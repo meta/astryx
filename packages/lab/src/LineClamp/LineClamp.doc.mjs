@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @type {import('../docs-types').ComponentDoc} */
+/** @type {import('../../../core/src/docs-types').ComponentDoc} */
 
 export const docs = {
   name: 'LineClamp',
@@ -44,7 +44,7 @@ export const docs = {
   },
 };
 
-/** @type {import('../docs-types').ComponentDoc} */
+/** @type {import('../../../core/src/docs-types').ComponentDoc} */
 export const docsZh = {
   name: 'LineClamp',
   displayName: 'Line Clamp',
@@ -85,7 +85,7 @@ export const docsZh = {
   },
 };
 
-/** @type {import('../docs-types').TranslationDoc} */
+/** @type {import('../../../core/src/docs-types').TranslationDoc} */
 export const docsDense = {
   description:
     'Clamps arbitrary content to N lines with an ellipsis; composable version of Text maxLines.',
