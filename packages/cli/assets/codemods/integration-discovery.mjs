@@ -18,19 +18,37 @@
  * Version selection mirrors the core registry's getTransformsBetween(from,to):
  * a codemod under folder X runs when upgrading to include X.
  *
- * Strictness: any broken discovery (bad/missing default export, schema
- * invalid, duplicate id) is a hard error so the upgrade fails loudly rather
- * than silently skipping migrations.
+ * Strictness: a module whose default export is a stamped codemod envelope is
+ * validated at the load boundary — a bad field, schema violation, or duplicate
+ * id is a hard error so the upgrade fails loudly rather than silently skipping
+ * migrations. Modules that are NOT codemods — co-located helpers with no
+ * codemod default export, and test/spec files — are skipped, so an integration
+ * can keep tests and shared transform helpers next to its codemods.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {loadModuleWithParser} from '../../foundation/fs/module-loader.mjs';
+import {importUserModule} from '../../foundation/fs/module-loader.mjs';
 import {parseCodemod} from '../../authoring/codemod/parse.mjs';
 import {semverCompare} from '../../foundation/env/semver.mjs';
 
 /** File extensions recognized as codemod modules. */
 const CODEMOD_EXTENSIONS = ['.ts', '.mjs', '.js'];
+
+/**
+ * Whether a module looks like a codemod at all: it must DEFAULT-EXPORT an
+ * object. A module with no default export — or a non-object default, e.g. a
+ * named-export-only helper or one that default-exports a function — is a
+ * co-located helper, not a codemod, and is skipped. A module that does
+ * default-export an object IS treated as a codemod and validated at the load
+ * boundary, so a genuinely broken codemod (bad/missing field, no `type`) still
+ * fails loudly rather than being silently skipped.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function hasCodemodDefault(value) {
+  return value != null && typeof value === 'object';
+}
 
 /**
  * Directories never walked for codemods: a test directory beside a transform is
@@ -147,6 +165,15 @@ export async function discoverIntegrationCodemods(loadedIntegrations = []) {
       for (const {id, file} of files) {
         const label = `Integration "${pkgLabel}" codemod ${version}/${id} (${file})`;
 
+        // Identify codemods by shape, not by "every module in the tree": a
+        // codemod DEFAULT-EXPORTS an object. A co-located helper (named exports
+        // only, or a default-exported function) is skipped rather than failing
+        // the whole integration's discovery. A module that does default-export
+        // an object is still validated below and fails loudly if it is not a
+        // valid codemod envelope.
+        const mod = await importUserModule(file);
+        if (!hasCodemodDefault(mod?.default)) continue;
+
         if (seenInVersion.has(id)) {
           throw new Error(
             `Integration "${pkgLabel}" has a duplicate codemod id "${id}" within version ${version}.`,
@@ -162,9 +189,9 @@ export async function discoverIntegrationCodemods(loadedIntegrations = []) {
         }
         idToVersion.set(id, version);
 
-        const codemod = await loadModuleWithParser(file, parseCodemod, {
-          label,
-        });
+        // Stamped as a codemod but otherwise invalid is a genuinely broken
+        // codemod: parseCodemod throws loudly here.
+        const codemod = parseCodemod(mod.default, label);
 
         const entry = {
           id,
