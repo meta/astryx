@@ -21,8 +21,9 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useTruncation} from '@astryxdesign/core/Text';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
-import {mergeProps, mergeRefs} from '@astryxdesign/core/utils';
+import {mergeProps} from '@astryxdesign/core/utils';
 import {themeProps} from '@astryxdesign/core/utils';
+import {useMergedRefs} from '@astryxdesign/core/hooks';
 
 const LazyTooltip = lazy(async () =>
   import('@astryxdesign/core/Tooltip').then(mod => ({default: mod.Tooltip})),
@@ -103,6 +104,9 @@ export function LineClamp({
   const truncation = useTruncation({maxLines});
   const elementRef = useRef<HTMLElement>(null);
 
+  // Keep the merged ref stable across rerenders.
+  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef);
+
   const tooltipPlacement: LayerPlacement =
     typeof hasTooltip === 'string' ? hasTooltip : 'above';
   const tooltipEnabled =
@@ -111,14 +115,13 @@ export function LineClamp({
   return (
     <>
       <Component
-        ref={mergeRefs(ref, truncation.ref, elementRef)}
+        ref={mergedRef}
         {...mergeProps(
           themeProps('line-clamp'),
           stylex.props(styles.clamp, xstyle),
           className,
           {...style, WebkitLineClamp: maxLines},
         )}
-        title={tooltipEnabled ? truncation.fullText : undefined}
         {...props}>
         {children}
       </Component>
