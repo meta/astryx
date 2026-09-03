@@ -85,3 +85,17 @@ export const ShortContentNotClamped: Story = {
     children: 'This content is short enough that it never clamps.',
   },
 };
+
+export const WithClippedLink: Story = {
+  args: {
+    maxLines: 2,
+    children: (
+      <>
+        {LONG_TEXT}{' '}
+        <a href="https://example.com" data-testid="trailing-link">
+          Read the full story
+        </a>
+      </>
+    ),
+  },
+};

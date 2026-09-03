@@ -40,6 +40,7 @@ export const docs = {
       { guidance: true, description: 'Use LineClamp when clamping a block of mixed or composed content (not a single Text node).' },
       { guidance: true, description: "Use Text's own maxLines prop when clamping a single Text node — no need to wrap it in LineClamp." },
       { guidance: false, description: 'Disable the tooltip (hasTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.' },
+      { guidance: true, description: 'A focusable element that falls past the visible lines (e.g. a trailing link) is automatically removed from the tab order and hidden from assistive tech while clipped, and restored the moment it is no longer clipped. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.' },
     ],
   },
 };
@@ -81,6 +82,7 @@ export const docsZh = {
       { guidance: true, description: '当需要截断混合或组合内容（而非单个 Text 节点）时使用 LineClamp。' },
       { guidance: true, description: '截断单个 Text 节点时使用 Text 自身的 maxLines 属性，无需用 LineClamp 包裹。' },
       { guidance: false, description: '当截断内容已在页面其他位置可访问时，禁用工具提示（hasTooltip={false}）以避免重复播报。' },
+      { guidance: true, description: '落在可见行之外的可聚焦元素（例如一个尾部链接）会在被截断时自动从 Tab 顺序中移除并对辅助技术隐藏，一旦不再被截断即恢复。无需消费者处理，但应避免依赖 Tab 到达一个只是有时被截断的链接。' },
     ],
   },
 };
@@ -96,6 +98,7 @@ export const docsDense = {
       { guidance: true, description: 'Use for clamping a block of mixed/composed content, not a single Text node.' },
       { guidance: true, description: "Use Text's own maxLines for a single Text node instead." },
       { guidance: false, description: 'Disable tooltip when content is reachable elsewhere, to avoid redundant announcement.' },
+      { guidance: true, description: 'A focusable element past the visible lines is auto-removed from the tab order while clipped, restored once not clipped. No consumer action needed.' },
     ],
   },
   propDescriptions: {

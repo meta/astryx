@@ -15,14 +15,25 @@
  * - /apps/storybook/stories/LineClamp.stories.tsx (storybook stories)
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 
 import type {BaseProps} from '@astryxdesign/core';
 import {useTruncation} from '@astryxdesign/core/Text';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
-import {mergeProps} from '@astryxdesign/core/utils';
-import {themeProps} from '@astryxdesign/core/utils';
+import {
+  mergeProps,
+  themeProps,
+  observeResize,
+  unobserveResize,
+} from '@astryxdesign/core/utils';
 import {useMergedRefs} from '@astryxdesign/core/hooks';
 
 const LazyTooltip = lazy(async () =>
@@ -33,7 +44,13 @@ const styles = stylex.create({
   clamp: {
     display: '-webkit-box',
     WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
+    // `clip`, not `hidden`: both clip the same way visually, but `hidden`
+    // makes the box a scroll container, so a browser bringing a focused
+    // descendant into view scrolls it — which, against a clamped box, means
+    // focusing a clipped link replaces the visible line with the hidden one
+    // out from under the reader. `clip` clips without becoming scrollable,
+    // so that scroll-into-view path never triggers (#4259).
+    overflow: 'clip',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
   },
@@ -42,6 +59,77 @@ const styles = stylex.create({
     wordBreak: 'break-word',
   },
 });
+
+// Elements the browser's own tab order can reach inside clamped content.
+// `core`'s canonical FOCUSABLE_SELECTOR (see useFocusTrap) is an internal
+// implementation detail not exported from its public barrel, so this is its
+// own narrower list — the cases actually plausible inside clamped text
+// content, skipping already-inert (`tabindex="-1"`) elements so this effect
+// doesn't fight a consumer's own choice.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Original tabIndex/aria-hidden state, captured before we touch an element. */
+const ORIGINAL_STATE = new WeakMap<
+  Element,
+  {tabIndex: string | null; ariaHidden: string | null}
+>();
+
+/** Remove a clipped descendant from the tab order, capturing its prior state once. */
+function hideFromTabOrder(el: HTMLElement) {
+  if (!ORIGINAL_STATE.has(el)) {
+    ORIGINAL_STATE.set(el, {
+      tabIndex: el.getAttribute('tabindex'),
+      ariaHidden: el.getAttribute('aria-hidden'),
+    });
+  }
+  el.setAttribute('tabindex', '-1');
+  el.setAttribute('aria-hidden', 'true');
+  el.setAttribute('data-line-clamp-hidden', '');
+}
+
+/** Put a previously-clipped descendant's own state back, exactly as it was. */
+function restoreOriginalState(el: HTMLElement) {
+  const original = ORIGINAL_STATE.get(el);
+  if (original) {
+    if (original.tabIndex === null) {
+      el.removeAttribute('tabindex');
+    } else {
+      el.setAttribute('tabindex', original.tabIndex);
+    }
+    if (original.ariaHidden === null) {
+      el.removeAttribute('aria-hidden');
+    } else {
+      el.setAttribute('aria-hidden', original.ariaHidden);
+    }
+    ORIGINAL_STATE.delete(el);
+  }
+  el.removeAttribute('data-line-clamp-hidden');
+}
+
+/**
+ * Scan a clamp container for focusable descendants that fall on a visually
+ * clipped line, and hide exactly those from the tab order (see the fuller
+ * comment where this runs, in the component). Also includes elements this
+ * already hid (`[data-line-clamp-hidden]`) even though a hidden one no
+ * longer matches FOCUSABLE_SELECTOR (its own tabindex="-1" excludes it) —
+ * otherwise a previously-clipped descendant that becomes visible again
+ * (a resize, more space) would never be found and restored.
+ */
+function syncFocusableClipping(container: HTMLElement) {
+  const containerBottom = container.getBoundingClientRect().bottom;
+  const candidates = container.querySelectorAll<HTMLElement>(
+    `${FOCUSABLE_SELECTOR}, [data-line-clamp-hidden]`,
+  );
+  for (const el of candidates) {
+    const isClipped = el.getBoundingClientRect().top >= containerBottom;
+    if (isClipped) {
+      hideFromTabOrder(el);
+    } else if (el.hasAttribute('data-line-clamp-hidden')) {
+      restoreOriginalState(el);
+    }
+  }
+}
 
 export interface LineClampProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
@@ -111,6 +199,43 @@ export function LineClamp({
     typeof hasTooltip === 'string' ? hasTooltip : 'above';
   const tooltipEnabled =
     hasTooltip !== false && maxLines > 0 && truncation.isTruncated;
+
+  // A descendant on a visually clipped line (e.g. a trailing "Read more"
+  // link that lands past maxLines) is still in the DOM and still tabbable —
+  // `-webkit-line-clamp` only clips paint, it doesn't remove the underlying
+  // layout. Tab can land on something the reader cannot see. `overflow:
+  // clip` above stops the browser from scrolling the box to chase a focused
+  // descendant into view, but the descendant itself is still a real, if
+  // invisible, tab stop unless something removes it from the tab order.
+  // `syncFocusableClipping` (above) is what finds and hides exactly that
+  // set, by comparing each focusable descendant's rect against the clamp
+  // box's own (clipped) rect: the DOM layout underneath a clamp is always
+  // the full, unclamped height, so anything whose top falls at or past the
+  // box's clipped bottom edge is what the clamp is hiding.
+  //
+  // Runs from two places, because either alone misses a real case:
+  // - Every render (rerun on children/maxLines changing, or anything else
+  //   that reflows the content) — covers ordinary prop-driven updates.
+  // - The shared ResizeObserver `useTruncation` also uses, on any actual
+  //   size change — a window/container resize can change which lines a
+  //   descendant falls on without `truncation.isTruncated` ever flipping
+  //   (still truncated before and after), so a render-only check would
+  //   never re-run and a since-uncovered descendant would stay hidden.
+  useLayoutEffect(() => {
+    const container = elementRef.current;
+    if (container) {
+      syncFocusableClipping(container);
+    }
+  });
+
+  useEffect(() => {
+    const container = elementRef.current;
+    if (!container) {
+      return;
+    }
+    observeResize(container, () => syncFocusableClipping(container));
+    return () => unobserveResize(container);
+  }, []);
 
   return (
     <>
