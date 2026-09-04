@@ -14,6 +14,7 @@ import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import {Link} from './Link';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
 import {LinkProvider} from './LinkProvider';
 
 function CustomLink({
@@ -482,5 +483,56 @@ describe('pressed state', () => {
       </Link>,
     );
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
+  });
+});
+
+// =============================================================================
+// Display: an ancestor clamp (<Text maxLines>) can only truncate an anchor
+// that participates in the surrounding line boxes, so the plain anchor must
+// be `inline`; flex layout is reserved for the icon/button forms (#6021).
+// =============================================================================
+
+function displayDeclarationsFor(el: Element): string[] {
+  const classes = Array.from(el.classList);
+  const declarations: string[] = [];
+  for (const chunk of getAllInjectedCss().split('}')) {
+    const sel = chunk.split('{')[0] ?? '';
+    const body = chunk.split('{')[1] ?? '';
+    if (classes.some(c => sel.includes(c)) && body.includes('display')) {
+      const match = body.match(/display:\s*([^;]+);/);
+      if (match) {
+        declarations.push(match[1].trim());
+      }
+    }
+  }
+  return declarations;
+}
+
+describe('Link display', () => {
+  it('renders a plain anchor inline so an ancestor clamp can reach it', () => {
+    const {container} = render(<Link href="/docs">Documentation</Link>);
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
+
+  it('keeps flex layout for the external-link icon form', () => {
+    const {container} = render(
+      <Link href="https://example.com" isExternalLink>
+        External docs
+      </Link>,
+    );
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
+  });
+
+  it('keeps flex layout for the button-rendered form', () => {
+    const {container} = render(
+      <Link onClick={() => {}} role="button">
+        Action
+      </Link>,
+    );
+    const button = container.querySelector('button')!;
+    expect(displayDeclarationsFor(button)).toContain('inline-flex');
   });
 });
