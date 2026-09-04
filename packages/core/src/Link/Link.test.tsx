@@ -14,7 +14,6 @@ import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
 import {Link} from './Link';
-import {getAllInjectedCss} from '../__tests__/forcedColors';
 import {LinkProvider} from './LinkProvider';
 
 function CustomLink({
@@ -492,17 +491,68 @@ describe('pressed state', () => {
 // be `inline`; flex layout is reserved for the icon/button forms (#6021).
 // =============================================================================
 
+/**
+ * Extracts class-name tokens from a CSS selector (e.g. the selectorText of
+ * a CSSStyleRule), so callers can match against an element's classList by
+ * exact token rather than by substring. Handles compound selectors
+ * (`.a.b:hover`) and comma-separated selector lists (`.a, .b`).
+ */
+function classTokensFromSelector(selectorText: string): string[] {
+  const tokens: string[] = [];
+  const classRegex = /\.([-_a-zA-Z0-9]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = classRegex.exec(selectorText)) !== null) {
+    tokens.push(match[1]);
+  }
+  return tokens;
+}
+
+/**
+ * Recursively collects every CSSStyleRule from a rule list, descending into
+ * grouping rules (e.g. `@media`) so declarations nested in a condition are
+ * not missed.
+ */
+function collectStyleRules(rules: CSSRuleList, out: CSSStyleRule[]): void {
+  for (const rule of Array.from(rules)) {
+    if (rule instanceof CSSStyleRule) {
+      out.push(rule);
+    } else if ('cssRules' in rule && rule.cssRules) {
+      collectStyleRules((rule as CSSGroupingRule).cssRules, out);
+    }
+  }
+}
+
+/**
+ * Returns the `display` value of every injected CSS rule that targets `el`,
+ * matched via the CSSOM (real selector tokens + real class list) rather than
+ * substring checks on raw selector/body text — a hashed atomic class like
+ * `x1a` can be a substring of an unrelated class like `x1a2b3c4`, so
+ * string-based matching can both false-positive and false-negative.
+ */
 function displayDeclarationsFor(el: Element): string[] {
-  const classes = Array.from(el.classList);
+  const classes = new Set(Array.from(el.classList));
+  const styleRules: CSSStyleRule[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    collectStyleRules(rules, styleRules);
+  }
+
   const declarations: string[] = [];
-  for (const chunk of getAllInjectedCss().split('}')) {
-    const sel = chunk.split('{')[0] ?? '';
-    const body = chunk.split('{')[1] ?? '';
-    if (classes.some(c => sel.includes(c)) && body.includes('display')) {
-      const match = body.match(/display:\s*([^;]+);/);
-      if (match) {
-        declarations.push(match[1].trim());
-      }
+  for (const rule of styleRules) {
+    const matchesElement = classTokensFromSelector(rule.selectorText).some(
+      token => classes.has(token),
+    );
+    if (!matchesElement) {
+      continue;
+    }
+    const display = rule.style.getPropertyValue('display');
+    if (display) {
+      declarations.push(display.trim());
     }
   }
   return declarations;
