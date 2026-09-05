@@ -349,6 +349,15 @@ export function Link({
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
   const isExternalWithIcon = isExternalLink && !renderAsButton;
+  // The plain anchor stays `inline` so an ancestor clamp (<Text maxLines>)
+  // can truncate it — that is the composition this PR fixes. But a Link that
+  // establishes its own box (`display="block"`, or clamping itself via
+  // `maxLines`, or carrying the external-link icon) must keep the inline-flex
+  // root: an inline anchor around a block-level child computes a focus
+  // outline that paints nothing in Chromium, losing keyboard focus
+  // visibility on those forms.
+  const needsRootBox =
+    isExternalWithIcon || display !== 'inline' || maxLines > 0;
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
@@ -429,7 +438,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
-            isExternalWithIcon && styles.flexLayout,
+            needsRootBox && styles.flexLayout,
             linkColorStyles[color],
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
@@ -462,7 +471,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
-            isExternalWithIcon && styles.flexLayout,
+            needsRootBox && styles.flexLayout,
             linkColorStyles[color],
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,
