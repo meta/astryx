@@ -576,6 +576,28 @@ describe('Link display', () => {
     expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
   });
 
+  it('keeps the flex root (visible focus box) for display="block" links', () => {
+    const {container} = render(
+      <Link href="/docs" display="block">
+        Documentation
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps the flex root for links clamping themselves via maxLines', () => {
+    const {container} = render(
+      <Link href="/docs" maxLines={2}>
+        Documentation
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
   it('keeps flex layout for the button-rendered form', () => {
     const {container} = render(
       <Link onClick={() => {}} role="button">
