@@ -287,6 +287,22 @@ export interface LinkProps extends BaseProps<
 }
 
 /**
+ * Determines whether children consist solely of text nodes (strings or numbers,
+ * or arrays of them). When composed with elements (such as HStack, Icon, or
+ * block containers), the anchor must keep an inline-flex root box so Chromium
+ * computes and paints a visible keyboard focus outline.
+ */
+function isTextOnly(content: ReactNode): boolean {
+  if (typeof content === 'string' || typeof content === 'number') {
+    return true;
+  }
+  if (Array.isArray(content)) {
+    return content.every(isTextOnly);
+  }
+  return false;
+}
+
+/**
  * A styled anchor link component.
  *
  * Uses Text internally for typography styling.
@@ -352,12 +368,15 @@ export function Link({
   // The plain anchor stays `inline` so an ancestor clamp (<Text maxLines>)
   // can truncate it — that is the composition this PR fixes. But a Link that
   // establishes its own box (`display="block"`, or clamping itself via
-  // `maxLines`, or carrying the external-link icon) must keep the inline-flex
-  // root: an inline anchor around a block-level child computes a focus
-  // outline that paints nothing in Chromium, losing keyboard focus
-  // visibility on those forms.
+  // `maxLines`, or carrying the external-link icon, or composed with block-level
+  // children like HStack) must keep the inline-flex root: an inline anchor
+  // around a block-level child computes a focus outline that paints nothing in
+  // Chromium, losing keyboard focus visibility on those forms.
   const needsRootBox =
-    isExternalWithIcon || display !== 'inline' || maxLines > 0;
+    isExternalWithIcon ||
+    display !== 'inline' ||
+    maxLines > 0 ||
+    !isTextOnly(children);
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).

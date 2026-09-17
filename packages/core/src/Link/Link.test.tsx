@@ -607,4 +607,22 @@ describe('Link display', () => {
     const button = container.querySelector('button')!;
     expect(displayDeclarationsFor(button)).toContain('inline-flex');
   });
+
+  it('keeps the flex root for composed links with element children (e.g. HStack)', () => {
+    const {container} = render(
+      <Link href="/docs">
+        <div>Composed content</div>
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps plain inline display for text-only children so ancestor clamp reaches them', () => {
+    const {container} = render(<Link href="/docs">Text only {'content'}</Link>);
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
 });
