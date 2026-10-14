@@ -759,6 +759,63 @@ describe('Slider', () => {
 
   // --- Pointer handling ---
 
+  it('reaches an off-grid max when dragging to the endpoint', () => {
+    const onChange = vi.fn();
+    render(
+      <Slider
+        label="Volume"
+        value={0}
+        min={0}
+        max={100}
+        step={3}
+        valueDisplay="none"
+        onChange={onChange}
+      />,
+    );
+    const thumb = screen.getByRole('slider');
+    const track = controlOf(thumb);
+    track.getBoundingClientRect = () => new DOMRect(0, 0, 220, 20);
+
+    fireEvent.pointerDown(thumb, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    fireEvent.pointerMove(track, {
+      clientX: 240,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+    });
+    expect(onChange).toHaveBeenLastCalledWith(100);
+
+    fireEvent.pointerUp(track, {
+      clientX: 240,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+    });
+    expect(onChange).toHaveBeenLastCalledWith(100);
+  });
+
+  it('selects an off-grid max at the track endpoint but rounds interior positions', () => {
+    const onChange = vi.fn();
+    render(<Slider label="Volume" value={0} step={3} onChange={onChange} />);
+    const track = controlOf(screen.getByRole('slider'));
+    track.getBoundingClientRect = () => new DOMRect(0, 0, 220, 20);
+
+    fireEvent.pointerDown(track, {clientX: 210, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith(100);
+
+    fireEvent.pointerMove(track, {clientX: 208, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith(99);
+    fireEvent.pointerMove(track, {clientX: 210, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith(100);
+    fireEvent.pointerUp(track, {pointerId: 1});
+  });
+
   it('fires onChangeEnd on pointer up after pointer down', () => {
     const handleChange = vi.fn();
     const handleChangeEnd = vi.fn();
@@ -993,6 +1050,7 @@ describe('Slider', () => {
         value={50}
         min={0}
         max={100}
+        step={3}
         onChange={handleChange}
         marks={[{value: 100, label: '100'}]}
       />,

@@ -929,6 +929,9 @@ export function Slider({ref, ...props}: SliderProps) {
         percent = 1 - travelFraction(clientY - rect.top, rect.height);
       }
       percent = clamp(percent, 0, 1);
+      if (percent === 1) {
+        return max;
+      }
       const raw = min + percent * (max - min);
       return clamp(snapToStep(raw, min, step), min, max);
     },
@@ -1153,7 +1156,8 @@ export function Slider({ref, ...props}: SliderProps) {
       }
       draggingThumbRef.current = thumbIndex;
       setDraggingThumb(thumbIndex);
-      updateValue(thumbIndex, parks ? values[thumbIndex] : newVal);
+      const nextValue = parks ? values[thumbIndex] : newVal;
+      updateValue(thumbIndex, nextValue, nextValue !== max);
 
       // Focus the thumb that owns this drag.
       thumbs?.[thumbIndex]?.focus();
@@ -1190,6 +1194,7 @@ export function Slider({ref, ...props}: SliderProps) {
       getClosestThumb,
       updateValue,
       endDrag,
+      max,
     ],
   );
 
@@ -1241,13 +1246,13 @@ export function Slider({ref, ...props}: SliderProps) {
           const from = [...current];
           from[dragging] = current[other];
           handTo(other);
-          updateValue(other, newVal, true, from);
+          updateValue(other, newVal, newVal !== max, from);
           return;
         }
       }
-      updateValue(draggingThumbRef.current, newVal);
+      updateValue(draggingThumbRef.current, newVal, newVal !== max);
     },
-    [isDisabled, getValueFromPosition, updateValue, valuesRef],
+    [isDisabled, getValueFromPosition, updateValue, valuesRef, max],
   );
 
   const handlePointerUp = useCallback(
@@ -1267,7 +1272,8 @@ export function Slider({ref, ...props}: SliderProps) {
     values: () => valuesRef.current,
     // The value updateValue would report for this thumb.
     constrain: (index, raw) => {
-      const next = clamp(snapToStep(raw, min, step), min, max);
+      const next =
+        raw >= max ? max : clamp(snapToStep(raw, min, step), min, max);
       if (!isRange) {
         return next;
       }
@@ -1288,7 +1294,7 @@ export function Slider({ref, ...props}: SliderProps) {
         : [clamp(v0 + minGap, min, max), max];
     },
     change: (index, next, from) =>
-      updateValueRef.current(index, next, true, from),
+      updateValueRef.current(index, next, next !== max, from),
     // A finger paints the thumb pressed and opens its value tooltip.
     // `handlePointerDown` already focused it.
     press: index => {
@@ -1313,7 +1319,7 @@ export function Slider({ref, ...props}: SliderProps) {
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the owner must render the interaction's last value before the parts return to the stylesheet and onChangeEnd reads it
       flushSync(() => {
         if (next !== null) {
-          updateValueRef.current(index, next);
+          updateValueRef.current(index, next, next !== max);
         }
         setDraggingThumb(null);
       });
