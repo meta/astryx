@@ -24,7 +24,7 @@ affects_consumer_docs: []
 {
   "scope": "global",
   "triggers": {
-    "accessibility": ["FR1", "FR2", "FR6", "FR15"]
+    "accessibility": ["FR1", "FR2", "FR6", "FR15", "FR16"]
   }
 }
 ```
@@ -45,7 +45,7 @@ review. It does not claim that one automated pass proves complete accessibility.
 
 ## Non-goals
 
-- Implementing the spec-test package or CI jobs in this specification pull request.
+- Implementing the spec-test package or CI jobs.
 - Defining how existing component tests migrate; that is owned by
   [AST-021](../AST-021/spec.md).
 - Publishing the first implementation as a supported package.
@@ -89,6 +89,22 @@ review. It does not claim that one automated pass proves complete accessibility.
   independently focusable controls does not gain them. The owning component record
   names the parts it adopts, any required part it does not adopt with the reason,
   and any extra it adopts beyond this rule as a named exception.
+
+- **FR16 — Non-text contrast follows necessary visual information.** For WCAG
+  2.2 1.4.11, the 3:1 threshold applies to visual information required to
+  identify a component or state and to parts of graphics required to understand
+  their content. The review MUST suppress the treatment under review, or inspect
+  an equivalent rendering without it, and determine whether the component or
+  state becomes materially less identifiable or the graphic becomes materially
+  less understandable. A treatment need not itself meet 3:1 only when, after its
+  suppression, another independent cue carries the same necessary information
+  and meets its applicable contrast requirement: 3:1 for a user-interface or
+  graphic cue, or WCAG 2.2 1.4.3 for text. At least one cue that identifies each
+  component or state MUST meet its applicable threshold; multiple sub-threshold
+  cues MUST NOT exempt one another. Evidence MUST name the exact component,
+  state, or graphic part; adjacent colors; treatment under review; independent
+  cue and its measured contrast; and visual or manual evidence layer. Inactive
+  controls follow WCAG's inactive-component exception.
 
 ### Expectation contract
 
@@ -146,28 +162,28 @@ review. It does not claim that one automated pass proves complete accessibility.
   or surfaces that own a page. Every row follows FR5 and FR6 rather than being
   forced into the reusable runtime contract.
 
-| WCAG 2.2 source                     | Outcome to consider                                                                        | Usual ownership                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------- |
-| 1.1.1 Non-text Content              | Informative non-text content has an equivalent alternative; decorative content is ignored. | Component or content                  |
-| 1.3.1 Info and Relationships        | Visual structure and relationships are programmatically available.                         | Component or composition              |
-| 1.3.2 Meaningful Sequence           | Programmatic reading sequence preserves meaning.                                           | Component or composition              |
-| 1.4.1 Use of Color                  | Color is not the only way to convey information or state.                                  | Component, theme, and caller content  |
-| 1.4.3 Contrast (Minimum)            | Text and images of text meet the required contrast.                                        | Component and theme                   |
-| 1.4.11 Non-text Contrast            | Controls, states, and meaningful graphics meet non-text contrast.                          | Component and theme                   |
-| 2.1.1 Keyboard                      | Every component-owned function is operable by keyboard.                                    | Component                             |
-| 2.1.2 No Keyboard Trap              | Keyboard focus can leave any component unless the user has a documented exit.              | Component or composition              |
-| 2.4.2 Page Titled                   | A page has a descriptive title.                                                            | Page only                             |
-| 2.4.3 Focus Order                   | Sequential focus preserves meaning and operation.                                          | Component or composition              |
-| 2.4.4 Link Purpose (In Context)     | A link's purpose is determinable.                                                          | Component and caller content          |
-| 2.4.6 Headings and Labels           | Headings and labels describe their topic or purpose.                                       | Component and caller content          |
-| 2.4.7 Focus Visible                 | Keyboard focus has a visible indicator.                                                    | Component and theme                   |
-| 2.4.11 Focus Not Obscured (Minimum) | Focused content is not entirely hidden by author-created content.                          | Component or composition              |
-| 2.5.8 Target Size (Minimum)         | Pointer targets meet the minimum size or an allowed exception.                             | Component or composition              |
-| 3.1.1 Language of Page              | The page language is programmatically available.                                           | Page only                             |
-| 3.2.4 Consistent Identification     | Repeated functions are identified consistently.                                            | System, component, and caller content |
-| 3.3.2 Labels or Instructions        | Inputs have persistent labels or needed instructions.                                      | Component and caller content          |
-| 4.1.2 Name, Role, Value             | Name, role, state, value, and changes are programmatically available.                      | Component                             |
-| 4.1.3 Status Messages               | Status changes are exposed without moving focus.                                           | Component or composition              |
+| WCAG 2.2 source                     | Outcome to consider                                                                                                                                                                                                  | Usual ownership                       |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| 1.1.1 Non-text Content              | Informative non-text content has an equivalent alternative; decorative content is ignored.                                                                                                                           | Component or content                  |
+| 1.3.1 Info and Relationships        | Visual structure and relationships are programmatically available.                                                                                                                                                   | Component or composition              |
+| 1.3.2 Meaningful Sequence           | Programmatic reading sequence preserves meaning.                                                                                                                                                                     | Component or composition              |
+| 1.4.1 Use of Color                  | Color is not the only way to convey information or state.                                                                                                                                                            | Component, theme, and caller content  |
+| 1.4.3 Contrast (Minimum)            | Text and images of text meet the required contrast.                                                                                                                                                                  | Component and theme                   |
+| 1.4.11 Non-text Contrast            | Visual information required to identify controls and states, and parts of graphics required to understand content, meet applicable non-text contrast; treatment applicability is determined contextually under FR16. | Component and theme                   |
+| 2.1.1 Keyboard                      | Every component-owned function is operable by keyboard.                                                                                                                                                              | Component                             |
+| 2.1.2 No Keyboard Trap              | Keyboard focus can leave any component unless the user has a documented exit.                                                                                                                                        | Component or composition              |
+| 2.4.2 Page Titled                   | A page has a descriptive title.                                                                                                                                                                                      | Page only                             |
+| 2.4.3 Focus Order                   | Sequential focus preserves meaning and operation.                                                                                                                                                                    | Component or composition              |
+| 2.4.4 Link Purpose (In Context)     | A link's purpose is determinable.                                                                                                                                                                                    | Component and caller content          |
+| 2.4.6 Headings and Labels           | Headings and labels describe their topic or purpose.                                                                                                                                                                 | Component and caller content          |
+| 2.4.7 Focus Visible                 | Keyboard focus has a visible indicator.                                                                                                                                                                              | Component and theme                   |
+| 2.4.11 Focus Not Obscured (Minimum) | Focused content is not entirely hidden by author-created content.                                                                                                                                                    | Component or composition              |
+| 2.5.8 Target Size (Minimum)         | Pointer targets meet the minimum size or an allowed exception.                                                                                                                                                       | Component or composition              |
+| 3.1.1 Language of Page              | The page language is programmatically available.                                                                                                                                                                     | Page only                             |
+| 3.2.4 Consistent Identification     | Repeated functions are identified consistently.                                                                                                                                                                      | System, component, and caller content |
+| 3.3.2 Labels or Instructions        | Inputs have persistent labels or needed instructions.                                                                                                                                                                | Component and caller content          |
+| 4.1.2 Name, Role, Value             | Name, role, state, value, and changes are programmatically available.                                                                                                                                                | Component                             |
+| 4.1.3 Status Messages               | Status changes are exposed without moving focus.                                                                                                                                                                     | Component or composition              |
 
 - **FR11 — The contract itself has positive and negative proof.** Each expectation
   MUST pass against a minimally conforming fixture or binding and fail when its
@@ -212,22 +228,19 @@ and exact known failures. It also showed why axe and pattern contracts are
 complementary: axe finds broad markup violations, while the contract verifies the
 state and interaction that make a switch behave as a switch.
 
-The prototype is evidence, not current policy. Its package name, scoring model,
-priority names, and harness shape remain implementation choices unless this or
-another current record adopts them. This spec keeps the proven contract boundary
-while correcting two risks before scale-out: a numeric score must not stand in for
-conformance, and each expectation must name the evidence layer that can actually
-observe its outcome.
+Package names, scoring models, priority names, and harness shapes remain
+implementation choices unless a current record adopts them. Numeric aggregate
+scores do not stand in for conformance, and every expectation names the evidence
+layer that can observe its outcome.
 
-The completeness review incorporates recurrent component-owned failures such as
-text alternatives, semantic relationships and order, focus order and visibility,
+The completeness review includes component-owned outcomes such as text
+alternatives, semantic relationships and order, focus order and visibility,
 descriptive labels and links, consistent identification, persistent instructions,
-and name/role/value/state. It updates that review to WCAG 2.2 and keeps page-owned,
-browser-owned, and real-AT-owned checks outside a component runtime contract when
-that is the honest boundary.
+and name/role/value/state. Page-owned, browser-owned, and real-AT-owned checks stay
+outside a component runtime contract when the component cannot prove them.
 
-This accepted spec creates no tests, package, CLI documentation, component behavior,
-or CI gate. Those changes follow in implementation work governed by this record.
+This record defines no test package, CLI surface, component behavior, or CI gate.
+Any implementation of those surfaces conforms to the requirements here.
 
 ## Verification
 

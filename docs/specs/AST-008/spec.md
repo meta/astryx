@@ -177,6 +177,11 @@ TypeScript declaration metadata is not executable runtime behavior.
   and contrast for explicit pairs. They MUST NOT label an isolated palette,
   family, stop, or suggestion accessible. Theme evidence names the exact
   foreground, background, text size, component state, mode, and non-color cues.
+  Non-text contrast applicability follows `spec:AST-020/FR16`: evidence
+  distinguishes visual information required to identify a component or state,
+  and parts of graphics required to understand content, from treatments whose
+  independent replacement cue meets its applicable threshold. Evidence names the
+  cue, its measured contrast, and the visual or manual verification.
 - **FR13 — Authoring has no runtime cost.** Generator code, color-math
   dependencies, candidates, reproducibility data, and suggestion logic MUST NOT
   enter Core component runtime, theme mounting, default theme CSS or JavaScript,
