@@ -59,13 +59,34 @@ const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--si
 const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
-  // Lexical marks every top-level block `dir="auto"`, which picks each
-  // block's direction from its first strong character: a Hebrew paragraph in
-  // an English document flips to the right, an English one in an Arabic
-  // document to the left. Blocks take the direction of the surface around
-  // them instead, as core Markdown's do, and bidi inside a block still
-  // follows the Unicode algorithm (spec:AST-061 FR6).
-  providerDirection: {
+  // Lexical marks every block `dir="auto"`, so the HTML directionality
+  // heuristic reads the block's first strong character. A block follows the
+  // surface around it (spec:AST-061 FR6) until its own text is strongly
+  // right-to-left: a Hebrew paragraph in an English document then reads
+  // right-to-left, flushes right, and takes its caret, quote bar, list
+  // markers and indent on the right, as it does in Google Docs and in
+  // Lexical's own playground. Without this a block kept the surface's
+  // `direction` while `dir="auto"` reordered its glyphs, which left the
+  // caret walking the wrong way through right-to-left text.
+  //
+  // `:dir(rtl)` tells a strongly right-to-left block from every other one,
+  // but CSS cannot tell a strongly left-to-right block from a block of
+  // digits, punctuation, an image or nothing at all: all four are
+  // `:dir(ltr)` under `dir="auto"`. A left-to-right block inside a
+  // right-to-left document therefore still follows the document, so an
+  // empty paragraph keeps its caret on the document's start edge.
+  blockDirection: {
+    direction: {
+      default: 'inherit',
+      ':dir(rtl)': 'rtl',
+    },
+  },
+  // A table is not prose. Its columns are read in the document's order, not
+  // in the order of whichever language the first cell happens to hold, so
+  // every table part takes the surface's direction and a column stays
+  // aligned down its length. The paragraph inside a cell is prose and takes
+  // the rule above.
+  surfaceDirection: {
     direction: 'inherit',
   },
   paragraph: {
@@ -483,9 +504,14 @@ const editorTheme = stylex.create({
  * class-name strings, which `stylex.props(...).className` yields.
  */
 export function sharedEditorTheme(): EditorThemeClasses {
-  // A class for a block Lexical may mark `dir="auto"`.
+  // A class for a text block, which follows the surface's direction until
+  // its own text is strongly right-to-left.
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
-    stylex.props(...styles, editorTheme.providerDirection).className ?? '';
+    stylex.props(...styles, editorTheme.blockDirection).className ?? '';
+  // A class for a table part, which takes the surface's direction whatever
+  // the cells hold, so a column reads the same way down its length.
+  const tablePart = (...styles: Array<stylex.StyleXStyles>): string =>
+    stylex.props(...styles, editorTheme.surfaceDirection).className ?? '';
   const className = (style: stylex.StyleXStyles): string =>
     stylex.props(style).className ?? '';
   return {
@@ -535,15 +561,15 @@ export function sharedEditorTheme(): EditorThemeClasses {
     hrSelected: stylex.props(editorTheme.hrSelected).className,
     // MarkdownExtensionsPlugin puts it on a selected plugin node.
     markdownExtensionSelected: stylex.props(editorTheme.hrSelected).className,
-    table: block(editorTheme.table),
-    // Lexical stamps rows and cells `dir="auto"` too, which would set a cell
-    // of English text left-to-right inside a right-to-left document.
-    tableRow: block(editorTheme.tableRow),
-    tableCell: block(editorTheme.tableCell),
-    tableCellHeader: block(editorTheme.tableCellHeader),
+    // Every table part takes the surface's direction, so a column reads the
+    // same way down its length whatever each cell holds.
+    table: tablePart(editorTheme.table),
+    tableRow: tablePart(editorTheme.tableRow),
+    tableCell: tablePart(editorTheme.tableCell),
+    tableCellHeader: tablePart(editorTheme.tableCellHeader),
     // Added on top of the cell's own class by Lexical while the cell is in a
     // table selection, so it carries no direction of its own.
     tableCellSelected: className(editorTheme.tableCellSelected),
-    tableScrollableWrapper: block(editorTheme.tableScrollableWrapper),
+    tableScrollableWrapper: tablePart(editorTheme.tableScrollableWrapper),
   };
 }
