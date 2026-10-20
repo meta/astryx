@@ -1931,13 +1931,12 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// spec:AST-061 FR6: a block takes the direction of the surface around it,
-// until its own text is strongly right-to-left — a Hebrew paragraph reads
-// right-to-left wherever it sits, as it does in Google Docs and Lexical's
-// own playground, so its caret, alignment and logical insets follow its
-// text. A table part is exempt: its columns are read in the document's
-// order. Core `Markdown` sets no `dir`, so its blocks follow the surface
-// throughout.
+// spec:AST-061 FR6: a block takes the direction of its own text — a Hebrew
+// paragraph reads right-to-left and an English one left-to-right, wherever
+// each sits, as in Google Docs and Lexical's own playground — and a block
+// with no direction of its own takes the document's. A table part is
+// exempt: its columns are read in the document's order. Core `Markdown`
+// sets no `dir`, so its blocks follow the document throughout.
 for (const direction of ['ltr', 'rtl'] as const) {
   test(`markdown blocks take the provider direction (${direction})`, async ({
     page,
@@ -1957,7 +1956,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
     expect(errors).toEqual([]);
   });
 
-  test(`a strongly right-to-left block reads right-to-left (${direction})`, async ({
+  test(`a rich text block reads the way its own text reads (${direction})`, async ({
     page,
   }) => {
     const errors = await openStory(
@@ -1973,15 +1972,14 @@ for (const direction of ['ltr', 'rtl'] as const) {
         block.direction,
       ]),
     );
-    // A Hebrew paragraph reads right-to-left in either document direction...
+    // The Hebrew paragraph reads right-to-left in either document...
     expect(byKey.get('paragraph-rtl')).toBe('rtl');
-    // ...while every other block still follows the document.
-    const followsSurface = [...byKey.entries()]
-      .filter(([key]) => key !== 'paragraph-rtl')
-      .filter(([, blockDirection]) => blockDirection !== direction)
-      .map(([key]) => key);
-    expect(followsSurface, RICH_TEXT).toEqual([]);
-    // A table's parts stay with the document, so its columns keep their order.
+    // ...and an English block reads left-to-right in either, which is the
+    // mirror case: both hold wherever the document points.
+    expect(byKey.get('heading-1')).toBe('ltr');
+    // A block with no strong character of its own follows the document.
+    expect(byKey.get('thematic-break')).toBe(direction);
+    // A table's parts follow the document too, so its columns keep order.
     const tableParts = await page.evaluate(
       ({selector, expected}) =>
         [
@@ -1999,9 +1997,9 @@ for (const direction of ['ltr', 'rtl'] as const) {
 
   // A table's own parts take the document's direction, so its columns keep
   // their order and a column's start edge is the document's. The paragraph
-  // inside a cell is prose: it follows its own script, as Google Docs and
-  // Lexical's playground align a Hebrew cell's text to the right of an
-  // otherwise left-to-right table.
+  // inside a cell takes it too: a column is read as one, so its cells line
+  // up with each other rather than each with its own script. Only a
+  // top-level block carries its own direction (BlockDirectionPlugin).
   test(`table parts take the provider direction with mixed scripts (${direction})`, async ({
     page,
   }) => {
@@ -2030,12 +2028,6 @@ for (const direction of ['ltr', 'rtl'] as const) {
             column: (cell as HTMLTableCellElement).cellIndex,
             direction: style.direction,
             paragraphDirection,
-            // Hebrew is the only strong-right-to-left script in the fixture.
-            textDirection: /^[\u0590-\u05ff]/.test(
-              (paragraph.textContent ?? '').trim(),
-            )
-              ? 'rtl'
-              : 'ltr',
             startGap:
               paragraphDirection === 'rtl'
                 ? box.right - parseFloat(style.paddingRight) - text.right
@@ -2049,14 +2041,10 @@ for (const direction of ['ltr', 'rtl'] as const) {
     for (const cell of cells) {
       // The cell box, and so the column it sits in, follows the document.
       expect(cell.direction).toBe(direction);
-      // Its prose follows the document until the cell's own text is
-      // strongly right-to-left.
-      expect(cell.paragraphDirection).toBe(
-        cell.textDirection === 'rtl' ? 'rtl' : direction,
-      );
+      // So does its prose, whatever script the cell holds.
+      expect(cell.paragraphDirection).toBe(direction);
       if (cell.column === 0) {
-        // The first column is start-aligned: its text touches the start edge
-        // of its own paragraph direction.
+        // The first column is start-aligned: its text touches the start edge.
         expect(Math.abs(cell.startGap)).toBeLessThanOrEqual(1);
       }
     }

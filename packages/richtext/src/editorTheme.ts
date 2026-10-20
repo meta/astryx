@@ -59,26 +59,20 @@ const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--si
 const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
-  // Lexical marks every block `dir="auto"`, so the HTML directionality
-  // heuristic reads the block's first strong character. A block follows the
-  // surface around it (spec:AST-061 FR6) until its own text is strongly
-  // right-to-left: a Hebrew paragraph in an English document then reads
-  // right-to-left, flushes right, and takes its caret, quote bar, list
-  // markers and indent on the right, as it does in Google Docs and in
-  // Lexical's own playground. Without this a block kept the surface's
-  // `direction` while `dir="auto"` reordered its glyphs, which left the
-  // caret walking the wrong way through right-to-left text.
+  // Lexical gives a top-level block `dir="auto"` until BlockDirectionPlugin
+  // writes the direction of the block's own text onto it. A block that says
+  // `ltr` or `rtl` is left alone, so the UA's own rule sets its direction
+  // and its caret, alignment, quote bar, list markers and indent all follow
+  // its text, as they do in Google Docs and in Lexical's own playground.
   //
-  // `:dir(rtl)` tells a strongly right-to-left block from every other one,
-  // but CSS cannot tell a strongly left-to-right block from a block of
-  // digits, punctuation, an image or nothing at all: all four are
-  // `:dir(ltr)` under `dir="auto"`. A left-to-right block inside a
-  // right-to-left document therefore still follows the document, so an
-  // empty paragraph keeps its caret on the document's start edge.
+  // `auto` means the block has no direction of its own — it holds digits,
+  // punctuation, an image, or nothing at all — so it follows the document
+  // around it (spec:AST-061 FR6) and an empty paragraph keeps its caret on
+  // a right-to-left document's start edge.
   blockDirection: {
     direction: {
-      default: 'inherit',
-      ':dir(rtl)': 'rtl',
+      default: null,
+      ':is([dir="auto"])': 'inherit',
     },
   },
   // A table is not prose. Its columns are read in the document's order, not

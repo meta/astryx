@@ -298,6 +298,17 @@ const IMAGE = '[data-playground-editor] [data-playground-image] img';
 async function insertSampleImage(page: Page): Promise<void> {
   await page.locator(EDITOR).click();
   await page.keyboard.press('ControlOrMeta+End');
+  await $insertFromDialog(page);
+}
+
+/** Inserts the sample image at the end of the block holding `text`. */
+async function insertSampleImageInto(page: Page, text: string): Promise<void> {
+  await page.locator(EDITOR).getByText(text, {exact: true}).click();
+  await page.keyboard.press('End');
+  await $insertFromDialog(page);
+}
+
+async function $insertFromDialog(page: Page): Promise<void> {
   await page.getByRole('button', {name: 'Image', exact: true}).click();
   // The dialog opens on its sample source, so this is one click away.
   await expect(page.getByRole('heading', {name: 'Insert image'})).toBeVisible();
@@ -434,8 +445,13 @@ test('the resize handle follows the drag in a right-to-left document', async ({
   // The handle sits on the inline end, which is the image's LEFT edge here,
   // so dragging it outward lowers clientX. A width that followed the axis
   // rather than the drag would shrink the image instead.
+  //
+  // The image goes in the document's Hebrew paragraph: a block reads the way
+  // its own text reads (BlockDirectionPlugin), so the last paragraph of this
+  // English document is left-to-right even here, and an image in it would
+  // have its handle on the right.
   const errors = await openStory(page, 'rtl');
-  await insertSampleImage(page);
+  await insertSampleImageInto(page, 'פסקה בעברית לבדיקת כיוון הטקסט.');
   await page.locator(IMAGE).click();
   // Narrow it first: at its own width the picture is already near the
   // measure, and `max-width: 100%` would absorb the drag.
