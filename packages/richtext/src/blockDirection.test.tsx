@@ -89,4 +89,34 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     ].map(part => part.getAttribute('dir'));
     expect(parts.every(dir => dir === null || dir === 'auto')).toBe(true);
   });
+
+  it('leaves a list and a fenced code block on the document direction', async () => {
+    // Both hold several lines under one element, so one direction would
+    // impose the first line's on the rest: a Hebrew first item would turn
+    // `Buy milk.` into `.Buy milk`.
+    const {container} = render(
+      <RichTextView
+        value={markdownToEditorStateJSON(
+          [
+            `- ${HEBREW}`,
+            '- Buy milk.',
+            '',
+            '```js',
+            '// שלום',
+            'const x = 1;',
+            '```',
+          ].join('\n'),
+        )}
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector('ul')).not.toBeNull(),
+    );
+    expect(blockDirections(container)).toEqual(['auto', 'auto']);
+    // And nothing is written onto the items inside the list either.
+    const items = [...container.querySelectorAll('li')].map(item =>
+      item.getAttribute('dir'),
+    );
+    expect(items.every(dir => dir === null)).toBe(true);
+  });
 });

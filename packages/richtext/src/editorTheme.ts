@@ -62,13 +62,15 @@ const editorTheme = stylex.create({
   // Lexical gives a top-level block `dir="auto"` until BlockDirectionPlugin
   // writes the direction of the block's own text onto it. A block that says
   // `ltr` or `rtl` is left alone, so the UA's own rule sets its direction
-  // and its caret, alignment, quote bar, list markers and indent all follow
-  // its text, as they do in Google Docs and in Lexical's own playground.
+  // and its caret, alignment, quote bar and indent all follow its text, as
+  // they do in Google Docs and in Lexical's own playground.
   //
-  // `auto` means the block has no direction of its own — it holds digits,
-  // punctuation, an image, or nothing at all — so it follows the document
-  // around it (spec:AST-061 FR6) and an empty paragraph keeps its caret on
-  // a right-to-left document's start edge.
+  // `auto` means the block has no single direction of its own — it holds
+  // digits, punctuation, an image, nothing at all, or several lines that
+  // are each read on their own terms (a list, a fenced code block). It
+  // follows the document around it (spec:AST-061 FR6), so an empty
+  // paragraph keeps its caret on a right-to-left document's start edge and
+  // an English item under a Hebrew one still reads `Buy milk.`.
   blockDirection: {
     direction: {
       default: null,
@@ -498,8 +500,9 @@ const editorTheme = stylex.create({
  * class-name strings, which `stylex.props(...).className` yields.
  */
 export function sharedEditorTheme(): EditorThemeClasses {
-  // A class for a text block, which follows the surface's direction until
-  // its own text is strongly right-to-left.
+  // A class for a block Lexical can mark `dir="auto"`: it reads its own way
+  // once BlockDirectionPlugin has written a direction onto it, and follows
+  // the document while it still says `auto`.
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
     stylex.props(...styles, editorTheme.blockDirection).className ?? '';
   // A class for a table part, which takes the surface's direction whatever

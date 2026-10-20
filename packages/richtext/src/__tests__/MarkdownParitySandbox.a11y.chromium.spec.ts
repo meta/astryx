@@ -1953,6 +1953,21 @@ for (const direction of ['ltr', 'rtl'] as const) {
       .filter(block => block.direction !== direction)
       .map(block => block.key);
     expect(otherDirection, MARKDOWN).toEqual([]);
+    // Inside blocks too: table rows and cells, list items, and paragraphs.
+    // This PR does not change core Markdown, so its nested blocks still
+    // take the provider direction throughout.
+    const nested = await page.evaluate(
+      ({selector, expected}) =>
+        [
+          ...document.querySelectorAll(
+            `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
+          ),
+        ]
+          .filter(element => getComputedStyle(element).direction !== expected)
+          .map(element => element.tagName),
+      {selector: MARKDOWN, expected: direction},
+    );
+    expect(nested, `${MARKDOWN} nested`).toEqual([]);
     expect(errors).toEqual([]);
   });
 
@@ -1993,6 +2008,59 @@ for (const direction of ['ltr', 'rtl'] as const) {
     );
     expect(tableParts, `${RICH_TEXT} table`).toEqual([]);
     expect(errors).toEqual([]);
+  });
+
+  // A list and a fenced code block hold several lines under one element, so
+  // one direction cannot serve them: the first line's would be imposed on
+  // the rest. They keep the document's direction, and the browser reads
+  // each line inside on its own.
+  test(`a Hebrew-first list and code block keep the document direction (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(
+        [
+          '- \u05e9\u05dc\u05d5\u05dd',
+          '- Buy milk.',
+          '',
+          '```js',
+          '// \u05e9\u05dc\u05d5\u05dd',
+          'const x = 1;',
+          '```',
+        ].join('\n'),
+      );
+    await expect(page.locator('ul:visible')).toHaveCount(2);
+    const blocks = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll('[data-lexical-editor] > :is(ul, code)'),
+      ].map(element => ({
+        tag: element.tagName,
+        dir: element.getAttribute('dir'),
+        direction: getComputedStyle(element).direction,
+      })),
+    );
+    // The editor's list and code block (the view renders its own copies).
+    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    for (const node of blocks) {
+      // No direction is written onto them, so they follow the document.
+      expect(node.dir, node.tag).toBe('auto');
+      expect(node.direction, node.tag).toBe(direction);
+    }
+    // And the English item still reads in its own order under the Hebrew
+    // one: `Buy milk.`, not `.Buy milk`.
+    const englishItem = page
+      .locator('[data-lexical-editor] li', {hasText: 'Buy milk.'})
+      .first();
+    await expect(englishItem).toHaveText('Buy milk.');
+    expect(
+      await englishItem.evaluate(element => getComputedStyle(element).direction),
+    ).toBe(direction);
   });
 
   // A table's own parts take the document's direction, so its columns keep
