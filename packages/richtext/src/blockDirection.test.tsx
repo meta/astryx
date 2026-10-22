@@ -90,16 +90,18 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     expect(parts.every(dir => dir === null || dir === 'auto')).toBe(true);
   });
 
-  it('leaves a list and a fenced code block on the document direction', async () => {
-    // Both hold several lines under one element, so one direction would
-    // impose the first line's on the rest: a Hebrew first item would turn
-    // `Buy milk.` into `.Buy milk`.
+  it('orders a list in the document direction and reads each item its own way', async () => {
+    // One direction on the list would impose the first item's on the rest:
+    // a Hebrew first item would turn `Buy milk.` into `.Buy milk`. Each item
+    // carries its own instead, and the list keeps the document's so its
+    // markers and indent stay on the document's start edge.
     const {container} = render(
       <RichTextView
         value={markdownToEditorStateJSON(
           [
             `- ${HEBREW}`,
             '- Buy milk.',
+            '- 123',
             '',
             '```js',
             '// שלום',
@@ -112,11 +114,20 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     await waitFor(() =>
       expect(container.querySelector('ul')).not.toBeNull(),
     );
+    // The list and the code block take no direction of their own. A fenced
+    // code block has no per-line node to carry one, so it keeps the
+    // document's, as core Markdown's does.
     expect(blockDirections(container)).toEqual(['auto', 'auto']);
-    // And nothing is written onto the items inside the list either.
-    const items = [...container.querySelectorAll('li')].map(item =>
-      item.getAttribute('dir'),
-    );
-    expect(items.every(dir => dir === null)).toBe(true);
+    expect(
+      [...container.querySelectorAll('li')].map(item => [
+        item.textContent,
+        item.getAttribute('dir'),
+      ]),
+    ).toEqual([
+      [HEBREW, 'rtl'],
+      ['Buy milk.', 'ltr'],
+      // No strong character, so it follows the document.
+      ['123', null],
+    ]);
   });
 });

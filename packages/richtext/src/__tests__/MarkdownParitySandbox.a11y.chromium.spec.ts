@@ -2010,11 +2010,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
     expect(errors).toEqual([]);
   });
 
-  // A list and a fenced code block hold several lines under one element, so
-  // one direction cannot serve them: the first line's would be imposed on
-  // the rest. They keep the document's direction, and the browser reads
-  // each line inside on its own.
-  test(`a Hebrew-first list and code block keep the document direction (${direction})`, async ({
+  // A list orders its markers and indent in the document's direction, so the
+  // `ul` keeps it. Each item is its own piece of prose and takes its own, so
+  // a Hebrew first item cannot turn `Buy milk.` into `.Buy milk`, and an
+  // English item in a right-to-left document still reads left-to-right. A
+  // fenced code block is several lines under one element with no per-line
+  // node to carry a direction, so it keeps the document's.
+  test(`a list orders in the document direction and its items read their own (${direction})`, async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -2036,7 +2038,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
         ].join('\n'),
       );
     await expect(page.locator('ul:visible')).toHaveCount(2);
-    const blocks = await page.evaluate(() =>
+    const containers = await page.evaluate(() =>
       [
         ...document.querySelectorAll('[data-lexical-editor] > :is(ul, code)'),
       ].map(element => ({
@@ -2046,29 +2048,37 @@ for (const direction of ['ltr', 'rtl'] as const) {
       })),
     );
     // The editor's list and code block (the view renders its own copies).
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
-    for (const node of blocks) {
-      // No direction is written onto them, so they follow the document.
+    expect(containers.length).toBeGreaterThanOrEqual(2);
+    for (const node of containers) {
+      // No direction is written onto either, so they order in the document's.
       expect(node.dir, node.tag).toBe('auto');
       expect(node.direction, node.tag).toBe(direction);
     }
-    // And the English item still reads in its own order under the Hebrew
-    // one: `Buy milk.`, not `.Buy milk`.
-    const englishItem = page
-      .locator('[data-lexical-editor] li', {hasText: 'Buy milk.'})
-      .first();
-    await expect(englishItem).toHaveText('Buy milk.');
-    expect(
-      await englishItem.evaluate(element => getComputedStyle(element).direction),
-    ).toBe(direction);
+    // Each item reads the way its own text reads, in either document.
+    const items = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-lexical-editor] li')].map(item => ({
+        text: (item.textContent ?? '').trim(),
+        dir: item.getAttribute('dir'),
+        direction: getComputedStyle(item).direction,
+      })),
+    );
+    const hebrew = items.find(item => item.text === '\u05e9\u05dc\u05d5\u05dd');
+    const english = items.find(item => item.text === 'Buy milk.');
+    expect(hebrew?.dir).toBe('rtl');
+    expect(hebrew?.direction).toBe('rtl');
+    expect(english?.dir).toBe('ltr');
+    expect(english?.direction).toBe('ltr');
+    // Which is what keeps `Buy milk.` reading `Buy milk.`, not `.Buy milk`.
+    await expect(
+      page.locator('[data-lexical-editor] li', {hasText: 'Buy milk.'}).first(),
+    ).toHaveText('Buy milk.');
   });
 
   // A table's own parts take the document's direction, so its columns keep
   // their order and a column's start edge is the document's. The paragraph
-  // inside a cell takes it too: a column is read as one, so its cells line
-  // up with each other rather than each with its own script. Only a
-  // top-level block carries its own direction (BlockDirectionPlugin).
-  test(`table parts take the provider direction with mixed scripts (${direction})`, async ({
+  // inside a cell is prose and takes its own, so a cell of English in a
+  // right-to-left document reads and is edited left-to-right.
+  test(`a table orders in the document direction and its cells read their own (${direction})`, async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -2096,6 +2106,16 @@ for (const direction of ['ltr', 'rtl'] as const) {
             column: (cell as HTMLTableCellElement).cellIndex,
             direction: style.direction,
             paragraphDirection,
+            // Hebrew is the only strong right-to-left script in the fixture.
+            textDirection: /^[^A-Za-z\u0590-\u05ff]*[\u0590-\u05ff]/.test(
+              (paragraph.textContent ?? '').trim(),
+            )
+              ? 'rtl'
+              : /^[^A-Za-z\u0590-\u05ff]*[A-Za-z]/.test(
+                    (paragraph.textContent ?? '').trim(),
+                  )
+                ? 'ltr'
+                : null,
             startGap:
               paragraphDirection === 'rtl'
                 ? box.right - parseFloat(style.paddingRight) - text.right
@@ -2109,10 +2129,11 @@ for (const direction of ['ltr', 'rtl'] as const) {
     for (const cell of cells) {
       // The cell box, and so the column it sits in, follows the document.
       expect(cell.direction).toBe(direction);
-      // So does its prose, whatever script the cell holds.
-      expect(cell.paragraphDirection).toBe(direction);
+      // Its prose reads the way the cell's own text reads.
+      expect(cell.paragraphDirection).toBe(cell.textDirection ?? direction);
       if (cell.column === 0) {
-        // The first column is start-aligned: its text touches the start edge.
+        // The first column is start-aligned: its text touches the start edge
+        // of its own paragraph's direction.
         expect(Math.abs(cell.startGap)).toBeLessThanOrEqual(1);
       }
     }
