@@ -446,6 +446,17 @@ const editorTheme = stylex.create({
   // lines wrap rather than scroll: a scrolling region inside the editable
   // text cannot take keyboard focus of its own, so keyboard users could not
   // scroll it (axe scrollable-region-focusable).
+  // A fenced code block is several lines under one element, and Lexical
+  // gives it no per-line node that could carry a direction. `plaintext`
+  // puts each line in its own bidi paragraph taking the direction of its
+  // own first strong character, which is what a reader of code wants: a
+  // Hebrew comment line reads right-to-left while `const x = 1;` keeps its
+  // semicolon at the end, in either document. Core Markdown's `pre` starts
+  // its code at the left edge in a right-to-left document too.
+  codeDirection: {
+    direction: 'inherit',
+    unicodeBidi: 'plaintext',
+  },
   code: {
     display: 'block',
     fontFamily: typographyVars['--font-family-code'],
@@ -553,7 +564,9 @@ export function sharedEditorTheme(): EditorThemeClasses {
       code: stylex.props(editorTheme.textCode).className,
     },
     // The plain class lets CodeSyntaxPlugin's highlight rules find code blocks.
-    code: `${block(editorTheme.code)} ${CODE_SYNTAX_CLASS}`,
+    // Each line of a fenced code block reads its own way (codeDirection),
+    // so the block itself takes no direction from `block()`.
+    code: `${className(editorTheme.code)} ${className(editorTheme.codeDirection)} ${CODE_SYNTAX_CLASS}`,
     hr: stylex.props(editorTheme.hr).className,
     hrSelected: stylex.props(editorTheme.hrSelected).className,
     // MarkdownExtensionsPlugin puts it on a selected plugin node.

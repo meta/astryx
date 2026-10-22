@@ -2010,6 +2010,89 @@ for (const direction of ['ltr', 'rtl'] as const) {
     expect(errors).toEqual([]);
   });
 
+  // Each line of a fenced code block reads its own way: Lexical gives the
+  // block no per-line node to carry a direction, so `unicode-bidi: plaintext`
+  // puts every line in its own bidi paragraph instead. A Hebrew comment line
+  // reads right-to-left while `const x = 1;` keeps its semicolon at the end,
+  // in either document.
+  test(`each line of a fenced code block reads its own way (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(['```js', '// \u05e9\u05dc\u05d5\u05dd', 'const x = 1;', '```'].join('\n'));
+    // The story draws the editor and the read-only view of one document.
+    await expect(page.locator('[data-lexical-editor] code')).toHaveCount(2);
+    // Syntax highlighting splits a line into many spans, so read the
+    // characters out of the box and group them into visual lines.
+    const lines = await page.evaluate(() => {
+      const el = document.querySelector('[data-lexical-editor] code');
+      if (el === null) {
+        return {bidi: 'none', rows: []};
+      }
+      const box = el.getBoundingClientRect();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const chars: Array<{top: number; left: number; char: string}> = [];
+      let node: Node | null;
+      while ((node = walker.nextNode()) !== null) {
+        const text = node.textContent ?? '';
+        for (let index = 0; index < text.length; index++) {
+          const range = document.createRange();
+          range.setStart(node, index);
+          range.setEnd(node, index + 1);
+          const rect = range.getBoundingClientRect();
+          // A preserved newline sits on the line it ends and would sort
+          // into the middle of a right-to-left line's characters.
+          if ((rect.width === 0 && rect.height === 0) || text[index] === '\n') {
+            continue;
+          }
+          chars.push({
+            top: Math.round(rect.top),
+            left: rect.left,
+            char: text[index],
+          });
+        }
+      }
+      const rows = new Map<number, Array<{left: number; char: string}>>();
+      for (const entry of chars) {
+        const row = rows.get(entry.top) ?? [];
+        row.push({left: entry.left, char: entry.char});
+        rows.set(entry.top, row);
+      }
+      return {
+        bidi: getComputedStyle(el).unicodeBidi,
+        rows: [...rows.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([, row]) => {
+            const sorted = [...row].sort((a, b) => a.left - b.left);
+            return {
+              visual: sorted.map(entry => entry.char).join(''),
+              startsAtLeftEdge:
+                Math.round(sorted[0].left - box.left) <= 20,
+            };
+          }),
+      };
+    });
+    // Every line is its own bidi paragraph.
+    expect(lines.bidi).toBe('plaintext');
+    const code = lines.rows.find(row => row.visual.includes('const'));
+    // The code line reads left to right, semicolon last, and starts at the
+    // left edge whichever way the document points.
+    expect(code?.visual).toBe('const x = 1;');
+    expect(code?.startsAtLeftEdge).toBe(true);
+    // The Hebrew comment line still reads right to left.
+    const comment = lines.rows.find(row => row.visual.includes('\u05e9'));
+    expect(comment?.visual).toBe('\u05dd\u05d5\u05dc\u05e9 //');
+    // It reads right to left, so it starts at the right edge in either
+    // document — the line's own direction, not the document's.
+    expect(comment?.startsAtLeftEdge).toBe(false);
+  });
+
   // A list orders its markers and indent in the document's direction, so the
   // `ul` keeps it. Each item is its own piece of prose and takes its own, so
   // a Hebrew first item cannot turn `Buy milk.` into `.Buy milk`, and an

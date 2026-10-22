@@ -2,5 +2,5 @@
 '@astryxdesign/richtext': patch
 ---
 
-[fix] A RichText paragraph, heading, quote or list item now reads the way its own text reads, at any depth: a Hebrew paragraph in an English document flushes right and its caret follows the arrow keys instead of walking backwards, an English paragraph in a Hebrew document does the mirror, and an English list item or table cell in a right-to-left document no longer flushes right with its arrow keys reversed. A container with no direction of its own — digits, punctuation, an image, an empty line — keeps the document's, and so do a list, a table and a fenced code block, whose markers, columns and lines are ordered by the document.
+[fix] RichText text reads the way it is written, in either document. A paragraph, heading, quote or list item takes the direction of its own text at any depth, so a Hebrew paragraph in an English document flushes right with its caret following the arrow keys instead of walking backwards, and an English paragraph, list item or table cell in a Hebrew document does the mirror. Each line of a fenced code block reads its own way too, so a Hebrew comment reads right-to-left while `const x = 1;` keeps its semicolon at the end. A container with no direction of its own keeps the document's, and so do a list's markers, a table's columns and a code block's frame.
 @potatowagon
