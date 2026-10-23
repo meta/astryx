@@ -516,9 +516,11 @@ export function sharedEditorTheme(): EditorThemeClasses {
   // the document while it still says `auto`.
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
     stylex.props(...styles, editorTheme.blockDirection).className ?? '';
-  // A class for a table part, which takes the surface's direction whatever
-  // the cells hold, so a column reads the same way down its length.
-  const tablePart = (...styles: Array<stylex.StyleXStyles>): string =>
+  // A class for a container — a list, a table and its parts — which orders
+  // its contents in the document's direction whatever they hold, and
+  // unconditionally, so a `dir` that arrives with a paste or an older
+  // stored document cannot turn the container around.
+  const container = (...styles: Array<stylex.StyleXStyles>): string =>
     stylex.props(...styles, editorTheme.surfaceDirection).className ?? '';
   const className = (style: stylex.StyleXStyles): string =>
     stylex.props(style).className ?? '';
@@ -537,8 +539,10 @@ export function sharedEditorTheme(): EditorThemeClasses {
     },
     quote: block(editorTheme.quote),
     list: {
-      ul: block(editorTheme.ul),
-      ol: block(editorTheme.ol),
+      // A list orders its markers and indent in the document's direction;
+      // each item carries its own (BlockDirectionPlugin).
+      ul: container(editorTheme.ul),
+      ol: container(editorTheme.ol),
       listitem: stylex.props(editorTheme.listItem).className,
       nested: {
         listitem: stylex.props(editorTheme.listItem).className,
@@ -573,13 +577,13 @@ export function sharedEditorTheme(): EditorThemeClasses {
     markdownExtensionSelected: stylex.props(editorTheme.hrSelected).className,
     // Every table part takes the surface's direction, so a column reads the
     // same way down its length whatever each cell holds.
-    table: tablePart(editorTheme.table),
-    tableRow: tablePart(editorTheme.tableRow),
-    tableCell: tablePart(editorTheme.tableCell),
-    tableCellHeader: tablePart(editorTheme.tableCellHeader),
+    table: container(editorTheme.table),
+    tableRow: container(editorTheme.tableRow),
+    tableCell: container(editorTheme.tableCell),
+    tableCellHeader: container(editorTheme.tableCellHeader),
     // Added on top of the cell's own class by Lexical while the cell is in a
     // table selection, so it carries no direction of its own.
     tableCellSelected: className(editorTheme.tableCellSelected),
-    tableScrollableWrapper: tablePart(editorTheme.tableScrollableWrapper),
+    tableScrollableWrapper: container(editorTheme.tableScrollableWrapper),
   };
 }

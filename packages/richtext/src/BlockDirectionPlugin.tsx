@@ -50,7 +50,9 @@ import {useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {mergeRegister} from '@lexical/utils';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
-import {$isListNode, ListItemNode} from '@lexical/list';
+import {$isListNode, ListItemNode, ListNode} from '@lexical/list';
+import {CodeNode} from '@lexical/code';
+import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {
   $getRoot,
   $isElementNode,
@@ -76,6 +78,21 @@ const PROSE_NODES: ReadonlyArray<Klass<ElementNode>> = [
   ListItemNode,
 ];
 
+/**
+ * The containers, which order their contents in the document's direction and
+ * so must never carry one of their own. A `dir` can still arrive on them from
+ * pasted HTML (`$setDirectionFromDOM`) or an older stored document, which
+ * would turn a list's markers or a table's columns around; clearing it keeps
+ * the stored state saying what the document shows.
+ */
+const CONTAINER_NODES: ReadonlyArray<Klass<ElementNode>> = [
+  ListNode,
+  CodeNode,
+  TableNode,
+  TableRowNode,
+  TableCellNode,
+];
+
 /** Whether this node is a prose container that carries its own `dir`. */
 function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
   if (!$isElementNode(node) || !PROSE_NODES.some(k => node instanceof k)) {
@@ -91,17 +108,30 @@ function $ownDirection(node: ElementNode): 'ltr' | 'rtl' | null {
   return getTextDirection(node.getTextContent());
 }
 
-/** Whether this container's `dir` already matches the text inside it. */
-function $isSettled(node: LexicalNode): boolean {
+/** Whether this node is a container, which carries no direction of its own. */
+function $isContainer(node: LexicalNode): node is ElementNode {
   return (
-    !$isOwnDirectionBlock(node) || node.getDirection() === $ownDirection(node)
+    $isElementNode(node) && CONTAINER_NODES.some(klass => node instanceof klass)
   );
 }
 
-/** Writes a container's own direction onto it, if that is not what it says. */
+/** The direction this node should carry: its text's, or none at all. */
+function $wantedDirection(node: LexicalNode): 'ltr' | 'rtl' | null {
+  return $isOwnDirectionBlock(node) ? $ownDirection(node) : null;
+}
+
+/** Whether this node's `dir` is already what it should be. */
+function $isSettled(node: LexicalNode): boolean {
+  if (!$isOwnDirectionBlock(node) && !$isContainer(node)) {
+    return true;
+  }
+  return (node as ElementNode).getDirection() === $wantedDirection(node);
+}
+
+/** Writes a node's direction onto it, if that is not what it says. */
 function $writeOwnDirection(node: LexicalNode): void {
   if (!$isSettled(node)) {
-    (node as ElementNode).setDirection($ownDirection(node as ElementNode));
+    (node as ElementNode).setDirection($wantedDirection(node));
   }
 }
 
@@ -119,12 +149,12 @@ function $proseContainer(node: LexicalNode): ElementNode | null {
   return null;
 }
 
-/** Every prose container in the document, in document order. */
+/** Every node whose direction this plugin owns, in document order. */
 function $allProseContainers(): ElementNode[] {
   const found: ElementNode[] = [];
   const visit = (node: LexicalNode): void => {
-    if ($isOwnDirectionBlock(node)) {
-      found.push(node);
+    if ($isOwnDirectionBlock(node) || $isContainer(node)) {
+      found.push(node as ElementNode);
     }
     if ($isElementNode(node)) {
       node.getChildren().forEach(visit);
@@ -155,6 +185,12 @@ export function registerBlockDirection(editor: LexicalEditor): () => void {
     // own being dirtied — a new empty paragraph, a heading conversion, a
     // list item split, a deletion that empties a block.
     ...PROSE_NODES.map(klass =>
+      editor.registerNodeTransform(klass, $writeOwnDirection),
+    ),
+    // A container that arrives carrying a direction — pasted HTML, or an
+    // older stored document — gives it up, so its contents are ordered by
+    // the document as they are everywhere else.
+    ...CONTAINER_NODES.map(klass =>
       editor.registerNodeTransform(klass, $writeOwnDirection),
     ),
     // Replacing the whole state runs no transform at all, and RichTextView

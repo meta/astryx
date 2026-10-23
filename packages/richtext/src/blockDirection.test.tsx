@@ -130,4 +130,60 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
       ['123', null],
     ]);
   });
+
+  it('clears a direction that arrives on a container', async () => {
+    // A list pasted as `<ul dir="rtl">`, or an older stored document, must
+    // not turn its markers and indent around in an English document. The
+    // item keeps its own direction; the list gives up the one it arrived
+    // with.
+    const stored = JSON.stringify({
+      root: {
+        children: [
+          {
+            children: [
+              {
+                children: [
+                  {
+                    detail: 0,
+                    format: 0,
+                    mode: 'normal',
+                    style: '',
+                    text: 'Buy milk.',
+                    type: 'text',
+                    version: 1,
+                  },
+                ],
+                direction: 'rtl',
+                format: '',
+                indent: 0,
+                type: 'listitem',
+                value: 1,
+                version: 1,
+              },
+            ],
+            direction: 'rtl',
+            format: '',
+            indent: 0,
+            listType: 'bullet',
+            start: 1,
+            tag: 'ul',
+            type: 'list',
+            version: 1,
+          },
+        ],
+        direction: 'rtl',
+        format: '',
+        indent: 0,
+        type: 'root',
+        version: 1,
+      },
+    });
+    const {container} = render(<RichTextView value={stored} />);
+    await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
+    await waitFor(() =>
+      expect(container.querySelector('ul')?.getAttribute('dir')).toBeNull(),
+    );
+    // The item reads its own text, which is English.
+    expect(container.querySelector('li')?.getAttribute('dir')).toBe('ltr');
+  });
 });
