@@ -415,8 +415,12 @@ describe('icon add', () => {
     const refused = await json(args);
     expect(refused.code).toBe(1);
     expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(refused.body.error).toContain('variant "solid" is not in variants');
-    expect(refused.body.error).toContain('Declare it in "variants"');
+    expect(refused.body.error).toBe(
+      'Icon set "outline" declares no variant "solid". Declare it first.',
+    );
+    expect(refused.body.suggestions[0].name).toBe(
+      'astryx experimental icon new-set outline --variants <default>,solid',
+    );
     expect(dataOf('outline')).toEqual(before);
 
     const dataPath = path.join(
@@ -980,7 +984,7 @@ describe('a library of icon data, through the adapter', () => {
     );
     // A built-in mapping lands in the theme map, and the types follow.
     expect(text).toContain(
-      "close: createElement(XIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em'}),",
+      "close: createElement(XIcon, {'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}),",
     );
     const types = fs.readFileSync(
       path.join(pkg, 'icon-sets', 'outline', 'outline.generated.d.ts'),

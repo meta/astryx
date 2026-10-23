@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start an icon set in your integration package',
   description:
-    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. Run it again to refresh. --variants and --default-variant declare the set's variants. Experimental: it may change or be removed in a patch release.",
+    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. A library whose export names end in looks (XOutline24WGHT500Icon) gives one icon per glyph, by its glyph id (x), in the look the default variant names, else the library's usual default. Run it again with --from to refresh. --variants and --default-variant declare the set's variants; over an existing set without --from, they, --display-name and --description update the set in place and leave its icons as they are. Experimental: it may change or be removed in a patch release.",
   fn: 'iconNewSet',
   args: [
     {

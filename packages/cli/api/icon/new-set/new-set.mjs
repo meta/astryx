@@ -9,7 +9,12 @@
  *   command
  */
 
-import {addIconSet, authoring, refuseOutsideProject} from '../_adapter.mjs';
+import {
+  addIconSet,
+  authoring,
+  refuseOutsideProject,
+  withLibraryProgress,
+} from '../_adapter.mjs';
 import {refuseOtherOptions} from '../_options.mjs';
 
 /**
@@ -21,6 +26,13 @@ import {refuseOtherOptions} from '../_options.mjs';
  * @returns {Promise<import('../icon.type.mjs').IconNewSetResponse>}
  */
 export async function iconNewSet(name, options = {}) {
+  const {progress, ...rest} = options;
+  if (progress != null && typeof progress !== 'function') {
+    throw new TypeError('options.progress must be a function.');
+  }
+  if (progress) {
+    return withLibraryProgress(progress, () => iconNewSet(name, rest));
+  }
   refuseOtherOptions('icon-set', options);
   refuseOutsideProject(
     options.cwd ?? process.cwd(),

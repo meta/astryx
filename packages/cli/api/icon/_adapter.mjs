@@ -28,6 +28,7 @@ export {
   importLine,
   leadingReading,
   matchIcon,
+  answeringMatches,
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
@@ -37,6 +38,7 @@ export {setConfigString} from '../../foundation/config/config-writer.mjs';
 export {
   assertIconExport,
   checkNewDefinition,
+  definitionNameFromInput,
   definitionFile,
   findLocalIconSet,
   writeDefinitionFile,
@@ -53,6 +55,9 @@ export {
   iconExportName,
   iconNaming,
   modulePrefix,
+  withLibraryProgress,
+  moduleNaming,
+  iconNamingWithoutLook,
   setModuleNote,
   variantExportName,
   writeGeneratedIcons,

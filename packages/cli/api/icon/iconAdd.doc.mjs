@@ -53,7 +53,7 @@ export const doc = {
       name: 'options.newDefinition',
       type: 'string',
       description:
-        "Add the set's own definition with this name, then map the icon to it.",
+        "Add the set's own definition with this name, in camelCase (`aiHelper`) or kebab-case (`ai-helper`), then map the icon to it.",
     },
     {
       name: 'options.description',
@@ -88,6 +88,12 @@ export const doc = {
       description:
         'With `variant` and `from`, and no export name: add that variant for every icon of the set whose id an export of `from` has (`TrashIcon` in a solid module becomes the solid variant of `trash`).',
       default: 'false',
+    },
+    {
+      name: 'options.progress',
+      type: '(line: string) => void',
+      description:
+        'Hears a line before a module of a thousand exports or more is read, and one with what it found. The CLI prints them on stderr in text mode.',
     },
     {
       name: 'options.cwd',

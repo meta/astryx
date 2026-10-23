@@ -167,13 +167,26 @@ function nodesOfType(node, type) {
     byType = new Map();
     nodesByTree.set(node, byType);
   }
-  let found = byType.get(type);
-  if (!found) {
-    found = collectNodesOfType(node, type, []);
-    byType.set(type, found);
-  }
+  const cached = byType.get(type);
+  if (cached) return cached;
+  // Module declarations live only at a program's top level, so they are
+  // read from its body: no walk of every function in a library file.
+  /** @type {readonly any[]} */
+  const found =
+    node.type === 'Program' && MODULE_DECLARATIONS.has(type)
+      ? node.body.filter((/** @type {any} */ each) => each.type === type)
+      : collectNodesOfType(node, type, []);
+  byType.set(type, found);
   return found;
 }
+
+/** Statement types that appear only at a module's top level. */
+const MODULE_DECLARATIONS = new Set([
+  'ExportNamedDeclaration',
+  'ExportDefaultDeclaration',
+  'ExportAllDeclaration',
+  'ImportDeclaration',
+]);
 
 /**
  * @param {any} node
