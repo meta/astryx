@@ -71,6 +71,16 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   allowedPointerTypes?: ReadonlyArray<PointerKind>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */
   requiresExclusiveTouchType?: boolean;
+  /**
+   * Whether this recognizer takes its touches from the browser when it
+   * recognizes. `false` makes a watcher (a tab bar that minimizes while the
+   * page scrolls): it never claims, so it gets only passive listeners and
+   * never delays a scroll; it prevents no other recognizer and none prevents
+   * it; and it keeps tracking a touch the browser takes for a scroll,
+   * reporting through the native scroll and ending at the lift.
+   * @default true
+   */
+  claimsTouches?: boolean;
   /** gestureRecognizerShouldBegin: return false to fail instead of beginning. */
   shouldBegin?: (recognizer: R) => boolean;
   /** gestureRecognizer(_:shouldReceive:): return false to never see this touch. */
@@ -234,7 +244,7 @@ export abstract class GestureRecognizer {
    * it. Every touch recognizer claims; hover has no touches to claim.
    */
   get claimsTouches(): boolean {
-    return true;
+    return this.options.claimsTouches ?? true;
   }
 
   get state(): GestureState {
@@ -414,6 +424,10 @@ export abstract class GestureRecognizer {
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): boolean {
+    if (!this.claimsTouches) {
+      // A watcher follows the browser's scroll to the lift.
+      return true;
+    }
     this.touchesCancelled(touches, event);
     return false;
   }

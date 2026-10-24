@@ -75,6 +75,13 @@ the same and returns a detach function.
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges` including `leading` / `trailing` (resolved against the writing direction); fails as soon as the touch lands outside                                                                           |
 | `HoverGestureRecognizer`         | `UIHoverGestureRecognizer`         | continuous | a mouse or a hovering pen; silent for fingers                                                                                                                                                         |
 
+A recognizer created with `claimsTouches: false` is a watcher (a tab bar
+that minimizes while the page scrolls): it never claims, so its element gets
+only passive listeners and a scroll never waits for it; it prevents no other
+recognizer and none prevents it; and it follows a touch the browser takes
+for a scroll to the lift. Attach it with `manageStyle: false` to leave the
+element's `touch-action` alone.
+
 Every recognizer also has UIKit's switches: `isEnabled` (use `setEnabled`;
 turning it off mid-gesture cancels), `cancelsTouchesInView` (default true),
 `delaysTouchesBegan` (default false), `delaysTouchesEnded` (default true),
