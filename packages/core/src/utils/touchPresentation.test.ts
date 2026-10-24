@@ -5,11 +5,10 @@
  * @input Uses vitest, React Testing Library, react-dom/server and a
  *   query-aware matchMedia stub
  * @output The touch presentation's answers: touch from the primary pointer,
- *   compact from the width, both for presentations, the iOS idiom from the
- *   engine and the pointer; the server default and hints; live updates; the
- *   one-moment read; the motion choice; core's compact-touch media keys and
- *   iOS gate keys spelled and nested as the shared queries; the adaptive
- *   presentation reading them
+ *   compact from the width, both for presentations, the same answer on every
+ *   engine; the server default and hints; live updates; the one-moment read;
+ *   core's compact-touch media keys and iOS style-gate keys spelled and nested
+ *   as the shared queries; the adaptive presentation reading them
  * @position Unit tests of packages/core/src/utils/touchPresentation.ts
  */
 
@@ -30,8 +29,6 @@ import {
   IOS_TOUCH_STYLE_KEYS,
   TOUCH_QUERY,
   readTouchPresentation,
-  useMotionPresentation,
-  useTouchIdiom,
   useTouchPresentation,
 } from './touchPresentation';
 
@@ -98,7 +95,6 @@ describe('touch presentation', () => {
       isTouch: false,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A tablet: a finger at any width.
     act(() => setDevice({coarse: true, width: 1024, height: 1366}));
@@ -106,7 +102,6 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A narrowed desktop window: compact, still a mouse.
     act(() => setDevice({coarse: false, width: 600, height: 900}));
@@ -114,7 +109,6 @@ describe('touch presentation', () => {
       isTouch: false,
       isCompact: true,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A phone: both.
     act(() => setDevice({coarse: true, width: 390, height: 844}));
@@ -122,43 +116,18 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: true,
       isCompactTouch: true,
-      idiom: 'default',
     });
   });
 
-  it('is the iOS idiom only for iOS WebKit under a finger', () => {
-    const {result} = renderHook(() => ({
-      presentation: useTouchPresentation(),
-      idiom: useTouchIdiom(),
-      motion: useMotionPresentation(),
-    }));
+  it('answers the same on every engine: iOS WebKit and Android alike', () => {
+    const {result} = renderHook(() => useTouchPresentation());
     // An Android phone: a finger, no -webkit-touch-callout.
     act(() => setDevice({coarse: true, width: 412, height: 915}));
-    expect(result.current.presentation.idiom).toBe('default');
-    expect(result.current.idiom).toBe('default');
-    expect(result.current.motion).toBe('theme');
-    // Desktop Safari: the engine is WebKit, but not iOS's, and a mouse.
-    act(() => setDevice({coarse: false, width: 1440, height: 900}));
-    expect(result.current.idiom).toBe('default');
-  });
-
-  it('follows the pointer live in iOS WebKit', () => {
-    setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
-    const {result} = renderHook(() => ({
-      presentation: useTouchPresentation(),
-      idiom: useTouchIdiom(),
-      motion: useMotionPresentation(),
-    }));
-    expect(result.current.presentation.idiom).toBe('ios');
-    expect(result.current.idiom).toBe('ios');
-    expect(result.current.motion).toBe('uikit');
-    // An iPad docks a trackpad: its primary pointer turns fine.
-    act(() => setDevice({coarse: false, width: 1024, height: 1366}));
-    expect(result.current.presentation.idiom).toBe('default');
-    expect(result.current.idiom).toBe('default');
-    expect(result.current.motion).toBe('theme');
-    act(() => setDevice({coarse: true}));
-    expect(result.current.idiom).toBe('ios');
+    const android = result.current;
+    // The same phone size in iOS WebKit gets the same answer.
+    act(() => setDevice({iosWebKit: true}));
+    expect(result.current).toEqual(android);
+    expect(result.current.isCompactTouch).toBe(true);
   });
 
   it('keeps one answer object while nothing changes', () => {
@@ -171,20 +140,18 @@ describe('touch presentation', () => {
   it('answers the server default, or the server hint, before hydration', () => {
     const Probe = (props: {hint?: boolean}) => {
       const presentation = useTouchPresentation(
-        props.hint === true ? {isCompact: true, idiom: 'ios'} : {},
+        props.hint === true ? {isTouch: true, isCompact: true} : {},
       );
       return createElement(
         'span',
         null,
-        `${presentation.isTouch}/${presentation.isCompactTouch}/${presentation.idiom}/${useTouchIdiom(props.hint === true ? 'ios' : 'default')}/${useMotionPresentation(props.hint)}`,
+        `${presentation.isTouch}/${presentation.isCompactTouch}`,
       );
     };
     setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
-    expect(renderToString(createElement(Probe))).toContain(
-      'false/false/default/default/theme',
-    );
+    expect(renderToString(createElement(Probe))).toContain('false/false');
     expect(renderToString(createElement(Probe, {hint: true}))).toContain(
-      'true/true/ios/ios/uikit',
+      'true/true',
     );
   });
 
@@ -210,24 +177,12 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: true,
       isCompactTouch: true,
-      idiom: 'default',
     });
-    setDevice({iosWebKit: true});
-    expect(readTouchPresentation().idiom).toBe('ios');
     expect(readTouchPresentation(null)).toEqual({
       isTouch: false,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
-  });
-
-  it('chooses UIKit motion in the iOS idiom and the theme everywhere else', () => {
-    const {result} = renderHook(() => useMotionPresentation());
-    expect(result.current).toBe('theme');
-    // A finger outside iOS keeps the theme's motion.
-    act(() => setDevice({coarse: true}));
-    expect(result.current).toBe('theme');
   });
 
   it('keeps every iOS gate in core spelled and nested as the resolver', () => {
