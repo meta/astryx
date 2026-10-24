@@ -9,7 +9,7 @@
  *   back: presentation values and velocities, retarget continuity, stop,
  *   completion, Reduced Motion substitutions, decays with edges, late attach
  * @position Testing; the compositor itself is proven in
- *   __tests__/animator.compositor.spec.ts
+ *   __tests__/animator.interaction.browser.spec.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
