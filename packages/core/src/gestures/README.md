@@ -533,6 +533,31 @@ way:
   starts sideways), so a passive listener there would cost no parity. It
   waits on a measured run on Android before any engine-specific choice.
 
+## Touches on moving elements
+
+iOS WebKit hit-tests an element that a compositor animation moves where
+the animation started: it keeps the transform it resolved when the
+animation went to the compositor, so event targets, `elementFromPoint` and
+`getBoundingClientRect` stay there for the whole curve, though the inline
+style holds the end and the computed style is live (iOS 26.2, measured;
+Chromium and Linux WebKit hit what is drawn). A finger on a settling sheet
+lands on whatever sat under the sheet's start (an upward release can hit
+the scrim and close the sheet). UIKit keeps an interruptible animation
+hit-testable where it is drawn (UIViewPropertyAnimator).
+
+A style write on the element makes WebKit resolve the transform again, to
+the value drawn at that moment, where it stays. So on iOS WebKit, at
+touch-down, the host has every element the animator reports as moving
+(`motion/presentation.ts`) resolved with one custom-property write, then
+asks the engine what is under the finger: the touch goes to what is drawn
+there, with z-order and `pointer-events` as the engine sees them. Press
+trackers take their bounds from `presentedRect`, the reported box moved by
+the motion since. A retargeted tap cancels the engine's click,
+which would hit the start position, and clicks what it touched; the
+swallower drops a late engine click, so the tap acts once. Not covered:
+scale and rotate (a zoom transition, a lifted preview is hit at its
+unscaled box) and CSS transitions or animations the animator did not start.
+
 ## Where the web differs from UIKit
 
 - Once a recognizer owns a touch, the browser cannot take the scroll back

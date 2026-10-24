@@ -54,7 +54,12 @@ export function usePressTracker(
   const tracker = useMemo(
     () =>
       new PressTracker({
-        getBounds: () => ref.current?.getBoundingClientRect() ?? null,
+        getBounds: () => {
+          const element = ref.current;
+          return element == null
+            ? null
+            : getGestureHost(element.ownerDocument).presentedRect(element);
+        },
         get view() {
           return ref.current;
         },

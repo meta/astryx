@@ -202,7 +202,7 @@ function addPressType(
       let last: ControlEvent | null = null;
       return new PressTracker({
         view: element,
-        getBounds: () => element.getBoundingClientRect(),
+        getBounds: () => host.presentedRect(element),
         trackingExpansion: options.trackingExpansion,
         highlightDelay: profile.highlightDelay,
         cancelTravel: profile.cancelTravel,
