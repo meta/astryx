@@ -22,6 +22,7 @@ import {
   COMPACT_TOUCH_PRESENTATION_QUERY,
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
+import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
 import {
   COMPACT_QUERY,
   COMPACT_TOUCH_QUERY,
@@ -155,20 +156,20 @@ describe('touch presentation', () => {
     );
   });
 
-  it('approximates UIKit size classes with a width and a height', () => {
+  it('is the theme compact definition: width below md or height below 500 (spec:AST-012 FR9)', () => {
     const {result} = renderHook(() => useTouchPresentation());
-    // iPad mini in portrait: regular in UIKit, not compact here.
-    act(() => setDevice({coarse: true, width: 744, height: 1133}));
+    // At the md point and taller than 500: not compact.
+    act(() => setDevice({coarse: true, width: 768, height: 1024}));
     expect(result.current.isCompact).toBe(false);
-    // iPhone in landscape: compact in UIKit and here.
+    // One pixel narrower: compact.
+    act(() => setDevice({coarse: true, width: 767, height: 1024}));
+    expect(result.current.isCompact).toBe(true);
+    // A phone in landscape: wide, but shorter than 500.
     act(() => setDevice({coarse: true, width: 852, height: 393}));
     expect(result.current.isCompact).toBe(true);
-    // iPad in Slide Over: compact in UIKit and here.
-    act(() => setDevice({coarse: true, width: 375, height: 1000}));
-    expect(result.current.isCompact).toBe(true);
-    // The known miss: a Max-size iPhone in landscape is regular in UIKit.
-    act(() => setDevice({coarse: true, width: 932, height: 430}));
-    expect(result.current.isCompact).toBe(true);
+    // A wide, short window at exactly 500 tall: not compact.
+    act(() => setDevice({coarse: true, width: 1024, height: 500}));
+    expect(result.current.isCompact).toBe(false);
   });
 
   it('reads the conditions at one moment, and without a window', () => {
@@ -280,7 +281,10 @@ describe('touch presentation', () => {
       );
     }
     expect(TOUCH_QUERY).toBe('(pointer: coarse)');
-    expect(COMPACT_QUERY).toBe('(width < 744px), (height < 500px)');
+    expect(COMPACT_QUERY).toBe(DEFAULT_COMPACT_DEFINITION.query);
+    expect(COMPACT_TOUCH_QUERY).toBe(
+      DEFAULT_COMPACT_DEFINITION.coarsePointerQuery,
+    );
   });
 
   it('is the query the adaptive popover-or-sheet presentation reads', () => {
@@ -292,8 +296,8 @@ describe('touch presentation', () => {
     // A phone in landscape too.
     act(() => setDevice({coarse: true, width: 852, height: 393}));
     expect(result.current).toBe('bottom-sheet');
-    // A tablet, even an iPad mini in portrait, keeps the anchored popover.
-    act(() => setDevice({coarse: true, width: 744, height: 1133}));
+    // A tablet at the md point keeps the anchored popover.
+    act(() => setDevice({coarse: true, width: 768, height: 1024}));
     expect(result.current).toBe('popover');
   });
 });

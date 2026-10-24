@@ -19,13 +19,11 @@
  *   reports coarse and gets touch ones at any width. Not `hover: none` (some
  *   touch browsers report hover) and not `any-pointer` (a laptop's touch
  *   screen is not how it is driven).
- * - LAYOUT behaviours key on the available size: compact below 744 px of
- *   width or below 500 px of height, whatever the pointer. UIKit decides by
- *   size class, which is not a width (an iPad mini in portrait, 744 pt wide,
- *   is regular; an iPhone in landscape, 852 pt wide, is compact). These two
- *   lines sort both right, and phones in landscape with them; the one known
- *   miss is a Max-size iPhone in landscape (932 x 430 pt), which UIKit calls
- *   regular and this calls compact.
+ * - LAYOUT behaviours key on the available size, whatever the pointer:
+ *   the theme's one compact definition (`spec:AST-012` FR9), width below the
+ *   `md` point or height below 500, the same numbers on every platform. A
+ *   phone in landscape is compact by its height; no platform size class is
+ *   consulted.
  * - A presentation that needs both (a bottom sheet in place of a popover, a
  *   drilled-in sub-menu in place of a flyout) asks for both.
  *
@@ -61,16 +59,17 @@
 
 import {useMemo} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
 
 /** The primary pointer is coarse: touch behaviours. */
 export const TOUCH_QUERY = '(pointer: coarse)';
 
-/** The viewport is compact: layout behaviours. */
-export const COMPACT_QUERY = '(width < 744px), (height < 500px)';
+/** The viewport is compact: layout behaviours (`spec:AST-012` FR9). */
+export const COMPACT_QUERY = DEFAULT_COMPACT_DEFINITION.query;
 
 /** Both: presentations such as a sheet in place of a popover. */
 export const COMPACT_TOUCH_QUERY =
-  '(width < 744px) and (pointer: coarse), (height < 500px) and (pointer: coarse)';
+  DEFAULT_COMPACT_DEFINITION.coarsePointerQuery;
 
 /**
  * The engine is WebKit on iOS or iPadOS: the only one that implements

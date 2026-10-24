@@ -46,7 +46,17 @@ export const docs = {
   name: 'MoreMenu',
   displayName: 'More Menu',
   category: 'Action',
-  keywords: ["moremenu","overflow","kebab","dotmenu","threedot","ellipsis","dropdown","contextmenu","actionmenu"],
+  keywords: [
+    'moremenu',
+    'overflow',
+    'kebab',
+    'dotmenu',
+    'threedot',
+    'ellipsis',
+    'dropdown',
+    'contextmenu',
+    'actionmenu',
+  ],
   props: [
     {
       name: 'items',
@@ -104,7 +114,8 @@ export const docs = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than 744px or shorter than 500px.',
+      description:
+        'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than 768px or shorter than 500px.',
       default: "'popover'",
     },
     {
@@ -129,19 +140,33 @@ export const docs = {
     },
   },
   theming: {
-    targets: [
-      {className: 'astryx-more-menu'},
-    ],
+    targets: [{className: 'astryx-more-menu'}],
   },
   usage: {
     anatomy,
     description:
-      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
+      "MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don't need to be always visible, like in table rows, card headers, or toolbars.",
     bestPractices: [
-      { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
-      { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
-      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
-      { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
+      {
+        guidance: true,
+        description:
+          'Use for overflow or secondary actions; keep primary actions visible outside the menu.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use dividers or sections to group related actions when the menu has many items.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.',
+      },
+      {
+        guidance: false,
+        description:
+          'Hide primary actions inside a MoreMenu; they should be directly visible.',
+      },
     ],
   },
 };
@@ -160,8 +185,7 @@ export const docsZh = {
     {
       name: 'label',
       type: 'string',
-      description:
-        '触发按钮的无障碍标签（aria-label）和工具提示文本。',
+      description: '触发按钮的无障碍标签（aria-label）和工具提示文本。',
       default: "'More options'",
     },
     {
@@ -179,15 +203,15 @@ export const docsZh = {
     {
       name: 'icon',
       type: 'ReactNode',
-      description:
-        '覆盖默认的三点图标。接受任何 ReactNode。',
+      description: '覆盖默认的三点图标。接受任何 ReactNode。',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
       description: '菜单触发器是否禁用。',
       default: 'false',
-    },    {
+    },
+    {
       name: 'placement',
       type: "'above' | 'below' | 'start' | 'end'",
       description:
@@ -204,7 +228,8 @@ export const docsZh = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于 744px 或高度小于 500px 时使用 BottomSheet。',
+      description:
+        '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于 768px 或高度小于 500px 时使用 BottomSheet。',
       default: "'popover'",
     },
     {
@@ -215,18 +240,32 @@ export const docsZh = {
     },
   ],
   theming: {
-    targets: [
-      {className: 'astryx-more-menu'},
-    ],
+    targets: [{className: 'astryx-more-menu'}],
   },
   usage: {
     description:
-      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
+      "MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don't need to be always visible, like in table rows, card headers, or toolbars.",
     bestPractices: [
-      { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
-      { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
-      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
-      { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
+      {
+        guidance: true,
+        description:
+          'Use for overflow or secondary actions; keep primary actions visible outside the menu.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use dividers or sections to group related actions when the menu has many items.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.',
+      },
+      {
+        guidance: false,
+        description:
+          'Hide primary actions inside a MoreMenu; they should be directly visible.',
+      },
     ],
   },
 };
@@ -238,16 +277,33 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
+      "MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don't need to be always visible, like in table rows, card headers, or toolbars.",
     bestPractices: [
-      { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
-      { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
-      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
-      { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
+      {
+        guidance: true,
+        description:
+          'Use for overflow or secondary actions; keep primary actions visible outside the menu.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use dividers or sections to group related actions when the menu has many items.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.',
+      },
+      {
+        guidance: false,
+        description:
+          'Hide primary actions inside a MoreMenu; they should be directly visible.',
+      },
     ],
   },
   propDescriptions: {
-    items: 'Menu items (actions, dividers, sections). Same type as DropdownMenu items.',
+    items:
+      'Menu items (actions, dividers, sections). Same type as DropdownMenu items.',
     label: 'Accessible label (aria-label) + tooltip text.',
     variant: 'Trigger button visual style variant.',
     size: 'Trigger button size.',
