@@ -1104,10 +1104,18 @@ function generateAdaptationMediaBlock(
   query: string,
   parts: string[],
   scopeSelector: string,
+  supports?: string,
 ): string {
-  return `@media ${query} {\n  @scope (${scopeSelector}) to (${THEME_SCOPE_TO}) {\n${parts
+  const block = `@media ${query} {\n  @scope (${scopeSelector}) to (${THEME_SCOPE_TO}) {\n${parts
     .map(indentRule)
     .join('\n\n')}\n  }\n}`;
+  // A platform condition is a feature query around the media block.
+  return supports === undefined
+    ? block
+    : `@supports ${supports} {\n${block
+        .split('\n')
+        .map(line => (line === '' ? line : `  ${line}`))
+        .join('\n')}\n}`;
 }
 
 /**
@@ -1167,7 +1175,14 @@ export function generateAdaptationCSS(
     if (parts.length === 0) {
       continue;
     }
-    blocks.push(generateAdaptationMediaBlock(rule.query, parts, scopeSelector));
+    blocks.push(
+      generateAdaptationMediaBlock(
+        rule.query,
+        parts,
+        scopeSelector,
+        rule.supports,
+      ),
+    );
   }
 
   if (adaptsHeading) {
@@ -1200,6 +1215,7 @@ export function generateAdaptationCSS(
             rule.query,
             authoredWeightParts,
             scopeSelector,
+            rule.supports,
           ),
         );
       }
