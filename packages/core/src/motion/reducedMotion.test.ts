@@ -19,7 +19,10 @@ import {
   REDUCED_MOTION_INSTANT_QUERY,
   reducedMotionFade,
 } from './reducedMotion';
-import {reducedMotionFadeConsts} from './reducedMotion.stylex';
+import {
+  reducedMotionFadeConsts,
+  reducedMotionKeys,
+} from './reducedMotion.stylex';
 import {timing} from './uikit/timing';
 
 const on = () => true;
@@ -67,12 +70,15 @@ describe('the CSS side of the policy', () => {
     );
   });
 
-  it('every StyleX key that splits Reduce Motion by pointer spells the two queries', () => {
-    const root = resolve(__dirname, '..');
-    const allowed = new Set([
-      `@media ${REDUCED_MOTION_FADE_QUERY}`,
+  it('spells the two media keys from the queries', () => {
+    expect(reducedMotionKeys.fade).toBe(`@media ${REDUCED_MOTION_FADE_QUERY}`);
+    expect(reducedMotionKeys.instant).toBe(
       `@media ${REDUCED_MOTION_INSTANT_QUERY}`,
-    ]);
+    );
+  });
+
+  it('no component spells a Reduce Motion pointer key itself', () => {
+    const root = resolve(__dirname, '..');
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, {withFileTypes: true})) {
@@ -85,12 +91,13 @@ describe('the CSS side of the policy', () => {
           /\.tsx?$/.test(entry.name) &&
           !/\.(test|spec|stories)\.tsx?$/.test(entry.name)
         ) {
+          if (/[/\\]motion[/\\]reducedMotion(\.stylex)?\.ts$/.test(path)) {
+            continue;
+          }
           for (const match of readFileSync(path, 'utf8').matchAll(
             /'(@media[^']*prefers-reduced-motion: reduce[^']*pointer[^']*)'/g,
           )) {
-            if (!allowed.has(match[1])) {
-              offenders.push(`${path.slice(root.length)}: ${match[1]}`);
-            }
+            offenders.push(`${path.slice(root.length)}: ${match[1]}`);
           }
         }
       }

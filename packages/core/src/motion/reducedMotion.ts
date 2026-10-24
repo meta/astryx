@@ -16,25 +16,24 @@
  * call site lengthens the fade (DR4). The animator follows the same policy on
  * its own (animator.ts).
  *
- * In StyleX, a media query key must be spelled in the file that uses it, so a
- * transition spells these two keys and takes its values from
- * reducedMotion.stylex.ts:
+ * In StyleX, a transition takes both keys and values from
+ * reducedMotion.stylex.ts, at property level:
  *
  * ```
  * transitionProperty: {
  *   default: 'opacity, translate',
- *   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': 'opacity',
- *   '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))': 'none',
+ *   [reducedMotionKeys.fade]: 'opacity',
+ *   [reducedMotionKeys.instant]: 'none',
  * },
  * transitionDuration: {
  *   default: '300ms',
- *   '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
- *     reducedMotionFadeConsts.duration,
- *   '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))': '0s',
+ *   [reducedMotionKeys.fade]: reducedMotionFadeConsts.duration,
+ *   [reducedMotionKeys.instant]: '0s',
  * },
  * ```
  *
- * reducedMotion.test.ts checks every such key in core against these queries.
+ * reducedMotion.test.ts pins the keys' spelling to these queries and refuses
+ * a component that spells them itself.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/reducedMotion.stylex.ts
