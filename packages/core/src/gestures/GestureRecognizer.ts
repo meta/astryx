@@ -53,6 +53,15 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   /** Hold the view's touch-began until this recognizer fails. @default false */
   delaysTouchesBegan?: boolean;
   /**
+   * While a finger or a pen is down on this recognizer's element, text
+   * selection and the touch callout are off there, as on a UIKit control:
+   * a slider's, a segmented control's or a switch's drag sets it. Content
+   * under a sheet's or a pager's pan stays selectable, so it is off by
+   * default; a mouse keeps desktop selection either way. A long press
+   * always turns them off for its element. @default false
+   */
+  preventsTextSelection?: boolean;
+  /**
    * Hold the view's touch-ended (and the browser's click) while this
    * recognizer may still recognize. @default true
    */
@@ -159,6 +168,8 @@ export abstract class GestureRecognizer {
   name: string;
   isEnabled: boolean;
   cancelsTouchesInView: boolean;
+  /** See GestureRecognizerOptions.preventsTextSelection. */
+  readonly preventsTextSelection: boolean;
   delaysTouchesBegan: boolean;
   delaysTouchesEnded: boolean;
   allowedPointerTypes: ReadonlySet<PointerKind> | null;
@@ -200,6 +211,7 @@ export abstract class GestureRecognizer {
     this.name = options.name ?? this.constructor.name;
     this.isEnabled = options.isEnabled ?? true;
     this.cancelsTouchesInView = options.cancelsTouchesInView ?? true;
+    this.preventsTextSelection = options.preventsTextSelection ?? false;
     this.delaysTouchesBegan = options.delaysTouchesBegan ?? false;
     this.delaysTouchesEnded = options.delaysTouchesEnded ?? true;
     this.allowedPointerTypes =
