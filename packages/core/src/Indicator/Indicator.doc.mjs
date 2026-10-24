@@ -26,7 +26,7 @@ export const docs = {
       name: 'CheckboxIndicator',
       displayName: 'Checkbox Indicator',
       description:
-        'The checkbox visual: a square box with a checkmark or an indeterminate bar. Decorative (aria-hidden); the owning control keeps the input, role, accessible name, focus, and keyboard behavior.',
+        'The checkbox visual: a square box with a checkmark or an indeterminate bar. Decorative (aria-hidden); the owning control keeps the input, role, accessible name, focus, and keyboard behavior. Under a finger (a coarse primary pointer) the box changes in one frame, as UIKit selection marks do; with a mouse its colors fade over the theme duration.',
       props: [
         {
           name: 'state',
@@ -97,7 +97,7 @@ export const docs = {
       name: 'RadioIndicator',
       displayName: 'Radio Indicator',
       description:
-        'The radio visual: a circle with a filled inner dot when selected. Draws in both states; an unselected radio is an empty circle, which is what lets it stand in for a checkmark in a selection slot.',
+        'The radio visual: a circle with a filled inner dot when selected. Draws in both states; an unselected radio is an empty circle, which is what lets it stand in for a checkmark in a selection slot. Under a finger (a coarse primary pointer) the circle changes in one frame, as UIKit selection marks do; with a mouse its colors fade over the theme duration.',
       props: [
         {
           name: 'state',

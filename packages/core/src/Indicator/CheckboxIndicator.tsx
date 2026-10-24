@@ -2,7 +2,8 @@
 
 /**
  * @file CheckboxIndicator.tsx
- * @input Indicator state props
+ * @input Indicator state props; the mark-change clock of a touch presentation
+ *   (selectionMotion.stylex.ts, mirroring motion/uikit/selection.ts)
  * @output Exports CheckboxIndicator — the default checkbox selection visual
  * @position Decorative checkbox visual shared by CheckboxInput, CheckboxList,
  *           and decorative menu markers
@@ -20,7 +21,11 @@ import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
+import {selectionMotionConsts} from './selectionMotion.stylex';
 import type {IndicatorProps} from './types';
+
+/** How long the mark takes to change under a finger: one frame. */
+const MARK_CHANGE = `${selectionMotionConsts.markChangeMs}ms`;
 
 const styles = stylex.create({
   box: {
@@ -35,7 +40,14 @@ const styles = stylex.create({
     transitionProperty: 'background-color, border-color',
     transitionDuration: {
       default: durationVars['--duration-fast'],
-      '@media (prefers-reduced-motion: reduce)': '0s',
+      // Under a finger the mark changes in the frame the selection lands, as
+      // UIKit's marks do (motion/uikit/selection.ts). Under Reduce Motion a
+      // mouse's change is immediate too.
+      // The keys are spelled out: an imported at-rule key lands in another
+      // StyleX priority layer than a literal one.
+      '@media (pointer: coarse)': MARK_CHANGE,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
