@@ -99,13 +99,16 @@ describe('conflict matrix', () => {
     // the content ran out while the content scrolls again.
     finger.move(0, 125, 112);
     expect(sheet.totalTranslation()).toEqual({x: 0, y: 0});
+    expect(sheet.translation()).toEqual({x: 0, y: 0});
     scrollTop = 5;
     finger.move(0, 120, 128);
     expect(sheet.totalTranslation()).toEqual({x: 0, y: 0});
+    expect(sheet.translation()).toEqual({x: 0, y: 0});
     scrollTop = 0;
     // 5 px of content were left at y = 120, so they ran out at y = 125.
     finger.move(0, 150, 144);
     expect(sheet.totalTranslation()).toEqual({x: 0, y: 25});
+    expect(sheet.translation()).toEqual({x: 0, y: 25});
     finger.up(160);
     expect(h.log.at(-2)).toBe('sheet:ended@160');
   });

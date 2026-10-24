@@ -594,7 +594,7 @@ export abstract class GestureRecognizer {
       this.arena.stop(this);
     } else if (isActive(this.state)) {
       this.applyState('cancelled');
-    } else if (this.state === 'possible') {
+    } else if (this.state === 'possible' && this.isInvolved()) {
       this.applyState('failed');
     }
   }

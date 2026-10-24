@@ -33,12 +33,16 @@ describe('SwipeGestureRecognizer', () => {
     slow.advance(500);
     expect(a.state).toBe('failed');
 
+    // Off-axis: still possible while the swipe could be reached (45 along,
+    // 40 across), failed once the drift passes the 50 px across limit.
     const diagonal = createHarness();
     const b = new SwipeGestureRecognizer({name: 'b'});
-    diagonal
+    const drift = diagonal
       .finger(1)
       .down(0, 0, 0, {recognizers: [b]})
       .move(45, 40, 60);
+    expect(b.state).toBe('possible');
+    drift.move(48, 56, 70);
     expect(b.state).toBe('failed');
 
     const wrong = createHarness();
@@ -62,5 +66,30 @@ describe('SwipeGestureRecognizer', () => {
     h.finger(1).move(0, 140, 50);
     h.finger(2).move(40, 140, 50);
     expect(swipe.recognizedDirection).toBe('up');
+  });
+
+  it('gives a 20 degree drag the same answer in small and large steps', () => {
+    for (const step of [4, 9]) {
+      const h = createHarness();
+      const swipe = new SwipeGestureRecognizer({
+        name: 'swipe',
+        direction: 'right',
+      });
+      const finger = h.finger(1).down(0, 0, 0, {recognizers: [swipe]});
+      const angle = (20 * Math.PI) / 180;
+      let travelled = 0;
+      let time = 0;
+      while (swipe.state === 'possible' && travelled < 80) {
+        travelled += step;
+        time += 8;
+        finger.move(
+          travelled * Math.cos(angle),
+          travelled * Math.sin(angle),
+          time,
+        );
+      }
+      expect(swipe.state).toBe('ended');
+      finger.up(time + 8);
+    }
   });
 });

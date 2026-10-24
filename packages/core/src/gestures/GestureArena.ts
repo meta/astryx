@@ -411,7 +411,8 @@ export class GestureArena {
     this.run(this.now(), () => {
       if (isActive(recognizer.state)) {
         this.apply(recognizer, 'cancelled');
-      } else if (recognizer.state === 'possible') {
+      } else if (recognizer.state === 'possible' && recognizer.isInvolved()) {
+        // An idle recognizer stays `possible`: nothing would ever reset it.
         this.fail(recognizer);
       }
     });
@@ -522,9 +523,36 @@ export class GestureArena {
       this.apply(recognizer, 'cancelled');
       return;
     }
+    const wasWaiting = internals(recognizer).pending != null;
     internals(recognizer).pending = null;
     this.apply(recognizer, 'failed');
+    if (wasWaiting) {
+      this.releaseClaim(recognizer);
+    }
     this.reviewPending();
+  }
+
+  /**
+   * A waiting recognition claimed its touches; when it fails instead, the
+   * touches go back to the browser unless another recognition owns them.
+   */
+  private releaseClaim(recognizer: GestureRecognizer): void {
+    for (const touch of recognizer.trackedTouches) {
+      const record = this.records.get(touch.id);
+      if (record == null || !record.isClaimed) {
+        continue;
+      }
+      const isOwned = [...this.active].some(
+        other =>
+          other !== recognizer &&
+          other.claimsTouches &&
+          (isActive(other.state) || internals(other).pending != null) &&
+          other.trackedTouches.some(tracked => tracked.id === touch.id),
+      );
+      if (!isOwned) {
+        record.isClaimed = false;
+      }
+    }
   }
 
   private apply(recognizer: GestureRecognizer, next: GestureState): void {
@@ -855,11 +883,22 @@ export class GestureArena {
       return;
     }
     const delay = Math.max(0, earliest - this.clock.now());
-    this.realTimer = this.clock.setTimeout(() => {
+    const fire = (mayYield: boolean): void => {
       this.realTimer = null;
       this.realTimerDeadline = Number.POSITIVE_INFINITY;
-      this.advanceTime(Math.max(earliest, this.clock.now()));
-    }, delay);
+      if (mayYield && this.clock.now() > earliest) {
+        // Late: a long task held the main thread past the deadline, and
+        // input queued behind it may come before the deadline (a lift that
+        // fails a long press). Let that input dispatch first, once.
+        this.realTimerDeadline = earliest;
+        this.realTimer = this.clock.setTimeout(() => fire(false), 0);
+        return;
+      }
+      // The event clock moves to the deadline only, so input still queued
+      // keeps its own timestamps.
+      this.advanceTime(earliest);
+    };
+    this.realTimer = this.clock.setTimeout(() => fire(true), delay);
   }
 }
 

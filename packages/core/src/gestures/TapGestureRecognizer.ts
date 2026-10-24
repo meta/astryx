@@ -54,6 +54,8 @@ export class TapGestureRecognizer extends GestureRecognizer {
   private isTapInProgress = false;
   private maxTouchesThisTap = 0;
   private firstTapLocation: Point | null = null;
+  /** Where the current tap's fingers landed. */
+  private tapStarts: Point[] = [];
 
   constructor(options: TapGestureRecognizerOptions = {}) {
     super(options);
@@ -92,16 +94,8 @@ export class TapGestureRecognizer extends GestureRecognizer {
     event: GestureEventContext,
   ): void {
     if (!this.isTapInProgress) {
-      const first = touches[0];
-      if (
-        this.firstTapLocation != null &&
-        distance({x: first.startX, y: first.startY}, this.firstTapLocation) >
-          this.allowableSeparation
-      ) {
-        this.setState('failed');
-        return;
-      }
       this.isTapInProgress = true;
+      this.tapStarts = [];
       this.maxTouchesThisTap = 0;
       this.clearTimer();
       if (Number.isFinite(this.maximumTapDuration)) {
@@ -110,11 +104,26 @@ export class TapGestureRecognizer extends GestureRecognizer {
         });
       }
     }
+    for (const touch of touches) {
+      this.tapStarts.push({x: touch.startX, y: touch.startY});
+    }
     this.maxTouchesThisTap = Math.max(
       this.maxTouchesThisTap,
       this.numberOfTouches,
     );
     if (this.numberOfTouches > this.numberOfTouchesRequired) {
+      this.setState('failed');
+      return;
+    }
+    // A later tap lands near the first: centroid against centroid, once its
+    // required fingers are down (a two-finger double tap at the same two
+    // points matches).
+    if (
+      this.firstTapLocation != null &&
+      this.tapStarts.length === this.numberOfTouchesRequired &&
+      distance(centroidOf(this.tapStarts), this.firstTapLocation) >
+        this.allowableSeparation
+    ) {
       this.setState('failed');
     }
   }
@@ -144,7 +153,7 @@ export class TapGestureRecognizer extends GestureRecognizer {
       return;
     }
     this.tapCount += 1;
-    this.firstTapLocation ??= this.location();
+    this.firstTapLocation ??= centroidOf(this.tapStarts);
     if (this.tapCount >= this.numberOfTapsRequired) {
       this.setState('ended');
       return;
@@ -159,5 +168,17 @@ export class TapGestureRecognizer extends GestureRecognizer {
     this.isTapInProgress = false;
     this.maxTouchesThisTap = 0;
     this.firstTapLocation = null;
+    this.tapStarts = [];
   }
+}
+
+function centroidOf(points: ReadonlyArray<Point>): Point {
+  let x = 0;
+  let y = 0;
+  for (const point of points) {
+    x += point.x;
+    y += point.y;
+  }
+  const count = Math.max(1, points.length);
+  return {x: x / count, y: y / count};
 }

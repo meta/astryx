@@ -108,6 +108,7 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
     const current = centroid(this.touches.values());
     const dx = current.x - this.origin.x;
     const dy = current.y - this.origin.y;
+    let isReachable = false;
     for (const direction of this.directions) {
       const [along, across] =
         direction === 'left'
@@ -117,16 +118,22 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
             : direction === 'up'
               ? [-dy, dx]
               : [dy, dx];
-      if (
-        along >= this.minimumDistance &&
-        Math.abs(across) <= this.maximumSecondaryMovement
-      ) {
+      if (Math.abs(across) > this.maximumSecondaryMovement) {
+        continue;
+      }
+      if (along >= this.minimumDistance) {
         this.recognizedDirection = direction;
         this.setState('ended');
         return;
       }
+      // Still reachable unless the drag has run the other way.
+      if (along > -this.maximumSecondaryMovement) {
+        isReachable = true;
+      }
     }
-    if (Math.hypot(dx, dy) >= this.minimumDistance) {
+    // Fails only once no allowed direction can still be reached, so the
+    // same drag gives the same answer however its events are spaced.
+    if (!isReachable) {
       this.setState('failed');
     }
   }

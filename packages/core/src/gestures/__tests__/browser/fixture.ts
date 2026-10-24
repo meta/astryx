@@ -162,7 +162,11 @@ host.attach(element('sheetBody'), sheet);
 
 // A one-way pan over the scrollable page, as a toast's upward swipe is: it
 // claims its direction from 5 px, before WebKit's scroll at 10–11 px.
-const card = new PanGestureRecognizer({name: 'card', direction: 'up'});
+const card = new PanGestureRecognizer({
+  name: 'card',
+  direction: 'up',
+  claimDistance: 'early',
+});
 record(card, () => ({x: card.translation().x, y: card.translation().y}));
 host.attach(element('card'), card);
 // The same pan claiming only when it begins at 10 px, for comparison.

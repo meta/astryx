@@ -11,25 +11,20 @@
  * What a release hands to a spring or a deceleration: the finger's velocity
  * when it lifted, in px per SECOND (UIKit's unit for `velocity(in:)`).
  *
- * One filter, iOS's measured blend, updated on each MOVED sample (a sample
- * at the newest position is not motion):
+ * - `uikit` (default): UIPanGestureRecognizer's own filter, measured. Each
+ *   event's instantaneous velocity is the position change over the timestamp
+ *   change since the previous event (the touch-down counts as the first),
+ *   and the velocity is 0.2 times the newest one plus 0.8 times the one
+ *   before. Fitted to every value UIKit reported on six HID streams, exactly.
+ *   It reacts a frame late to an acceleration, includes a hold before the
+ *   first move, and never decays: a finger at rest sends no events, so a
+ *   release after a pause reports the last moving value, as UIKit does.
+ * - `window`: the two-point speed over the last 100 ms that BottomSheet's
+ *   gesture uses on main, for a path that keeps main's behavior (a release
+ *   off iOS that must stay byte-identical). Not UIKit.
  *
- * - A pan's velocity is 0.2 times the newest interval's velocity plus 0.8
- *   times the previous interval's (an interval runs from one moved sample to
- *   the next; the touch-down counts as the first). With one interval so far
- *   it is that interval, as UIKit reports it. It reproduces every value
- *   UIKit reported on six HID streams, and like UIKit's it reacts a frame
- *   late to an acceleration.
- * - A scrolling surface's release (paging, a wheel) is 0.25 times the newest
- *   pan value plus 0.75 times the previous one.
- *
- * A release (`velocity(releaseTime)`, `scrollVelocity(releaseTime)`) reads 0
- * when the contact was still for longer than the stillness interval before
- * lifting, the one difference from iOS, whose filter never decays and so
- * flings after a rest; and 0 with fewer than two moved samples.
- *
- * Feed it one sample per input event: coalesced samples would change its
- * timing.
+ * Feed the `uikit` filter one sample per input event (coalesced samples
+ * would change its timing); `window` takes every sample.
  *
  * SYNC: When modified, update VelocityTracker.test.ts.
  */
@@ -37,12 +32,20 @@
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import type {Point, TouchSample} from './types';
 
+/**
+ * How a pan estimates its release velocity: one of the filters this file's
+ * header describes, `uikit` by default.
+ * @experimental
+ */
+export type VelocityStrategy = 'uikit' | 'window';
+
 export interface VelocityTrackerOptions {
-  /**
-   * A contact that has not moved for longer than this (ms) before its
-   * release releases at 0 (spec:AST-100 FR2).
-   */
-  stillness?: number;
+  /** @default 'uikit' */
+  strategy?: VelocityStrategy;
+  /** Samples older than this (ms) relative to the newest are ignored. */
+  horizon?: number;
+  /** At most this many samples are kept. */
+  maxSamples?: number;
 }
 
 const ZERO: Point = {x: 0, y: 0};
@@ -57,23 +60,16 @@ function blend(weight: number, current: Point, previous: Point): Point {
 }
 
 export class VelocityTracker {
-  private readonly stillness: number;
-  /** The newest sample added, moved or not. */
-  private newest: TouchSample | null = null;
-  /**
-   * The newest moved samples, oldest first (the touch-down counts as the
-   * first); the filter reads the last three.
-   */
-  private moved: TouchSample[] = [];
-  /** Moved samples since the touch-down. */
-  private moves = 0;
-  /** The newest pan value, and the one before it. */
-  private pan: Point = ZERO;
-  private previousPan: Point = ZERO;
+  readonly strategy: VelocityStrategy;
+  private readonly horizon: number;
+  private readonly maxSamples: number;
+  private samples: TouchSample[] = [];
 
   constructor(options: VelocityTrackerOptions = {}) {
-    this.stillness =
-      options.stillness ?? UIKIT_GESTURES.velocity.stillness.value;
+    this.strategy = options.strategy ?? 'uikit';
+    this.horizon = options.horizon ?? UIKIT_GESTURES.velocity.horizon.value;
+    this.maxSamples =
+      options.maxSamples ?? UIKIT_GESTURES.velocity.maxSamples.value;
   }
 
   /** Forget every sample (a new gesture). */
@@ -124,54 +120,33 @@ export class VelocityTracker {
 
   /** The newest sample, if any. */
   get lastSample(): TouchSample | null {
-    return this.newest;
+    return this.samples[this.samples.length - 1] ?? null;
   }
 
-  /**
-   * The pan's velocity in px/s. Pass the release's event time to read the
-   * release velocity of a dragged surface: 0 after a rest longer than the
-   * stillness interval, or with fewer than two moved samples (AST-100 FR2).
-   */
-  velocity(releaseTime?: number): Point {
-    if (releaseTime != null && !this.releases(releaseTime)) {
+  /** The velocity in px/s at the newest sample. */
+  velocity(): Point {
+    const newest = this.samples[this.samples.length - 1];
+    if (newest == null) {
       return ZERO;
     }
-    return this.pan;
-  }
-
-  /**
-   * A scrolling surface's release velocity in px/s (paging, a wheel): 0.25
-   * times the newest pan value plus 0.75 times the previous one, with the
-   * same stillness and two-moved-sample rules (AST-100 FR2).
-   */
-  scrollVelocity(releaseTime: number): Point {
-    if (!this.releases(releaseTime)) {
-      return ZERO;
+    switch (this.strategy) {
+      case 'uikit':
+        return uikitVelocity(this.samples);
+      case 'window':
+        return windowVelocity(this.samples, newest, this.horizon);
     }
-    return blend(SCROLL_CURRENT_WEIGHT, this.pan, this.previousPan);
-  }
-
-  private releases(releaseTime: number): boolean {
-    const last = this.moved[this.moved.length - 1];
-    return (
-      this.moves >= 2 &&
-      last != null &&
-      releaseTime - last.time <= this.stillness
-    );
   }
 }
 
-/**
- * UIPanGestureRecognizer's filter over the newest moved samples: 0.2 x the
- * newest interval's velocity + 0.8 x the previous one's; one interval so far
- * is reported whole, as UIKit does.
- */
-function panVelocity(moved: ReadonlyArray<TouchSample>): Point {
-  const n = moved.length;
+const UIKIT_CURRENT_WEIGHT = UIKIT_GESTURES.velocity.currentWeight.value;
+
+/** UIPanGestureRecognizer's filter: 0.2 x newest + 0.8 x previous event velocity. */
+function uikitVelocity(samples: ReadonlyArray<TouchSample>): Point {
+  const n = samples.length;
   if (n < 2) {
     return ZERO;
   }
-  const current = pairVelocity(moved[n - 2], moved[n - 1]);
+  const current = pairVelocity(samples[n - 2], samples[n - 1]);
   if (n === 2) {
     return current;
   }
@@ -191,5 +166,33 @@ function pairVelocity(start: TouchSample, end: TouchSample): Point {
   return {
     x: ((end.x - start.x) / dt) * 1000,
     y: ((end.y - start.y) / dt) * 1000,
+  };
+}
+
+/**
+ * BottomSheet's former estimator: displacement from the oldest sample still
+ * inside the window (keeping at least one partner) over the elapsed time,
+ * with a lone partner older than the window read as if it took the window.
+ */
+function windowVelocity(
+  samples: ReadonlyArray<TouchSample>,
+  newest: TouchSample,
+  horizon: number,
+): Point {
+  if (samples.length < 2) {
+    return ZERO;
+  }
+  let first = samples.length - 2;
+  while (first > 0 && newest.time - samples[first - 1].time <= horizon) {
+    first--;
+  }
+  const oldest = samples[first];
+  const span = Math.min(newest.time - oldest.time, horizon);
+  if (span <= 0) {
+    return ZERO;
+  }
+  return {
+    x: ((newest.x - oldest.x) / span) * 1000,
+    y: ((newest.y - oldest.y) / span) * 1000,
   };
 }

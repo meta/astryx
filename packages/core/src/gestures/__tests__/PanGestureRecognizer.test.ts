@@ -11,6 +11,7 @@ import {describe, expect, it} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {createHarness, scrollProbe} from './harness';
+import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 
 describe('PanGestureRecognizer', () => {
   it('begins past the hysteresis and leaves the threshold out of the translation', () => {
@@ -295,9 +296,13 @@ describe('PanGestureRecognizer', () => {
   });
 
   describe('claiming before it begins', () => {
-    it('a one-way pan claims once the finger has gone 5 px its way, and begins at 10', () => {
+    it('a one-way pan that opts in claims once the finger has gone 5 px its way, and begins at 10', () => {
       const h = createHarness();
-      const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'up',
+        claimDistance: 'early',
+      });
       const finger = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
       finger.move(0, 97, 16);
       expect(pan.claimsEarly()).toBe(false);
@@ -312,7 +317,11 @@ describe('PanGestureRecognizer', () => {
 
     it('never claims the other way, sideways, or for a pan whose axis touch-action keeps', () => {
       const h = createHarness();
-      const up = new PanGestureRecognizer({name: 'up', direction: 'up'});
+      const up = new PanGestureRecognizer({
+        name: 'up',
+        direction: 'up',
+        claimDistance: 'early',
+      });
       h.finger(1)
         .down(0, 100, 0, {recognizers: [up]})
         .move(0, 106, 16);
@@ -326,6 +335,7 @@ describe('PanGestureRecognizer', () => {
       const vertical = new PanGestureRecognizer({
         name: 'vertical',
         direction: 'vertical',
+        claimDistance: 'early',
       });
       h.finger(3)
         .down(0, 100, 200, {recognizers: [vertical]})
@@ -345,7 +355,11 @@ describe('PanGestureRecognizer', () => {
 
     it('commits on the claim: a reversal no longer fails it, and it begins at 10 px either way', () => {
       const h = createHarness();
-      const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'up',
+        claimDistance: 'early',
+      });
       const finger = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
       finger.move(0, 95, 16);
       expect(pan.claimsEarly()).toBe(true);
@@ -359,6 +373,66 @@ describe('PanGestureRecognizer', () => {
       expect(pan.state).toBe('began');
       finger.up(64);
       expect(pan.isClaimCommitted).toBe(false);
+    });
+
+    it('claims nothing early unless asked: a row swipe or an edge pan leaves a wobble to the scroll', () => {
+      const h = createHarness();
+      const row = new PanGestureRecognizer({name: 'row', direction: 'left'});
+      h.finger(1)
+        .down(100, 100, 0, {recognizers: [row]})
+        .move(94, 100, 16);
+      expect(row.claimsEarly()).toBe(false);
+      h.finger(1).move(94, 130, 32);
+      expect(row.state).toBe('failed');
+      h.finger(1).up(48);
+      // An edge pan: 5 px inward, then down the edge.
+      const edge = new ScreenEdgePanGestureRecognizer({
+        name: 'edge',
+        edges: ['left'],
+      });
+      const finger = h.finger(2).down(2, 300, 100, {recognizers: [edge]});
+      finger.move(7, 300, 116);
+      expect(edge.claimsEarly()).toBe(false);
+      finger.move(7, 320, 132);
+      expect(edge.state).not.toBe('began');
+      finger.up(148);
+    });
+
+    it('keeps a committed claim through a second finger and through content that could scroll', () => {
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'up',
+        maximumNumberOfTouches: 1,
+        claimDistance: 'early',
+      });
+      const first = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
+      first.move(0, 95, 16);
+      pan.commitClaim();
+      h.finger(2).down(80, 100, 24, {recognizers: [pan]});
+      expect(pan.state).toBe('possible');
+      first.move(0, 88, 32);
+      expect(pan.state).toBe('began');
+      first.up(48);
+      h.finger(2).up(48);
+      // A scroll-edge sheet that opted in, claimed with its list at the top,
+      // then turned back toward content that scrolls.
+      const sheet = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+        claimDistance: 'early',
+      });
+      const probe = scrollProbe((_dx, dy) => dy < 0);
+      const finger = h
+        .finger(3)
+        .down(0, 100, 100, {recognizers: [sheet], scroll: probe});
+      finger.move(0, 106, 116);
+      expect(sheet.claimsEarly()).toBe(true);
+      sheet.commitClaim();
+      finger.move(0, 89, 132);
+      expect(sheet.state).toBe('began');
+      finger.up(148);
     });
 
     it('a scroll-edge pan claims at its begin, as UIKit gives a reversed drag to its content', () => {

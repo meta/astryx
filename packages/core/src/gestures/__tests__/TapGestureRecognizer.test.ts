@@ -118,4 +118,25 @@ describe('TapGestureRecognizer', () => {
     h.advance(400);
     expect(tap.state).toBe('failed');
   });
+
+  it('recognizes a two-finger double tap at the same two points', () => {
+    const h = createHarness();
+    const tap = new TapGestureRecognizer({
+      name: 'double2',
+      numberOfTapsRequired: 2,
+      numberOfTouchesRequired: 2,
+    });
+    for (const start of [0, 200]) {
+      const left = h
+        .finger(start + 1)
+        .down(100, 100, start, {recognizers: [tap]});
+      const right = h
+        .finger(start + 2)
+        .down(200, 100, start + 10, {recognizers: [tap]});
+      // The fingers lift one after the other, the right one last.
+      left.up(start + 60);
+      right.up(start + 80);
+    }
+    expect(h.log).toContain('double2:ended@280');
+  });
 });

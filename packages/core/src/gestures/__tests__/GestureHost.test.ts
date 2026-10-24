@@ -381,7 +381,11 @@ describe('GestureHost', () => {
 
   it("cancels a one-way pan's moves from its claim distance, before it begins, and keeps the touch through a reversal", () => {
     const {card} = mount('<div id="card"></div>');
-    const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
+    const pan = new PanGestureRecognizer({
+      name: 'pan',
+      direction: 'up',
+      claimDistance: 'early',
+    });
     detachers.push(host.attach(card, pan));
     const finger = {id: 1, x: 50, y: 100};
     touch('touchstart', card, [finger], [finger], 0);

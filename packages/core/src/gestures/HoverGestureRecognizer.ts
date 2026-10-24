@@ -17,6 +17,7 @@
 import {
   GestureRecognizer,
   isActive,
+  isTerminal,
   type GestureRecognizerOptions,
 } from './GestureRecognizer';
 import type {Point, PointerKind} from './types';
@@ -43,6 +44,11 @@ export class HoverGestureRecognizer extends GestureRecognizer {
   hoverEntered(point: Point, pointerType: PointerKind): void {
     if (!this.isEnabled || isActive(this.state)) {
       return;
+    }
+    if (isTerminal(this.state)) {
+      // Cancelled mid-hover (disabled, or `cancel()`), with no arena to
+      // reset it: a new hover starts over.
+      this.resetToPossible();
     }
     this.point = point;
     this.pointerType = pointerType;

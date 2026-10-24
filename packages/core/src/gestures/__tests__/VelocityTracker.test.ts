@@ -11,7 +11,9 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {VelocityTracker} from '../VelocityTracker';
+import {VelocityTracker, type VelocityStrategy} from '../VelocityTracker';
+
+const STRATEGIES: VelocityStrategy[] = ['uikit', 'window'];
 
 /** Feed `position(t)` sampled every `step` ms over [0, end]. */
 function trace(
@@ -159,13 +161,19 @@ describe('VelocityTracker', () => {
     expect(tracker.scrollVelocity(200).x).toBeCloseTo(1000, 6);
   });
 
-  it('lags a hard acceleration by a frame, as UIKit does', () => {
-    // x = 0.02 t^2 (px, ms). UIKit's filter is 0.8 on the previous interval
-    // (its middle, 188 ms: 7520 px/s) and 0.2 on the newest (196 ms:
-    // 7840 px/s).
-    const tracker = new VelocityTracker();
-    trace(tracker, t => 0.02 * t * t, 200);
-    expect(tracker.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
+  it('window reads the middle of its horizon under a hard acceleration, and UIKit a frame late', () => {
+    // x = 0.02 t^2 (px, ms): the true velocity at t = 200 is 8000 px/s.
+    const position = (t: number) => 0.02 * t * t;
+    const window = new VelocityTracker({strategy: 'window'});
+    const uikit = new VelocityTracker({strategy: 'uikit'});
+    trace(window, position, 200);
+    trace(uikit, position, 200);
+    // The two-point average over the window (samples 104..200 ms) reads
+    // the middle of it: 0.02 * (104 + 200) px/ms.
+    expect(window.velocity().x).toBeCloseTo(6080, 3);
+    // UIKit's filter is 0.8 on the previous interval (its middle, 188 ms:
+    // 7520 px/s) and 0.2 on the newest (196 ms: 7840 px/s).
+    expect(uikit.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
   });
 
   it('handles one and two samples, and repeated timestamps', () => {

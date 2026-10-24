@@ -71,8 +71,8 @@
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch, a rotation) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
- *   recognizer owns one of its touches, or while a one-way overlay pan
- *   claims early (5 px its way, under WebKit's 10–11 px scroll claim; the
+ *   recognizer owns one of its touches, or while a one-way overlay pan that
+ *   opted in claims early (5 px its way, under WebKit's 10–11 px scroll claim; the
  *   pan then commits to the touch, since Safari gives the page no scroll
  *   once one of its moves was cancelled). Nothing else is ever cancelled, so a
  *   touch nobody claims scrolls exactly as it would without the system. The
