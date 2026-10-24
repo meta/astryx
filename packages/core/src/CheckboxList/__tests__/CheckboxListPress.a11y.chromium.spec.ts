@@ -2,15 +2,14 @@
 
 /**
  * @file CheckboxListPress.a11y.chromium.spec.ts
- * @input The CheckboxList Default story in a built Storybook (a layered
- *   stylesheet) and real touch input through CDP
+ * @input The CheckboxList Default story, editable and `isReadOnly`, in a built
+ *   Storybook (a layered stylesheet), and real touch input through CDP
  * @output Real-engine proof that a finger on a CheckboxList row's label and on
  *   its box press the same surface and paint the same pixels. A pen on a
  *   fine-pointer page, a pressed ClickableCard and an outer row around a
- *   nested list paint none of the box's press
- * @position Run with `pnpm test:a11y-contract`. Browser layer of the row's
- *   press surface; the jsdom layer is CheckboxList.test.tsx ("CheckboxListItem
- *   press surface").
+ *   nested list paint none of the box's press. A read-only row paints none
+ * @position Browser layer of the row's press surface, run by
+ *   `pnpm test:a11y-contract`; the jsdom layer is in CheckboxList.test.tsx
  */
 
 import {expect, test, type Browser, type Page} from '@playwright/test';
@@ -510,6 +509,34 @@ test.describe('CheckboxList row press', () => {
       expect(held.nested).toEqual(rest.nested);
     } finally {
       await row.close();
+    }
+  });
+
+  test('a read-only row paints no press, on the row or on the box', async ({
+    browser,
+  }) => {
+    for (const where of ['label', 'box'] as const) {
+      const row = await openRow(
+        browser,
+        'core-checkboxlist--default&args=isReadOnly:!true',
+        'SMS',
+      );
+      try {
+        const rest = {
+          box: await pixel(row.page, row.boxSample),
+          row: await pixel(row.page, row.rowSample),
+        };
+        // Nothing in a read-only row is pressable, so no press can paint.
+        expect(await pressablesInList(row.page)).toBe(0);
+        await row.press(row[where]);
+        await untilStill(row.page);
+        expect(await pressedSurface(row.page)).toBeNull();
+        expect(await pixel(row.page, row.boxSample)).toEqual(rest.box);
+        expect(await pixel(row.page, row.rowSample)).toEqual(rest.row);
+        await row.lift(row[where]);
+      } finally {
+        await row.close();
+      }
     }
   });
 });

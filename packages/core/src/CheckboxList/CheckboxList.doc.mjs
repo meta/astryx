@@ -155,7 +155,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Whether all checkbox items are read-only. Displays the current state at full opacity but prevents interaction. Unlike isDisabled, read-only checkboxes are not visually dimmed.',
+        'Whether all checkbox items are read-only. Displays the current state at full opacity but prevents interaction, and shows no pressed feedback. Unlike isDisabled, read-only checkboxes are not visually dimmed.',
       default: 'false',
     },
     {

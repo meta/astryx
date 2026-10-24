@@ -1614,6 +1614,47 @@ describe('CheckboxListItem press surface', () => {
     expect(hasPressedArm(wrapper)).toBe(false);
   });
 
+  it('paints no press anywhere in a read-only group, whose values cannot change', () => {
+    render(
+      <CheckboxList
+        label="Notifications"
+        value={['email']}
+        onChange={() => {}}
+        isReadOnly>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>,
+    );
+    for (const name of ['Email', 'SMS']) {
+      const row = rowOf(name);
+      const {wrapper} = parts(row);
+      expect(row).not.toHaveAttribute('data-astryx-pressable');
+      expect(row.querySelectorAll('[data-astryx-pressable]')).toHaveLength(0);
+      expect(hasPressedArm(wrapper)).toBe(false);
+      expect(readsRowPressPaint(wrapper)).toBe(false);
+    }
+  });
+
+  it('lets a read-only row with its own click handler press, but not its box', () => {
+    // The row still responds (the consumer's handler runs), so it keeps its
+    // press; the box's value cannot change, so it paints nothing.
+    render(
+      <CheckboxList
+        label="Notifications"
+        value={['email']}
+        onChange={() => {}}
+        isReadOnly>
+        <CheckboxListItem label="Email" value="email" onClick={() => {}} />
+      </CheckboxList>,
+    );
+    const row = rowOf('Email');
+    const {wrapper, control} = parts(row);
+    expect(row).toHaveAttribute('data-astryx-pressable');
+    expect(control).not.toHaveAttribute('data-astryx-pressable');
+    expect(hasPressedArm(wrapper)).toBe(false);
+    expect(readsRowPressPaint(wrapper)).toBe(false);
+  });
+
   it("keeps a checkbox placed in the row's content its own press surface", () => {
     render(
       <CheckboxList label="Notifications" value={[]} onChange={() => {}}>

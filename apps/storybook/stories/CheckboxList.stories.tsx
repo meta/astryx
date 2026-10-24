@@ -5,6 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {List} from '@astryxdesign/core/List';
+import {Text} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
@@ -253,6 +254,41 @@ export const CheckboxListInRowContent: Story = {
         />
         <CheckboxListItem label="SMS" value="sms" />
       </CheckboxList>
+    );
+  },
+};
+
+/**
+ * A read-only list whose rows carry their own click handler: a row still
+ * presses as a row (its handler runs), but its checkbox paints no press and
+ * the value never changes.
+ */
+export const ReadOnlyWithRowAction: Story = {
+  name: 'Read-only with a row action',
+  render: () => {
+    const [opened, setOpened] = useState<string | null>(null);
+    return (
+      <>
+        <CheckboxList
+          label="Notification preferences"
+          value={['email']}
+          onChange={() => {}}
+          isReadOnly>
+          <CheckboxListItem
+            label="Email"
+            value="email"
+            onClick={() => setOpened('Email')}
+          />
+          <CheckboxListItem
+            label="SMS"
+            value="sms"
+            onClick={() => setOpened('SMS')}
+          />
+        </CheckboxList>
+        <Text type="supporting">
+          {opened == null ? 'No row opened' : `Opened ${opened}`}
+        </Text>
+      </>
     );
   },
 };
