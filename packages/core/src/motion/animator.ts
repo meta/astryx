@@ -107,7 +107,10 @@
  *   - leaving (opacity falls, or `crossfadeAs: 'exit'`): fades out in place,
  *     then lands;
  *   - an opacity change alone: fades to its value;
- *   - otherwise: dips (fades out, lands at the midpoint, fades back in);
+ *   - otherwise: dips (fades out, lands, fades back in);
+ *   travel lands with a plain style write while the element is transparent,
+ *   never as an animated transform; a busy main thread only keeps it
+ *   transparent longer, and a dip fades back in from the landing;
  * - on any other primary pointer (DR3) it completes at once.
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
  * the fade's length is not a theme role. Decays keep their motion: they
@@ -417,6 +420,31 @@ interface HandleState {
   resolve: (finished: boolean) => void;
   settled: boolean;
   timer: ReturnType<typeof setTimeout> | null;
+}
+
+/**
+ * Reduced Motion travel that lands with a plain style write while the
+ * element is fully transparent (never an animated transform), then, in a
+ * dip, the fade back in.
+ */
+interface Landing {
+  readonly owner: HandleState;
+  /** ms after the call's start. */
+  readonly at: number;
+  readonly values: Map<MotionProperty, number>;
+  /** The fade back in that follows the landing (a dip). */
+  fadeIn: {readonly to: number; readonly ms: number} | null;
+  /** The opacity written with the landing (an exit by role). */
+  restore: number | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** What Reduced Motion makes of a call: its segments, and any landing. */
+interface ReducedPlan {
+  readonly next: Partial<Record<MotionProperty, Segment | null>>;
+  /** Values that stay where they are until the landing writes them. */
+  readonly holds: Partial<Record<MotionProperty, number>>;
+  readonly landing: Omit<Landing, 'owner' | 'timer'> | null;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -1225,6 +1253,7 @@ export function createAnimator(
   const lastSpring = new WeakMap<HandleState, SpringDescription>();
 
   const interrupt = (property: MotionProperty, time: number) => {
+    cancelLanding(property);
     const segment = segments.get(property);
     if (segment == null) {
       return;
@@ -1374,23 +1403,6 @@ export function createAnimator(
     };
   };
 
-  const jumpSegment = (
-    owner: HandleState,
-    start: number,
-    from: number,
-    to: number,
-    after: number,
-  ): Segment => ({
-    start,
-    duration: after,
-    target: to,
-    at: t => (t < after ? from : to),
-    speed: () => 0,
-    jumps: [after],
-    steps: true,
-    owner,
-  });
-
   // -- the animator -----------------------------------------------------------
 
   const commit = (changed: Iterable<MotionProperty>, time: number) => {
@@ -1403,10 +1415,104 @@ export function createAnimator(
     }
   };
 
+  /** Reduced Motion landings still waiting for the element to be transparent. */
+  const landings = new Set<Landing>();
+
+  /** A later write to `property` takes it from any landing; opacity ends it. */
+  const cancelLanding = (property: MotionProperty) => {
+    for (const landing of landings) {
+      if (property === 'opacity') {
+        endLanding(landing);
+      } else {
+        landing.values.delete(property);
+      }
+    }
+  };
+
+  const endLanding = (landing: Landing) => {
+    if (landing.timer != null) {
+      clearTimeout(landing.timer);
+    }
+    landings.delete(landing);
+  };
+
+  /** Arms a landing from the call's start (the browser's, for a call from rest). */
+  const scheduleLanding = (
+    owner: HandleState,
+    started: Promise<number>,
+    plan: NonNullable<ReducedPlan['landing']>,
+  ) => {
+    const landing: Landing = {...plan, owner, timer: null};
+    landings.add(landing);
+    // The handle settles when the landing (and its fade back in) is done.
+    if (owner.timer != null) {
+      clearTimeout(owner.timer);
+      owner.timer = null;
+    }
+    void started.then(start => {
+      if (!landings.has(landing)) {
+        return;
+      }
+      landing.timer = setTimeout(
+        () => land(landing),
+        Math.max(0, start + landing.at - now()),
+      );
+    });
+  };
+
+  /**
+   * Writes the travel while the element is transparent: a plain style write,
+   * never an animation. A busy main thread only keeps it transparent longer.
+   * In a dip the fade back in starts from here.
+   */
+  const land = (landing: Landing) => {
+    landings.delete(landing);
+    landing.timer = null;
+    const time = now();
+    const changed: MotionProperty[] = [];
+    for (const [property, value] of landing.values) {
+      segments.delete(property);
+      resting[property] = value;
+      changed.push(property);
+    }
+    let end = time;
+    if (landing.fadeIn != null) {
+      segments.set(
+        'opacity',
+        fadeSegment(landing.owner, time, [
+          {at: 0, value: valueAt('opacity', time)},
+          {at: landing.fadeIn.ms, value: landing.fadeIn.to},
+        ]),
+      );
+      changed.push('opacity');
+      end = time + landing.fadeIn.ms;
+    } else if (landing.restore != null) {
+      segments.delete('opacity');
+      resting.opacity = landing.restore;
+      changed.push('opacity');
+    }
+    commit(changed, time);
+    const {owner} = landing;
+    if (owner.settled) {
+      return;
+    }
+    if (end <= time) {
+      settle(owner, true);
+    } else {
+      owner.timer = setTimeout(
+        () => {
+          owner.timer = null;
+          settle(owner, true);
+        },
+        Math.max(0, end - now()),
+      );
+    }
+  };
+
   /**
    * Reduced Motion (see the file header): with `fade`, an opacity-only
-   * cross-fade; without, everything at once. Returns each property's new
-   * segment, or null to put it in place at once.
+   * cross-fade whose travel lands while the element is transparent; without,
+   * everything at once.
    */
   const reducedMotion = (
     owner: HandleState,
@@ -1415,13 +1521,14 @@ export function createAnimator(
     properties: MotionProperty[],
     fade: boolean,
     role?: 'entrance' | 'exit',
-  ): Partial<Record<MotionProperty, Segment | null>> => {
+  ): ReducedPlan => {
     const next: Partial<Record<MotionProperty, Segment | null>> = {};
+    const holds: Partial<Record<MotionProperty, number>> = {};
     if (!fade) {
       for (const property of properties) {
         next[property] = null;
       }
-      return next;
+      return {next, holds, landing: null};
     }
     const opacityNow = valueAt('opacity', time);
     // A fade the call does not name keeps going where it was heading.
@@ -1434,8 +1541,6 @@ export function createAnimator(
     );
     let entering = opacityTo > opacityNow + 1e-6;
     let leaving = opacityTo < opacityNow - 1e-6;
-    // The fade runs fadeFrom -> fadeTo; an exit by role then returns the
-    // opacity to its value (`restore`) when the travel lands.
     let fadeFrom = opacityNow;
     let fadeTo = opacityTo;
     let restore: number | null = null;
@@ -1449,55 +1554,56 @@ export function createAnimator(
     }
     // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
     const ms = timing.reducedMotionCrossFadeMs;
-    // The fade, and when the travel lands (ms after `time`): at once for an
-    // entrance, after the fade out for an exit, at the bottom of a dip.
-    let opacity: Segment | null = null;
-    let landsAt = 0;
-    if (entering || leaving) {
-      opacity =
-        restore == null
-          ? fadeSegment(owner, time, [
-              {at: 0, value: fadeFrom},
-              {at: ms, value: fadeTo},
-            ])
-          : fadeSegment(
-              owner,
-              time,
-              [
-                {at: 0, value: fadeFrom},
-                {at: ms, value: fadeTo},
-                {at: ms, value: restore},
-              ],
-              [ms],
-            );
-      landsAt = entering ? 0 : ms;
-    } else if (travel.length > 0) {
-      opacity = fadeSegment(owner, time, [
+    for (const property of properties) {
+      if (TRAVEL.includes(property)) {
+        next[property] = null;
+      }
+    }
+    const landsLater = (at: number, fadeIn: Landing['fadeIn']) => {
+      const values = new Map<MotionProperty, number>();
+      for (const property of travel) {
+        holds[property] = valueAt(property, time);
+        values.set(property, targets[property] as number);
+      }
+      return {at, values, fadeIn, restore};
+    };
+    if (entering) {
+      // Lands at once (the travel is null above) and fades in.
+      next.opacity = fadeSegment(owner, time, [
+        {at: 0, value: fadeFrom},
+        {at: ms, value: fadeTo},
+      ]);
+      return {next, holds, landing: null};
+    }
+    if (leaving) {
+      // Fades out in place, then lands.
+      next.opacity = fadeSegment(owner, time, [
+        {at: 0, value: fadeFrom},
+        {at: ms, value: fadeTo},
+      ]);
+      return {
+        next,
+        holds,
+        landing:
+          travel.length > 0 || restore != null ? landsLater(ms, null) : null,
+      };
+    }
+    if (travel.length > 0) {
+      // A dip: fades out, lands while transparent, fades back in.
+      next.opacity = fadeSegment(owner, time, [
         {at: 0, value: opacityNow},
         {at: ms / 2, value: 0},
-        {at: ms, value: opacityTo},
       ]);
-      landsAt = ms / 2;
+      return {
+        next,
+        holds,
+        landing: landsLater(ms / 2, {to: opacityTo, ms: ms / 2}),
+      };
     }
-    for (const property of properties) {
-      if (!TRAVEL.includes(property)) {
-        continue;
-      }
-      next[property] =
-        landsAt === 0 || !travel.includes(property)
-          ? null // in place at once
-          : jumpSegment(
-              owner,
-              time,
-              valueAt(property, time),
-              targets[property] as number,
-              landsAt,
-            );
+    if ('opacity' in targets) {
+      next.opacity = null;
     }
-    if (opacity != null || 'opacity' in targets) {
-      next.opacity = opacity;
-    }
-    return next;
+    return {next, holds, landing: null};
   };
 
   const animator: Animator = {
@@ -1581,19 +1687,18 @@ export function createAnimator(
       lastSpring.set(owner, transition.spring);
       const properties = Object.keys(targets) as MotionProperty[];
       const next: Partial<Record<MotionProperty, Segment | null>> = {};
+      let plan: ReducedPlan | null = null;
 
       if (prefersReducedMotion()) {
-        Object.assign(
-          next,
-          reducedMotion(
-            owner,
-            time,
-            targets,
-            properties,
-            isCoarsePointer() || animateOptions.touchRelease === true,
-            animateOptions.crossfadeAs,
-          ),
+        plan = reducedMotion(
+          owner,
+          time,
+          targets,
+          properties,
+          isCoarsePointer() || animateOptions.touchRelease === true,
+          animateOptions.crossfadeAs,
         );
+        Object.assign(next, plan.next);
       } else {
         for (const property of properties) {
           const velocity = velocities[property] ?? velocityAt(property, time);
@@ -1621,14 +1726,23 @@ export function createAnimator(
         interrupt(property, time);
         changed.push(property);
         if (segment == null) {
+          // Read before the segment goes: valueAt falls back to resting.
+          const value =
+            plan?.holds[property] ??
+            targets[property] ??
+            valueAt(property, time);
           segments.delete(property);
-          resting[property] = targets[property] ?? valueAt(property, time);
+          resting[property] = value;
         } else {
           segments.set(property, segment);
         }
       }
       commitCall(group, owner, changed, time);
-      return makeHandle(owner, changed, finished, time, group);
+      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.landing != null) {
+        scheduleLanding(owner, handle.started, plan.landing);
+      }
+      return handle;
     },
 
     play(curves, playOptions = {}) {
@@ -1658,17 +1772,19 @@ export function createAnimator(
         const curve = byProperty[property] as MotionCurve;
         targets[property] = curve.at(curve.duration);
       }
-      const next: Partial<Record<MotionProperty, Segment | null>> =
-        prefersReducedMotion()
-          ? reducedMotion(
-              owner,
-              time,
-              targets,
-              properties,
-              isCoarsePointer() || playOptions.touchRelease === true,
-              playOptions.crossfadeAs,
-            )
-          : {};
+      const plan = prefersReducedMotion()
+        ? reducedMotion(
+            owner,
+            time,
+            targets,
+            properties,
+            isCoarsePointer() || playOptions.touchRelease === true,
+            playOptions.crossfadeAs,
+          )
+        : null;
+      const next: Partial<Record<MotionProperty, Segment | null>> = {
+        ...plan?.next,
+      };
       for (const property of properties) {
         if (property in next) {
           continue;
@@ -1700,14 +1816,23 @@ export function createAnimator(
         interrupt(property, time);
         changed.push(property);
         if (segment == null) {
+          // Read before the segment goes: valueAt falls back to resting.
+          const value =
+            plan?.holds[property] ??
+            targets[property] ??
+            valueAt(property, time);
           segments.delete(property);
-          resting[property] = targets[property] ?? valueAt(property, time);
+          resting[property] = value;
         } else {
           segments.set(property, segment);
         }
       }
       commitCall(group, owner, changed, time);
-      return makeHandle(owner, changed, finished, time, group);
+      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.landing != null) {
+        scheduleLanding(owner, handle.started, plan.landing);
+      }
+      return handle;
     },
 
     decay(velocity, decayOptions = {}) {
@@ -1817,6 +1942,7 @@ export function createAnimator(
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
       for (const property of list) {
+        cancelLanding(property);
         if (!segments.has(property)) {
           continue;
         }
@@ -1914,7 +2040,10 @@ export function createAnimator(
               end = Math.max(end, segment.start + segment.duration);
             }
           }
-          if (end <= time) {
+          if (landings.size > 0) {
+            // A Reduced Motion landing is still to come.
+            setTimeout(check, 16);
+          } else if (end <= time) {
             resolve();
           } else {
             // A retarget or a later start moves the end: look again then.
@@ -1926,6 +2055,9 @@ export function createAnimator(
     },
 
     dispose() {
+      for (const landing of [...landings]) {
+        endLanding(landing);
+      }
       const time = now();
       for (const property of PROPERTIES) {
         interrupt(property, time);

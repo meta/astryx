@@ -127,7 +127,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
   drag's release (`{touchRelease: true}`), it is an opacity-only cross-fade
   of `timing.reducedMotionCrossFadeMs` (200 ms): an entrance lands and fades
   in, an exit fades out then lands, an opacity change fades, any other move
-  dips (fade out, land, fade in). On any other pointer it completes at once.
+  dips (fade out, land, fade in). Travel lands with a plain style write while
+  the element is transparent, never as an animated transform. On any other
+  pointer it completes at once.
   `{crossfadeAs: 'entrance'}` or `'exit'` gives a slide that changes no
   opacity its direction. No option or theme value lengthens the fade or keeps
   travel. For motion the animator does not drive, `reducedMotionFade()`
