@@ -684,6 +684,8 @@ export class GestureHost {
       return;
     }
     this.isInstalled = false;
+    // Unheard from here on: no fingers to keep.
+    this.fingerTargets = [];
     const doc = this.doc;
     const view = doc.defaultView;
     doc.removeEventListener('touchstart', this.onTouchStart, PASSIVE_CAPTURE);
@@ -807,6 +809,18 @@ export class GestureHost {
 
   // --- Touch events ----------------------------------------------------------
 
+  /**
+   * How many fingers are on the screen: the length of `touches` in the last
+   * touch event the host's listeners heard (`touchstart`, `touchmove`,
+   * `touchend`, `touchcancel`), whatever its target, so a finger on an
+   * element with no recognizer counts too. 0 before any, and while no
+   * listener is installed. A recognizer that claims only a lone finger reads
+   * it in `shouldBegin` (a second finger is the browser's pinch).
+   */
+  fingersDown(): number {
+    return this.fingerTargets.length;
+  }
+
   /** Whether this event is new to the host (and mark it handled). */
   private takeEvent(event: Event): boolean {
     if (this.processed.has(event)) {
@@ -817,6 +831,7 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
+    this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
     }
@@ -878,6 +893,7 @@ export class GestureHost {
   };
 
   private readonly onTouchMove = (event: TouchEvent): void => {
+    this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
     }
@@ -1040,6 +1056,7 @@ export class GestureHost {
   }
 
   private readonly onTouchEnd = (event: TouchEvent): void => {
+    this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
     }
@@ -1071,6 +1088,7 @@ export class GestureHost {
   };
 
   private readonly onTouchCancel = (event: TouchEvent): void => {
+    this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
     }

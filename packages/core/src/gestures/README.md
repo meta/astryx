@@ -60,7 +60,10 @@ function Sheet() {
   calls neither `onHighlightChange` nor `onControlEvent`.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
-the same and returns a detach function.
+the same and returns a detach function. `getGestureHost(document).fingersDown()`
+is how many fingers are on the screen (the last touch event's `touches`,
+wherever they landed): a recognizer that claims only a lone finger checks it
+in `shouldBegin`, so two fingers stay the browser's pinch.
 
 ## Recognizers
 
