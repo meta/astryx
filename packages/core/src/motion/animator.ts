@@ -412,8 +412,16 @@ interface StartGroup {
   readonly animations: Animation[];
   readonly channels: Set<Channel>;
   resolved: boolean;
+  /** A later call in the same task that took over its curves. */
+  adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
   readonly started: Promise<number>;
+}
+
+/** An atRest() call waiting for its curves to end. */
+interface RestWait {
+  timer: ReturnType<typeof setTimeout> | null;
+  settle: () => void;
 }
 
 interface HandleState {
@@ -719,6 +727,8 @@ export function createAnimator(
   let target: HTMLElement | null = null;
   /** Calls from rest whose start still waits for the browser's commit. */
   const pendingGroups = new Set<StartGroup>();
+  /** atRest() calls still waiting; dispose settles them. */
+  const restWaits = new Set<RestWait>();
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -748,7 +758,12 @@ export function createAnimator(
     return segment;
   };
 
-  const valueAt = (property: MotionProperty, time: number): number => {
+  /** A curve whose call the browser has not started yet: still at its start. */
+  const isHeld = (segment: Segment) =>
+    segment.group != null && !segment.group.resolved;
+
+  /** The curve itself at `time`: what the keyframes play. */
+  const curveAt = (property: MotionProperty, time: number): number => {
     const segment = segments.get(property);
     if (segment == null) {
       return resting[property];
@@ -759,7 +774,21 @@ export function createAnimator(
     return segment.at(Math.max(0, time - segment.start));
   };
 
+  /** The value on screen at `time`. */
+  const valueAt = (property: MotionProperty, time: number): number => {
+    const segment = segments.get(property);
+    if (segment != null && isHeld(segment)) {
+      // Nothing has moved on screen until the browser starts the call.
+      return segment.at(0);
+    }
+    return curveAt(property, time);
+  };
+
   const velocityAt = (property: MotionProperty, time: number): number => {
+    const held = segments.get(property);
+    if (held != null && isHeld(held)) {
+      return held.speed(0);
+    }
     const segment = segmentAt(property, time);
     if (segment == null || time < segment.start) {
       return 0;
@@ -767,9 +796,9 @@ export function createAnimator(
     return segment.speed(time - segment.start);
   };
 
-  // A value just before a jump at absolute time `time`.
+  // The curve just before a jump at absolute time `time`.
   const valueBefore = (property: MotionProperty, time: number): number =>
-    valueAt(property, time - 1e-6);
+    curveAt(property, time - 1e-6);
 
   // -- writing --------------------------------------------------------------
 
@@ -810,7 +839,7 @@ export function createAnimator(
       return [];
     }
     const times: number[] = [begin];
-    const value = (t: number) => valueAt(property, t);
+    const value = (t: number) => curveAt(property, t);
     const breaks = segment.jumps
       .map(j => segment.start + j)
       .filter(t => t > begin && t < end);
@@ -913,6 +942,15 @@ export function createAnimator(
       previous?.cancel();
       return;
     }
+    // A channel rebuilt by an explicit call (set, rebase, a retarget of
+    // another axis) while one of its curves still waits for the browser's
+    // start keeps that start: no explicit start for this animation.
+    const waiting =
+      callGroup ??
+      moving
+        .map(p => (segments.get(p) as Segment).group)
+        .find(group => group != null && !group.resolved) ??
+      null;
     if (callGroup != null) {
       // A curve of an earlier call still waiting for its first frame is
       // rebaked here: it starts with this call's commit.
@@ -920,7 +958,11 @@ export function createAnimator(
         const segment = segments.get(property) as Segment;
         const group = segment.group;
         if (group != null && group !== callGroup && !group.resolved) {
-          group.segments.splice(group.segments.indexOf(segment), 1);
+          const index = group.segments.indexOf(segment);
+          if (index >= 0) {
+            group.segments.splice(index, 1);
+          }
+          group.adoptedBy = callGroup;
           segment.group = callGroup;
           callGroup.segments.push(segment);
         }
@@ -973,7 +1015,7 @@ export function createAnimator(
       keyframes.push({
         offset,
         [channel]: format(channel, p =>
-          t >= end ? finalValue(p) : valueAt(p, t),
+          t >= end ? finalValue(p) : curveAt(p, t),
         ),
       });
     }
@@ -989,12 +1031,14 @@ export function createAnimator(
       easing: 'linear',
       ...(pseudoElement != null ? {pseudoElement} : {}),
     });
-    if (callGroup != null) {
+    if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
       // it commits it (StartGroup); the keyframes are sampled from `time`,
       // the call's own start.
-      callGroup.animations.push(animation);
-      callGroup.channels.add(channel);
+      waiting.animations.push(animation);
+      waiting.channels.add(channel);
+      // A cancel before the first frame rejects its ready promise.
+      (animation as Partial<Animation>).ready?.catch(() => {});
     } else {
       // One clock: the keyframes were sampled from `time`.
       animation.startTime = time;
@@ -1254,8 +1298,28 @@ export function createAnimator(
     requestFrame?.(() => syncGroup(group));
     ready.then(
       () => syncGroup(group),
-      () => resolveGroup(group, group.provisional), // cancelled: never started
+      () => settleCancelled(group),
     );
+  };
+
+  /**
+   * A call whose first animation was cancelled before its first frame: if a
+   * later call in the same task took over its curves, it starts with that
+   * call; otherwise it never started.
+   */
+  const settleCancelled = (group: StartGroup) => {
+    if (group.resolved) {
+      return;
+    }
+    let adopter = group.adoptedBy;
+    while (adopter?.adoptedBy != null) {
+      adopter = adopter.adoptedBy;
+    }
+    if (adopter != null && adopter !== group) {
+      void adopter.started.then(start => resolveGroup(group, start));
+      return;
+    }
+    resolveGroup(group, group.provisional);
   };
 
   const syncGroup = (group: StartGroup) => {
@@ -2056,6 +2120,23 @@ export function createAnimator(
           continue;
         }
         owners.add(segment.owner);
+        // A curve still waiting for the browser's start stays in its call:
+        // it starts with that call's commit.
+        const group =
+          segment.group != null && !segment.group.resolved
+            ? segment.group
+            : undefined;
+        const replace = (next: Segment) => {
+          if (group != null) {
+            const index = group.segments.indexOf(segment);
+            if (index >= 0) {
+              group.segments[index] = next;
+            } else {
+              group.segments.push(next);
+            }
+          }
+          segments.set(property, next);
+        };
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
@@ -2064,8 +2145,9 @@ export function createAnimator(
             to: segment.target,
             velocity,
           });
-          segments.set(property, {
-            start: time,
+          replace({
+            start: group?.provisional ?? time,
+            ...(group != null ? {group} : {}),
             duration: Math.min(
               MAX_DURATION_MS,
               curve.settleTime(SETTLE_THRESHOLD[property]) * 1000,
@@ -2078,7 +2160,7 @@ export function createAnimator(
             spring: segment.spring,
           });
         } else {
-          segments.set(property, {
+          replace({
             ...segment,
             target: segment.target + delta,
             at: t => segment.at(t) + delta,
@@ -2111,7 +2193,18 @@ export function createAnimator(
     async atRest(properties) {
       const list = properties == null ? PROPERTIES : expandList(properties);
       return new Promise<void>(resolve => {
+        const wait: RestWait = {timer: null, settle: () => {}};
+        const done = () => {
+          if (wait.timer != null) {
+            clearTimeout(wait.timer);
+          }
+          restWaits.delete(wait);
+          resolve();
+        };
+        wait.settle = done;
+        restWaits.add(wait);
         const check = () => {
+          wait.timer = null;
           syncPending();
           const time = now();
           let end = time;
@@ -2123,12 +2216,12 @@ export function createAnimator(
           }
           if (landings.size > 0) {
             // A Reduced Motion landing is still to come.
-            setTimeout(check, 16);
+            wait.timer = setTimeout(check, 16);
           } else if (end <= time) {
-            resolve();
+            done();
           } else {
             // A retarget or a later start moves the end: look again then.
-            setTimeout(check, end - time);
+            wait.timer = setTimeout(check, end - time);
           }
         };
         check();
@@ -2138,6 +2231,10 @@ export function createAnimator(
     dispose() {
       for (const landing of [...landings]) {
         endLanding(landing);
+      }
+      // Nothing moves any more: every atRest() wait settles.
+      for (const wait of [...restWaits]) {
+        wait.settle();
       }
       const time = now();
       for (const property of PROPERTIES) {
