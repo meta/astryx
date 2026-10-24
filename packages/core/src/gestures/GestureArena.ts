@@ -487,7 +487,11 @@ export class GestureArena {
   ): boolean {
     if (
       !sharesTouches(winner, other) ||
-      internals(winner).allowsSimultaneous(other)
+      internals(winner).allowsSimultaneous(other) ||
+      // A watcher (claimsTouches false) prevents nothing and nothing
+      // prevents it.
+      !winner.claimsTouches ||
+      !other.claimsTouches
     ) {
       return false;
     }
