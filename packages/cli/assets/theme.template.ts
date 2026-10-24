@@ -189,7 +189,7 @@ export const myTheme = defineTheme({
    * `springs`, `durations` and `curves` retune touch motion roles by table
    * path; a role left out keeps its measured default:
    *   springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}
-   *   durations: {'timing.reducedMotionCrossFadeMs': 300}
+   *   durations: {'navigation.transitionMs': 300}
    *
    * Reference: `astryx docs motion`.
    */

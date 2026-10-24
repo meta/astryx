@@ -51,6 +51,12 @@ export type {
 export {rubberBand, rubberBandInverse} from './rubberBand';
 
 export {resolveMotion} from './resolveMotion';
+export {
+  REDUCED_MOTION_FADE_QUERY,
+  REDUCED_MOTION_INSTANT_QUERY,
+  reducedMotionFade,
+} from './reducedMotion';
+export type {ReducedMotionFade} from './reducedMotion';
 export type {MotionCurvePoints} from './roles';
 
 export {cubicBezier} from './bezier';

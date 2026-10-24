@@ -259,7 +259,7 @@ export interface DefineThemeInput {
    * // A softer sheet and a slower reduced-motion fade:
    * motion: {
    *   springs: { 'springs.sheetPresent': { duration: 0.6, bounce: 0.1 } },
-   *   durations: { 'timing.reducedMotionCrossFadeMs': 300 },
+   *   durations: { 'navigation.transitionMs': 300 },
    * }
    * ```
    */
