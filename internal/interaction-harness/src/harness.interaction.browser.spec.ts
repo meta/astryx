@@ -16,6 +16,7 @@ import {
   flick,
   installInputLog,
   merge,
+  PARTIAL_LIFT_SKIP,
   pinch,
   readInputLog,
   tap,
@@ -129,6 +130,45 @@ test.describe('touch input', () => {
     const fast = await distanceFor(2400);
     expect(slow).toBeGreaterThan(48); // it coasted past the finger's own travel
     expect(fast).toBeGreaterThan(slow * 1.8);
+  });
+
+  test('lifting one of two fingers releases only that finger', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await touchDriver(page);
+    test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP);
+    const first = drag(
+      {x: 80, y: 80},
+      {x: 80, y: 240},
+      {durationMs: 400, hz: 60},
+    );
+    const second = withFinger(tap({x: 300, y: 120}, {holdMs: 100}), 1, 100);
+    await driver.play(merge(first, second));
+    const log = await readInputLog(page);
+    const [stays, lifts] = log.filter(r => r.type === 'pointerdown');
+    const upOf = (down?: {pointerId?: number}) =>
+      log.find(r => r.type === 'pointerup' && r.pointerId === down?.pointerId);
+    const lifted = upOf(lifts);
+    const last = upOf(stays);
+    if (stays == null || lifted == null || last == null) {
+      throw new Error('expected two fingers down, each released');
+    }
+    // Released when it lifted (~200 ms in), while the first finger was down.
+    expect(lifted.timeStamp).toBeLessThan(last.timeStamp - 150);
+    expect(
+      log.filter(
+        r =>
+          r.type === 'pointermove' &&
+          r.pointerId === stays.pointerId &&
+          r.timeStamp > lifted.timeStamp,
+      ).length,
+      'the other finger keeps moving',
+    ).toBeGreaterThan(5);
+    // As iOS sends it: the lift's touchend still lists the finger down.
+    expect(log.filter(r => r.type === 'touchend').map(r => r.touches)).toEqual([
+      1, 0,
+    ]);
   });
 
   test('a second finger and a pinch arrive as distinct touch pointers', async ({

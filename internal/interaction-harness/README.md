@@ -50,17 +50,20 @@ the limits below. Read positions a frame after a move: Chromium delivers
 
 ## Engine limits (measured with Playwright 1.61)
 
-|                                                        | Chromium 149 | WebKit 26.5 (Linux build)                                                           |
-| ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------- |
-| Trusted touch + pointer events, multi-touch            | yes          | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact) |
-| Page sees the scripted timestamps                      | yes, exactly | no: real dispatch time; real-time pacing keeps velocities within ~1 ms              |
-| Sub-pixel touch positions                              | yes          | no: integer CSS px                                                                  |
-| Native scroll, fling, pinch-zoom from injected touches | yes          | no                                                                                  |
-| Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence        |
-| Input log                                              | yes          | yes                                                                                 |
+|                                                        | Chromium 149 | WebKit 26.5 (Linux build)                                                                             |
+| ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------- |
+| Trusted touch + pointer events, multi-touch            | yes          | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                   |
+| Page sees the scripted timestamps                      | yes, exactly | no: real dispatch time; real-time pacing keeps velocities within ~1 ms                                |
+| Sub-pixel touch positions                              | yes          | no: integer CSS px                                                                                    |
+| Native scroll, fling, pinch-zoom from injected touches | yes          | no                                                                                                    |
+| Lifting one finger while others stay down              | yes          | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP` |
+| Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                          |
+| Input log                                              | yes          | yes                                                                                                   |
 
-What WebKit cannot show here — native scroll hand-off, flings, and anything
-iOS-only — needs Mobile Safari itself, on a device or the iOS simulator.
+What WebKit cannot show here — native scroll hand-off, flings, a finger
+lifting while another stays down, and anything iOS-only — needs Mobile Safari
+itself, on a device or the iOS simulator. Skip such a proof on the driver's
+flag, citing the reason: `test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP)`.
 
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.

@@ -75,11 +75,26 @@ export interface TouchDriver {
   readonly scriptedTimestamps: boolean;
   /** True when these touches can scroll, fling and pinch-zoom natively. */
   readonly drivesNativeGestures: boolean;
+  /**
+   * True when lifting one finger while others stay down reaches the page as
+   * iOS sends it: a `touchend` whose `touches` still lists the fingers down.
+   * Skip such proofs with `PARTIAL_LIFT_SKIP` where it is false.
+   */
+  readonly partialLifts: boolean;
   /** Plays a script; resolves when its last event has been dispatched. */
   play(script: TouchScript, options?: PlayOptions): Promise<PlayedEvent[]>;
   /** A tap through the engine's tap path (WebKit synthesises click only from this). */
   tap(at: Point): Promise<void>;
 }
+
+/**
+ * The skip reason for a proof that lifts one finger while another stays down,
+ * on a driver whose `partialLifts` is false: Playwright's WebKit (Linux build)
+ * sends that lift's `touchend` with no remaining `touches`, an emulation quirk
+ * iOS does not have. Those cases need a simulator capture.
+ */
+export const PARTIAL_LIFT_SKIP =
+  'injected WebKit touches report no remaining touches when one finger of several lifts (README: engine limits); capture it on the iOS simulator';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -132,6 +147,7 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
     engine: 'chromium',
     scriptedTimestamps: true,
     drivesNativeGestures: true,
+    partialLifts: true,
     async play(script, options = {}) {
       // Stamps follow the wall clock the page's own clock is on: with real-time
       // pacing an event's stamp and its dispatch agree to ~0.1 ms.
@@ -140,18 +156,18 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
         script,
         options,
         async (step, timestamp) => {
-          // CDP diffs each event's active points against the previous event's:
-          // a missing point is released, a new one pressed. touchEnd must carry
-          // no points, so lifting one finger of several is a touchMove that
-          // lists the fingers still down.
-          const partialLift =
-            step.type === 'touchEnd' && step.fingers.length > 0;
+          // A start or move lists every finger down (CDP presses the new ones).
+          // An end lists the fingers that lift: that releases exactly those
+          // while the rest stay down and keep moving; the last lift lists none.
+          // (A move that omits a finger does not release it.)
           await cdp.send('Input.dispatchTouchEvent', {
-            type: partialLift ? 'touchMove' : step.type,
+            type: step.type,
             touchPoints:
-              step.type === 'touchEnd' && !partialLift
-                ? []
-                : touchPoints(step.fingers),
+              step.type !== 'touchEnd'
+                ? touchPoints(step.fingers)
+                : step.fingers.length > 0
+                  ? touchPoints(step.changed)
+                  : [],
             timestamp: timestamp / 1000,
           });
         },
@@ -201,6 +217,7 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
     engine: 'webkit',
     scriptedTimestamps: false,
     drivesNativeGestures: false,
+    partialLifts: false,
     async play(script, options = {}) {
       return playSteps(
         script,
