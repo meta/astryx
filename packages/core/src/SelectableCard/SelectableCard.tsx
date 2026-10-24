@@ -4,7 +4,8 @@
 
 /**
  * @file SelectableCard.tsx
- * @input Uses Card, useClickableContainer, StyleX
+ * @input Uses Card, useClickableContainer, StyleX, the selection mark's
+ *   touch timing (Indicator/selectionMotion.stylex.ts)
  * @output Exports SelectableCard component and SelectableCardProps
  * @position Interactive card for toggle selection
  *
@@ -43,6 +44,7 @@ import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
 import {mergeProps} from '../utils';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
+import {selectionMotionConsts} from '../Indicator/selectionMotion.stylex';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
@@ -66,6 +68,9 @@ const PRESSED_ON = '[data-astryx-press="on"]';
 /** Written by the press controller for the press's release. */
 const PRESSED_FADING = '[data-astryx-press="fading"]';
 
+/** How long the selection mark takes to change under a finger: one frame. */
+const MARK_CHANGE = `${selectionMotionConsts.markChangeMs}ms`;
+
 const styles = stylex.create({
   interactive: {
     // Declared here, on the element that carries the `astryx-selectable-card`
@@ -78,7 +83,19 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     transitionProperty: 'box-shadow, border-color',
-    transitionDuration: durationVars['--duration-fast'],
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      // Under a finger the ring and the border change in the frame the
+      // selection lands, as UIKit's marks do (motion/uikit/selection.ts). The
+      // ring cannot interpolate with the card's resting shadow, so a fade would
+      // split it from the border. Under Reduce Motion a mouse's change is
+      // immediate too.
+      // The keys are spelled out: an imported at-rule key lands in another
+      // StyleX priority layer than a literal one.
+      '@media (pointer: coarse)': MARK_CHANGE,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   // Hover and pressed overlay. Hover is guarded by @media (hover: hover) so

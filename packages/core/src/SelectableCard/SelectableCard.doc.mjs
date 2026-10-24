@@ -23,7 +23,7 @@ export const docs = {
   },
   props: [
     {name: 'label', type: 'string', description: 'Accessibility label.', required: true},
-    {name: 'isSelected', type: 'boolean', description: 'Controlled selection state.', required: true},
+    {name: 'isSelected', type: 'boolean', description: 'Controlled selection state. Under a finger (a coarse primary pointer) the selection ring and border change in one frame. With a mouse the ring changes at once and the border fades over the theme’s fast duration; under Reduce Motion both change at once.', required: true},
     {name: 'onChange', type: '(isSelected: boolean) => void', description: 'Called when toggled.', required: true},
     {name: 'isDisabled', type: 'boolean', description: 'Disables the card.', default: 'false'},
     {name: 'children', type: 'ReactNode', description: 'Card content.'},
