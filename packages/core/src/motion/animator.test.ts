@@ -401,6 +401,26 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
   const fade = timing.reducedMotionCrossFadeMs;
   const ease = cubicBezier(timing.curves.easeInOut);
 
+  it('a move during a running fade keeps that fade\u2019s target', async () => {
+    const {animator} = reduced();
+    // Opacity alone is not travel: it keeps its spring.
+    animator.animate({opacity: 0}, {spring: springs.smooth});
+    await advance(120);
+    expect(animator.get('opacity')).toBeGreaterThan(0.1);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + 100);
+    expect(animator.get('opacity')).toBeCloseTo(0, 6);
+    expect(animator.get('x')).toBe(100);
+
+    const entrance = reduced().animator;
+    entrance.set({opacity: 0});
+    entrance.animate({opacity: 1}, {spring: springs.smooth});
+    await advance(120);
+    entrance.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + 100);
+    expect(entrance.get('opacity')).toBeCloseTo(1, 6);
+  });
+
   it('a move dips: fades out, jumps at the midpoint, fades back in', () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});

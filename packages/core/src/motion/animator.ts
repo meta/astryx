@@ -868,7 +868,8 @@ export function createAnimator(
       if (reduce) {
         const fade = timing.reducedMotionCrossFadeMs;
         const opacityNow = valueAt('opacity', time);
-        const opacityTo = targets.opacity ?? opacityNow;
+        // A fade the call does not name keeps going where it was heading.
+        const opacityTo = targets.opacity ?? finalValue('opacity');
         const entering = opacityTo > opacityNow + 1e-6;
         const leaving = opacityTo < opacityNow - 1e-6;
         for (const property of properties) {
