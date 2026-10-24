@@ -15,10 +15,11 @@
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
  *
  * The expected curve here is today's: the panel's `--ease-standard` CSS
- * transition (cubic-bezier(0.24, 1, 0.4, 1), `--duration-medium` = 410 ms).
- * When the settle moves to the UIKit spring, `expectedSettle` becomes the
- * spring from the motion constants, and the velocity hand-off reported below
- * becomes an assertion.
+ * transition over `--duration-medium`, pinned below as SETTLE_EASING and
+ * SETTLE_MS rather than read from the animation under test. When the settle
+ * moves to the UIKit spring, `expectedSettle` becomes the spring from the
+ * motion constants, and the velocity hand-off reported below becomes an
+ * assertion.
  */
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
@@ -60,6 +61,12 @@ import {
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+// The settle's timing, from the theme the story renders in: `--ease-standard`
+// is the default cubic-bezier(0.24, 1, 0.4, 1), and `--duration-medium` is the
+// neutral theme's motion `medium` (300 ms; the base theme's is 410 ms).
+const SETTLE_EASING = 'cubic-bezier(0.24, 1, 0.4, 1)';
+const SETTLE_MS = 300;
 
 interface OpenSheet {
   driver: TouchDriver;
@@ -182,16 +189,22 @@ test('the settle follows its timing function, sampled frame by frame', async ({
   if (transition == null) {
     throw new Error(`no transform transition held: ${JSON.stringify(held)}`);
   }
+  // The settle runs the pinned timing: a changed curve or duration fails here,
+  // and the oracle below is built from the pinned values, not from it.
+  expect(transition.easing.replace(/\s+/g, '')).toBe(
+    SETTLE_EASING.replace(/\s+/g, ''),
+  );
+  expect(transition.durationMs).toBe(SETTLE_MS);
   // Seek the held settle to every frame time and read the presented transform.
   const samples = curveOf(
-    await sampleCurve(sheet, timeline(transition.durationMs)),
+    await sampleCurve(sheet, timeline(SETTLE_MS)),
     'translateY',
   );
   const from = samples[0].value;
   const to = samples[samples.length - 1].value;
-  const ease = timingFunction(transition.easing);
+  const ease = timingFunction(SETTLE_EASING);
   const expectedSettle = (t: number) =>
-    from + (to - from) * ease(Math.min(1, t / transition.durationMs));
+    from + (to - from) * ease(Math.min(1, t / SETTLE_MS));
   const result = compareCurve(samples, expectedSettle, 0.5);
   await releaseAnimations(page);
   // UIKit parity metric, reported rather than asserted until the spring lands:
