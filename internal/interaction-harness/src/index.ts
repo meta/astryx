@@ -12,6 +12,10 @@
  * SYNC: When a module is added, export it here and describe it in README.md.
  */
 
+export * from './curves';
+export * from './math';
+export * from './output';
 export * from './scripts';
 export * from './story';
+export * from './storyboard';
 export * from './touch';

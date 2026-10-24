@@ -3,24 +3,42 @@
 /**
  * @file harness.interaction.browser.spec.ts
  * @input Fixture pages written inline (no Storybook), real Chromium/WebKit
- * @output Proof that each touch instrument delivers real engine input:
+ * @output Proof that each harness instrument measures what it claims:
  *   scripted timestamps reach the page; a flick flings natively (Chromium);
- *   a second finger and a pinch arrive as distinct pointers.
+ *   a second finger and a pinch arrive as distinct pointers; sampled curves
+ *   match the oracles; the animation-state waits report a running transition
+ *   and its end; storyboards write a sheet and a trace that follows the curve,
+ *   and the timer gate holds a component timer until the filmstrip is done.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
 
 import {expect, test, type Page} from '@playwright/test';
 import {
+  animationStoryboard,
+  compareCurve,
+  cubicBezier,
+  curveOf,
   drag,
   flick,
+  freezeTimers,
+  holdAnimations,
   installInputLog,
+  installTimerGate,
   merge,
+  parseTransform,
   PARTIAL_LIFT_SKIP,
   pinch,
   readInputLog,
+  sampleCurve,
+  springStep,
   tap,
+  thawTimers,
+  timeline,
   touchDriver,
+  touchStoryboard,
+  waitForAnimation,
+  waitForRest,
   withFinger,
 } from './index';
 
@@ -204,5 +222,207 @@ test.describe('touch input', () => {
         ...log.filter(r => r.type === 'touchmove').map(r => r.touches ?? 0),
       ),
     ).toBe(2);
+  });
+});
+
+test.describe('curve sampling', () => {
+  test('a CSS transition samples onto its cubic-bezier to 0.05 px', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.transition = 'transform 400ms cubic-bezier(0.24, 1, 0.4, 1)';
+      void (el as HTMLElement).offsetWidth;
+      el.style.transform = 'translateY(200px)';
+    });
+    const held = await holdAnimations(page, box);
+    expect(held).toHaveLength(1);
+    expect(held[0].kind).toBe('CSSTransition');
+    const samples = curveOf(
+      await sampleCurve(box, timeline(400)),
+      'translateY',
+    );
+    const ease = cubicBezier(0.24, 1, 0.4, 1);
+    const result = compareCurve(samples, t => 200 * ease(t / 400), 0.05);
+    expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
+      0.05,
+    );
+  });
+
+  test('a spring baked into linear() matches the SwiftUI spring oracle', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const spring = {response: 0.4, dampingFraction: 0.75};
+    const duration = 1200;
+    await box.evaluate(
+      (el, {stops, ms}) => {
+        el.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+          {duration: ms, easing: `linear(${stops})`},
+        );
+      },
+      {
+        stops: timeline(duration, 4)
+          .map(t => springStep(spring, t).toFixed(6))
+          .join(', '),
+        ms: duration,
+      },
+    );
+    await holdAnimations(page, box);
+    const samples = curveOf(
+      await sampleCurve(box, timeline(duration, 1000 / 60)),
+      'translateX',
+    );
+    // linear() draws chords between the 4 ms stops: at most h²/8 · |x''| =
+    // 0.004² / 8 · 200 · (2π / 0.4)² ≈ 0.1 px off the exact oracle.
+    const result = compareCurve(
+      samples,
+      t => 200 * springStep(spring, t),
+      0.15,
+    );
+    expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
+      0.15,
+    );
+    expect(Math.max(...samples.map(s => s.value))).toBeGreaterThan(200); // the overshoot is presented
+  });
+});
+
+test.describe('animation state', () => {
+  test('waitForAnimation reports a running transition and waitForRest resolves after it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.transition = 'transform 300ms linear';
+      void (el as HTMLElement).offsetWidth;
+      el.style.transform = 'translateY(100px)';
+    });
+    const [running] = await waitForAnimation(box);
+    expect(running.kind).toBe('CSSTransition');
+    expect(running.name).toBe('transform');
+    expect(running.durationMs).toBe(300);
+    expect(running.to - running.from).toBeCloseTo(300, 0);
+    await waitForRest(box);
+    const settledAt = await page.evaluate(
+      () => performance.timeOrigin + performance.now(),
+    );
+    expect(settledAt).toBeGreaterThanOrEqual(running.to);
+    const transform = await box.evaluate(el => getComputedStyle(el).transform);
+    expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+});
+
+test.describe('storyboards', () => {
+  test('an animation filmstrip records every frame and its trace follows the curve', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0)'}, {transform: 'translateX(240px)'}],
+        {duration: 200, easing: 'ease-out'},
+      ),
+    );
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'harness-self-test-animation',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      measure: async () => ({
+        x: await box.evaluate(el => el.getBoundingClientRect().x),
+      }),
+      columns: 4,
+    });
+    const files = await storyboard.write(testInfo);
+    const xs = storyboard.frames.map(f => f.data.x as number);
+    expect(xs).toHaveLength(13); // t = 0, 16.7 … 200
+    expect(xs[0]).toBeCloseTo(20, 1);
+    expect(xs.at(-1)).toBeCloseTo(260, 1);
+    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
+    expect(files['sheet.png']).toMatch(/sheet\.png$/);
+  });
+
+  test('a touch filmstrip photographs every scripted event', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const pad = document.getElementById('pad');
+      if (pad == null) {
+        throw new Error('no pad');
+      }
+      const dot = document.createElement('div');
+      dot.id = 'dot';
+      dot.style.cssText =
+        'position:absolute;width:24px;height:24px;border-radius:12px;background:#c33;left:-30px;top:0';
+      pad.append(dot);
+      pad.addEventListener('pointermove', e => {
+        dot.style.transform = `translate(${e.clientX - 12 + 30}px, ${e.clientY - 12}px)`;
+      });
+    });
+    const driver = await touchDriver(page);
+    const storyboard = await touchStoryboard(
+      page,
+      driver,
+      drag({x: 60, y: 60}, {x: 300, y: 240}, {durationMs: 100, hz: 60}),
+      {
+        name: 'harness-self-test-touch',
+        clip: {x: 0, y: 0, width: 402, height: 300},
+        measure: async () => ({
+          x: await page
+            .locator('#dot')
+            .evaluate(el => el.getBoundingClientRect().x + 12),
+        }),
+        columns: 4,
+      },
+    );
+    await storyboard.write(testInfo);
+    // before + touchStart + 6 moves + touchEnd
+    expect(storyboard.frames).toHaveLength(9);
+    expect(storyboard.frames.at(-2)?.data.x).toBeCloseTo(300, 0);
+  });
+
+  test('the timer gate holds a component timer until the filmstrip is done', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    // A component that ends its own animation from a timer (a transitionend
+    // backstop): without the gate it would finish behind the held storyboard.
+    await box.evaluate(el => {
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      setTimeout(() => {
+        animation.finish();
+        (window as unknown as {timerRan?: boolean}).timerRan = true;
+      }, 40);
+    });
+    await freezeTimers(page);
+    await page.waitForTimeout(120); // the timer is due now, and held
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'harness-self-test-timer-gate',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      measure: async () => ({
+        x: await box.evaluate(el => el.getBoundingClientRect().x),
+      }),
+      columns: 6,
+    });
+    const timerRan = () =>
+      page.evaluate(
+        () => (window as unknown as {timerRan?: boolean}).timerRan === true,
+      );
+    expect(await timerRan()).toBe(false);
+    await thawTimers(page);
+    expect(await timerRan()).toBe(true);
+    await storyboard.write(testInfo);
+    const xs = storyboard.frames.map(f => f.data.x as number);
+    expect(xs).toHaveLength(19); // t = 0 … 300 ms every 16.7 ms
+    expect(xs.every((x, i) => i === 0 || x > xs[i - 1])).toBe(true);
   });
 });
