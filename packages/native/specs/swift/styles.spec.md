@@ -1,12 +1,24 @@
-# SwiftUI styles (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-styles
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-24
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by: [.github/scripts/native-swift.sh]
+deciding_specs: [spec:AST-093/FR2]
+---
 
-- Status: draft
-- Relation: extends `packages/native/specs/swift/library/component-api.md`,
-  reads the theme as `packages/native/specs/swift/library/theme-environment.md`
-  says, and applies AST-093 FR2 (native-first: a component sits on the platform's
-  own control). It decides how Astryx's look reaches SwiftUI's own controls.
+# SwiftUI styles architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 An app that already uses SwiftUI's buttons, toggles, and progress views can
 adopt Astryx's look one control at a time, with
@@ -15,7 +27,14 @@ screens. The person using the app keeps the system controls' accessibility and
 behavior, now in the brand. Astryx's own views are built on the same styles,
 so a theme change reaches both.
 
-## Requirements
+## System model
+
+This record extends `architecture:native-swift-component-api`, reads the theme
+as `architecture:native-swift-theme-environment` says, and applies AST-093 FR2
+(native-first: a component sits on the platform's own control). It decides how
+Astryx's look reaches SwiftUI's own controls.
+
+## Boundaries and invariants
 
 - **Y1 — Astryx looks as SwiftUI styles.** For each component whose core
   contract matches a SwiftUI control whose style protocol accepts a custom
@@ -61,7 +80,21 @@ so a theme change reaches both.
   styled with `.astryx` gets the look and not the view's behavior contract
   (for example, loading announced once).
 
-## Acceptance checks
+## Change coupling
+
+A change to the Swift code or build step this record governs is reviewed against
+its requirements, and a change to a record it builds on is reviewed for its
+effect here. The checks under Verification prove the record stays current.
+
+## Owning code
+
+- `packages/native/apple/Sources/Astryx/` — the SwiftUI styles and the views built on them.
+
+## Deciding specs
+
+- `spec:AST-093/FR2`
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                                          |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -73,8 +106,11 @@ so a theme change reaches both.
 
 ## Current state
 
-- On `main`, the Swift package `packages/native/apple` holds generated props,
-  the wire, and the logic host. There are no SwiftUI views or styles.
+- The `Astryx` product in `packages/native/apple` holds the SwiftUI views
+  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Text,
+  TextInput, and Thumbnail. Button draws
+  through an internal button style; no public Astryx style for SwiftUI's own
+  controls exists yet.
 
 ## Open questions
 

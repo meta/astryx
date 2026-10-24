@@ -1,13 +1,28 @@
-# Typed slots (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-slots
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-24
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by:
+  [
+    .github/scripts/native-swift.sh,
+    packages/native/src/contract/contracts.test.ts,
+  ]
+deciding_specs: [spec:AST-082/FR4, spec:AST-082/FR17]
+---
 
-- Status: draft
-- Relation: applies AST-082 FR4
-  (`docs/specs/AST-082-native-first-surfaces/spec.md`: typed slots, text,
-  icon, and content, and a platform's wider form for a content slot with the
-  same meaning), and FR17 (shared icon names) to Swift. It decides how each slot kind appears in
-  SwiftUI; it does not define the kinds.
+# Typed slots architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 An iOS developer can put an icon in a button, an avatar at the start of a list
 row, or any SwiftUI view at its end, the way SwiftUI's own `Label` takes an
@@ -16,7 +31,15 @@ row lines up and reads the same way. Icons are always ones the platform can
 draw. The person using the app sees the same parts in the same
 places as on the web, read by VoiceOver in the same order.
 
-## Requirements
+## System model
+
+This record applies AST-082 FR4
+(`docs/specs/AST-082-native-first-surfaces/spec.md`: typed slots, text, icon,
+and content, and a platform's wider form for a content slot with the same
+meaning), and FR17 (shared icon names) to Swift. It decides how each slot kind
+appears in SwiftUI; it does not define the kinds.
+
+## Boundaries and invariants
 
 - **S1 — Each AST-082 slot kind has one Swift form.**
   - A **text** slot is a `String`, the contract's exact type (AST-093 FR5). A
@@ -71,7 +94,23 @@ places as on the web, read by VoiceOver in the same order.
   slot holds, for every free-form prop it keeps; the contract generator fails
   when a kept free-form prop has none.
 
-## Acceptance checks
+## Change coupling
+
+A change to the Swift code or build step this record governs is reviewed against
+its requirements, and a change to a record it builds on is reviewed for its
+effect here. The checks under Verification prove the record stays current.
+
+## Owning code
+
+- `packages/native/apple/Sources/Astryx/` — the views that take each slot kind.
+- `packages/native/src/contract/` — the generator that gives each slot its Swift form.
+
+## Deciding specs
+
+- `spec:AST-082/FR4`
+- `spec:AST-082/FR17`
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                          |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -83,10 +122,11 @@ places as on the web, read by VoiceOver in the same order.
 
 ## Current state
 
-- The contract generator knows two slot kinds, `text` and `content`; an icon
-  prop has no portable form, so the icon props of Button and Badge are
-  web-only.
-- The built-in icon names map to SF Symbols in TypeScript only.
+- The contract generator has a typed icon slot, the generated `IconName`,
+  which Icon's `icon` prop uses; the generated Button and Badge contracts
+  still leave out their icon props.
+- Swift's Icon draws the built-in icon names as SF Symbols, and a theme can
+  replace any of them.
 
 ## Open questions
 

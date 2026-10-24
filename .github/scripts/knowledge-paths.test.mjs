@@ -175,7 +175,7 @@ describe('component knowledge paths', () => {
       'packages/core/src/Button/Thing.generated.spec.md',
       'packages/core/src/Button/Button.a11y.chromium.spec.ts',
       'packages/cli/src/Prompt.spec.md',
-      'packages/native/specs/swift/library/tooltip.spec.md',
+      'packages/native/specs/swift/tooltip.spec.md',
     ]) {
       expect(isLegacyComponentSpecPath(filePath), filePath).toBe(false);
     }
