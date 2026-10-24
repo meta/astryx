@@ -1171,6 +1171,12 @@ jobs:
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
         run: pnpm -F @astryxdesign/native typecheck:types
 
+      # The interaction harness is consumed as TypeScript source by Vitest and
+      # Playwright, which do not typecheck; this is the only gate over it.
+      - name: Typecheck interaction harness
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/interaction-harness typecheck
+
   # Sandbox preview build — the single slowest piece of PR CI (~4min), run as
   # its own job so it overlaps build-storybook instead of serializing after it.
   # PR-only: merge_group runs never deploy previews, and docsite-only PRs skip
@@ -3436,6 +3442,88 @@ jobs:
           pattern: component-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}-*
           retention-days: 30
           delete-merged: true
+
+  # Touch interaction and animation proofs: the harness in
+  # internal/interaction-harness and every *.interaction.browser.spec.ts.
+  # Real touch input, composited frames, rendering traces and presented
+  # animation values only exist in a real engine, and the specs read stories
+  # from this PR's own Storybook build. The harness's self-test runs with
+  # them, so a change to an instrument is proven by its negative controls
+  # before a component spec relies on it. Chromium only on these runners;
+  # see the harness README for running WebKit.
+  pr-interaction:
+    needs: [check-scope, build-storybook]
+    if: github.event_name == 'pull_request' && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+    # Frame evidence measures timing: four cores, one Playwright worker.
+    runs-on: 4-core-ubuntu
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify evidence checkout
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      # The helper comes from the base, since an older PR head lacks it.
+      # Exit 1 means out of scope; 0 in scope; 2 unknown, so run.
+      - name: Check interaction scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          scope=2
+          helper="$(mktemp)"
+          if git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA" \
+            && git show "$BASE_SHA:.github/scripts/pr-scope-touches.sh" > "$helper"; then
+            scope=0
+            bash "$helper" "$BASE_SHA" '^(internal/interaction-harness/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|apps/storybook/)' || scope=$?
+          fi
+          if [ "$scope" = 1 ]; then
+            echo "Neither the interaction harness nor a component changed; skipping the interaction proofs."
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.scope.outputs.run == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      - name: Run interaction proofs
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          pnpm exec playwright test \
+            --config playwright.interaction.config.ts \
+            --project chromium \
+            --output interaction-proof-output
+
+      # Storyboards (PNG contact sheets) and curve traces, for review.
+      - name: Upload interaction evidence
+        if: always() && steps.scope.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-evidence
+          path: test-results/interaction-evidence
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration

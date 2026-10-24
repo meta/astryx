@@ -517,3 +517,52 @@ describe('deploy.yml push gating', () => {
     }
   });
 });
+
+describe('ci.yml interaction proofs', () => {
+  const workflow = load('ci.yml');
+  const job = workflow.jobs['pr-interaction'];
+  const step = name => job.steps.find(candidate => candidate.name === name);
+
+  it('runs the interaction config in Chromium against the exact PR head', () => {
+    expect(KNOWN_RUNNERS.has(job['runs-on'])).toBe(true);
+    expect(job.needs).toEqual(
+      expect.arrayContaining(['check-scope', 'build-storybook']),
+    );
+    const checkout = job.steps.find(candidate =>
+      candidate.uses?.startsWith('actions/checkout@'),
+    );
+    expect(checkout?.with?.ref).toBe(
+      '${{ github.event.pull_request.head.sha }}',
+    );
+    const run = step('Run interaction proofs').run;
+    expect(run).toContain('--config playwright.interaction.config.ts');
+    expect(run).toContain('--project chromium');
+    const packageJson = JSON.parse(read('package.json'));
+    expect(packageJson.scripts['test:interaction']).toBe(
+      'playwright test --config playwright.interaction.config.ts',
+    );
+  });
+
+  it('runs whenever the harness, its config, a component or a story changes', () => {
+    const scope = step('Check interaction scope').run;
+    expect(scope).toContain('.github/scripts/pr-scope-touches.sh');
+    for (const path of [
+      'internal/interaction-harness/',
+      'playwright\\.interaction\\.config\\.ts',
+      'packages/[^/]+/src/',
+      'apps/storybook/',
+    ]) {
+      expect(scope).toContain(path);
+    }
+    // Unknown scope (exit 2) runs the proofs; only "out of scope" skips them.
+    expect(scope).toContain('if [ "$scope" = 1 ]; then');
+  });
+
+  it('typechecks the harness in both workflows', () => {
+    for (const file of ['ci.yml', 'deploy.yml']) {
+      expect(runLines(load(file).jobs.typecheck), file).toContain(
+        '@astryxdesign/interaction-harness typecheck',
+      );
+    }
+  });
+});

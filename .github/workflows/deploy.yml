@@ -132,6 +132,9 @@ jobs:
       - name: Typecheck accessibility spec-test contracts
         run: pnpm -F @astryxdesign/a11y-spec typecheck
 
+      - name: Typecheck interaction harness
+        run: pnpm -F @astryxdesign/interaction-harness typecheck
+
   # Stable join for the three post-merge validation lanes.
   test:
     needs: [test-ui, test-node, typecheck]
