@@ -787,6 +787,125 @@ describe('GestureHost', () => {
     expect(host.arena.now()).toBeLessThan(1e9);
   });
 
+  it('locks nothing for a recognizer that would not take the touch', () => {
+    const {slider} = mount('<div id="slider"></div>');
+    const drag = new PanGestureRecognizer({
+      name: 'drag',
+      direction: 'horizontal',
+      preventsTextSelection: true,
+    });
+    detachers.push(host.attach(slider, drag));
+    drag.setEnabled(false);
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', slider, [finger], [finger], 0);
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', slider, [finger], [], 40);
+  });
+
+  it('turns text selection off on a press-tracked element while a finger is down, and restores it', () => {
+    const {row, text} = mount(
+      '<div id="row" style="user-select: text"><span id="text">Row</span></div>',
+    );
+    detachers.push(host.attachConsumer(row, new RecordingConsumer()));
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', text, [finger], [finger], 0);
+    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', text, [finger], [], 600);
+    expect(row.style.getPropertyValue('user-select')).toBe('text');
+  });
+
+  it('locks a delegated pressable only when it takes the touch, and holds the lock until the last finger lifts', () => {
+    const {row, off} = mount(
+      '<div id="row" data-test-press></div><div id="off" data-test-press="off"></div>',
+    );
+    detachers.push(
+      host.addDelegatedConsumer({
+        attribute: 'data-test-press',
+        create: element =>
+          element.getAttribute('data-test-press') === 'off'
+            ? null
+            : new RecordingConsumer(),
+      }),
+    );
+    const one = {id: 1, x: 5, y: 5};
+    const two = {id: 2, x: 9, y: 9};
+    touch('touchstart', row, [one], [one], 0);
+    touch('touchstart', row, [two], [one, two], 10);
+    touch('touchend', row, [one], [two], 100);
+    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', row, [two], [], 200);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    touch('touchstart', off, [one], [one], 300);
+    expect(off.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', off, [one], [], 400);
+  });
+
+  it('keeps selection for a mouse and for a pan that does not ask, and locks a pan that asks and a pen', () => {
+    const {row, sheet, slider} = mount(
+      '<div id="row"></div><div id="sheet"></div><div id="slider"></div>',
+    );
+    detachers.push(
+      host.attachConsumer(row, new RecordingConsumer()),
+      host.attach(sheet, new PanGestureRecognizer()),
+      host.attach(
+        slider,
+        new PanGestureRecognizer({
+          direction: 'horizontal',
+          preventsTextSelection: true,
+        }),
+      ),
+    );
+    const at = {x: 5, y: 5};
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      ...at,
+      buttons: 1,
+      time: 0,
+    });
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    pointer('pointerup', row, {pointerType: 'mouse', ...at, time: 50});
+    pointer('pointerdown', row, {
+      pointerType: 'pen',
+      ...at,
+      buttons: 1,
+      time: 100,
+    });
+    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    pointer('pointerup', row, {pointerType: 'pen', ...at, time: 150});
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+
+    const finger = {id: 1, ...at};
+    touch('touchstart', sheet, [finger], [finger], 200);
+    expect(sheet.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', sheet, [finger], [], 250);
+    touch('touchstart', slider, [finger], [finger], 300);
+    expect(slider.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchcancel', slider, [finger], [], 350);
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
+  });
+
+  it('locks a checkbox under the finger inside a locked element, which WebKit makes selectable, but never a text field', () => {
+    const {row, check, field} = mount(
+      '<div id="row"><input id="check" type="checkbox"><input id="field"></div>',
+    );
+    detachers.push(host.attachConsumer(row, new RecordingConsumer()));
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', check, [finger], [finger], 0);
+    expect(check.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', check, [finger], [], 100);
+    expect(check.style.getPropertyValue('user-select')).toBe('');
+    touch('touchstart', field, [finger], [finger], 200);
+    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    expect(field.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', field, [finger], [], 300);
+    // An input outside every locked element is not ours to lock.
+    const {alone} = mount('<input id="alone" type="checkbox">');
+    detachers.push(host.attach(alone, new TapGestureRecognizer()));
+    touch('touchstart', alone, [finger], [finger], 400);
+    expect(alone.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', alone, [finger], [], 450);
+  });
+
   it('ignores touches that land outside every attached element', () => {
     const {box, elsewhere} = mount(
       '<div id="box"></div><div id="elsewhere"></div>',

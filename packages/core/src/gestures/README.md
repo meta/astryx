@@ -208,6 +208,17 @@ component can call the hook.
   attached, so the page stays zoomable (WCAG 1.4.4). A long press also turns
   off the iOS callout and text selection on its element.
 
+  While a finger or a pen is down, the host turns them off too on the
+  element of a press tracker (attached or delegated: a control or a cell)
+  and of a recognizer with `preventsTextSelection` (a slider's, a segmented
+  control's or a switch's drag) that would take the touch (enabled, and
+  accepting its pointer), and restores them when the contact ends: UIKit
+  never starts a selection under a held control or cell. The document press
+  controller (`usePressFeedback` rows) takes the same lock on its surface for
+  any coarse pointer, iOS or not (`selectionLock.ts` is shared). A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. A mouse never
+  takes the lock, so desktop selection is unchanged, and content under a
+  sheet's or a pager's pan stays selectable.
+
 - **Claiming.** When a recognizer recognizes, it owns its touches. Each
   element with a recognizer that can claim a moving touch (a pan, a swipe, a
   long press that then drags, a pinch, a rotation) has a non-passive
