@@ -120,6 +120,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
+ * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
  * - /packages/core/src/motion/README.md
  */
 

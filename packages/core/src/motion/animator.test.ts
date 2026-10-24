@@ -8,8 +8,8 @@
  *   the analytic curves, the clock, the inline end state; and what it reads
  *   back: presentation values and velocities, retarget continuity, stop,
  *   completion, Reduced Motion substitutions, decays with edges, late attach
- * @position Testing; what the compositor plays needs a real browser, so it is
- *   proven in browser tests, not here
+ * @position Testing; the compositor itself is proven in
+ *   __tests__/animator.interaction.browser.spec.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
