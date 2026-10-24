@@ -26,6 +26,7 @@ import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
+import {frames} from './story';
 import type {TouchDriver} from './touch';
 
 export interface ClipBox {
@@ -230,7 +231,8 @@ async function composeSheet(
 export interface AnimationStoryboardOptions extends StoryboardOptions {
   /**
    * Frame times, ms (default every 16.7 ms to the end of the longest held
-   * animation's curve; a held end value is not filmed).
+   * curve that ends: a held end value is not filmed, and an animation that
+   * repeats forever does not set the length).
    */
   readonly times?: readonly number[];
   /** Restrict to animations inside this element. */
@@ -251,13 +253,26 @@ export async function animationStoryboard(
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
-  const longest = Math.max(...held.map(a => a.curveEndMs));
-  const times = options.times ?? timeline(longest);
+  // An animation that repeats forever (a spinner, a pulsing skeleton) has no
+  // end to film to: the default length comes from the others.
+  const ends = held.map(a => a.curveEndMs).filter(Number.isFinite);
+  if (options.times == null && ends.length === 0) {
+    throw new Error(
+      `storyboard ${options.name}: every held animation repeats forever ` +
+        `(${held.map(a => a.name ?? a.kind).join(', ')}); pass \`times\``,
+    );
+  }
+  const times = options.times ?? timeline(Math.max(...ends));
   const storyboard = new Storyboard(page, options);
   for (const t of times) {
-    await seekAnimations(page, t);
+    // Labelled with the time the page presents (just inside an end).
+    const presentedAt = await seekAnimations(page, t);
     const data = (await options.measure?.()) ?? {};
-    await storyboard.capture(`t=${+t.toFixed(1)} ms`, t, data);
+    await storyboard.capture(
+      `t=${+presentedAt.toFixed(1)} ms`,
+      presentedAt,
+      data,
+    );
   }
   return {storyboard, held};
 }
@@ -284,12 +299,7 @@ export async function touchStoryboard(
     realtime: false,
     onEvent: async step => {
       // Let the page run its handlers and present the frame before the photo.
-      await page.evaluate(
-        () =>
-          new Promise<void>(resolve =>
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-          ),
-      );
+      await frames(page, 2);
       const data = (await options.measure?.()) ?? {};
       const where = step.changed
         .map(f => `${Math.round(f.x)},${Math.round(f.y)}`)

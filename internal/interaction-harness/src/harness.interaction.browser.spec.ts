@@ -8,9 +8,14 @@
  *   a second finger and a pinch arrive as distinct pointers; sampled curves
  *   match the oracles; the animation-state waits report a running transition
  *   and its end, and judge rest by presented values even while an animation
- *   holds its end; individual transform properties are sampled; storyboards
- *   write a sheet and a trace that follows the curve, and the timer gate
- *   holds a component timer until the filmstrip is done.
+ *   holds its end; individual transform properties are sampled; a sample at
+ *   an end reports the time it was read at; holding takes only running
+ *   document-timeline animations, each at its own offset, and releases only
+ *   them; storyboards write a sheet and a trace that follows the curve, and an
+ *   endless animation does not set their length; the timer gate holds a
+ *   component timer until the filmstrip is done, drops callbacks the page
+ *   cancels, stamps held frames with the time they run, and leaves the
+ *   harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -23,6 +28,7 @@ import {
   curveOf,
   drag,
   flick,
+  frames,
   freezeTimers,
   holdAnimations,
   installInputLog,
@@ -32,7 +38,9 @@ import {
   PARTIAL_LIFT_SKIP,
   pinch,
   readInputLog,
+  releaseAnimations,
   sampleCurve,
+  seekAnimations,
   springStep,
   tap,
   thawTimers,
@@ -292,6 +300,109 @@ test.describe('curve sampling', () => {
   });
 });
 
+test.describe('holding', () => {
+  test('a sample at an end reports the time it was read at', async ({page}) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateY(0px)'}, {transform: 'translateY(200px)'}],
+        {duration: 300, easing: 'linear'},
+      ),
+    );
+    await holdAnimations(page, box);
+    const samples = await sampleCurve(box, [0, 150, 300]);
+    // Read just inside the end, and labelled so.
+    expect(samples.at(-1)).toMatchObject({t: 300, presentedAt: 299.5});
+    const result = compareCurve(
+      curveOf(samples, 'translateY'),
+      t => (200 * t) / 300,
+      0.05,
+    );
+    expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
+      0.05,
+    );
+    await releaseAnimations(page);
+  });
+
+  test('only running document-timeline animations are held, each at its own offset', async ({
+    page,
+  }) => {
+    await fixture(page);
+    // Besides #box: a finished fade, an animation the page paused, one on a
+    // scroll timeline, and a second runner started 100 ms after #box's.
+    await page.evaluate(async () => {
+      const make = (id: string) => {
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText =
+          'position:absolute;left:0;top:300px;width:40px;height:40px;background:#c63';
+        document.body.append(el);
+        return el;
+      };
+      make('finished').animate([{opacity: 0}, {opacity: 1}], {
+        duration: 50,
+        fill: 'both',
+      });
+      const paused = make('paused').animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(100px)'}],
+        {duration: 1000},
+      );
+      paused.pause();
+      paused.currentTime = 500;
+      const timelines = window as unknown as {
+        ScrollTimeline?: new (options: object) => AnimationTimeline;
+      };
+      if (timelines.ScrollTimeline != null) {
+        new Animation(
+          new KeyframeEffect(make('scrolled'), [{opacity: 0}, {opacity: 1}], {
+            duration: 1000,
+          }),
+          new timelines.ScrollTimeline({source: document.scrollingElement}),
+        ).play();
+      }
+      await new Promise(resolve => setTimeout(resolve, 120));
+      const run = (el: Element | null) =>
+        el?.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+          {duration: 600, easing: 'linear'},
+        );
+      run(document.getElementById('box'));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      run(make('later'));
+    });
+    const held = await holdAnimations(page);
+    expect(held.map(a => a.target)).toEqual(['div#box', 'div#later']);
+    const [first, later] = held;
+    expect(first.offsetMs).toBe(0);
+    expect(later.offsetMs).toBeGreaterThan(80);
+    const x = (id: string) =>
+      page
+        .locator(`#${id}`)
+        .evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m41);
+    expect(await seekAnimations(page, 300)).toBe(300);
+    expect(await x('box')).toBeCloseTo(150, 1);
+    expect(await x('later')).toBeCloseTo(
+      (300 * (300 - later.offsetMs)) / 600,
+      1,
+    );
+    // The finished fade kept its end value; the paused animation stays put.
+    expect(
+      await page
+        .locator('#finished')
+        .evaluate(el => getComputedStyle(el).opacity),
+    ).toBe('1');
+    await releaseAnimations(page);
+    await page.waitForTimeout(100);
+    expect(
+      await page.evaluate(() => {
+        const animation = document.getElementById('paused')?.getAnimations()[0];
+        return [animation?.playState, Number(animation?.currentTime)];
+      }),
+    ).toEqual(['paused', 500]);
+  });
+});
+
 test.describe('animation state', () => {
   test('waitForAnimation reports a running transition and waitForRest resolves after it', async ({
     page,
@@ -359,7 +470,7 @@ test.describe('animation state', () => {
   });
 });
 
-test.describe('storyboards', () => {
+test.describe('storyboards', {tag: '@storyboard'}, () => {
   test('an animation filmstrip records every frame and its trace follows the curve', async ({
     page,
   }, testInfo) => {
@@ -467,5 +578,91 @@ test.describe('storyboards', () => {
     const xs = storyboard.frames.map(f => f.data.x as number);
     expect(xs).toHaveLength(19); // t = 0 … 300 ms every 16.7 ms
     expect(xs.every((x, i) => i === 0 || x > xs[i - 1])).toBe(true);
+  });
+
+  test('an animation that repeats forever does not set the filmstrip length', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    await page.locator('#box').evaluate(el => {
+      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 800,
+        iterations: Infinity,
+      });
+      el.animate([{opacity: 1}, {opacity: 0.4}], {duration: 200});
+    });
+    const {storyboard, held} = await animationStoryboard(page, {
+      name: 'harness-self-test-endless',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      columns: 4,
+    });
+    expect(held.map(a => Number.isFinite(a.curveEndMs))).toEqual([false, true]);
+    expect(storyboard.frames).toHaveLength(13); // t = 0 … 200 ms
+    await releaseAnimations(page);
+    await storyboard.write(testInfo);
+  });
+
+  test('a filmstrip of endless animations alone asks for its times', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.locator('#box').evaluate(el =>
+      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 800,
+        iterations: Infinity,
+      }),
+    );
+    await expect(
+      animationStoryboard(page, {
+        name: 'harness-self-test-endless-only',
+        clip: {x: 0, y: 340, width: 402, height: 120},
+      }),
+    ).rejects.toThrow(/repeats forever/);
+    await releaseAnimations(page);
+  });
+
+  test('the timer gate drops callbacks the page cancels and stamps held frames with the time they run', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await installTimerGate(page);
+    await freezeTimers(page);
+    await page.evaluate(() => {
+      const w = window as unknown as Record<string, unknown>;
+      w.frozenAt = performance.now();
+      w.timer = setTimeout(() => {
+        w.cancelledTimerRan = true;
+      }, 20);
+      w.frame = requestAnimationFrame(() => {
+        w.cancelledFrameRan = true;
+      });
+      requestAnimationFrame(time => {
+        w.heldFrameTime = time;
+      });
+    });
+    await page.waitForTimeout(150); // both are due now, and held
+    // The harness's own frame waits still resolve while the page's are held.
+    await Promise.race([
+      frames(page, 2),
+      page.waitForTimeout(5000).then(() => {
+        throw new Error('frames() did not resolve while the gate was frozen');
+      }),
+    ]);
+    await page.evaluate(() => {
+      const w = window as unknown as {timer: number; frame: number};
+      clearTimeout(w.timer);
+      cancelAnimationFrame(w.frame);
+    });
+    await thawTimers(page);
+    const state = await page.evaluate(() => {
+      const w = window as unknown as Record<string, unknown>;
+      return {
+        timer: w.cancelledTimerRan === true,
+        frame: w.cancelledFrameRan === true,
+        heldFor: Number(w.heldFrameTime) - Number(w.frozenAt),
+      };
+    });
+    expect(state).toMatchObject({timer: false, frame: false});
+    expect(state.heldFor).toBeGreaterThanOrEqual(140);
   });
 });

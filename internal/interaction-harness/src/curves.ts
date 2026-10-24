@@ -6,7 +6,8 @@
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
  * @output `holdAnimations` (pause every running animation and describe it),
- *   `seekAnimations` (move them all to t ms), `sampleCurve` (the presented
+ *   `seekAnimations` (move them to t ms, each keeping its offset from the
+ *   earliest), `sampleCurve` (the presented
  *   transform/opacity at each t, with the individual `translate`, `rotate` and
  *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
  *   picks one channel out of the samples for ./math's `compareCurve`, and the
@@ -93,12 +94,20 @@ export interface HeldAnimation {
   readonly keyframes: readonly Record<string, unknown>[];
   /** Where it was when held, ms. */
   readonly heldAtMs: number | null;
+  /**
+   * How much later than the earliest held animation it started, ms: a seek to
+   * t moves it to its own t - offsetMs, so staggered starts stay staggered.
+   */
+  readonly offsetMs: number;
 }
 
 /**
- * Pauses every animation in the document (optionally only those whose target
- * is inside `scope`) and returns what was held. Later `seekAnimations` calls
- * move exactly this set.
+ * Pauses every running animation in the document (optionally only those whose
+ * target is inside `scope`) and returns what was held. Finished animations,
+ * animations the page paused, and animations on a scroll or view timeline are
+ * left as they are. Later `seekAnimations` calls move exactly the held set,
+ * each by its offset from the earliest start, and `releaseAnimations` resumes
+ * only it.
  */
 export async function holdAnimations(
   page: Page,
@@ -118,19 +127,36 @@ export async function holdAnimations(
           (node.classList.length
             ? `.${[...node.classList].slice(0, 2).join('.')}`
             : '');
+    const now = Number(document.timeline.currentTime ?? performance.now());
     const all = document.getAnimations().filter(animation => {
       const target =
         (animation.effect as KeyframeEffect | null)?.target ?? null;
       return (
-        root == null ||
-        (target != null && (root === target || root.contains(target)))
+        animation.playState === 'running' &&
+        animation.timeline instanceof DocumentTimeline &&
+        (root == null ||
+          (target != null && (root === target || root.contains(target))))
       );
     });
+    // Each animation's start on the document timeline, read before the pause
+    // clears it (a pending play has no start time yet: it starts now).
+    const starts = all.map(animation =>
+      animation.startTime != null
+        ? Number(animation.startTime)
+        : now - Number(animation.currentTime ?? 0),
+    );
+    const earliest = Math.min(...starts);
+    const offsets = starts.map(start => start - earliest);
     const held = all.map(animation => {
       animation.pause();
       return animation;
     });
-    (window as unknown as {__harnessHeld: Animation[]}).__harnessHeld = held;
+    const w = window as unknown as {
+      __harnessHeld: Animation[];
+      __harnessHeldOffsets: number[];
+    };
+    w.__harnessHeld = held;
+    w.__harnessHeldOffsets = offsets;
     return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
       const timing = effect?.getComputedTiming();
@@ -155,38 +181,52 @@ export async function holdAnimations(
         ),
         heldAtMs:
           animation.currentTime == null ? null : Number(animation.currentTime),
+        offsetMs: offsets[index],
       };
     });
   }, scopeHandle);
 }
 
 /**
- * Moves every held animation to `timeMs` (from its own start, delay included).
- * A time at or past an animation's end is clamped to END_INSET_MS before it:
- * an animation without `fill` stops applying its effect exactly at the end,
- * and the frame wanted there is the last one it presents. (Half a millisecond,
- * not less: engines round `currentTime` writes to their timer resolution.)
+ * Moves every held animation to `timeMs` from the earliest held start (delay
+ * included): each to its own `timeMs - offsetMs`. A time at or past an
+ * animation's end is clamped to END_INSET_MS before it: an animation without
+ * `fill` stops applying its effect exactly at the end, and the frame wanted
+ * there is the last one it presents. (Half a millisecond, not less: engines
+ * round `currentTime` writes to their timer resolution.) Returns the time the
+ * page then presents: `timeMs`, or the latest clamped end when every held
+ * animation was clamped.
  */
 export async function seekAnimations(
   page: Page,
   timeMs: number,
-): Promise<void> {
-  await page.evaluate(
+): Promise<number> {
+  return page.evaluate(
     ({t, inset}) => {
-      for (const animation of (
-        window as unknown as {__harnessHeld?: Animation[]}
-      ).__harnessHeld ?? []) {
+      const w = window as unknown as {
+        __harnessHeld?: Animation[];
+        __harnessHeldOffsets?: number[];
+      };
+      let presented = -Infinity;
+      (w.__harnessHeld ?? []).forEach((animation, index) => {
+        const offset = w.__harnessHeldOffsets?.[index] ?? 0;
         const end = Number(
           animation.effect?.getComputedTiming().endTime ?? Infinity,
         );
-        animation.currentTime = Math.min(t, end - inset);
-      }
+        const local = Math.min(t - offset, end - inset);
+        animation.currentTime = local;
+        presented = Math.max(presented, local + offset);
+      });
+      return Number.isFinite(presented) ? presented : t;
     },
     {t: timeMs, inset: END_INSET_MS},
   );
 }
 
-/** Resumes (default) or finishes every held animation. */
+/**
+ * Resumes (default) or finishes every held animation: only those
+ * `holdAnimations` paused, so an animation the page paused stays paused.
+ */
 export async function releaseAnimations(
   page: Page,
   {finish = false}: {finish?: boolean} = {},
@@ -206,7 +246,13 @@ export async function releaseAnimations(
 }
 
 export interface CurveSample {
+  /** The requested time. */
   readonly t: number;
+  /**
+   * The time the page presents: `t`, or just inside the end when the sample
+   * was taken at or past it (see `seekAnimations`). Oracles are read here.
+   */
+  readonly presentedAt: number;
   /**
    * The presented 2D transform: `translate` · `rotate` · `scale` ·
    * `transform`, composed in the order CSS applies them.
@@ -235,22 +281,29 @@ export async function sampleCurve(
 ): Promise<CurveSample[]> {
   const raw = await locator.evaluate(
     (element, {ts, inset}) => {
-      const held =
-        (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ??
-        [];
+      const w = window as unknown as {
+        __harnessHeld?: Animation[];
+        __harnessHeldOffsets?: number[];
+      };
+      const held = w.__harnessHeld ?? [];
       if (held.length === 0) {
         throw new Error(
           'sampleCurve: no held animations (call holdAnimations first)',
         );
       }
       return ts.map(t => {
-        for (const animation of held) {
-          // Just inside the end: see seekAnimations.
+        let presented = -Infinity;
+        held.forEach((animation, index) => {
+          // Each at its own offset, just inside its end: see seekAnimations.
+          const offset = w.__harnessHeldOffsets?.[index] ?? 0;
           const end = Number(
             animation.effect?.getComputedTiming().endTime ?? Infinity,
           );
-          animation.currentTime = Math.min(t, end - inset);
-        }
+          const local = Math.min(t - offset, end - inset);
+          animation.currentTime = local;
+          presented = Math.max(presented, local + offset);
+        });
+        const presentedAt = Number.isFinite(presented) ? presented : t;
         const style = getComputedStyle(element);
         // translate · rotate · scale · transform, as CSS applies them (all
         // about the same transform origin, which `transform` excludes too).
@@ -289,6 +342,7 @@ export async function sampleCurve(
         const {a, b, c, d, e, f} = matrix;
         return {
           t,
+          presentedAt,
           matrix: `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`,
           transform: style.transform,
           translate: style.translate,
@@ -302,6 +356,7 @@ export async function sampleCurve(
   );
   return raw.map(r => ({
     t: r.t,
+    presentedAt: r.presentedAt,
     transform: parseTransform(r.matrix),
     opacity: Number(r.opacity),
     raw: {
@@ -323,7 +378,7 @@ export function curveOf(
   channel: Channel,
 ): TimedValue[] {
   return samples.map(s => ({
-    t: s.t,
+    t: s.presentedAt,
     value: channel === 'opacity' ? s.opacity : s.transform[channel],
   }));
 }
@@ -438,6 +493,13 @@ export async function waitForRest(
             backdrop,
           ].join(' | ');
         };
+        // The page's real frames, even while a timer gate holds its callbacks.
+        const frame =
+          (
+            window as unknown as {
+              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+            }
+          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
         let last = read();
         let still = 0;
         const tick = () => {
@@ -457,10 +519,10 @@ export async function waitForRest(
           } else if (performance.now() > deadline) {
             reject(new Error(`waitForRest: still moving (${now})`));
           } else {
-            requestAnimationFrame(tick);
+            frame(tick);
           }
         };
-        requestAnimationFrame(tick);
+        frame(tick);
       }),
     {ms: timeout, need: frames},
   );

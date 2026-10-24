@@ -58,13 +58,17 @@ dispatch latency, and the events go through the compositor's gesture detection
 the limits below. Read positions a frame after a move: Chromium delivers
 `pointermove` aligned to animation frames.
 
-**Curve sampling.** Pause every animation (CSS transitions and animations are
-Web Animations too), seek to a time, read `getComputedStyle`: the presented
-value at that exact time, independent of frame timing. Compare it with an
+**Curve sampling.** Pause every running animation (CSS transitions and
+animations are Web Animations too), seek to a time, read `getComputedStyle`:
+the presented value at that exact time, independent of frame timing. Finished
+animations, ones the page paused and ones on a scroll or view timeline are left
+alone; held animations keep their offsets from the earliest start, and release
+resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond
-inside it, the last frame it presents. An animation whose keyframes end in a run of
+inside it, the last frame it presents, and the sample says so (`presentedAt`,
+where oracles are read). An animation whose keyframes end in a run of
 identical values (an end value held so a later interruption can read it)
 ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
 the default storyboard times stop there, and `waitForRest`, which judges the
@@ -77,7 +81,10 @@ carries each frame's measurements and the spec asserts on it; the sheet is
 evidence. A component that finishes an animation from a timer (a transitionend
 backstop, a cleanup render) would do so behind a held storyboard's back:
 `installTimerGate` before the animation starts and `freezeTimers` while
-photographing.
+photographing. The page can still cancel a held callback, a held frame callback
+gets the time it actually runs, and the harness's own frame waits are not held.
+An animation that repeats forever does not set a storyboard's default length;
+with nothing else to film, pass `times`.
 
 ## Engine limits (measured with Playwright 1.61)
 
