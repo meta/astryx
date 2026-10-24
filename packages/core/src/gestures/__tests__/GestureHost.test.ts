@@ -772,6 +772,19 @@ describe('GestureHost', () => {
       expect(host.isFingerScroll(list)).toBe(false);
     });
 
+    it('keeps a scroll that ends while the finger still rests the finger’s until the lift', () => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      detachers.push(host.watchFingerScrolls(list));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      list.dispatchEvent(new Event('scrollend'));
+      expect(host.isFingerScroll(list)).toBe(true);
+      // Lifting without moving the list again ends it.
+      touch('touchend', row, [finger], [], 300);
+      expect(host.isFingerScroll(list)).toBe(false);
+    });
+
     it('forgets a scroller once nobody watches it', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
       const stop = host.watchFingerScrolls(list);

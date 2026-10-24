@@ -324,6 +324,11 @@ export class GestureHost {
    */
   private readonly fingerScrollers = new Set<Node>();
   /**
+   * Finger-driven scrollers whose `scrollend` came while that finger still
+   * rested on them: the scroll stays the finger's until the lift.
+   */
+  private readonly endedWhileDown = new Set<Node>();
+  /**
    * Where each finger now on the screen landed, from the last touch event's
    * `touches` (every finger, whether or not a recognizer tracks it).
    */
@@ -537,6 +542,7 @@ export class GestureHost {
       } else {
         this.scrollWatchers.delete(scroller);
         this.fingerScrollers.delete(scroller);
+        this.endedWhileDown.delete(scroller);
       }
       this.uninstallIfIdle();
     };
@@ -1584,13 +1590,13 @@ export class GestureHost {
     }
     // A watched scroller's scroll is a finger's from a scroll while a finger
     // that landed inside it is down until its own scrollend.
+    this.endedWhileDown.delete(scroller);
     if (
       this.scrollWatchers.has(scroller) &&
-      !this.fingerScrollers.has(scroller)
+      !this.fingerScrollers.has(scroller) &&
+      this.isFingerDownIn(scroller)
     ) {
-      if (this.fingerTargets.some(target => scroller.contains(target))) {
-        this.fingerScrollers.add(scroller);
-      }
+      this.fingerScrollers.add(scroller);
     }
     // A scroll is a finger's only if that finger was inside this scroller,
     // recently; anything else is the program moving something.
@@ -1642,11 +1648,28 @@ export class GestureHost {
       }
     }
     this.fingerTargets = fingers;
+    // A scroll that ended while its finger rested ends with the lift.
+    for (const scroller of this.endedWhileDown) {
+      if (!this.isFingerDownIn(scroller)) {
+        this.endedWhileDown.delete(scroller);
+        this.fingerScrollers.delete(scroller);
+      }
+    }
+  }
+
+  private isFingerDownIn(scroller: Node): boolean {
+    return this.fingerTargets.some(target => scroller.contains(target));
   }
 
   private readonly onScrollEnd = (event: Event): void => {
     const scroller = event.target === this.doc ? this.doc : event.target;
-    if (scroller instanceof Node) {
+    if (!(scroller instanceof Node) || !this.fingerScrollers.has(scroller)) {
+      return;
+    }
+    if (this.isFingerDownIn(scroller)) {
+      // The finger still rests there: the scroll is its until the lift.
+      this.endedWhileDown.add(scroller);
+    } else {
       this.fingerScrollers.delete(scroller);
     }
   };
