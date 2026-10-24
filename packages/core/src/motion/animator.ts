@@ -111,6 +111,14 @@
  * direct manipulation that UIKit keeps under Reduce Motion). Decays keep their
  * motion: they follow a finger's throw.
  *
+ * Theme: a spring or curve from a motion table (`springs.sheetPresent`,
+ * `scroll.bounce`, the Reduce Motion fade's duration and curve) plays the
+ * value the element's theme sets for that role, or the table's value when it
+ * sets none (resolveMotion.ts). It is read once, when the motion starts, from
+ * the theme scope's computed style: no layout, and the start, the promotion
+ * and the browser-set start time are unchanged. A spring written inline at the
+ * call site is played as given.
+ *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
  * curve ends, and after `set`) until the next animation replaces it.
@@ -121,6 +129,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
  * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
+ * - /packages/core/src/motion/resolveMotion.ts (the theme roles it resolves)
  * - /packages/core/src/motion/README.md
  */
 
@@ -132,6 +141,7 @@ import {
   type SpringCurve,
   type SpringDescription,
 } from './spring';
+import {resolveMotion} from './resolveMotion';
 import {scroll} from './uikit/scroll';
 import {timing} from './uikit/timing';
 
@@ -1247,7 +1257,9 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    const curve = solveSpring(toSpring(spring), {from, to, velocity});
+    // A table spring takes its theme's value, read once here, at the start.
+    const resolved = resolveMotion(target, spring);
+    const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
       MAX_DURATION_MS,
       curve.settleTime(SETTLE_THRESHOLD[property]) * 1000,
@@ -1260,7 +1272,7 @@ export function createAnimator(
       speed: t => curve.velocity(t / 1000),
       jumps: [],
       owner,
-      spring,
+      spring: resolved,
     };
   };
 
@@ -1270,7 +1282,7 @@ export function createAnimator(
     stops: ReadonlyArray<{at: number; value: number}>,
     jumps: ReadonlyArray<number> = [],
   ): Segment => {
-    const ease = cubicBezier(timing.curves.easeInOut);
+    const ease = cubicBezier(resolveMotion(target, timing.curves.easeInOut));
     const duration = stops[stops.length - 1].at;
     const at = (t: number) => {
       for (let i = 0; i + 1 < stops.length; i++) {
@@ -1364,7 +1376,7 @@ export function createAnimator(
     let opacity: Segment | null = null;
     let landsAt = 0;
     if (mode === 'crossfade' && fadeSpring == null) {
-      const fade = timing.reducedMotionCrossFadeMs;
+      const fade = resolveMotion(target, timing, 'reducedMotionCrossFadeMs');
       if (entering || leaving) {
         opacity =
           restore == null
@@ -1392,7 +1404,7 @@ export function createAnimator(
         landsAt = fade / 2;
       }
     } else if (mode === 'crossfade' && fadeSpring != null) {
-      const spring = toSpring(fadeSpring);
+      const spring = toSpring(resolveMotion(target, fadeSpring));
       const settle = (curve: SpringCurve) =>
         Math.min(
           MAX_DURATION_MS / 2,
@@ -1677,7 +1689,9 @@ export function createAnimator(
       const velocities = expand(velocity);
       const {owner, finished} = newOwner();
       const rate = decayOptions.rate ?? scroll.decelerationRate.normal;
-      const bounce = toSpring(decayOptions.bounce ?? scroll.bounce);
+      const bounce = toSpring(
+        resolveMotion(target, decayOptions.bounce ?? scroll.bounce),
+      );
       const properties = Object.keys(velocities) as MotionProperty[];
       const group = beginGroup(time, properties, decayOptions.at);
       for (const property of properties) {
