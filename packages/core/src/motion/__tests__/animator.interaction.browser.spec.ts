@@ -12,7 +12,8 @@
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
- *   the curve and holds its end state
+ *   the curve and holds its end state; a theme that retunes a table spring
+ *   changes the curve the engine plays
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
  */
@@ -315,6 +316,79 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   expect(new Set(result.starts).size).toBe(1);
   expect(result.worstX).toBeLessThan(0.06);
   expect(result.worstOpacity).toBeLessThan(0.003);
+});
+
+test('a theme that retunes a table spring changes the curve the engine plays', async ({
+  page,
+}) => {
+  // The theme writes the role's variable on its scope, as defineTheme's CSS
+  // does; the box outside the scope keeps the table's spring.
+  const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html, body { margin: 0; background: #fff; }
+  .box { position: absolute; top: 40px; width: 48px; height: 48px; background: #36c; }
+  @scope ([data-astryx-theme="soft"]) { :scope { --motion-springs-sheet-present: 0.8s 0.3; } }
+</style>
+<div class="box" id="plain" style="left: 0"></div>
+<div data-astryx-theme="soft"><div class="box" id="themed" style="left: 80px"></div></div>
+<script>${script}</script>`;
+  await page.route('http://motion.test/', async route =>
+    route.fulfill({contentType: 'text/html', body: html}),
+  );
+  await page.goto('http://motion.test/');
+  const result = await page.evaluate(async () => {
+    const curves = {
+      plain: Motion.solveSpring(Motion.toSpring(Motion.springs.sheetPresent), {
+        from: 300,
+        to: 0,
+      }),
+      themed: Motion.solveSpring(
+        Motion.toSpring({duration: 0.8, bounce: 0.3}),
+        {
+          from: 300,
+          to: 0,
+        },
+      ),
+    };
+    const report: Record<string, {worst: number; lowest: number}> = {};
+    for (const id of ['plain', 'themed'] as const) {
+      const element = document.getElementById(id) as HTMLElement;
+      const animator = Motion.createAnimator(element);
+      animator.set({y: 300});
+      const handle = animator.animate(
+        {y: 0},
+        {spring: Motion.springs.sheetPresent},
+      );
+      await handle.started;
+      const animations = element.getAnimations();
+      for (const a of animations) {
+        a.pause();
+      }
+      let worst = 0;
+      let lowest = Infinity;
+      for (let t = 0; t <= 1200; t += 8) {
+        for (const a of animations) {
+          a.currentTime = t;
+        }
+        const [, y = '0'] = getComputedStyle(element).translate.split(' ');
+        const value = Number.parseFloat(y) || 0;
+        lowest = Math.min(lowest, value);
+        worst = Math.max(worst, Math.abs(value - curves[id].value(t / 1000)));
+      }
+      report[id] = {worst, lowest};
+    }
+    return report;
+  });
+  test.info().annotations.push({
+    type: 'themed spring',
+    description: JSON.stringify(result),
+  });
+  // Each box plays its own spring: the themed one overshoots, the table's
+  // (critically damped) does not.
+  expect(result.plain.worst).toBeLessThan(0.06);
+  expect(result.themed.worst).toBeLessThan(0.06);
+  expect(result.themed.lowest).toBeLessThan(-10);
+  expect(result.plain.lowest).toBeGreaterThan(-0.5);
 });
 
 test('a finished animation leaves the element once the curve ends', async ({
