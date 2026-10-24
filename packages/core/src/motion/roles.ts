@@ -13,7 +13,7 @@
  * A motion role is one value of a motion table that a theme may retune: a
  * spring, a duration (a key ending in `Ms`, in milliseconds) or a curve (four
  * cubic-bézier control points). It is named by its table path, for example
- * `springs.sheetDetent`, `timing.curves.easeInOut` or `sheet.present`, and
+ * `springs.sheetDetent`, `timing.curves.easeInOut` or `scroll.bounce`, and
  * carried by one CSS custom property, `--motion-` followed by the path in
  * kebab case (`--motion-springs-sheet-detent`). A theme writes that property
  * only for the roles it sets; an empty property means the table's value, so
@@ -72,7 +72,7 @@ export function isMotionRoleId(id: string): boolean {
 export function motionRoleVariable(id: string): string {
   if (!isMotionRoleId(id)) {
     throw new Error(
-      `motion role "${id}" must be a dotted table path such as "sheet.present"`,
+      `motion role "${id}" must be a dotted table path such as "springs.sheetPresent"`,
     );
   }
   return `--motion-${id

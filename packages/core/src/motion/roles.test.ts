@@ -10,6 +10,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {MOTION_ROLE_KINDS} from './roleKinds.generated';
 import {
   formatMotionRoleValue,
   isMotionRoleId,
@@ -93,6 +94,18 @@ describe('motion roles', () => {
     // Every role has its own CSS variable.
     const variables = listMotionRoles().map(role => role.variable);
     expect(new Set(variables).size).toBe(variables.length);
+  });
+
+  it('lists every registered role, and its kind, in the generated role kinds', () => {
+    // The shared tables (other tests here register tables of their own).
+    const shared = listMotionRoles().filter(role =>
+      ['springs', 'scroll', 'timing', 'navigation'].includes(
+        role.id.split('.')[0],
+      ),
+    );
+    expect(
+      Object.fromEntries(shared.map(role => [role.id, role.kind])),
+    ).toEqual(MOTION_ROLE_KINDS);
   });
 
   it('writes every table value in CSS form and reads back the same motion', () => {

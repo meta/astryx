@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'On a touch screen, sheets, alerts, menus, navigation and scrolling play the springs, durations and curves measured from iOS. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default.',
+          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. No shipped component reads these roles yet.',
         },
         {
           type: 'code',
@@ -166,7 +166,7 @@ const calmTheme = defineTheme({
   },
   adaptations: {
     rules: [
-      // Touch screens outside iOS: a quicker push.
+      // Touch screens other than iPhone and iPad: a quicker push.
       {
         when: {platform: 'other', pointer: 'coarse'},
         value: {motion: {springs: {'springs.navigationPush': {duration: 0.25, bounce: 0}}}},
@@ -177,7 +177,7 @@ const calmTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'A theme writes one CSS variable per role it sets, `--motion-` followed by the path in kebab case: a spring as its duration and bounce (`0.6s 0.1`), a duration in milliseconds, a curve as `cubic-bezier()`. Components read the variable when a motion starts and fall back to the default when it is empty. Gesture thresholds, the delays that decide whether a touch scrolls or presses, and haptics are not motion roles. The `platform` condition matches iOS and iPadOS browsers (`ios`) or every other browser (`other`).',
+          text: 'A theme writes one CSS variable per role it sets, `--motion-` followed by the path in kebab case: a spring as its duration and bounce (`0.6s 0.1`), a duration in milliseconds, a curve as `cubic-bezier()`. Code that plays a motion reads the variable when the motion starts, and the default when it is empty. Gesture thresholds, the delays that decide whether a touch scrolls or presses, and haptics are not motion roles. The `platform` condition matches the browsers of iPhone and iPad (`ios`) or every other browser (`other`). A role id is checked when the theme is defined: an unknown id, or a role under the wrong group, is refused.',
         },
         {
           type: 'table',

@@ -116,7 +116,7 @@ export interface ThemeAdaptationCondition {
   /** User reduced-motion preference. */
   motion?: 'reduce' | 'no-preference';
   /**
-   * The platform's web engine: `ios` is iOS and iPadOS WebKit (every browser
+   * The platform's web engine: `ios` is the WebKit of iPhone and iPad (every browser
    * there), detected with `@supports (-webkit-touch-callout: none)`; `other`
    * is everything else. Pair `ios` with `pointer: 'coarse'` for a touch
    * profile, such as touch motion tuned per platform.
@@ -718,7 +718,7 @@ function mediaQueryForCondition(
   return parts.join(' and ');
 }
 
-/** iOS and iPadOS WebKit: the one engine with the touch-callout property. */
+/** The WebKit of iPhone and iPad: the one engine with the touch-callout property. */
 const IOS_SUPPORTS = '(-webkit-touch-callout: none)';
 
 /** The @supports prelude (without the keyword) for a platform condition. */
