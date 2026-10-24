@@ -13,10 +13,10 @@
  * A theme sets a role by writing its CSS variable (motion/roles.ts) on its
  * scope, the nearest `[data-astryx-theme]` element (or the root element). The
  * value is read from that scope's computed style when a motion starts: a style
- * read, never a layout, and at most once per scope and role until something
- * that can change it happens (a theme attribute changes, theme CSS is inserted
- * or edited, the window resizes, or the pointer, contrast or reduced-motion
- * preference changes). An empty or malformed value means the table's value.
+ * read, never a layout, and at most once per scope and role per task (the
+ * motions one task starts share it), or again within the task when a theme
+ * attribute changes. Nothing is listened to or observed. An empty or malformed
+ * value means the table's value.
  * Nothing runs on import or on the server, and a detached element reads the
  * table's value.
  *
@@ -35,57 +35,31 @@ import {
 import type {SpringDescription} from './spring';
 
 interface ScopeValues {
-  epoch: number;
+  /** The task the values were read in. */
+  task: number;
+  /** The theme attributes they were read under. */
+  theme: string;
   values: Map<string, string>;
 }
 
 const scopes = new WeakMap<Element, ScopeValues>();
-const watched = new WeakSet<Document>();
-/** Each document's theme observer, so a read can take its pending records. */
-const observers = new WeakMap<Document, MutationObserver>();
-let epoch = 0;
 
-/** Media queries whose change can switch an adaptation rule on or off. */
-const ENVIRONMENT_QUERIES = [
-  '(pointer: coarse)',
-  '(pointer: fine)',
-  '(prefers-reduced-motion: reduce)',
-  '(prefers-contrast: more)',
-  '(prefers-contrast: less)',
-];
-
-/** Starts watching what can change a theme's motion values, once per document. */
-function watch(doc: Document): void {
-  if (watched.has(doc)) {
-    return;
-  }
-  watched.add(doc);
-  const invalidate = () => {
-    epoch += 1;
-  };
-  if (typeof MutationObserver === 'function') {
-    const observer = new MutationObserver(invalidate);
-    observers.set(doc, observer);
-    observer.observe(doc.documentElement, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['data-astryx-theme', 'data-theme'],
+/**
+ * The current task: a number that changes once the task that read it ends,
+ * so values are shared by the motions one task starts and read again by the
+ * next. Nothing is listened to or observed.
+ */
+let task = 0;
+let taskEnding = false;
+function currentTask(): number {
+  if (!taskEnding) {
+    taskEnding = true;
+    queueMicrotask(() => {
+      taskEnding = false;
+      task += 1;
     });
-    if (doc.head != null) {
-      observer.observe(doc.head, {
-        subtree: true,
-        childList: true,
-        characterData: true,
-      });
-    }
   }
-  const view = doc.defaultView;
-  if (view != null) {
-    view.addEventListener('resize', invalidate);
-    for (const query of ENVIRONMENT_QUERIES) {
-      view.matchMedia?.(query).addEventListener?.('change', invalidate);
-    }
-  }
+  return task;
 }
 
 /** The raw value of a role's CSS variable under `element`'s theme scope. */
@@ -95,16 +69,15 @@ function readVariable(element: Element, role: MotionRole): string {
   if (view == null || !element.isConnected) {
     return '';
   }
-  watch(doc);
-  // A theme switch earlier in this task reaches the observer's callback only
-  // in a microtask: take its records now, so this read sees the new theme.
-  if ((observers.get(doc)?.takeRecords().length ?? 0) > 0) {
-    epoch += 1;
-  }
   const scope = element.closest('[data-astryx-theme]') ?? doc.documentElement;
+  // A theme switched earlier in this task changes these attributes.
+  const theme = `${scope.getAttribute('data-astryx-theme') ?? ''} ${
+    doc.documentElement.getAttribute('data-theme') ?? ''
+  }`;
+  const now = currentTask();
   let cached = scopes.get(scope);
-  if (cached == null || cached.epoch !== epoch) {
-    cached = {epoch, values: new Map()};
+  if (cached == null || cached.task !== now || cached.theme !== theme) {
+    cached = {task: now, theme, values: new Map()};
     scopes.set(scope, cached);
   }
   let value = cached.values.get(role.variable);
