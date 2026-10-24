@@ -1,23 +1,27 @@
 # @astryxdesign/interaction-harness
 
 Playwright instruments for touch interaction and animation proofs: real touch
-input, curve sampling and storyboards. **Internal and unpublished.** Specs live
-next to their component as `*.interaction.browser.spec.ts` and run under
+input, frame evidence, curve sampling and storyboards. **Internal and
+unpublished.** Specs live next to their component as
+`*.interaction.browser.spec.ts` and run under
 [`playwright.interaction.config.ts`](../../playwright.interaction.config.ts) on
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
+The exemplar to copy is
+[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
-[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts),
-on fixture pages written inline.
+[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
+every positive check has a negative control beside it (a rAF animation that
+freezes, a `top` animation that lays out every frame).
 
 ## Running
 
 ```sh
-pnpm storybook:build                      # component specs read stories from the built Storybook
+pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction <spec file>         # one spec, both engines
+pnpm test:interaction BottomSheetDetent   # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -29,7 +33,7 @@ image (podman or docker; the repository is mounted at the same path):
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
-Evidence (storyboards, curve traces) is written to
+Evidence (storyboards, curve traces, busy-main-thread frames) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
 committed: a pull request links or attaches it.
@@ -40,9 +44,12 @@ committed: a pull request links or attaches it.
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
+| `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
+| `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall.                                                                                                       |
+| `trace.ts`      | `traceRendering(page, body)`: main-thread Layout / Paint / UpdateLayoutTree / PrePaint counts, `countBetween` for a sub-window, long tasks. `installLongTaskLog` / `readLongTasks`.                                           |
 | `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
-| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                       |
+| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                            |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                     |
 | `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                       |
 
@@ -85,6 +92,26 @@ set): a short entrance no longer races the first look on a cold page. When the
 action may be the page's first contact with the harness, take
 `watchAnimations(locator)` before it and read `watch.started()` after.
 
+**Busy main thread.** Mark the element, start the screencast, start the
+animation, wait until it runs (`waitForAnimation`: an animation cannot start
+while the thread is held), block the main thread 500–1000 ms, stop. Always
+start the gesture or animation first and block mid-flight, never before:
+in headless Chromium a touch that starts while the main thread is busy does
+not scroll or start a gesture even with only passive listeners (the input
+waits for the main thread). Tracking a finger under a busy main thread is
+therefore proven on the iOS simulator, not here. The
+screencast is captured off the main thread, so a compositor animation shows a
+new position every frame of the block, and a main-thread animation shows none
+(nothing changed, so no frame is sent at all: `busyWindowProof` counts the
+whole window as one stall). `settledWithin` stops judging at the easing tail
+that moves less than a frame pixel per frame. `castStoryboard` turns the frames
+of the block into a filmstrip.
+
+**No Layout / Paint.** `traceRendering` records a Chromium trace around the
+interaction; `countBetween` counts the steady middle of an animation (its
+first and last frames may commit). A transform/opacity animation does no
+Layout or Paint there; a layout-property animation does one per frame.
+
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
 carries each frame's measurements and the spec asserts on it; the sheet is
@@ -111,11 +138,14 @@ gesture from a screencast.
 | Lifting one finger while others stay down              | yes          | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP` |
 | Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                          |
 | Curve sampling, storyboards, input log                 | yes          | yes                                                                                                   |
+| Screencast frame evidence (busy main thread)           | yes          | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                    |
+| Rendering trace, long tasks                            | yes          | no (Playwright exposes neither)                                                                       |
 
 What WebKit cannot show here — native scroll hand-off, flings, a finger
-lifting while another stays down, and anything iOS-only — needs Mobile Safari
-itself, on a device or the iOS simulator. Skip such a proof on the driver's
-flag, citing the reason: `test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP)`.
+lifting while another stays down, finger tracking under a busy main thread, and
+anything iOS-only — needs Mobile Safari itself, on a device or the iOS
+simulator. Skip such a proof on the driver's flag, citing the reason:
+`test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP)`.
 
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.
