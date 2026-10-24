@@ -116,6 +116,24 @@ describe('resolveMotion', () => {
 });
 
 describe('the animator under a theme', () => {
+  it('reads again in the next task, and listens to nothing', async () => {
+    const listen = vi.spyOn(window, 'addEventListener');
+    const Observer = vi.fn();
+    vi.stubGlobal('MutationObserver', Observer);
+    const {child} = themed('soft', {
+      '--motion-springs-sheet-present': '0.8s 0.3',
+    });
+    resolveMotion(child, springs.sheetPresent);
+    resolveMotion(child, springs.sheetPresent);
+    expect(reads).toBe(1);
+    await Promise.resolve();
+    resolveMotion(child, springs.sheetPresent);
+    expect(reads).toBe(2);
+    expect(listen).not.toHaveBeenCalled();
+    expect(Observer).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it('sees a theme switched earlier in the same task', () => {
     const {scope, child} = themed('soft', {
       '--motion-springs-sheet-present': '0.8s 0.3',
