@@ -580,6 +580,57 @@ export function animatorFor(
   return animator;
 }
 
+/**
+ * The inline text for a channel: `format`, except that an identity transform
+ * is written `none`. Any other value, `translate: 0px 0px` included, makes
+ * the element the containing block of its `position: fixed` descendants and
+ * a stacking context, so a motion back to identity would leave a fixed child
+ * moved with its parent; Mobile Safari also lets no finger scroll a list
+ * inside an element left at `scale: 1`. At rest the identity leaves the
+ * element entirely when its stylesheet agrees (`releaseIdentity`).
+ */
+function inlineText(
+  channel: Channel,
+  value: (property: MotionProperty) => number,
+): string {
+  const at = (property: MotionProperty, identity: number, digits: number) =>
+    round(value(property), digits) === identity;
+  switch (channel) {
+    case 'translate':
+      return at('x', 0, 3) && at('y', 0, 3) ? 'none' : format(channel, value);
+    case 'rotate':
+      return at('rotate', 0, 4) ? 'none' : format(channel, value);
+    case 'scale':
+      return at('scaleX', 1, 5) && at('scaleY', 1, 5)
+        ? 'none'
+        : format(channel, value);
+    case 'opacity':
+      return format(channel, value);
+  }
+}
+
+/** What `inlineText` writes for each channel at identity. */
+const IDENTITY_TEXT: Record<Channel, string> = {
+  translate: 'none',
+  rotate: 'none',
+  scale: 'none',
+  opacity: '1',
+};
+
+/** Whether a computed value (or an unset one) is the channel's identity. */
+function isIdentityText(channel: Channel, text: string): boolean {
+  const value = text.trim();
+  if (value === '' || value === 'none') {
+    return true;
+  }
+  const numbers = value.split(/\s+/).map(part => Number.parseFloat(part));
+  if (numbers.some(number => !Number.isFinite(number))) {
+    return false;
+  }
+  const identity = channel === 'scale' || channel === 'opacity' ? 1 : 0;
+  return numbers.every(number => Math.abs(number - identity) < 1e-6);
+}
+
 function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   const out: Partial<Record<MotionProperty, number>> = {};
   for (const [key, value] of Object.entries(values)) {
@@ -733,7 +784,14 @@ export function createAnimator(
       return;
     }
     touched.add(channel);
-    target.style.setProperty(channel, format(channel, value));
+    const text = inlineText(channel, value);
+    if (text === IDENTITY_TEXT[channel]) {
+      // Identity leaves the element when nothing else would move it.
+      target.style.setProperty(channel, text);
+      releaseIdentity(channel);
+    } else {
+      target.style.setProperty(channel, text);
+    }
   };
 
   const sampleTimes = (
@@ -981,8 +1039,31 @@ export function createAnimator(
         hold(channel, now());
       }
       animation.cancel();
+      releaseIdentity(channel);
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
+  };
+
+  /**
+   * A channel at identity with no animation of its own leaves the element:
+   * its inline value is removed, unless the stylesheet would then move the
+   * element, in which case the identity stays inline. Runs when such a value
+   * is written and again when a motion ends.
+   */
+  const releaseIdentity = (channel: Channel) => {
+    if (target == null || pseudoElement != null || running.has(channel)) {
+      return;
+    }
+    const text = target.style.getPropertyValue(channel);
+    if (text !== IDENTITY_TEXT[channel]) {
+      return;
+    }
+    target.style.removeProperty(channel);
+    const view = target.ownerDocument.defaultView;
+    const resting = view?.getComputedStyle(target).getPropertyValue(channel);
+    if (resting != null && !isIdentityText(channel, resting)) {
+      target.style.setProperty(channel, text);
+    }
   };
 
   /**
