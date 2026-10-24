@@ -8,7 +8,8 @@
  * @output The DOM integration: hit-path collection (shadow DOM included),
  *   touch-action negotiation, cancelling touchmove only while claimed,
  *   click suppression and replay, browser takeover, the mouse path, hover,
- *   context menus, focus loss
+ *   context menus, focus loss, and telling a finger's scroll (until the
+ *   scroller's scrollend) from the program's
  * @position jsdom integration tests of packages/core/src/gestures
  */
 
@@ -717,6 +718,72 @@ describe('GestureHost', () => {
     // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
     expect(setStrip).toHaveBeenCalledWith('touch-action', 'pan-y');
     restore();
+  });
+
+  describe('finger scrolls', () => {
+    it('reads a scroll while a finger that landed inside is down as the finger’s, until the scroller’s scrollend', () => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      detachers.push(host.watchFingerScrolls(list));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(true);
+      // The lift starts the momentum: still the finger's scroll.
+      touch('touchend', row, [finger], [], 120);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(true);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(host.isFingerScroll(list)).toBe(false);
+    });
+
+    it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      detachers.push(host.watchFingerScrolls(list));
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(false);
+      // A tap whose click scrolls the list (a scrollTo after the lift).
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      touch('touchend', row, [finger], [], 80);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(false);
+    });
+
+    it('reads the page’s own scroll on the document', () => {
+      const {row} = mount('<div id="row"></div>');
+      detachers.push(host.watchFingerScrolls(document));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      document.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(document)).toBe(true);
+      touch('touchend', row, [finger], [], 120);
+      document.dispatchEvent(new Event('scrollend'));
+      expect(host.isFingerScroll(document)).toBe(false);
+    });
+
+    it('does not count a finger down outside the scroller', () => {
+      const {list, other} = mount(
+        '<div id="list"><div id="row"></div></div><div id="other"></div>',
+      );
+      detachers.push(host.watchFingerScrolls(list));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', other, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(false);
+    });
+
+    it('forgets a scroller once nobody watches it', () => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      const stop = host.watchFingerScrolls(list);
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(true);
+      stop();
+      expect(host.isFingerScroll(list)).toBe(false);
+      list.dispatchEvent(new Event('scroll'));
+      expect(host.isFingerScroll(list)).toBe(false);
+    });
   });
 
   it('drives mouse input through Pointer Events', () => {

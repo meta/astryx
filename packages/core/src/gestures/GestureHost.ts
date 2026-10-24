@@ -34,6 +34,15 @@
  *   cancelled where `touch-action` let the browser pan, and a scroll above
  *   the touch.
  *
+ * FINGER SCROLLS
+ *
+ * - `watchFingerScrolls(scroller)` / `isFingerScroll(scroller)` tell a
+ *   scroll a finger drives (a finger that landed inside the scroller is down
+ *   while it scrolls, then the momentum after the lift) from one the program
+ *   starts (`scrollTo`, a status-bar tap): the finger's lasts until the
+ *   scroller's own `scrollend`. A component that animates differently for
+ *   the two asks here instead of listening to touches itself.
+ *
  * WHAT THE BROWSER IS TOLD
  *
  * - Each element gets the `touch-action` its recognizers leave the browser
@@ -306,6 +315,19 @@ export class GestureHost {
     readonly y: number;
     verdict: boolean | null;
   } | null = null;
+  /** Scrollers someone watches (watchFingerScrolls), and how many watchers. */
+  private readonly scrollWatchers = new Map<Node, number>();
+  /**
+   * Watched scrollers whose scroll a finger is driving: a finger that landed
+   * inside one was down when it scrolled, and its own `scrollend` (the
+   * momentum after the lift included) has not come yet.
+   */
+  private readonly fingerScrollers = new Set<Node>();
+  /**
+   * Where each finger now on the screen landed, from the last touch event's
+   * `touches` (every finger, whether or not a recognizer tracks it).
+   */
+  private fingerTargets: ReadonlyArray<Node> = [];
   private nextId = 1;
   private isInstalled = false;
   private readonly inputMode: 'auto' | 'pointer-events';
@@ -491,6 +513,47 @@ export class GestureHost {
     );
   }
 
+  /**
+   * Keeps track of whether the scrolls of `scroller` (an element, or the
+   * document for the page's own scroll) are a finger's, for isFingerScroll,
+   * until the returned function is called. The host stays installed
+   * meanwhile.
+   */
+  watchFingerScrolls(scroller: Node): () => void {
+    this.scrollWatchers.set(
+      scroller,
+      (this.scrollWatchers.get(scroller) ?? 0) + 1,
+    );
+    this.install();
+    let isWatching = true;
+    return () => {
+      if (!isWatching) {
+        return;
+      }
+      isWatching = false;
+      const count = (this.scrollWatchers.get(scroller) ?? 1) - 1;
+      if (count > 0) {
+        this.scrollWatchers.set(scroller, count);
+      } else {
+        this.scrollWatchers.delete(scroller);
+        this.fingerScrollers.delete(scroller);
+      }
+      this.uninstallIfIdle();
+    };
+  }
+
+  /**
+   * Whether the scroll now moving a watched `scroller` is a finger's: a
+   * finger that landed inside it was down when it scrolled, and the scroll
+   * has not ended since (its `scrollend` comes after the momentum that
+   * follows the lift). A scroll the program starts while no finger is down
+   * there (`scrollTo`, a status-bar tap) is not. No clock is involved: the
+   * scroller's own `scrollend` closes a finger's scroll.
+   */
+  isFingerScroll(scroller: Node): boolean {
+    return this.fingerScrollers.has(scroller);
+  }
+
   private registrationFor(element: Element): Registration {
     let registration = this.registry.get(element);
     if (registration == null) {
@@ -574,7 +637,11 @@ export class GestureHost {
   }
 
   private uninstallIfIdle(): void {
-    if (this.registry.size === 0 && this.delegated.size === 0) {
+    if (
+      this.registry.size === 0 &&
+      this.delegated.size === 0 &&
+      this.scrollWatchers.size === 0
+    ) {
       this.uninstall();
     }
   }
@@ -605,6 +672,7 @@ export class GestureHost {
     doc.addEventListener('pointerout', this.onPointerOut, PASSIVE_CAPTURE);
     doc.addEventListener('contextmenu', this.onContextMenu, ACTIVE_CAPTURE);
     doc.addEventListener('scroll', this.onScroll, PASSIVE_CAPTURE);
+    doc.addEventListener('scrollend', this.onScrollEnd, PASSIVE_CAPTURE);
     doc.addEventListener('visibilitychange', this.onVisibilityChange);
     view?.addEventListener('click', this.onClick, ACTIVE_CAPTURE);
     view?.addEventListener('blur', this.onBlur);
@@ -632,6 +700,7 @@ export class GestureHost {
     doc.removeEventListener('pointerout', this.onPointerOut, PASSIVE_CAPTURE);
     doc.removeEventListener('contextmenu', this.onContextMenu, ACTIVE_CAPTURE);
     doc.removeEventListener('scroll', this.onScroll, PASSIVE_CAPTURE);
+    doc.removeEventListener('scrollend', this.onScrollEnd, PASSIVE_CAPTURE);
     doc.removeEventListener('visibilitychange', this.onVisibilityChange);
     view?.removeEventListener('click', this.onClick, ACTIVE_CAPTURE);
     view?.removeEventListener('blur', this.onBlur);
@@ -749,6 +818,7 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
+    this.noteFingersDown(event);
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
     const stale: number[] = [];
@@ -969,6 +1039,7 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
+    this.noteFingersDown(event);
     this.dropFingersNotDown(event);
     const time = eventTime(event);
     const inputs: TouchInput[] = [];
@@ -999,6 +1070,7 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
+    this.noteFingersDown(event);
     const listed = touchesOf(event.changedTouches);
     // A cancel that names no finger is the system taking them all.
     const identifiers =
@@ -1492,6 +1564,16 @@ export class GestureHost {
     if (!(scroller instanceof Node)) {
       return;
     }
+    // A watched scroller's scroll is a finger's from a scroll while a finger
+    // that landed inside it is down until its own scrollend.
+    if (
+      this.scrollWatchers.has(scroller) &&
+      !this.fingerScrollers.has(scroller)
+    ) {
+      if (this.fingerTargets.some(target => scroller.contains(target))) {
+        this.fingerScrollers.add(scroller);
+      }
+    }
     // A scroll is a finger's only if that finger was inside this scroller,
     // recently; anything else is the program moving something.
     const last = this.lastTouch;
@@ -1529,6 +1611,25 @@ export class GestureHost {
     }
     if (taken.length > 0) {
       this.arena.browserTookOver(taken, time);
+    }
+  };
+
+  private noteFingersDown(event: TouchEvent): void {
+    const fingers: Node[] = [];
+    for (const touch of touchesOf(event.touches)) {
+      if ((touch as StylusTouch).touchType !== 'stylus') {
+        if (touch.target instanceof Node) {
+          fingers.push(touch.target);
+        }
+      }
+    }
+    this.fingerTargets = fingers;
+  }
+
+  private readonly onScrollEnd = (event: Event): void => {
+    const scroller = event.target === this.doc ? this.doc : event.target;
+    if (scroller instanceof Node) {
+      this.fingerScrollers.delete(scroller);
     }
   };
 
