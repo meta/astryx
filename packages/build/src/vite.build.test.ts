@@ -399,7 +399,7 @@ describe('a production build resolves defineConsts imported across files', () =>
 
         it('substitutes a constant read as a media-query key', () => {
           expect(built.css).toMatch(
-            /@media \(pointer: ?coarse\)\s*\{[^}]*transition-property:\s*none/,
+            /@media \((?:max-width: ?599px|width ?<= ?599px)\)\s*\{[^}]*transition-property:\s*none/,
           );
         });
 

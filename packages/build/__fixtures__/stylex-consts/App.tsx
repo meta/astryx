@@ -14,7 +14,7 @@ import {libraryConsts} from './library/libraryConsts.stylex';
 const styles = stylex.create({
   row: {
     minHeight: appConsts.rowHeight,
-    transitionProperty: {default: 'color', [appConsts.touch]: 'none'},
+    transitionProperty: {default: 'color', [appConsts.narrow]: 'none'},
   },
   panel: {
     paddingTop: libraryConsts.inset,
