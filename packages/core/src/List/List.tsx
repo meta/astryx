@@ -11,10 +11,11 @@
  *   types
  * @position Core implementation. Consumed by index.ts, tested by List.test.tsx
  *
- * `animatedLayout` runs the layout updates (List/listLayoutUpdates.ts);
+ * `animatedLayout` runs the layout updates (List/listLayoutUpdates.ts).
  * `reorderable` runs the reorder session after them. List imports only the
- * reorderable object's type and its key (List/listReorderContext.ts). It
- * hands the reorder to its rows through ListContext. The session, its handle
+ * reorderable object's type and List/listReorderContext.ts, which holds the
+ * object's key and the session hooks. It hands the reorder to its rows
+ * through ListContext. The session, its handle
  * and its listeners come with the object (reorderable/createReorderable.ts).
  * So a List without it loads no reorder code.
  *
@@ -44,11 +45,10 @@ import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import type {AnimatedLayout} from '../motion/animatedLayout';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  REORDER_ENGINE,
+  useReorderCommit,
+  useReorderSession,
   type ListReorderOptions,
-  type ReorderableInternals,
 } from './listReorderContext';
 
 export {
@@ -303,16 +303,12 @@ export function List({
 }: ListProps) {
   const headerId = useId();
   const listRef = useRef<HTMLUListElement & HTMLOListElement>(null);
-  // The reorder's machinery comes with the object. The
-  // object may be made on every render: the session lasts as long as its
-  // machinery, and reads the object's latest callbacks.
-  const reorder = reorderable as ReorderableInternals | undefined;
-  const reorderEngine = reorder?.[REORDER_ENGINE];
-  const reorderOptions = reorder?.options;
-  // The handles' instructions take the header's id with a suffix.
-  const reorderSession = useMemo(
-    () => reorderEngine?.createSession(() => listRef.current, `${headerId}h`),
-    [reorderEngine, headerId],
+  // The reorder's machinery comes with the object. The handles'
+  // instructions take the header's id with a suffix.
+  const {session: reorderSession, options: reorderOptions} = useReorderSession(
+    reorderable,
+    () => listRef.current,
+    `${headerId}h`,
   );
   const measureRows = useListLayoutUpdates(listRef, animatedLayout);
   // A drag's or a reorder-mode move's commits are the reorder's to move, so
@@ -322,11 +318,8 @@ export function List({
       measureRows();
     }
   }, [measureRows, reorderSession]);
-  // Syncs the reorder session, which lives outside React, after each commit.
-  // It runs after the layout updates, so a drop's commit is the reorder's.
-  useIsomorphicLayoutEffect(() => {
-    reorderSession?.commit();
-  });
+  // After the layout updates, so a drop's commit is the reorder's.
+  useReorderCommit(reorderSession);
   const mergedRef = useMergedRefs(
     listRef,
     ref as React.Ref<HTMLUListElement & HTMLOListElement>,

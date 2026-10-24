@@ -4,10 +4,12 @@
 
 /**
  * @file listReorderContext.ts
- * @input Nothing at run time but a symbol
+ * @input React's hooks and a symbol
  * @output `REORDER_ENGINE`, the key a reorderable object carries its
  *   machinery under. Also the internal types between List, ListItem and that
- *   machinery: what a List hands its rows through ListContext's `reorder`
+ *   machinery: what a List hands its rows through ListContext's `reorder`.
+ *   `useReorderSession` and `useReorderCommit` run the object's session for a
+ *   List and for List/ListReorderScope.tsx
  * @position Internal to List. List imports only this module and the
  *   reorderable object's type, and ListItem only types. So a List without
  *   `reorderable` loads no reorder code. The machinery
@@ -20,7 +22,16 @@
  */
 
 import type {ItemAlign} from '../Item/Item';
-import type {ComponentType, Key, ReactNode, RefObject} from 'react';
+import {
+  useMemo,
+  useRef,
+  type ComponentType,
+  type Key,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import type {Reorderable} from '../reorderable/createReorderable';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
 
@@ -140,4 +151,44 @@ export interface ReorderableInternals {
 export interface ListReorderContextValue {
   readonly session: ListReorderSession;
   readonly options: ListReorderOptions;
+}
+
+/** A reorder session and the options of the object that runs it. */
+export interface ReorderSessionOf {
+  readonly session: ListReorderSession | null;
+  readonly options: ListReorderOptions | null;
+}
+
+/**
+ * The reorder session over the children of the element `getList` returns,
+ * run by `reorderable`'s engine. Both fields are null without an object.
+ * `hintId` names the handles' instructions. The object may be made on every
+ * render: the session lasts as long as its engine and reads the object's
+ * latest callbacks.
+ */
+export function useReorderSession(
+  reorderable: Reorderable | undefined,
+  getList: () => HTMLElement | null,
+  hintId: string,
+): ReorderSessionOf {
+  const reorder = reorderable as ReorderableInternals | undefined;
+  const engine = reorder?.[REORDER_ENGINE];
+  const getListRef = useRef(getList);
+  getListRef.current = getList;
+  const session = useMemo(
+    () => engine?.createSession(() => getListRef.current(), hintId) ?? null,
+    [engine, hintId],
+  );
+  return {session, options: reorder?.options ?? null};
+}
+
+/**
+ * Applies a drop's new order after each commit. A caller with layout updates
+ * calls it after them, so a drop's commit is the reorder's.
+ */
+export function useReorderCommit(session: ListReorderSession | null): void {
+  // Syncs the reorder session, which lives outside React, after each commit.
+  useIsomorphicLayoutEffect(() => {
+    session?.commit();
+  });
 }

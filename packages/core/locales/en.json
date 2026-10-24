@@ -687,6 +687,10 @@
     "defaultMessage": "Reorder {itemName} {position, number}",
     "description": "Accessible label on the drag-handle button that reorders one record in a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Reorder guest 2\")."
   },
+  "@astryx.listInput.itemName": {
+    "defaultMessage": "{itemName} {position, number}",
+    "description": "The name of one record in a lab ListInput, which its reorder handle (\"Reorder guest 2\") and the reorder announcements use. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"guest 2\")."
+  },
   "@astryx.listInput.fieldLabelWithPosition": {
     "defaultMessage": "{header}, {itemName} {position, number} of {total, number}",
     "description": "Accessible name for a field inside a lab ListInput row after the first row, disambiguating repeated column labels. `{header}` is the column's own label (e.g. \"Name\"); `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the row's 1-based index and the total row count (e.g. \"Name, guest 2 of 3\")."
