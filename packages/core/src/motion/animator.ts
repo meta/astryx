@@ -1,0 +1,1082 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file animator.ts
+ * @input An element, target values, and a spring or a decay
+ * @output Exports `createAnimator`: a compositor animator for translate,
+ *   rotate, scale and opacity, with presentation values and velocities read
+ *   from the analytic curves, velocity-preserving retargeting, freeze-in-place
+ *   `stop`, completion promises, a shared clock, and UIKit's Reduced Motion
+ *   substitution; plus its option, handle and transition types
+ * @position Motion foundation (DOM). Internal to core: components use it for
+ *   every touch-presentation animation; not exported from the package entry
+ *
+ * HOW IT RUNS
+ *
+ * Each animated value (x, y, rotate, scaleX, scaleY, opacity) follows a
+ * closed-form curve: a spring (spring.ts), a UIScrollView coast with an edge
+ * bounce (decay.ts), or a Reduced Motion cross-fade. The curves are baked into
+ * Web Animations keyframes on the individual transform properties (`translate`,
+ * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
+ * interpolation between keyframes is within a fraction of a pixel, and played
+ * with `easing: linear`. The browser then runs them on its compositor: they
+ * keep advancing every frame while JavaScript is busy (law M1).
+ *
+ * Why keyframes and not one `linear()` easing: measured in Chromium, both
+ * forms are composited and equally precise for the same samples, but WebKit's
+ * Core Animation path refuses to accelerate an effect whose easing is
+ * `linear()` with points (KeyframeEffect::canBeAccelerated) unless its newer
+ * threaded animations are on, so on older iOS Safari a `linear()` spring would
+ * run on the main thread. Linear segments between keyframes map directly onto
+ * a Core Animation keyframe animation. Why the individual properties and not
+ * `transform`: each can be animated, retargeted or driven by a finger on its
+ * own (a drag writes `translate` while `scale` keeps springing), with no
+ * additive composition, which neither engine composites.
+ *
+ * The page never reads the DOM to know where something is: `get` and
+ * `getVelocity` evaluate the curves at a time on the document timeline's
+ * clock (`performance.now()` by default), so a finger can grab anything
+ * mid-flight from the value on screen (M2), and a new target starts from the
+ * current value with the current velocity (M3). A gesture's release velocity
+ * can be handed in explicitly instead.
+ *
+ * End state without a flicker frame: the element's inline style always holds
+ * the values the animations END on, and the keyframes hold that end state for
+ * a while after the curve ends (END_HOLD_MS). The main thread drops a finished
+ * animation as soon as it runs after the curve's end; the inline style already
+ * shows the same values, so nothing moves. The hold matters when the curve
+ * ends during a main-thread block: WebKit's compositor ends an animation by
+ * falling back to the value its main thread last committed, which is
+ * mid-flight.
+ *
+ * Shared clock: every animation an `animate` / `decay` call starts gets the
+ * same explicit `startTime` (the call time, or `options.at` to line several
+ * animators up). Keyframes are sampled from that time, so a value that keeps
+ * moving through a rebuild stays on its curve to the frame.
+ *
+ * Reduced Motion (law M5): UIKit replaces travel with a cross-fade. With
+ * `prefers-reduced-motion: reduce`, an `animate` that moves something
+ * (x, y, rotate, scale) by default (`reducedMotion: 'crossfade'`):
+ * - entering (opacity rises in the same call): jumps to the new place and
+ *   fades in;
+ * - leaving (opacity falls): fades out in place, then jumps;
+ * - otherwise: dips (fades out, jumps at the midpoint, fades back in).
+ * The fade runs `timing.reducedMotionCrossFadeMs` on `timing.curves.easeInOut`.
+ * `'instant'` jumps without a fade; `'keep'` plays the motion unchanged (for
+ * direct manipulation that UIKit keeps under Reduce Motion). Decays keep their
+ * motion: they follow a finger's throw.
+ *
+ * SSR-safe: nothing touches `window` or `document` at module scope, and an
+ * animator created without an element only keeps state until one is attached.
+ *
+ * SYNC: When modified, update:
+ * - /packages/core/src/motion/animator.test.ts
+ * - /packages/core/src/motion/__tests__/animator.compositor.spec.ts
+ * - /packages/core/src/motion/README.md
+ */
+
+import {cubicBezier} from './bezier';
+import {solveDecay} from './decay';
+import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {scroll} from './uikit/scroll';
+import {timing} from './uikit/timing';
+
+/** A value the animator can drive. */
+export type MotionProperty =
+  'x' | 'y' | 'rotate' | 'scaleX' | 'scaleY' | 'opacity';
+
+/** Values by property; `scale` sets `scaleX` and `scaleY` together. */
+export type MotionValues = Partial<Record<MotionProperty | 'scale', number>>;
+
+export interface SpringTransition {
+  /** The spring, in any vocabulary of the constants table. */
+  spring: SpringDescription;
+  /**
+   * Initial velocities in units per second (px/s, deg/s, 1/s), for example a
+   * gesture's release velocity. A property without one keeps the velocity it
+   * has on screen.
+   */
+  velocity?: MotionValues;
+}
+
+export interface DecayOptions {
+  /** Per-millisecond velocity factor; UIScrollView's normal rate by default. */
+  rate?: number;
+  /** Edges: a coast crossing one hands its velocity to `bounce`. */
+  bounds?: Partial<Record<MotionProperty, {min: number; max: number}>>;
+  /** The edge spring; `scroll.bounce` by default. */
+  bounce?: SpringDescription;
+}
+
+export interface AnimateOptions {
+  /**
+   * Start time on the document timeline (ms, `performance.now()` clock).
+   * Defaults to now. Pass one value to several animators to put their
+   * animations on one clock.
+   */
+  at?: number;
+  /** Reduced Motion substitution; see the file header. */
+  reducedMotion?: 'crossfade' | 'instant' | 'keep';
+}
+
+export interface AnimatorOptions {
+  /** Starting values; identity by default. Never read from the DOM. */
+  initial?: MotionValues;
+  /** Clock in ms on the document timeline's time base. */
+  now?: () => number;
+  /** The Reduced Motion preference; `prefers-reduced-motion` by default. */
+  prefersReducedMotion?: () => boolean;
+}
+
+/** One `animate` / `decay` call's animations. */
+export interface MotionHandle {
+  /** The properties this call drives. */
+  readonly properties: ReadonlyArray<MotionProperty>;
+  /**
+   * True when every property reached the end of this call's curve, false
+   * as soon as any of them is retargeted, stopped or set before that.
+   */
+  readonly finished: Promise<boolean>;
+  /** Presentation value of a property at `time` (default now). */
+  value(property: MotionProperty, time?: number): number;
+  /** Presentation velocity of a property at `time`, units/s. */
+  velocity(property: MotionProperty, time?: number): number;
+  /** New targets for this call's properties, keeping their velocity. */
+  retarget(
+    to: MotionValues,
+    transition?: SpringTransition,
+    options?: AnimateOptions,
+  ): MotionHandle;
+  /** Freezes this call's properties at their presentation values. */
+  stop(): void;
+}
+
+export interface Animator {
+  /** The element the animator writes to, if attached. */
+  readonly element: HTMLElement | null;
+  /**
+   * Attaches (or detaches, with null) the element. Attaching writes the
+   * current state and resumes running curves from now.
+   */
+  attach(element: HTMLElement | null): void;
+  /** Presentation value at `time` (default now), from the curve. */
+  get(property: MotionProperty | 'scale', time?: number): number;
+  /** Presentation velocity at `time` (default now), units/s. */
+  getVelocity(property: MotionProperty | 'scale', time?: number): number;
+  /**
+   * Puts values in place now, ending their animations: the per-frame write
+   * of a drag (one style write per channel, no animation when nothing else
+   * on the channel is moving).
+   */
+  set(values: MotionValues): void;
+  /** Springs to `to` from the presentation values. */
+  animate(
+    to: MotionValues,
+    transition: SpringTransition,
+    options?: AnimateOptions,
+  ): MotionHandle;
+  /** Coasts with `velocity` like a released scroll view. */
+  decay(
+    velocity: MotionValues,
+    options?: DecayOptions & Pick<AnimateOptions, 'at'>,
+  ): MotionHandle;
+  /** Freezes properties (all by default) at their presentation values. */
+  stop(properties?: ReadonlyArray<MotionProperty | 'scale'>): void;
+  /** Cancels everything and detaches. */
+  dispose(): void;
+}
+
+// ---------------------------------------------------------------------------
+// Curves
+// ---------------------------------------------------------------------------
+
+interface Segment {
+  /** Start on the document timeline, ms. */
+  readonly start: number;
+  /** Length in ms (finite). */
+  readonly duration: number;
+  /** Value from the end on. */
+  readonly target: number;
+  /** Value `t` ms after the start (0 ≤ t ≤ duration). */
+  at(t: number): number;
+  /** Velocity `t` ms after the start, units/s. */
+  speed(t: number): number;
+  /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
+  readonly jumps: ReadonlyArray<number>;
+  /** Constant between jumps: sampled at its jumps only. */
+  readonly steps?: true;
+  readonly owner: HandleState;
+}
+
+interface HandleState {
+  resolve: (finished: boolean) => void;
+  settled: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const PROPERTIES: ReadonlyArray<MotionProperty> = [
+  'x',
+  'y',
+  'rotate',
+  'scaleX',
+  'scaleY',
+  'opacity',
+];
+
+const IDENTITY: Record<MotionProperty, number> = {
+  x: 0,
+  y: 0,
+  rotate: 0,
+  scaleX: 1,
+  scaleY: 1,
+  opacity: 1,
+};
+
+/** Within this of its target a curve is over (in the property's own unit). */
+const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
+  x: 0.05,
+  y: 0.05,
+  rotate: 0.01,
+  scaleX: 0.0001,
+  scaleY: 0.0001,
+  opacity: 0.001,
+};
+
+/** Keyframes are added until linear interpolation is within this. */
+const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
+  x: 0.05,
+  y: 0.05,
+  rotate: 0.02,
+  scaleX: 0.0002,
+  scaleY: 0.0002,
+  opacity: 0.002,
+};
+
+/** A curve that has not settled by then (an undamped spring) snaps. */
+const MAX_DURATION_MS = 30_000;
+/** Above this many keyframes the tolerance is relaxed. */
+const MAX_KEYFRAMES = 1200;
+/**
+ * The keyframes hold the end state this long after a curve ends. An engine
+ * whose compositor ends an animation while the main thread is blocked falls
+ * back to the value its main thread last committed, mid-flight (WebKit); the
+ * hold keeps the end state on screen through such a block. The main thread
+ * drops the animation as soon as it runs after the curve's end.
+ */
+export const END_HOLD_MS = 5000;
+
+/** How often a paused animation is looked at again for retiring, ms. */
+const RETIRE_RECHECK_MS = 100;
+
+const TRAVEL: ReadonlyArray<MotionProperty> = [
+  'x',
+  'y',
+  'rotate',
+  'scaleX',
+  'scaleY',
+];
+
+type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
+
+const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
+  translate: ['x', 'y'],
+  rotate: ['rotate'],
+  scale: ['scaleX', 'scaleY'],
+  opacity: ['opacity'],
+};
+
+const CHANNEL_OF: Record<MotionProperty, Channel> = {
+  x: 'translate',
+  y: 'translate',
+  rotate: 'rotate',
+  scaleX: 'scale',
+  scaleY: 'scale',
+  opacity: 'opacity',
+};
+
+function round(value: number, digits: number): number {
+  return Number(value.toFixed(digits));
+}
+
+function format(
+  channel: Channel,
+  value: (property: MotionProperty) => number,
+): string {
+  switch (channel) {
+    case 'translate':
+      return `${round(value('x'), 3)}px ${round(value('y'), 3)}px`;
+    case 'rotate':
+      return `${round(value('rotate'), 4)}deg`;
+    case 'scale':
+      return `${round(value('scaleX'), 5)} ${round(value('scaleY'), 5)}`;
+    case 'opacity':
+      return `${round(Math.min(1, Math.max(0, value('opacity'))), 4)}`;
+  }
+}
+
+function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
+  const out: Partial<Record<MotionProperty, number>> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value == null || !Number.isFinite(value)) {
+      continue;
+    }
+    if (key === 'scale') {
+      out.scaleX ??= value;
+      out.scaleY ??= value;
+    } else if ((PROPERTIES as ReadonlyArray<string>).includes(key)) {
+      out[key as MotionProperty] = value;
+    }
+  }
+  return out;
+}
+
+function defaultNow(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function defaultPrefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/**
+ * Creates an animator for `element` (or for an element attached later).
+ *
+ * @example
+ * ```
+ * const animator = createAnimator(sheet);
+ * // finger lifts at 1200 px/s heading for the detent at 0:
+ * animator.animate({y: 0}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+ * // the finger lands again: where is it right now?
+ * const y = animator.get('y', event.timeStamp);
+ * animator.stop(['y']);
+ * ```
+ */
+export function createAnimator(
+  element: HTMLElement | null,
+  options: AnimatorOptions = {},
+): Animator {
+  const now = options.now ?? defaultNow;
+  const prefersReducedMotion =
+    options.prefersReducedMotion ?? defaultPrefersReducedMotion;
+  const resting: Record<MotionProperty, number> = {
+    ...IDENTITY,
+    ...expand(options.initial ?? {}),
+  };
+  const segments = new Map<MotionProperty, Segment>();
+  const running = new Map<Channel, Animation>();
+  /** Drops a finished, still-filling animation once the main thread runs. */
+  const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
+  const touched = new Set<Channel>();
+  let target: HTMLElement | null = null;
+
+  // -- reading the curves ---------------------------------------------------
+
+  const segmentAt = (
+    property: MotionProperty,
+    time: number,
+  ): Segment | null => {
+    const segment = segments.get(property);
+    if (segment == null) {
+      return null;
+    }
+    if (time >= segment.start + segment.duration) {
+      return null;
+    }
+    return segment;
+  };
+
+  const valueAt = (property: MotionProperty, time: number): number => {
+    const segment = segments.get(property);
+    if (segment == null) {
+      return resting[property];
+    }
+    if (time >= segment.start + segment.duration) {
+      return segment.target;
+    }
+    return segment.at(Math.max(0, time - segment.start));
+  };
+
+  const velocityAt = (property: MotionProperty, time: number): number => {
+    const segment = segmentAt(property, time);
+    if (segment == null || time < segment.start) {
+      return 0;
+    }
+    return segment.speed(time - segment.start);
+  };
+
+  // A value just before a jump at absolute time `time`.
+  const valueBefore = (property: MotionProperty, time: number): number =>
+    valueAt(property, time - 1e-6);
+
+  // -- writing --------------------------------------------------------------
+
+  const finalValue = (property: MotionProperty): number =>
+    segments.get(property)?.target ?? resting[property];
+
+  const writeInline = (
+    channel: Channel,
+    value: (property: MotionProperty) => number,
+  ) => {
+    if (target == null) {
+      return;
+    }
+    touched.add(channel);
+    target.style.setProperty(channel, format(channel, value));
+  };
+
+  const sampleTimes = (
+    property: MotionProperty,
+    from: number,
+    to: number,
+    tolerance: number,
+  ): number[] => {
+    const segment = segments.get(property);
+    if (segment == null) {
+      return [];
+    }
+    const begin = Math.max(from, segment.start);
+    const end = Math.min(to, segment.start + segment.duration);
+    if (end <= begin) {
+      return [];
+    }
+    const times: number[] = [begin];
+    const value = (t: number) => valueAt(property, t);
+    const breaks = segment.jumps
+      .map(j => segment.start + j)
+      .filter(t => t > begin && t < end);
+    if (segment.steps) {
+      return [begin, ...breaks, end];
+    }
+    const edges = [begin, ...breaks, end];
+    for (let e = 0; e + 1 < edges.length; e++) {
+      const a = edges[e];
+      const b = edges[e + 1];
+      // A 120 Hz grid, each interval split until the chord is within the
+      // tolerance at its quarter points.
+      const steps = Math.max(1, Math.ceil((b - a) / (1000 / 120)));
+      const split = (t0: number, t1: number, depth: number) => {
+        const v0 = value(t0);
+        const v1 =
+          t1 === b && breaks.includes(b) ? valueBefore(property, b) : value(t1);
+        let worst = 0;
+        for (const f of [0.25, 0.5, 0.75]) {
+          const t = t0 + (t1 - t0) * f;
+          worst = Math.max(worst, Math.abs(value(t) - (v0 + (v1 - v0) * f)));
+        }
+        if (worst > tolerance && depth < 10 && t1 - t0 > 0.25) {
+          const mid = (t0 + t1) / 2;
+          split(t0, mid, depth + 1);
+          split(mid, t1, depth + 1);
+        } else {
+          times.push(t1);
+        }
+      };
+      for (let i = 0; i < steps; i++) {
+        split(a + ((b - a) * i) / steps, a + ((b - a) * (i + 1)) / steps, 0);
+      }
+    }
+    return times;
+  };
+
+  const rebuild = (channel: Channel, time: number) => {
+    running.get(channel)?.cancel();
+    running.delete(channel);
+    clearTimeout(retireTimers.get(channel));
+    retireTimers.delete(channel);
+    const properties = CHANNELS[channel];
+    // Settled curves become resting values.
+    for (const property of properties) {
+      const segment = segments.get(property);
+      if (segment != null && time >= segment.start + segment.duration) {
+        resting[property] = segment.target;
+        segments.delete(property);
+      }
+    }
+    writeInline(channel, finalValue);
+    const moving = properties.filter(p => segments.has(p));
+    if (
+      target == null ||
+      moving.length === 0 ||
+      typeof target.animate !== 'function'
+    ) {
+      return;
+    }
+    const end = Math.min(
+      time + MAX_DURATION_MS,
+      Math.max(
+        ...moving.map(
+          p =>
+            (segments.get(p) as Segment).start +
+            (segments.get(p) as Segment).duration,
+        ),
+      ),
+    );
+    if (end <= time) {
+      return;
+    }
+    const collect = (scale: number) => {
+      const times = new Set<number>([time, end]);
+      for (const property of moving) {
+        for (const t of sampleTimes(
+          property,
+          time,
+          end,
+          SAMPLE_TOLERANCE[property] * scale,
+        )) {
+          times.add(t);
+        }
+      }
+      return times;
+    };
+    let scale = 1;
+    let all = collect(scale);
+    while (all.size > MAX_KEYFRAMES && scale < 64) {
+      scale *= 2;
+      all = collect(scale);
+    }
+    // Jumps become two keyframes at one offset: the value just before, then
+    // the value after. A jump on the last frame (fade out, then move) too.
+    const jumpTimes = new Set<number>();
+    for (const property of moving) {
+      const segment = segments.get(property) as Segment;
+      for (const j of segment.jumps) {
+        const t = segment.start + j;
+        if (t > time && t <= end) {
+          jumpTimes.add(t);
+          all.add(t);
+        }
+      }
+    }
+    const times = [...all].sort((a, b) => a - b);
+    const span = end - time + END_HOLD_MS;
+    const keyframes: Keyframe[] = [];
+    for (const t of times) {
+      const offset = (t - time) / span;
+      if (jumpTimes.has(t)) {
+        keyframes.push({
+          offset,
+          [channel]: format(channel, p => valueBefore(p, t)),
+        });
+      }
+      keyframes.push({
+        offset,
+        [channel]: format(channel, p =>
+          t >= end ? finalValue(p) : valueAt(p, t),
+        ),
+      });
+    }
+    keyframes.push({offset: 1, [channel]: format(channel, finalValue)});
+    const animation = target.animate(keyframes, {
+      duration: span,
+      // The last keyframes hold the end state (END_HOLD_MS); filling both
+      // ways also keeps it where an engine honors the fill on its compositor.
+      // The main thread drops the animation once it runs after the end; the
+      // inline style already holds the same values, so that changes no pixel.
+      fill: 'both',
+      easing: 'linear',
+    });
+    // One clock: the keyframes were sampled from `time`.
+    animation.startTime = time;
+    running.set(channel, animation);
+    const retire = () => {
+      retireTimers.delete(channel);
+      if (running.get(channel) !== animation) {
+        return;
+      }
+      // Paused or sought (a sampler holding it): retire when its own time
+      // reaches the curve's end, never from the wall clock.
+      const remaining = remainingCurve(animation);
+      if (remaining != null && remaining > 0) {
+        retireTimers.set(
+          channel,
+          setTimeout(
+            retire,
+            animation.playState === 'paused' ? RETIRE_RECHECK_MS : remaining,
+          ),
+        );
+        return;
+      }
+      animation.cancel();
+      running.delete(channel);
+    };
+    retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
+  };
+
+  /**
+   * Curve time an animation still has to play on its own clock (its keyframes
+   * hold the end for END_HOLD_MS after the curve), or null where the engine
+   * does not report it; a paused animation always has some left.
+   */
+  const remainingCurve = (animation: Animation): number | null => {
+    const timing = animation.effect?.getTiming?.();
+    const current = animation.currentTime;
+    if (timing == null || current == null) {
+      return animation.playState === 'paused' ? Infinity : null;
+    }
+    const left = Number(timing.duration) - END_HOLD_MS - Number(current);
+    return animation.playState === 'paused' ? Math.max(left, 1) : left;
+  };
+
+  // -- handles --------------------------------------------------------------
+
+  const lastSpring = new WeakMap<HandleState, SpringDescription>();
+
+  const interrupt = (property: MotionProperty, time: number) => {
+    const segment = segments.get(property);
+    if (segment == null) {
+      return;
+    }
+    if (time < segment.start + segment.duration) {
+      settle(segment.owner, false);
+    }
+  };
+
+  const settle = (owner: HandleState, finished: boolean) => {
+    if (owner.settled) {
+      return;
+    }
+    owner.settled = true;
+    if (owner.timer != null) {
+      clearTimeout(owner.timer);
+      owner.timer = null;
+    }
+    owner.resolve(finished);
+  };
+
+  const makeHandle = (
+    owner: HandleState,
+    properties: MotionProperty[],
+    finished: Promise<boolean>,
+    time: number,
+  ): MotionHandle => {
+    const ends = properties.map(p => {
+      const segment = segments.get(p);
+      return segment != null && segment.owner === owner
+        ? segment.start + segment.duration
+        : time;
+    });
+    const end = Math.max(time, ...ends);
+    if (properties.length === 0 || end <= time) {
+      settle(owner, true);
+    } else {
+      // Interruptions settle false as they happen (interrupt); reaching the
+      // end untouched is completion.
+      owner.timer = setTimeout(
+        () => {
+          owner.timer = null;
+          settle(owner, true);
+        },
+        Math.max(0, end - now()),
+      );
+    }
+    const handle: MotionHandle = {
+      properties,
+      finished,
+      value: (property, at = now()) => valueAt(property, at),
+      velocity: (property, at = now()) => velocityAt(property, at),
+      retarget: (to, transition, retargetOptions) => {
+        const spring = transition?.spring ?? lastSpring.get(owner);
+        if (spring == null) {
+          throw new Error('animator: retarget needs a spring');
+        }
+        return animator.animate(to, {...transition, spring}, retargetOptions);
+      },
+      stop: () =>
+        animator.stop(properties.filter(p => segments.get(p)?.owner === owner)),
+    };
+    return handle;
+  };
+
+  const newOwner = (): {owner: HandleState; finished: Promise<boolean>} => {
+    let resolve: (finished: boolean) => void = () => {};
+    const finished = new Promise<boolean>(r => {
+      resolve = r;
+    });
+    return {owner: {resolve, settled: false, timer: null}, finished};
+  };
+
+  // -- segment factories ------------------------------------------------------
+
+  const springSegment = (
+    owner: HandleState,
+    property: MotionProperty,
+    start: number,
+    to: number,
+    spring: SpringDescription,
+    velocity: number,
+  ): Segment | null => {
+    const from = valueAt(property, start);
+    if (from === to && velocity === 0) {
+      return null;
+    }
+    const curve = solveSpring(toSpring(spring), {from, to, velocity});
+    const duration = Math.min(
+      MAX_DURATION_MS,
+      curve.settleTime(SETTLE_THRESHOLD[property]) * 1000,
+    );
+    return {
+      start,
+      duration,
+      target: to,
+      at: t => curve.value(t / 1000),
+      speed: t => curve.velocity(t / 1000),
+      jumps: [],
+      owner,
+    };
+  };
+
+  const fadeSegment = (
+    owner: HandleState,
+    start: number,
+    stops: ReadonlyArray<{at: number; value: number}>,
+    jumps: ReadonlyArray<number> = [],
+  ): Segment => {
+    const ease = cubicBezier(timing.curves.easeInOut);
+    const duration = stops[stops.length - 1].at;
+    const at = (t: number) => {
+      for (let i = 0; i + 1 < stops.length; i++) {
+        const a = stops[i];
+        const b = stops[i + 1];
+        if (t < b.at || i + 2 === stops.length) {
+          if (b.at === a.at) {
+            return b.value;
+          }
+          const p = Math.min(1, Math.max(0, (t - a.at) / (b.at - a.at)));
+          return a.value + (b.value - a.value) * ease(p);
+        }
+      }
+      return stops[stops.length - 1].value;
+    };
+    return {
+      start,
+      duration,
+      target: stops[stops.length - 1].value,
+      at,
+      speed: t =>
+        ((at(t + 0.5) - at(Math.max(0, t - 0.5))) / (t >= 0.5 ? 1 : 0.5 + t)) *
+        1000,
+      jumps,
+      owner,
+    };
+  };
+
+  const jumpSegment = (
+    owner: HandleState,
+    start: number,
+    from: number,
+    to: number,
+    after: number,
+  ): Segment => ({
+    start,
+    duration: after,
+    target: to,
+    at: t => (t < after ? from : to),
+    speed: () => 0,
+    jumps: [after],
+    steps: true,
+    owner,
+  });
+
+  // -- the animator -----------------------------------------------------------
+
+  const commit = (changed: Iterable<MotionProperty>, time: number) => {
+    const channels = new Set<Channel>();
+    for (const property of changed) {
+      channels.add(CHANNEL_OF[property]);
+    }
+    for (const channel of channels) {
+      rebuild(channel, time);
+    }
+  };
+
+  const animator: Animator = {
+    get element() {
+      return target;
+    },
+
+    attach(next) {
+      if (next === target) {
+        return;
+      }
+      for (const animation of running.values()) {
+        animation.cancel();
+      }
+      running.clear();
+      for (const timer of retireTimers.values()) {
+        clearTimeout(timer);
+      }
+      retireTimers.clear();
+      target = next;
+      if (target == null) {
+        return;
+      }
+      const time = now();
+      for (const channel of Object.keys(CHANNELS) as Channel[]) {
+        const properties = CHANNELS[channel];
+        const isDefault = properties.every(
+          p => !segments.has(p) && resting[p] === IDENTITY[p],
+        );
+        if (!isDefault) {
+          rebuild(channel, time);
+        }
+      }
+    },
+
+    get(property, time = now()) {
+      return valueAt(property === 'scale' ? 'scaleX' : property, time);
+    },
+
+    getVelocity(property, time = now()) {
+      return velocityAt(property === 'scale' ? 'scaleX' : property, time);
+    },
+
+    set(values) {
+      const time = now();
+      const next = expand(values);
+      for (const [property, value] of Object.entries(next) as [
+        MotionProperty,
+        number,
+      ][]) {
+        interrupt(property, time);
+        segments.delete(property);
+        resting[property] = value;
+      }
+      commit(Object.keys(next) as MotionProperty[], time);
+    },
+
+    animate(to, transition, animateOptions = {}) {
+      const time = animateOptions.at ?? now();
+      const targets = expand(to);
+      const velocities = expand(transition.velocity ?? {});
+      const {owner, finished} = newOwner();
+      lastSpring.set(owner, transition.spring);
+      const properties = Object.keys(targets) as MotionProperty[];
+      const mode = animateOptions.reducedMotion ?? 'crossfade';
+      const travels = properties.filter(
+        p =>
+          TRAVEL.includes(p) &&
+          Math.abs((targets[p] as number) - valueAt(p, time)) > 1e-9,
+      );
+      const reduce =
+        mode !== 'keep' && travels.length > 0 && prefersReducedMotion();
+      const next: Partial<Record<MotionProperty, Segment | null>> = {};
+
+      if (reduce) {
+        const fade = timing.reducedMotionCrossFadeMs;
+        const opacityNow = valueAt('opacity', time);
+        const opacityTo = targets.opacity ?? opacityNow;
+        const entering = opacityTo > opacityNow + 1e-6;
+        const leaving = opacityTo < opacityNow - 1e-6;
+        for (const property of properties) {
+          if (!TRAVEL.includes(property)) {
+            continue;
+          }
+          const from = valueAt(property, time);
+          const toValue = targets[property] as number;
+          if (mode === 'instant' || entering) {
+            next[property] = null; // in place at once (and fade in)
+          } else if (leaving) {
+            next[property] = jumpSegment(owner, time, from, toValue, fade); // fade out, then move
+          } else {
+            next[property] = jumpSegment(owner, time, from, toValue, fade / 2); // dip
+          }
+        }
+        if (mode === 'instant') {
+          next.opacity = null;
+        } else if (entering || leaving) {
+          next.opacity = fadeSegment(owner, time, [
+            {at: 0, value: opacityNow},
+            {at: fade, value: opacityTo},
+          ]);
+        } else {
+          next.opacity = fadeSegment(owner, time, [
+            {at: 0, value: opacityNow},
+            {at: fade / 2, value: 0},
+            {at: fade, value: opacityTo},
+          ]);
+        }
+      } else {
+        for (const property of properties) {
+          const velocity = velocities[property] ?? velocityAt(property, time);
+          next[property] = springSegment(
+            owner,
+            property,
+            time,
+            targets[property] as number,
+            transition.spring,
+            velocity,
+          );
+        }
+      }
+
+      const changed: MotionProperty[] = [];
+      for (const [property, segment] of Object.entries(next) as [
+        MotionProperty,
+        Segment | null,
+      ][]) {
+        interrupt(property, time);
+        changed.push(property);
+        if (segment == null) {
+          segments.delete(property);
+          resting[property] = targets[property] ?? valueAt(property, time);
+        } else {
+          segments.set(property, segment);
+        }
+      }
+      commit(changed, time);
+      return makeHandle(owner, changed, finished, time);
+    },
+
+    decay(velocity, decayOptions = {}) {
+      const time = decayOptions.at ?? now();
+      const velocities = expand(velocity);
+      const {owner, finished} = newOwner();
+      const rate = decayOptions.rate ?? scroll.decelerationRate.normal;
+      const bounce = toSpring(decayOptions.bounce ?? scroll.bounce);
+      const properties = Object.keys(velocities) as MotionProperty[];
+      for (const property of properties) {
+        const from = valueAt(property, time);
+        const v0 = velocities[property] as number;
+        const bounds = decayOptions.bounds?.[property];
+        const threshold = SETTLE_THRESHOLD[property];
+        interrupt(property, time);
+        let segment: Segment | null;
+        if (bounds != null && (from < bounds.min || from > bounds.max)) {
+          // Released past an edge: straight back with the release velocity.
+          const edge = from < bounds.min ? bounds.min : bounds.max;
+          const curve = solveSpring(bounce, {from, to: edge, velocity: v0});
+          segment = {
+            start: time,
+            duration: Math.min(
+              MAX_DURATION_MS,
+              curve.settleTime(threshold) * 1000,
+            ),
+            target: edge,
+            at: t => curve.value(t / 1000),
+            speed: t => curve.velocity(t / 1000),
+            jumps: [],
+            owner,
+          };
+        } else {
+          const coast = solveDecay({from, velocity: v0, rate});
+          const edge =
+            bounds == null
+              ? null
+              : coast.rest < bounds.min
+                ? bounds.min
+                : coast.rest > bounds.max
+                  ? bounds.max
+                  : null;
+          const hit = edge == null ? null : coast.timeToReach(edge);
+          if (edge != null && hit != null) {
+            // The coast reaches the edge: the edge spring takes its velocity.
+            const contact = hit * 1000;
+            const spring = solveSpring(bounce, {
+              from: edge,
+              to: edge,
+              velocity: coast.velocity(hit),
+            });
+            segment = {
+              start: time,
+              duration: Math.min(
+                MAX_DURATION_MS,
+                contact + spring.settleTime(threshold) * 1000,
+              ),
+              target: edge,
+              at: t =>
+                t < contact
+                  ? coast.value(t / 1000)
+                  : spring.value((t - contact) / 1000),
+              speed: t =>
+                t < contact
+                  ? coast.velocity(t / 1000)
+                  : spring.velocity((t - contact) / 1000),
+              jumps: [],
+              owner,
+            };
+          } else {
+            const rest = edge ?? coast.rest;
+            segment =
+              v0 === 0
+                ? null
+                : {
+                    start: time,
+                    duration: Math.min(
+                      MAX_DURATION_MS,
+                      coast.settleTime(threshold * 2) * 1000,
+                    ),
+                    target: rest,
+                    at: t => coast.value(t / 1000),
+                    speed: t => coast.velocity(t / 1000),
+                    jumps: [],
+                    owner,
+                  };
+          }
+        }
+        if (segment == null) {
+          segments.delete(property);
+          resting[property] = from;
+        } else {
+          segments.set(property, segment);
+        }
+      }
+      commit(properties, time);
+      return makeHandle(owner, properties, finished, time);
+    },
+
+    stop(properties) {
+      const time = now();
+      const list = properties == null ? PROPERTIES : expandList(properties);
+      const changed: MotionProperty[] = [];
+      for (const property of list) {
+        if (!segments.has(property)) {
+          continue;
+        }
+        const value = valueAt(property, time);
+        interrupt(property, time);
+        segments.delete(property);
+        resting[property] = value;
+        changed.push(property);
+      }
+      commit(changed, time);
+    },
+
+    dispose() {
+      const time = now();
+      for (const property of PROPERTIES) {
+        interrupt(property, time);
+      }
+      for (const animation of running.values()) {
+        animation.cancel();
+      }
+      running.clear();
+      for (const timer of retireTimers.values()) {
+        clearTimeout(timer);
+      }
+      retireTimers.clear();
+      target = null;
+    },
+  };
+
+  animator.attach(element);
+  return animator;
+}
+
+function expandList(
+  properties: ReadonlyArray<MotionProperty | 'scale'>,
+): MotionProperty[] {
+  const out = new Set<MotionProperty>();
+  for (const property of properties) {
+    if (property === 'scale') {
+      out.add('scaleX');
+      out.add('scaleY');
+    } else {
+      out.add(property);
+    }
+  }
+  return [...out];
+}

@@ -1,0 +1,578 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file animator.test.ts
+ * @input vitest (jsdom), the animator, a recording stand-in for
+ *   Element.animate (jsdom runs no animations)
+ * @output Checks what the animator hands the browser: keyframes that follow
+ *   the analytic curves, the clock, the inline end state; and what it reads
+ *   back: presentation values and velocities, retarget continuity, stop,
+ *   completion, Reduced Motion substitutions, decays with edges, late attach
+ * @position Testing; the compositor itself is proven in
+ *   __tests__/animator.compositor.spec.ts
+ */
+
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {createAnimator, END_HOLD_MS, type AnimatorOptions} from './animator';
+import {cubicBezier} from './bezier';
+import {solveDecay} from './decay';
+import {solveSpring, toSpring} from './spring';
+import {scroll} from './uikit/scroll';
+import {springs} from './uikit/springs';
+import {timing} from './uikit/timing';
+
+interface Recorded {
+  element: Element;
+  keyframes: Keyframe[];
+  options: KeyframeAnimationOptions;
+  startTime: number | null;
+  cancelled: boolean;
+  /** A sampler holding it (the interaction harness pauses to seek). */
+  paused: boolean;
+  readonly playState: 'idle' | 'paused' | 'running';
+  cancel(): void;
+}
+
+let clock = 1000;
+let recorded: Recorded[] = [];
+
+beforeEach(() => {
+  clock = 1000;
+  recorded = [];
+  vi.useFakeTimers();
+  HTMLElement.prototype.animate = function (keyframes, options) {
+    const animation: Recorded = {
+      element: this,
+      keyframes: keyframes as Keyframe[],
+      options: options as KeyframeAnimationOptions,
+      startTime: null,
+      cancelled: false,
+      paused: false,
+      get playState() {
+        return this.cancelled ? 'idle' : this.paused ? 'paused' : 'running';
+      },
+      cancel() {
+        this.cancelled = true;
+      },
+    };
+    recorded.push(animation);
+    return animation as unknown as Animation;
+  };
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+  vi.useRealTimers();
+});
+
+function setup(options: AnimatorOptions = {}) {
+  const element = document.createElement('div');
+  const animator = createAnimator(element, {
+    now: () => clock,
+    prefersReducedMotion: () => false,
+    ...options,
+  });
+  return {element, animator};
+}
+
+/** Advances the injected clock and the timers together. */
+async function advance(ms: number) {
+  clock += ms;
+  await vi.advanceTimersByTimeAsync(ms);
+}
+
+function live(channel: string): Recorded[] {
+  return recorded.filter(
+    a => !a.cancelled && channel in (a.keyframes[0] ?? {}),
+  );
+}
+
+function parse(value: string | number | null | undefined): number[] {
+  return String(value)
+    .split(/\s+/)
+    .map(part => Number.parseFloat(part));
+}
+
+/** What the browser would show: the keyframes interpolated linearly at `time`. */
+function sampleAt(
+  animation: Recorded,
+  channel: string,
+  time: number,
+): number[] {
+  const duration = Number(animation.options.duration);
+  const offset = Math.min(
+    1,
+    Math.max(0, (time - (animation.startTime ?? 0)) / duration),
+  );
+  const frames = animation.keyframes;
+  for (let i = 0; i + 1 < frames.length; i++) {
+    const a = frames[i];
+    const b = frames[i + 1];
+    const oa = Number(a.offset);
+    const ob = Number(b.offset);
+    if (
+      offset >= oa &&
+      offset <= ob &&
+      !(
+        offset === ob &&
+        i + 2 < frames.length &&
+        Number(frames[i + 2].offset) === ob
+      )
+    ) {
+      const va = parse(a[channel]);
+      const vb = parse(b[channel]);
+      const f = ob === oa ? 1 : (offset - oa) / (ob - oa);
+      return va.map((v, k) => v + (vb[k] - v) * f);
+    }
+  }
+  return parse(frames[frames.length - 1][channel]);
+}
+
+describe('animate: keyframes on the compositor', () => {
+  it('bakes the spring into keyframes within a twentieth of a pixel of the curve', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    const [animation] = live('translate');
+    expect(animation).toBeDefined();
+    expect(animation.options).toMatchObject({
+      fill: 'both',
+      easing: 'linear',
+    });
+    expect(animation.startTime).toBe(1000);
+    const curve = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    // The curve, then the end state held (END_HOLD_MS).
+    const duration = Number(animation.options.duration) - END_HOLD_MS;
+    expect(duration).toBeCloseTo(curve.settleTime(0.05) * 1000, 6);
+    for (let t = 0; t <= duration; t += 0.5) {
+      const [x, y] = sampleAt(animation, 'translate', 1000 + t);
+      expect(Math.abs(x - curve.value(t / 1000))).toBeLessThan(0.06);
+      expect(y).toBe(0);
+      expect(animator.get('x', 1000 + t)).toBeCloseTo(curve.value(t / 1000), 9);
+    }
+    // Then the end state, held through a main-thread block.
+    expect(
+      sampleAt(animation, 'translate', 1000 + duration + END_HOLD_MS / 2),
+    ).toEqual([300, 0]);
+  });
+
+  it('keeps the keyframe count modest (adaptive sampling)', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    expect(live('translate')[0].keyframes.length).toBeLessThan(200);
+  });
+
+  it('writes the end values inline up front, so the last frame needs no main thread', () => {
+    const {animator, element} = setup();
+    animator.animate(
+      {x: 120, y: -40, scale: 1.1, rotate: 12, opacity: 0.25},
+      {spring: springs.snappy},
+    );
+    expect(element.style.translate).toBe('120px -40px');
+    expect(element.style.scale).toBe('1.1 1.1');
+    expect(element.style.rotate).toBe('12deg');
+    expect(element.style.opacity).toBe('0.25');
+    for (const channel of ['translate', 'scale', 'rotate', 'opacity']) {
+      const [animation] = live(channel);
+      expect(animation.keyframes[animation.keyframes.length - 1][channel]).toBe(
+        (element.style as unknown as Record<string, string>)[channel],
+      );
+    }
+  });
+
+  it('keeps the end state in effect until the main thread drops the finished animation', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 120}, {spring: springs.snappy});
+    const [animation] = live('translate');
+    expect(animation.options.fill).toBe('both');
+    // The animation outlasts its curve by END_HOLD_MS; the main thread drops
+    // it as soon as it runs after the curve's end.
+    const duration = Number(animation.options.duration) - END_HOLD_MS;
+    await advance(duration - 1);
+    expect(animation.cancelled).toBe(false);
+    await advance(2);
+    expect(animation.cancelled).toBe(true);
+    expect(element.style.translate).toBe(
+      animation.keyframes[animation.keyframes.length - 1].translate,
+    );
+  });
+
+  it('never retires an animation a sampler has paused', async () => {
+    const {animator} = setup();
+    animator.animate({x: 120}, {spring: springs.snappy});
+    const [animation] = live('translate');
+    const duration = Number(animation.options.duration) - END_HOLD_MS;
+    animation.paused = true;
+    await advance(duration + 500);
+    expect(animation.cancelled).toBe(false);
+    // Resumed: it leaves once the main thread looks again.
+    animation.paused = false;
+    await advance(150);
+    expect(animation.cancelled).toBe(true);
+  });
+
+  it('puts everything one call starts on one clock', () => {
+    const {animator} = setup();
+    animator.animate({x: 100, opacity: 0.5}, {spring: springs.smooth});
+    const starts = recorded.map(a => a.startTime);
+    expect(starts).toEqual([1000, 1000]);
+    animator.animate({rotate: 90}, {spring: springs.smooth}, {at: 1234.5});
+    expect(live('rotate')[0].startTime).toBe(1234.5);
+  });
+
+  it('expands scale onto both axes and reads it back', () => {
+    const {animator} = setup();
+    animator.animate({scale: 0.5}, {spring: springs.smooth});
+    clock += 5000;
+    expect(animator.get('scale')).toBe(0.5);
+    expect(animator.get('scaleY')).toBe(0.5);
+  });
+
+  it('does nothing for a value already at its target and at rest', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 0}, {spring: springs.smooth});
+    expect(live('translate')).toHaveLength(0);
+    await expect(handle.finished).resolves.toBe(true);
+  });
+});
+
+describe('presentation values, retargeting, velocity (M2, M3)', () => {
+  it('hands a release velocity to the spring', () => {
+    const {animator} = setup();
+    animator.set({y: 200});
+    animator.animate(
+      {y: 0},
+      {spring: springs.sheetDetent, velocity: {y: 1500}},
+    );
+    expect(animator.get('y')).toBe(200);
+    expect(animator.getVelocity('y')).toBeCloseTo(1500, 6);
+  });
+
+  it('a retarget starts from the value and the velocity on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.bouncy, velocity: {x: 800}});
+    const first = live('translate')[0];
+    await advance(120);
+    const value = animator.get('x');
+    const velocity = animator.getVelocity('x');
+    animator.animate({x: -100}, {spring: springs.bouncy});
+    expect(first.cancelled).toBe(true);
+    const second = live('translate')[0];
+    expect(second.startTime).toBe(clock);
+    expect(animator.get('x', clock)).toBeCloseTo(value, 9);
+    expect(animator.getVelocity('x', clock)).toBeCloseTo(velocity, 6);
+    expect(sampleAt(second, 'translate', clock)[0]).toBeCloseTo(value, 2);
+    // And it really goes to the new target with that start.
+    const curve = solveSpring(toSpring(springs.bouncy), {
+      from: value,
+      to: -100,
+      velocity,
+    });
+    expect(animator.get('x', clock + 90)).toBeCloseTo(curve.value(0.09), 9);
+  });
+
+  it('velocity is continuous across a retarget (property sweep)', async () => {
+    for (const spring of [
+      springs.smooth,
+      springs.snappy,
+      springs.switchThumbMove,
+      springs.navigationPush,
+    ]) {
+      const {animator} = setup();
+      animator.animate({x: 200}, {spring});
+      for (const step of [16, 50, 120]) {
+        await advance(step);
+        const before = animator.getVelocity('x', clock);
+        const value = animator.get('x', clock);
+        animator.animate({x: value > 100 ? 0 : 200}, {spring});
+        expect(animator.getVelocity('x', clock)).toBeCloseTo(before, 6);
+        expect(animator.get('x', clock)).toBeCloseTo(value, 9);
+      }
+    }
+  });
+
+  it('a value that keeps moving through a rebuild stays on its curve', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300, y: 200}, {spring: springs.smooth});
+    const yCurve = solveSpring(toSpring(springs.smooth), {from: 0, to: 200});
+    await advance(100);
+    animator.animate({x: 0}, {spring: springs.smooth});
+    const [animation] = live('translate');
+    for (let t = clock; t < clock + 400; t += 7) {
+      expect(sampleAt(animation, 'translate', t)[1]).toBeCloseTo(
+        yCurve.value((t - 1000) / 1000),
+        1,
+      );
+      expect(animator.get('y', t)).toBeCloseTo(
+        yCurve.value((t - 1000) / 1000),
+        9,
+      );
+    }
+  });
+
+  it('stop() freezes at the presentation value', async () => {
+    const {animator, element} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    await advance(80);
+    const value = animator.get('x');
+    animator.stop();
+    expect(live('translate')).toHaveLength(0);
+    expect(Number.parseFloat(element.style.translate)).toBeCloseTo(value, 3);
+    await advance(500);
+    expect(animator.get('x')).toBe(value);
+    expect(animator.getVelocity('x')).toBe(0);
+  });
+
+  it('a handle reads, retargets and stops its own properties', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 100}, {spring: springs.smooth});
+    await advance(50);
+    expect(handle.value('x')).toBe(animator.get('x'));
+    expect(handle.velocity('x')).toBe(animator.getVelocity('x'));
+    const next = handle.retarget({x: 50});
+    await expect(handle.finished).resolves.toBe(false);
+    next.stop();
+    await expect(next.finished).resolves.toBe(false);
+  });
+});
+
+describe('set: direct manipulation (M4)', () => {
+  it('writes one inline style per move and starts no animation', () => {
+    const {animator, element} = setup();
+    for (let x = 0; x < 30; x += 3) {
+      animator.set({x});
+      expect(element.style.translate).toBe(`${x}px 0px`);
+    }
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('a drag on translate leaves a running scale alone', () => {
+    const {animator} = setup();
+    animator.animate({scale: 0.95}, {spring: springs.smooth});
+    const scaleAnimation = live('scale')[0];
+    animator.set({x: 12});
+    animator.set({x: 20});
+    expect(scaleAnimation.cancelled).toBe(false);
+    expect(live('translate')).toHaveLength(0);
+  });
+});
+
+describe('finished', () => {
+  it('resolves true when the curve ends untouched', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.snappy});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    await advance(100);
+    expect(result).toBeUndefined();
+    await advance(5000);
+    expect(result).toBe(true);
+  });
+
+  it('resolves false as soon as a property is retargeted, set or stopped', async () => {
+    const {animator} = setup();
+    const a = animator.animate({x: 40}, {spring: springs.snappy});
+    animator.animate({x: 80}, {spring: springs.snappy});
+    await expect(a.finished).resolves.toBe(false);
+    const b = animator.animate({y: 40}, {spring: springs.snappy});
+    animator.set({y: 3});
+    await expect(b.finished).resolves.toBe(false);
+    const c = animator.animate({rotate: 40}, {spring: springs.snappy});
+    animator.stop(['rotate']);
+    await expect(c.finished).resolves.toBe(false);
+  });
+
+  it('dispose cancels and settles everything', async () => {
+    const {animator} = setup();
+    const handle = animator.animate(
+      {x: 40, opacity: 0},
+      {spring: springs.snappy},
+    );
+    animator.dispose();
+    await expect(handle.finished).resolves.toBe(false);
+    expect(recorded.every(a => a.cancelled)).toBe(true);
+    expect(animator.element).toBeNull();
+  });
+});
+
+describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
+  const reduced = () => setup({prefersReducedMotion: () => true});
+  const fade = timing.reducedMotionCrossFadeMs;
+  const ease = cubicBezier(timing.curves.easeInOut);
+
+  it('a move dips: fades out, jumps at the midpoint, fades back in', () => {
+    const {animator, element} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(animator.get('x', 1000 + fade / 2 - 1)).toBe(0);
+    expect(animator.get('x', 1000 + fade / 2)).toBe(100);
+    expect(animator.get('opacity', 1000 + fade / 4)).toBeCloseTo(
+      1 - ease(0.5),
+      9,
+    );
+    expect(animator.get('opacity', 1000 + fade / 2)).toBeCloseTo(0, 9);
+    expect(animator.get('opacity', 1000 + fade)).toBe(1);
+    // The move is a hold that ends in a jump: two keyframes at its last
+    // offset, the value before and after. The fade runs on the same clock.
+    const [translate] = live('translate');
+    const [opacity] = live('opacity');
+    expect(translate.startTime).toBe(opacity.startTime);
+    expect(Number(translate.options.duration)).toBeCloseTo(
+      fade / 2 + END_HOLD_MS,
+      6,
+    );
+    const jump = fade / 2 / (fade / 2 + END_HOLD_MS);
+    const atJump = translate.keyframes.filter(
+      k => Math.abs(Number(k.offset) - jump) < 1e-12,
+    );
+    expect(atJump.map(k => k.translate)).toEqual(['0px 0px', '100px 0px']);
+    expect(translate.keyframes[translate.keyframes.length - 1]).toMatchObject({
+      offset: 1,
+      translate: '100px 0px',
+    });
+    expect(sampleAt(translate, 'translate', 1000 + fade / 2 - 2)[0]).toBe(0);
+    expect(element.style.translate).toBe('100px 0px');
+    expect(element.style.opacity).toBe('1');
+  });
+
+  it('an entrance lands in place and fades in', () => {
+    const {animator, element} = reduced();
+    animator.set({y: 400, opacity: 0});
+    animator.animate({y: 0, opacity: 1}, {spring: springs.sheetPresent});
+    expect(animator.get('y')).toBe(0);
+    expect(live('translate')).toHaveLength(0);
+    expect(element.style.translate).toBe('0px 0px');
+    expect(animator.get('opacity', 1000 + fade / 2)).toBeCloseTo(ease(0.5), 9);
+    expect(Number(live('opacity')[0].options.duration)).toBeCloseTo(
+      fade + END_HOLD_MS,
+      6,
+    );
+  });
+
+  it('an exit fades out in place, then moves', () => {
+    const {animator} = reduced();
+    animator.animate({y: 400, opacity: 0}, {spring: springs.sheetDismiss});
+    expect(animator.get('y', 1000 + fade - 1)).toBe(0);
+    expect(animator.get('y', 1000 + fade)).toBe(400);
+    const [translate] = live('translate');
+    expect(sampleAt(translate, 'translate', 1000 + fade - 1)[1]).toBe(0);
+    expect(translate.keyframes[translate.keyframes.length - 1].translate).toBe(
+      '0px 400px',
+    );
+  });
+
+  it("'instant' jumps, 'keep' keeps the motion", () => {
+    const a = reduced();
+    a.animator.animate(
+      {x: 50},
+      {spring: springs.smooth},
+      {reducedMotion: 'instant'},
+    );
+    expect(a.animator.get('x')).toBe(50);
+    expect(recorded).toHaveLength(0);
+    const b = reduced();
+    b.animator.animate(
+      {x: 50},
+      {spring: springs.smooth},
+      {reducedMotion: 'keep'},
+    );
+    expect(b.animator.getVelocity('x', 1010)).toBeGreaterThan(0);
+  });
+
+  it('an opacity-only change is not travel and keeps its spring', () => {
+    const {animator} = reduced();
+    animator.animate({opacity: 0}, {spring: springs.smooth});
+    expect(animator.getVelocity('opacity', 1010)).toBeLessThan(0);
+  });
+});
+
+describe('decay: UIScrollView coasts', () => {
+  it('follows the coast and comes to rest where it projects', () => {
+    const {animator} = setup();
+    animator.decay({y: -2400});
+    const coast = solveDecay({from: 0, velocity: -2400});
+    for (const t of [0, 16, 100, 400, 1200]) {
+      expect(animator.get('y', 1000 + t)).toBeCloseTo(coast.value(t / 1000), 9);
+    }
+    const [animation] = live('translate');
+    for (let t = 0; t < 1500; t += 3) {
+      expect(
+        Math.abs(
+          sampleAt(animation, 'translate', 1000 + t)[1] - coast.value(t / 1000),
+        ),
+      ).toBeLessThan(0.11);
+    }
+    expect(animator.get('y', 1e7)).toBeCloseTo(coast.rest, 9);
+  });
+
+  it('a coast that reaches an edge hands its velocity to the edge spring', () => {
+    const {animator} = setup();
+    animator.set({y: -100});
+    animator.decay({y: 3000}, {bounds: {y: {min: -2000, max: 0}}});
+    const coast = solveDecay({from: -100, velocity: 3000});
+    const contact = 1000 + (coast.timeToReach(0) as number) * 1000;
+    expect(animator.get('y', contact)).toBeCloseTo(0, 6);
+    expect(animator.getVelocity('y', contact - 1e-6)).toBeCloseTo(
+      animator.getVelocity('y', contact + 1e-6),
+      2,
+    );
+    // It overshoots past the edge, then comes back to it.
+    expect(animator.get('y', contact + 60)).toBeGreaterThan(0);
+    expect(animator.get('y', 1e7)).toBe(0);
+  });
+
+  it('a release past an edge springs straight back with the release velocity', () => {
+    const {animator} = setup();
+    animator.set({x: 60});
+    animator.decay({x: 400}, {bounds: {x: {min: -500, max: 0}}});
+    expect(animator.getVelocity('x')).toBeCloseTo(400, 6);
+    const curve = solveSpring(toSpring(scroll.bounce), {
+      from: 60,
+      to: 0,
+      velocity: 400,
+    });
+    expect(animator.get('x', 1100)).toBeCloseTo(curve.value(0.1), 9);
+  });
+
+  it('keeps moving under Reduced Motion: a throw is the finger\u2019s', () => {
+    const {animator} = setup({prefersReducedMotion: () => true});
+    animator.decay({x: 1000});
+    expect(animator.getVelocity('x', 1016)).toBeGreaterThan(900);
+  });
+});
+
+describe('attach', () => {
+  it('keeps state without an element and resumes the curve on attach', () => {
+    const animator = createAnimator(null, {
+      now: () => clock,
+      prefersReducedMotion: () => false,
+    });
+    animator.animate({x: 300}, {spring: springs.smooth});
+    expect(recorded).toHaveLength(0);
+    clock += 100;
+    const element = document.createElement('div');
+    animator.attach(element);
+    const [animation] = live('translate');
+    expect(animation.startTime).toBe(1100);
+    const curve = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    expect(sampleAt(animation, 'translate', 1100)[0]).toBeCloseTo(
+      curve.value(0.1),
+      1,
+    );
+    expect(element.style.translate).toBe('300px 0px');
+  });
+
+  it('detaching cancels the running animations', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.attach(null);
+    expect(recorded.every(a => a.cancelled)).toBe(true);
+    expect(animator.get('x', 1050)).toBeGreaterThan(0);
+  });
+
+  it('writes nothing for channels at identity', () => {
+    const element = document.createElement('div');
+    createAnimator(element);
+    expect(element.getAttribute('style')).toBeNull();
+  });
+});
