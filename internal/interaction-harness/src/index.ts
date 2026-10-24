@@ -4,8 +4,8 @@
  * @file index.ts
  * @input Re-exports the harness modules
  * @output The `@astryxdesign/interaction-harness` entry point for Playwright
- *   specs. Pure helpers are also reachable without Playwright through
- *   `@astryxdesign/interaction-harness/math` and `/scripts` (unit tests).
+ *   specs. The pure touch scripts are also reachable without Playwright
+ *   through `@astryxdesign/interaction-harness/scripts` (unit tests).
  * @position Imported only from `*.interaction.browser.spec.ts` files (run by
  *   playwright.interaction.config.ts) and from this package's own tests.
  *

@@ -131,8 +131,10 @@ export interface FlickOptions {
   readonly durationMs?: number;
   readonly hz?: number;
   /**
-   * Velocity over the move as a fraction of the final velocity (0..1 → 0..∞),
-   * default constant. `p => p` is a finger accelerating linearly into the lift.
+   * Velocity over the move as a fraction of `velocity` (0..1 → 0..∞), default
+   * constant. `p => p` is a finger accelerating linearly into the lift. The
+   * moves before the last follow it (midpoint rule); the last move runs at
+   * `profile(1)`.
    */
   readonly profile?: (progress: number) => number;
   readonly id?: number;
@@ -141,7 +143,10 @@ export interface FlickOptions {
 /**
  * A throw: the finger moves with the given velocity profile and lifts while
  * still moving (the lift lands a quarter frame after the last move, as on a
- * device), so the release velocity is exactly `velocity`.
+ * device). Its last move runs at `velocity` times `profile(1)`, so with the
+ * default constant profile, or any profile that ends at 1, the release
+ * velocity (what `releaseVelocity` and a velocity tracker read from the last
+ * move) is exactly `velocity`.
  */
 export function flick(from: Point, options: FlickOptions): TouchScript {
   const {
@@ -156,9 +161,14 @@ export function flick(from: Point, options: FlickOptions): TouchScript {
   let x = from.x;
   let y = from.y;
   let previous = 0;
-  for (const t of frameTimes(durationMs, hz)) {
-    // Integrate the profile over (previous, t] with the midpoint rule.
-    const scale = profile((previous + t) / 2 / durationMs);
+  const times = frameTimes(durationMs, hz);
+  for (const [index, t] of times.entries()) {
+    // Integrate the profile over (previous, t] with the midpoint rule; the last
+    // move runs at the release velocity itself, so the finger lifts at it.
+    const scale =
+      index === times.length - 1
+        ? profile(1)
+        : profile((previous + t) / 2 / durationMs);
     x += (velocity.x * scale * (t - previous)) / 1000;
     y += (velocity.y * scale * (t - previous)) / 1000;
     previous = t;
@@ -348,14 +358,14 @@ export function toTouchEvents(script: TouchScript): TouchEventStep[] {
 }
 
 /**
- * The velocity (px/s) of finger `id` at its lift: the slope over the last
- * `windowMs` of moves, or zero when the finger rested `windowMs` or longer
- * before lifting (a finger that rested released nothing in motion).
+ * The velocity (px/s) of finger `id` as it lifts: the slope of its last move,
+ * or zero when it never moved or rested `restMs` or longer before lifting (a
+ * finger that rested released nothing in motion).
  */
 export function releaseVelocity(
   script: TouchScript,
   id = 0,
-  windowMs = 100,
+  restMs = 100,
 ): Point {
   const samples = script.flatMap(frame =>
     frame.fingers
@@ -377,19 +387,19 @@ export function releaseVelocity(
   ) {
     lastMove -= 1;
   }
-  const last = samples[lastMove];
-  if (lift != null && lift.t - last.t >= windowMs) {
+  if (lastMove === 0) {
     return {x: 0, y: 0};
   }
-  const recent = samples
-    .slice(0, lastMove + 1)
-    .filter(s => s.t >= last.t - windowMs);
-  const first = recent[0];
-  const dt = last.t - first.t;
+  const last = samples[lastMove];
+  if (lift != null && lift.t - last.t >= restMs) {
+    return {x: 0, y: 0};
+  }
+  const before = samples[lastMove - 1];
+  const dt = last.t - before.t;
   return dt <= 0
     ? {x: 0, y: 0}
     : {
-        x: ((last.x - first.x) / dt) * 1000,
-        y: ((last.y - first.y) / dt) * 1000,
+        x: ((last.x - before.x) / dt) * 1000,
+        y: ((last.y - before.y) / dt) * 1000,
       };
 }

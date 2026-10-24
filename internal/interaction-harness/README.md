@@ -41,7 +41,7 @@ node internal/interaction-harness/scripts/webkit-container.mjs [playwright test 
 Untrusted DOM events are not input: they start no native scroll, claim no
 gesture, and read `isTrusted: false`. Chromium input goes through CDP
 `Input.dispatchTouchEvent` with an explicit timestamp per event: the page's
-`event.timeStamp` is the scripted time to the microsecond, whatever the
+`event.timeStamp` is the scripted time to 0.1 ms, whatever the
 dispatch latency, and the events go through the compositor's gesture detection
 (native scrolling, flings with velocity from those timestamps, `touch-action`,
 `pointercancel`). WebKit input goes through the engine's own input command; see

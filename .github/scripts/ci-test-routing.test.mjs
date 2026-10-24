@@ -595,7 +595,13 @@ describe('ci.yml interaction proofs', () => {
   const step = name => job.steps.find(candidate => candidate.name === name);
 
   it('runs the interaction config in Chromium against the exact PR head', () => {
-    expect(KNOWN_RUNNERS.has(job['runs-on'])).toBe(true);
+    // Four cores when the proofs apply, a slim runner when it passes without work.
+    const labels = [...job['runs-on'].matchAll(/'([^']+)'/g)]
+      .map(match => match[1])
+      .filter(label => label !== 'true');
+    expect(labels).toEqual(['4-core-ubuntu', 'ubuntu-slim']);
+    for (const label of labels)
+      expect(KNOWN_RUNNERS.has(label), label).toBe(true);
     expect(job.needs).toEqual(
       expect.arrayContaining(['check-scope', 'build-storybook']),
     );
@@ -615,13 +621,20 @@ describe('ci.yml interaction proofs', () => {
   });
 
   it('runs whenever the harness, its config, a component or a story changes', () => {
-    const scope = step('Check interaction scope').run;
+    const scope = workflow.jobs['interaction-scope'].steps.find(
+      candidate =>
+        candidate.name === 'Decide whether the interaction proofs apply',
+    ).run;
     expect(scope).toContain('.github/scripts/pr-scope-touches.sh');
     for (const path of [
       'internal/interaction-harness/',
+      'internal/a11y-spec/',
       'playwright\\.interaction\\.config\\.ts',
       'packages/[^/]+/src/',
       'apps/storybook/',
+      '\\.github/workflows/ci\\.yml$',
+      'package\\.json$',
+      'pnpm-lock\\.yaml$',
     ]) {
       expect(scope).toContain(path);
     }
