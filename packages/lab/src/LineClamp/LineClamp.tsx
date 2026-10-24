@@ -28,12 +28,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useTruncation} from '@astryxdesign/core/Text';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
-import {
-  mergeProps,
-  themeProps,
-  observeResize,
-  unobserveResize,
-} from '@astryxdesign/core/utils';
+import {mergeProps, themeProps, observeResize} from '@astryxdesign/core/utils';
 import {useMergedRefs} from '@astryxdesign/core/hooks';
 
 const LazyTooltip = lazy(async () =>
@@ -77,6 +72,14 @@ const ORIGINAL_STATE = new WeakMap<
 
 /** Remove a clipped descendant from the tab order, capturing its prior state once. */
 function hideFromTabOrder(el: HTMLElement) {
+  // Already hidden and still inert: writing again would only emit mutation
+  // records that wake the observer below for no change.
+  if (
+    el.hasAttribute('data-line-clamp-hidden') &&
+    el.getAttribute('tabindex') === '-1'
+  ) {
+    return;
+  }
   if (!ORIGINAL_STATE.has(el)) {
     ORIGINAL_STATE.set(el, {
       tabIndex: el.getAttribute('tabindex'),
@@ -145,7 +148,8 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
    */
   maxLines: number;
   /**
-   * Show a tooltip with the full content on hover/focus when clamped.
+   * Show a tooltip with the full text content on hover when clamped. The
+   * root is not focusable, so it is not shown on keyboard focus.
    * - `true` (default): show tooltip at default position
    * - `false`: disable tooltip
    * - Position value: show tooltip at specific position
@@ -189,7 +193,13 @@ export function LineClamp({
   ref,
   ...props
 }: LineClampProps): ReactNode {
-  const truncation = useTruncation({maxLines});
+  // The clamp is height-based at every line count, so a single line must be
+  // measured the way a multi-line clamp is. `useTruncation({maxLines: 1})`
+  // compares horizontal overflow, which a wrapping box never has, so the
+  // tooltip would never appear.
+  const truncation = useTruncation({
+    maxLines: maxLines > 0 ? Math.max(maxLines, 2) : 0,
+  });
   const elementRef = useRef<HTMLElement>(null);
 
   // Keep the merged ref stable across rerenders.
@@ -216,8 +226,8 @@ export function LineClamp({
   // Runs from two places, because either alone misses a real case:
   // - Every render (rerun on children/maxLines changing, or anything else
   //   that reflows the content) — covers ordinary prop-driven updates.
-  // - The shared ResizeObserver `useTruncation` also uses, on any actual
-  //   size change — a window/container resize can change which lines a
+  // - The shared ResizeObserver `useTruncation` also uses, and a
+  //   MutationObserver for descendant changes, on any actual change — a window/container resize can change which lines a
   //   descendant falls on without `truncation.isTruncated` ever flipping
   //   (still truncated before and after), so a render-only check would
   //   never re-run and a since-uncovered descendant would stay hidden.
@@ -228,14 +238,32 @@ export function LineClamp({
     }
   });
 
+  // Resubscribes when `as` swaps the root node, so the observers never stay
+  // attached to a node that has been replaced. The mutation observer covers
+  // what neither a render nor a resize does: a child component adding or
+  // re-enabling a focusable element past the fold on its own state change.
   useEffect(() => {
     const container = elementRef.current;
     if (!container) {
       return;
     }
-    observeResize(container, () => syncFocusableClipping(container));
-    return () => unobserveResize(container);
-  }, []);
+    const sync = () => syncFocusableClipping(container);
+    const unobserve = observeResize(container, sync);
+    const mutations =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(sync);
+    mutations?.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['tabindex', 'disabled', 'href'],
+    });
+    return () => {
+      unobserve();
+      mutations?.disconnect();
+    };
+  }, [Component]);
 
   return (
     <>

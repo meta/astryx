@@ -10,7 +10,8 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {useState} from 'react';
+import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {LineClamp} from './LineClamp';
 
 // jsdom has no layout engine, so content never actually overflows and
@@ -198,6 +199,49 @@ describe('LineClamp', () => {
 
       expect(link).toHaveAttribute('tabindex', '3');
       expect(link).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('hides a descendant a child re-enables past the fold after mount', async () => {
+      // Only the late link is placed past the fold; everything else sits
+      // above it. Enabling it changes an attribute only: no text change, no
+      // LineClamp render, no resize, so only the mutation observer can see it.
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+        function (this: Element) {
+          const isLate = this.textContent === 'Late link';
+          const isClamp = this.getAttribute('data-testid') === 'clamp';
+          const top = isLate ? 40 : 0;
+          const bottom = isClamp ? 40 : top + 16;
+          return {
+            top,
+            bottom,
+            left: 0,
+            right: 0,
+            width: 0,
+            height: 16,
+          } as DOMRect;
+        },
+      );
+      function Late() {
+        const [on, setOn] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setOn(true)}>
+              Reveal
+            </button>
+            <a href={on ? '/late' : undefined}>Late link</a>
+          </>
+        );
+      }
+      render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          <Late />
+        </LineClamp>,
+      );
+      fireEvent.click(screen.getByText('Reveal'));
+      const late = screen.getByText('Late link');
+      await waitFor(() => {
+        expect(late).toHaveAttribute('tabindex', '-1');
+      });
     });
   });
 });

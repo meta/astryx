@@ -23,7 +23,7 @@ export const docs = {
     {
       name: 'hasTooltip',
       type: "boolean | 'above' | 'below' | 'start' | 'end'",
-      description: 'Show a tooltip with the full content on hover/focus when clamped. true shows at default position, false disables it, or pass a placement.',
+      description: 'Show a tooltip with the full text content on hover when clamped. The root is not focusable, so the tooltip is not shown on keyboard focus. true shows at default position, false disables it, or pass a placement.',
       default: 'true',
     },
     {
@@ -40,7 +40,7 @@ export const docs = {
       { guidance: true, description: 'Use LineClamp when clamping a block of mixed or composed content (not a single Text node).' },
       { guidance: true, description: "Use Text's own maxLines prop when clamping a single Text node — no need to wrap it in LineClamp." },
       { guidance: false, description: 'Disable the tooltip (hasTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.' },
-      { guidance: true, description: 'A focusable element that falls past the visible lines (e.g. a trailing link) is automatically removed from the tab order and hidden from assistive tech while clipped, and restored the moment it is no longer clipped. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.' },
+      { guidance: true, description: 'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically removed from the tab order and hidden from assistive tech while clipped, and restored the moment it is no longer clipped, including when a child adds or re-enables one later. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.' },
     ],
   },
 };
@@ -104,7 +104,7 @@ export const docsDense = {
   propDescriptions: {
     children: 'Content to clamp. Composable version of maxLines — wraps arbitrary children.',
     maxLines: 'Max lines before clamping with ellipsis.',
-    hasTooltip: 'Tooltip with full content when clamped. true/false/placement.',
+    hasTooltip: 'Tooltip with full text on hover when clamped (not on focus). true/false/placement.',
     as: "HTML element to render. Default 'div'.",
   },
 };
