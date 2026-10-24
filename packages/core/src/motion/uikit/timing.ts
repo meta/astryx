@@ -24,6 +24,8 @@
  *   there and must agree; uikit/uikit.test.ts checks it)
  */
 
+import {registerMotionTable} from '../roles';
+
 export const timing = {
   press: {
     /**
@@ -142,3 +144,10 @@ export const timing = {
    */
   reducedMotionCrossFadeMs: 500,
 } as const;
+
+// Each spring, duration and curve above is a motion role a theme may retune
+// (motion/roles.ts).
+registerMotionTable('timing', timing, {
+  // Arbitration: who gets the touch, not how anything moves.
+  exclude: ['press.scrollBrakeMs'],
+});
