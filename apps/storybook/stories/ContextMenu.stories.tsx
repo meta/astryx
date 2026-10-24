@@ -494,7 +494,7 @@ export const AdaptivePresentation: Story = {
     docs: {
       description: {
         story:
-          'Uses the built-in adaptive policy: BottomSheet at 768px and below with a coarse primary pointer, cursor-positioned popover otherwise. Important actions still need a visible MoreMenu or equivalent entry point.',
+          'Uses the built-in adaptive policy: BottomSheet on a compact touch screen (a coarse primary pointer, and a viewport narrower than 744px or shorter than 500px), cursor-positioned popover otherwise. Important actions still need a visible MoreMenu or equivalent entry point.',
       },
     },
   },

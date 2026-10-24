@@ -36,6 +36,7 @@ import {selectorPresentationStyles} from '../Selector/selectorPresentation.style
 import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -146,7 +147,7 @@ describe('MultiSelector', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -2183,7 +2184,7 @@ describe('MultiSelector', () => {
       vi.mocked(matchMedia).mockImplementation(
         (query: string) =>
           ({
-            matches: query === '(max-width: 768px) and (pointer: coarse)',
+            matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
             media: query,
             onchange: null,
             addEventListener: vi.fn(),
