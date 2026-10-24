@@ -13,7 +13,11 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import stylex from '@stylexjs/unplugin';
-import {astryxStylex, LIGHTNINGCSS_TARGETS} from './vite';
+import {
+  astryxStylex,
+  LIGHTNINGCSS_TARGETS,
+  undefinedGeneratedVariables,
+} from './vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -270,5 +274,40 @@ describe('astryxStylex optimizeDeps package discovery', () => {
     } finally {
       rmSync(outfile, {force: true});
     }
+  });
+});
+
+describe('undefinedGeneratedVariables', () => {
+  it('reports a generated variable that is read but never declared', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{min-height:var(--astryx1abc2)}.b{color:var(--x9zz9z, red)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--astryx1abc2', '--x9zz9z']);
+  });
+
+  it('accepts a variable declared anywhere in the stylesheet', () => {
+    expect(
+      undefinedGeneratedVariables(
+        ':root{--astryx1abc2:4px}.a{padding:var(--astryx1abc2)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores dynamic-style and component variables, which carry a dash', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{width:var(--x-width)}.b{padding:var(--astryx-card-padding,8px)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('checks only the prefixes it is given', () => {
+    expect(
+      undefinedGeneratedVariables('.a{color:var(--x1abc2)}', ['astryx']),
+    ).toEqual([]);
   });
 });

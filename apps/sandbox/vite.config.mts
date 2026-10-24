@@ -191,6 +191,7 @@ export default defineConfig({
         unstable_moduleResolution: {type: 'commonJS', rootDir: appDir},
       },
       stylexPrefix: 'x',
+      undefinedVariables: 'error',
     }),
     react({
       babel: {
