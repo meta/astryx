@@ -60,6 +60,10 @@ const MENU_OPEN_SPRING = {response: 0.32, dampingRatio: 0.8} as const;
 /** Menus and context menus closing (see `springs.menuClose`). */
 const MENU_CLOSE_SPRING = {response: 0.35, dampingRatio: 0.85} as const;
 
+/**
+ * UIKit's interaction springs, each with its source.
+ * @experimental
+ */
 export const springs = {
   // ---------------------------------------------------------------------
   // Sourced presets

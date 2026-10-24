@@ -26,6 +26,7 @@ import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
 
+/** @experimental */
 export interface UseGestureRecognizerOptions {
   /** Live toggle; turning it off mid-gesture cancels the gesture. @default true */
   isEnabled?: boolean;
@@ -46,6 +47,7 @@ export interface UseGestureRecognizerOptions {
  *   },
  * );
  * ```
+ * @experimental
  */
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
@@ -85,6 +87,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   return recognizer;
 }
 
+/** @experimental */
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
   'getBounds' | 'view'
@@ -93,6 +96,7 @@ export type UsePressTrackerOptions = Omit<
 /**
  * Track presses on the element behind `ref` with UIControl semantics. The
  * callbacks are read through a ref, like a recognizer's listener.
+ * @experimental
  */
 export function usePressTracker(
   ref: RefObject<Element | null>,

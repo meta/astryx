@@ -1,4 +1,24 @@
-Results for "experimental" (3)
+Results for "experimental" (7)
+name:        useAnimator
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/motion/experimental
+command:     pnpm exec astryx hook useAnimator
+name:        useGestureRecognizer
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/gestures/experimental
+command:     pnpm exec astryx hook useGestureRecognizer
+name:        usePressTracker
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/gestures/experimental
+command:     pnpm exec astryx hook usePressTracker
+name:        useTouchPresentation
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/gestures/experimental
+command:     pnpm exec astryx hook useTouchPresentation
 name:        authoring/field-reference
 section:     config
 domain:      doc

@@ -24,10 +24,12 @@ import {
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
+/** @experimental */
 export interface RotationGestureRecognizerOptions extends GestureRecognizerOptions<RotationGestureRecognizer> {
   hysteresis?: number;
 }
 
+/** @experimental */
 export class RotationGestureRecognizer extends GestureRecognizer {
   hysteresis: number;
   private initialAngle = 0;

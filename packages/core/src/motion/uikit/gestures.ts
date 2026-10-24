@@ -34,6 +34,10 @@
 import {scroll} from './scroll';
 import {timing} from './timing';
 
+/**
+ * The unit of a gesture constant.
+ * @experimental
+ */
 export type GestureConstantUnit =
   'px' | 'ms' | 'px/s' | 'rad' | 'ratio' | 'count';
 
@@ -42,7 +46,10 @@ interface GestureConstantBase<T> {
   readonly unit: GestureConstantUnit;
 }
 
-/** A number with a citable origin. */
+/**
+ * A number with a citable origin.
+ * @experimental
+ */
 export interface SourcedGestureConstant<
   T = number,
 > extends GestureConstantBase<T> {
@@ -50,7 +57,10 @@ export interface SourcedGestureConstant<
   readonly source: string;
 }
 
-/** A number nobody has measured yet. */
+/**
+ * A number nobody has measured yet.
+ * @experimental
+ */
 export interface GuessedGestureConstant<
   T = number,
 > extends GestureConstantBase<T> {
@@ -60,10 +70,17 @@ export interface GuessedGestureConstant<
   readonly measure: string;
 }
 
+/**
+ * A gesture constant: sourced, or a guess with its measurement task.
+ * @experimental
+ */
 export type GestureConstant<T = number> =
   SourcedGestureConstant<T> | GuessedGestureConstant<T>;
 
-/** Whether a constant still needs its measurement. */
+/**
+ * Whether a constant still needs its measurement.
+ * @experimental
+ */
 export function isGuess<T>(
   constant: GestureConstant<T>,
 ): constant is GuessedGestureConstant<T> {
@@ -96,6 +113,10 @@ const PRESS_MEASUREMENT =
 const SAFARI_SCROLL_CLAIM =
   'measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag on a scrollable page (1 pt steps): last cancelable touchmove at 10 px, pointercancel and the first uncancelable touchmove at 11 px';
 
+/**
+ * UIKit's gesture thresholds and velocity filter, each with its source.
+ * @experimental
+ */
 export const UIKIT_GESTURES = {
   tap: {
     /**
@@ -342,6 +363,7 @@ export const UIKIT_GESTURES = {
  * UIImpactFeedbackGenerator (.light .medium .heavy .soft .rigid) and
  * UINotificationFeedbackGenerator (.success .warning .error).
  * https://developer.apple.com/documentation/uikit/uifeedbackgenerator
+ * @experimental
  */
 export const HAPTIC_FEEDBACK_KINDS = [
   'selection',
@@ -355,6 +377,10 @@ export const HAPTIC_FEEDBACK_KINDS = [
   'notificationError',
 ] as const;
 
+/**
+ * A feedback kind of UIKit's feedback generators.
+ * @experimental
+ */
 export type HapticFeedbackKind = (typeof HAPTIC_FEEDBACK_KINDS)[number];
 
 /**
@@ -362,6 +388,7 @@ export type HapticFeedbackKind = (typeof HAPTIC_FEEDBACK_KINDS)[number];
  * has nothing better (Android browsers). Not UIKit numbers: a vibration motor
  * cannot render a Taptic Engine waveform, so these only keep the relative
  * strengths in order.
+ * @experimental
  */
 export const HAPTIC_VIBRATION_PATTERNS: Record<
   HapticFeedbackKind,

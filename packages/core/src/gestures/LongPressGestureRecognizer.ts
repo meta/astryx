@@ -31,6 +31,7 @@ import {
 } from './GestureRecognizer';
 import type {GestureEventContext, GestureTouch} from './types';
 
+/** @experimental */
 export interface LongPressGestureRecognizerOptions extends GestureRecognizerOptions<LongPressGestureRecognizer> {
   minimumPressDuration?: number;
   allowableMovement?: number;
@@ -40,6 +41,7 @@ export interface LongPressGestureRecognizerOptions extends GestureRecognizerOpti
   numberOfTouchesRequired?: number;
 }
 
+/** @experimental */
 export class LongPressGestureRecognizer extends GestureRecognizer {
   minimumPressDuration: number;
   allowableMovement: number;

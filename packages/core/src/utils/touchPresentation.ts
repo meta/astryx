@@ -81,21 +81,27 @@ export const COMPACT_TOUCH_QUERY =
 /**
  * The engine is WebKit on iOS or iPadOS: the only one that implements
  * `-webkit-touch-callout`. With TOUCH_QUERY, the iOS idiom.
+ * @experimental
  */
 export const IOS_SUPPORTS_QUERY = '(-webkit-touch-callout: none)';
 
 /**
  * The iOS gate as StyleX keys, nested in this order: the media query
  * outside, the supports query inside.
+ * @experimental
  */
 export const IOS_TOUCH_STYLE_KEYS = [
   `@media ${TOUCH_QUERY}`,
   `@supports ${IOS_SUPPORTS_QUERY}`,
 ] as const;
 
-/** Whose idiom a touch presentation follows: iOS's, or today's Astryx. */
+/**
+ * Whose idiom a touch presentation follows: iOS's, or today's Astryx.
+ * @experimental
+ */
 export type TouchIdiom = 'ios' | 'default';
 
+/** @experimental */
 export interface TouchPresentation {
   /** The primary pointer is coarse (a finger). */
   readonly isTouch: boolean;
@@ -135,6 +141,7 @@ function useIsIosWebKit(serverDefault: boolean): boolean {
 /**
  * The idiom now: `ios` for WebKit on iOS or iPadOS under a coarse pointer,
  * `default` otherwise. SSR-safe: renders `serverDefault` until hydrated.
+ * @experimental
  */
 export function useTouchIdiom(
   serverDefault: TouchIdiom = 'default',
@@ -147,6 +154,7 @@ export function useTouchIdiom(
 /**
  * The touch presentation now. SSR-safe: hooks render the server default and
  * update after hydration.
+ * @experimental
  */
 export function useTouchPresentation(
   serverDefault: Partial<Omit<TouchPresentation, 'isCompactTouch'>> = {},
@@ -189,6 +197,7 @@ export function useMotionPresentation(
  * The touch presentation at this moment, for a decision taken once (a menu
  * deciding how it presents as it opens). Not touch and not compact where
  * there is no window.
+ * @experimental
  */
 export function readTouchPresentation(
   view: Window | null = typeof window === 'undefined' ? null : window,

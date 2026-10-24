@@ -61,6 +61,16 @@
       "types": "./dist/naming.d.ts",
       "default": "./dist/naming.js"
     },
+    "./motion/experimental": {
+      "source": "./src/motion/experimental.ts",
+      "types": "./dist/motion/experimental.d.ts",
+      "default": "./dist/motion/experimental.js"
+    },
+    "./gestures/experimental": {
+      "source": "./src/gestures/experimental.ts",
+      "types": "./dist/gestures/experimental.d.ts",
+      "default": "./dist/gestures/experimental.js"
+    },
     "./theme/tokens": {
       "source": "./src/theme/tokens.ts",
       "types": "./dist/theme/tokens.d.ts",

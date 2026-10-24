@@ -134,6 +134,7 @@ function resolveRole<T>(
  *
  * Anything that is not a registered role comes back unchanged, so a spring
  * written inline at a call site keeps working.
+ * @experimental
  */
 export function resolveMotion<T extends SpringDescription>(
   element: Element | null | undefined,

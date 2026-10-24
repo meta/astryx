@@ -20,6 +20,11 @@
 
 import {registerMotionTable} from '../roles';
 
+/**
+ * UIScrollView's deceleration, rubber band, bounce, paging and touch-delay
+ * values.
+ * @experimental
+ */
 export const scroll = {
   decelerationRate: {
     /**

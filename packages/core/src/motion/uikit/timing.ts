@@ -26,6 +26,10 @@
 
 import {registerMotionTable} from '../roles';
 
+/**
+ * UIKit's press clocks, named curves and fixed durations.
+ * @experimental
+ */
 export const timing = {
   press: {
     /**

@@ -64,6 +64,7 @@ export function supportsSwitchControl(doc?: Document): boolean {
  * Vibrate for a feedback kind where `navigator.vibrate` exists. Returns
  * whether anything was played. Never plays on iOS, which has no vibration
  * API; use `attachTapHaptic` for the tap moment there.
+ * @experimental
  */
 export function playHaptic(kind: HapticFeedbackKind): boolean {
   if (!canVibrate()) {

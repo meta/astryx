@@ -3,8 +3,68 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 3,
+    "matchCount": 7,
     "results": [
+      {
+        "domain": "hook",
+        "name": "useAnimator",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/motion/experimental",
+        "command": "astryx hook useAnimator",
+        "mentions": [
+          "@astryxdesign/core/motion/experimental",
+          "Experimental: this hook and everything exported from `@astryxdesign/core/motion/experimental` are outside the stable compatibility promise and may change or be removed in a patch release.",
+          "keyword \"experimental\""
+        ]
+      },
+      {
+        "domain": "hook",
+        "name": "useGestureRecognizer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/gestures/experimental",
+        "command": "astryx hook useGestureRecognizer",
+        "mentions": [
+          "@astryxdesign/core/gestures/experimental",
+          "Experimental: this hook may change or be removed in a patch release.",
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "hook",
+        "name": "usePressTracker",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/gestures/experimental",
+        "command": "astryx hook usePressTracker",
+        "mentions": [
+          "@astryxdesign/core/gestures/experimental",
+          "Experimental: this hook may change or be removed in a patch release.",
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "hook",
+        "name": "useTouchPresentation",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/gestures/experimental",
+        "command": "astryx hook useTouchPresentation",
+        "mentions": [
+          "@astryxdesign/core/gestures/experimental",
+          "Experimental: this hook may change or be removed in a patch release.",
+          "description mentions \"experimental\""
+        ]
+      },
       {
         "domain": "doc",
         "name": "authoring/field-reference",

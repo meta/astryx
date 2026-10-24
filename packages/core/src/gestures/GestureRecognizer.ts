@@ -38,6 +38,7 @@ import type {
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
 
+/** @experimental */
 export interface GestureRecognizerOptions<R = GestureRecognizer> {
   /** A name for debugging and test output. */
   name?: string;
@@ -78,8 +79,10 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   ) => boolean;
 }
 
+/** @experimental */
 export type GestureListener<R> = (recognizer: R) => void;
 
+/** @experimental */
 export type GestureTransitionListener<R> = (
   recognizer: R,
   from: GestureState,
@@ -110,15 +113,20 @@ export function isTransitionAllowed(
   return ALLOWED[from].includes(to);
 }
 
+/** @experimental */
 export function isTerminal(state: GestureState): boolean {
   return state === 'ended' || state === 'cancelled' || state === 'failed';
 }
 
+/** @experimental */
 export function isActive(state: GestureState): boolean {
   return state === 'began' || state === 'changed';
 }
 
-/** The browser behaviors `touch-action` can keep or remove. */
+/**
+ * The browser behaviors `touch-action` can keep or remove.
+ * @experimental
+ */
 export interface NativeTouchBehavior {
   readonly panX: boolean;
   readonly panY: boolean;
@@ -144,6 +152,7 @@ export const MANIPULATION: NativeTouchBehavior = {
 
 let nextRecognizerId = 1;
 
+/** @experimental */
 export abstract class GestureRecognizer {
   /** Stable id, for ordering and debugging. */
   readonly id = nextRecognizerId++;

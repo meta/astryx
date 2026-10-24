@@ -38,7 +38,10 @@ import {
 /** The three kinds of value a role can hold. */
 export type MotionRoleKind = 'spring' | 'duration' | 'curve';
 
-/** Cubic-bézier control points `[x1, y1, x2, y2]`. */
+/**
+ * Cubic-bézier control points `[x1, y1, x2, y2]`.
+ * @experimental
+ */
 export type MotionCurvePoints = readonly [number, number, number, number];
 
 /** One registered role. */
