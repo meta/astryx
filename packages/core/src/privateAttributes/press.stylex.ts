@@ -5,17 +5,15 @@
 
 /**
  * @file privateAttributes/press.stylex.ts
- * @input StyleX, the semantic overlay color tokens, the touch press strength
- *   (`pressVars`, utils/interactionOverlay.stylex.ts) and the row layer's
- *   clocks (utils/rowPressLayer.stylex.ts)
- * @output `rowPressLayerStyles`: the compositor press layer for list rows
- *   (`cell`) and its own-image arms for a row on the `backgroundImage`
- *   variant (`cellOnImage`)
- * @position Owner module of the private press attribute for the row layer:
- *   the press controller (utils/pressFeedback.ts) writes the attribute, and
- *   this file reads it. No package entry exports it. Item and TreeList
- *   compose these styles after their overlay variant;
- *   utils/interactionOverlay.cell.test.ts tests them.
+ * @input StyleX, the overlay color tokens, the touch press strength
+ *   (`pressVars`) and the row layer's clocks (utils/rowPressLayer.stylex.ts)
+ * @output `rowPressLayerStyles`, the compositor press layer for list rows
+ *   (`cell`, `cellOnImage` for a `backgroundImage` row), and
+ *   `rowPressPaintStyles`, a CheckboxList row's press paint for its box
+ * @position Owner module of the private press attribute: the press controller
+ *   (utils/pressFeedback.ts) writes it, and this file reads it. No package
+ *   entry exports it. Item, TreeList and CheckboxListItem compose its styles;
+ *   utils/interactionOverlay.cell.test.ts tests the row layer.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -237,6 +235,24 @@ export const rowPressLayerStyles = stylex.create({
         },
         [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
         [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},
+      },
+    },
+  },
+});
+
+export const rowPressPaintStyles = stylex.create({
+  // A box reads its nearest row's value, so a list in a row's content keeps
+  // its own rows' paint.
+  checkboxRow: {
+    '--_checkbox-row-press-paint': {
+      default: 'none',
+      ':is([data-astryx-press="on"])': {
+        default: 'none',
+        '@media (pointer: coarse)': 'var(--_press-paint-image)',
+      },
+      ':is([data-astryx-press="fading"])': {
+        default: 'none',
+        '@media (pointer: coarse)': 'var(--_press-paint-image)',
       },
     },
   },
