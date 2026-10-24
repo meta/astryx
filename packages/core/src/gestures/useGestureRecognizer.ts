@@ -15,12 +15,14 @@
  * passing a new function each render re-attaches nothing, and a gesture
  * costs no React render at all — the listener runs inside the input event
  * and writes to the DOM itself. The recognizer attaches in a layout effect,
- * so its `touch-action` is in place before the browser can see a finger.
+ * so its `touch-action` is in place before the browser can see a finger, and
+ * re-attaches on any commit that finds another element behind the ref. After
+ * unmount neither hook calls the consumer back.
  *
  * SYNC: When modified, update useGestureRecognizer.test.tsx and README.md.
  */
 
-import {useEffect, useRef, useState, type RefObject} from 'react';
+import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
@@ -69,15 +71,18 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     onGestureRef.current = onGesture;
   });
   const {isEnabled = true, manageStyle = true} = options;
+  const isUnmountedRef = useIsUnmountedRef();
 
+  // The listener runs inside input events, never during a render or an
+  // Effect, and goes quiet once the component unmounts.
   useEffect(
     () =>
       recognizer.addListener(current => {
-        if (!isSyncingRef.current) {
+        if (!isUnmountedRef.current && !isSyncingRef.current) {
           onGestureRef.current?.(current);
         }
       }),
-    [recognizer],
+    [recognizer, isUnmountedRef],
   );
 
   useAttachment(
@@ -120,29 +125,62 @@ export function usePressTracker(
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
-  const [tracker] = useState(
+  const isUnmountedRef = useIsUnmountedRef();
+  const {trackingExpansion, highlightDelay, cancelTravel, quickTapFlash} =
+    options;
+  // A profile change after mount takes effect from the next touch: the
+  // tracker is rebuilt with the new values.
+  const tracker = useMemo(
     () =>
       new PressTracker({
         getBounds: () => ref.current?.getBoundingClientRect() ?? null,
         get view() {
           return ref.current;
         },
-        onControlEvent: (event, touch) =>
-          optionsRef.current.onControlEvent?.(event, touch),
-        onHighlightChange: isHighlighted =>
-          optionsRef.current.onHighlightChange?.(isHighlighted),
-        trackingExpansion: options.trackingExpansion,
-        highlightDelay: options.highlightDelay,
-        cancelTravel: options.cancelTravel,
-        quickTapFlash: options.quickTapFlash,
+        onControlEvent: (event, touch) => {
+          if (!isUnmountedRef.current) {
+            optionsRef.current.onControlEvent?.(event, touch);
+          }
+        },
+        onHighlightChange: isHighlighted => {
+          if (!isUnmountedRef.current) {
+            optionsRef.current.onHighlightChange?.(isHighlighted);
+          }
+        },
+        trackingExpansion,
+        highlightDelay,
+        cancelTravel,
+        quickTapFlash,
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
         isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
-        isBraking: touch => optionsRef.current.isBraking?.(touch) ?? false,
+        // The caller's brake, or the host's: a touch that stops a flick
+        // presses nothing, as a UIKit control in a decelerating scroll view.
+        isBraking: touch => {
+          const own = optionsRef.current.isBraking;
+          if (own != null) {
+            return own(touch);
+          }
+          const element = ref.current;
+          return (
+            element != null &&
+            getGestureHost(element.ownerDocument).isScrollBraking(element)
+          );
+        },
       }),
+    [
+      ref,
+      isUnmountedRef,
+      trackingExpansion,
+      highlightDelay,
+      cancelTravel,
+      quickTapFlash,
+    ],
   );
 
+  // A tracker replaced by an option change is disposed, which un-highlights
+  // a control it was holding.
   useAttachment(
     ref,
     element => {
@@ -155,10 +193,25 @@ export function usePressTracker(
         tracker.dispose();
       };
     },
-    null,
+    tracker,
   );
 
   return tracker;
+}
+
+/**
+ * A flag that turns true when the component unmounts, before the cleanups of
+ * the effects declared after it run, so nothing reports from those cleanups.
+ */
+function useIsUnmountedRef(): {readonly current: boolean} {
+  const isUnmountedRef = useRef(false);
+  useIsomorphicLayoutEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
+  return isUnmountedRef;
 }
 
 /**

@@ -23,6 +23,7 @@ import {
 } from '../GestureRecognizer';
 import type {GestureEventContext, GestureTouch} from '../types';
 import {createHarness, RecordingConsumer} from './harness';
+import {internals} from '../recognizerInternals';
 
 type Step = (recognizer: Scripted, event: GestureEventContext) => void;
 
@@ -165,7 +166,7 @@ describe('arena: who wins', () => {
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
     expect(single.state).toBe('possible');
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
     h.advance(400);
     expect(h.log).toEqual([
       'double:failed@400',
@@ -204,7 +205,7 @@ describe('arena: who wins', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
   });
 
   it('honors shouldBegin and shouldReceiveTouch', () => {

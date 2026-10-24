@@ -27,6 +27,7 @@
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
 import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
+import {internals} from './recognizerInternals';
 
 /** The intersection of what each touch recognizer leaves the browser. */
 export function combinedNativeBehavior(
@@ -37,7 +38,7 @@ export function combinedNativeBehavior(
   let pinchZoom = true;
   let doubleTapZoom = true;
   for (const recognizer of recognizers) {
-    if (!recognizer.acceptsTouchInput) {
+    if (!internals(recognizer).acceptsTouchInput) {
       continue;
     }
     const behavior = recognizer.nativeTouchBehavior;
@@ -102,7 +103,7 @@ export function gestureHostStyle(
     recognizers.some(
       recognizer =>
         recognizer instanceof LongPressGestureRecognizer &&
-        recognizer.acceptsTouchInput,
+        internals(recognizer).acceptsTouchInput,
     )
   ) {
     style.WebkitTouchCallout = 'none';
