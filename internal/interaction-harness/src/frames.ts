@@ -108,7 +108,7 @@ async function chromiumScreencast(
       await cdp.send('Page.stopScreencast');
       cdp.off('Page.screencastFrame', onFrame);
       await cdp.detach().catch(() => {});
-      return frames;
+      return inPresentationOrder(frames);
     },
   };
 }
@@ -149,11 +149,24 @@ async function webkitScreencast(
       if (frames.length === 0) {
         return frames;
       }
+      const ordered = inPresentationOrder(frames);
       // Rebase the monotonic stamps onto the wall clock (first frame ≈ start).
-      const offset = wallAtStart - frames[0].t;
-      return frames.map(f => ({...f, t: f.t + offset}));
+      const offset = wallAtStart - ordered[0].t;
+      return ordered.map(f => ({...f, t: f.t + offset}));
     },
   };
+}
+
+/**
+ * Frames sorted by their presentation timestamp. A loaded machine can deliver
+ * screencast frames out of order (a frame stamped 35 ms arriving after one
+ * stamped 46 ms); judged in arrival order, a steadily moving element would
+ * appear to step backwards.
+ */
+export function inPresentationOrder<T extends {readonly t: number}>(
+  frames: readonly T[],
+): T[] {
+  return [...frames].sort((a, b) => a.t - b.t);
 }
 
 /** The marker colour: magenta never occurs in Astryx themes. */

@@ -45,7 +45,7 @@ committed: a pull request links or attaches it.
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
-| `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall.                                                                                                       |
+| `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, and a verdict.                                                                                        |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread Layout / Paint / UpdateLayoutTree / PrePaint counts, `countBetween` for a sub-window, long tasks. `installLongTaskLog` / `readLongTasks`.                                           |
 | `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
@@ -103,9 +103,17 @@ therefore proven on the iOS simulator, not here. The
 screencast is captured off the main thread, so a compositor animation shows a
 new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
-whole window as one stall). `settledWithin` stops judging at the easing tail
-that moves less than a frame pixel per frame. `castStoryboard` turns the frames
-of the block into a filmstrip.
+whole window as one stall). `settledWithin` (2 px) stops judging at the easing
+tail: the screencast rounds to whole pixels, so a tail that still moves shows
+plateaus within a pixel or two of rest. The `verdict` tolerates what a
+loaded machine does to a screencast and nothing a frozen animation does: a
+median frame interval of at most 20 ms, no stall longer than three screencast
+intervals (two dropped frames), and at least 90% of the window's whole frame
+intervals presenting a new position (one miss is always allowed).
+`verdict.failures` names each miss with its numbers, and `summary` carries the
+raw numbers for the report. Frames are judged in presentation order: a loaded
+machine can deliver them out of order. `castStoryboard` turns the frames of the
+block into a filmstrip.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its

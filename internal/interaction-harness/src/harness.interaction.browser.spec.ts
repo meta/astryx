@@ -252,7 +252,7 @@ test.describe('touch input', () => {
 test.describe('frame evidence', () => {
   test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await fixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
@@ -287,19 +287,26 @@ test.describe('frame evidence', () => {
     };
 
     const compositor = await run('compositor');
-    expect(compositor.medianFrameMs).toBeLessThan(20);
-    expect(compositor.frames).toBeGreaterThanOrEqual(
-      compositor.expectedFrames - 2,
-    );
-    expect(compositor.changed).toBeGreaterThanOrEqual(compositor.frames - 3);
-    expect(compositor.longestStallMs).toBeLessThan(40);
+    testInfo.annotations.push({
+      type: 'busy-main-thread compositor',
+      description: compositor.summary,
+    });
+    expect(compositor.verdict.failures, compositor.summary).toEqual([]);
     expect(compositor.monotonic).toBe(true);
 
     const raf = await run('raf');
+    testInfo.annotations.push({
+      type: 'busy-main-thread rAF control',
+      description: raf.summary,
+    });
     // Frozen for the whole block: no presented frame moved (the compositor
-    // sends none at all when nothing on screen changes).
+    // sends none at all when nothing on screen changes), and the verdict that
+    // passes the compositor animation fails it on every criterion.
     expect(raf.changed).toBe(0);
     expect(raf.longestStallMs).toBeGreaterThan(600);
+    expect(raf.verdict.pass).toBe(false);
+    expect(raf.verdict.failures.join('\n')).toMatch(/longest stall/);
+    expect(raf.verdict.failures.join('\n')).toMatch(/expected frames moved/);
   });
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
