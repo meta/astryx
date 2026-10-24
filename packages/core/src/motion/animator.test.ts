@@ -8,8 +8,8 @@
  *   the analytic curves, the clock, the inline end state; and what it reads
  *   back: presentation values and velocities, retarget continuity, stop,
  *   completion, Reduced Motion substitutions, decays with edges, late attach
- * @position Testing; the compositor itself is proven in
- *   __tests__/animator.compositor.spec.ts
+ * @position Testing; what the compositor plays needs a real browser, so it is
+ *   proven in browser tests, not here
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -355,9 +355,10 @@ describe('animate: keyframes on the compositor', () => {
     expect(live('rotate')[0].startTime).toBe(1234.5);
   });
 
-  it('expands scale onto both axes and reads it back', () => {
+  it('expands scale onto both axes and reads it back', async () => {
     const {animator} = setup();
     animator.animate({scale: 0.5}, {spring: springs.smooth});
+    await commitFrame(clock); // the browser starts it
     clock += 5000;
     expect(animator.get('scale')).toBe(0.5);
     expect(animator.get('scaleY')).toBe(0.5);
@@ -394,10 +395,12 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     );
   });
 
-  it('reads from the call time until its first frame', async () => {
+  it('holds its start until the browser starts it', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
-    expect(animator.get('x', 1100)).toBeCloseTo(curve.value(0.1), 9);
+    // Nothing has moved on screen yet, whatever the clock says.
+    expect(animator.get('x', 1100)).toBe(0);
+    expect(animator.getVelocity('x', 1100)).toBe(0);
     clock = 1250;
     await commitFrame(1250);
     expect(animator.get('x', 1350)).toBeCloseTo(curve.value(0.1), 9);
@@ -453,6 +456,95 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     await commitFrame(1300);
     expect(animator.get('x', 1400)).toBeCloseTo(curve.value(0.1), 9);
     expect(animator.get('y', 1400)).toBeCloseTo(curve.value(0.1), 9);
+  });
+});
+
+describe('review fixes', () => {
+  it('a retarget before the first frame starts from what is on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    // A 150 ms block, then a second call on the same channel, all before the
+    // browser started the first.
+    clock = 1150;
+    animator.animate({x: 100}, {spring: springs.smooth});
+    expect(animator.get('x')).toBe(0);
+    await commitFrame(1150);
+    const from0 = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    expect(animator.get('x', 1250)).toBeCloseTo(from0.value(0.1), 9);
+  });
+
+  it('a call adopted by a later same-task call starts with it', async () => {
+    const {animator} = setup();
+    const a = animator.animate({x: 300}, {spring: springs.smooth});
+    const b = animator.animate({y: 300}, {spring: springs.smooth});
+    clock = 1300;
+    await commitFrame(1300);
+    await expect(b.started).resolves.toBe(1300);
+    await expect(a.started).resolves.toBe(1300);
+  });
+
+  it('dispose settles every atRest() wait', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    await commitFrame(1000);
+    let rested = false;
+    void animator.atRest().then(() => {
+      rested = true;
+    });
+    animator.dispose();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+    expect(rested).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('rebasing a curve that waits for its first frame keeps it in its call', async () => {
+    const {animator} = setup();
+    animator.play({
+      opacity: {duration: 0.3, at: t => 1 - t, velocity: () => -1},
+      x: {duration: 0.3, at: t => 100 * t, velocity: () => 100},
+      rotate: {duration: 0.3, at: t => 90 * t, velocity: () => 90},
+    });
+    animator.rebase({x: -20});
+    animator.animate({y: 50}, {spring: springs.smooth});
+    clock = 1300;
+    await commitFrame(1300);
+    // Every curve starts with the browser's start.
+    // 100 ms in: 9° (not the 27° of a curve dated at the call), x 10 − 20.
+    expect(animator.get('rotate', 1400)).toBeCloseTo(9, 6);
+    expect(animator.get('x', 1400)).toBeCloseTo(-10, 6);
+  });
+
+  it('writing another axis before the first frame keeps the channel on the call\u2019s start', async () => {
+    const {animator} = setup();
+    animator.animate({opacity: 0.5, x: 100}, {spring: springs.smooth});
+    animator.set({y: 10});
+    const [translate] = live('translate');
+    expect(translate.startTime).toBeNull();
+    clock = 1300;
+    await commitFrame(1300);
+    const x = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    expect(animator.get('x', 1400)).toBeCloseTo(x.value(0.1), 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1400)[0]).toBeCloseTo(
+      x.value(0.1),
+      1,
+    );
+  });
+
+  it('under instant Reduced Motion, a move leaves a running fade alone', async () => {
+    const {animator} = setup({prefersReducedMotion: () => true});
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.smooth});
+    await commitFrame(1000);
+    await advance(10_000);
+    animator.animate(
+      {x: 40},
+      {spring: springs.smooth},
+      {reducedMotion: 'instant'},
+    );
+    expect(animator.get('opacity')).toBe(1);
+    expect(animator.get('x')).toBe(40);
   });
 });
 
@@ -802,9 +894,10 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     expect(entrance.get('opacity')).toBeCloseTo(1, 6);
   });
 
-  it('a move dips: fades out, jumps at the midpoint, fades back in', () => {
+  it('a move dips: fades out, jumps at the midpoint, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock); // the browser starts it
     expect(animator.get('x', 1000 + fade / 2 - 1)).toBe(0);
     expect(animator.get('x', 1000 + fade / 2)).toBe(100);
     expect(animator.get('opacity', 1000 + fade / 4)).toBeCloseTo(
@@ -836,10 +929,11 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     expect(element.style.opacity).toBe('');
   });
 
-  it('an entrance lands in place and fades in', () => {
+  it('an entrance lands in place and fades in', async () => {
     const {animator, element} = reduced();
     animator.set({y: 400, opacity: 0});
     animator.animate({y: 0, opacity: 1}, {spring: springs.sheetPresent});
+    await commitFrame(clock); // the browser starts it
     expect(animator.get('y')).toBe(0);
     expect(live('translate')).toHaveLength(0);
     expect(element.style.translate).toBe('');
@@ -850,9 +944,10 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     );
   });
 
-  it('an exit fades out in place, then moves', () => {
+  it('an exit fades out in place, then moves', async () => {
     const {animator} = reduced();
     animator.animate({y: 400, opacity: 0}, {spring: springs.sheetDismiss});
+    await commitFrame(clock); // the browser starts it
     expect(animator.get('y', 1000 + fade - 1)).toBe(0);
     expect(animator.get('y', 1000 + fade)).toBe(400);
     const [translate] = live('translate');
@@ -862,13 +957,14 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     );
   });
 
-  it("'instant' jumps, 'keep' keeps the motion", () => {
+  it("'instant' jumps, 'keep' keeps the motion", async () => {
     const a = reduced();
     a.animator.animate(
       {x: 50},
       {spring: springs.smooth},
       {reducedMotion: 'instant'},
     );
+    await commitFrame(clock); // the browser starts it
     expect(a.animator.get('x')).toBe(50);
     expect(recorded).toHaveLength(0);
     const b = reduced();
@@ -877,10 +973,11 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.smooth},
       {reducedMotion: 'keep'},
     );
+    await commitFrame(clock);
     expect(b.animator.getVelocity('x', 1010)).toBeGreaterThan(0);
   });
 
-  it('a cross-fade can follow the presentation\u2019s own spring', () => {
+  it('a cross-fade can follow the presentation\u2019s own spring', async () => {
     const {animator} = reduced();
     // An exit: fades out on the spring, then moves once the fade settles.
     animator.set({y: 0, opacity: 1});
@@ -889,6 +986,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.sheetDismiss},
       {crossfade: springs.sheetDismiss},
     );
+    await commitFrame(clock); // the browser starts it
     const curve = solveSpring(toSpring(springs.sheetDismiss), {from: 1, to: 0});
     const settle = curve.settleTime(0.001) * 1000;
     for (const t of [0, 50, 120, 250]) {
@@ -901,13 +999,14 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     expect(animator.get('y', 1000 + settle + 1)).toBe(400);
   });
 
-  it('a dip on a spring fades out, moves at the bottom, fades back in', () => {
+  it('a dip on a spring fades out, moves at the bottom, fades back in', async () => {
     const {animator} = reduced();
     animator.animate(
       {x: 100},
       {spring: springs.alertPresent},
       {crossfade: springs.alertPresent},
     );
+    await commitFrame(clock); // the browser starts it
     const spring = toSpring(springs.alertPresent);
     const out = solveSpring(spring, {from: 1, to: 0});
     const half = out.settleTime(0.001) * 1000;
@@ -924,13 +1023,14 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     );
   });
 
-  it('an opacity-only change is not travel and keeps its spring', () => {
+  it('an opacity-only change is not travel and keeps its spring', async () => {
     const {animator} = reduced();
     animator.animate({opacity: 0}, {spring: springs.smooth});
+    await commitFrame(clock); // the browser starts it
     expect(animator.getVelocity('opacity', 1010)).toBeLessThan(0);
   });
 
-  it('crossfadeAs entrance: a slide-in lands at once and fades in on its spring', () => {
+  it('crossfadeAs entrance: a slide-in lands at once and fades in on its spring', async () => {
     const {animator} = reduced();
     animator.set({y: 800});
     animator.animate(
@@ -938,6 +1038,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.sheetPresent},
       {crossfade: springs.sheetPresent, crossfadeAs: 'entrance'},
     );
+    await commitFrame(clock); // the browser starts it
     const curve = solveSpring(toSpring(springs.sheetPresent), {from: 0, to: 1});
     expect(animator.get('y', 1000)).toBe(0);
     for (const t of [0, 40, 120]) {
@@ -949,7 +1050,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     expect(animator.get('opacity', 1000 + 5000)).toBe(1);
   });
 
-  it('crossfadeAs entrance with the timed fade', () => {
+  it('crossfadeAs entrance with the timed fade', async () => {
     const {animator} = reduced();
     animator.set({x: 300});
     animator.animate(
@@ -957,13 +1058,14 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.navigationPush},
       {crossfadeAs: 'entrance'},
     );
+    await commitFrame(clock); // the browser starts it
     expect(animator.get('x', 1000)).toBe(0);
     expect(animator.get('opacity', 1000)).toBe(0);
     expect(animator.get('opacity', 1000 + fade / 2)).toBeCloseTo(ease(0.5), 9);
     expect(animator.get('opacity', 1000 + fade)).toBe(1);
   });
 
-  it('crossfadeAs exit: fades out in place, then lands and restores the opacity', () => {
+  it('crossfadeAs exit: fades out in place, then lands and restores the opacity', async () => {
     const {animator} = reduced();
     animator.set({y: 0});
     animator.animate(
@@ -971,6 +1073,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.sheetDismiss},
       {crossfade: springs.sheetDismiss, crossfadeAs: 'exit'},
     );
+    await commitFrame(clock); // the browser starts it
     const curve = solveSpring(toSpring(springs.sheetDismiss), {from: 1, to: 0});
     const settle = curve.settleTime(0.001) * 1000;
     expect(animator.get('y', 1000 + settle - 1)).toBe(0);
@@ -994,7 +1097,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     ]);
   });
 
-  it('crossfadeAs changes nothing without Reduced Motion', () => {
+  it('crossfadeAs changes nothing without Reduced Motion', async () => {
     const {animator} = setup();
     animator.set({y: 800});
     animator.animate(
@@ -1002,6 +1105,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
       {spring: springs.sheetPresent},
       {crossfade: springs.sheetPresent, crossfadeAs: 'entrance'},
     );
+    await commitFrame(clock); // the browser starts it
     expect(live('opacity')).toHaveLength(0);
     expect(animator.getVelocity('y', 1010)).toBeLessThan(0);
   });
@@ -1089,11 +1193,12 @@ describe('play: any closed-form curve', () => {
     expect(element.style.opacity).toBe('0.4');
   });
 
-  it('under Reduced Motion a played travel cross-fades unless kept', () => {
+  it('under Reduced Motion a played travel cross-fades unless kept', async () => {
     const reduced = setup({prefersReducedMotion: () => true});
     reduced.animator.play({
       x: {duration: 0.3, at: t => 300 * t, velocity: () => 300},
     });
+    await commitFrame(clock); // the browser starts it
     const [opacity] = live('opacity');
     expect(opacity).toBeDefined();
     expect(
@@ -1105,6 +1210,7 @@ describe('play: any closed-form curve', () => {
       {x: {duration: 0.3, at: t => 300 * t, velocity: () => 300}},
       {reducedMotion: 'keep'},
     );
+    await commitFrame(clock);
     expect(live('opacity')).toHaveLength(0);
     expect(kept.animator.get('x', 1150)).toBeCloseTo(45, 9);
   });
@@ -1130,9 +1236,10 @@ describe('play: any closed-form curve', () => {
 });
 
 describe('decay: UIScrollView coasts', () => {
-  it('follows the coast and comes to rest where it projects', () => {
+  it('follows the coast and comes to rest where it projects', async () => {
     const {animator} = setup();
     animator.decay({y: -2400});
+    await commitFrame(clock); // the browser starts it
     const coast = solveDecay({from: 0, velocity: -2400});
     for (const t of [0, 16, 100, 400, 1200]) {
       expect(animator.get('y', 1000 + t)).toBeCloseTo(coast.value(t / 1000), 9);
@@ -1148,10 +1255,11 @@ describe('decay: UIScrollView coasts', () => {
     expect(animator.get('y', 1e7)).toBeCloseTo(coast.rest, 9);
   });
 
-  it('a coast that reaches an edge hands its velocity to the edge spring', () => {
+  it('a coast that reaches an edge hands its velocity to the edge spring', async () => {
     const {animator} = setup();
     animator.set({y: -100});
     animator.decay({y: 3000}, {bounds: {y: {min: -2000, max: 0}}});
+    await commitFrame(clock); // the browser starts it
     const coast = solveDecay({from: -100, velocity: 3000});
     const contact = 1000 + (coast.timeToReach(0) as number) * 1000;
     expect(animator.get('y', contact)).toBeCloseTo(0, 6);
@@ -1164,10 +1272,11 @@ describe('decay: UIScrollView coasts', () => {
     expect(animator.get('y', 1e7)).toBe(0);
   });
 
-  it('a release past an edge springs straight back with the release velocity', () => {
+  it('a release past an edge springs straight back with the release velocity', async () => {
     const {animator} = setup();
     animator.set({x: 60});
     animator.decay({x: 400}, {bounds: {x: {min: -500, max: 0}}});
+    await commitFrame(clock); // the browser starts it
     expect(animator.getVelocity('x')).toBeCloseTo(400, 6);
     const curve = solveSpring(toSpring(scroll.bounce), {
       from: 60,
@@ -1255,9 +1364,10 @@ describe('attach', () => {
     expect(element.style.translate).toBe('300px 0px');
   });
 
-  it('detaching cancels the running animations', () => {
+  it('detaching cancels the running animations', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
+    await commitFrame(clock); // the browser starts it
     animator.attach(null);
     expect(recorded.every(a => a.cancelled)).toBe(true);
     expect(animator.get('x', 1050)).toBeGreaterThan(0);
