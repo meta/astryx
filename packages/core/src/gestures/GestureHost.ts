@@ -84,6 +84,7 @@
  * SYNC: When modified, update GestureHost.test.ts and README.md.
  */
 
+import {isRtlElement} from '../hooks/isRtlElement';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {
   browserClock,
@@ -290,9 +291,9 @@ export class GestureHost {
         width: doc.defaultView?.innerWidth ?? 0,
         height: doc.defaultView?.innerHeight ?? 0,
       }),
+      // The writing direction through core's one helper.
       isRtl: view =>
-        view instanceof Element &&
-        doc.defaultView?.getComputedStyle(view).direction === 'rtl',
+        view instanceof Element && isRtlElement(view as HTMLElement),
     };
     this.arena = new GestureArena({
       clock: options.clock ?? browserClock,
