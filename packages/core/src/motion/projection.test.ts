@@ -112,6 +112,19 @@ describe('selectSnapPoint', () => {
 });
 
 describe('selectPage', () => {
+  it('lands on a real page when the current page is past the end', () => {
+    const result = selectPage({
+      position: 400,
+      velocity: 0,
+      pageSize: 100,
+      pageCount: 3,
+      currentPage: 4,
+    });
+    expect(result.value).toBeDefined();
+    expect(result.index).toBeGreaterThanOrEqual(0);
+    expect(result.index).toBeLessThanOrEqual(2);
+  });
+
   it('moves at most one page per release', () => {
     const page = (position: number, velocity: number, currentPage: number) =>
       selectPage({position, velocity, pageSize: 390, pageCount: 6, currentPage})

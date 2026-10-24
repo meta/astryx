@@ -94,8 +94,10 @@ export function selectSnapPoint(
   let lo = 0;
   let hi = points.length - 1;
   if (fromIndex != null && maxSteps != null) {
-    lo = Math.max(lo, fromIndex - maxSteps);
-    hi = Math.min(hi, fromIndex + maxSteps);
+    // A stale index past either end counts from the nearest real point.
+    const from = Math.min(Math.max(fromIndex, 0), points.length - 1);
+    lo = Math.max(lo, from - maxSteps);
+    hi = Math.min(hi, from + maxSteps);
   }
   let best = lo;
   let bestDistance = Infinity;
