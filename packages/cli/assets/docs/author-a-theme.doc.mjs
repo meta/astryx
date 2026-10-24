@@ -41,7 +41,7 @@ export const docs = {
           ['typography.scale', '--text-heading-*-size/weight/leading, --text-body-size/weight/leading', 'base (px), ratio'],
           ['typography.body/heading/code', '--font-family-body, --font-family-heading, --font-family-code', 'family, fallbacks?, url?, weight?'],
           ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-chat', 'base (px), multiplier (0–2)'],
-          ['motion', '--duration-fast-min/fast/fast-max, --duration-medium-min/medium/medium-max', 'fast (ms), medium (ms), ratio, easing?'],
+          ['motion', '--duration-fast-min/fast/fast-max, --duration-medium-min/medium/medium-max; --motion-<role> for each touch motion role set', 'fast (ms), medium (ms), ratio, easing? (together or not at all); springs?, durations?, curves? by role ({@link generic:motion})'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
       ],
@@ -86,13 +86,14 @@ export const docs = {
     {
       title: 'Theme Adaptations',
       content: [
-        {type: 'prose', text: "Use `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, or motion preference. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win."},
+        {type: 'prose', text: "Use `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, motion preference, or platform. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win."},
         {type: 'code', lang: 'tsx', label: 'Width and pointer adaptations', code: "const acmeTheme = defineTheme({\n  name: 'acme',\n  adaptations: {\n    widthBreakpoints: {\n      sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536,\n    },\n    rules: [\n      {\n        when: {width: {below: 'md'}},\n        value: {tokens: {'--spacing-4': '12px'}},\n      },\n      {\n        when: {pointer: 'coarse'},\n        value: {tokens: {'--size-element-sm': '36px', '--size-element-md': '40px', '--size-element-lg': '44px'}},\n      },\n    ],\n  },\n});"},
         {type: 'table', headers: ['Condition', 'Values'], rows: [
           ['width.from / width.below', 'sm | md | lg | xl | 2xl'],
           ['pointer', 'coarse | fine'],
           ['contrast', 'more | less | no-preference'],
           ['motion', 'reduce | no-preference'],
+          ['platform', 'ios (iOS and iPadOS browsers) | other'],
         ]},
         {type: 'prose', text: "`widthBreakpoints` are fixed named start points. Defaults are 640 / 768 / 1024 / 1280 / 1536 CSS pixels. `from` includes its point; `below` excludes it. Breakpoint configuration alone emits no CSS."},
       ],

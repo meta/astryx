@@ -1,4 +1,4 @@
-Results for "close" (20 of 44)
+Results for "close" (20 of 45)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -95,14 +95,15 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs migration/component-migration move-the-app-frame-first
 parent:      pnpm exec astryx docs migration/component-migration --index
+name:        motion
+section:     touch-motion
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs motion touch-motion
+parent:      pnpm exec astryx docs motion --index
 name:        styling/styling-advanced
 section:     compound-components
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs styling/styling-advanced compound-components
 parent:      pnpm exec astryx docs styling/styling-advanced --index
-name:        ComplexSelector
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ComplexSelector
-command:     pnpm exec astryx component ComplexSelector

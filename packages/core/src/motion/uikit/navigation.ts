@@ -24,6 +24,8 @@
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
 
+import {registerMotionTable} from '../roles';
+
 export const navigation = {
   /**
    * The push and pop springs start moving at this many travels per second
@@ -71,3 +73,7 @@ export const navigation = {
    */
   interactivePopFinishThreshold: 0.5,
 } as const;
+
+// Each spring, duration and curve above is a motion role a theme may retune
+// (motion/roles.ts).
+registerMotionTable('navigation', navigation);

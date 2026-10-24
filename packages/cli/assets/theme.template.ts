@@ -186,6 +186,11 @@ export const myTheme = defineTheme({
    *   Cinematic {fast: 200, medium: 500, slow: 1200}
    * `easing` overrides --ease-standard.
    *
+   * `springs`, `durations` and `curves` retune touch motion roles by table
+   * path; a role left out keeps its measured default:
+   *   springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}
+   *   durations: {'timing.reducedMotionCrossFadeMs': 300}
+   *
    * Reference: `astryx docs motion`.
    */
   motion: {fast: 175, medium: 410, slow: 975, ratio: 0.75},
@@ -353,7 +358,8 @@ export const myTheme = defineTheme({
    * authored order so later writes win.
    *
    * `from` includes its point; `below` excludes it. The other supported axes
-   * are primary-pointer precision, contrast preference, and motion preference.
+   * are primary-pointer precision, contrast preference, motion preference, and
+   * platform (`ios` for iOS and iPadOS browsers, `other` for the rest).
    * Component writes in a rule are validated exactly like root `components`.
    * The one addition: a custom value that is valid only because a theme
    * enrolls it must be declared at the root first, since generated type

@@ -27,6 +27,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 /**
  * UIKit's default spring (see `springs.uikitDefault` for its sources). The
  * guesses below start from it: the system-driven transitions it is believed
@@ -325,3 +327,7 @@ export const springs = {
    */
   banner: UIKIT_DEFAULT_SPRING,
 } as const;
+
+// Each spring, duration and curve above is a motion role a theme may retune
+// (motion/roles.ts).
+registerMotionTable('springs', springs);
