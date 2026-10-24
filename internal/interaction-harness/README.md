@@ -64,7 +64,12 @@ value at that exact time, independent of frame timing. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond
-inside it, the last frame it presents.
+inside it, the last frame it presents. An animation whose keyframes end in a run of
+identical values (an end value held so a later interruption can read it)
+ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
+the default storyboard times stop there, and `waitForRest`, which judges the
+presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
+than `playState`, does not wait the hold out.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

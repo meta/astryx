@@ -7,8 +7,10 @@
  *   Web Animations too)
  * @output `holdAnimations` (pause every running animation and describe it),
  *   `seekAnimations` (move them all to t ms), `sampleCurve` (the presented
- *   transform/opacity at each t), `releaseAnimations`, and `curveOf`, which
- *   picks one channel out of the samples for ./math's `compareCurve`.
+ *   transform/opacity at each t, with the individual `translate`, `rotate` and
+ *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
+ *   picks one channel out of the samples for ./math's `compareCurve`, and the
+ *   animation-state waits `waitForAnimation` and `waitForRest`.
  * @position Curve sampling: the exact presented value of an animation at a
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
@@ -23,6 +25,56 @@ import {parseTransform, type TimedValue, type Transform2D} from './math';
 /** How far inside its end a seek past an animation's end lands, ms. */
 export const END_INSET_MS = 0.5;
 
+/**
+ * Installs `window.__harnessCurveEnd(animation)`: the local time (ms, delay
+ * included) where the animation's effect stops changing. An animation whose
+ * keyframes end in a run of identical values (an end value held so that a
+ * later interruption can read it) ends where that run starts; any other ends
+ * at its end time.
+ */
+async function installCurveEnd(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __harnessCurveEnd?: (animation: Animation) => number;
+    };
+    if (w.__harnessCurveEnd) {
+      return;
+    }
+    const timingKeys = new Set([
+      'offset',
+      'computedOffset',
+      'easing',
+      'composite',
+    ]);
+    const values = (k: ComputedKeyframe) =>
+      JSON.stringify(
+        Object.keys(k)
+          .filter(p => !timingKeys.has(p))
+          .sort()
+          .map(p => [p, String(k[p])]),
+      );
+    w.__harnessCurveEnd = animation => {
+      const effect = animation.effect as KeyframeEffect | null;
+      const timing = effect?.getComputedTiming();
+      const delay = Number(timing?.delay ?? 0);
+      const active = Number(timing?.activeDuration ?? 0);
+      if (
+        effect == null ||
+        !Number.isFinite(active) ||
+        Number(timing?.iterations ?? 1) !== 1
+      ) {
+        return delay + active;
+      }
+      const frames = effect.getKeyframes();
+      let first = frames.length - 1;
+      while (first > 0 && values(frames[first - 1]) === values(frames[first])) {
+        first -= 1;
+      }
+      return delay + Number(frames[first]?.computedOffset ?? 1) * active;
+    };
+  });
+}
+
 export interface HeldAnimation {
   readonly index: number;
   /** `CSSTransition`, `CSSAnimation` or `Animation` (script-created). */
@@ -32,6 +84,11 @@ export interface HeldAnimation {
   readonly target: string | null;
   readonly durationMs: number;
   readonly delayMs: number;
+  /**
+   * Where its curve ends, ms from its start (delay included): before a held
+   * end value, if its keyframes end in one; otherwise its end time.
+   */
+  readonly curveEndMs: number;
   readonly easing: string;
   readonly keyframes: readonly Record<string, unknown>[];
   /** Where it was when held, ms. */
@@ -48,7 +105,11 @@ export async function holdAnimations(
   scope?: Locator,
 ): Promise<HeldAnimation[]> {
   const scopeHandle = scope ? await scope.elementHandle() : null;
+  await installCurveEnd(page);
   return page.evaluate(root => {
+    const curveEnd = (
+      window as unknown as {__harnessCurveEnd: (a: Animation) => number}
+    ).__harnessCurveEnd;
     const describe = (node: Element | null) =>
       node == null
         ? null
@@ -87,6 +148,7 @@ export async function holdAnimations(
         target: describe((effect?.target as Element | null) ?? null),
         durationMs: Number(timing?.duration ?? 0),
         delayMs: Number(timing?.delay ?? 0),
+        curveEndMs: curveEnd(animation),
         easing: String(effect?.getTiming().easing ?? 'linear'),
         keyframes: (effect?.getKeyframes() ?? []).map(
           (k): Record<string, unknown> => ({...k}),
@@ -145,15 +207,27 @@ export async function releaseAnimations(
 
 export interface CurveSample {
   readonly t: number;
+  /**
+   * The presented 2D transform: `translate` · `rotate` · `scale` ·
+   * `transform`, composed in the order CSS applies them.
+   */
   readonly transform: Transform2D;
   readonly opacity: number;
   /** Raw computed values, for the JSON trace. */
-  readonly raw: {readonly transform: string; readonly opacity: string};
+  readonly raw: {
+    readonly transform: string;
+    readonly translate: string;
+    readonly rotate: string;
+    readonly scale: string;
+    readonly opacity: string;
+  };
 }
 
 /**
  * The presented transform and opacity of `locator` at each time (ms from the
- * held animations' start). Hold the animations first.
+ * held animations' start). Hold the animations first. An animation of the
+ * individual `translate`, `rotate` or `scale` properties is included: they
+ * are composed with `transform` into one matrix.
  */
 export async function sampleCurve(
   locator: Locator,
@@ -178,16 +252,65 @@ export async function sampleCurve(
           animation.currentTime = Math.min(t, end - inset);
         }
         const style = getComputedStyle(element);
-        return {t, transform: style.transform, opacity: style.opacity};
+        // translate · rotate · scale · transform, as CSS applies them (all
+        // about the same transform origin, which `transform` excludes too).
+        const box = element as HTMLElement;
+        const length = (value: string, size: number) =>
+          value.endsWith('%')
+            ? (parseFloat(value) / 100) * size
+            : parseFloat(value) || 0;
+        const matrix = new DOMMatrix();
+        if (style.translate !== 'none') {
+          const [x = '0px', y = '0px'] = style.translate.split(' ');
+          matrix.translateSelf(
+            length(x, box.offsetWidth ?? 0),
+            length(y, box.offsetHeight ?? 0),
+          );
+        }
+        if (style.rotate !== 'none') {
+          // "45deg", "z 45deg" or "0 0 1 45deg": the angle is the last token.
+          const angle = style.rotate.split(' ').at(-1) ?? '0deg';
+          const turns: Record<string, number> = {
+            deg: 1,
+            rad: 180 / Math.PI,
+            grad: 0.9,
+            turn: 360,
+          };
+          const unit = /[a-z]+$/.exec(angle)?.[0] ?? 'deg';
+          matrix.rotateSelf(parseFloat(angle) * (turns[unit] ?? 1));
+        }
+        if (style.scale !== 'none') {
+          const [sx = 1, sy = sx] = style.scale.split(' ').map(Number);
+          matrix.scaleSelf(sx, sy);
+        }
+        if (style.transform !== 'none') {
+          matrix.multiplySelf(new DOMMatrix(style.transform));
+        }
+        const {a, b, c, d, e, f} = matrix;
+        return {
+          t,
+          matrix: `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`,
+          transform: style.transform,
+          translate: style.translate,
+          rotate: style.rotate,
+          scale: style.scale,
+          opacity: style.opacity,
+        };
       });
     },
     {ts: [...times], inset: END_INSET_MS},
   );
   return raw.map(r => ({
     t: r.t,
-    transform: parseTransform(r.transform),
+    transform: parseTransform(r.matrix),
     opacity: Number(r.opacity),
-    raw: {transform: r.transform, opacity: r.opacity},
+    raw: {
+      transform: r.transform,
+      translate: r.translate,
+      rotate: r.rotate,
+      scale: r.scale,
+      opacity: r.opacity,
+    },
   }));
 }
 
@@ -208,7 +331,10 @@ export function curveOf(
 export interface ActiveAnimation {
   readonly kind: string;
   readonly name: string | null;
-  /** Epoch ms when the active interval starts and ends (page clock). */
+  /**
+   * Epoch ms (page clock) when the animation's curve starts and ends. A held
+   * end value (see `HeldAnimation.curveEndMs`) is not part of the curve.
+   */
   readonly from: number;
   readonly to: number;
   readonly durationMs: number;
@@ -230,8 +356,12 @@ export async function waitForAnimation(
   }: {timeout?: number; minProgressMs?: number} = {},
 ): Promise<ActiveAnimation[]> {
   const deadline = Date.now() + timeout;
+  await installCurveEnd(locator.page());
   for (;;) {
     const found = await locator.evaluate((element, minProgress) => {
+      const curveEnd = (
+        window as unknown as {__harnessCurveEnd: (a: Animation) => number}
+      ).__harnessCurveEnd;
       return element
         .getAnimations({subtree: true})
         .filter(
@@ -243,10 +373,7 @@ export async function waitForAnimation(
         .map(a => {
           const effect = a.effect as KeyframeEffect | null;
           const timing = effect?.getComputedTiming();
-          const start =
-            performance.timeOrigin +
-            Number(a.startTime) +
-            Number(timing?.delay ?? 0);
+          const startedAt = performance.timeOrigin + Number(a.startTime);
           const name =
             'transitionProperty' in a
               ? (a as unknown as {transitionProperty: string})
@@ -257,8 +384,8 @@ export async function waitForAnimation(
           return {
             kind: a.constructor.name,
             name,
-            from: start,
-            to: start + Number(timing?.activeDuration ?? 0),
+            from: startedAt + Number(timing?.delay ?? 0),
+            to: startedAt + curveEnd(a),
             durationMs: Number(timing?.duration ?? 0),
             easing: String(effect?.getTiming().easing ?? 'linear'),
             keyframes: (effect?.getKeyframes() ?? []).map(
@@ -278,36 +405,63 @@ export async function waitForAnimation(
 }
 
 /**
- * Resolves once nothing animates on `locator`'s element (or inside it) and its
- * transform has held still for two frames: the element is at rest.
+ * Resolves once `locator`'s element is at rest: no animation on it (or inside
+ * it) is pending or still before the end of its curve, and its presented
+ * `transform`, `translate`, `rotate`, `scale` and `opacity` (and `::backdrop`
+ * opacity) have held still for `frames` consecutive frames.
+ *
+ * It judges curves and presented values, not `playState`: an animation that
+ * holds its end value (a run of identical final keyframes kept so a later
+ * interruption can read it) still reports `running` while nothing moves.
  */
 export async function waitForRest(
   locator: Locator,
-  {timeout = 5_000}: {timeout?: number} = {},
+  {timeout = 5_000, frames = 3}: {timeout?: number; frames?: number} = {},
 ): Promise<void> {
+  await installCurveEnd(locator.page());
   await locator.evaluate(
-    (element, ms) =>
+    (element, {ms, need}) =>
       new Promise<void>((resolve, reject) => {
         const deadline = performance.now() + ms;
-        let last = '';
+        const curveEnd = (
+          window as unknown as {__harnessCurveEnd: (a: Animation) => number}
+        ).__harnessCurveEnd;
+        const read = () => {
+          const style = getComputedStyle(element);
+          const backdrop = getComputedStyle(element, '::backdrop').opacity;
+          return [
+            style.transform,
+            style.translate,
+            style.rotate,
+            style.scale,
+            style.opacity,
+            backdrop,
+          ].join(' | ');
+        };
+        let last = read();
         let still = 0;
         const tick = () => {
-          const transform = getComputedStyle(element).transform;
-          const animating = element
+          const now = read();
+          const moving = element
             .getAnimations({subtree: true})
-            .some(a => a.playState === 'running');
-          still = !animating && transform === last ? still + 1 : 0;
-          last = transform;
-          if (still >= 2) {
+            .some(
+              a =>
+                a.pending ||
+                (a.playState === 'running' &&
+                  Number(a.currentTime ?? 0) < curveEnd(a)),
+            );
+          still = !moving && now === last ? still + 1 : 0;
+          last = now;
+          if (still >= need) {
             resolve();
           } else if (performance.now() > deadline) {
-            reject(new Error('waitForRest: still moving'));
+            reject(new Error(`waitForRest: still moving (${now})`));
           } else {
             requestAnimationFrame(tick);
           }
         };
         requestAnimationFrame(tick);
       }),
-    timeout,
+    {ms: timeout, need: frames},
   );
 }
