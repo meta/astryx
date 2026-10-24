@@ -181,13 +181,20 @@ at once on a cancel; the marker's value picks the profile (empty or
 A touch that brakes a list the finger set moving paints nothing. A value the
 consumer did not write (a row kept `held` through a navigation push) is
 never overwritten or cleared. Installs are counted per attribute, so every
-component can call the hook.
+component can call the hook. The default attribute pair is the one the
+document press controller (`installPressFeedback`, behind
+`usePressFeedback`) writes: while that controller is installed, the
+delegated press on the same attribute stays idle, with one development
+warning, so two writers never fight over the paint. Pass another
+`attribute` and `pressedAttribute`, or uninstall the controller.
 
 ## What the browser is told
 
 - **`touch-action`.** Each element gets the intersection of what its
-  recognizers leave the browser. It is set inline on attach and restored on
-  detach (opt out with `manageStyle: false`):
+  recognizers leave the browser, and never more than the element's own
+  value allows: a caller's explicit `touch-action` (a trigger's `none`)
+  stays in force, as the intersection of both. It is set inline on attach
+  and restored on detach (opt out with `manageStyle: false`):
 
   | Recognizers on the element                         | `touch-action`      |
   | -------------------------------------------------- | ------------------- |
@@ -223,8 +230,13 @@ component can call the hook.
   long press that then drags, a pinch, a rotation) has a non-passive
   `touchmove` listener that cancels the event only while one of its touches
   is owned. A touch nobody owns scrolls exactly as it would without the
-  system. Taps claim only at the lift, so an element with only taps, or only
-  a press consumer, gets no such listener (see the known limit below).
+  system. Taps claim only at the lift, and a recognizer that never claims
+  (`claimsTouches` false, such as a pull that only watches the scroll) never
+  owns a touch, so an element with only those, or only a press consumer,
+  gets no such listener (see the known limit below). The listener the host
+  adds to a finger's target at touch-down, for a target that leaves the
+  document mid-gesture, is passive too unless a recognizer on that touch can
+  claim while it moves.
 - **Early claim.** A one-way pan over content the browser could scroll (an
   overlay such as a toast or a banner) cancels its touch's moves once the
   finger has gone 5 px its way (`claimDistance`), before WebKit claims a
@@ -245,7 +257,11 @@ component can call the hook.
   scrolling therefore decides at 10 px or less (the toast's swipe decides at
   8).
 - **The browser's claim.** `pointercancel` on a finger, or a scroll above
-  the touch, means the browser took the finger; so does its first `touchmove`
+  the touch once the finger has travelled the slop (the browser starts a pan
+  no earlier), means the browser took the finger; a scroll under a finger
+  that has not moved (scrollIntoView, a transcript pinned to its end, scroll
+  anchoring) is the page's own and leaves the press and its click alone. So
+  does its first `touchmove`
   that can no longer be cancelled, when the browser could pan along the
   finger's main axis. (Chromium also stops asking after one unconsumed
   `touchmove` when `touch-action` keeps it from panning that way, as for a
@@ -285,7 +301,8 @@ scrollers under the finger. This is the sheet over its own list:
 
 "Could scroll" follows the browser's own rules: `touch-action` between the
 touch and each scroller, scroll chaining stopped by `overscroll-behavior`,
-and RTL `scrollLeft` ranges.
+and RTL `scrollLeft` ranges, along the flat tree (content slotted into a
+shadow-tree scroller scrolls with it, as the hit path does).
 
 ### Multiple fingers
 
@@ -430,7 +447,9 @@ tokens under a mouse.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
   Chromium (CDP touches with timestamps) and WebKit (its own touch input).
-  Run it with
+  CI runs it in Chromium in the interaction lane
+  (`pnpm test:interaction --project chromium`, `playwright.interaction.config.ts`).
+  Run both engines with
   `pnpm exec playwright test --config packages/core/src/gestures/__tests__/browser/playwright.config.ts`;
   where WebKit cannot launch on the host, its project runs in the official
   Playwright image (see the config header). The same fixture passed in

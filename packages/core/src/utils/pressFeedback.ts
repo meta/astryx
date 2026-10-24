@@ -456,6 +456,14 @@ function removeListeners(): void {
  *   are reset with them, so a later install never inherits a gesture that
  *   never happened.
  */
+/**
+ * Whether the touch press controller is installed: the delegated press of
+ * gestures/delegatedPress.ts stays off the same attribute while it is.
+ */
+export function isPressFeedbackInstalled(): boolean {
+  return holders > 0;
+}
+
 export function installPressFeedback(): () => void {
   if (typeof window === 'undefined') {
     return () => undefined;
