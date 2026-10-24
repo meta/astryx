@@ -142,6 +142,27 @@ export interface GestureHostOptions {
   onTransition?: GestureArenaOptions['onTransition'];
 }
 
+/**
+ * How far a finger travels before a page-scroll hold judges its pan, in CSS
+ * px: enough that a swipe's first sample (a 2 px by 2 px wobble) does not fix
+ * the wrong axis, and still under WebKit's 10–11 px scroll claim, so the
+ * verdict comes before the browser commits to a scroll.
+ */
+const PAGE_HOLD_SLOP = 5;
+
+/**
+ * Decides, once per one-finger touch, whether its pan would scroll the page:
+ * `origin` is the innermost node under the finger (the composed path's first
+ * node, so a scroller inside a shadow root is seen), `dx` and `dy` the touch's
+ * movement once it clears a small slop. True cancels the touch's moves for as
+ * long as it lasts.
+ */
+export type PageScrollDecision = (
+  origin: EventTarget | null,
+  dx: number,
+  dy: number,
+) => boolean;
+
 export interface AttachOptions {
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
@@ -276,6 +297,15 @@ export class GestureHost {
   /** The last scroll a finger drove, and when. */
   private lastScroll: {readonly scroller: Node; readonly time: number} | null =
     null;
+  /** Page-scroll holds; while any is held, page pans under a finger are judged. */
+  private readonly pageHolds = new Set<{readonly decide: PageScrollDecision}>();
+  /** The one finger of the gesture the page-scroll holds are judging. */
+  private pageHoldTouch: {
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+    verdict: boolean | null;
+  } | null = null;
   private nextId = 1;
   private isInstalled = false;
   private readonly inputMode: 'auto' | 'pointer-events';
@@ -365,6 +395,52 @@ export class GestureHost {
     return () => {
       this.delegated.delete(type);
       this.uninstallIfIdle();
+    };
+  }
+
+  /**
+   * Hold the page still under a finger until the returned release runs. A
+   * one-finger pan that `decide` says would scroll the page, and that no
+   * recognizer owns, is cancelled for the rest of its touch; a second finger
+   * (pinch-zoom) never is. Holds stack. Only while one is held does the host
+   * listen with a non-passive `touchmove`, so a scroll lock costs nothing
+   * once it is released, and a touch scrolls as without the system.
+   */
+  holdPageScroll(decide: PageScrollDecision): () => void {
+    const hold = {decide};
+    this.pageHolds.add(hold);
+    if (this.pageHolds.size === 1) {
+      this.doc.addEventListener(
+        'touchstart',
+        this.onHoldTouchStart,
+        PASSIVE_CAPTURE,
+      );
+      this.doc.addEventListener(
+        'touchmove',
+        this.onHoldTouchMove,
+        ACTIVE_CAPTURE,
+      );
+    }
+    let isHeld = true;
+    return () => {
+      if (!isHeld) {
+        return;
+      }
+      isHeld = false;
+      this.pageHolds.delete(hold);
+      if (this.pageHolds.size === 0) {
+        this.doc.removeEventListener(
+          'touchstart',
+          this.onHoldTouchStart,
+          PASSIVE_CAPTURE,
+        );
+        this.doc.removeEventListener(
+          'touchmove',
+          this.onHoldTouchMove,
+          ACTIVE_CAPTURE,
+        );
+        this.pageHoldTouch = null;
+      }
     };
   }
 
@@ -783,6 +859,55 @@ export class GestureHost {
       }
     }
     this.feedMoves(inputs);
+  };
+
+  private readonly onHoldTouchStart = (event: TouchEvent): void => {
+    const fingers = touchesOf(event.touches);
+    const finger = fingers[0];
+    this.pageHoldTouch =
+      fingers.length === 1 && finger != null
+        ? {
+            id: finger.identifier,
+            x: finger.clientX,
+            y: finger.clientY,
+            verdict: null,
+          }
+        : null;
+  };
+
+  private readonly onHoldTouchMove = (event: TouchEvent): void => {
+    const fingers = touchesOf(event.touches);
+    const current = this.pageHoldTouch;
+    const finger = fingers[0];
+    // A second finger is a pinch: zooming the page stays available.
+    if (
+      fingers.length !== 1 ||
+      finger == null ||
+      current == null ||
+      finger.identifier !== current.id
+    ) {
+      return;
+    }
+    // A recognizer that owns the touch decides about its moves itself.
+    const id = this.touchIds.get(current.id);
+    if (id != null && this.arena.isClaimed(id)) {
+      return;
+    }
+    if (current.verdict == null) {
+      const dx = finger.clientX - current.x;
+      const dy = finger.clientY - current.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < PAGE_HOLD_SLOP) {
+        return;
+      }
+      // The browser picks the scroller once per gesture; so do the holds.
+      const origin = event.composedPath()[0] ?? event.target;
+      current.verdict = [...this.pageHolds].some(hold =>
+        hold.decide(origin, dx, dy),
+      );
+    }
+    if (current.verdict && event.cancelable) {
+      event.preventDefault();
+    }
   };
 
   /** Cancel a `touchmove` while a recognizer owns one of its fingers. */

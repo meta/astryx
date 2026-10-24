@@ -326,6 +326,19 @@ touch and each scroller, scroll chaining stopped by `overscroll-behavior`,
 and RTL `scrollLeft` ranges, along the flat tree (content slotted into a
 shadow-tree scroller scrolls with it, as the hit path does).
 
+### Holding the page still
+
+A scroll lock (`useScrollLock`) holds the page through the host:
+`getGestureHost(document).holdPageScroll(decide)` returns the release. While
+any hold is active, the host listens to the document with a non-passive
+`touchmove`. Once per one-finger touch that no recognizer owns, after the
+finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
+`decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
+being the innermost node under the finger (the composed path's first node),
+and cancels the touch's moves for its whole length if so. A second finger is
+never cancelled, so pinch-zoom keeps working. With no hold, the listener is
+gone and every touch scrolls as without the system.
+
 ### Multiple fingers
 
 A second finger never breaks a one-finger pan that is already moving: the

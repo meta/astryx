@@ -1071,3 +1071,127 @@ describe('GestureHost', () => {
     expect(host.arena.touches).toEqual([]);
   });
 });
+
+describe('holdPageScroll', () => {
+  const at = (id: number, x: number, y: number) => [{id, x, y}];
+
+  it('cancels a one-finger pan the decision says would scroll the page, for the rest of its touch', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    const decide = vi.fn(() => true);
+    detachers.push(host.holdPageScroll(decide));
+
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
+    const first = touch(
+      'touchmove',
+      scrim,
+      at(1, 100, 250),
+      at(1, 100, 250),
+      16,
+    );
+    const second = touch(
+      'touchmove',
+      scrim,
+      at(1, 100, 200),
+      at(1, 100, 200),
+      32,
+    );
+
+    expect(first.defaultPrevented).toBe(true);
+    expect(second.defaultPrevented).toBe(true);
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledWith(scrim, 0, -50);
+  });
+
+  it('judges a pan once it clears the slop, so a first wobble does not fix its axis', () => {
+    const {strip} = mount('<div id="strip"></div>');
+    const decide = vi.fn((_origin: EventTarget | null, dx: number) => dx === 0);
+    detachers.push(host.holdPageScroll(decide));
+
+    touch('touchstart', strip, at(1, 100, 300), at(1, 100, 300), 0);
+    const wobble = touch(
+      'touchmove',
+      strip,
+      at(1, 102, 302),
+      at(1, 102, 302),
+      16,
+    );
+    const swipe = touch(
+      'touchmove',
+      strip,
+      at(1, 110, 303),
+      at(1, 110, 303),
+      32,
+    );
+
+    expect(wobble.defaultPrevented).toBe(false);
+    expect(decide).toHaveBeenCalledTimes(1);
+    expect(decide).toHaveBeenCalledWith(strip, 10, 3);
+    expect(swipe.defaultPrevented).toBe(false);
+  });
+
+  it('lets a pan through when the decision says something under the finger takes it', () => {
+    const {list} = mount('<div id="list"></div>');
+    detachers.push(host.holdPageScroll(() => false));
+
+    touch('touchstart', list, at(1, 100, 300), at(1, 100, 300), 0);
+    expect(
+      touch('touchmove', list, at(1, 100, 250), at(1, 100, 250), 16)
+        .defaultPrevented,
+    ).toBe(false);
+  });
+
+  it('never cancels a two-finger gesture, so pinch-zoom keeps working', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    const decide = vi.fn(() => true);
+    detachers.push(host.holdPageScroll(decide));
+    const both = [
+      {id: 1, x: 100, y: 300},
+      {id: 2, x: 200, y: 300},
+    ];
+
+    touch('touchstart', scrim, both, both, 0);
+    const moved = [
+      {id: 1, x: 90, y: 300},
+      {id: 2, x: 210, y: 300},
+    ];
+    expect(touch('touchmove', scrim, moved, moved, 16).defaultPrevented).toBe(
+      false,
+    );
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it('hands the decision the innermost node of a touch inside a shadow root', () => {
+    const {outer} = mount('<div id="outer"></div>');
+    const inner = document.createElement('div');
+    outer.attachShadow({mode: 'open'}).append(inner);
+    const decide = vi.fn(() => false);
+    detachers.push(host.holdPageScroll(decide));
+
+    touch('touchstart', inner, at(1, 100, 300), at(1, 100, 300), 0);
+    touch('touchmove', inner, at(1, 100, 250), at(1, 100, 250), 16);
+
+    expect(decide).toHaveBeenCalledWith(inner, 0, -50);
+  });
+
+  it('stacks holds and stops judging pans once the last one is released', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    const releaseFirst = host.holdPageScroll(() => true);
+    const releaseSecond = host.holdPageScroll(() => true);
+    const pan = (time: number) => {
+      touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), time);
+      return touch(
+        'touchmove',
+        scrim,
+        at(1, 100, 250),
+        at(1, 100, 250),
+        time + 16,
+      ).defaultPrevented;
+    };
+
+    releaseFirst();
+    expect(pan(0)).toBe(true);
+    releaseSecond();
+    releaseSecond();
+    expect(pan(100)).toBe(false);
+  });
+});
