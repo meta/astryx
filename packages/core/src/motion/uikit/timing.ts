@@ -11,7 +11,7 @@
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
  * measured | GUESS); webkit and GUESS values also carry the `@measure` task
- * that will confirm or replace them (motion/README.md). sources.test.ts
+ * that will confirm or replace them (MEASUREMENTS.md). uikit.test.ts
  * enforces both.
  *
  * Durations are in ms (the unit of pointer-event timestamps, which these

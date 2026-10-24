@@ -11,15 +11,14 @@
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
  * measured | GUESS); webkit and GUESS values also carry the `@measure` task
- * that will confirm or replace them (motion/README.md lists them all).
- * sources.test.ts enforces both.
+ * that will confirm or replace them (MEASUREMENTS.md lists them all).
+ * uikit.test.ts enforces both.
  *
- * Most interaction springs below are GUESSES today: UIKit does not document
- * the springs of its own transitions, and the simulator measurements that
- * will replace them (method in motion/README.md) have not run yet. Each
- * guess starts from the nearest sourced spring and names it, so a component
- * built on the table gets the right value the moment the measurement lands,
- * without changing.
+ * Most springs are measured on iOS 26.2 or documented by Apple; two are still
+ * GUESSES (`segmentedThumb`, `banner`) and two come from WebKit
+ * (`switchThumbMove`, `switchThumbStretch`). A guess starts from the
+ * nearest sourced spring and names it, so a component built on the table
+ * gets the right value the moment its measurement lands, without changing.
  *
  * Press highlight in/out are fades, not springs: see timing.ts.
  *
@@ -28,9 +27,8 @@
  */
 
 /**
- * UIKit's default spring (see `springs.uikitDefault` for its sources). The
- * guesses below start from it: the system-driven transitions it is believed
- * to drive until each is measured.
+ * UIKit's default spring (see `springs.uikitDefault` for its sources), shared
+ * by the system transitions measured to run on it.
  */
 const UIKIT_DEFAULT_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
 
@@ -282,7 +280,8 @@ export const springs = {
    *   `thumbMoveSpring = SpringSolver(1.0, 438.649…, 31.4159…)`, "Values
    *   chosen for consistency with UIKit" (= response 0.30 s, ratio 0.75);
    *   its settling duration is WebKit's iOS switch duration 0.48801 s
-   *   (RenderThemeIOS.h)
+   *   (RenderThemeIOS.h). These are WebKit's iOS 18 values: UIKit's own
+   *   switch frames differ, and a switch reads its measured table instead.
    * @measure M-SW02
    */
   switchThumbMove: {response: 0.3, dampingRatio: 0.75},
@@ -291,7 +290,8 @@ export const springs = {
    * @source webkit Source/WebCore/rendering/cocoa/RenderThemeCocoa.mm
    *   `thumbPressSpring = SpringSolver(1.0, 322.272…, 31.2364…)`, "Values
    *   chosen for consistency with UIKit" (= response 0.35 s, ratio 0.87);
-   *   settles in WebKit's held duration 0.50740 s (RenderThemeIOS.h)
+   *   settles in WebKit's held duration 0.50740 s (RenderThemeIOS.h). As
+   *   for `switchThumbMove`, UIKit's own frames differ.
    * @measure M-SW03
    */
   switchThumbStretch: {response: 0.35, dampingRatio: 0.87},
