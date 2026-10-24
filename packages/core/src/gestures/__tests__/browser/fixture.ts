@@ -17,6 +17,7 @@ import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
+import {internals} from '../../recognizerInternals';
 
 interface Entry {
   name: string;
@@ -104,7 +105,7 @@ function record(recognizer: GestureRecognizer, extra: () => Partial<Entry>) {
     window.__gestures.push({
       name: current.name,
       state: to,
-      time: current.arena?.now() ?? performance.now(),
+      time: internals(current).arena?.now() ?? performance.now(),
       ...(to === 'possible' || to === 'failed' ? {} : extra()),
     });
   });

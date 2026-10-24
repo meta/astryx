@@ -26,7 +26,11 @@
  *   light impact at the moment of the tap. The switch itself never takes the
  *   touch (`pointer-events: none`; WebKit marks a switch's `touchstart`
  *   handled, which would stop a pan starting on it from scrolling the page),
- *   and its own events never reach the page.
+ *   its own events never bubble to the page (capture-phase listeners still
+ *   see its click; the gesture host's click swallower skips it by
+ *   attribute), and focus the label's activation gives it goes straight
+ *   back, so a later Space never toggles it. A label that already labels
+ *   another control gets no switch: its activation goes to that control.
  * - `playHaptic(kind)` vibrates where `navigator.vibrate` exists (Android
  *   browsers) with the kind's pattern, and does nothing elsewhere.
  *
@@ -87,6 +91,24 @@ function swallow(event: Event): void {
 }
 
 /**
+ * The label's activation focuses its control (Chromium does): give focus
+ * back to where it was, or drop it, so keys never reach the hidden switch.
+ */
+function handBackFocus(event: FocusEvent): void {
+  const input = event.currentTarget as HTMLInputElement;
+  const previous = event.relatedTarget;
+  if (
+    previous instanceof HTMLElement &&
+    previous !== input &&
+    previous.isConnected
+  ) {
+    previous.focus({preventScroll: true});
+  } else {
+    input.blur();
+  }
+}
+
+/**
  * Make every real tap on `label` play iOS Safari's light impact, by giving it
  * a hidden switch to toggle. Returns a function that removes the switch.
  * Harmless where switches have no haptics.
@@ -104,14 +126,22 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   // The label's activation clicks the switch, and that click would bubble
   // through the control as a second click: keep it, and the switch's
   // change events, inside.
+  label.appendChild(input);
+  if (label.control != null && label.control !== input) {
+    // The label already labels another control (a nested one, or `for`):
+    // its activation goes there, and this switch would never toggle.
+    input.remove();
+    return () => undefined;
+  }
   input.addEventListener('click', swallow);
   input.addEventListener('change', swallow);
   input.addEventListener('input', swallow);
-  label.appendChild(input);
+  input.addEventListener('focus', handBackFocus);
   return () => {
     input.removeEventListener('click', swallow);
     input.removeEventListener('change', swallow);
     input.removeEventListener('input', swallow);
+    input.removeEventListener('focus', handBackFocus);
     input.remove();
   };
 }

@@ -164,3 +164,239 @@ describe('usePressTracker', () => {
     expect(events).toEqual(['touchDown', 'touchUpInside']);
   });
 });
+
+function Swappable({
+  as,
+  onPan,
+}: {
+  as: 'none' | 'div' | 'span';
+  onPan: (recognizer: PanGestureRecognizer) => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  useGestureRecognizer(
+    ref,
+    () => new PanGestureRecognizer({direction: 'horizontal'}),
+    onPan,
+  );
+  if (as === 'none') {
+    return null;
+  }
+  return as === 'div' ? (
+    <div data-testid="node" ref={ref as React.RefObject<HTMLDivElement>} />
+  ) : (
+    <span data-testid="node" ref={ref} />
+  );
+}
+
+describe('useGestureRecognizer follows the element behind its ref', () => {
+  it('attaches to a node rendered after mount, and to a node swapped behind the same ref', () => {
+    const states: string[] = [];
+    const onPan = (r: PanGestureRecognizer) => states.push(r.state);
+    const {getByTestId, rerender} = render(
+      <Swappable as="none" onPan={onPan} />,
+    );
+    rerender(<Swappable as="div" onPan={onPan} />);
+    const first = getByTestId('node');
+    touch('touchstart', first, {id: 1, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 1, x: 30, y: 0}, 16);
+    touch('touchend', first, {id: 1, x: 30, y: 0}, 32, true);
+    expect(states).toContain('began');
+    states.length = 0;
+    rerender(<Swappable as="span" onPan={onPan} />);
+    const second = getByTestId('node');
+    expect(second).not.toBe(first);
+    touch('touchstart', second, {id: 2, x: 0, y: 0}, 100);
+    touch('touchmove', second, {id: 2, x: 30, y: 0}, 116);
+    touch('touchend', second, {id: 2, x: 30, y: 0}, 132, true);
+    expect(states).toContain('began');
+    // The detached node no longer drives it.
+    states.length = 0;
+    touch('touchstart', first, {id: 3, x: 0, y: 0}, 200);
+    touch('touchmove', first, {id: 3, x: 30, y: 0}, 216);
+    touch('touchend', first, {id: 3, x: 30, y: 0}, 232, true);
+    expect(states).toEqual([]);
+  });
+
+  it('reports nothing from cleanup when it unmounts mid-gesture', () => {
+    const states: string[] = [];
+    const {getByTestId, unmount} = render(
+      <Draggable onPan={r => states.push(r.state)} />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 5, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 5, x: 30, y: 0}, 16);
+    expect(states).toEqual(['began']);
+    unmount();
+    expect(states).toEqual(['began']);
+  });
+});
+
+function LaterButton({
+  isShown,
+  onEvent,
+  onHighlight,
+  isBraking,
+  highlightDelay,
+}: {
+  isShown: boolean;
+  onEvent?: (event: ControlEvent) => void;
+  onHighlight?: (isOn: boolean) => void;
+  isBraking?: () => boolean;
+  highlightDelay?: 'inScrollers' | 'always' | 'never';
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+  usePressTracker(ref, {
+    onControlEvent: event => onEvent?.(event),
+    onHighlightChange: isOn => onHighlight?.(isOn),
+    isBraking,
+    highlightDelay,
+  });
+  return isShown ? (
+    <button data-testid="stepper" ref={ref} type="button">
+      +
+    </button>
+  ) : null;
+}
+
+describe('usePressTracker follows its element and its options', () => {
+  it('tracks a node rendered after mount', () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId, rerender} = render(
+      <LaterButton isShown={false} onEvent={event => events.push(event)} />,
+    );
+    rerender(<LaterButton isShown onEvent={event => events.push(event)} />);
+    const stepper = getByTestId('stepper');
+    touch('touchstart', stepper, {id: 1, x: 2, y: 2}, 0);
+    touch('touchend', stepper, {id: 1, x: 2, y: 2}, 60, true);
+    expect(events).toContain('touchUpInside');
+  });
+
+  it("uses the caller's brake", () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId} = render(
+      <LaterButton
+        isShown
+        isBraking={() => true}
+        onEvent={event => events.push(event)}
+      />,
+    );
+    const stepper = getByTestId('stepper');
+    touch('touchstart', stepper, {id: 1, x: 2, y: 2}, 0);
+    touch('touchend', stepper, {id: 1, x: 2, y: 2}, 60, true);
+    expect(events).not.toContain('touchDown');
+    expect(events).not.toContain('touchUpInside');
+  });
+
+  it('takes a highlight delay changed after mount from the next touch', () => {
+    vi.useFakeTimers();
+    const highlights: boolean[] = [];
+    const {getByTestId, rerender} = render(
+      <LaterButton
+        isShown
+        highlightDelay="never"
+        onHighlight={isOn => highlights.push(isOn)}
+      />,
+    );
+    rerender(
+      <LaterButton
+        isShown
+        highlightDelay="always"
+        onHighlight={isOn => highlights.push(isOn)}
+      />,
+    );
+    const stepper = getByTestId('stepper');
+    touch('touchstart', stepper, {id: 1, x: 2, y: 2}, 0);
+    // 'always' waits the content-touch delay before highlighting.
+    expect(highlights).toEqual([]);
+    touch('touchend', stepper, {id: 1, x: 2, y: 2}, 400, true);
+    vi.useRealTimers();
+  });
+
+  it('calls no callback from cleanup when it unmounts while highlighted', () => {
+    const highlights: boolean[] = [];
+    const {getByTestId, unmount} = render(
+      <LaterButton
+        isShown
+        highlightDelay="never"
+        onHighlight={isOn => highlights.push(isOn)}
+      />,
+    );
+    const stepper = getByTestId('stepper');
+    touch('touchstart', stepper, {id: 1, x: 2, y: 2}, 0);
+    expect(highlights).toEqual([true]);
+    unmount();
+    expect(highlights).toEqual([true]);
+  });
+});
+
+function boundsOf(element: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      left: 0,
+      top: 0,
+      right: width,
+      bottom: height,
+      width,
+      height,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
+function SwappedColumn({
+  which,
+  freshRef,
+  onEvent,
+}: {
+  which: 'a' | 'b';
+  freshRef: boolean;
+  onEvent: (event: ControlEvent) => void;
+}) {
+  const stableRef = useRef<HTMLButtonElement>(null);
+  const fresh = {current: null as HTMLButtonElement | null};
+  const ref = freshRef ? fresh : stableRef;
+  usePressTracker(ref, {onControlEvent: event => onEvent(event)});
+  return which === 'a' ? (
+    <button key="a" data-testid="a" ref={ref} type="button">
+      A
+    </button>
+  ) : (
+    <button key="b" data-testid="b" ref={ref} type="button">
+      B
+    </button>
+  );
+}
+
+describe('usePressTracker hit-tests the element behind its ref now', () => {
+  for (const freshRef of [false, true]) {
+    it(`judges a lift against the swapped node's bounds (${freshRef ? 'a new ref object' : 'the same ref'})`, () => {
+      const events: ControlEvent[] = [];
+      const {getByTestId, rerender} = render(
+        <SwappedColumn
+          which="a"
+          freshRef={freshRef}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      rerender(
+        <SwappedColumn
+          which="b"
+          freshRef={freshRef}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      const b = getByTestId('b');
+      boundsOf(b, 100, 40);
+      touch('touchstart', b, {id: 1, x: 10, y: 10}, 0);
+      // Far outside B, past the tracking expansion.
+      touch('touchmove', b, {id: 1, x: 400, y: 400}, 16);
+      touch('touchend', b, {id: 1, x: 400, y: 400}, 32, true);
+      expect(events).toContain('touchDown');
+      expect(events).toContain('touchUpOutside');
+      expect(events).not.toContain('touchUpInside');
+    });
+  }
+});

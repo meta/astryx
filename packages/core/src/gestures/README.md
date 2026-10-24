@@ -43,9 +43,19 @@ function Sheet() {
 - The listener is read through a ref. Passing a new function on each render
   attaches nothing new, and a gesture never causes a React render.
 - The recognizer attaches in a layout effect, so the element's `touch-action`
-  is set before the browser can see a finger.
+  is set before the browser can see a finger. It follows the element behind
+  the ref: a node rendered after mount, or swapped behind the same ref (a
+  trigger rendered `as` another element), is attached at that commit.
+- `isEnabled: false` mid-gesture cancels it, and the listener hears
+  `cancelled`, as UIKit sends `.cancelled` when `isEnabled` turns off. After
+  unmount the listener hears nothing, not even the cancellation of a
+  gesture the unmount ended.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
-  (see below).
+  (see below). It follows its element the same way, takes `isBraking` (by
+  default the host's: a touch that stops a flick presses nothing), and
+  rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
+  `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
+  calls neither `onHighlightChange` nor `onControlEvent`.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
 the same and returns a detach function.
@@ -116,7 +126,10 @@ each one that accepts it tracks it until it ends. Then:
   The delegates `shouldRequireFailureOf` and `shouldBeRequiredToFailBy`
   express the same thing dynamically.
 - **Delegates.** `shouldBegin`, `shouldReceiveTouch`, and `canPrevent` /
-  `canBePrevented` on subclasses.
+  `canBePrevented` on subclasses. The arena's plumbing (touch delivery,
+  approved transitions, a pending recognition) is `protected`: a subclass
+  overrides the `touches*` handlers and sets `state`, and only the gesture
+  system drives the rest.
 
 ```ts
 // Single tap waits for the double tap to fail, as in UIKit.
@@ -347,7 +360,9 @@ pattern per UIKit feedback kind. iOS Safari has no vibration API. It plays a
 light impact only when a real tap toggles an `<input type="checkbox"
 switch>`, and WebKit requires a trusted event for it. `attachTapHaptic(label)`
 puts a hidden switch inside a label the control renders as its tap target,
-so every real tap on it plays that impact. Nothing can play a haptic later
+so every real tap on it plays that impact; focus the activation gives the
+switch goes straight back, and a label that already labels another control
+gets no switch. Nothing can play a haptic later
 from script, so mid-drag haptics (detent snaps, picker ticks) are not
 possible in iOS Safari.
 

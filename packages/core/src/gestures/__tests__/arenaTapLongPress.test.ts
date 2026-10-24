@@ -16,6 +16,7 @@ import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {createHarness, RecordingConsumer} from './harness';
+import {internals} from '../recognizerInternals';
 
 const INTERVAL = UIKIT_GESTURES.tap.maximumIntervalBetweenTaps.value;
 
@@ -31,7 +32,7 @@ describe('conflict matrix', () => {
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(80);
     expect(single.state).toBe('possible');
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
     h.advance(80 + INTERVAL);
     expect(h.log).toEqual([
       `double:failed@${80 + INTERVAL}`,
@@ -95,7 +96,7 @@ describe('conflict matrix', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
   });
 });
 

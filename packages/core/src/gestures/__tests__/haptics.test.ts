@@ -99,6 +99,34 @@ describe('attachTapHaptic', () => {
     expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
   });
 
+  it('hands focus back from the switch, so a later key never toggles it', () => {
+    document.body.innerHTML = '<input id="field" /><label id="tap">Tap</label>';
+    const label = document.getElementById('tap') as HTMLLabelElement;
+    const field = document.getElementById('field') as HTMLInputElement;
+    const release = attachTapHaptic(label);
+    const sw = label.querySelector(
+      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
+    ) as HTMLInputElement;
+    field.focus();
+    // The label's activation focuses its control.
+    sw.focus();
+    expect(document.activeElement).toBe(field);
+    field.blur();
+    sw.focus();
+    expect(document.activeElement).not.toBe(sw);
+    release();
+  });
+
+  it('gives no switch to a label that already labels another control', () => {
+    document.body.innerHTML =
+      '<label id="tap"><button id="go" type="button">Go</button></label>';
+    const label = document.getElementById('tap') as HTMLLabelElement;
+    const release = attachTapHaptic(label);
+    expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
+    expect(label.control).toBe(document.getElementById('go'));
+    release();
+  });
+
   it('reports whether the browser knows the switch control', () => {
     // jsdom has no `switch` property on checkbox inputs, like browsers
     // before Safari 17.4.

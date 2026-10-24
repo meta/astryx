@@ -111,6 +111,7 @@ import type {
   TouchInput,
   TouchSample,
 } from './types';
+import {internals} from './recognizerInternals';
 import {lockSelection} from './selectionLock';
 
 interface Registration {
@@ -175,7 +176,7 @@ const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
 function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
   return (
     recognizer.claimsTouches &&
-    recognizer.acceptsTouchInput &&
+    internals(recognizer).acceptsTouchInput &&
     !(recognizer instanceof TapGestureRecognizer)
   );
 }
@@ -639,7 +640,7 @@ export class GestureHost {
         recognizer.preventsTextSelection &&
         // Only a recognizer that would take this touch locks for it.
         recognizer.isEnabled &&
-        recognizer.acceptsTouchInput &&
+        internals(recognizer).acceptsTouchInput &&
         recognizer.view instanceof Element
       ) {
         elements.add(recognizer.view);
