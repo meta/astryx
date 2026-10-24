@@ -38,6 +38,9 @@ const TABLE_FILES = fs
       !TYPED_TABLE_FILES.includes(file),
   )
   .sort();
+/** A measurement names its subject, the iOS version it ran on and its date. */
+const MEASURED =
+  /^@source measured: .*iOS \d.*(\b20\d\d-\d\d-\d\d\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d\d\b)/;
 const SOURCE_KINDS =
   /^@source (apple-docs https:\/\/developer\.apple\.com\/|wwdc \d{4}-\d+ |webkit Source\/|measured: .*iOS \d|GUESS — )/;
 
@@ -136,6 +139,11 @@ describe('UIKit constants table: every value is sourced (law P2)', () => {
       expect(sources.length, `${key} has no @source`).toBeGreaterThan(0);
       for (const source of sources) {
         expect(source, `${key}: unknown source kind`).toMatch(SOURCE_KINDS);
+        if (source.startsWith('@source measured: ')) {
+          expect(source, `${key}: a measurement needs its date`).toMatch(
+            MEASURED,
+          );
+        }
       }
       const needsMeasurement = sources.some(source =>
         /^@source (GUESS|webkit)/.test(source),
@@ -188,6 +196,12 @@ describe('UIKit constants table: typed domains follow the same rules', () => {
   it.each(constants)('%s', (name, constant) => {
     if (constant.source != null) {
       expect(`@source ${constant.source}`, name).toMatch(SOURCE_KINDS);
+      if (constant.source.startsWith('measured: ')) {
+        expect(
+          `@source ${constant.source}`,
+          `${name}: a measurement needs its date`,
+        ).toMatch(MEASURED);
+      }
     } else {
       expect(
         constant.guess,

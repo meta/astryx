@@ -3,8 +3,8 @@
 /**
  * @file gestures.ts
  * @input Nothing: plain data
- * @output Exports UIKIT_GESTURES, the gesture thresholds the gesture system
- *   (../../gestures) reads, each with where the number comes from, and the
+ * @output Exports UIKIT_GESTURES, the gesture thresholds gesture recognizers
+ *   read, each with where the number comes from, and the
  *   GestureConstant type that carries a value and its source
  * @position Gesture half of the UIKit constants table. Springs, scroll
  *   physics and timing live beside it in this folder; no component carries a
@@ -27,8 +27,7 @@
  * tap-to-click, long press, double tap and the start of a page scroll, so
  * many guesses can be settled by measuring Safari itself.
  *
- * SYNC: When modified, update packages/core/src/gestures/README.md (the
- * thresholds section) and packages/core/src/motion/uikit/gestures.test.ts.
+ * SYNC: When modified, update packages/core/src/motion/uikit/gestures.test.ts.
  */
 
 import {scroll} from './scroll';
@@ -95,7 +94,7 @@ const APPLE = 'https://developer.apple.com/documentation/uikit';
  * recognizer state log), iPhone 17 Pro simulator, iOS 26.2, Oct 2026.
  */
 const UIKIT_LAB =
-  'measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed with HID touches';
+  'measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed with HID touches, Oct 23 2026';
 
 /**
  * The repository's own measurement of the touch press model, recorded in
@@ -103,7 +102,7 @@ const UIKIT_LAB =
  * simulator running iOS 26.2, driven with real HID touches, filmed at 60 fps.
  */
 const PRESS_MEASUREMENT =
-  'measured: Settings and Contacts, iOS 26.2 simulator, HID touches filmed at 60 fps (utils/pressGesture.ts)';
+  'measured: Settings and Contacts, iOS 26.2 simulator, HID touches filmed at 60 fps (utils/pressGesture.ts), Oct 6 2026';
 
 /**
  * Safari page scroll is a UIScrollView: the distance at which it claims a
@@ -111,7 +110,7 @@ const PRESS_MEASUREMENT =
  * can still cancel the scroll.
  */
 const SAFARI_SCROLL_CLAIM =
-  'measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag on a scrollable page (1 pt steps): last cancelable touchmove at 10 px, pointercancel and the first uncancelable touchmove at 11 px';
+  'measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag on a scrollable page (1 pt steps): last cancelable touchmove at 10 px, pointercancel and the first uncancelable touchmove at 11 px, Oct 23 2026';
 
 /**
  * UIKit's gesture thresholds and velocity filter, each with its source.
