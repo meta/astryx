@@ -63,9 +63,12 @@ const source = new Map(
   files.map(file => [path.relative(SRC, file), fs.readFileSync(file, 'utf8')]),
 );
 
-const PRESS_ARM = /':active|'\[data-astryx-press=|interactionOverlayStyles\./;
+// A press arm keys on `:active` or on the attribute the controller writes, as
+// a bare attribute selector or inside `:is(…)`.
+const PRESS_ARM =
+  /':active|'(?::is\()?\[data-astryx-press=|interactionOverlayStyles\./;
 const ANCESTOR_ARM =
-  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*\)/g;
+  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*,?\s*\)/g;
 
 function isMarked(file: string): boolean {
   return (source.get(file) ?? '').includes('usePressFeedback(');
@@ -167,8 +170,9 @@ describe('every surface that paints a press is reachable by the touch press cont
 
   it('marks nothing that does not paint a press', () => {
     // The converse: a marker with no arm would ask the controller to write an
-    // attribute nothing reads. Every marked file must paint a press itself or
-    // apply a scope an indicator reads.
+    // attribute nothing reads. Every marked file must paint a press itself,
+    // apply a styles-only module that does, or apply a scope an indicator
+    // reads.
     const marked = [...source.entries()]
       .filter(([, text]) => text.includes('usePressFeedback('))
       .map(([file]) => file)
@@ -181,6 +185,12 @@ describe('every surface that paints a press is reachable by the touch press cont
     const unexplained = marked.filter(file => {
       const text = source.get(file) ?? '';
       if (PRESS_ARM.test(text)) {
+        return false;
+      }
+      const appliesArms = pressArmFiles.some(
+        arms => arms.endsWith('.stylex.ts') && importers(arms).includes(file),
+      );
+      if (appliesArms) {
         return false;
       }
       return ![...scopeNames].some(scope =>

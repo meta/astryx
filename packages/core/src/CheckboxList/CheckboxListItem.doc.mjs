@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Checkbox List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item).',
+    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item). On a touch screen (a coarse primary pointer), a toggleable row is one press target: a touch on the label, the description or the box itself shows the pressed state on the row and its checkbox together. Where the primary pointer is fine, the box keeps its own press.',
   props: [
     {
       name: 'label',
@@ -105,7 +105,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。',
+    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。在触摸屏上，可切换的行是一个整体的按压目标：手指按在标签、描述或复选框本身上，行与其复选框会一起显示按下状态。',
   props: [
     {
       name: 'label',
@@ -177,7 +177,7 @@ export const docsDense = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value.',
+    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value. On a touch screen a toggleable row presses as one target, box included; with a fine primary pointer the box keeps its own press.',
   propDescriptions: {
     align:
       "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
