@@ -9,7 +9,7 @@
  *   surface) and one <SwiftName>Theme.swift per theme declaring
  *   Theme.<swiftName>
  * @position Implements the Swift theme generator spec
- *   (specs/swift/library/theme-generator.md). Run by `generate:swift-ios`; the
+ *   (specs/swift/theme-generator.spec.md). Run by `generate:swift-ios`; the
  *   Swift output is committed and a test fails when any file drifts. CSS
  *   values convert in css-values.mjs; this file turns its notes into
  *   warnings and its errors into a fallback or a failed run (G15).

@@ -38,7 +38,7 @@ system_specs: [spec:AST-082, spec:AST-093]
 | Builder impact          | An app passes a name and an image URL, and optionally tooltip words and an `AvatarStatusDot`. Pixel sizes, `target`, and `rel` have no Swift form; an `href` must be an absolute URL.                                                                                           |
 | Compatibility/readiness | Additive: a new view and generated `AvatarProps`. Draft; built and tested on macOS and the iOS Simulator; device captures are attached to the change.                                                                                                                           |
 | Review checks           | Reject a size or shape beyond the contract, a disabled state, a link or button that draws differently from the static avatar, a layout that grows for the touch target, or a static avatar VoiceOver reads without a name.                                                      |
-| Governing rules         | `spec:AST-082` FR3, FR4, FR7; `spec:AST-093` FR1–FR5; the Swift component API (A1–A9), theme environment, and accessibility records under `packages/native/specs/swift/library/`.                                                                                               |
+| Governing rules         | `spec:AST-082` FR3, FR4, FR7; `spec:AST-093` FR1–FR5; the Swift component API (A1–A9), theme environment, and accessibility records (`architecture:native-swift-component-api`, `architecture:native-swift-theme-environment`, `architecture:native-swift-accessibility`).      |
 
 This table is a review projection; the body below is authoritative.
 

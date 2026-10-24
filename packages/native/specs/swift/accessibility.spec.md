@@ -1,11 +1,31 @@
-# Accessibility contract (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-accessibility
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-23
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by: [.github/scripts/native-swift.sh]
+deciding_specs:
+  [
+    spec:AST-093/FR3,
+    spec:AST-093/FR5,
+    spec:AST-085,
+    spec:AST-086,
+    spec:AST-082/FR17,
+  ]
+---
 
-- Status: draft
-- Relation: extends AST-093 FR3 and FR5. Applies the core accessibility
-  records AST-085 (focusable disabled controls) and AST-086 (status
-  announcements) to VoiceOver and Apple's accessibility settings.
+# Accessibility architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 A VoiceOver user hears the same name, role, state, and messages from an Astryx
 component on iPhone as a screen-reader user hears on the web: a message that
@@ -13,7 +33,13 @@ appears is announced once, and one already on screen when it opens is not. Peopl
 who turn on Reduce Motion, Reduce Transparency, Bold Text, Button Shapes, or
 Differentiate Without Color get components that honor each setting.
 
-## Requirements
+## System model
+
+This record extends AST-093 FR3 and FR5. Applies the core accessibility records
+AST-085 (focusable disabled controls) and AST-086 (status announcements) to
+VoiceOver and Apple's accessibility settings.
+
+## Boundaries and invariants
 
 - **X1 — Name, role, and state come from the core contract.** The contract's
   accessible name becomes `accessibilityLabel`, its role becomes the matching
@@ -54,7 +80,31 @@ Differentiate Without Color get components that honor each setting.
 - **X7 — Targets are at least 44 by 44 points,** even when the drawn control is
   smaller.
 
-## Acceptance checks
+## Change coupling
+
+A change to a Swift component's accessibility modifiers, its animations, or
+its colors and shapes is reviewed against X1–X7. A change to the core
+accessibility contract of a component, or to `spec:AST-085` or
+`spec:AST-086`, is reviewed for its effect here. The checks in Verification
+prove the record stays current.
+
+## Owning code
+
+- `packages/native/` — Swift components and their test targets, which carry
+  X1–X7 and the checks that prove them.
+
+## Deciding specs
+
+- `spec:AST-093/FR3` — Apple platforms follow the Human Interface Guidelines,
+  including VoiceOver and the accessibility settings.
+- `spec:AST-093/FR5` — every native component change ships with accessibility
+  evidence.
+- `spec:AST-085` — disabled controls stay focusable and say why.
+- `spec:AST-086` — status messages announce once, at the priority their
+  severity sets.
+- `spec:AST-082/FR17` — icons share names and are decorative unless labeled.
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -67,9 +117,16 @@ Differentiate Without Color get components that honor each setting.
 
 ## Current state
 
-- On `main`, the Swift package `packages/native/apple` holds generated props,
-  the wire, and the logic host, and no SwiftUI views.
-- No Swift component has accessibility tests or an audit.
+- The `Astryx` product in `packages/native/apple` holds the SwiftUI views
+  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Text,
+  TextInput, and Thumbnail.
+- Unit tests assert the accessible names and traits that Avatar,
+  AvatarStatusDot, Banner, Button, Heading, Icon, TextInput, and Thumbnail set,
+  and Button's Loading value; Card and Text have no accessibility assertions.
+  X2 is tested in part (Thumbnail's disabled buttons stay mounted and inert),
+  and so is X6 (Reduce Motion and Bold Text, and AvatarStatusDot's status
+  shown by shape as well as color). X3 has no tests,
+  and no Swift component has an accessibility audit yet.
 
 ## Open questions
 

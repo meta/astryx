@@ -38,7 +38,7 @@ enum TooltipTouch: Equatable, Sendable {
 
 extension View {
   /// The Astryx tooltip, one behavior for every component, following core's
-  /// `useTooltip` and `Tooltip` (`library/tooltip.spec.md`).
+  /// `useTooltip` and `Tooltip` (`specs/swift/tooltip.spec.md`).
   /// - Parameters:
   ///   - text: The tooltip's words; `nil` shows nothing.
   ///   - hint: Words VoiceOver reads as the hint, as core puts given tooltip
@@ -57,7 +57,7 @@ extension View {
   }
 }
 
-/// Core's tooltip on Apple platforms (`library/tooltip.spec.md`):
+/// Core's tooltip on Apple platforms (`specs/swift/tooltip.spec.md`):
 ///
 /// - The bubble sits above the view, as core places it, below when there is
 ///   no room above, and slides sideways to stay inside the window's safe area

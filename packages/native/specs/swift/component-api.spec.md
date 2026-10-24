@@ -1,10 +1,37 @@
-# Component API (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-component-api
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-26
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by:
+  [
+    .github/scripts/native-swift.sh,
+    packages/native/src/contract/contracts.test.ts,
+  ]
+deciding_specs:
+  [
+    spec:AST-093/FR1,
+    spec:AST-093/FR5,
+    spec:AST-082/FR3,
+    spec:AST-082/FR4,
+    spec:AST-082/FR5,
+    spec:AST-082/FR7,
+    spec:AST-082/FR8,
+  ]
+---
 
-- Status: draft
-- Relation: extends AST-093 FR1 and FR5, and AST-082 FR3, FR4, FR5, FR7, FR8.
-  It decides how one SwiftUI view exposes its component's generated contract.
+# Component API architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 An iOS developer writes `import Astryx`, then
 `Button("Save", variant: .primary) { save() }`, or
@@ -14,7 +41,12 @@ contract does not allow. The person using the app gets the same words, states,
 and behavior the web gives them, because every Swift view is driven by the
 same generated contract.
 
-## Requirements
+## System model
+
+This record extends AST-093 FR1 and FR5, and AST-082 FR3, FR4, FR5, FR7, FR8.
+It decides how one SwiftUI view exposes its component's generated contract.
+
+## Boundaries and invariants
 
 - **A1 — Core names, in a module named `Astryx`.** The library product and
   the Swift module that holds the views are both named `Astryx`. A component's
@@ -77,7 +109,7 @@ same generated contract.
   `<Name>Props`, for generated and wire-driven callers, and a SwiftUI-style
   initializer with labeled parameters. Both take every content slot, the
   labeled one as a `@ViewBuilder` closure and the props one as the slot's
-  generated node type, as `packages/native/specs/swift/library/slots.md` says,
+  generated node type, as `architecture:native-swift-slots` says,
   and both build the view from the same `<Name>Props` values; the view's `body`
   reads only those values and slots. The two initializers, and the convenience
   initializers that take a slot component's props (slots S3), are one API in
@@ -90,7 +122,7 @@ same generated contract.
   - A `content` slot (AST-082 FR4, with its amendment that lets a platform
     accept a wider form for a content slot) is a generic `@ViewBuilder`
     closure parameter that accepts any view, as
-    `packages/native/specs/swift/library/slots.md` says, never `AnyView`. A
+    `architecture:native-swift-slots` says, never `AnyView`. A
     `text` slot is words, a `String` field of `<Name>Props` (A5), and an `icon`
     slot is an `IconName` field.
   - Parameters without defaults come before those with defaults, except a
@@ -129,7 +161,28 @@ same generated contract.
   its `HStack` and `VStack` wire nodes (AST-082 FR19), which the logic host
   draws with SwiftUI's stacks.
 
-## Acceptance checks
+## Change coupling
+
+A change to the Swift code or build step this record governs is reviewed against
+its requirements, and a change to a record it builds on is reviewed for its
+effect here. The checks under Verification prove the record stays current.
+
+## Owning code
+
+- `packages/native/apple/Sources/Astryx/` — each component's SwiftUI view and the generated contract it takes.
+- `packages/native/src/contract/` — the contract generator whose Swift output the views take.
+
+## Deciding specs
+
+- `spec:AST-093/FR1`
+- `spec:AST-093/FR5`
+- `spec:AST-082/FR3`
+- `spec:AST-082/FR4`
+- `spec:AST-082/FR5`
+- `spec:AST-082/FR7`
+- `spec:AST-082/FR8`
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
