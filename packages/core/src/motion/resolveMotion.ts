@@ -41,6 +41,8 @@ interface ScopeValues {
 
 const scopes = new WeakMap<Element, ScopeValues>();
 const watched = new WeakSet<Document>();
+/** Each document's theme observer, so a read can take its pending records. */
+const observers = new WeakMap<Document, MutationObserver>();
 let epoch = 0;
 
 /** Media queries whose change can switch an adaptation rule on or off. */
@@ -63,6 +65,7 @@ function watch(doc: Document): void {
   };
   if (typeof MutationObserver === 'function') {
     const observer = new MutationObserver(invalidate);
+    observers.set(doc, observer);
     observer.observe(doc.documentElement, {
       subtree: true,
       attributes: true,
@@ -93,6 +96,11 @@ function readVariable(element: Element, role: MotionRole): string {
     return '';
   }
   watch(doc);
+  // A theme switch earlier in this task reaches the observer's callback only
+  // in a microtask: take its records now, so this read sees the new theme.
+  if ((observers.get(doc)?.takeRecords().length ?? 0) > 0) {
+    epoch += 1;
+  }
   const scope = element.closest('[data-astryx-theme]') ?? doc.documentElement;
   let cached = scopes.get(scope);
   if (cached == null || cached.epoch !== epoch) {

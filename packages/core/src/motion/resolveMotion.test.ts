@@ -116,6 +116,23 @@ describe('resolveMotion', () => {
 });
 
 describe('the animator under a theme', () => {
+  it('sees a theme switched earlier in the same task', () => {
+    const {scope, child} = themed('soft', {
+      '--motion-springs-sheet-present': '0.8s 0.3',
+    });
+    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+      duration: 0.8,
+      bounce: 0.3,
+    });
+    // Same task: the observer's callback has not run yet.
+    scope.setAttribute('data-astryx-theme', 'firm');
+    variables.set(scope, {'--motion-springs-sheet-present': '0.4s 0'});
+    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+      duration: 0.4,
+      bounce: 0,
+    });
+  });
+
   it('plays the spring its theme sets for a table spring', () => {
     const {child} = themed('soft', {
       '--motion-springs-sheet-present': '0.8s 0.3',
