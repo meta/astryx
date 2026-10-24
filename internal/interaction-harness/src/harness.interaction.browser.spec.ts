@@ -3,19 +3,22 @@
 /**
  * @file harness.interaction.browser.spec.ts
  * @input Fixture pages written inline (no Storybook), real Chromium/WebKit
- * @output Proof that each harness instrument measures what it claims:
- *   scripted timestamps reach the page; a flick flings natively (Chromium);
- *   a second finger and a pinch arrive as distinct pointers; sampled curves
- *   match the oracles; the animation-state waits report a running transition
- *   and its end, and judge rest by presented values even while an animation
- *   holds its end; individual transform properties are sampled; a sample at
- *   an end reports the time it was read at; holding takes only running
- *   document-timeline animations, each at its own offset, and releases only
- *   them; storyboards write a sheet and a trace that follows the curve, and an
- *   endless animation does not set their length; the timer gate holds a
- *   component timer until the filmstrip is done, drops callbacks the page
- *   cancels, stamps held frames with the time they run, and leaves the
- *   harness its own frames.
+ * @output Proof that each harness instrument measures what it claims, with a
+ *   negative control beside every positive one: scripted timestamps reach the
+ *   page; a flick flings natively (Chromium); a second finger and a pinch
+ *   arrive as distinct pointers; the screencast shows a compositor animation
+ *   advancing through a blocked main thread while a rAF animation freezes;
+ *   the trace counts zero Layout for a transform animation and one per frame
+ *   for a `top` animation; sampled curves match the oracles, individual
+ *   transform properties included; a sample at an end reports the time it was
+ *   read at; holding takes only running document-timeline animations, each at
+ *   its own offset, and releases only them; the animation-state waits report
+ *   a running transition and its end, and judge rest by presented values even
+ *   while an animation holds its end; storyboards write a sheet and a trace
+ *   that follows the curve, and an endless animation does not set their
+ *   length; the timer gate holds a component timer until the filmstrip is
+ *   done, drops callbacks the page cancels, stamps held frames with the time
+ *   they run, and leaves the harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -23,7 +26,10 @@
 import {expect, test, type Page} from '@playwright/test';
 import {
   animationStoryboard,
+  blockMainThread,
+  busyWindowProof,
   compareCurve,
+  countBetween,
   cubicBezier,
   curveOf,
   drag,
@@ -33,6 +39,7 @@ import {
   holdAnimations,
   installInputLog,
   installTimerGate,
+  markElement,
   merge,
   parseTransform,
   PARTIAL_LIFT_SKIP,
@@ -40,13 +47,17 @@ import {
   readInputLog,
   releaseAnimations,
   sampleCurve,
+  sampleRects,
   seekAnimations,
   springStep,
+  startScreencast,
   tap,
   thawTimers,
   timeline,
   touchDriver,
   touchStoryboard,
+  traceRendering,
+  trackMarker,
   waitForAnimation,
   waitForRest,
   withFinger,
@@ -232,6 +243,127 @@ test.describe('touch input', () => {
         ...log.filter(r => r.type === 'touchmove').map(r => r.touches ?? 0),
       ),
     ).toBe(2);
+  });
+});
+
+test.describe('frame evidence', () => {
+  test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+
+    const run = async (driver: 'compositor' | 'raf') => {
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateX(0px)'}, {transform: 'translateX(280px)'}],
+            {duration: 1600, easing: 'linear'},
+          );
+        } else {
+          const start = performance.now();
+          const step = (now: number) => {
+            const p = Math.min(1, (now - start) / 1600);
+            el.style.transform = `translateX(${280 * p}px)`;
+            if (p < 1) {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        }
+      }, driver);
+      const cast = await startScreencast(page);
+      await page.waitForTimeout(200);
+      const window = await blockMainThread(page, 700);
+      await page.waitForTimeout(200);
+      const tracked = await trackMarker(page, await cast.stop());
+      return busyWindowProof(tracked, window, {axis: 'x'});
+    };
+
+    const compositor = await run('compositor');
+    expect(compositor.medianFrameMs).toBeLessThan(20);
+    expect(compositor.frames).toBeGreaterThanOrEqual(
+      compositor.expectedFrames - 2,
+    );
+    expect(compositor.changed).toBeGreaterThanOrEqual(compositor.frames - 3);
+    expect(compositor.longestStallMs).toBeLessThan(40);
+    expect(compositor.monotonic).toBe(true);
+
+    const raf = await run('raf');
+    // Frozen for the whole block: no presented frame moved (the compositor
+    // sends none at all when nothing on screen changes).
+    expect(raf.changed).toBe(0);
+    expect(raf.longestStallMs).toBeGreaterThan(600);
+  });
+
+  test('rect sampling reads one rect per animation frame while the main thread is free', async ({
+    page,
+    browserName,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 600, easing: 'linear'},
+      );
+    });
+    const samples = await sampleRects(box, 400);
+    const xs = samples.map(s => s.box?.x ?? NaN);
+    const gaps = samples
+      .slice(1)
+      .map((s, i) => s.t - samples[i].t)
+      .sort((a, b) => a - b);
+    const cadence = gaps[Math.floor(gaps.length / 2)];
+    expect(cadence).toBeLessThan(34);
+    expect(samples.length).toBeGreaterThanOrEqual(10);
+    if (browserName === 'chromium') {
+      // One sample per presented frame at 60 Hz. (Headless WebKit's animation
+      // frames are irregular, so only the cadence is checked there.)
+      expect(samples.length).toBeGreaterThanOrEqual(20);
+    }
+    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
+    expect(xs.at(-1) ?? 0).toBeGreaterThan(xs[0] + 80);
+  });
+
+  test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await fixture(page);
+    const box = page.locator('#box');
+    // Count the animation's steady middle: starting and ending it may lay out once each.
+    const animate = async (property: 'transform' | 'top') => {
+      let started = 0;
+      const trace = await traceRendering(page, async () => {
+        started = await box.evaluate((el, prop) => {
+          const keyframes =
+            prop === 'transform'
+              ? [
+                  {transform: 'translateY(0px)'},
+                  {transform: 'translateY(200px)'},
+                ]
+              : [{top: '360px'}, {top: '560px'}];
+          el.animate(keyframes, {duration: 600});
+          return performance.timeOrigin + performance.now();
+        }, property);
+        await page.waitForTimeout(700);
+      });
+      return countBetween(trace, started + 100, started + 500);
+    };
+    const transform = await animate('transform');
+    const top = await animate('top');
+    expect(transform.Layout ?? 0).toBe(0);
+    expect(transform.Paint ?? 0).toBe(0);
+    // ~24 frames in 400 ms: one layout per frame.
+    expect(top.Layout ?? 0).toBeGreaterThan(18);
   });
 });
 

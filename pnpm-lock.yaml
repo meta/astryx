@@ -882,6 +882,9 @@ importers:
       '@astryxdesign/cli':
         specifier: workspace:*
         version: link:../cli
+      '@astryxdesign/interaction-harness':
+        specifier: workspace:*
+        version: link:../../internal/interaction-harness
       '@babel/cli':
         specifier: 'catalog:'
         version: 7.29.7(@babel/core@7.29.7)
