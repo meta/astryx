@@ -228,7 +228,10 @@ async function composeSheet(
 }
 
 export interface AnimationStoryboardOptions extends StoryboardOptions {
-  /** Frame times, ms (default every 16.7 ms through the longest held animation). */
+  /**
+   * Frame times, ms (default every 16.7 ms to the end of the longest held
+   * animation's curve; a held end value is not filmed).
+   */
   readonly times?: readonly number[];
   /** Restrict to animations inside this element. */
   readonly scope?: Locator;
@@ -248,7 +251,7 @@ export async function animationStoryboard(
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
-  const longest = Math.max(...held.map(a => a.delayMs + a.durationMs));
+  const longest = Math.max(...held.map(a => a.curveEndMs));
   const times = options.times ?? timeline(longest);
   const storyboard = new Storyboard(page, options);
   for (const t of times) {

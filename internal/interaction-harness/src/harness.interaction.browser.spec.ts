@@ -7,8 +7,10 @@
  *   scripted timestamps reach the page; a flick flings natively (Chromium);
  *   a second finger and a pinch arrive as distinct pointers; sampled curves
  *   match the oracles; the animation-state waits report a running transition
- *   and its end; storyboards write a sheet and a trace that follows the curve,
- *   and the timer gate holds a component timer until the filmstrip is done.
+ *   and its end, and judge rest by presented values even while an animation
+ *   holds its end; individual transform properties are sampled; storyboards
+ *   write a sheet and a trace that follows the curve, and the timer gate
+ *   holds a component timer until the filmstrip is done.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -313,6 +315,47 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // 300 ms of motion on the individual `translate` and `scale` properties,
+    // then 5 s holding the end values: playState stays 'running' throughout.
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: '0px 0px', scale: '1', offset: 0},
+          {translate: '0px 120px', scale: '1.5', offset: 300 / 5300},
+          {translate: '0px 120px', scale: '1.5', offset: 1},
+        ],
+        {duration: 5300, fill: 'forwards'},
+      );
+    });
+    const startedAt = await page.evaluate(() => performance.now());
+    const [active] = await waitForAnimation(box);
+    expect(active.to - active.from).toBeCloseTo(300, 0); // the curve, not the hold
+    await waitForRest(box, {timeout: 3_000});
+    const after = await box.evaluate(el => ({
+      at: performance.now(),
+      running: el.getAnimations().some(a => a.playState === 'running'),
+      translate: getComputedStyle(el).translate,
+    }));
+    expect(after.running).toBe(true); // still holding its end value
+    expect(after.at - startedAt).toBeGreaterThanOrEqual(300);
+    expect(after.at - startedAt).toBeLessThan(1_500);
+    expect(after.translate).toBe('0px 120px');
+
+    const held = await holdAnimations(page, box);
+    expect(held[0].curveEndMs).toBeCloseTo(300, 0);
+    const [mid, end] = await sampleCurve(box, [150, 300]);
+    expect(mid.raw.translate).toBe('0px 60px');
+    expect(mid.transform.translateY).toBeCloseTo(60, 1);
+    expect(mid.transform.scaleX).toBeCloseTo(1.25, 3);
+    expect(end.transform.translateY).toBeCloseTo(120, 1);
+    expect(end.transform.scaleY).toBeCloseTo(1.5, 3);
   });
 });
 
