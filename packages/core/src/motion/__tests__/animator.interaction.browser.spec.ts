@@ -352,6 +352,37 @@ test('a finished animation leaves the element once the curve ends', async ({
   expect(result.leftAt).toBeLessThan(result.curveEnd + 100);
 });
 
+test('a fixed child stays fixed after a motion back to identity', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(async () => {
+    const box = document.getElementById('box') as HTMLElement;
+    const child = document.createElement('div');
+    child.style.cssText =
+      'position: fixed; top: 10px; left: 10px; width: 4px; height: 4px;';
+    box.appendChild(child);
+    const quick = {response: 0.1, dampingRatio: 1};
+    await window.animator.animate({x: 120}, {spring: quick}).finished;
+    await window.animator.animate({x: 0}, {spring: quick}).finished;
+    // At rest: the animation retired and the layer promotion lingered out.
+    await new Promise<void>(resolve => {
+      const tick = () =>
+        box.getAnimations().length === 0 && box.style.willChange === ''
+          ? resolve()
+          : requestAnimationFrame(tick);
+      requestAnimationFrame(tick);
+    });
+    const rect = child.getBoundingClientRect();
+    return {top: rect.top, left: rect.left, translate: box.style.translate};
+  });
+  // The identity left the element: any translate but none would keep the box
+  // (40 px down) its containing block for good.
+  expect(result.translate).toBe('');
+  expect(result.top).toBe(10);
+  expect(result.left).toBe(10);
+});
+
 test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async ({
   page,
 }) => {
