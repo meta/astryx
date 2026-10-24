@@ -1262,3 +1262,57 @@ describe('holdPageScroll', () => {
     expect(pan(100)).toBe(false);
   });
 });
+
+describe('GestureHost.fingersDown', () => {
+  it('counts every finger on the screen, one on a plain element too', () => {
+    const {handle, row} = mount(
+      '<div id="handle"></div><div id="row">plain</div>',
+    );
+    expect(host.fingersDown()).toBe(0);
+    detachers.push(
+      host.attach(handle, new LongPressGestureRecognizer({name: 'hold'})),
+    );
+    const first = {id: 1, x: 10, y: 10, target: handle};
+    const second = {id: 2, x: 200, y: 10, target: row};
+    touch('touchstart', handle, [first], [first], 0);
+    expect(host.fingersDown()).toBe(1);
+    // The second finger lands on an element no recognizer is attached to.
+    touch('touchstart', row, [second], [first, second], 16);
+    expect(host.fingersDown()).toBe(2);
+    // A lift lowers it.
+    touch('touchend', row, [second], [first], 32);
+    expect(host.fingersDown()).toBe(1);
+    touch('touchend', handle, [first], [], 48);
+    expect(host.fingersDown()).toBe(0);
+  });
+
+  it('drops to what a touchcancel lists', () => {
+    const {handle, row} = mount(
+      '<div id="handle"></div><div id="row">plain</div>',
+    );
+    detachers.push(
+      host.attach(handle, new LongPressGestureRecognizer({name: 'hold'})),
+    );
+    const first = {id: 1, x: 10, y: 10, target: handle};
+    const second = {id: 2, x: 200, y: 10, target: row};
+    touch('touchstart', handle, [first], [first], 0);
+    touch('touchstart', row, [second], [first, second], 16);
+    expect(host.fingersDown()).toBe(2);
+    // The system takes every finger.
+    touch('touchcancel', handle, [first, second], [], 32);
+    expect(host.fingersDown()).toBe(0);
+  });
+
+  it('reads 0 once the host stops listening', () => {
+    const {handle} = mount('<div id="handle"></div>');
+    const detach = host.attach(
+      handle,
+      new LongPressGestureRecognizer({name: 'hold'}),
+    );
+    const finger = {id: 1, x: 10, y: 10, target: handle};
+    touch('touchstart', handle, [finger], [finger], 0);
+    expect(host.fingersDown()).toBe(1);
+    detach();
+    expect(host.fingersDown()).toBe(0);
+  });
+});
