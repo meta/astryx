@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-07
+approved_at: 2026-10-24
 owners: [cixzhang]
 applies_to: [packages/core/src/, packages/lab/src/]
 verified_by:
@@ -17,7 +17,7 @@ verified_by:
     internal/eslint-plugin-astryx/no-stylex-null-override.test.mjs,
     internal/eslint-plugin-astryx/no-style-only-wrapper.test.mjs,
   ]
-deciding_specs: []
+deciding_specs: [spec:AST-080/DEC-4]
 ---
 
 # Component style authoring architecture
@@ -28,7 +28,7 @@ deciding_specs: []
 {
   "scope": "global",
   "triggers": {
-    "styling": ["INV1", "INV2", "INV3", "INV4", "INV5"]
+    "styling": ["INV1", "INV2", "INV3", "INV4", "INV5", "INV6"]
   }
 }
 ```
@@ -39,7 +39,7 @@ Astryx component styling should lower to valid maintained CSS, compose predictab
 with supported consumer styling, keep relational state scoped to the intended
 component, and avoid DOM wrappers with no runtime responsibility.
 
-This record owns five component-level authoring outcomes. It does not redefine
+This record owns six component-level authoring outcomes. It does not redefine
 semantic tokens, public theme targets, extensible prop axes, public styling props,
 icon resolution, bidirectionality, or React Server Component boundaries.
 
@@ -95,6 +95,25 @@ not evidence of conformance or violation.
   owns a compatible style-bearing DOM surface. A wrapper may instead own that
   boundary when the child has no compatible surface. Source clarity alone is not a
   normative responsibility.
+- **INV6 — Component size is reported and touch-only cost is budgeted.** Every
+  pull request that changes a component's code or styles reports, base against
+  head, the gzip size of the JavaScript each changed component's import pulls
+  in, including its transitive modules, and that component's gzip CSS delta in
+  its package stylesheet (`spec:AST-080` FR8). A feature that runs only on a
+  coarse pointer and adds more than 2 KB gzip of JavaScript or 1 KB gzip of CSS
+  to one component is flagged. Its pull request either loads that JavaScript
+  lazily, only when a coarse pointer needs it, so the component's import does
+  not carry it, or justifies the cost. For flagged CSS, its pull request
+  justifies the cost, because that CSS stays in the package stylesheet
+  (`spec:AST-080` FR1, FR8). Sizes are gzip at the default compression level,
+  and 1 KB is 1,024 bytes; measured as `spec:AST-080` FR8 measures CSS, a
+  component's JavaScript size is the gzip size of one bundle holding its
+  import and every module that import reaches. A shared JavaScript value
+  table, such as a gesture or spring tuning table, ships to a component only
+  the rows that component uses: importing a component does not pull in rows
+  only other components read. The rule covers tuning tables only: StyleX
+  variable groups follow `spec:AST-066` FR3, and message catalogs follow
+  `architecture:internationalization` INV15.
 
 ## Authoring guidance
 
@@ -182,8 +201,10 @@ Focused style-authoring review triggers when a component change adds or alters:
 - shorthand/reset/null behavior that can prevent independent consumer property
   composition;
 - ancestor, descendant, or sibling visual state;
-- a DOM wrapper around one component or one visual child; or
-- a component-owned inline SVG that may represent a shared semantic glyph.
+- a DOM wrapper around one component or one visual child;
+- a component-owned inline SVG that may represent a shared semantic glyph; or
+- code or styles that run only on a coarse pointer, or a shared value table a
+  component reads (INV6).
 
 Review checks the invariant owned here and follows the delegated authority above
 before assigning a verdict.
@@ -198,16 +219,21 @@ before assigning a verdict.
 
 ## Deciding specs
 
-None. The icon, theme-token, component-theming, public-API, bidirectionality, and
+- `spec:AST-080/DEC-4` — every pull request reports component JavaScript and
+  CSS size; touch-only JavaScript over 2 KB or CSS over 1 KB is flagged, and
+  shared value tables ship only the rows a component uses (INV6).
+
+The icon, theme-token, component-theming, public-API, bidirectionality, and
 RSC owners retain the delegated decisions above.
 
 ## Verification
 
-| Invariant           | Evidence                                                                                       | Failure signal                                                                                                                                                          |
-| ------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1                | StyleX capability scan plus component-source mutation                                          | Shipped component styling bypasses the maintained lowering path without another named owner, including component-local raw CSS where that path supports the same result |
-| INV2                | Equivalent CSS/JS mutation fixtures and real-browser presentation                              | JavaScript recreates CSS-resolvable presentation, flashes intermediate state, or disagrees with CSS conditions                                                          |
-| INV3                | StyleX compile fixtures and independent consumer-property override mutations                   | Input lowers to invalid CSS or changing one supported property cannot compose without removing another                                                                  |
-| INV4                | Nested unrelated-owner browser fixture across hover, focus-within, active, and disabled states | Outer component state activates an inner component's visual treatment                                                                                                   |
-| INV5                | Wrapper mutations in default and host-composed render paths                                    | Removing a wrapper changes no semantic, behavior/ref, formatting-context, outside-border-spacing, or required style-bearing DOM boundary                                |
-| Capability registry | Registry generation against the installed StyleX package                                       | Recorded and installed StyleX versions differ, so capability-dependent cases are untestable                                                                             |
+| Invariant           | Evidence                                                                                       | Failure signal                                                                                                                                                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1                | StyleX capability scan plus component-source mutation                                          | Shipped component styling bypasses the maintained lowering path without another named owner, including component-local raw CSS where that path supports the same result                                                                                    |
+| INV2                | Equivalent CSS/JS mutation fixtures and real-browser presentation                              | JavaScript recreates CSS-resolvable presentation, flashes intermediate state, or disagrees with CSS conditions                                                                                                                                             |
+| INV3                | StyleX compile fixtures and independent consumer-property override mutations                   | Input lowers to invalid CSS or changing one supported property cannot compose without removing another                                                                                                                                                     |
+| INV4                | Nested unrelated-owner browser fixture across hover, focus-within, active, and disabled states | Outer component state activates an inner component's visual treatment                                                                                                                                                                                      |
+| INV5                | Wrapper mutations in default and host-composed render paths                                    | Removing a wrapper changes no semantic, behavior/ref, formatting-context, outside-border-spacing, or required style-bearing DOM boundary                                                                                                                   |
+| INV6                | Pull-request size report against base, with value-table import fixtures                        | A changed component with no base-against-head gzip JavaScript or CSS figure; a touch-only feature over 2 KB gzip JavaScript or 1 KB gzip CSS per component that is not flagged; importing a component pulls in value-table rows only other components read |
+| Capability registry | Registry generation against the installed StyleX package                                       | Recorded and installed StyleX versions differ, so capability-dependent cases are untestable                                                                                                                                                                |

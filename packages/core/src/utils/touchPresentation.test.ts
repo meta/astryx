@@ -5,11 +5,10 @@
  * @input Uses vitest, React Testing Library, react-dom/server and a
  *   query-aware matchMedia stub
  * @output The touch presentation's answers: touch from the primary pointer,
- *   compact from the width, both for presentations, the iOS idiom from the
- *   engine and the pointer; the server default and hints; live updates; the
- *   one-moment read; the motion choice; core's compact-touch media keys and
- *   iOS gate keys spelled and nested as the shared queries; the adaptive
- *   presentation reading them
+ *   compact from the width, both for presentations, the same answer on every
+ *   engine; the server default and hints; live updates; the one-moment read;
+ *   core's compact-touch media keys and iOS style-gate keys spelled and nested
+ *   as the shared queries; the adaptive presentation reading them
  * @position Unit tests of packages/core/src/utils/touchPresentation.ts
  */
 
@@ -23,6 +22,7 @@ import {
   COMPACT_TOUCH_PRESENTATION_QUERY,
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
+import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
 import {
   COMPACT_QUERY,
   COMPACT_TOUCH_QUERY,
@@ -30,8 +30,6 @@ import {
   IOS_TOUCH_STYLE_KEYS,
   TOUCH_QUERY,
   readTouchPresentation,
-  useMotionPresentation,
-  useTouchIdiom,
   useTouchPresentation,
 } from './touchPresentation';
 
@@ -98,7 +96,6 @@ describe('touch presentation', () => {
       isTouch: false,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A tablet: a finger at any width.
     act(() => setDevice({coarse: true, width: 1024, height: 1366}));
@@ -106,7 +103,6 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A narrowed desktop window: compact, still a mouse.
     act(() => setDevice({coarse: false, width: 600, height: 900}));
@@ -114,7 +110,6 @@ describe('touch presentation', () => {
       isTouch: false,
       isCompact: true,
       isCompactTouch: false,
-      idiom: 'default',
     });
     // A phone: both.
     act(() => setDevice({coarse: true, width: 390, height: 844}));
@@ -122,43 +117,18 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: true,
       isCompactTouch: true,
-      idiom: 'default',
     });
   });
 
-  it('is the iOS idiom only for iOS WebKit under a finger', () => {
-    const {result} = renderHook(() => ({
-      presentation: useTouchPresentation(),
-      idiom: useTouchIdiom(),
-      motion: useMotionPresentation(),
-    }));
+  it('answers the same on every engine: iOS WebKit and Android alike', () => {
+    const {result} = renderHook(() => useTouchPresentation());
     // An Android phone: a finger, no -webkit-touch-callout.
     act(() => setDevice({coarse: true, width: 412, height: 915}));
-    expect(result.current.presentation.idiom).toBe('default');
-    expect(result.current.idiom).toBe('default');
-    expect(result.current.motion).toBe('theme');
-    // Desktop Safari: the engine is WebKit, but not iOS's, and a mouse.
-    act(() => setDevice({coarse: false, width: 1440, height: 900}));
-    expect(result.current.idiom).toBe('default');
-  });
-
-  it('follows the pointer live in iOS WebKit', () => {
-    setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
-    const {result} = renderHook(() => ({
-      presentation: useTouchPresentation(),
-      idiom: useTouchIdiom(),
-      motion: useMotionPresentation(),
-    }));
-    expect(result.current.presentation.idiom).toBe('ios');
-    expect(result.current.idiom).toBe('ios');
-    expect(result.current.motion).toBe('uikit');
-    // An iPad docks a trackpad: its primary pointer turns fine.
-    act(() => setDevice({coarse: false, width: 1024, height: 1366}));
-    expect(result.current.presentation.idiom).toBe('default');
-    expect(result.current.idiom).toBe('default');
-    expect(result.current.motion).toBe('theme');
-    act(() => setDevice({coarse: true}));
-    expect(result.current.idiom).toBe('ios');
+    const android = result.current;
+    // The same phone size in iOS WebKit gets the same answer.
+    act(() => setDevice({iosWebKit: true}));
+    expect(result.current).toEqual(android);
+    expect(result.current.isCompactTouch).toBe(true);
   });
 
   it('keeps one answer object while nothing changes', () => {
@@ -171,37 +141,35 @@ describe('touch presentation', () => {
   it('answers the server default, or the server hint, before hydration', () => {
     const Probe = (props: {hint?: boolean}) => {
       const presentation = useTouchPresentation(
-        props.hint === true ? {isCompact: true, idiom: 'ios'} : {},
+        props.hint === true ? {isTouch: true, isCompact: true} : {},
       );
       return createElement(
         'span',
         null,
-        `${presentation.isTouch}/${presentation.isCompactTouch}/${presentation.idiom}/${useTouchIdiom(props.hint === true ? 'ios' : 'default')}/${useMotionPresentation(props.hint)}`,
+        `${presentation.isTouch}/${presentation.isCompactTouch}`,
       );
     };
     setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
-    expect(renderToString(createElement(Probe))).toContain(
-      'false/false/default/default/theme',
-    );
+    expect(renderToString(createElement(Probe))).toContain('false/false');
     expect(renderToString(createElement(Probe, {hint: true}))).toContain(
-      'true/true/ios/ios/uikit',
+      'true/true',
     );
   });
 
-  it('approximates UIKit size classes with a width and a height', () => {
+  it('is the theme compact definition: width below md or height below 500 (spec:AST-012 FR9)', () => {
     const {result} = renderHook(() => useTouchPresentation());
-    // iPad mini in portrait: regular in UIKit, not compact here.
-    act(() => setDevice({coarse: true, width: 744, height: 1133}));
+    // At the md point and taller than 500: not compact.
+    act(() => setDevice({coarse: true, width: 768, height: 1024}));
     expect(result.current.isCompact).toBe(false);
-    // iPhone in landscape: compact in UIKit and here.
+    // One pixel narrower: compact.
+    act(() => setDevice({coarse: true, width: 767, height: 1024}));
+    expect(result.current.isCompact).toBe(true);
+    // A phone in landscape: wide, but shorter than 500.
     act(() => setDevice({coarse: true, width: 852, height: 393}));
     expect(result.current.isCompact).toBe(true);
-    // iPad in Slide Over: compact in UIKit and here.
-    act(() => setDevice({coarse: true, width: 375, height: 1000}));
-    expect(result.current.isCompact).toBe(true);
-    // The known miss: a Max-size iPhone in landscape is regular in UIKit.
-    act(() => setDevice({coarse: true, width: 932, height: 430}));
-    expect(result.current.isCompact).toBe(true);
+    // A wide, short window at exactly 500 tall: not compact.
+    act(() => setDevice({coarse: true, width: 1024, height: 500}));
+    expect(result.current.isCompact).toBe(false);
   });
 
   it('reads the conditions at one moment, and without a window', () => {
@@ -210,24 +178,12 @@ describe('touch presentation', () => {
       isTouch: true,
       isCompact: true,
       isCompactTouch: true,
-      idiom: 'default',
     });
-    setDevice({iosWebKit: true});
-    expect(readTouchPresentation().idiom).toBe('ios');
     expect(readTouchPresentation(null)).toEqual({
       isTouch: false,
       isCompact: false,
       isCompactTouch: false,
-      idiom: 'default',
     });
-  });
-
-  it('chooses UIKit motion in the iOS idiom and the theme everywhere else', () => {
-    const {result} = renderHook(() => useMotionPresentation());
-    expect(result.current).toBe('theme');
-    // A finger outside iOS keeps the theme's motion.
-    act(() => setDevice({coarse: true}));
-    expect(result.current).toBe('theme');
   });
 
   it('keeps every iOS gate in core spelled and nested as the resolver', () => {
@@ -325,7 +281,10 @@ describe('touch presentation', () => {
       );
     }
     expect(TOUCH_QUERY).toBe('(pointer: coarse)');
-    expect(COMPACT_QUERY).toBe('(width < 744px), (height < 500px)');
+    expect(COMPACT_QUERY).toBe(DEFAULT_COMPACT_DEFINITION.query);
+    expect(COMPACT_TOUCH_QUERY).toBe(
+      DEFAULT_COMPACT_DEFINITION.coarsePointerQuery,
+    );
   });
 
   it('is the query the adaptive popover-or-sheet presentation reads', () => {
@@ -337,8 +296,8 @@ describe('touch presentation', () => {
     // A phone in landscape too.
     act(() => setDevice({coarse: true, width: 852, height: 393}));
     expect(result.current).toBe('bottom-sheet');
-    // A tablet, even an iPad mini in portrait, keeps the anchored popover.
-    act(() => setDevice({coarse: true, width: 744, height: 1133}));
+    // A tablet at the md point keeps the anchored popover.
+    act(() => setDevice({coarse: true, width: 768, height: 1024}));
     expect(result.current).toBe('popover');
   });
 });

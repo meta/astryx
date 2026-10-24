@@ -95,11 +95,12 @@ reflows no line; only editing affordances appear or disappear.
   and `&#169;`, render as the characters they name on every surface; inside
   inline code and fenced code they stay literal. Every surface decodes them
   with the one decoder `Markdown` exports (DEC-5).
-- **FR8 — Same code block frame.** A fenced code block shows the same header,
-  its language label and copy action, at the same height in read and edit
-  mode, so the switch does not move the code. In edit mode the header sits
-  outside the editable text: it is not part of the document and cannot be
-  edited.
+- **FR8 — Same code block frame.** A fenced code block shows the same frame —
+  its header, or the corner cluster when it has none, with its language label
+  and copy action placed as `component:CodeBlock` FR3 and FR11 place them — at
+  the same height in read and edit mode, so the switch does not move the code.
+  In edit mode the frame — the header or the corner cluster — sits outside the
+  editable text: it is not part of the document and cannot be edited.
 - **FR9 — Reading and editing in place.** Edit mode may add a caret,
   selection, placeholder, focus ring, field border and inset, and a toolbar.
   Together these offset the whole document by one constant amount: after that
@@ -155,6 +156,9 @@ FR5 wrap; RichText already wraps fenced code. RichText's editing surface is
 line that wraps close to the available width can take one more line in edit
 mode than in read mode, against FR9; at phone width a long fenced code line
 does.
+`Markdown`, through `component:CodeBlock`, and the RichText surfaces float
+Copy over the code of a fence that names no language; both adopt the FR8
+corner cluster that `component:CodeBlock` FR11 places.
 
 ## Verification
 
@@ -168,7 +172,7 @@ does.
 | FR5, DEC-9 | Real-browser line boxes and horizontal overflow of a long-line code fixture on both surfaces, read and edit | 390px and 1440px; light and dark; left-to-right and right-to-left                                                                                                                                                    | A code block whose scroll width exceeds its client width, or a long line that is taller in one mode than the other, fails                                                                         |
 | FR5, DEC-6 | Real-browser marker style per depth on both surfaces                                                        | Bulleted and numbered lists nested 0–8 deep and of mixed types; starts of 0, −1, 26, 27, 3999, and 4000 at alpha and roman depths; right-to-left; light and dark                                                     | A level that draws another level's marker, or one surface differing from the other, fails                                                                                                         |
 | FR5, FR11  | Real-browser counter line boxes, sibling text starts, and nested-list insets on Markdown and RichText       | Short and wide-counter lists at the same depth; decimal 9–10 and 99–100; alpha z–aa; roman vi–viii; adjacent parents whose child lists have different widest counters; phone/desktop; LTR/RTL; light/dark; read/edit | A split, clipped, or overlapping counter, a per-item text shift, a nested-list anchor displaced from its parent list's shared text-start line, or a cross-renderer/read-edit inset mismatch fails |
-| FR8        | Real-browser code block header geometry in both modes                                                       | Fenced code with an info string                                                                                                                                                                                      | A header missing from one mode moves the code and fails                                                                                                                                           |
+| FR8        | Real-browser code block header geometry in both modes                                                       | Fenced code with an info string; a one-line fence with a language; a long fence with no language                                                                                                                     | A header or corner cluster present in only one mode, a control over the code in either mode, or a line that wraps differently between modes fails                                                 |
 | FR9–FR10   | Real-browser read/edit switch of the parity fixture and a long document                                     | Short document at the top; long document halfway down                                                                                                                                                                | A per-block shift beyond the constant offset, or an anchor block leaving the top of the view, fails                                                                                               |
 
 ## Decision log

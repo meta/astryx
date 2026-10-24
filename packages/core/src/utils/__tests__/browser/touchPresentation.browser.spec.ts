@@ -5,13 +5,11 @@
  * @input fixture.ts bundled with esbuild; Chromium as an Android phone and
  *   WebKit on a phone-sized touch screen (playwright.config.ts beside this
  *   file)
- * @output What each engine answers: a coarse pointer in both; no
- *   -webkit-touch-callout in either (only WebKit on iOS and iPadOS implements
- *   it, so both resolve the `default` idiom and the theme's motion); a style
- *   under the touch query applies while one under the iOS gate does not
+ * @output What each engine answers: a coarse pointer and a compact viewport
+ *   in both, the same touch presentation; no -webkit-touch-callout in either
+ *   (only WebKit on iOS and iPadOS implements it); a style under the touch
+ *   query applies while one under the iOS style gate does not
  * @position Real-engine proof of packages/core/src/utils/touchPresentation.ts.
- *   The `ios` answer needs Mobile Safari, which no Playwright engine is: it
- *   was read on the iOS 26.2 simulator.
  */
 
 import path from 'node:path';
@@ -53,17 +51,13 @@ const color = async (page: Page, id: string) =>
     id,
   );
 
-test('a finger outside iOS WebKit is the default idiom, with the theme’s motion', async ({
-  page,
-}) => {
+test('a finger gets the touch presentation in every engine', async ({page}) => {
   const answers = await open(page);
   expect(answers).toMatchObject({
     coarse: true,
     touchCallout: false,
-    idiom: 'default',
-    motion: 'theme',
-    presentation: {isTouch: true, isCompact: true, idiom: 'default'},
-    read: {isTouch: true, isCompact: true, idiom: 'default'},
+    presentation: {isTouch: true, isCompact: true, isCompactTouch: true},
+    read: {isTouch: true, isCompact: true, isCompactTouch: true},
   });
   // The touch style applies; the iOS-only style does not.
   expect(await color(page, 'touch')).toBe('rgb(255, 0, 0)');

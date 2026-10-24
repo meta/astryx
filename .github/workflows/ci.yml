@@ -1073,6 +1073,87 @@ jobs:
             pr-meta.json
           retention-days: 1
 
+  # Measures the PR's merge base so the PR comment can show component and
+  # package sizes before and after. It runs beside build-storybook rather than
+  # inside it, so no browser lane waits for the second build; the head sizes
+  # still come from build-storybook's analysis.
+  size-base:
+    needs: [check-scope]
+    if: github.event_name == 'pull_request' && needs.check-scope.result == 'success' && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 50
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }} --depth=50
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      # A branch far behind main may have no merge base within the fetched
+      # history even after deepening. The report then keeps Before and Delta
+      # as N/A rather than failing the run.
+      - name: Check out the merge base
+        id: merge-base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
+            git fetch --deepen=200 origin "$BASE_REF:refs/remotes/origin/$BASE_REF" || true
+            if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
+              echo "::warning::no merge base within the fetched history; skipping base size measurement"
+              echo "found=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          git worktree add --detach .size-base "$BASE_SHA"
+          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      # Core and its build tooling always build, because the other component
+      # packages depend on them; another package builds only when the PR
+      # changes its source.
+      - name: Build the merge base's component packages
+        if: steps.merge-base.outputs.found == 'true'
+        working-directory: .size-base
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm -F @astryxdesign/build build
+          pnpm -F @astryxdesign/core build
+          for pkg in lab charts richtext vega; do
+            if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src"; then
+              continue
+            fi
+            pnpm -F "@astryxdesign/$pkg" build
+          done
+
+      - name: Measure the merge base
+        if: steps.merge-base.outputs.found == 'true'
+        run: |
+          node .github/scripts/analyze-pr.js \
+            --base origin/${{ github.base_ref }} \
+            --head HEAD \
+            --base-root .size-base \
+            --base-only \
+            --output size-base.json
+
+      - name: Upload base size stats
+        if: steps.merge-base.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-size-base
+          path: size-base.json
+          retention-days: 1
+
   # Typechecks run beside build-storybook instead of before its Storybook
   # build, so the browser checks that wait on the Storybook artifact start
   # ~1.5 minutes sooner. The build and release-check joins require this job,
@@ -1415,6 +1496,25 @@ jobs:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
+      # A contract step added on main after this PR branched names a spec file
+      # the PR head does not have, and would fail with "No tests found". The
+      # wrapper, sourced into every later step, drops such files from
+      # `pnpm exec playwright test` with a notice and passes a step left with
+      # none. It comes from the merge commit these steps come from (an older PR
+      # head lacks it, and the PR's recorded base can lag main).
+      - name: Skip contract specs the PR head predates
+        if: github.event_name == 'pull_request'
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          wrapper="$RUNNER_TEMP/skip-absent-specs.sh"
+          if git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA" \
+            && git show "$WORKFLOW_SHA:.github/scripts/skip-absent-specs.sh" > "$wrapper"; then
+            echo "BASH_ENV=$wrapper" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Could not load the spec wrapper from the merge commit; contract steps run unwrapped."
+          fi
+
       # Dependencies are installed later, together with the Playwright browser,
       # because the analysis artifact has to be downloaded first.
       - name: Setup Node and pnpm
@@ -1523,6 +1623,17 @@ jobs:
             --project chromium \
             --output multiselector-disabled-focus-output
 
+      # In a right-to-left page Lightbox's Next button sits on the left, and
+      # the arrow keys must move toward the button on their side. The
+      # direction reaches the top-layer dialog through the engine's own
+      # cascade, which jsdom does not inherit.
+      - name: Run Lightbox arrow-key direction contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Lightbox/LightboxKeyboard.a11y.browser.spec.ts \
+            --project chromium \
+            --output lightbox-keyboard-output
+
       # The same guard for Selector and ComplexSelector triggers.
       - name: Run disabled trigger focus contract
         run: |
@@ -1530,6 +1641,17 @@ jobs:
             packages/core/src/__tests__/DisabledTriggerFocus.a11y.chromium.spec.ts \
             --project chromium \
             --output disabled-trigger-focus-output
+
+      # A pinch that starts on, or reaches, a Lab reorder grip (ListInput,
+      # TransferList) must zoom the page (WCAG 1.4.4), while a one-finger drag
+      # on the grip still reorders. touch-action and pinch-zoom only exist in a
+      # real engine with two-finger touch input.
+      - name: Run Lab reorder grip pinch-zoom contract
+        run: |
+          pnpm exec playwright test \
+            packages/lab/src/__tests__/ReorderGripPinchZoom.a11y.chromium.spec.ts \
+            --project chromium \
+            --output reorder-grip-pinch-zoom-output
 
       # Table merges a consumer min-width with its column floors through CSS
       # max(). jsdom keeps any string, so only a real engine shows whether the
@@ -1540,6 +1662,17 @@ jobs:
             packages/core/src/Table/__tests__/TableMinWidth.a11y.chromium.spec.ts \
             --project chromium \
             --output table-min-width-output
+
+      # A row the pointer lights in a menu (a resting mouse, a held press
+      # dragged over it) takes focus without matching :focus-visible, and a key
+      # pressed afterwards moves focus with it; jsdom has no focus-visible
+      # heuristic, so only a real engine shows it.
+      - name: Run menu hover focus contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/DropdownMenu/__tests__/MenuHoverFocus.a11y.chromium.spec.ts \
+            --project chromium \
+            --output menu-hover-focus-output
 
       # A CodeBlock diff row's tint has to follow a long line to the end of its
       # scroll width; jsdom has no layout, so only a real engine shows whether
@@ -1571,6 +1704,16 @@ jobs:
             --project chromium \
             --output menu-header-footer-output
 
+      # A card's press overlay paints a finger's press only if its arms win
+      # the cascade of the layered stylesheet Storybook builds, which jsdom
+      # does not model; the real engine shows the pixels under a held touch.
+      - name: Run card press overlay contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/__tests__/CardPress.a11y.chromium.spec.ts \
+            --project chromium \
+            --output card-press-output
+
       # A menu inside a shadow root must act on the row under a released
       # pointer; at the document level a real engine resolves that point to
       # the shadow host, which jsdom cannot show.
@@ -1580,6 +1723,17 @@ jobs:
             packages/core/src/hooks/__tests__/MenuPressShadowRoot.a11y.chromium.spec.ts \
             --project chromium \
             --output menu-press-shadow-root-output
+
+      # A two-finger pinch over an open picker wheel must zoom the page (WCAG
+      # 1.4.4) while one finger still scrolls the wheel. jsdom computes no
+      # touch-action, so only a real engine shows which gesture the browser
+      # keeps.
+      - name: Run picker wheel pinch-zoom contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/DateInput/__tests__/WheelPinchZoom.a11y.chromium.spec.ts \
+            --project chromium \
+            --output wheel-pinch-zoom-output
 
       # A sub-menu with a header or footer is a modal dialog beside the root's
       # menu, outside every role="menu" element. Its Tab order, a header radio
@@ -1591,6 +1745,18 @@ jobs:
             packages/core/src/DropdownMenu/__tests__/SubMenuHeaderFooter.a11y.chromium.spec.ts \
             --project chromium \
             --output submenu-header-footer-output
+
+      # Tooltip and HoverCard answer a touch only once it is a tap: they open
+      # when the finger lifts, never for a touch that turns into a scroll, and
+      # a tap-opened layer closes when a tap outside lifts. Whether a touch is
+      # a tap, a scroll or a long press is the engine's own gesture decision,
+      # which only real touch input reaches.
+      - name: Run hover layer touch contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts \
+            --project chromium \
+            --output hover-layer-touch-output
 
       # A pointer that crosses from a Tooltip's trigger onto the tooltip in one
       # step must not lose it (WCAG 1.4.13 hoverable). The defect is in the
@@ -1623,6 +1789,17 @@ jobs:
             packages/core/src/TopNav/__tests__/TopNavMobileLongHeading.a11y.chromium.spec.ts \
             --project chromium \
             --output top-nav-mobile-long-heading-output
+
+      # A pinch that starts on a row with swipe actions must zoom the page
+      # (WCAG 1.4.4) and leave the row where it is, whichever finger lands
+      # first, while a one-finger sideways drag still swipes. Pinch-zoom and
+      # touch-action only exist in a real engine with two-finger touch input.
+      - name: Run Item swipe pinch-zoom contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Item/__tests__/ItemSwipePinchZoom.a11y.chromium.spec.ts \
+            --project chromium \
+            --output item-swipe-pinch-zoom-output
 
       # The RichTextEditor "Markdown parity" stories render one Markdown
       # document with core Markdown and RichTextEditor and measure where each
@@ -1918,6 +2095,55 @@ jobs:
         with:
           name: menu-contract-evidence-${{ needs.build-storybook.outputs.short_hash }}
           path: menu-contract/
+          retention-days: 30
+          if-no-files-found: warn
+
+      # The table contract's table role and name, header and cell roles, and
+      # their place in the table's accessibility subtree are accessibility-tree
+      # facts that jsdom cannot observe. Run the contract's own fixture proof and
+      # the Table binding whenever Table source, the binding's stories, or the
+      # contract changes. Its own --output directory; the JSON report is the
+      # head-bound record, uploaded next.
+      - name: Run Table accessibility contract
+        id: table-contract
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PLAYWRIGHT_JSON_OUTPUT_FILE: table-contract/report.json
+        run: |
+          should_run=false
+          # Table and the contract are matched by file name.
+          # The helper comes from the base, since an older PR head lacks it.
+          # Exit 1 means out of scope; 0 in scope; 2 unknown, so run.
+          scope=2
+          helper="$(mktemp)"
+          if git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA" \
+            && git show "$BASE_SHA:.github/scripts/pr-scope-touches.sh" > "$helper"; then
+            scope=0
+            bash "$helper" "$BASE_SHA" \
+              '^(internal/a11y-spec/src/patterns/table\.|packages/core/src/Table/|apps/storybook/stories/TableA11y)' || scope=$?
+          fi
+          if [ "$scope" != 1 ]; then
+            should_run=true
+          fi
+          echo "should_run=${should_run}" >> "$GITHUB_OUTPUT"
+          if [ "$should_run" != true ]; then
+            echo "Table and the table contract are not in PR scope; skipping table evidence."
+            exit 0
+          fi
+          pnpm exec playwright test \
+            internal/a11y-spec/src/patterns/table.chromium.spec.ts \
+            packages/core/src/Table/__tests__/Table.a11y.chromium.spec.ts \
+            --project chromium \
+            --reporter list,json \
+            --output table-contract-output
+
+      - name: Upload Table accessibility contract evidence
+        if: ${{ !cancelled() && steps.table-contract.outputs.should_run == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: table-contract-evidence-${{ needs.build-storybook.outputs.short_hash }}
+          path: table-contract/
           retention-days: 30
           if-no-files-found: warn
 
@@ -2625,7 +2851,13 @@ jobs:
           COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
           case ",${COMPONENTS}," in
             *,core/Markdown,*)
-              echo 'should_run=true' >> "$GITHUB_OUTPUT"
+              # An older PR head can lack the spec (the wrapper then skips
+              # it), and it would leave nothing for the upload to find.
+              if [ -e packages/core/src/Markdown/plugins/headingLinks.a11y.chromium.spec.ts ]; then
+                echo 'should_run=true' >> "$GITHUB_OUTPUT"
+              else
+                echo 'should_run=false' >> "$GITHUB_OUTPUT"
+              fi
               pnpm exec playwright test \
                 packages/core/src/Markdown/plugins/headingLinks.a11y.chromium.spec.ts \
                 --project chromium \
@@ -3130,6 +3362,70 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      # DropdownMenuRadioItem owns one menuitemradio row: its checked state,
+      # decorative radio marker, icon, description, end content, disabled
+      # paint, and composition of caller handlers with row activation. The
+      # group owns value propagation; DropdownMenu owns keyboard navigation.
+      - name: Run DropdownMenuRadioItem audit browser evidence
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] DropdownMenuRadioItem:') }}
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output dropdown-menu-radio-item-a11y-report.json \
+            --components DropdownMenuRadioItem \
+            --baseline .github/a11y-baseline.json \
+            --fail-on-new || status=1
+          pnpm exec playwright test \
+            packages/core/src/DropdownMenu/__tests__/DropdownMenuRadioItemAudit.a11y.chromium.spec.ts \
+            --project chromium || status=1
+          exit "$status"
+
+      - name: Upload DropdownMenuRadioItem audit evidence
+        if: always() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] DropdownMenuRadioItem:')
+        uses: actions/upload-artifact@v7
+        with:
+          name: dropdown-menu-radio-item-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}
+          path: |
+            dropdown-menu-radio-item-a11y-report.json
+            dropdown-menu-radio-item-audit-evidence/
+          retention-days: 30
+          if-no-files-found: error
+
+      # DropdownMenuSubMenu owns one menuitem row that reveals its own rows: the
+      # popup state and wiring, the flyout beside the row, the drilled-in view,
+      # the caret or spinner, and disabled paint. DropdownMenu owns the root
+      # surface, the drill-in stack, and root keyboard navigation.
+      - name: Run DropdownMenuSubMenu audit browser evidence
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] DropdownMenuSubMenu:') }}
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output dropdown-menu-submenu-a11y-report.json \
+            --components DropdownMenuSubMenu \
+            --baseline .github/a11y-baseline.json \
+            --fail-on-new || status=1
+          pnpm exec playwright test \
+            packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts \
+            --project chromium || status=1
+          exit "$status"
+
+      - name: Upload DropdownMenuSubMenu audit evidence
+        if: always() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] DropdownMenuSubMenu:')
+        uses: actions/upload-artifact@v7
+        with:
+          name: dropdown-menu-submenu-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}
+          path: |
+            dropdown-menu-submenu-a11y-report.json
+            dropdown-menu-submenu-audit-evidence/
+          retention-days: 30
+          if-no-files-found: error
+
       # ContextMenu owns pointer and touch presentations across cursor anchoring,
       # selectable rows, sections, inline triggers, RTL, and narrow viewports.
       # Its audit lane binds the rendered matrix to the exact pull-request head.
@@ -3158,6 +3454,37 @@ jobs:
           path: |
             context-menu-a11y-report.json
             context-menu-audit-evidence/
+          retention-days: 30
+          if-no-files-found: error
+
+      # ComplexSelector's whole-component audit grades the rendered state matrix,
+      # caller-rendered trigger anchor/focus behavior, RTL, and 320px reflow from
+      # exact-head Chromium receipts. Keep this with the existing pr-a11y owner.
+      - name: Run ComplexSelector audit browser evidence
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] ComplexSelector:') }}
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output complex-selector-a11y-report.json \
+            --components ComplexSelector \
+            --baseline .github/a11y-baseline.json \
+            --fail-on-new || status=1
+          pnpm exec playwright test \
+            packages/core/src/ComplexSelector/__tests__/ComplexSelector.a11y.chromium.spec.ts \
+            --project chromium || status=1
+          exit "$status"
+
+      - name: Upload ComplexSelector audit evidence
+        if: always() && github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[Component Audit] ComplexSelector:')
+        uses: actions/upload-artifact@v7
+        with:
+          name: complex-selector-audit-evidence-${{ needs.build-storybook.outputs.short_hash }}
+          path: |
+            complex-selector-a11y-report.json
+            test-results/complex-selector-audit-evidence/
           retention-days: 30
           if-no-files-found: error
 

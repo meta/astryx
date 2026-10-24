@@ -19,8 +19,6 @@ import {
   IOS_TOUCH_STYLE_KEYS,
   TOUCH_QUERY,
   readTouchPresentation,
-  useMotionPresentation,
-  useTouchIdiom,
   useTouchPresentation,
 } from '../../touchPresentation';
 
@@ -42,13 +40,9 @@ document.head.append(style);
 
 function Probe() {
   const presentation = useTouchPresentation();
-  const idiom = useTouchIdiom();
-  const motion = useMotionPresentation();
   useEffect(() => {
     window.__answers = {
       presentation,
-      idiom,
-      motion,
       read: readTouchPresentation(),
       touchCallout: CSS.supports(IOS_SUPPORTS_QUERY),
       coarse: matchMedia(TOUCH_QUERY).matches,

@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[feat] `presentation="adaptive"` on DropdownMenu, ContextMenu, MoreMenu, Selector and MultiSelector chooses the bottom sheet on a compact touch screen: a coarse primary pointer and a viewport narrower than 744px or shorter than 500px (it was 768px wide and below). An iPad mini in portrait keeps the anchored popover; a phone in landscape now gets the sheet.
+[feat] `presentation="adaptive"` on DropdownMenu, ContextMenu, MoreMenu, Selector and MultiSelector, and a DropdownMenu's default sub-menu drill-in, now use the theme's compact definition with a coarse primary pointer: a viewport narrower than the theme's `md` point (768px by default) or shorter than 500px. This is a behavior change. The old default was a bottom sheet at 768px wide and below on a coarse pointer. Now a coarse-pointer screen exactly 768px wide keeps the anchored popover, and a phone in landscape (wider than 768px but shorter than 500px) gets the bottom sheet and the drilled-in sub-menu. To pin a component's presentation regardless of the rule, pass `presentation="popover"` or `presentation="bottom-sheet"`. Mouse and keyboard users on desktop see no change, because every case requires a coarse pointer.
 
 @vjeux

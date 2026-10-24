@@ -4,7 +4,8 @@
 
 /**
  * @file Lightbox.tsx
- * @input Uses React, native dialog, StyleX, IconButton, theme tokens, layerTextReset, layerStructureReset
+ * @input Uses React, native dialog, StyleX, IconButton, theme tokens, layerTextReset, layerStructureReset,
+ *   isRtlElement (gallery arrow keys follow the rendered direction)
  * @output Exports Lightbox component, LightboxProps, LightboxMedia
  * @position Core implementation; consumed by index.ts
  *
@@ -46,6 +47,7 @@ import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isRtlElement} from '../hooks/isRtlElement';
 /**
  * Media type for lightbox items.
  */
@@ -274,7 +276,9 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
  * A fullscreen overlay for viewing images at full resolution.
  *
  * Supports single image and gallery modes. In gallery mode, provides
- * prev/next navigation via buttons and arrow keys. Optionally supports
+ * prev/next navigation via buttons and arrow keys; the arrow keys follow
+ * the writing direction (in RTL, ArrowLeft goes to the next item, like the
+ * Next button on the left). Optionally supports
  * zoom (double-click, Enter/Space on the image, or `+`/`-` to toggle 2x)
  * and pan (drag or arrow keys when zoomed; arrows navigate the gallery
  * when not zoomed).
@@ -513,6 +517,12 @@ export function Lightbox({
 
   // Keyboard navigation. While zoomed, arrows pan the image (matching common
   // lightbox conventions); when not zoomed they navigate the gallery.
+  //
+  // Gallery arrows follow the rendered direction, resolved at keydown: in RTL
+  // the Next button sits on the left, so ArrowLeft goes to the next item and
+  // ArrowRight to the previous one. Panning stays physical in both directions:
+  // the image itself is not mirrored, so ArrowRight still reveals what is to
+  // its right.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (hasZoom && !isVideo) {
@@ -533,12 +543,15 @@ export function Lightbox({
           return;
         }
       }
-      if (e.key === 'ArrowLeft') {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
-        goToPrev();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        goToNext();
+        const towardEnd =
+          (e.key === 'ArrowRight') !== isRtlElement(dialogRef.current);
+        if (towardEnd) {
+          goToNext();
+        } else {
+          goToPrev();
+        }
       }
     },
     [hasZoom, isVideo, zoom, applyZoom, goToPrev, goToNext],

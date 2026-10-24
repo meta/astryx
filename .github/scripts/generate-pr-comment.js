@@ -3,7 +3,7 @@
 
 /**
  * @description Generates and posts PR comment with analysis results
- * @input --analysis <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout
  */
 
@@ -21,6 +21,7 @@ const getArg = name => {
 };
 
 const analysisFile = getArg('analysis') || 'analysis.json';
+const baseStatsFile = getArg('base-stats');
 const a11yFile = getArg('a11y') || 'a11y-report.json';
 const visualFile = getArg('visual');
 const runUrl = getArg('run-url') || '';
@@ -42,6 +43,18 @@ try {
   analysis = JSON.parse(fs.readFileSync(analysisFile, 'utf8'));
 } catch (e) {
   console.error('Warning: Could not read analysis file:', e.message);
+}
+
+// Base measurements from a built checkout of the merge base, written by
+// `analyze-pr.js --base-only`. The caller has already matched their head.
+if (baseStatsFile) {
+  try {
+    const base = JSON.parse(fs.readFileSync(baseStatsFile, 'utf8'));
+    analysis.baseComponentStats = base.baseComponentStats || undefined;
+    analysis.baseBundlePackages = base.baseBundlePackages || undefined;
+  } catch (e) {
+    console.error('Warning: Could not read base stats:', e.message);
+  }
 }
 
 try {
@@ -73,6 +86,17 @@ function extLink(text, url) {
   return `<a href="${String(url).replace(/"/g, '%22')}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 }
 
+// Difference of two measured byte counts, or null when either side was not
+// measured. A missing size is never treated as 0.
+function bytesDelta(after, before) {
+  return typeof after === 'number' &&
+    Number.isFinite(after) &&
+    typeof before === 'number' &&
+    Number.isFinite(before)
+    ? after - before
+    : null;
+}
+
 // Build component stats section
 let componentSection = '';
 if (analysis.newComponents && analysis.newComponents.length > 0) {
@@ -86,8 +110,9 @@ if (analysis.newComponents && analysis.newComponents.length > 0) {
       : '';
     componentSection += `<details>\n<summary><strong>${inline(comp)}</strong>${pkgBadge}${sbBadge}</summary>\n\n`;
     componentSection += `| Metric | Value |\n|--------|-------|\n`;
-    componentSection += `| Bundle Size (ESM) | ${inline(stats.esmSize) || 'N/A'} |\n`;
-    componentSection += `| Bundle Size (CJS) | ${inline(stats.cjsSize) || 'N/A'} |\n`;
+    componentSection += `| Entry File (ESM) | ${inline(stats.esmSize) || 'N/A'} |\n`;
+    if (stats.cjsSize)
+      componentSection += `| Entry File (CJS) | ${inline(stats.cjsSize)} |\n`;
     componentSection += `| Lines of Code | ${inline(stats.linesOfCode) || 'N/A'} |\n`;
     componentSection += `| Source Files | ${inline(stats.fileCount) || 'N/A'} |\n`;
     componentSection += `| Complexity | ${inline(stats.complexityRating) || 'N/A'} (${num(stats.complexity)}) |\n`;
@@ -120,11 +145,7 @@ if (analysis.modifiedComponents && analysis.modifiedComponents.length > 0) {
     componentSection += `<details>\n<summary><strong>${inline(comp)}</strong>${pkgBadge}${sbBadge}${newBadge}</summary>\n\n`;
     componentSection += `| Metric | Before | After | Delta |\n|--------|--------|-------|-------|\n`;
 
-    const esmDelta =
-      Number.isFinite(Number(stats.esmBytes)) &&
-      Number.isFinite(Number(baseStats.esmBytes))
-        ? Number(stats.esmBytes) - Number(baseStats.esmBytes)
-        : null;
+    const esmDelta = bytesDelta(stats.esmBytes, baseStats.esmBytes);
     const esmDeltaStr =
       esmDelta !== null
         ? esmDelta > 0
@@ -132,7 +153,7 @@ if (analysis.modifiedComponents && analysis.modifiedComponents.length > 0) {
           : `${esmDelta}B`
         : 'N/A';
 
-    componentSection += `| Bundle Size (ESM) | ${inline(baseStats.esmSize) || 'N/A'} | ${inline(stats.esmSize) || 'N/A'} | ${esmDeltaStr} |\n`;
+    componentSection += `| Entry File (ESM) | ${inline(baseStats.esmSize) || 'N/A'} | ${inline(stats.esmSize) || 'N/A'} | ${esmDeltaStr} |\n`;
     componentSection += `| Lines of Code | ${inline(baseStats.linesOfCode) || 'N/A'} | ${inline(stats.linesOfCode) || 'N/A'} | - |\n`;
     componentSection += `| Complexity | ${inline(baseStats.complexityRating) || 'N/A'} | ${inline(stats.complexityRating) || 'N/A'} (${num(stats.complexity)}) | - |\n`;
     componentSection += `\n</details>\n\n`;
@@ -169,7 +190,20 @@ const bundlePackages =
       ? [{package: '@astryxdesign/core', ...analysis.totalBundle}]
       : [];
 
-if (bundlePackages.length > 0) {
+const baseBundles = analysis.baseBundlePackages;
+const signedBytes = delta =>
+  delta === null ? 'N/A' : delta > 0 ? `+${delta}B` : `${delta}B`;
+if (bundlePackages.length > 0 && Array.isArray(baseBundles)) {
+  bundleSection += `Gzip figures measure each package's entry file, not the code an import pulls in.\n\n`;
+  bundleSection += `| Package | Entry (ESM) | Entry gzip before | Entry gzip after | Delta |\n`;
+  bundleSection += `|---------|-------------|-------------------|------------------|-------|\n`;
+  for (const b of bundlePackages) {
+    const base = baseBundles.find(entry => entry.package === b.package) || {};
+    const delta = bytesDelta(b.gzipBytes, base.gzipBytes);
+    bundleSection += `| ${inline(b.package)} | ${inline(b.esmSize) || 'N/A'} | ${inline(base.gzipSize) || 'N/A'} | ${inline(b.gzipSize) || 'N/A'} | ${signedBytes(delta)} |\n`;
+  }
+  bundleSection += `\n`;
+} else if (bundlePackages.length > 0) {
   bundleSection += `| Package | Size (ESM) | Size (CJS) | Gzipped |\n`;
   bundleSection += `|---------|------------|------------|----------|\n`;
   for (const b of bundlePackages) {

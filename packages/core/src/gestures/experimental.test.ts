@@ -33,9 +33,6 @@ const NAMES = [
   'PRESS_PROFILES',
   'useTouchPresentation',
   'readTouchPresentation',
-  'useTouchIdiom',
-  'IOS_SUPPORTS_QUERY',
-  'IOS_TOUCH_STYLE_KEYS',
   'playHaptic',
 ] as const;
 

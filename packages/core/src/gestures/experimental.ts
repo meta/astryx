@@ -82,13 +82,10 @@ export type {
 } from './PressTracker';
 
 export {
-  IOS_SUPPORTS_QUERY,
-  IOS_TOUCH_STYLE_KEYS,
   readTouchPresentation,
-  useTouchIdiom,
   useTouchPresentation,
 } from '../utils/touchPresentation';
-export type {TouchIdiom, TouchPresentation} from '../utils/touchPresentation';
+export type {TouchPresentation} from '../utils/touchPresentation';
 
 export {playHaptic} from './haptics';
 export type {HapticFeedbackKind} from '../motion/uikit';

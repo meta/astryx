@@ -248,10 +248,14 @@ export interface ComplexSelectorRenderTriggerProps extends Omit<
   | 'id'
   | 'onClick'
   | 'onKeyDown'
+  | 'role'
+  | 'aria-label'
   | 'aria-haspopup'
   | 'aria-expanded'
   | 'aria-controls'
   | 'aria-busy'
+  | 'aria-required'
+  | 'aria-disabled'
 > {
   /**
    * Attaches the control as the popup's anchor and focus-return target, and
@@ -267,6 +271,24 @@ export interface ComplexSelectorRenderTriggerProps extends Omit<
   'aria-expanded': boolean;
   'aria-controls': string;
   'aria-busy': boolean | undefined;
+  /**
+   * The control is the selector's field: a combobox whose popup is a dialog,
+   * as on the built-in trigger.
+   */
+  role: 'combobox';
+  /**
+   * The field's `label`, unless the selector was given `aria-label` or
+   * `aria-labelledby`: a combobox takes no name from its content, so the
+   * label names the control as it names the built-in trigger.
+   */
+  'aria-label': string | undefined;
+  /** `'true'` when the field is required. */
+  'aria-required': 'true' | undefined;
+  /**
+   * `'true'` when the selector is disabled. The control keeps its tab stop
+   * and the popup does not open (`spec:AST-085`).
+   */
+  'aria-disabled': 'true' | undefined;
 }
 
 export interface ComplexSelectorRenderState {
@@ -719,12 +741,29 @@ export function ComplexSelector<Value>({
       id: triggerId,
       // This path never forwarded caller handlers before, so the newly
       // forwarded ones compose component first and cannot cancel opening.
-      onClick: composeEventHandlers(handleTriggerClick, onClickProp),
-      onKeyDown: composeEventHandlers(handleTriggerKeyDown, onKeyDownProp),
+      // A disabled control keeps its tab stop but invokes no callback
+      // (`spec:AST-085` FR2), as on the built-in trigger.
+      onClick: isDisabled
+        ? swallowDisabledPress
+        : composeEventHandlers(handleTriggerClick, onClickProp),
+      onKeyDown: isDisabled
+        ? handleTriggerKeyDown
+        : composeEventHandlers(handleTriggerKeyDown, onKeyDownProp),
+      // The caller's control is the field, so it carries the field's role
+      // and state as the built-in trigger does.
+      role: 'combobox',
+      // A combobox takes no name from its content, so the field's label
+      // names the control, as it names the built-in trigger and the popup.
+      // A name passed to the selector wins.
+      'aria-label':
+        rest['aria-label'] ??
+        (rest['aria-labelledby'] != null ? undefined : label),
       'aria-haspopup': 'dialog',
       'aria-expanded': isOpen,
       'aria-controls': contentId,
       'aria-busy': isBusy || undefined,
+      'aria-required': isEffectivelyRequired ? 'true' : undefined,
+      'aria-disabled': isDisabled ? 'true' : undefined,
     };
     return (
       <>
@@ -773,6 +812,9 @@ export function ComplexSelector<Value>({
           ref={triggerButtonRef}
           id={triggerId}
           type="button"
+          // The trigger is the field's control: a combobox whose popup is a
+          // dialog, so required and disabled state are valid on it.
+          role="combobox"
           aria-haspopup="dialog"
           aria-expanded={isOpen}
           aria-controls={contentId}

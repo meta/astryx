@@ -18,7 +18,8 @@
  *   pointer events stay with the element it landed on (implicit capture), so a
  *   menu container never sees a finger that slid onto it — the document does.
  * - The highlight follows the pointer (DOM focus with `preventScroll` in a
- *   menu; a callback for a picker that highlights by index).
+ *   menu, its indicator following the last input; a callback for a picker
+ *   that highlights by index).
  * - The row under the RELEASE acts, the way its own click would, carrying the
  *   release's button and modifier keys.
  * - The browser's stray `click` for a tracked gesture is swallowed at the
@@ -58,6 +59,8 @@ import {
   type MenuPressPointerType,
 } from './menuPressGesture';
 import {useLongPress, type UseLongPressHandlers} from './useLongPress';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
 /** Marks a menu root that carries this press model. */
 export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
@@ -327,6 +330,9 @@ interface ResolvedPoint {
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  // The highlight, and the hover focus of the rows in this menu, follow the
+  // last input, which this tracks for the document.
+  useInteractionModalityTracking();
 
   const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
@@ -423,7 +429,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
       }
       // In a menu the highlight IS focus. A row whose root takes no
       // focus is highlighted through the control inside it; over nothing,
-      // the menu root holds focus so no row is lit.
+      // the menu root holds focus so no row is lit. The focus follows the
+      // last input (`architecture:interaction-modality` INV1): a held press
+      // is pointer input, so the row does not match :focus-visible, which a
+      // plain focus() would inherit from the focus before it.
       const target =
         row == null
           ? menuRef.current
@@ -431,7 +440,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             ? row
             : row.querySelector<HTMLElement>(INNER_CONTROL_SELECTOR);
       if (target != null && target !== getDocument().activeElement) {
-        target.focus({preventScroll: true});
+        focusForLastInput(target, {preventScroll: true});
       }
     },
     [getDocument],

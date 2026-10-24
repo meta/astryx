@@ -32,6 +32,7 @@
     "dist",
     "src",
     "apple",
+    "!apple/Templates",
     "README.md"
   ],
   "exports": {
@@ -73,6 +74,7 @@
     "prepack": "pnpm build",
     "build": "node ../../scripts/clean-dist.mjs && tsc --project tsconfig.build.json && node scripts/generate.mjs --types",
     "generate:apple": "pnpm build && node scripts/generate.mjs --apple",
+    "generate:swift-ios": "pnpm -F @astryxdesign/core build && node scripts/swift-ios-theme.mjs && node scripts/swift-ios-strings.mjs",
     "test": "vitest run --root ../.. packages/native",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "typecheck:types": "tsc --project tsconfig.types.json"

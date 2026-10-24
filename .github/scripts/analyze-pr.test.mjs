@@ -279,3 +279,119 @@ describe('analyze-pr component ownership', () => {
     }
   });
 });
+
+describe('analyze-pr base and head sizes', () => {
+  it('measures ESM entries by module type and reads base sizes from a merge-base build', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-size-'));
+    const baseRoot = path.join(repo, '.size-base');
+    const write = (root, file, content) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), content);
+    };
+    try {
+      write(repo, 'package.json', '{}');
+      write(repo, '.gitignore', 'dist/\n.size-base/\n*.json.out\n');
+      write(repo, 'packages/core/package.json', '{"type": "module"}\n');
+      write(
+        repo,
+        'packages/core/src/index.ts',
+        "export {Card} from './Card';\n",
+      );
+      write(
+        repo,
+        'packages/core/src/Card/index.ts',
+        "export {Card} from './Card';\n",
+      );
+      write(
+        repo,
+        'packages/core/src/Card/Card.tsx',
+        'export function Card() {}\n',
+      );
+      write(
+        repo,
+        'packages/core/src/Card/Card.doc.mjs',
+        "export const docs = {\n  name: 'Card',\n};\n",
+      );
+      git(repo, ['init', '-q', '-b', 'main']);
+      git(repo, ['config', 'user.email', 'test@test.co']);
+      git(repo, ['config', 'user.name', 'Test']);
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-qm', 'base']);
+      git(repo, ['worktree', 'add', '-q', '--detach', baseRoot, 'HEAD']);
+      git(repo, ['checkout', '-q', '-b', 'feature']);
+      fs.appendFileSync(
+        path.join(repo, 'packages/core/src/Card/Card.tsx'),
+        'export const changed = true;\n',
+      );
+      git(repo, ['commit', '-qam', 'touch Card']);
+
+      // Babel writes ES modules as `.js` in a "type": "module" package.
+      write(baseRoot, 'packages/core/dist/Card/index.js', 'x'.repeat(100));
+      write(
+        baseRoot,
+        'packages/core/dist/index.js',
+        'export const base = 1;\n'.repeat(10),
+      );
+      write(repo, 'packages/core/dist/Card/index.js', 'x'.repeat(160));
+      write(
+        repo,
+        'packages/core/dist/index.js',
+        'export const head = 2;\n'.repeat(40),
+      );
+
+      execFileSync(
+        process.execPath,
+        [
+          SCRIPT,
+          '--base',
+          'main',
+          '--head',
+          'HEAD',
+          '--base-root',
+          '.size-base',
+          '--output',
+          'analysis.json',
+        ],
+        {cwd: repo, encoding: 'utf8'},
+      );
+      const analysis = JSON.parse(
+        fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'),
+      );
+      expect(analysis.componentStats.Card.esmBytes).toBe(160);
+      expect(analysis.componentStats.Card.cjsBytes).toBeNull();
+      expect(analysis.baseComponentStats.Card.esmBytes).toBe(100);
+      const [headBundle] = analysis.bundlePackages;
+      const [baseBundle] = analysis.baseBundlePackages;
+      expect(headBundle.package).toBe('@astryxdesign/core');
+      expect(baseBundle.package).toBe('@astryxdesign/core');
+      expect(headBundle.gzipBytes).toBeGreaterThan(0);
+      expect(baseBundle.gzipBytes).toBeGreaterThan(0);
+
+      execFileSync(
+        process.execPath,
+        [
+          SCRIPT,
+          '--base',
+          'main',
+          '--head',
+          'HEAD',
+          '--base-root',
+          '.size-base',
+          '--base-only',
+          '--output',
+          'size-base.json',
+        ],
+        {cwd: repo, encoding: 'utf8'},
+      );
+      const baseOnly = JSON.parse(
+        fs.readFileSync(path.join(repo, 'size-base.json'), 'utf8'),
+      );
+      expect(baseOnly.headSha).toBe(git(repo, ['rev-parse', 'HEAD']));
+      expect(baseOnly.baseSha).toBe(git(repo, ['rev-parse', 'main']));
+      expect(baseOnly.baseComponentStats.Card.esmBytes).toBe(100);
+      expect(baseOnly.componentStats).toBeUndefined();
+    } finally {
+      fs.rmSync(repo, {recursive: true, force: true});
+    }
+  });
+});

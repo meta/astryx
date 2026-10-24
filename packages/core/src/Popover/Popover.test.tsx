@@ -945,6 +945,54 @@ describe('Popover', () => {
       expect(trigger).toHaveFocus();
     });
 
+    it('does not move focus into a popover that closed before its first frame', () => {
+      // Auto-focus waits a frame for the content to mount. A popover dismissed
+      // within that frame must not pull focus into its hidden content.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+        frames.delete(frame);
+      });
+      try {
+        render(
+          <Popover
+            content={
+              <button type="button" data-testid="inside-content">
+                Inside
+              </button>
+            }
+            label="Test">
+            <button type="button">Open</button>
+          </Popover>,
+        );
+        const trigger = screen.getByRole('button', {name: 'Open'});
+        trigger.focus();
+
+        fireEvent.click(trigger);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.keyDown(document, {key: 'Escape'});
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        // The open's frame runs late, as on a busy machine.
+        act(() => {
+          const due = [...frames.values()];
+          frames.clear();
+          due.forEach(callback => callback(0));
+        });
+        expect(trigger).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('returns focus to the trigger on light dismiss', () => {
       render(
         <Popover
