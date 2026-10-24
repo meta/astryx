@@ -35,10 +35,25 @@ interface Recorded {
 
 let clock = 1000;
 let recorded: Recorded[] = [];
+/**
+ * What the page's stylesheet sets, by property. Computed style reads it
+ * under the inline value (jsdom keeps stale computed values for these
+ * properties, so the page is modeled here).
+ */
+let stylesheet: Record<string, string> = {};
 
 beforeEach(() => {
   clock = 1000;
   recorded = [];
+  stylesheet = {};
+  vi.spyOn(window, 'getComputedStyle').mockImplementation(
+    element =>
+      ({
+        getPropertyValue: (property: string) =>
+          (element as HTMLElement).style.getPropertyValue(property) ||
+          (stylesheet[property] ?? ''),
+      }) as unknown as CSSStyleDeclaration,
+  );
   vi.useFakeTimers();
   HTMLElement.prototype.animate = function (keyframes, options) {
     const animation: Recorded = {
@@ -63,6 +78,7 @@ beforeEach(() => {
 afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, 'animate');
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function setup(options: AnimatorOptions = {}) {
@@ -159,6 +175,57 @@ describe('animate: keyframes on the compositor', () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
     expect(live('translate')[0].keyframes.length).toBeLessThan(200);
+  });
+
+  it('clears an identity transform at rest, so a fixed child stays fixed', async () => {
+    const {animator, element} = setup();
+    animator.animate(
+      {x: 100, scale: 0.9, rotate: 10},
+      {spring: springs.snappy},
+    );
+    expect(element.style.translate).toBe('100px 0px');
+    await advance(100);
+    animator.animate({x: 0, scale: 1, rotate: 0}, {spring: springs.snappy});
+    // While the motion back runs, the end is never written 0px 0px: none, or
+    // nothing where the stylesheet agrees.
+    expect(live('translate')).toHaveLength(1);
+    for (const channel of ['translate', 'scale', 'rotate'] as const) {
+      expect(['', 'none']).toContain(element.style[channel]);
+    }
+    await advance(5000);
+    // At rest the identity leaves the element: translate 0px 0px would make
+    // the element a fixed child's containing block, and scale 1 stops a
+    // finger scrolling inside it on Mobile Safari.
+    expect(element.style.translate).toBe('');
+    expect(element.style.scale).toBe('');
+    expect(element.style.rotate).toBe('');
+    // The keyframes stay numeric, so the curve still interpolates.
+    animator.animate({x: 50}, {spring: springs.snappy});
+    expect(live('translate')[0].keyframes[0].translate).toBe('0px 0px');
+  });
+
+  it('clears opacity back at 1, and an identity set at rest, and keeps any other value', async () => {
+    const {animator, element} = setup();
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.snappy});
+    await advance(5000);
+    expect(element.style.opacity).toBe('');
+    animator.set({x: 12});
+    animator.set({x: 0});
+    expect(element.style.translate).toBe('');
+    animator.animate({opacity: 0.5, x: 20}, {spring: springs.snappy});
+    await advance(5000);
+    expect(element.style.opacity).toBe('0.5');
+    expect(element.style.translate).toBe('20px 0px');
+  });
+
+  it('keeps an identity inline where the stylesheet would move the element', async () => {
+    const {animator, element} = setup();
+    stylesheet.scale = '0.5';
+    animator.animate({scale: 0.9}, {spring: springs.snappy});
+    animator.animate({scale: 1}, {spring: springs.snappy});
+    await advance(5000);
+    expect(element.style.scale).toBe('none');
   });
 
   it('writes the end values inline up front, so the last frame needs no main thread', () => {
@@ -340,7 +407,7 @@ describe('set: direct manipulation (M4)', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
       animator.set({x});
-      expect(element.style.translate).toBe(`${x}px 0px`);
+      expect(element.style.translate).toBe(x === 0 ? '' : `${x}px 0px`);
     }
     expect(recorded).toHaveLength(0);
   });
@@ -452,7 +519,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     });
     expect(sampleAt(translate, 'translate', 1000 + fade / 2 - 2)[0]).toBe(0);
     expect(element.style.translate).toBe('100px 0px');
-    expect(element.style.opacity).toBe('1');
+    expect(element.style.opacity).toBe('');
   });
 
   it('an entrance lands in place and fades in', () => {
@@ -461,7 +528,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     animator.animate({y: 0, opacity: 1}, {spring: springs.sheetPresent});
     expect(animator.get('y')).toBe(0);
     expect(live('translate')).toHaveLength(0);
-    expect(element.style.translate).toBe('0px 0px');
+    expect(element.style.translate).toBe('');
     expect(animator.get('opacity', 1000 + fade / 2)).toBeCloseTo(ease(0.5), 9);
     expect(Number(live('opacity')[0].options.duration)).toBeCloseTo(
       fade + END_HOLD_MS,
