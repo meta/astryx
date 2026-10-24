@@ -11,8 +11,9 @@
  *   and for each adaptation rule
  *
  * A motion role is a spring, duration or curve of a motion table, named by its
- * table path (`sheet.present`, `springs.navigationPush`,
- * `timing.curves.easeInOut`; see motion/roles.ts). A theme writes a role's CSS
+ * table path (`springs.sheetPresent`, `springs.navigationPush`,
+ * `timing.curves.easeInOut`; see motion/roles.ts), and listed in
+ * motion/roleKinds.generated.ts. A theme writes a role's CSS
  * variable only when it sets the role; an empty variable means the table's
  * measured value, so a theme never has to restate the defaults.
  *
@@ -26,11 +27,11 @@
 import {
   formatMotionRoleValue,
   isMotionRoleId,
-  motionRole,
   motionRoleVariable,
   type MotionCurvePoints,
   type MotionRoleKind,
 } from '../motion/roles';
+import {MOTION_ROLE_KINDS} from '../motion/roleKinds.generated';
 import type {SpringDescription} from '../motion/spring';
 import type {MotionScaleConfig} from './expandMotionScale';
 
@@ -110,8 +111,8 @@ export function hasMotionRoleValues(config: MotionRoleValues): boolean {
 /**
  * The CSS custom properties for the roles a motion config sets, e.g.
  * `{'--motion-sheet-present': '0.5s 0.15'}`. Throws, naming the role, on a
- * malformed id, a value of the wrong kind, or a role whose registered table
- * holds another kind.
+ * malformed or unknown id, a value of the wrong kind, or a role of another
+ * kind (checked against the generated list of roles, whatever is imported).
  */
 export function expandMotionRoles(
   config: MotionRoleValues,
@@ -134,13 +135,20 @@ export function expandMotionRoles(
       const location = `${path}.${group}["${id}"]`;
       if (!isMotionRoleId(id)) {
         throw new Error(
-          `${location}: a motion role is named by its table path, such as "sheet.present" or "springs.navigationPush".`,
+          `${location}: a motion role is named by its table path, such as "springs.sheetPresent" or "timing.curves.easeInOut".`,
         );
       }
-      const registered = motionRole(id);
-      if (registered !== undefined && registered.kind !== kind) {
+      // The generated list, not the runtime registry: the check must not
+      // depend on which tables happen to be imported.
+      const registered = MOTION_ROLE_KINDS[id];
+      if (registered === undefined) {
         throw new Error(
-          `${location}: "${id}" is a ${registered.kind}; set it under the matching group.`,
+          `${location}: "${id}" is not a motion role; the motion docs list every role.`,
+        );
+      }
+      if (registered !== kind) {
+        throw new Error(
+          `${location}: "${id}" is a ${registered}; set it under the matching group.`,
         );
       }
       const variable = motionRoleVariable(id);

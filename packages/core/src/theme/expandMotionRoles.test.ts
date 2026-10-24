@@ -28,7 +28,7 @@ describe('motion roles in a theme', () => {
         {
           springs: {
             'springs.sheetPresent': {duration: 0.6, bounce: 0.1},
-            'sheet.present': {response: 0.5, dampingRatio: 0.85},
+            'springs.alertPresent': {response: 0.5, dampingRatio: 0.85},
           },
           durations: {'timing.reducedMotionCrossFadeMs': 300},
           curves: {'timing.curves.easeInOut': [0.4, 0, 0.2, 1]},
@@ -37,7 +37,7 @@ describe('motion roles in a theme', () => {
       ),
     ).toEqual({
       '--motion-springs-sheet-present': '0.6s 0.1',
-      '--motion-sheet-present': '0.5s 0.15',
+      '--motion-springs-alert-present': '0.5s 0.15',
       '--motion-timing-reduced-motion-cross-fade-ms': '300ms',
       '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
     });
@@ -159,6 +159,59 @@ describe('motion roles in adaptation rules', () => {
     expect(() =>
       adaptive([{when: {motion: 'reduce'}, value: {motion: {fast: 100}}}]),
     ).toThrow(/must supply `fast`, `medium`, and `ratio`/);
+  });
+
+  it('keeps duplicate platform conditions, in order', () => {
+    const css = generateAdaptationCSS(
+      adaptive([
+        {
+          when: {platform: 'ios'},
+          value: {motion: {durations: {'navigation.transitionMs': 300}}},
+        },
+        {
+          when: {platform: 'ios'},
+          value: {motion: {durations: {'navigation.transitionMs': 350}}},
+        },
+      ]),
+    ).component;
+    expect(css.split('@supports (-webkit-touch-callout: none)')).toHaveLength(
+      3,
+    );
+    expect(
+      css.indexOf('--motion-navigation-transition-ms: 300ms'),
+    ).toBeLessThan(css.indexOf('--motion-navigation-transition-ms: 350ms'));
+  });
+
+  it('keeps a built theme\u2019s platform rules when another theme extends it', () => {
+    const base = adaptive([
+      {
+        when: {platform: 'ios'},
+        value: {
+          motion: {
+            springs: {'springs.navigationPush': {duration: 0.4, bounce: 0}},
+          },
+        },
+      },
+    ]);
+    const child = defineTheme({
+      name: 'child-motion',
+      extends: base,
+      adaptations: {
+        rules: [
+          {
+            when: {platform: 'other'},
+            value: {motion: {durations: {'navigation.transitionMs': 300}}},
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(child).component;
+    const ios = css.indexOf('@supports (-webkit-touch-callout: none)');
+    const other = css.indexOf('@supports not (-webkit-touch-callout: none)');
+    expect(ios).toBeGreaterThanOrEqual(0);
+    expect(other).toBeGreaterThan(ios);
+    expect(css).toContain('--motion-springs-navigation-push: 0.4s 0');
+    expect(css).toContain('--motion-navigation-transition-ms: 300ms');
   });
 
   it('refuses an unknown platform', () => {
