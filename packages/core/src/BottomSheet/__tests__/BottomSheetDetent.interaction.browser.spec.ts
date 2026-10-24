@@ -226,26 +226,25 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
   const cast = await startScreencast(page);
   await driver.play(slowDragTo(handle, Math.round((halfTop - tallTop) * 0.66)));
   // The settle must be running (and composited) before the block: an
-  // animation cannot start while the main thread is held.
-  const [settle] = await waitForAnimation(sheet, {minProgressMs: 16});
-  const block = await blockMainThread(page, 700);
+  // animation cannot start while the main thread is held. The page blocks
+  // itself in the frame the settle has run 16 ms, however busy the machine.
+  const block = await blockMainThread(page, 700, {
+    during: sheet,
+    minProgressMs: 16,
+  });
   await page.waitForTimeout(150);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
-  // Judge the part of the block during which the settle was still moving.
-  // (until the last pixel: the easing tail moves less than a pixel per frame)
-  const proof = busyWindowProof(
-    tracked,
-    {from: block.from, to: Math.min(block.to, settle.to)},
-    {settledWithin: 1},
-  );
+  // Judge the part of the block during which the settle was still moving:
+  // until it is within 2 px of rest (the screencast rounds to whole pixels,
+  // so the easing tail shows plateaus there).
+  const proof = busyWindowProof(tracked, block, {settledWithin: 2});
   await writeEvidence(
     'busy-main-thread/bottomsheet-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
           block,
-          settle,
           proof,
           frames: tracked.map(f => ({
             t: +(f.t - block.from).toFixed(1),
@@ -263,16 +262,17 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
     name: 'bottomsheet-settle-busy-main-thread',
     zero: block.from,
     from: block.from - 40,
-    to: Math.min(block.to, settle.to) + 40,
+    to: proof.judged.to + 40,
     columns: 8,
     cellScale: 0.35,
     data: t => ({y: tracked.find(f => f.t === t)?.box?.y ?? -1}),
   });
-  await film.write(testInfo, {block, settle});
-  expect(proof.medianFrameMs).toBeLessThan(20);
-  expect(proof.frames).toBeGreaterThanOrEqual(proof.expectedFrames - 2);
-  expect(proof.changed).toBeGreaterThanOrEqual(proof.frames - 3);
-  expect(proof.longestStallMs).toBeLessThan(40);
+  await film.write(testInfo, {block, judged: proof.judged});
+  testInfo.annotations.push({
+    type: 'busy-main-thread',
+    description: proof.summary,
+  });
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
 });
 
