@@ -797,7 +797,7 @@ describe('DropdownMenu', () => {
         );
       });
       expect(menu).toHaveStyle(
-        'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+        'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--astryx-layer-keyboard-max-block-size, 100dvb)))',
       );
       expect(menu).not.toHaveStyle({overflowY: 'auto'});
       expect(menu).toHaveAttribute('tabindex', '-1');
@@ -3362,11 +3362,13 @@ describe('DropdownMenu menuMaxHeight', () => {
     const menu = screen.getByRole('menu', {hidden: true});
     // The cap is lifted to the given height, still bounded by the viewport.
     expect(menu).toHaveStyle({maxHeight: 'var(--x-maxHeight)'});
-    expect(menu.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(528px, min(calc(100dvb');
     expect(menu.getAttribute('style')).not.toContain('min(300px');
     // The popover viewport that holds the menu lifts its cap with it.
     const popover = menu.closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(popover?.getAttribute('style')).toContain(
+      'min(528px, min(calc(100dvb',
+    );
   });
 
   it('keeps the viewport bound below the raised cap', () => {
@@ -3381,7 +3383,7 @@ describe('DropdownMenu menuMaxHeight', () => {
       />,
     );
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu.getAttribute('style')).toContain('min(720px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(720px, min(calc(100dvb');
   });
 });
 

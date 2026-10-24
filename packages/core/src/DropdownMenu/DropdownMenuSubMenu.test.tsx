@@ -126,7 +126,7 @@ describe('DropdownMenuSubMenu', () => {
     expect(popover).toHaveStyle({minWidth: 'var(--x-minWidth)'});
     expect(popover?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(flyout).toHaveStyle(
-      'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+      'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--astryx-layer-keyboard-max-block-size, 100dvb)))',
     );
     expect(flyout).not.toHaveStyle({overflowY: 'auto'});
     expect(flyout).toHaveAttribute('tabindex', '-1');

@@ -74,14 +74,16 @@ describe('layer viewport inset stylesheet (spec:AST-059)', () => {
     const inlineCaps = declarations(css, 'max-width');
 
     expect(blockCaps).toContainEqual(
-      expect.stringMatching(/^calc\(calc\(100dvb - .*safe-area-inset-top/),
+      expect.stringMatching(
+        /^calc\(min\(calc\(100dvb - .*safe-area-inset-top.*var\(--astryx-layer-keyboard-max-block-size, 100dvb\)/,
+      ),
     );
     expect(inlineCaps).toContainEqual(
       expect.stringMatching(/^calc\(calc\(100vi - .*safe-area-inset-left/),
     );
     // The older-engine fallbacks still ship, ahead of the preferred value.
     expect(blockCaps).toContainEqual(
-      expect.stringMatching(/^calc\(calc\(100vh - /),
+      expect.stringMatching(/^calc\(min\(calc\(100vh - /),
     );
     expect(inlineCaps).toContainEqual(
       expect.stringMatching(/^calc\(calc\(100vw - /),

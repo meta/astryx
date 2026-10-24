@@ -8,6 +8,9 @@
  * @output Exports Popover with conditional overflow and content-first focus above the layer runtime's viewport fit
  * @position Layer component; declarative wrapper around usePopover hook
  *
+ * Like every anchored layer, a popover that would run under the software
+ * keyboard shrinks to stay above it (the layer runtime).
+ *
  * For hover-triggered overlays, use HoverCard instead.
  *
  * `presentation` chooses the surface, with the vocabulary DropdownMenu and
