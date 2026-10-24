@@ -5,7 +5,8 @@
  * @input Uses @playwright/test
  * @output The gesture system's browser proof on a phone-sized touch screen,
  *   in Chromium (touch input through CDP) and WebKit (its own input command)
- * @position Self-contained config for packages/core/src/gestures; run with
+ * @position Both-engine config for packages/core/src/gestures (CI runs the
+ *   same specs in Chromium through playwright.interaction.config.ts); run with
  *   `pnpm exec playwright test --config packages/core/src/gestures/__tests__/browser/playwright.config.ts`.
  *   Where WebKit cannot launch on the host, run its project inside the
  *   official Playwright image (the repository mounted at the same path):

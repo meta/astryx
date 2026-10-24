@@ -42,7 +42,12 @@
  */
 
 import {useEffect, useState} from 'react';
-import {PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {devWarn} from '../utils/devWarning';
+import {
+  PRESSABLE_ATTRIBUTE,
+  PRESSED_ATTRIBUTE,
+  isPressFeedbackInstalled,
+} from '../utils/pressFeedback';
 import {getGestureHost} from './GestureHost';
 import {paintPress} from './pressPaint';
 import {
@@ -90,6 +95,20 @@ interface Install {
 }
 
 const installs = new WeakMap<Document, Map<string, Install>>();
+
+let hasWarnedSharedAttribute = false;
+
+/** Says once, in development, why the delegated press stays off. */
+function warnSharedAttributeOnce(): void {
+  if (hasWarnedSharedAttribute) {
+    return;
+  }
+  hasWarnedSharedAttribute = true;
+  devWarn(
+    'installPressAttribute',
+    `the delegated press on "${PRESSABLE_ATTRIBUTE}" stays idle while the document press controller (installPressFeedback) holds the same attribute. Pass another \`attribute\` and \`pressedAttribute\`, or uninstall the controller.`,
+  );
+}
 
 /**
  * Track presses on every element carrying `attribute` in `doc`. Returns a
@@ -170,6 +189,13 @@ function addPressType(
         element.matches(disabled) ||
         options.accepts?.(element, pointerType) === false
       ) {
+        return null;
+      }
+      if (attribute === PRESSABLE_ATTRIBUTE && isPressFeedbackInstalled()) {
+        // The document press controller (utils/pressFeedback.ts) writes the
+        // same attribute pair: two writers would fight over the paint, so
+        // the older one keeps it until it is uninstalled.
+        warnSharedAttributeOnce();
         return null;
       }
       const profile = profileOf(element);

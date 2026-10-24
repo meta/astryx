@@ -111,3 +111,69 @@ export function gestureHostStyle(
   }
   return style;
 }
+
+/** What a `touch-action` value lets the browser do, as tokens. */
+const ALL_PANS = [
+  'pan-left',
+  'pan-right',
+  'pan-up',
+  'pan-down',
+  'pinch-zoom',
+] as const;
+
+function touchActionTokens(value: string): Set<string> {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(part => part !== '');
+  const tokens = new Set<string>();
+  if (parts.length === 0) {
+    parts.push('auto');
+  }
+  for (const part of parts) {
+    if (part === 'auto') {
+      ALL_PANS.forEach(token => tokens.add(token));
+      tokens.add('double-tap-zoom');
+    } else if (part === 'manipulation') {
+      ALL_PANS.forEach(token => tokens.add(token));
+    } else if (part === 'pan-x') {
+      tokens.add('pan-left').add('pan-right');
+    } else if (part === 'pan-y') {
+      tokens.add('pan-up').add('pan-down');
+    } else if ((ALL_PANS as ReadonlyArray<string>).includes(part)) {
+      tokens.add(part);
+    }
+  }
+  return tokens;
+}
+
+/**
+ * The `touch-action` that allows only what both values allow: the host's
+ * derived value never overrides a caller's narrower one.
+ */
+export function intersectTouchAction(derived: string, caller: string): string {
+  const own = touchActionTokens(caller);
+  const both = new Set(
+    [...touchActionTokens(derived)].filter(token => own.has(token)),
+  );
+  if (ALL_PANS.every(token => both.has(token))) {
+    return both.has('double-tap-zoom') ? 'auto' : 'manipulation';
+  }
+  const parts: string[] = [];
+  for (const [axis, start, end] of [
+    ['pan-x', 'pan-left', 'pan-right'],
+    ['pan-y', 'pan-up', 'pan-down'],
+  ] as const) {
+    if (both.has(start) && both.has(end)) {
+      parts.push(axis);
+    } else if (both.has(start)) {
+      parts.push(start);
+    } else if (both.has(end)) {
+      parts.push(end);
+    }
+  }
+  if (both.has('pinch-zoom')) {
+    parts.push('pinch-zoom');
+  }
+  return parts.length === 0 ? 'none' : parts.join(' ');
+}
