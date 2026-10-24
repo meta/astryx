@@ -90,6 +90,29 @@ describe('touch scripts', () => {
     },
   );
 
+  it('release velocity ignores frames merged in for another finger', () => {
+    // A 10 Hz drag with a tap from 120 to 220 ms: merge inserts frames where
+    // the dragging finger did not move, and the page sees no move there.
+    const slow = drag({x: 0, y: 0}, {x: 0, y: 90}, {durationMs: 300, hz: 10});
+    const tapping = withFinger(tap({x: 50, y: 50}, {holdMs: 100}), 1, 120);
+    expect(releaseVelocity(merge(slow, tapping)).y).toBeCloseTo(
+      releaseVelocity(slow).y,
+      6,
+    );
+    // A 60 Hz drag whose second finger lifts 5 ms before the drag's last move.
+    const fast = drag({x: 0, y: 0}, {x: 0, y: 300}, {durationMs: 300, hz: 60});
+    const lastMove = fast.at(-2)!.t;
+    const lifting = withFinger(
+      tap({x: 50, y: 50}, {holdMs: lastMove - 5 - 100}),
+      1,
+      100,
+    );
+    expect(releaseVelocity(merge(fast, lifting)).y).toBeCloseTo(
+      releaseVelocity(fast).y,
+      6,
+    );
+  });
+
   it('release velocity is the last move, not a window mean', () => {
     // 500 px/s for 100 ms, then 2,000 px/s for one 10 ms move; path() lifts a
     // quarter frame later.

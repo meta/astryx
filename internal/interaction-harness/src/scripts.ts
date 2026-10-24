@@ -359,8 +359,10 @@ export function toTouchEvents(script: TouchScript): TouchEventStep[] {
 
 /**
  * The velocity (px/s) of finger `id` as it lifts: the slope of its last move,
- * or zero when it never moved or rested `restMs` or longer before lifting (a
- * finger that rested released nothing in motion).
+ * measured from when it reached its previous position (samples that repeat a
+ * position, such as frames `merge` inserts for another finger, are not moves:
+ * the page sees none there), or zero when it never moved or rested `restMs` or
+ * longer before lifting (a finger that rested released nothing in motion).
  */
 export function releaseVelocity(
   script: TouchScript,
@@ -394,7 +396,15 @@ export function releaseVelocity(
   if (lift != null && lift.t - last.t >= restMs) {
     return {x: 0, y: 0};
   }
-  const before = samples[lastMove - 1];
+  let previous = lastMove - 1;
+  while (
+    previous > 0 &&
+    samples[previous - 1].x === samples[previous].x &&
+    samples[previous - 1].y === samples[previous].y
+  ) {
+    previous -= 1;
+  }
+  const before = samples[previous];
   const dt = last.t - before.t;
   return dt <= 0
     ? {x: 0, y: 0}
