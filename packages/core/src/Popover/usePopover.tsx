@@ -443,13 +443,17 @@ function usePopoverImplementation(
 
   // Auto-focus first element when popover opens (unless skipped)
   useEffect(() => {
-    if (layer.isOpen && hasAutoFocus && !skipAutoFocusRef.current) {
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(focusInitialTarget);
-    }
     // Reset the per-open focus preference after the popover closes.
     if (!layer.isOpen) {
       skipAutoFocusRef.current = false;
+      return;
+    }
+    if (hasAutoFocus && !skipAutoFocusRef.current) {
+      // Wait a frame so the content is mounted. A popover that closes or
+      // unmounts first cancels it: the frame would otherwise move focus into
+      // content that is no longer shown, after the close had left it alone.
+      const frame = requestAnimationFrame(focusInitialTarget);
+      return () => cancelAnimationFrame(frame);
     }
   }, [layer.isOpen, hasAutoFocus, focusInitialTarget]);
 

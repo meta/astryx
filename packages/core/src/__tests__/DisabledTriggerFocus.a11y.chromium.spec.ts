@@ -37,7 +37,7 @@ const CASES = [
   },
   {
     storyId: 'a11y-disabled-trigger-focus--complex-selector-trigger',
-    role: 'button',
+    role: 'combobox',
     name: 'View options',
   },
 ] as const;

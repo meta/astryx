@@ -30,6 +30,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead';
 import {useCombobox} from '../Selector';
 import type {SelectorOptionData} from '../Selector';
 import {CommandPaletteContext} from './CommandPaletteContext';
+import {BusyStartSettleContext} from './busyStartSettle';
 import {CommandPaletteList} from './CommandPaletteList';
 import {CommandPaletteItem} from './CommandPaletteItem';
 import {CommandPaletteGroup} from './CommandPaletteGroup';
@@ -317,6 +318,13 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   const isBusy = isPending;
   const searchVersionRef = useRef(0);
   const emptyStateRef = useRef<HTMLDivElement>(null);
+  const settleBusyAnnouncementRef = useRef<(() => void) | null>(null);
+  const registerBusyAnnouncementSettle = useCallback(
+    (settle: (() => void) | null) => {
+      settleBusyAnnouncementRef.current = settle;
+    },
+    [],
+  );
 
   // Announce search results to screen readers through the shared polite live
   // region (comboboxes-7 announce path, mirroring Selector / BaseTypeahead).
@@ -427,6 +435,12 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
         const items = await Promise.resolve(result);
 
         if (searchVersionRef.current === version) {
+          if (!isBootstrap) {
+            // This query's outcome is announced below (a count) or from the
+            // rendered empty state; a busy start not yet announced would
+            // follow it, so the input drops it (spec:AST-086 FR8).
+            settleBusyAnnouncementRef.current?.();
+          }
           // Commit query and results together
           setSearch(query);
           setOptimisticResults(items);
@@ -666,7 +680,9 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
           defaultHasDividers
           header={
             <LayoutHeader hasDivider padding={0}>
-              {input ?? <CommandPaletteInput />}
+              <BusyStartSettleContext value={registerBusyAnnouncementSettle}>
+                {input ?? <CommandPaletteInput />}
+              </BusyStartSettleContext>
             </LayoutHeader>
           }
           content={

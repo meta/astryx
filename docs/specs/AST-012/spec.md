@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-02
+approved_at: 2026-10-24
 phase: accepted
 owners: [cixzhang, rubyycheung, imdreamrunner]
 affects_architecture:
@@ -98,11 +98,13 @@ A breakpoint map alone emits no CSS. Only rules with adaptation values do.
   base below `sm`; there is no configurable `xs: 0` point. Defining or overriding
   the map alone MUST NOT emit CSS.
 - **FR2 — Conditions are named, closed, and composable.** A `when` object may
-  contain `width`, `pointer`, `contrast`, and `motion`; fields are ANDed.
+  contain `width`, `height`, `pointer`, `contrast`, and `motion`; fields are
+  ANDed.
   `width` accepts `from` and `below` using the five fixed names and MUST contain
   one or both. `from` is inclusive, `below` is exclusive, either edge may be
   omitted but not both, and a bounded width MUST resolve to `from < below`.
-  `pointer` accepts `coarse | fine`; `contrast` accepts
+  `height` accepts only `{below: 500}`: a viewport height below 500, exclusive,
+  the height edge of the FR9 compact definition. `pointer` accepts `coarse | fine`; `contrast` accepts
   `more | less | no-preference`; `motion` accepts `reduce | no-preference`.
   Future environment fields require explicit additions to this closed vocabulary.
 - **FR3 — Rules are named objects.** `adaptations.rules` contains
@@ -161,6 +163,20 @@ A breakpoint map alone emits no CSS. Only rules with adaptation values do.
   `architecture:theme-application`, and with no active theme it uses the FR1
   defaults. `defaultIsMobile` remains an SSR hint; the client query uses the
   effective map after hydration.
+- **FR9 — Compact has one definition on every platform.** A screen is compact
+  while its viewport width is below the effective `md` point (FR1) or its
+  viewport height is below 500. The numbers are the same on every platform: CSS
+  pixels on the web, points on iOS, and density-independent pixels on Android;
+  native presentations do not map compact to platform size classes. The theme
+  exports this one definition, and every resolver that chooses a presentation
+  by screen size uses it, including the web touch presentation resolver,
+  Selector's `adaptive` presentation, and `@astryxdesign/native`; none keeps
+  size numbers of its own. A resolver that also needs a coarse pointer ANDs
+  that with compact. Compact governs only the choice of a presentation, such as
+  a sheet in place of a popover; a layout width a caller picks, such as
+  AppShell's `mobileNav.breakpoint` (FR8), is not compact. Theme `adaptations`
+  stay web-only (`spec:AST-082` FR18); native reads the compact numbers from
+  the portable theme.
 - **IR1 — Normalize and reject atomically.** One path validates width breakpoints,
   named condition fields, width ranges, theme extension, enrolled local-token
   names, and concrete expanded values for both `defineTheme` and
@@ -197,8 +213,8 @@ A breakpoint map alone emits no CSS. Only rules with adaptation values do.
 
 ### Platform support
 
-- Adaptations use viewport-width, primary-pointer, contrast-preference, and
-  reduced-motion queries within Astryx's browser support floor; there is no
+- Adaptations use viewport-width, viewport-height, primary-pointer,
+  contrast-preference, and reduced-motion queries within Astryx's browser support floor; there is no
   JavaScript styling fallback.
 - Real Chromium MUST verify conditions, nesting, AppShell agreement, and first
   paint. Real Safari MUST verify exclusive width edges and primary-pointer
@@ -223,15 +239,25 @@ implemented.
 Its value resolver, explicit-value preservation, CSS generation/build parity, and
 extension metadata remain useful implementation evidence.
 
+The theme exports no compact definition, and `when` has no `height` field.
+Selector's, MultiSelector's, ContextMenu's, and DropdownMenu's `adaptive`
+presentation (MoreMenu forwards to DropdownMenu) and DropdownMenu's compact-touch
+sub-menu decisions use `(max-width: 768px) and (pointer: coarse)`, and the
+ContextMenu and MoreMenu consumer docs describe it as "768px and below": a coarse-pointer screen exactly 768 pixels wide and at least 500 tall counts as compact, and a landscape phone wider than 768 pixels but under
+500 tall does not. Under FR9 the first opens the popover and the
+second the bottom sheet; the release note for that change names `presentation`
+as the way to keep a surface. `PortableTheme` carries no compact definition, and `@astryxdesign/native` has no compact resolver yet; it adopts FR9 when it gains one.
+
 ## Verification
 
-| Contract | Verification                                                  | Representative states                                                                                                                                                                                                                               | Failure signal                                                                                                                                                                                                                 |
-| -------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1–FR3  | Width-breakpoint and condition matrix plus browser boundaries | defaults/overrides; from/below/range; pointer/contrast/motion; multi-field AND; empty/no rules                                                                                                                                                      | A point acts as an upper bound, intervals gap/overlap, fields OR together, or an unused map emits CSS.                                                                                                                         |
-| FR4–FR7  | Shared resolver, surface, cascade-order, and extension tests  | enrolled/unenrolled local tokens; incomplete scales; finite built-ins; open primitive values absent from root; root-enrolled and rule-only custom values; unresolved shared results; later generated vs earlier explicit leaves; surface collisions | A rule enrolls a local or component value, a valid open value requires a dummy root rule, adaptation validation diverges from root validation, an unresolved result becomes a permanent exemption, or inherited order is lost. |
-| FR8      | Theme/AppShell integration                                    | all names/`none`; SSR hint; no/nearest/root/nested theme; exact boundaries                                                                                                                                                                          | AppShell uses the wrong map, equality, or scope.                                                                                                                                                                               |
-| IR1–IR3  | Runtime/build and CLI positive/negative fixtures              | invalid map/range/field; source axis metadata; duplicate `when`; root-restoring rules; finite/open/unresolved component domains; declaration targets; root-enrolled and rule-only custom values; non-CSS token reads                                | Invalid input writes output, root and adaptation component validation disagree, an independently valid value is forced into root, an adaptation conditionally enrolls a custom value, or tooling misses a rule-only value.     |
-| IR4      | Generated-module import and size tests                        | no rules/rules; source/built parent and child; generative/local-token metadata                                                                                                                                                                      | Breakpoints, rules, order, or metadata disappear; extension diverges; CSS text enters the module; or resolved layers duplicate.                                                                                                |
+| Contract          | Verification                                                  | Representative states                                                                                                                                                                                                                               | Failure signal                                                                                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1–FR3           | Width-breakpoint and condition matrix plus browser boundaries | defaults/overrides; from/below/range; pointer/contrast/motion; multi-field AND; empty/no rules                                                                                                                                                      | A point acts as an upper bound, intervals gap/overlap, fields OR together, or an unused map emits CSS.                                                                                                                         |
+| FR4–FR7           | Shared resolver, surface, cascade-order, and extension tests  | enrolled/unenrolled local tokens; incomplete scales; finite built-ins; open primitive values absent from root; root-enrolled and rule-only custom values; unresolved shared results; later generated vs earlier explicit leaves; surface collisions | A rule enrolls a local or component value, a valid open value requires a dummy root rule, adaptation validation diverges from root validation, an unresolved result becomes a permanent exemption, or inherited order is lost. |
+| FR8               | Theme/AppShell integration                                    | all names/`none`; SSR hint; no/nearest/root/nested theme; exact boundaries                                                                                                                                                                          | AppShell uses the wrong map, equality, or scope.                                                                                                                                                                               |
+| FR2 (height), FR9 | Condition matrix plus resolver tests on web and native        | width 767/768 at height 800; width 1024 at height 499/500; overridden `md`; Selector `adaptive`; the web touch resolver; a native resolver                                                                                                          | A resolver with its own size numbers or an inclusive edge, a native resolver using platform size classes or different numbers, or a `height` value other than `below: 500` accepted                                            |
+| IR1–IR3           | Runtime/build and CLI positive/negative fixtures              | invalid map/range/field; source axis metadata; duplicate `when`; root-restoring rules; finite/open/unresolved component domains; declaration targets; root-enrolled and rule-only custom values; non-CSS token reads                                | Invalid input writes output, root and adaptation component validation disagree, an independently valid value is forced into root, an adaptation conditionally enrolls a custom value, or tooling misses a rule-only value.     |
+| IR4               | Generated-module import and size tests                        | no rules/rules; source/built parent and child; generative/local-token metadata                                                                                                                                                                      | Breakpoints, rules, order, or metadata disappear; extension diverges; CSS text enters the module; or resolved layers duplicate.                                                                                                |
 
 ## Decision log
 
@@ -304,6 +330,19 @@ validation tighten adaptations automatically.
 
 Rejected: adaptation-specific value resolvers, allowlists, unresolved-domain
 exceptions, and dummy root rules for independently valid values.
+
+### DEC-6 — Compact is one definition on every platform
+
+**Reference:** `spec:AST-012/DEC-6`
+**Decider:** `cixzhang`, `2026-10-24`
+
+A phone, a small tablet, and a short landscape window all lack room for an
+anchored surface, so compact is width below the `md` point or height below 500. The same numbers on every platform keep one component presenting the same
+way on the web and in native code, and one exported definition keeps resolvers
+from drifting apart.
+
+Rejected: mapping compact to each platform's size classes, which makes the
+same screen compact on one platform and not another.
 
 ## Open questions
 

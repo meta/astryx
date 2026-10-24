@@ -108,6 +108,9 @@ describe('Node-tooling CI routing', () => {
       step(ci.jobs['test-build'], 'Run Build CSS-layer cascade guard').run,
     ).toBe('node .github/scripts/theme-layer-cascade.js');
     expect(ci.jobs['fixture-contrast'].if).toContain(TOOLING_FALSE);
+    // The merge-base size build is heavy build work and stays off the
+    // Node-tooling, docsite, and spec lanes.
+    expect(ci.jobs['size-base'].if).toContain(BROAD_ONLY);
     const familyCommands = new Map([
       [
         'Install Playwright for theme-family contract',

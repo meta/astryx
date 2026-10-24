@@ -171,7 +171,7 @@ describe('useMenuPress — tracking inside the menu', () => {
     }
   });
 
-  it('moves the highlight as focus with preventScroll', () => {
+  it('moves the highlight as focus with preventScroll and without :focus-visible', () => {
     render(<Harness />);
     const b = row('B');
     const focusSpy = vi.spyOn(b, 'focus');
@@ -179,7 +179,10 @@ describe('useMenuPress — tracking inside the menu', () => {
     expect(row('A')).toHaveFocus();
     fireEvent.pointerMove(b, touch());
     expect(b).toHaveFocus();
-    expect(focusSpy).toHaveBeenCalledWith({preventScroll: true});
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
   });
 
   it('clears the highlight over a disabled row or a divider and acts on nothing there', () => {

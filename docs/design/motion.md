@@ -37,6 +37,7 @@ when motion is reduced.
   disruption and preserve reading and interaction context.
 - **DR5 — Reduced motion preserves meaning.** Every animated transition MUST have
   an immediate or minimally moving form that communicates the same state change.
+  `design:reduced-motion` owns the current reduced-motion rule.
 
 ## Anatomy and hierarchy
 

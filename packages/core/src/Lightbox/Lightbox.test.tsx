@@ -322,6 +322,50 @@ describe('Lightbox', () => {
       fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
       expect(onIndexChange).toHaveBeenCalledWith(0);
     });
+
+    it('follows the visual direction of the arrows in RTL', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <div dir="rtl">
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            index={1}
+            onIndexChange={onIndexChange}
+          />
+        </div>,
+      );
+      const dialog = document.querySelector('dialog')!;
+      // The component resolves direction with getComputedStyle at keydown, and
+      // jsdom does not inherit `dir` down to it, so set it on the dialog too.
+      dialog.style.direction = 'rtl';
+      // Next sits on the left in RTL: ArrowLeft moves to the next item.
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      expect(onIndexChange).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves the direction at keydown, so a direction change applies at once', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
+    });
   });
 
   describe('screen-reader announcements', () => {
@@ -567,6 +611,30 @@ describe('Lightbox', () => {
       const dialog = document.querySelector('dialog')!;
       fireEvent.keyDown(dialog, {key: 'ArrowRight'});
       expect(onIndexChange).toHaveBeenCalledWith(2);
+    });
+
+    it('keeps panning physical in RTL: the image is not mirrored', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(zoomTarget(), {key: 'Enter'});
+      const img = screen.getByAltText('Image B');
+      // ArrowRight still reveals what is to the right of the photo.
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(img.getAttribute('style') ?? '').toContain(
+        'translate(-25px, 0px)',
+      );
+      expect(onIndexChange).not.toHaveBeenCalled();
     });
 
     it('announces zoom state changes politely', async () => {

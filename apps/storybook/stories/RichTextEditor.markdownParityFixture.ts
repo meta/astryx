@@ -174,6 +174,18 @@ export const MARKDOWN_PARITY_BLOCKS: readonly MarkdownParityBlock[] = [
       '```',
     ),
   },
+  // A long line in a fence that names no language: the copy button sits in
+  // its own column beside the code, so the line wraps before it.
+  {
+    key: 'code-plain-long',
+    label: 'Fenced code, no info string, long line',
+    probe: 'plainLongFence',
+    markdown: lines(
+      '```',
+      'plainLongFence: the quick brown fox jumps over the lazy dog, then runs back across the field to do it again',
+      '```',
+    ),
+  },
   {
     key: 'table',
     label: 'Table',

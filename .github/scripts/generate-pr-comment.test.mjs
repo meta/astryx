@@ -125,3 +125,103 @@ describe('generate-pr-comment preview availability', () => {
     expect(stdout).not.toContain('View Sandbox for this PR');
   });
 });
+
+describe('generate-pr-comment base sizes', () => {
+  const sized = {
+    ...baseAnalysis,
+    componentStats: {
+      Card: {package: '@astryxdesign/core', esmSize: '160B', esmBytes: 160},
+    },
+    bundlePackages: [
+      {
+        package: '@astryxdesign/core',
+        esmSize: '900B',
+        gzipSize: '300B',
+        gzipBytes: 300,
+      },
+    ],
+  };
+
+  it('fills Before and Delta from base stats', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-stats-'));
+    try {
+      const baseFile = path.join(dir, 'size-base.json');
+      fs.writeFileSync(
+        baseFile,
+        JSON.stringify({
+          baseComponentStats: {
+            Card: {
+              package: '@astryxdesign/core',
+              esmSize: '100B',
+              esmBytes: 100,
+            },
+          },
+          baseBundlePackages: [
+            {package: '@astryxdesign/core', gzipSize: '280B', gzipBytes: 280},
+          ],
+        }),
+      );
+      const out = runComment(sized, ['--base-stats', baseFile]);
+      expect(out).toContain('| Entry File (ESM) | 100B | 160B | +60B |');
+      expect(out).toContain(
+        '| @astryxdesign/core | 900B | 280B | 300B | +20B |',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('never reports a delta for an unmeasured size', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-null-'));
+    try {
+      const baseFile = path.join(dir, 'size-base.json');
+      fs.writeFileSync(
+        baseFile,
+        JSON.stringify({
+          baseComponentStats: {
+            Card: {
+              package: '@astryxdesign/charts',
+              esmSize: null,
+              esmBytes: null,
+            },
+          },
+          baseBundlePackages: [
+            {package: '@astryxdesign/core', gzipSize: null, gzipBytes: null},
+          ],
+        }),
+      );
+      const out = runComment(
+        {
+          ...sized,
+          componentStats: {
+            Card: {
+              package: '@astryxdesign/charts',
+              esmSize: null,
+              esmBytes: null,
+            },
+          },
+          bundlePackages: [
+            {
+              package: '@astryxdesign/core',
+              esmSize: '900B',
+              gzipSize: '300B',
+              gzipBytes: 300,
+            },
+          ],
+        },
+        ['--base-stats', baseFile],
+      );
+      expect(out).toContain('| Entry File (ESM) | N/A | N/A | N/A |');
+      expect(out).toContain('| @astryxdesign/core | 900B | N/A | 300B | N/A |');
+      expect(out).not.toMatch(/\| [+-]?0B \|/);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('keeps N/A without base stats', () => {
+    const out = runComment(sized);
+    expect(out).toContain('| Entry File (ESM) | N/A | 160B | N/A |');
+    expect(out).toContain('| Package | Size (ESM) | Size (CJS) | Gzipped |');
+  });
+});

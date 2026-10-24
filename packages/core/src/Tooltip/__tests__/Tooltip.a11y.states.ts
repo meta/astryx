@@ -98,9 +98,9 @@ export const TOOLTIP_EXCLUSIONS = [
   {
     id: 'touch-trigger',
     owner:
-      'useTooltip.test.tsx and Tooltip.test.tsx (touchTrigger suites) through the shared useTouchTrigger hook',
+      'useTooltip.test.tsx and Tooltip.test.tsx (touchTrigger suites) through the shared useTouchTrigger hook, and TouchTrigger.a11y.chromium.spec.ts for real touch input',
     reason:
-      'On a touch pointer there is no hover, so a tap opens the tooltip or leaves it to the control the tap operates; the APG defines no touch behaviour, and the Chromium lane drives a mouse and a keyboard only.',
+      'On a touch pointer there is no hover, so a tap opens the tooltip or leaves it to the control the tap operates; the APG defines no touch behaviour, and this contract drives a mouse and a keyboard only, so the touch outcomes have their own real-touch Chromium proof.',
   },
   {
     id: 'controlled-and-disabled',
