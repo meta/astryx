@@ -57,6 +57,7 @@ const runtimeImports = [
 describe('storybook main.ts workspace source aliases', () => {
   let viteAliases: Record<string, string>;
   let stylexAliases: Record<string, string[]>;
+  let undefinedVariables: unknown;
   const stylexSpy = vi.spyOn(build, 'astryxStylex');
 
   beforeAll(async () => {
@@ -69,6 +70,11 @@ describe('storybook main.ts workspace source aliases', () => {
       throw new Error('Expected the Storybook StyleX options');
     }
     stylexAliases = options.stylexOptions!.aliases as Record<string, string[]>;
+    undefinedVariables = options.undefinedVariables;
+  });
+
+  it('fails the build on a generated variable nothing declares', () => {
+    expect(undefinedVariables).toBe('error');
   });
 
   afterAll(() => stylexSpy.mockRestore());

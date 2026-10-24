@@ -31,7 +31,7 @@
  */
 
 import {describe, it, expect, beforeAll, afterAll} from 'vitest';
-import {build} from 'vite';
+import {build, createLogger} from 'vite';
 import react from '@vitejs/plugin-react';
 import {
   mkdirSync,
@@ -70,6 +70,20 @@ type Built = {
 async function buildFixture(
   name: string,
   htmlNames: string[] = ['index.html'],
+  {
+    libraryPattern = 'packages/core/',
+    zeroConfig = false,
+    undefinedVariables,
+    warnings = [],
+  }: {
+    /** Which source paths land in the library layer. */
+    libraryPattern?: string;
+    /** Use `astryxStylex({...})` instead of the legacy `{stylexOptions}` form. */
+    zeroConfig?: boolean;
+    undefinedVariables?: 'warn' | 'error';
+    /** Receives every warning the build logs. */
+    warnings?: string[];
+  } = {},
 ): Promise<Built> {
   const root = path.join(FIXTURES, name);
   const outDir = mkdtempSync(path.join(tmpdir(), `astryx-${name}-`));
@@ -77,6 +91,11 @@ async function buildFixture(
     await build({
       root,
       logLevel: 'error',
+      customLogger: {
+        ...createLogger('error'),
+        warn: (message: string) => void warnings.push(message),
+        warnOnce: (message: string) => void warnings.push(message),
+      },
       build: {
         outDir,
         emptyOutDir: true,
@@ -94,17 +113,23 @@ async function buildFixture(
       resolve: {alias: {'@astryxdesign/core': CORE_SRC}},
       plugins: [
         react(),
-        ...astryxStylex({
-          stylexOptions: {
-            dev: false,
-            unstable_moduleResolution: {type: 'commonJS', rootDir: REPO_ROOT},
-            aliases: {
-              '@astryxdesign/core/*': [path.join(CORE_SRC, '*')],
-              '@astryxdesign/core': [CORE_SRC],
-            },
-          },
-          libraryPattern: 'packages/core/',
-        }),
+        ...(zeroConfig
+          ? astryxStylex({dev: false, rootDir: REPO_ROOT, libraryPattern})
+          : astryxStylex({
+              stylexOptions: {
+                dev: false,
+                unstable_moduleResolution: {
+                  type: 'commonJS',
+                  rootDir: REPO_ROOT,
+                },
+                aliases: {
+                  '@astryxdesign/core/*': [path.join(CORE_SRC, '*')],
+                  '@astryxdesign/core': [CORE_SRC],
+                },
+              },
+              libraryPattern,
+              undefinedVariables,
+            })),
       ],
     });
   } catch (error) {
@@ -336,6 +361,83 @@ describe('a production build separates Astryx and product styles by layer', () =
       expect(built.css).not.toContain('--multipage-setup-only');
     });
   });
+});
+
+// `defineConsts` values are compiled into the reading file as placeholders,
+// `var(--<prefix><hash>)`, and the defining file contributes the values; the
+// final CSS pass substitutes one for the other. Both halves must reach that
+// pass. Storybook builds through the legacy `{stylexOptions}` form, whose
+// StyleX instance ran without `treeshakeCompensation`: once `stylex.create`
+// was compiled, nothing used the import at runtime, the TypeScript transform
+// dropped it, and the defining module was never loaded. A media-query key was
+// left as `var(--x…){…}` and failed the build ("Invalid empty selector"); a
+// value shipped as a custom property nothing defines. And a constant defined
+// on one side of the layer split and read on the other was substituted only
+// within its own side.
+describe('a production build resolves defineConsts imported across files', () => {
+  /** A constant reference StyleX left unsubstituted. */
+  const PLACEHOLDER = /var\(--(?:astryx|x)[a-z0-9]{4,}\)/;
+
+  for (const zeroConfig of [false, true]) {
+    describe(
+      zeroConfig ? 'zero-config form' : 'legacy stylexOptions form (Storybook)',
+      () => {
+        let built: Built;
+        beforeAll(async () => {
+          built = await buildFixture('stylex-consts', ['index.html'], {
+            libraryPattern: '__fixtures__/stylex-consts/library/',
+            zeroConfig,
+          });
+        }, 180_000);
+        afterAll(
+          () => built && rmSync(built.outDir, {recursive: true, force: true}),
+        );
+
+        it('substitutes a constant read as a value', () => {
+          expect(built.css).toMatch(/min-height:\s*52px/);
+        });
+
+        it('substitutes a constant read as a media-query key', () => {
+          expect(built.css).toMatch(
+            /@media \(pointer: ?coarse\)\s*\{[^}]*transition-property:\s*none/,
+          );
+        });
+
+        it('substitutes a library-side constant read from the product side', () => {
+          expect(built.css).toMatch(/padding-top:\s*13px/);
+          expect(built.css).toMatch(
+            /@media \((?:min-width: ?900px|width ?>= ?900px)\)\s*\{[^}]*max-width:\s*640px/,
+          );
+        });
+
+        it('leaves no constant placeholder behind', () => {
+          expect(built.css).not.toMatch(PLACEHOLDER);
+        });
+      },
+    );
+  }
+});
+
+describe('a production build checks the custom properties its stylesheet reads', () => {
+  const MESSAGE =
+    /reads 1 generated custom property that nothing declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
+
+  it('warns by default, naming the variable and the rule that reads it', async () => {
+    const warnings: string[] = [];
+    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
+      warnings,
+    });
+    rmSync(built.outDir, {recursive: true, force: true});
+    expect(warnings.join('\n')).toMatch(MESSAGE);
+  }, 180_000);
+
+  it("fails the build with undefinedVariables: 'error'", async () => {
+    await expect(
+      buildFixture('stylex-undefined-var', ['index.html'], {
+        undefinedVariables: 'error',
+      }),
+    ).rejects.toThrow(MESSAGE);
+  }, 180_000);
 });
 
 describe('a production build validates StyleX declarations', () => {
