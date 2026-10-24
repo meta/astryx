@@ -18,6 +18,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 export const scroll = {
   decelerationRate: {
     /**
@@ -115,3 +117,10 @@ export const scroll = {
    */
   scrollToTopRate: 0.99035,
 } as const;
+
+// Each spring, duration and curve above is a motion role a theme may retune
+// (motion/roles.ts).
+registerMotionTable('scroll', scroll, {
+  // Arbitration: who gets the touch, not how anything moves.
+  exclude: ['delaysContentTouchesMs'],
+});
