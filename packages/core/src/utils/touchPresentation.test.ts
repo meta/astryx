@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {act, renderHook} from '@testing-library/react';
-import {createElement} from 'react';
+import {createElement, type ComponentProps, type ReactNode} from 'react';
 import {renderToString} from 'react-dom/server';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
@@ -23,6 +23,7 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {Theme, defineTheme} from '../theme';
 import {
   COMPACT_QUERY,
   COMPACT_TOUCH_QUERY,
@@ -285,6 +286,31 @@ describe('touch presentation', () => {
     expect(COMPACT_TOUCH_QUERY).toBe(
       DEFAULT_COMPACT_DEFINITION.coarsePointerQuery,
     );
+  });
+
+  it("follows the active theme's md point (spec:AST-012 FR9)", () => {
+    const wideMd = defineTheme({
+      name: 'wide-md-touch',
+      adaptations: {widthBreakpoints: {md: 1000, lg: 1100}},
+    });
+    const wrapper = ({children}: {children: ReactNode}) =>
+      createElement(
+        Theme,
+        {theme: wideMd} as ComponentProps<typeof Theme>,
+        children,
+      );
+    setDevice({coarse: true, width: 900, height: 1024});
+    // Under the default md point (768) this screen is not compact.
+    const plain = renderHook(() => useAdaptivePresentation('adaptive'));
+    expect(plain.result.current).toBe('popover');
+    plain.unmount();
+    // Under a theme whose md is 1000, the same screen is compact.
+    const themed = renderHook(() => useAdaptivePresentation('adaptive'), {
+      wrapper,
+    });
+    expect(themed.result.current).toBe('bottom-sheet');
+    const touch = renderHook(() => useTouchPresentation(), {wrapper});
+    expect(touch.result.current.isCompact).toBe(true);
   });
 
   it('is the query the adaptive popover-or-sheet presentation reads', () => {

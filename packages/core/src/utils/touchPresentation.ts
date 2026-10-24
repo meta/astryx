@@ -59,15 +59,25 @@
 
 import {useMemo} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {
+  DEFAULT_COMPACT_DEFINITION,
+  compactDefinition,
+  type CompactDefinition,
+} from '../theme/themeAdaptations';
+import {useThemeDefinition} from '../theme/useTheme';
 
 /** The primary pointer is coarse: touch behaviours. */
 export const TOUCH_QUERY = '(pointer: coarse)';
 
-/** The viewport is compact: layout behaviours (`spec:AST-012` FR9). */
+/**
+ * The viewport is compact at the default width points: layout behaviours
+ * (`spec:AST-012` FR9). A StyleX media key, which cannot read the theme,
+ * spells this; behaviour reads the active theme's definition
+ * (useCompactDefinition), so a theme that moves `md` moves compact with it.
+ */
 export const COMPACT_QUERY = DEFAULT_COMPACT_DEFINITION.query;
 
-/** Both: presentations such as a sheet in place of a popover. */
+/** Both, at the default width points: a sheet in place of a popover. */
 export const COMPACT_TOUCH_QUERY =
   DEFAULT_COMPACT_DEFINITION.coarsePointerQuery;
 
@@ -97,15 +107,29 @@ export interface TouchPresentation {
 }
 
 /**
+ * The active theme's compact definition (`spec:AST-012` FR9): width below the
+ * theme's effective `md` point, or height below 500.
+ */
+export function useCompactDefinition(): CompactDefinition {
+  const points = useThemeDefinition()?.__adaptations?.widthBreakpoints;
+  return useMemo(
+    () =>
+      points == null ? DEFAULT_COMPACT_DEFINITION : compactDefinition(points),
+    [points],
+  );
+}
+
+/**
  * The touch presentation now. SSR-safe: hooks render the server default and
  * update after hydration.
  */
 export function useTouchPresentation(
   serverDefault: Partial<Omit<TouchPresentation, 'isCompactTouch'>> = {},
 ): TouchPresentation {
+  const compact = useCompactDefinition();
   const isTouch = useMediaQuery(TOUCH_QUERY, serverDefault.isTouch ?? false);
   const isCompact = useMediaQuery(
-    COMPACT_QUERY,
+    compact.query,
     serverDefault.isCompact ?? false,
   );
   return useMemo(
@@ -121,11 +145,12 @@ export function useTouchPresentation(
  */
 export function readTouchPresentation(
   view: Window | null = typeof window === 'undefined' ? null : window,
+  compact: CompactDefinition = DEFAULT_COMPACT_DEFINITION,
 ): TouchPresentation {
   if (view == null || typeof view.matchMedia !== 'function') {
     return {isTouch: false, isCompact: false, isCompactTouch: false};
   }
   const isTouch = view.matchMedia(TOUCH_QUERY).matches;
-  const isCompact = view.matchMedia(COMPACT_QUERY).matches;
+  const isCompact = view.matchMedia(compact.query).matches;
   return {isTouch, isCompact, isCompactTouch: isTouch && isCompact};
 }
