@@ -40,7 +40,7 @@ committed: a pull request links or attaches it.
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `waitForRest`, `releaseAnimations`.                                                                           |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                       |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                     |
@@ -74,6 +74,16 @@ ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
 the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
 than `playState`, does not wait the hold out.
+
+**Waiting for an animation.** The page records every animation from the first
+call into `curves.ts` on it (and on every later document): a frame loop on the
+page's own `requestAnimationFrame`, the CSS animation and transition events,
+and `Element.animate` as it is called, pending animations included. So
+`waitForAnimation` also reports one that started after the last
+`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+set): a short entrance no longer races the first look on a cold page. When the
+action may be the page's first contact with the harness, take
+`watchAnimations(locator)` before it and read `watch.started()` after.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

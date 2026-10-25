@@ -49,6 +49,7 @@ import {
   touchStoryboard,
   waitForAnimation,
   waitForRest,
+  watchAnimations,
   withFinger,
 } from './index';
 
@@ -494,6 +495,60 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test('waitForAnimation reports a short animation that ended before it looked', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    await box.evaluate(el => {
+      el.style.transition = 'transform 60ms linear';
+      void (el as HTMLElement).offsetWidth;
+      el.style.transform = 'translateY(40px)';
+    });
+    // A cold page answers late: the transition is over before the first look.
+    await page.waitForTimeout(250);
+    const [ended] = await waitForAnimation(box);
+    expect(ended.kind).toBe('CSSTransition');
+    expect(ended.durationMs).toBe(60);
+    expect(ended.finishedAt).not.toBeNull();
+    expect(ended.finishedAt!).toBeGreaterThanOrEqual(ended.to - 1);
+  });
+
+  test("a watch taken before the action catches an entrance on the page's first contact", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    await box.evaluate(el =>
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 50}),
+    );
+    await page.waitForTimeout(250);
+    const [entrance] = await watch.started();
+    expect(entrance.kind).toBe('Animation');
+    expect(entrance.durationMs).toBe(50);
+    expect(entrance.finishedAt).not.toBeNull();
+  });
+
+  test('a watch reports only what started after it', async ({page}) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el =>
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 40}),
+    );
+    await page.waitForTimeout(150);
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    await box.evaluate(el =>
+      el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 70}),
+    );
+    const started = await watch.started();
+    expect(started.map(a => a.durationMs)).toEqual([70]);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({
