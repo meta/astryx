@@ -95,8 +95,13 @@ document.body.innerHTML = `
     <div id="passive" style="height: 60px; background: #dfd; touch-action: pan-y pinch-zoom">passive control</div>
     <div id="slider" style="height: 60px; background: #fdf">slider: a pan that turns selection off</div>
     <div id="checkRow" style="height: 60px; background: #eef">checkbox row <input id="check" type="checkbox" style="width: 40px; height: 40px"></div>
+    <div id="switchRow" style="height: 60px; background: #efe">switch: a drag that turns selection off <input id="switchInput" type="checkbox" style="width: 40px; height: 40px"></div>
     <div id="card" style="height: 80px; background: #def">card (swipe up)</div>
     <div id="cardLate" style="height: 80px; background: #fed">card, claims only when it begins</div>
+    <div id="feed" style="height: 240px; overflow-y: auto; overscroll-behavior: contain; background: #efe">
+      <div id="feedRow" style="height: 80px; background: #cfc">feed row (tap)</div>
+      <div style="height: 1200px">feed content</div>
+    </div>
     <div style="height: 1600px">page</div>
   </div>`;
 
@@ -128,6 +133,12 @@ host.attach(element('hpan'), hpan);
 const tap = new TapGestureRecognizer({name: 'tap'});
 record(tap, () => ({}));
 host.attach(element('tapper'), tap);
+
+// A row in a scroller: a scroll the page makes under a still finger keeps
+// its tap; a drag that scrolls the feed takes it.
+const feedTap = new TapGestureRecognizer({name: 'feedTap'});
+record(feedTap, () => ({}));
+host.attach(element('feedRow'), feedTap);
 
 const press = new LongPressGestureRecognizer({name: 'press'});
 record(press, () => ({
@@ -184,6 +195,15 @@ host.attach(
   element('slider'),
   new PanGestureRecognizer({
     name: 'slider',
+    direction: 'horizontal',
+    preventsTextSelection: true,
+  }),
+);
+
+host.attach(
+  element('switchRow'),
+  new PanGestureRecognizer({
+    name: 'switchRow',
     direction: 'horizontal',
     preventsTextSelection: true,
   }),

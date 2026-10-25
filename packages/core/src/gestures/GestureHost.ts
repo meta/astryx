@@ -70,7 +70,7 @@
  *   explicit `touch-action` stays in force), set inline when they attach and
  *   restored when they detach.
  * - While a finger or a pen is down, text selection and the touch callout
- *   are off on the press-tracked element (attached or delegated), on the
+ *   are off only where the hold does something (`spec:AST-094` FR41): on the
  *   elements of recognizers with `preventsTextSelection`, and on a non-text
  *   input under the finger inside them (WebKit's own style makes every
  *   input selectable); restored when the contact ends. Only where the
@@ -977,18 +977,16 @@ export class GestureHost {
   ): {
     recognizers: GestureRecognizer[];
     consumer: TouchConsumer | null;
-    consumerElement: Element | null;
     hovers: HoverGestureRecognizer[];
   } {
     const recognizers: GestureRecognizer[] = [];
     const hovers: HoverGestureRecognizer[] = [];
     let consumer: TouchConsumer | null = null;
-    let consumerElement: Element | null = null;
     if (
       target instanceof Node &&
       [...this.touchGates].some(gate => gate(target))
     ) {
-      return {recognizers, consumer, consumerElement, hovers};
+      return {recognizers, consumer, hovers};
     }
     let hasConsumerOwner = pointerType == null;
     for (
@@ -1022,7 +1020,6 @@ export class GestureHost {
         this.isConsumerActive(registration.consumer)
       ) {
         consumer = registration.consumer;
-        consumerElement = node;
         hasConsumerOwner = true;
         continue;
       }
@@ -1032,36 +1029,36 @@ export class GestureHost {
       for (const type of this.delegated) {
         if (node.hasAttribute(type.attribute)) {
           consumer = type.create(node, pointerType);
-          consumerElement = consumer == null ? null : node;
           hasConsumerOwner = true;
           break;
         }
       }
     }
-    return {recognizers, consumer, consumerElement, hovers};
+    return {recognizers, consumer, hovers};
   }
 
   /**
-   * Turn text selection and the touch callout off on the press-tracked
-   * element and on the elements of recognizers that ask, for as long as this
-   * finger or pen is down: a UIKit control or cell never starts a selection
-   * under a held finger. Restored when the contact ends. Callers lock only
-   * where the primary pointer is coarse (locksSelectionFor), so desktop
-   * selection is untouched.
+   * Turn text selection and the touch callout off, for as long as this
+   * finger or pen is down, only on the elements whose hold does something:
+   * a long press's (a menu, a hold-repeat) and those of recognizers that ask
+   * (`preventsTextSelection`, a slider's thumb or a switch's drag). Anything whose hold does nothing, a
+   * press-tracked control or row included, keeps the browser's long-press
+   * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
+   * lock only where the primary pointer is coarse (locksSelectionFor), so
+   * desktop selection is untouched.
    */
   private lockSelection(
     id: number,
     recognizers: ReadonlyArray<GestureRecognizer>,
-    consumerElement: Element | null,
     target: EventTarget | null,
   ): void {
     const elements = new Set<Element>();
-    if (consumerElement != null) {
-      elements.add(consumerElement);
-    }
     for (const recognizer of recognizers) {
       if (
-        recognizer.preventsTextSelection &&
+        // A long press (a menu, a hold-repeat) or a recognizer that asks: a
+        // hold that does something.
+        (recognizer.preventsTextSelection ||
+          internals(recognizer).family === 'longPress') &&
         // Only a recognizer that would take this touch locks for it.
         recognizer.isEnabled &&
         internals(recognizer).acceptsTouchInput &&
@@ -1139,17 +1136,14 @@ export class GestureHost {
       }
       const native = touch.target instanceof Node ? touch.target : event.target;
       const target = this.presentedTarget(native, touch.clientX, touch.clientY);
-      const {recognizers, consumer, consumerElement} = this.participantsAt(
-        target,
-        'touch',
-      );
+      const {recognizers, consumer} = this.participantsAt(target, 'touch');
       if (recognizers.length === 0 && consumer == null) {
         continue;
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
       if (locksSelectionFor('touch', this.doc.defaultView)) {
-        this.lockSelection(id, recognizers, consumerElement, target);
+        this.lockSelection(id, recognizers, target);
       }
       // The finger's events keep going to what the engine hit.
       this.watchTarget(
@@ -1628,7 +1622,7 @@ export class GestureHost {
       event.clientX,
       event.clientY,
     );
-    const {recognizers, consumer, consumerElement} = this.participantsAt(
+    const {recognizers, consumer} = this.participantsAt(
       target,
       event.pointerType,
     );
@@ -1638,7 +1632,7 @@ export class GestureHost {
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
     if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
-      this.lockSelection(id, recognizers, consumerElement, target);
+      this.lockSelection(id, recognizers, target);
     }
     if (target !== event.target && target != null) {
       this.retargeted.set(id, {x: event.clientX, y: event.clientY, target});
