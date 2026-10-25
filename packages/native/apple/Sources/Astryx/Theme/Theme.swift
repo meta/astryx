@@ -125,38 +125,6 @@ public struct AstryxStyle: Sendable {
   }
 }
 
-extension Color {
-  /// A color from `0xRRGGBBAA` in sRGB, the form the generated themes use.
-  public init(astryxRGBA value: UInt32) {
-    self.init(
-      .sRGB,
-      red: Double((value >> 24) & 0xFF) / 255,
-      green: Double((value >> 16) & 0xFF) / 255,
-      blue: Double((value >> 8) & 0xFF) / 255,
-      opacity: Double(value & 0xFF) / 255
-    )
-  }
-
-  /// A color from `#RRGGBBAA`. `#RRGGBB` and `#RGB` also read; anything else
-  /// is clear.
-  public init(astryxHex hex: String) {
-    var digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-    if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
-    if digits.count == 6 { digits += "FF" }
-    guard digits.count == 8, let value = UInt32(digits, radix: 16) else {
-      self = .clear
-      return
-    }
-    self.init(
-      .sRGB,
-      red: Double((value >> 24) & 0xFF) / 255,
-      green: Double((value >> 16) & 0xFF) / 255,
-      blue: Double((value >> 8) & 0xFF) / 255,
-      opacity: Double(value & 0xFF) / 255
-    )
-  }
-}
-
 /// A font from a CSS family stack: the first system family or installed font.
 /// System fonts follow Bold Text by themselves; an installed custom face is
 /// drawn one weight step heavier when Bold Text is on (theme environment

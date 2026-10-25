@@ -154,10 +154,8 @@ same generated contract.
 - `AstryxNodeView` draws Card, Heading, Icon, and Text wire nodes. Any other
   node, HStack and VStack included, renders in its place as unsupported, and
   its siblings still render, until the logic host draws stacks (A9).
-- The generated iOS `SwitchProps` still declares `size`, the generated
-  `SwitchProps` still declare `labelPosition` and `labelSpacing` on iOS and
-  macOS, and `HStackProps` and `VStackProps` are still generated for iOS and
-  macOS.
+- The generated iOS `SwitchProps` still declares `size`, and `HStackProps` and
+  `VStackProps` are still generated for iOS and macOS.
 
 ## Open questions
 
