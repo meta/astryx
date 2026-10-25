@@ -24,6 +24,7 @@
 
 import {transformAsync} from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
+import stylexResolution from './stylex-module-resolution.cjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -288,10 +289,8 @@ export async function collectStyleXCSS(target) {
               genConditionalClasses: true,
               treeshakeCompensation: true,
               aliases: target.aliases,
-              unstable_moduleResolution: {
-                type: 'commonJS',
-                rootDir: ROOT,
-              },
+              unstable_moduleResolution:
+                stylexResolution.stylexModuleResolution,
             },
           ],
         ],

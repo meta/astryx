@@ -16,6 +16,10 @@ public enum ButtonElevation: String, CaseIterable, Codable, Sendable {
   case med = "med"
   case high = "high"
 }
+public enum ButtonWidth: String, CaseIterable, Codable, Sendable {
+  case content = "content"
+  case fill = "fill"
+}
 #if os(iOS)
 public struct ButtonProps {
   /// Base props attach to this part on every platform.
@@ -28,10 +32,11 @@ public struct ButtonProps {
   public var isLoading: Bool?
   public var isInterruptible: Bool?
   public var isDisabled: Bool?
+  public var width: ButtonWidth?
   public var tooltip: String?
   public var onClick: (() -> Void)?
   public var href: String?
-  public init(label: String, variant: ButtonVariant? = nil, size: ButtonSize? = nil, elevation: ButtonElevation? = nil, isLoading: Bool? = nil, isInterruptible: Bool? = nil, isDisabled: Bool? = nil, tooltip: String? = nil, onClick: (() -> Void)? = nil, href: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, variant: ButtonVariant? = nil, size: ButtonSize? = nil, elevation: ButtonElevation? = nil, isLoading: Bool? = nil, isInterruptible: Bool? = nil, isDisabled: Bool? = nil, width: ButtonWidth? = nil, tooltip: String? = nil, onClick: (() -> Void)? = nil, href: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.variant = variant
     self.size = size
@@ -39,6 +44,7 @@ public struct ButtonProps {
     self.isLoading = isLoading
     self.isInterruptible = isInterruptible
     self.isDisabled = isDisabled
+    self.width = width
     self.tooltip = tooltip
     self.onClick = onClick
     self.href = href
@@ -54,6 +60,7 @@ public struct ButtonNode: Decodable, Equatable, Sendable {
     public var isLoading: Bool?
     public var isInterruptible: Bool?
     public var isDisabled: Bool?
+    public var width: ButtonWidth?
     public var tooltip: String?
     public var href: String?
   }
@@ -76,6 +83,7 @@ public struct ButtonNode: Decodable, Equatable, Sendable {
       isLoading: props.isLoading,
       isInterruptible: props.isInterruptible,
       isDisabled: props.isDisabled,
+      width: props.width,
       tooltip: props.tooltip,
       onClick: listens("onClick") ? { send(AstryxAction(key: key, component: "Button", event: "onClick", args: [])) } : nil,
       href: props.href,
@@ -96,10 +104,11 @@ public struct ButtonProps {
   public var isLoading: Bool?
   public var isInterruptible: Bool?
   public var isDisabled: Bool?
+  public var width: ButtonWidth?
   public var tooltip: String?
   public var onClick: (() -> Void)?
   public var href: String?
-  public init(label: String, variant: ButtonVariant? = nil, size: ButtonSize? = nil, elevation: ButtonElevation? = nil, isLoading: Bool? = nil, isInterruptible: Bool? = nil, isDisabled: Bool? = nil, tooltip: String? = nil, onClick: (() -> Void)? = nil, href: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, variant: ButtonVariant? = nil, size: ButtonSize? = nil, elevation: ButtonElevation? = nil, isLoading: Bool? = nil, isInterruptible: Bool? = nil, isDisabled: Bool? = nil, width: ButtonWidth? = nil, tooltip: String? = nil, onClick: (() -> Void)? = nil, href: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.variant = variant
     self.size = size
@@ -107,6 +116,7 @@ public struct ButtonProps {
     self.isLoading = isLoading
     self.isInterruptible = isInterruptible
     self.isDisabled = isDisabled
+    self.width = width
     self.tooltip = tooltip
     self.onClick = onClick
     self.href = href
@@ -122,6 +132,7 @@ public struct ButtonNode: Decodable, Equatable, Sendable {
     public var isLoading: Bool?
     public var isInterruptible: Bool?
     public var isDisabled: Bool?
+    public var width: ButtonWidth?
     public var tooltip: String?
     public var href: String?
   }
@@ -144,6 +155,7 @@ public struct ButtonNode: Decodable, Equatable, Sendable {
       isLoading: props.isLoading,
       isInterruptible: props.isInterruptible,
       isDisabled: props.isDisabled,
+      width: props.width,
       tooltip: props.tooltip,
       onClick: listens("onClick") ? { send(AstryxAction(key: key, component: "Button", event: "onClick", args: [])) } : nil,
       href: props.href,
