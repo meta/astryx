@@ -199,6 +199,9 @@ export interface HeldAnimation {
  * each by its offset from the earliest start, and `releaseAnimations` resumes
  * only it. A second call adds to the held set: what the first held stays held
  * until the release, and offsets count from the earliest start of all of it.
+ * An animation the page cancels after the hold (retargeting a CSS transition
+ * cancels it) leaves the held set: seeking, sampling and releasing skip it
+ * rather than revive it.
  */
 export async function holdAnimations(
   page: Page,
@@ -245,10 +248,14 @@ export async function holdAnimations(
     const w = window as unknown as {
       __harnessHeld?: Animation[];
       __harnessHeldStarts?: number[];
+      __harnessHeldOrigin?: number;
     };
     w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
     w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
-    const earliest = Math.min(...w.__harnessHeldStarts);
+    // Times count from the earliest start of everything held until the
+    // release, so dropping one later never moves the others.
+    const earliest = Math.min(w.__harnessHeldOrigin ?? Infinity, ...starts);
+    w.__harnessHeldOrigin = earliest;
     const offsets = starts.map(start => start - earliest);
     return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
@@ -299,12 +306,22 @@ export async function seekAnimations(
       const w = window as unknown as {
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
+        __harnessHeldOrigin?: number;
       };
-      const starts = w.__harnessHeldStarts ?? [];
-      const earliest = Math.min(...starts);
+      // An animation the page cancelled since the hold (a CSS transition is
+      // cancelled whenever the page retargets its property) leaves the held set:
+      // applying or playing it again would revive what the page dropped.
+      const kept = (w.__harnessHeld ?? []).flatMap((animation, index) =>
+        animation.playState === 'idle'
+          ? []
+          : [{animation, start: (w.__harnessHeldStarts ?? [])[index] ?? 0}],
+      );
+      w.__harnessHeld = kept.map(k => k.animation);
+      w.__harnessHeldStarts = kept.map(k => k.start);
+      const origin = w.__harnessHeldOrigin ?? 0;
       let presented = -Infinity;
-      (w.__harnessHeld ?? []).forEach((animation, index) => {
-        const offset = (starts[index] ?? earliest) - earliest;
+      kept.forEach(({animation, start}) => {
+        const offset = start - origin;
         const end = Number(
           animation.effect?.getComputedTiming().endTime ?? Infinity,
         );
@@ -332,10 +349,20 @@ export async function releaseAnimations(
     const w = window as unknown as {
       __harnessHeld?: Animation[];
       __harnessHeldStarts?: number[];
+      __harnessHeldOrigin?: number;
     };
-    const held = w.__harnessHeld ?? [];
+    // An animation the page cancelled since the hold (a CSS transition is
+    // cancelled whenever the page retargets its property) leaves the held set:
+    // applying or playing it again would revive what the page dropped.
+    const kept = (w.__harnessHeld ?? []).flatMap((animation, index) =>
+      animation.playState === 'idle'
+        ? []
+        : [{animation, start: (w.__harnessHeldStarts ?? [])[index] ?? 0}],
+    );
+    w.__harnessHeld = kept.map(k => k.animation);
+    w.__harnessHeldStarts = kept.map(k => k.start);
     try {
-      for (const animation of held) {
+      for (const {animation} of kept) {
         const end = Number(
           animation.effect?.getComputedTiming().endTime ?? Infinity,
         );
@@ -348,6 +375,7 @@ export async function releaseAnimations(
     } finally {
       w.__harnessHeld = [];
       w.__harnessHeldStarts = [];
+      w.__harnessHeldOrigin = undefined;
     }
   }, finish);
 }
@@ -403,10 +431,20 @@ export async function sampleCurve(
       const w = window as unknown as {
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
+        __harnessHeldOrigin?: number;
       };
-      const held = w.__harnessHeld ?? [];
-      const starts = w.__harnessHeldStarts ?? [];
-      const earliest = Math.min(...starts);
+      // An animation the page cancelled since the hold (a CSS transition is
+      // cancelled whenever the page retargets its property) leaves the held set:
+      // applying or playing it again would revive what the page dropped.
+      const kept = (w.__harnessHeld ?? []).flatMap((animation, index) =>
+        animation.playState === 'idle'
+          ? []
+          : [{animation, start: (w.__harnessHeldStarts ?? [])[index] ?? 0}],
+      );
+      w.__harnessHeld = kept.map(k => k.animation);
+      w.__harnessHeldStarts = kept.map(k => k.start);
+      const held = kept.map(k => k.animation);
+      const origin = w.__harnessHeldOrigin ?? 0;
       if (held.length === 0) {
         throw new Error(
           'sampleCurve: no held animations (call holdAnimations first)',
@@ -434,7 +472,7 @@ export async function sampleCurve(
         let presentedOpacity = -Infinity;
         held.forEach((animation, index) => {
           // Each at its own offset, just inside its end: see seekAnimations.
-          const offset = (starts[index] ?? earliest) - earliest;
+          const offset = kept[index].start - origin;
           const end = Number(
             animation.effect?.getComputedTiming().endTime ?? Infinity,
           );
