@@ -11,7 +11,15 @@
 import {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
-import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  cleanup,
+  createEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {readFileSync} from 'node:fs';
 import {ContextMenu} from './ContextMenu';
@@ -1401,5 +1409,147 @@ describe('ContextMenu inline trigger (triggerAs)', () => {
       </ContextMenu>,
     );
     expect(screen.getByTestId('area').tagName).toBe('DIV');
+  });
+});
+
+describe('ContextMenu outside dismissal', () => {
+  const finger = (pointerId: number) => ({pointerType: 'touch', pointerId});
+
+  // Holds a finger on the trigger until the long-press opens the menu. Only
+  // the long-press delay is faked.
+  function longPress(trigger: HTMLElement, pointerId: number) {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      fireEvent.pointerDown(trigger, finger(pointerId));
+      fireEvent.touchStart(trigger, {touches: [{clientX: 20, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  // What a browser sends after a touch: the lift, then compatibility mouse
+  // events aimed at the element the finger held.
+  function lift(target: HTMLElement, pointerId: number) {
+    fireEvent.pointerUp(target, finger(pointerId));
+    fireEvent.touchEnd(target);
+    fireEvent.mouseDown(target);
+    fireEvent.mouseUp(target);
+    fireEvent.click(target);
+  }
+
+  function renderMenu(onOpenChange: (isOpen: boolean) => void) {
+    render(
+      <>
+        <ContextMenu
+          items={[{label: 'Cut'}, {label: 'Copy'}]}
+          data-testid="ctx"
+          onOpenChange={onOpenChange}>
+          <div>Long-press me</div>
+        </ContextMenu>
+        <button type="button">Outside</button>
+      </>,
+    );
+    return {
+      trigger: screen.getByTestId('ctx'),
+      outside: screen.getByRole('button', {name: 'Outside'}),
+    };
+  }
+
+  it('the long press that opened the menu does not close it, mid-hold or as it lifts; the next press outside does', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    longPress(trigger, 1);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // iOS: a compatibility mousedown while the finger is still down.
+    fireEvent.mouseDown(trigger);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // Chromium: the compatibility events that follow the lift.
+    lift(trigger, 1);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    // A new press is a new gesture: a mouse press outside closes the menu.
+    fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 9});
+    fireEvent.mouseDown(outside);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a finger long press that opens the menu through a pointer contextmenu (Chromium) does not close it as it lifts', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.pointerDown(trigger, finger(8));
+    const contextmenu = createEvent.contextMenu(trigger, {
+      clientX: 20,
+      clientY: 15,
+      detail: 1,
+    });
+    Object.defineProperty(contextmenu, 'pointerType', {value: 'touch'});
+    fireEvent(trigger, contextmenu);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    lift(trigger, 8);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    // A right-click is not a finger: its gesture's next mousedown, outside,
+    // closes the menu.
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.contextMenu(trigger, {clientX: 20, clientY: 15, detail: 1});
+    fireEvent.mouseDown(outside);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a long press that moves the open menu keeps it open as it lifts', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    longPress(trigger, 2);
+    lift(trigger, 2);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('a tap outside closes the menu through its compatibility mousedown; a scroll that starts outside leaves it open', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    // The browser takes this finger for a scroll: no compatibility events.
+    fireEvent.pointerDown(outside, finger(3));
+    fireEvent.pointerCancel(outside, finger(3));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerDown(outside, finger(4));
+    lift(outside, 4);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a mouse press or a pen press outside closes the menu at the press', () => {
+    for (const pointerType of ['mouse', 'pen']) {
+      const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+      const {trigger, outside} = renderMenu(onOpenChange);
+      fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+      fireEvent.pointerDown(outside, {pointerType, pointerId: 7});
+      fireEvent.mouseDown(outside);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      cleanup();
+    }
+  });
+
+  it('presses that send no mousedown leave the menu open, as before: a cancelled pointerdown, a finger drag, a second finger', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    // A control that cancels its pointerdown (a NumberInput stepper, a
+    // resize handle): the browser sends no mousedown.
+    fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.pointerUp(outside, {pointerType: 'mouse', pointerId: 1});
+    // A finger drag on a surface that does not pan (a Slider), lifted.
+    fireEvent.pointerDown(outside, finger(5));
+    fireEvent.pointerMove(outside, finger(5));
+    fireEvent.pointerUp(outside, finger(5));
+    // A second finger's tap.
+    fireEvent.pointerDown(outside, finger(6));
+    fireEvent.pointerDown(outside, finger(7));
+    fireEvent.pointerUp(outside, finger(7));
+    fireEvent.pointerCancel(outside, finger(6));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });
