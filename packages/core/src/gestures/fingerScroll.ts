@@ -14,11 +14,10 @@
  * (the momentum after the lift is still the finger's). A scroll that ends
  * while its finger still rests there stays the finger's until the lift. A
  * scroll the program starts while no finger is down there (`scrollTo`, a
- * status-bar tap) is not. Where the browser fires no `scrollend` (mobile
- * Safari before 26), a finger's scroll ends once its scroll events go quiet
- * for `SCROLL_QUIET_MS`, on the host's clock. The host keeps the one finger
- * record; this module adds only passive scroll listeners, and only while
- * something is watched.
+ * status-bar tap) is not. Where the browser sends no `scrollend`, a quiet
+ * spell of `SCROLL_END_FALLBACK_MS` after its last scroll event ends a
+ * finger's scroll instead. The host keeps the one finger record; this module
+ * adds only passive scroll listeners, and only while something is watched.
  */
 
 import {subscribeInput} from '../utils/inputStream';
@@ -26,11 +25,12 @@ import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import type {GestureHost} from './GestureHost';
 
 /**
- * Where the browser fires no `scrollend` (mobile Safari before 26), a watched
- * scroller's scroll counts as ended once no scroll event came for this long.
- * GUESS: six 60 Hz frames; a scroll reports every frame until it stops.
+ * Where the browser sends no `scrollend`, how long a finger-driven scroller
+ * stays quiet (no scroll event) before its scroll counts as ended, in ms:
+ * longer than the gap between a momentum scroll's events, short enough that
+ * a program's scroll right after it is not read as the finger's.
  */
-const SCROLL_QUIET_MS = 100;
+const SCROLL_END_FALLBACK_MS = 150;
 
 interface Watch {
   /** Watched scrollers, and how many watchers each has. */
@@ -51,7 +51,7 @@ function start(host: GestureHost, watch: Watch): () => void {
     return target instanceof Node ? target : null;
   };
   // A finger's scroll ends at the scroller's scrollend, or, where the
-  // browser fires none, once its scroll events go quiet (host's clock).
+  // browser sends none, after a quiet spell.
   const endScroll = (scroller: Node): void => {
     if (!watch.fingerScrollers.has(scroller)) {
       return;
@@ -63,16 +63,17 @@ function start(host: GestureHost, watch: Watch): () => void {
       watch.fingerScrollers.delete(scroller);
     }
   };
-  const quietTimers = new Map<Node, unknown>();
-  const clearQuietTimer = (scroller: Node): void => {
-    if (quietTimers.has(scroller)) {
-      host.clock.clearTimeout(quietTimers.get(scroller));
-      quietTimers.delete(scroller);
+  const scrollEndFallbacks = new Map<Node, ReturnType<typeof setTimeout>>();
+  const clearScrollEndFallback = (scroller: Node): void => {
+    const timer = scrollEndFallbacks.get(scroller);
+    if (timer != null) {
+      clearTimeout(timer);
+      scrollEndFallbacks.delete(scroller);
     }
   };
-  const firesScrollEnd = (): boolean => {
+  const hasScrollEnd = (): boolean => {
     const view = doc.defaultView;
-    return view == null || 'onscrollend' in view;
+    return view != null && 'onscrollend' in view;
   };
   const onScroll = (event: Event): void => {
     const scroller = scrollerOf(event);
@@ -83,14 +84,14 @@ function start(host: GestureHost, watch: Watch): () => void {
     if (host.isFingerDownIn(scroller)) {
       watch.fingerScrollers.add(scroller);
     }
-    if (watch.fingerScrollers.has(scroller) && !firesScrollEnd()) {
-      clearQuietTimer(scroller);
-      quietTimers.set(
+    if (watch.fingerScrollers.has(scroller) && !hasScrollEnd()) {
+      clearScrollEndFallback(scroller);
+      scrollEndFallbacks.set(
         scroller,
-        host.clock.setTimeout(() => {
-          quietTimers.delete(scroller);
+        setTimeout(() => {
+          scrollEndFallbacks.delete(scroller);
           endScroll(scroller);
-        }, SCROLL_QUIET_MS),
+        }, SCROLL_END_FALLBACK_MS),
       );
     }
   };
@@ -128,8 +129,8 @@ function start(host: GestureHost, watch: Watch): () => void {
       for (const stop of unsubscribers.splice(0)) {
         stop();
       }
-      for (const scroller of [...quietTimers.keys()]) {
-        clearQuietTimer(scroller);
+      for (const scroller of [...scrollEndFallbacks.keys()]) {
+        clearScrollEndFallback(scroller);
       }
       watch.fingerScrollers.clear();
       watch.endedWhileDown.clear();
