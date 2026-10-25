@@ -83,6 +83,11 @@ export function formatMotionRoleValue(
       );
     }
     const {duration, bounce} = durationBounceOf(toSpring(value));
+    if (!(bounce < 1)) {
+      throw new RangeError(
+        'a spring must settle: its bounce must be below 1 (a damping ratio above 0)',
+      );
+    }
     return `${short(duration)}s ${short(bounce)}`;
   }
   if (kind === 'duration') {

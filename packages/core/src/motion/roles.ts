@@ -12,10 +12,12 @@
  *
  * A motion role is one value of a motion table that a theme may retune: a
  * spring, a duration (a key ending in `Ms`, in milliseconds) or a curve (four
- * cubic-bézier control points). It is named by its table path, for example
- * `springs.sheetDetent`, `timing.curves.easeInOut` or `scroll.bounce`, and
- * carried by one CSS custom property, `--motion-` followed by the path in
- * kebab case (`--motion-springs-sheet-detent`). A theme writes that property
+ * cubic-bézier control points). It is named for its use (`spec:AST-094` FR4):
+ * by its table path, for example `springs.sheetDetent` or `scroll.bounce`,
+ * unless the table renames it, as the shared tables do for the roles FR4
+ * names (`springs.settle` for SwiftUI's `.smooth`, `timing.curves.move` for
+ * UIKit's ease-in-out). It is carried by one CSS custom property, `--motion-`
+ * followed by the role id in kebab case (`--motion-springs-sheet-detent`). A theme writes that property
  * only for the roles it sets; an empty property means the table's value, so
  * the table stays the one measured source of every default.
  *
@@ -60,19 +62,30 @@ const tablesById = new Map<string, object>();
 const roleOfLeaf = new WeakMap<object, MotionRole>();
 /** A table or one of its groups → its path. */
 const pathOfGroup = new WeakMap<object, string>();
+/** A table path → the role id it is registered under, when renamed. */
+const roleIdOfPath = new Map<string, string>();
 
 /**
  * Registers a motion table: each spring, `…Ms` duration and curve leaf becomes
  * a role named by its path under `id`. A leaf object the table shares between
  * two keys is replaced in the table by an equal copy, so each role has its own
  * object (an animator resolves a role from the object it is handed).
- * `exclude` lists paths, relative to the table, that are not motion.
- * Registering the same table under the same id again does nothing.
+ * `exclude` lists paths, relative to the table, that are not motion;
+ * `rename` maps a path, relative to the table, to the role name it is
+ * registered under (relative too), so a role is named for its use while the
+ * table keeps its source's name. Registering the same table under the same id
+ * again does nothing.
  */
 export function registerMotionTable(
   id: string,
   table: object,
-  {exclude = []}: {exclude?: ReadonlyArray<string>} = {},
+  {
+    exclude = [],
+    rename = {},
+  }: {
+    exclude?: ReadonlyArray<string>;
+    rename?: Readonly<Record<string, string>>;
+  } = {},
 ): void {
   if (!/^[a-z][A-Za-z0-9]*$/.test(id)) {
     throw new Error(`motion table id "${id}" must be one camelCase word`);
@@ -109,22 +122,27 @@ export function registerMotionTable(
       if (kind == null) {
         continue;
       }
+      const relative = path.slice(id.length + 1);
+      const roleId = relative in rename ? `${id}.${rename[relative]}` : path;
+      if (roleId !== path) {
+        roleIdOfPath.set(path, roleId);
+      }
       let leaf = value as SpringDescription | number | MotionCurvePoints;
       if (typeof leaf === 'object') {
         const taken = roleOfLeaf.get(leaf);
-        if (taken != null && taken.id !== path) {
+        if (taken != null && taken.id !== roleId) {
           leaf = Object.freeze(Array.isArray(leaf) ? [...leaf] : {...leaf}) as
             SpringDescription | MotionCurvePoints;
           group[key] = leaf;
         }
       }
       const role: MotionRole = {
-        id: path,
+        id: roleId,
         kind,
-        variable: motionRoleVariable(path),
+        variable: motionRoleVariable(roleId),
         value: leaf,
       };
-      rolesById.set(path, role);
+      rolesById.set(roleId, role);
       if (typeof leaf === 'object') {
         roleOfLeaf.set(leaf, role);
       }
@@ -149,7 +167,11 @@ export function motionRoleIn(
   key: string,
 ): MotionRole | undefined {
   const prefix = pathOfGroup.get(group);
-  return prefix == null ? undefined : rolesById.get(`${prefix}.${key}`);
+  if (prefix == null) {
+    return undefined;
+  }
+  const path = `${prefix}.${key}`;
+  return rolesById.get(roleIdOfPath.get(path) ?? path);
 }
 
 /** The role with this id, once its table is registered. */
@@ -204,7 +226,8 @@ export function parseMotionRoleValue(
     }
     const duration = Number(m[1]);
     const bounce = Number(m[2]);
-    return duration > 0 && bounce > -1 && bounce <= 1
+    // A bounce of 1 is undamped: it never settles.
+    return duration > 0 && bounce > -1 && bounce < 1
       ? {duration, bounce}
       : null;
   }
