@@ -922,23 +922,6 @@ export function createAnimator(
       previous?.cancel();
       return;
     }
-    const end = Math.min(
-      time + MAX_DURATION_MS,
-      Math.max(
-        ...moving.map(
-          p =>
-            (segments.get(p) as Segment).start +
-            (segments.get(p) as Segment).duration,
-        ),
-      ),
-    );
-    if (end <= time) {
-      if (pseudoElement != null) {
-        hold(channel, time);
-      }
-      previous?.cancel();
-      return;
-    }
     // A channel rebuilt by an explicit call (set, rebase, a retarget of
     // another axis) while one of its curves still waits for the browser's
     // start keeps that start: no explicit start for this animation.
@@ -948,6 +931,27 @@ export function createAnimator(
         .map(p => (segments.get(p) as Segment).group)
         .find(group => group != null && !group.resolved) ??
       null;
+    // The keyframes start where the animation will: at the waiting call's
+    // own time, which its start moves to the browser's (resolveGroup), so a
+    // write later in the task keeps the screen on the model's clock.
+    const from = waiting?.provisional ?? time;
+    const end = Math.min(
+      from + MAX_DURATION_MS,
+      Math.max(
+        ...moving.map(
+          p =>
+            (segments.get(p) as Segment).start +
+            (segments.get(p) as Segment).duration,
+        ),
+      ),
+    );
+    if (end <= from) {
+      if (pseudoElement != null) {
+        hold(channel, time);
+      }
+      previous?.cancel();
+      return;
+    }
     if (callGroup != null) {
       // A curve of an earlier call still waiting for its first frame is
       // rebaked here: it starts with this call's commit.
@@ -966,11 +970,11 @@ export function createAnimator(
       }
     }
     const collect = (scale: number) => {
-      const times = new Set<number>([time, end]);
+      const times = new Set<number>([from, end]);
       for (const property of moving) {
         for (const t of sampleTimes(
           property,
-          time,
+          from,
           end,
           SAMPLE_TOLERANCE[property] * scale,
         )) {
@@ -992,17 +996,17 @@ export function createAnimator(
       const segment = segments.get(property) as Segment;
       for (const j of segment.jumps) {
         const t = segment.start + j;
-        if (t > time && t <= end) {
+        if (t > from && t <= end) {
           jumpTimes.add(t);
           all.add(t);
         }
       }
     }
     const times = [...all].sort((a, b) => a - b);
-    const span = end - time + END_HOLD_MS;
+    const span = end - from + END_HOLD_MS;
     const keyframes: Keyframe[] = [];
     for (const t of times) {
-      const offset = (t - time) / span;
+      const offset = (t - from) / span;
       if (jumpTimes.has(t)) {
         keyframes.push({
           offset,
@@ -1030,7 +1034,7 @@ export function createAnimator(
     });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
-      // it commits it (StartGroup); the keyframes are sampled from `time`,
+      // it commits it (StartGroup); the keyframes are sampled from `from`,
       // the call's own start.
       waiting.animations.push(animation);
       waiting.channels.add(channel);
@@ -1331,7 +1335,31 @@ export function createAnimator(
       void adopter.started.then(start => resolveGroup(group, start));
       return;
     }
+    // A same-task write replaced the animation the call waited on: the call
+    // still starts with the browser's start of the ones that remain.
+    if (awaitStart(group)) {
+      return;
+    }
     resolveGroup(group, group.provisional);
+  };
+
+  /**
+   * Waits for the browser's start of a call through one of its animations
+   * still playing; false when none is left to wait on.
+   */
+  const awaitStart = (group: StartGroup): boolean => {
+    const live = group.animations.find(
+      animation => animation.playState !== 'idle',
+    );
+    const ready = (live as Partial<Animation> | undefined)?.ready;
+    if (ready == null || typeof ready.then !== 'function') {
+      return false;
+    }
+    ready.then(
+      () => syncGroup(group),
+      () => settleCancelled(group),
+    );
+    return true;
   };
 
   const syncGroup = (group: StartGroup) => {

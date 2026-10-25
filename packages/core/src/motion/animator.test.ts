@@ -652,6 +652,41 @@ describe('review fixes', () => {
     );
   });
 
+  it('a same-task write that cancels the call\u2019s first animation still leaves the call on the browser\u2019s start', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 100}, {spring: springs.smooth});
+    animator.set({y: 10});
+    // The cancelled animation's rejection runs before the first frame, as in
+    // a browser's task order.
+    await Promise.resolve();
+    await Promise.resolve();
+    clock = 1300;
+    await commitFrame(1300);
+    await expect(handle.started).resolves.toBe(1300);
+    const x = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    expect(animator.get('x', 1316)).toBeCloseTo(x.value(0.016), 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1316)[0]).toBeCloseTo(
+      x.value(0.016),
+      1,
+    );
+  });
+
+  it('a write later in the task samples the waiting call\u2019s curve from its start, so the screen and get() share one clock', async () => {
+    const {animator} = setup();
+    animator.animate({opacity: 0.5, x: 100}, {spring: springs.smooth});
+    // 100 ms of work in the same task before another axis is written.
+    clock = 1100;
+    animator.set({y: 10});
+    clock = 1300;
+    await commitFrame(1300);
+    const x = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    expect(animator.get('x', 1400)).toBeCloseTo(x.value(0.1), 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1400)[0]).toBeCloseTo(
+      x.value(0.1),
+      1,
+    );
+  });
+
   it('under Reduced Motion on a fine pointer, a move leaves a running fade alone', async () => {
     const {animator} = setup({
       reduced: true,
