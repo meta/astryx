@@ -9,9 +9,9 @@
  *   beside the animator: a raw Web Animations fade, a CSS transition
  *
  * Under Reduce Motion nothing moves, scales or springs. On a coarse primary
- * pointer (DR2), or for a change started by a touch drag's release on any
- * pointer (DR3), a change becomes an opacity-only cross-fade of
- * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.easeInOut`; on
+ * pointer, or for a change started by a touch drag's release on any pointer
+ * (DR2), a change becomes an opacity-only cross-fade of
+ * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.move`; on
  * any other primary pointer it completes at once (DR3). No theme value or
  * call site lengthens the fade (DR4). The animator follows the same policy on
  * its own (animator.ts).
@@ -76,7 +76,7 @@ export interface ReducedMotionFade {
 export function reducedMotionFade(
   element?: Element | null,
   options: {
-    /** The change starts from the release of a touch drag (DR3). */
+    /** The change starts from the release of a touch drag (DR2). */
     touchRelease?: boolean;
   } = {},
 ): ReducedMotionFade | null {
@@ -92,8 +92,8 @@ export function reducedMotionFade(
   }
   const curve =
     element != null
-      ? resolveMotion(element, timing.curves.easeInOut)
-      : timing.curves.easeInOut;
+      ? resolveMotion(element, timing.curves.move)
+      : timing.curves.move;
   return {
     duration: timing.reducedMotionCrossFadeMs,
     easing: `cubic-bezier(${curve.join(', ')})`,

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatMessageList
 
 /**
  * @file ChatMessageList.a11y.chromium.spec.ts
