@@ -13,6 +13,7 @@
  *   __tests__/animator.interaction.browser.spec.ts
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -1596,6 +1597,35 @@ describe('decay: momentum curves (a coast)', () => {
     expect(live('translate')).toHaveLength(1);
     expect(live('opacity')).toHaveLength(0);
     expect(element.style.opacity).toBe('');
+  });
+
+  it('ships the Reduce Motion fade, not the rest of the timing table', () => {
+    // Bundled for a page, the animator and reducedMotionFade() read two
+    // timing values; the table's other rows stay out
+    // (architecture:component-style-authoring INV6).
+    // esbuild runs in its own process: it needs a native TextEncoder.
+    const script = [
+      "import {build} from 'esbuild';",
+      'const result = await build({',
+      `  entryPoints: ${JSON.stringify(['animator.ts', 'reducedMotion.ts'].map(file => path.resolve(__dirname, file)))},`,
+      '  outdir: "out",',
+      "  bundle: true, write: false, format: 'esm', logLevel: 'silent',",
+      '});',
+      'process.stdout.write(result.outputFiles.map(file => file.text).join("\\n"));',
+    ].join('\n');
+    const bundle = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {cwd: path.resolve(__dirname, '../../../..'), encoding: 'utf8'},
+    );
+    expect(bundle).toContain('durationMs');
+    for (const row of [
+      'stateChangeMs',
+      'highlightOutMs',
+      'navigationBarHideShowMs',
+    ]) {
+      expect(bundle).not.toContain(row);
+    }
   });
 
   it('imports neither the coast math nor the scroll table', () => {

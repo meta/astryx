@@ -46,7 +46,10 @@
 
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {resolveMotion} from './resolveMotion';
-import {registerTimingTable, timing} from './uikit/timing';
+import {
+  reducedMotionCrossFade,
+  registerReducedMotionCrossFade,
+} from './uikit/timing';
 
 /** Reduce Motion on a coarse primary pointer: an opacity-only cross-fade. */
 export const REDUCED_MOTION_FADE_QUERY =
@@ -88,14 +91,14 @@ export function reducedMotionFade(
     return {duration: 0, easing: 'linear'};
   }
   if (element != null) {
-    registerTimingTable();
+    registerReducedMotionCrossFade();
   }
   const curve =
     element != null
-      ? resolveMotion(element, timing.curves.move)
-      : timing.curves.move;
+      ? resolveMotion(element, reducedMotionCrossFade.curve)
+      : reducedMotionCrossFade.curve;
   return {
-    duration: timing.reducedMotionCrossFadeMs,
+    duration: reducedMotionCrossFade.durationMs,
     easing: `cubic-bezier(${curve.join(', ')})`,
   };
 }
