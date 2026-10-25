@@ -23,7 +23,8 @@
  *   rest by presented values even while an animation holds its end, and a
  *   watch taken on first contact ignores an animation already running and
  *   keeps the start of one the page cancels when it ends, and the recorder
- *   reads nothing while a rendering trace runs and catches up after it;
+ *   reads only at CSS starts while a rendering trace runs and catches up
+ *   after it;
  *   storyboards write a
  *   sheet and a trace that follows the curve, an endless animation does not
  *   set their length, and a photograph Chromium returns empty is taken again
@@ -584,6 +585,50 @@ test.describe('frame evidence', () => {
     expect(started.map(a => a.durationMs)).toEqual([600, 600]);
   });
 
+  test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    await page.addStyleTag({
+      content:
+        '@keyframes harness-fade { from { opacity: 1 } to { opacity: 0.6 } }',
+    });
+    const pop = page.locator('#pop');
+    // The recorder runs, and a watch is taken before the trace.
+    await waitForRest(pop);
+    const watch = await watchAnimations(pop);
+    let started = 0;
+    const trace = await traceRendering(page, async () => {
+      started = await pop.evaluate(el => {
+        const pop = el as HTMLElement;
+        pop.style.transition = 'transform 400ms linear';
+        void pop.offsetWidth;
+        pop.style.transform = 'translateY(100px)';
+        pop.style.animation = 'harness-fade 400ms linear';
+        return performance.timeOrigin + performance.now();
+      });
+      await page.waitForTimeout(600);
+    });
+    // Its reads at the two starts fall before the steady middle.
+    expect(countBetween(trace, started + 100, started + 300).Layout ?? 0).toBe(
+      0,
+    );
+    const ended = await watch.started({timeout: 1_000});
+    expect(ended.map(a => a.kind).sort()).toEqual([
+      'CSSAnimation',
+      'CSSTransition',
+    ]);
+    expect(ended.every(a => a.finishedAt != null)).toBe(true);
+  });
+
   test("the long-task log records the page's own long task but not a DevTools evaluate, which the trace counts", async ({
     page,
     browserName,
@@ -1098,38 +1143,63 @@ test.describe('animation state', () => {
     expect(started.map(a => a.durationMs)).toEqual([300]);
   });
 
-  test('the recorder reads nothing while a rendering trace runs, and catches up after it', async ({
+  test('while a rendering trace runs the recorder reads only at CSS starts, and catches up after it', async ({
     page,
   }) => {
     await fixture(page);
     const box = page.locator('#box');
     const watch = await watchAnimations(box);
     // Counts the recorder's reads of the page's animations (each one flushes
-    // style), then flags a trace, as traceRendering does.
+    // style): the whole document's, and one element's. Then flags a trace, as
+    // traceRendering does.
     await page.evaluate(() => {
       const w = window as unknown as {
         __reads: number;
+        __elementReads: number;
         __harnessRenderingTrace?: boolean;
       };
       w.__reads = 0;
+      w.__elementReads = 0;
       const read = document.getAnimations.bind(document);
       document.getAnimations = () => {
         w.__reads += 1;
         return read();
       };
+      const readElement = Element.prototype.getAnimations;
+      Element.prototype.getAnimations = function (
+        this: Element,
+        ...args: Parameters<Element['getAnimations']>
+      ) {
+        w.__elementReads += 1;
+        return readElement.apply(this, args);
+      };
       w.__harnessRenderingTrace = true;
     });
-    // A CSS transition and a script animation start during the trace.
-    await box.evaluate(el => {
-      el.style.transition = 'transform 600ms linear';
-      void (el as HTMLElement).offsetWidth;
-      el.style.transform = 'translateX(100px)';
-      el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 600});
+    // During the trace: a CSS transition and a CSS animation that both end
+    // inside it, and a script animation still running after it.
+    await page.addStyleTag({
+      content:
+        '@keyframes harness-fade { from { opacity: 1 } to { opacity: 0.6 } }',
     });
-    await page.waitForTimeout(200);
+    await box.evaluate(el => {
+      const box = el as HTMLElement;
+      box.style.transition = 'transform 120ms linear';
+      void box.offsetWidth;
+      box.style.transform = 'translateX(100px)';
+      box.style.animation = 'harness-fade 120ms linear';
+      box.animate([{scale: '1'}, {scale: '0.9'}], {duration: 600});
+    });
+    await page.waitForTimeout(300);
     const reads = () =>
       page.evaluate(() => (window as unknown as {__reads: number}).__reads);
+    // No frame loop: no document-wide read. One element read per CSS start
+    // event (transitionrun, transitionstart, animationstart), not per frame.
     expect(await reads()).toBe(0);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {__elementReads: number}).__elementReads,
+      ),
+    ).toBeLessThanOrEqual(3);
     // The trace ends: traceRendering clears the flag and resumes the recorder,
     // which reads again, every frame.
     await page.evaluate(() => {
@@ -1142,12 +1212,20 @@ test.describe('animation state', () => {
     });
     await frames(page, 3);
     expect(await reads()).toBeGreaterThan(2);
-    // Both animations the trace saw start are reported.
+    // All three are reported, the two CSS ones that ended inside the trace
+    // with the time they finished.
+    await waitForRest(box);
     const started = await watch.started();
     expect(started.map(a => a.kind).sort()).toEqual([
       'Animation',
+      'CSSAnimation',
       'CSSTransition',
     ]);
+    expect(
+      started
+        .filter(a => a.kind !== 'Animation')
+        .map(a => a.finishedAt != null),
+    ).toEqual([true, true]);
   });
 
   test('a watch reports only what started after it', async ({page}) => {

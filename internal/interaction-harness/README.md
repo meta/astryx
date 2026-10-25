@@ -134,7 +134,9 @@ first and last frames may commit). A transform/opacity animation does no
 Layout or Paint there; a layout-property animation does one per frame. The
 harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
-animation's target and laying out an anchored one, and catches up afterwards.
+animation's target and laying out an anchored one: it reads only the element a
+CSS animation or transition event names, once, when that animation starts, and
+catches up afterwards.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

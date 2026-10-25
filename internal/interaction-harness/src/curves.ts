@@ -118,9 +118,12 @@ function animationRecorder(): void {
   // callback would make every frame a main-thread frame, in which Blink
   // restyles each running animation's target, a composited one included (and
   // lays out an anchored one), and document.getAnimations() flushes style:
-  // exactly what the trace counts. The animate() wrapper below still records
-  // script animations (it reads no style), and traceRendering resumes the
-  // recorder once the trace ends.
+  // exactly what the trace counts. So it runs no frame callback, and a CSS
+  // animation or transition event reads only the animations of the element it
+  // names, once, at that animation's start (one that ends inside the trace is
+  // otherwise never seen). The animate() wrapper below still records script
+  // animations (it reads no style), and traceRendering resumes the recorder
+  // once the trace ends.
   const tracing = () =>
     (window as unknown as {__harnessRenderingTrace?: boolean})
       .__harnessRenderingTrace === true;
@@ -148,9 +151,19 @@ function animationRecorder(): void {
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
     document.addEventListener(
       type,
-      () => {
+      event => {
         if (!tracing()) {
           record();
+          return;
+        }
+        const target = event.target;
+        if (target instanceof Element) {
+          // A pseudo-element's animation (`::backdrop`) is in the subtree.
+          const pseudo = (event as AnimationEvent | TransitionEvent)
+            .pseudoElement;
+          for (const animation of target.getAnimations({subtree: !!pseudo})) {
+            remember(animation);
+          }
         }
       },
       true,
