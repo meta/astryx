@@ -102,6 +102,10 @@ describe('motion roles', () => {
     // Nor is UIKit's menu spring under Reduce Motion: nothing springs under
     // reduced motion (design:reduced-motion DR1).
     expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
+    // Nor is the keyboard's motion: it rides the keyboard's own spring and
+    // notification duration, not a theme value (spec:AST-094 FR4).
+    expect(motionRoleIn(springs, 'keyboard')).toBeUndefined();
+    expect(motionRoleIn(timing, 'keyboardNotificationMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'transitionMs')?.id).toBe(
       'navigation.transitionMs',
     );

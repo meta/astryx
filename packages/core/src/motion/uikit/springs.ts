@@ -340,7 +340,9 @@ export function registerSpringsTable(): void {
   registerMotionTable('springs', springs, {
     // UIKit's menus under Reduce Motion: nothing springs under reduced
     // motion (design:reduced-motion DR1), and no theme value may change a
-    // reduced-motion animation (DR4).
-    exclude: ['menuReducedMotion'],
+    // reduced-motion animation (DR4). The keyboard's spring: motion in step
+    // with the keyboard rides the keyboard's own motion, not a theme value
+    // (spec:AST-094 FR4).
+    exclude: ['menuReducedMotion', 'keyboard'],
   });
 }
