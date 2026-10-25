@@ -7,8 +7,8 @@
  * @output undefinedGeneratedVariables, the generated custom properties the
  *   stylesheet reads but never declares
  * @position Internal to @astryxdesign/build: astryxStylex (vite.ts) runs it
- *   on a production stylesheet for its `undefinedVariables` option. Not
- *   exported from any package entry.
+ *   on a production stylesheet and warns about what it finds. Not exported
+ *   from any package entry.
  */
 
 /**
