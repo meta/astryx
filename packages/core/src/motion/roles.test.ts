@@ -40,6 +40,10 @@ for (const file of motionTableFiles(resolve(__dirname, '..'))) {
     }
   }
 }
+// The tables that discovery registered, before any test adds a fixture.
+const DISCOVERED = new Set(
+  listMotionRoles().map(role => role.id.split('.')[0]),
+);
 
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
@@ -114,14 +118,12 @@ describe('motion roles', () => {
   });
 
   it('lists every registered role, and its kind, in the generated role kinds', () => {
-    // The shared tables (other tests here register tables of their own).
-    const shared = listMotionRoles().filter(role =>
-      ['springs', 'scroll', 'timing', 'navigation'].includes(
-        role.id.split('.')[0],
-      ),
+    // Every table discovery registered (other tests here add fixtures).
+    const discovered = listMotionRoles().filter(role =>
+      DISCOVERED.has(role.id.split('.')[0]),
     );
     expect(
-      Object.fromEntries(shared.map(role => [role.id, role.kind])),
+      Object.fromEntries(discovered.map(role => [role.id, role.kind])),
     ).toEqual(MOTION_ROLE_KINDS);
   });
 
