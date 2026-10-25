@@ -399,14 +399,33 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
   it('holds its start until the browser starts it', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
-    // Nothing has moved on screen yet, whatever the clock says, but the model
-    // is moving: a retarget carries this velocity.
-    expect(animator.get('x', 1100)).toBe(0);
+    // Nothing has moved on screen yet, whatever the clock says; a time ahead
+    // reads the curve from the call's time, and the model is moving: a
+    // retarget carries this velocity.
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('x', 1100)).toBeCloseTo(curve.value(0.1), 9);
+    clock = 1100;
+    expect(animator.get('x')).toBe(0);
     expect(animator.getVelocity('x', 1100)).toBeCloseTo(curve.velocity(0.1), 9);
     clock = 1250;
     await commitFrame(1250);
     expect(animator.get('x', 1350)).toBeCloseTo(curve.value(0.1), 9);
     expect(live('translate')[0].startTime).toBe(1250);
+  });
+
+  it('a companion sampling a waiting curve ahead follows its shape', async () => {
+    // A tab bar's counter-moving copy, sampled from the body's curve.
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    const at = clock;
+    const samples = [0, 50, 100, 200].map(t => animator.get('x', at + t));
+    expect(samples[0]).toBe(0);
+    expect(samples.slice(1).map((v, i) => v > samples[i])).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(samples[2]).toBeCloseTo(curve.value(0.1), 9);
   });
 
   it('finishes and drops the animation on the committed clock', async () => {

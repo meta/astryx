@@ -785,10 +785,15 @@ export function createAnimator(
     return segment.at(Math.max(0, time - segment.start));
   };
 
-  /** The value on screen at `time`. */
+  /**
+   * The value on screen at `time`. A curve the browser has not started is at
+   * its start up to now; a later time reads the curve from its provisional
+   * start, the model's best guess until the browser's start moves it (a
+   * companion that samples a curve ahead follows its shape).
+   */
   const valueAt = (property: MotionProperty, time: number): number => {
     const segment = segments.get(property);
-    if (segment != null && isHeld(segment)) {
+    if (segment != null && isHeld(segment) && time <= now()) {
       // Nothing has moved on screen until the browser starts the call.
       return segment.at(0);
     }
