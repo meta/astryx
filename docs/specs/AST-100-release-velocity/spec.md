@@ -133,9 +133,8 @@ means for them.
 
 Each component estimating velocity its own way reads the same flick at
 different speeds in components of the same kind, and counts a finger that
-paused before lifting as a flick in one place and not another. One release filter, with one source in
-Core and the same filter in Lab, gives every component of a kind the same
-speed for the same motion. Reading a moving finger the way
+paused before lifting as a flick in one place and not another. One release filter, with one source in Core and no copy in Lab, gives every
+component of a kind the same speed for the same motion. Reading a moving finger the way
 iOS does keeps flicks, paging, and dismissal near their thresholds where an
 iPhone puts them, and the stillness reset stops a resting finger from flinging,
 which is the one place the filter departs from iOS. What a speed means stays
