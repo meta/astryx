@@ -22,7 +22,11 @@ import {describe, expect, it} from 'vitest';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const coreSrc = path.join(root, 'packages/core/src');
 
-/** What a Node-side spec imports from the foundation. */
+/**
+ * What a Node-side spec imports from the foundation: the motion modules, and
+ * each gesture recognizer by its own module (the gestures barrel also carries
+ * the press paint's styles).
+ */
 const ENTRY = `
 export {createAnimator, animatorFor, SETTLE_THRESHOLD} from './motion/animator';
 export {reducedMotionFade} from './motion/reducedMotion';
@@ -31,6 +35,15 @@ export {solveSpring, toSpring} from './motion/spring';
 export {registerSpringsTable, springs} from './motion/uikit/springs';
 export {registerTimingTable, timing} from './motion/uikit/timing';
 export {registerScrollTable, scroll} from './motion/uikit/scroll';
+export {GestureRecognizer} from './gestures/GestureRecognizer';
+export {TapGestureRecognizer} from './gestures/TapGestureRecognizer';
+export {LongPressGestureRecognizer} from './gestures/LongPressGestureRecognizer';
+export {PanGestureRecognizer} from './gestures/PanGestureRecognizer';
+export {ScreenEdgePanGestureRecognizer} from './gestures/ScreenEdgePanGestureRecognizer';
+export {SwipeGestureRecognizer} from './gestures/SwipeGestureRecognizer';
+export {PinchGestureRecognizer} from './gestures/PinchGestureRecognizer';
+export {RotationGestureRecognizer} from './gestures/RotationGestureRecognizer';
+export {HoverGestureRecognizer} from './gestures/HoverGestureRecognizer';
 `;
 
 async function bundleFoundation() {
@@ -88,10 +101,12 @@ describe('the touch motion foundation in plain Node', () => {
           `const m = await import(${JSON.stringify(pathToFileURL(file).href)});
            m.registerSpringsTable();
            const animator = m.createAnimator(null);
+           const pan = new m.PanGestureRecognizer({});
            console.log(JSON.stringify({
              createAnimator: typeof m.createAnimator,
              set: typeof animator.set,
              sheet: m.springs.sheetPresent != null,
+             pan: typeof pan.state,
            }));`,
         ],
         {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
@@ -100,6 +115,7 @@ describe('the touch motion foundation in plain Node', () => {
         createAnimator: 'function',
         set: 'function',
         sheet: true,
+        pan: 'string',
       });
     } finally {
       fs.rmSync(file, {force: true});
