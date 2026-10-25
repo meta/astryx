@@ -22,6 +22,18 @@ export declare function swiftThemeName(themeName: string): string;
 export declare function themeFileName(swiftName: string): string;
 export declare function toHexColor(value: string): string | null;
 export declare function toPoints(value: string): number | null;
+export interface ShadowLayer {
+  x: number;
+  y: number;
+  blur: number;
+  spread: number;
+  isInset: boolean;
+  color: string;
+}
+export declare function toShadow(
+  value: string,
+  mode: 'light' | 'dark',
+): ShadowLayer[] | null;
 export declare function toFamilies(value: string): string[] | null;
 export declare function valueForMode(
   value: string,
@@ -32,6 +44,9 @@ export declare function localTokensLeftOut(theme: DefinedTheme): string[];
 export declare function tokenSurface(
   resolved: Record<string, SwiftMember>,
 ): Record<TokenGroup, {token: string; member: string; type: string}[]>;
+export declare function renderTokenTypes(
+  surface: Record<TokenGroup, {token: string; member: string; type: string}[]>,
+): string;
 export declare function defaultTheme(): Promise<DefinedTheme>;
 export declare function defineTheme(input: {
   name: string;

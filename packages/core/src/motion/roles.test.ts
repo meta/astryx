@@ -48,14 +48,14 @@ const DISCOVERED = new Set(
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
     expect(isMotionRoleId('sheet.present')).toBe(true);
-    expect(isMotionRoleId('timing.curves.easeInOut')).toBe(true);
+    expect(isMotionRoleId('timing.curves.move')).toBe(true);
     expect(isMotionRoleId('sheet')).toBe(false);
     expect(isMotionRoleId('Sheet.present')).toBe(false);
     expect(motionRoleVariable('springs.sheetDetent')).toBe(
       '--motion-springs-sheet-detent',
     );
-    expect(motionRoleVariable('timing.curves.easeInOut')).toBe(
-      '--motion-timing-curves-ease-in-out',
+    expect(motionRoleVariable('timing.curves.move')).toBe(
+      '--motion-timing-curves-move',
     );
     expect(() => motionRoleVariable('sheet')).toThrow(/dotted table path/);
   });
@@ -92,16 +92,20 @@ describe('motion roles', () => {
 
   it('makes the shared tables roles, without their thresholds and arbitration timings', () => {
     expect(motionRoleOf(springs.sheetPresent)?.id).toBe('springs.sheetPresent');
-    expect(motionRoleOf(springs.uikitDefault)?.id).toBe('springs.uikitDefault');
-    expect(springs.sheetPresent).toEqual(springs.uikitDefault);
+    expect(motionRoleOf(springs.viewChange)?.id).toBe('springs.viewChange');
+    expect(springs.sheetPresent).toEqual(springs.viewChange);
     expect(motionRoleOf(scroll.bounce)?.kind).toBe('spring');
-    expect(motionRoleOf(timing.curves.easeInOut)?.kind).toBe('curve');
+    expect(motionRoleOf(timing.curves.move)?.kind).toBe('curve');
     expect(motionRoleIn(timing.press, 'flashMs')?.kind).toBe('duration');
     // The Reduced Motion fade is not a role: no theme lengthens it.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
     // Nor is UIKit's menu spring under Reduce Motion: nothing springs under
     // reduced motion (design:reduced-motion DR1).
     expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
+    // Nor is the keyboard's motion: it rides the keyboard's own spring and
+    // notification duration, not a theme value (spec:AST-094 FR4).
+    expect(motionRoleIn(springs, 'keyboard')).toBeUndefined();
+    expect(motionRoleIn(timing, 'keyboardNotificationMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'transitionMs')?.id).toBe(
       'navigation.transitionMs',
     );
@@ -112,7 +116,7 @@ describe('motion roles', () => {
       springs.navigationPush,
     );
     const ids = listMotionRoles().map(role => role.id);
-    expect(ids).toContain('scroll.paging.snap');
+    expect(ids).toContain('scroll.bounce');
     expect(ids.some(id => id.startsWith('gestures.'))).toBe(false);
     // Every role has its own CSS variable.
     const variables = listMotionRoles().map(role => role.variable);
@@ -160,6 +164,18 @@ describe('motion roles', () => {
     expect(() => formatMotionRoleValue('spring', {response: 0.5})).toThrow(
       /spring is/,
     );
+    // A spring with no damping never settles.
+    for (const never of [
+      {duration: 0.5, bounce: 1},
+      {duration: 0.5, bounce: 1.5},
+      {response: 0.5, dampingRatio: 0},
+      {mass: 1, stiffness: 100, damping: 0},
+    ]) {
+      expect(() => formatMotionRoleValue('spring', never)).toThrow(
+        /must settle/,
+      );
+    }
+    expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
     expect(parseMotionRoleValue('spring', '')).toBeNull();
     expect(parseMotionRoleValue('spring', 'fast')).toBeNull();
     expect(parseMotionRoleValue('spring', '0.4s 0.2')).toEqual({

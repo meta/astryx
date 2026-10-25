@@ -13,6 +13,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createAnimator} from './animator';
+import {coast} from './coast';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
 import {
@@ -75,16 +76,14 @@ describe('resolveMotion', () => {
   it("takes the theme scope's value for a spring, a curve and a duration", () => {
     const {child} = themed('soft', {
       '--motion-springs-sheet-present': '0.8s 0.3',
-      '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
       '--motion-navigation-transition-ms': '300ms',
     });
     expect(resolveMotion(child, springs.sheetPresent)).toEqual({
       duration: 0.8,
       bounce: 0.3,
     });
-    expect(resolveMotion(child, timing.curves.easeInOut)).toEqual([
-      0.4, 0, 0.2, 1,
-    ]);
+    expect(resolveMotion(child, timing.curves.move)).toEqual([0.4, 0, 0.2, 1]);
     expect(resolveMotion(child, navigation, 'transitionMs')).toBe(300);
   });
 
@@ -170,6 +169,27 @@ describe('the animator under a theme', () => {
       duration: 0.4,
       bounce: 0,
     });
+  });
+
+  it('a coast plays the edge spring its theme sets (scroll.bounce)', () => {
+    const {child} = themed('soft', {
+      '--motion-scroll-bounce': '0.8s 0.3',
+    });
+    const animator = createAnimator(child, {now: () => 0});
+    animator.set({x: 60});
+    // Released past the edge: straight back on the edge spring.
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: -500, max: 0}}, at: 0}),
+      {at: 0},
+    );
+    const expected = solveSpring(toSpring({duration: 0.8, bounce: 0.3}), {
+      from: 60,
+      to: 0,
+    });
+    for (const ms of [50, 150, 400]) {
+      expect(animator.get('x', ms)).toBeCloseTo(expected.value(ms / 1000), 3);
+    }
+    animator.dispose();
   });
 
   it('plays the spring its theme sets for a table spring', () => {

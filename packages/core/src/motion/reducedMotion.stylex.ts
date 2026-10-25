@@ -11,7 +11,7 @@
  *
  * Constants, not theme variables: no theme lengthens the fade
  * (design:reduced-motion DR4). They equal `timing.reducedMotionCrossFadeMs`
- * and `timing.curves.easeInOut`, which reducedMotion.test.ts checks.
+ * and `timing.curves.move`, which reducedMotion.test.ts checks.
  *
  * SYNC: When modified, update /packages/core/src/motion/uikit/timing.ts and
  * /packages/core/src/motion/reducedMotion.test.ts.
