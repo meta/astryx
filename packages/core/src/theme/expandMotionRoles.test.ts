@@ -6,8 +6,8 @@
  *   generateAdaptationCSS
  * @output Proof that a theme writes a CSS variable for each motion role it
  *   sets (and none for the rest), at its root and in adaptation rules, that
- *   the duration scale is all-or-nothing, and that the platform condition
- *   lowers to a feature query
+ *   the duration scale is all-or-nothing, and that adaptations have no
+ *   platform condition
  * @position Testing for /packages/core/src/theme/expandMotionRoles.ts
  */
 
@@ -118,33 +118,6 @@ describe('motion roles in adaptation rules', () => {
     return defineTheme({name: 'adaptive-motion', adaptations: {rules}});
   }
 
-  it('writes roles under a platform condition, as a feature query around the media query', () => {
-    const css = generateAdaptationCSS(
-      adaptive([
-        {
-          when: {platform: 'ios', pointer: 'coarse'},
-          value: {
-            motion: {
-              springs: {'springs.navigationPush': {duration: 0.4, bounce: 0}},
-            },
-          },
-        },
-        {
-          when: {platform: 'other'},
-          value: {motion: {durations: {'navigation.transitionMs': 300}}},
-        },
-      ]),
-    ).component;
-    expect(css).toMatch(
-      /@supports \(-webkit-touch-callout: none\) \{\n {2}@media \(pointer: coarse\) \{/,
-    );
-    expect(css).toContain('--motion-springs-navigation-push: 0.4s 0');
-    expect(css).toMatch(
-      /@supports not \(-webkit-touch-callout: none\) \{\n {2}@media all \{/,
-    );
-    expect(css).toContain('--motion-navigation-transition-ms: 300ms');
-  });
-
   it('needs no root motion axis for a rule that writes only roles', () => {
     expect(() =>
       adaptive([
@@ -161,67 +134,14 @@ describe('motion roles in adaptation rules', () => {
     ).toThrow(/must supply `fast`, `medium`, and `ratio`/);
   });
 
-  it('keeps duplicate platform conditions, in order', () => {
-    const css = generateAdaptationCSS(
-      adaptive([
-        {
-          when: {platform: 'ios'},
-          value: {motion: {durations: {'navigation.transitionMs': 300}}},
-        },
-        {
-          when: {platform: 'ios'},
-          value: {motion: {durations: {'navigation.transitionMs': 350}}},
-        },
-      ]),
-    ).component;
-    expect(css.split('@supports (-webkit-touch-callout: none)')).toHaveLength(
-      3,
-    );
-    expect(
-      css.indexOf('--motion-navigation-transition-ms: 300ms'),
-    ).toBeLessThan(css.indexOf('--motion-navigation-transition-ms: 350ms'));
-  });
-
-  it('keeps a built theme\u2019s platform rules when another theme extends it', () => {
-    const base = adaptive([
-      {
-        when: {platform: 'ios'},
-        value: {
-          motion: {
-            springs: {'springs.navigationPush': {duration: 0.4, bounce: 0}},
-          },
-        },
-      },
-    ]);
-    const child = defineTheme({
-      name: 'child-motion',
-      extends: base,
-      adaptations: {
-        rules: [
-          {
-            when: {platform: 'other'},
-            value: {motion: {durations: {'navigation.transitionMs': 300}}},
-          },
-        ],
-      },
-    });
-    const css = generateAdaptationCSS(child).component;
-    const ios = css.indexOf('@supports (-webkit-touch-callout: none)');
-    const other = css.indexOf('@supports not (-webkit-touch-callout: none)');
-    expect(ios).toBeGreaterThanOrEqual(0);
-    expect(other).toBeGreaterThan(ios);
-    expect(css).toContain('--motion-springs-navigation-push: 0.4s 0');
-    expect(css).toContain('--motion-navigation-transition-ms: 300ms');
-  });
-
-  it('refuses an unknown platform', () => {
+  it('refuses a platform condition, which adaptations do not have', () => {
     expect(() =>
       adaptive([
         {
-          when: {platform: 'android'} as never,
+          when: {platform: 'ios'} as never,
           value: {motion: {durations: {'navigation.transitionMs': 300}}},
         },
       ]),
-    ).toThrow(/platform must be 'ios' or 'other'/);
+    ).toThrow(/platform/);
   });
 });

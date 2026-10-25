@@ -166,9 +166,9 @@ const calmTheme = defineTheme({
   },
   adaptations: {
     rules: [
-      // Touch screens other than iPhone and iPad: a quicker push.
+      // Touch screens: a quicker push.
       {
-        when: {platform: 'other', pointer: 'coarse'},
+        when: {pointer: 'coarse'},
         value: {motion: {springs: {'springs.navigationPush': {duration: 0.25, bounce: 0}}}},
       },
     ],
@@ -177,7 +177,7 @@ const calmTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'A theme writes one CSS variable per role it sets, `--motion-` followed by the path in kebab case: a spring as its duration and bounce (`0.6s 0.1`), a duration in milliseconds, a curve as `cubic-bezier()`. Code that plays a motion reads the variable when the motion starts, and the default when it is empty. Gesture thresholds, the delays that decide whether a touch scrolls or presses, and haptics are not motion roles. The `platform` condition matches the browsers of iPhone and iPad (`ios`) or every other browser (`other`). A role id is checked when the theme is defined: an unknown id, or a role under the wrong group, is refused.',
+          text: 'A theme writes one CSS variable per role it sets, `--motion-` followed by the path in kebab case: a spring as its duration and bounce (`0.6s 0.1`), a duration in milliseconds, a curve as `cubic-bezier()`. Code that plays a motion reads the variable when the motion starts, and the default when it is empty. Gesture thresholds, the delays that decide whether a touch scrolls or presses, and haptics are not motion roles. A role id is checked when the theme is defined: an unknown id, or a role under the wrong group, is refused.',
         },
         {
           type: 'table',

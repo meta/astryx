@@ -257,7 +257,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Use `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, motion preference, or platform. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win.',
+          text: 'Use `adaptations` for opt-in token, theme-local token, and component changes under viewport width, primary-pointer precision, contrast preference, or motion preference. Conditions in one `when` are ANDed. Rules are ordinary ordered objects, and later matching writes win.',
         },
         {
           type: 'code',
@@ -273,7 +273,6 @@ export const docs = {
             ['pointer', 'coarse | fine'],
             ['contrast', 'more | less | no-preference'],
             ['motion', 'reduce | no-preference'],
-            ['platform', 'ios (browsers on iPhone and iPad) | other'],
           ],
         },
         {
