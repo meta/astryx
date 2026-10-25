@@ -93,15 +93,23 @@ await handle.finished; // true if it ran to the end, false if interrupted
   frame before the block). Everything the call starts shares that start
   (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
   several animators on one clock.
-- Reduced Motion (`prefers-reduced-motion: reduce`): travel becomes UIKit's
-  cross-fade (Reduce Motion with Prefer Cross-Fade Transitions). An entrance
-  lands and fades in, an exit fades out then moves, any other move dips (fade
-  out, move, fade in), over `timing.reducedMotionCrossFadeMs` (a navigation
-  push or pop) or on the spring passed as `{crossfade}` (a sheet, a modal or
-  an alert fades on its presentation spring). `{crossfadeAs: 'entrance'}` or
-  `'exit'` gives a slide that changes no opacity its direction.
-  `{reducedMotion: 'keep'}` keeps the motion (direct manipulation), `'instant'`
-  jumps.
+- Reduced Motion (`prefers-reduced-motion: reduce`, design:reduced-motion):
+  every `animate` and `play` is replaced and nothing moves, scales or
+  springs. On a coarse primary pointer, or for a call started by a touch
+  drag's release (`{touchRelease: true}`), it is an opacity-only cross-fade
+  of `timing.reducedMotionCrossFadeMs` (200 ms): an entrance lands and fades
+  in, an exit fades out then lands, an opacity change fades, any other move
+  dips (fade out, land, fade in). Travel lands with a plain style write while
+  the element is transparent, never as an animated transform. On any other
+  pointer it completes at once.
+  `{crossfadeAs: 'entrance'}` or `'exit'` gives a slide that changes no
+  opacity its direction. No option or theme value lengthens the fade or keeps
+  travel. For motion the animator does not drive, `reducedMotionFade()`
+  answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
+  constants and the two media queries a StyleX transition spells.
+  A decay keeps its motion under Reduce Motion: it only continues a
+  finger's throw, as a native scroll view's momentum does; a spring a
+  component starts on release toward a target it picks cross-fades.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
