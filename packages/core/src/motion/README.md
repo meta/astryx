@@ -1,11 +1,13 @@
 # Motion
 
-Internal motion foundation for the touch presentations of core components:
-the UIKit constants table (every spring, duration, deceleration rate,
-rubber-band constant, curve and gesture threshold a touch presentation uses,
-each with its source), the spring, decay, rubber-band and projection math
-UIKit uses, and a compositor animator that plays it. Nothing here is exported
-from the package entry point; components import it by path.
+Internal motion foundation for the touch presentations of core components: the
+UIKit constants table (every spring, duration, deceleration rate, rubber-band
+constant, curve and gesture threshold a touch presentation uses, each with its
+source), the spring, decay, rubber-band and projection math UIKit uses, and a
+compositor animator that plays it. Nothing here is exported from the package
+entry point. Core's motion and gesture modules read the table by path;
+components take touch motion from the theme's motion roles (`spec:AST-094`
+FR4), not from this table.
 
 ## Files
 
@@ -16,14 +18,15 @@ from the package entry point; components import it by path.
 | `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.                                                    |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
-| `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and the haptic stand-ins, as typed entries the gesture system reads.                                              |
+| `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `MEASUREMENTS.md`                                | The UIKit reference captures each unconfirmed value still needs.                                                                                                     |
 | `spring.ts`                                      | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.                                                        |
 | `decay.ts`                                       | UIScrollView's momentum coast.                                                                                                                                       |
+| `coast.ts`                                       | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                                                                |
 | `rubberBand.ts`                                  | UIScrollView's resistance past an edge, and its inverse.                                                                                                             |
 | `projection.ts`                                  | Release targets: the rest point nearest the projected coast; paging.                                                                                                 |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
-| `animator.ts`                                    | Compositor animator: springs, decays and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -51,8 +54,8 @@ const y = animator.get('y', event.timeStamp);
 const v = animator.getVelocity('y', event.timeStamp);
 animator.stop(['y']); // freezes at the value on screen
 
-// A throw on a scroll-like surface, with an edge:
-animator.decay({x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}});
+// A throw on a scroll-like surface, with an edge (coast.ts builds the curves):
+animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
 // Any closed-form curve, here a press that keeps deepening: the target
 // scale falls at 0.16/s and the platter follows it on a spring.
@@ -107,9 +110,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
   travel. For motion the animator does not drive, `reducedMotionFade()`
   answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
-  A decay keeps its motion under Reduce Motion: it only continues a
-  finger's throw, as a native scroll view's momentum does; a spring a
-  component starts on release toward a target it picks cross-fades.
+  A decay keeps its motion under Reduce Motion: momentum that continues a
+  throw is direct movement (DR2, DEC-2); a spring a component starts on
+  release toward a target it picks cross-fades.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
@@ -208,12 +211,11 @@ Allowed source kinds:
 A `GUESS` or `webkit` value also names the measurement that will confirm or
 replace it (`@measure M-…`, listed in MEASUREMENTS.md). An entry may carry
 several sources when different parts come from different places.
-`uikit/gestures.ts` carries the same information as typed fields that the
-gesture system reads at run time: `{value, unit, source}` with a source of one
-of the kinds above, or `{value, unit, guess, measure}` with a `measure` that
-starts with its MEASUREMENTS.md ID. `uikit/uikit.test.ts` enforces all of it on
-every domain file, in both forms: an unsourced value, an unknown kind, a guess
-without a task, or a task missing from MEASUREMENTS.md fails the build.
+The sources are documentation and stay out of the bundle: no value carries
+them, `uikit/gestures.ts` included (its entries ship only `{value, unit}`).
+`uikit/uikit.test.ts` enforces all of it on every domain file: an unsourced
+value, an unknown kind, a guess without a task, a task missing from
+MEASUREMENTS.md, or a source in a value fails the build.
 
 Measurements come from the iOS simulator: built-in apps (Settings, Maps,
 Photos, Files, Contacts, Calendar, Reminders, Safari's own chrome) or a UIKit

@@ -36,6 +36,7 @@ import {selectorPresentationStyles} from '../Selector/selectorPresentation.style
 import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -160,7 +161,7 @@ describe('MultiSelector', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -2197,7 +2198,7 @@ describe('MultiSelector', () => {
       vi.mocked(matchMedia).mockImplementation(
         (query: string) =>
           ({
-            matches: query === '(max-width: 768px) and (pointer: coarse)',
+            matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
             media: query,
             onchange: null,
             addEventListener: vi.fn(),

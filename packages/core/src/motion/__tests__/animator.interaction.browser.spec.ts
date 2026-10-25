@@ -273,7 +273,7 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
 }) => {
   await open(page);
   const result = await page.evaluate(async () => {
-    const spring = Motion.springs.snappy;
+    const spring = Motion.springs.quickChange;
     const handle = window.animator.animate({x: 300, opacity: 0.4}, {spring});
     // From rest, the animations start in the frame after the call.
     await handle.started;
