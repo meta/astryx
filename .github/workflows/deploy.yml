@@ -100,9 +100,6 @@ jobs:
       - name: Typecheck every package
         run: pnpm typecheck
 
-      - name: Typecheck interaction harness
-        run: pnpm -F @astryxdesign/interaction-harness typecheck
-
   # Stable join for the three post-merge validation lanes.
   test:
     needs: [test-ui, test-node, typecheck]

@@ -12,17 +12,22 @@
  *   for a `top` animation; sampled curves match the oracles, individual
  *   transform properties included; a sample at an end reports the time it was
  *   read at; holding takes only running document-timeline animations, each at
- *   its own offset, and releases only them; the animation-state waits report
- *   a running transition and its end, and judge rest by presented values even
- *   while an animation holds its end; storyboards write a sheet and a trace
- *   that follows the curve, and an endless animation does not set their
- *   length; the timer gate holds a component timer until the filmstrip is
- *   done, drops callbacks the page cancels, stamps held frames with the time
- *   they run, and leaves the harness its own frames.
+ *   its own offset, holds each where it was read, adds a second hold to the
+ *   held set, drops one the page cancels, and releases only them; the
+ *   animation-state waits report a running transition and its end, and judge
+ *   rest by presented values even while an animation holds its end;
+ *   storyboards write a sheet and a trace that follows the curve, and an
+ *   endless animation does not set their length; a touch filmstrip keeps the
+ *   scripted event times while a handler clock sees its pacing; the timer
+ *   gate holds a component timer until the filmstrip is done, drops callbacks
+ *   the page cancels, stamps held frames with the time they run, and leaves
+ *   the harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
 import {
   animationStoryboard,
@@ -60,6 +65,7 @@ import {
   trackMarker,
   waitForAnimation,
   waitForRest,
+  watchAnimations,
   withFinger,
 } from './index';
 
@@ -306,6 +312,116 @@ test.describe('frame evidence', () => {
     expect(raf.verdict.failures.join('\n')).toMatch(/expected frames moved/);
   });
 
+  test('a block that starts during a just-started transition still lets the compositor advance it', async ({
+    page,
+  }, testInfo) => {
+    // `during` blocks in the frame the transition has run 16 ms. In WebKit
+    // the transition reaches the compositor in that frame's rendering update,
+    // so a loop inside the rAF callback froze it (2 of 29 frames moved).
+    // Linear and longer than the block, so every frame of the block moves a
+    // whole pixel or more and the transition is still running when it ends.
+    await fixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const cast = await startScreencast(page);
+    await box.evaluate(el => {
+      el.style.transition = 'transform 1600ms linear';
+      el.getBoundingClientRect();
+      el.style.transform = 'translateX(280px)';
+    });
+    const window = await blockMainThread(page, 700, {
+      during: box,
+      minProgressMs: 16,
+    });
+    await waitForRest(box);
+    const tracked = await trackMarker(page, await cast.stop());
+    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    testInfo.annotations.push({
+      type: 'busy-main-thread transition',
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.monotonic).toBe(true);
+  });
+
+  test('a block never starts on an animation that is not on the compositor yet', async ({
+    page,
+  }, testInfo) => {
+    // An animation created in the frame the helper looks is still pending (not
+    // committed to the compositor). A block that started on it then froze it
+    // in Chromium: no presented frame moved.
+    await fixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    await box.evaluate(el => {
+      el.style.willChange = 'transform';
+    });
+    const cast = await startScreencast(page);
+    // A rAF loop registered before the helper's tick runs ahead of it in every
+    // frame; on its 12th frame it creates the animation, and the helper's tick
+    // looks in that same frame.
+    await box.evaluate(el => {
+      let n = 0;
+      const loop = () => {
+        n += 1;
+        if (n === 12) {
+          el.animate(
+            [{transform: 'translateX(0px)'}, {transform: 'translateX(280px)'}],
+            {duration: 1600, easing: 'linear'},
+          );
+          return;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    });
+    const window = await blockMainThread(page, 700, {
+      during: box,
+      minProgressMs: 0,
+    });
+    await waitForRest(box);
+    const tracked = await trackMarker(page, await cast.stop());
+    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    testInfo.annotations.push({
+      type: 'busy-main-thread pending animation',
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.monotonic).toBe(true);
+  });
+
+  test('in the WebKit container, compiled shaders outlive the run', async ({
+    page,
+  }, testInfo) => {
+    // The official Playwright image keeps its browsers here.
+    test.skip(
+      testInfo.project.name !== 'webkit' ||
+        process.env.PLAYWRIGHT_BROWSERS_PATH !== '/ms-playwright',
+      'runs inside webkit-container.mjs',
+    );
+    // A cache inside the container dies with it: every run then compiled each
+    // shader again, 450–700 ms in the first frame of a blurred layer.
+    const dir = process.env.MESA_SHADER_CACHE_DIR;
+    expect(dir, 'MESA_SHADER_CACHE_DIR names the host-kept cache').toBeTruthy();
+    // Written on the host by the script before the container starts.
+    expect(
+      fs.readFileSync(path.join(dir ?? '', 'ASTRYX-SHADER-CACHE'), 'utf8'),
+    ).toContain('playwright');
+    // Mesa writes what it compiles there once a page draws a blurred layer.
+    await page.setContent(
+      '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
+    );
+    await page.evaluate(
+      () =>
+        document
+          .getElementById('glass')
+          ?.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200}).finished,
+    );
+    expect(
+      fs.readdirSync(dir ?? '').filter(name => name !== 'ASTRYX-SHADER-CACHE'),
+    ).not.toEqual([]);
+  });
+
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
     browserName,
@@ -540,6 +656,180 @@ test.describe('holding', () => {
       }),
     ).toEqual(['paused', 500]);
   });
+
+  test("a sample is labelled from its own element's animations, per channel", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // #box moves for 300 ms and fades for 400 ms; another element runs longer.
+    await page.evaluate(() => {
+      const box = document.getElementById('box');
+      box?.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      box?.animate([{opacity: 1}, {opacity: 0}], {
+        duration: 400,
+        easing: 'linear',
+      });
+      const other = document.createElement('div');
+      other.style.cssText =
+        'position:absolute;top:300px;width:40px;height:40px';
+      document.body.append(other);
+      other.animate([{opacity: 0}, {opacity: 1}], {duration: 600});
+    });
+    await holdAnimations(page);
+    const samples = await sampleCurve(page.locator('#box'), [0, 150, 300]);
+    // The move is read just inside its end, the fade where it is.
+    expect(samples.at(-1)?.presentedAtFor).toEqual({
+      transform: 299.5,
+      opacity: 300,
+    });
+    const move = compareCurve(curveOf(samples, 'translateX'), t => t, 0.05);
+    expect(move.maxError, JSON.stringify(move.worst)).toBeLessThanOrEqual(0.05);
+    const fade = compareCurve(
+      curveOf(samples, 'opacity'),
+      t => 1 - t / 400,
+      0.002,
+    );
+    expect(fade.maxError, JSON.stringify(fade.worst)).toBeLessThanOrEqual(
+      0.002,
+    );
+    await releaseAnimations(page);
+  });
+
+  test('a hold stays where it was read, not a frame later', async ({page}) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      document
+        .getElementById('box')
+        ?.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+          {duration: 1000, easing: 'linear'},
+        );
+    });
+    const box = page.locator('#box');
+    await waitForAnimation(box, {minProgressMs: 50});
+    const [held] = await holdAnimations(page, box);
+    // Two frames later, the held animation is still where the hold read it.
+    const after = await box.evaluate(
+      el =>
+        new Promise<number>(resolve =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(Number(el.getAnimations()[0]?.currentTime)),
+            ),
+          ),
+        ),
+    );
+    expect(held.heldAtMs).not.toBeNull();
+    expect(Math.abs(after - (held.heldAtMs ?? 0))).toBeLessThan(0.5);
+    await releaseAnimations(page);
+  });
+
+  test('a second hold adds to the held set, and releasing resumes both', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      document
+        .getElementById('box')
+        ?.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+          {duration: 300, easing: 'linear', fill: 'forwards'},
+        );
+      const other = document.createElement('div');
+      other.id = 'other';
+      document.body.append(other);
+      other.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 300,
+        fill: 'forwards',
+      });
+    });
+    const box = page.locator('#box');
+    expect(await holdAnimations(page, box)).toHaveLength(1);
+    expect(await holdAnimations(page, page.locator('#other'))).toHaveLength(1);
+    await releaseAnimations(page);
+    // The first hold was released too: the move runs to its end, and rest is
+    // its end, not the frame it was held on.
+    await waitForRest(box);
+    expect(await box.evaluate(el => getComputedStyle(el).transform)).toBe(
+      'matrix(1, 0, 0, 1, 300, 0)',
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.getAnimations().filter(a => a.playState === 'paused').length,
+      ),
+    ).toBe(0);
+  });
+
+  test('a held transition the page retargets is dropped, not revived', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.transition = 'transform 300ms linear';
+      el.getBoundingClientRect();
+      el.style.transform = 'translateX(300px)';
+    });
+    await waitForAnimation(box);
+    expect(await holdAnimations(page, box)).toHaveLength(1);
+    // The page sends the box back: the held transition is cancelled, and a
+    // new one runs from where the box is.
+    await box.evaluate(el => {
+      const w = window as unknown as {__cancelled: Animation};
+      w.__cancelled = el.getAnimations()[0];
+      el.style.transform = 'none';
+    });
+    const state = () =>
+      page.evaluate(() => {
+        const w = window as unknown as {
+          __cancelled: Animation;
+          __harnessHeld: Animation[];
+        };
+        return {
+          cancelled: w.__cancelled.playState,
+          held: w.__harnessHeld.length,
+        };
+      });
+    await seekAnimations(page, 150);
+    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    await releaseAnimations(page);
+    await waitForRest(box);
+    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    expect(await box.evaluate(el => getComputedStyle(el).transform)).toBe(
+      'none',
+    );
+  });
+
+  test('finishing resumes an animation that repeats forever and still clears the held set', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const box = document.getElementById('box');
+      box?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 800,
+        iterations: Infinity,
+      });
+      const fade = document.createElement('div');
+      fade.id = 'fade';
+      document.body.append(fade);
+      fade.animate([{opacity: 0}, {opacity: 1}], {duration: 300});
+    });
+    expect(await holdAnimations(page)).toHaveLength(2);
+    await releaseAnimations(page, {finish: true});
+    expect(
+      await page.evaluate(() => ({
+        spinner: document.getElementById('box')?.getAnimations()[0]?.playState,
+        fade: document.getElementById('fade')?.getAnimations().length,
+        held: (window as unknown as {__harnessHeld: Animation[]}).__harnessHeld
+          .length,
+      })),
+    ).toEqual({spinner: 'running', fade: 0, held: 0});
+  });
 });
 
 test.describe('animation state', () => {
@@ -565,6 +855,60 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test('waitForAnimation reports a short animation that ended before it looked', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    await box.evaluate(el => {
+      el.style.transition = 'transform 60ms linear';
+      void (el as HTMLElement).offsetWidth;
+      el.style.transform = 'translateY(40px)';
+    });
+    // A cold page answers late: the transition is over before the first look.
+    await page.waitForTimeout(250);
+    const [ended] = await waitForAnimation(box);
+    expect(ended.kind).toBe('CSSTransition');
+    expect(ended.durationMs).toBe(60);
+    expect(ended.finishedAt).not.toBeNull();
+    expect(ended.finishedAt ?? 0).toBeGreaterThanOrEqual(ended.to - 1);
+  });
+
+  test("a watch taken before the action catches an entrance on the page's first contact", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    await box.evaluate(el =>
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 50}),
+    );
+    await page.waitForTimeout(250);
+    const [entrance] = await watch.started();
+    expect(entrance.kind).toBe('Animation');
+    expect(entrance.durationMs).toBe(50);
+    expect(entrance.finishedAt).not.toBeNull();
+  });
+
+  test('a watch reports only what started after it', async ({page}) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el =>
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 40}),
+    );
+    await page.waitForTimeout(150);
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    await box.evaluate(el =>
+      el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 70}),
+    );
+    const started = await watch.started();
+    expect(started.map(a => a.durationMs)).toEqual([70]);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({
@@ -678,6 +1022,48 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(storyboard.frames.at(-2)?.data.x).toBeCloseTo(300, 0);
   });
 
+  test('a touch filmstrip keeps the scripted event times, and a handler clock sees its pacing', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'WebKit stamps events with their real dispatch time',
+    );
+    await fixture(page);
+    await page.evaluate(() => {
+      const w = window as unknown as {__moves: [number, number][]};
+      w.__moves = [];
+      document.getElementById('pad')?.addEventListener('pointermove', e => {
+        w.__moves.push([e.timeStamp, performance.now()]);
+      });
+    });
+    const driver = await touchDriver(page);
+    await touchStoryboard(
+      page,
+      driver,
+      drag({x: 60, y: 60}, {x: 300, y: 240}, {durationMs: 100, hz: 60}),
+      {
+        name: 'harness-self-test-touch-clock',
+        clip: {x: 0, y: 0, width: 402, height: 300},
+      },
+    );
+    const moves = await page.evaluate(
+      () => (window as unknown as {__moves: [number, number][]}).__moves,
+    );
+    const gaps = (column: 0 | 1) =>
+      moves.slice(1).map((move, i) => move[column] - moves[i][column]);
+    expect(moves.length).toBeGreaterThanOrEqual(5);
+    // The events carry the script's 60 Hz times…
+    for (const gap of gaps(0)) {
+      expect(gap).toBeCloseTo(1000 / 60, 0);
+    }
+    // …but the clock a handler reads advances by a photograph per event.
+    for (const gap of gaps(1)) {
+      expect(gap).toBeGreaterThan(2 * (1000 / 60));
+    }
+  });
+
   test('the timer gate holds a component timer until the filmstrip is done', async ({
     page,
   }, testInfo) => {
@@ -737,6 +1123,65 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     });
     expect(held.map(a => Number.isFinite(a.curveEndMs))).toEqual([false, true]);
     expect(storyboard.frames).toHaveLength(13); // t = 0 … 200 ms
+    await releaseAnimations(page);
+    await storyboard.write(testInfo);
+  });
+
+  test('a filmstrip runs from the earliest start to the latest end among the animations that end', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    // A spinner that started a second earlier, a 300 ms move, and a 240 ms
+    // move that starts 83 ms after it.
+    await page.evaluate(async () => {
+      const make = (id: string, top: number) => {
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `position:absolute;left:0;top:${top}px;width:40px;height:40px;background:#36c`;
+        document.body.append(el);
+        return el;
+      };
+      document
+        .getElementById('box')
+        ?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+          duration: 800,
+          iterations: Infinity,
+        });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      make('first', 360).animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      await new Promise(resolve => setTimeout(resolve, 83));
+      make('second', 410).animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(240px)'}],
+        {duration: 240, easing: 'linear'},
+      );
+    });
+    const x = (id: string) =>
+      page
+        .locator(`#${id}`)
+        .evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m41);
+    const {storyboard, held} = await animationStoryboard(page, {
+      name: 'harness-self-test-offsets',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      columns: 6,
+      measure: async () => ({
+        first: await x('first'),
+        second: await x('second'),
+      }),
+    });
+    const second = held.find(a => a.target === 'div#second');
+    const first = held.find(a => a.target === 'div#first');
+    const lag = (second?.offsetMs ?? 0) - (first?.offsetMs ?? 0);
+    const firsts = storyboard.frames.map(f => Number(f.data.first));
+    const seconds = storyboard.frames.map(f => Number(f.data.second));
+    // The film starts with the first move at its start, the spinner aside...
+    expect(firsts[0]).toBeCloseTo(0, 1);
+    expect(firsts[6]).toBeCloseTo(100, 0);
+    // ...and ends with the second move at its end, not cut off.
+    expect(seconds.at(-1)).toBeGreaterThan(239);
+    expect(storyboard.frames.at(-1)?.t).toBeCloseTo(lag + 240, 0);
     await releaseAnimations(page);
     await storyboard.write(testInfo);
   });
