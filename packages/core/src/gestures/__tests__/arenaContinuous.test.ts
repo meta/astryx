@@ -4,8 +4,8 @@
  * @file arenaContinuous.test.ts
  * @input GestureArena with pans, long presses, taps, consumers and scroll
  *   probes, driven by synthetic touches with explicit timestamps
- * @output The pan's conflicts: native scrolling (failing, scroll edge,
- *   handoff), long press vs pan, nested pans, delegate hooks, two fingers on
+ * @output The pan's conflicts: native scrolling (failing, scroll edge),
+ *   long press vs pan, nested pans, delegate hooks, two fingers on
  *   two views, delivery while moving, cancellation from code, the clock
  * @position Unit tests of packages/core/src/gestures/GestureArena.ts
  */

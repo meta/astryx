@@ -85,4 +85,24 @@ describe('SwipeGestureRecognizer', () => {
     expect(b.state).toBe('ended');
     expect(b.recognizedDirection).toBe('right');
   });
+
+  it('recognizes a 40\u00b0 swipe at 16 px per event as at small steps', () => {
+    // At 40\u00b0 the travel along reaches 50 px with 42 px across, inside
+    // the 50 px allowance; at 16 px per event the next event is already 51 px
+    // across, so the verdict must come from the path between the events.
+    const angle = (40 * Math.PI) / 180;
+    for (const step of [2, 16]) {
+      const h = createHarness();
+      const swipe = new SwipeGestureRecognizer({name: 'swipe'});
+      const finger = h.finger(1).down(0, 0, 0, {recognizers: [swipe]});
+      for (let d = step, t = 4; d <= 96; d += step, t += 4) {
+        finger.move(d * Math.cos(angle), d * Math.sin(angle), t);
+        if (swipe.state !== 'possible') {
+          break;
+        }
+      }
+      expect(swipe.state).toBe('ended');
+      expect(swipe.recognizedDirection).toBe('right');
+    }
+  });
 });

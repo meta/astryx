@@ -52,6 +52,8 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
   private origin: Point = {x: 0, y: 0};
   /** Directions this touch's path has ruled out. */
   private readonly ruledOut = new Set<SwipeDirection>();
+  /** The centroid at the previous move. */
+  private last: Point | null = null;
 
   constructor(options: SwipeGestureRecognizerOptions = {}) {
     super(options);
@@ -100,6 +102,7 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
     }
     // Measure from where every required finger is down.
     this.origin = centroid(this.touches.values());
+    this.last = null;
   }
 
   protected override touchesMoved(): void {
@@ -107,39 +110,50 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
       return;
     }
     const current = centroid(this.touches.values());
-    const dx = current.x - this.origin.x;
-    const dy = current.y - this.origin.y;
+    const from = this.last ?? this.origin;
+    this.last = current;
     for (const direction of this.directions) {
-      const [along, across] =
-        direction === 'left'
-          ? [-dx, dy]
-          : direction === 'right'
-            ? [dx, dy]
-            : direction === 'up'
-              ? [-dy, dx]
-              : [dy, dx];
       if (this.ruledOut.has(direction)) {
         continue;
       }
-      // Off-axis travel past the allowance, or the distance the wrong way,
-      // rules a direction out for good, so the verdict follows the path and
-      // not how far apart the events were.
-      if (
-        Math.abs(across) > this.maximumSecondaryMovement ||
-        along <= -this.minimumDistance
-      ) {
-        this.ruledOut.add(direction);
-        continue;
-      }
-      if (along >= this.minimumDistance) {
+      // Along and across this direction at the start and the end of the
+      // move. The path between two events is read as a straight segment, so
+      // the verdict does not depend on how far apart the events were.
+      const [along0, across0] = this.project(direction, from);
+      const [along1, across1] = this.project(direction, current);
+      const reaches = segmentCrossing(along0, along1, this.minimumDistance);
+      const strays = Math.max(
+        segmentCrossing(across0, across1, this.maximumSecondaryMovement),
+        segmentCrossing(-across0, -across1, this.maximumSecondaryMovement),
+      );
+      const strayAt = strays < 0 ? Infinity : strays;
+      if (reaches >= 0 && reaches <= strayAt) {
         this.recognizedDirection = direction;
         this.setState('ended');
         return;
+      }
+      // Off-axis travel past the allowance, or the distance the wrong way,
+      // rules a direction out for good.
+      if (strays >= 0 || along1 <= -this.minimumDistance) {
+        this.ruledOut.add(direction);
       }
     }
     if (this.directions.every(direction => this.ruledOut.has(direction))) {
       this.setState('failed');
     }
+  }
+
+  /** Travel along and across `direction` from the origin to `point`. */
+  private project(direction: SwipeDirection, point: Point): [number, number] {
+    const dx = point.x - this.origin.x;
+    const dy = point.y - this.origin.y;
+    return direction === 'left'
+      ? [-dx, dy]
+      : direction === 'right'
+        ? [dx, dy]
+        : direction === 'up'
+          ? [-dy, dx]
+          : [dy, dx];
   }
 
   protected override touchesEnded(): void {
@@ -149,6 +163,21 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
   protected override reset(): void {
     this.recognizedDirection = null;
     this.ruledOut.clear();
+    this.last = null;
     this.origin = {x: 0, y: 0};
   }
+}
+
+/**
+ * Where on the segment from `start` to `end` (0 to 1) the value first
+ * reaches `limit`; 0 when it starts there, -1 when it never does.
+ */
+function segmentCrossing(start: number, end: number, limit: number): number {
+  if (start >= limit) {
+    return 0;
+  }
+  if (end < limit) {
+    return -1;
+  }
+  return (limit - start) / (end - start);
 }

@@ -96,7 +96,9 @@ export class RotationGestureRecognizer extends GestureRecognizer {
     const [a, b] = this.trackedTouches;
     this.lastAngle = unwrapAngle(angleBetween(a, b), this.lastAngle);
     this.rotationValue = this.lastAngle - this.initialAngle;
-    this.tracker.add(this.lastAngle, 0, event.time);
+    // Every move of the fingers is a sample: an angle that holds while they
+    // move reads as no turn, so the velocity never goes stale.
+    this.tracker.add(this.lastAngle, 0, event.time, {isMotion: true});
     if (this.state === 'possible') {
       if (Math.abs(this.rotationValue) >= this.hysteresis) {
         this.setState('began');
