@@ -536,23 +536,55 @@ describe('full component typechecks', () => {
   // typecheck:docs covers only its .doc.mjs files, so a type error in a test
   // otherwise lands on main unseen (lab's MobileTokenizer.test.tsx did).
   const packages = ['core', 'lab', 'charts', 'richtext', 'vega'];
+  const scriptsOf = dir => JSON.parse(read(`${dir}/package.json`)).scripts;
 
   it.each(['ci.yml', 'deploy.yml'])(
-    '%s typechecks every component package, tests included',
+    '%s runs every package typecheck through pnpm typecheck',
     file => {
       const steps = load(file).jobs.typecheck.steps;
-      const command = name => `pnpm -F @astryxdesign/${name} typecheck`;
-      const core = steps.find(step => step.run === command('core'));
-      for (const name of packages) {
-        const step = steps.find(candidate => candidate.run === command(name));
-        expect(step, `${file} does not typecheck ${name}`).toBeDefined();
-        // The same specialized-lane guard as core's (none in deploy.yml).
-        expect(step.if, `${file}: ${name} is not guarded like core`).toBe(
-          core.if,
-        );
-      }
+      const step = steps.find(candidate =>
+        /^\s*pnpm typecheck\s*$/m.test(candidate.run ?? ''),
+      );
+      expect(step, `${file} does not run pnpm typecheck`).toBeDefined();
+      expect(scriptsOf('.').typecheck).toBe(
+        'pnpm -r --no-bail --workspace-concurrency=1 --if-present --filter "!@astryxdesign/docsite" --filter "!@astryxdesign/sandbox" run typecheck',
+      );
     },
   );
+
+  it.each(packages)(
+    "%s's typecheck covers its sources, tests, and docs",
+    name => {
+      const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
+      expect(docs).toBe('tsc --project tsconfig.docs.json');
+      expect(typecheck).toMatch(
+        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+      );
+    },
+  );
+
+  it('covers the CLI template docs and strict checkJs', () => {
+    expect(scriptsOf('packages/cli').typecheck).toBe(
+      'pnpm typecheck:template-docs && pnpm typecheck:strict',
+    );
+  });
+
+  it('keeps the previous list for a head that predates pnpm typecheck', () => {
+    const step = load('ci.yml').jobs.typecheck.steps.find(
+      candidate => candidate.name === 'Typecheck every package',
+    );
+    expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    expect(step.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/typecheck-predating-head.sh" > "$legacy"',
+    );
+    const legacy = read('.github/scripts/typecheck-predating-head.sh');
+    for (const name of packages) {
+      expect(legacy).toContain(`pnpm -F @astryxdesign/${name} typecheck\n`);
+      expect(legacy).toContain(
+        `pnpm -F @astryxdesign/${name} typecheck:docs\n`,
+      );
+    }
+  });
 });
 
 describe('deploy.yml push gating', () => {
@@ -578,7 +610,7 @@ describe('deploy.yml push gating', () => {
     // build has to precede the gates in the SAME lane.
     const steps = workflow.jobs.typecheck.steps.map(step => step.run ?? '');
     const build = steps.findIndex(step => step.trim() === 'pnpm build');
-    const strict = steps.findIndex(step => step.includes('typecheck:strict'));
+    const strict = steps.findIndex(step => /^pnpm typecheck$/m.test(step));
 
     expect(build).toBeGreaterThanOrEqual(0);
     expect(strict).toBeGreaterThan(build);
@@ -588,17 +620,19 @@ describe('deploy.yml push gating', () => {
     // These exist because a typecheck error can otherwise land on main and
     // break the `build` check on every open PR (#3197).
     const gates = runLines(workflow.jobs.typecheck);
-    for (const gate of [
-      'scripts/verify-exports.mjs',
-      '@astryxdesign/core typecheck:docs',
-      '@astryxdesign/lab typecheck:docs',
-      '@astryxdesign/charts typecheck:docs',
-      '@astryxdesign/cli typecheck:template-docs',
-      '@astryxdesign/cli typecheck:strict',
-      '@astryxdesign/storybook typecheck',
-      '@astryxdesign/core typecheck',
+    expect(gates).toContain('scripts/verify-exports.mjs');
+    expect(gates).toMatch(/^pnpm typecheck$/m);
+    // Every package that guarded main still defines the script it reaches.
+    for (const dir of [
+      'packages/core',
+      'packages/lab',
+      'packages/charts',
+      'packages/cli',
+      'apps/storybook',
+      'internal/a11y-spec',
     ]) {
-      expect(gates, `lost the ${gate} gate`).toContain(gate);
+      const {typecheck} = JSON.parse(read(`${dir}/package.json`)).scripts;
+      expect(typecheck, `${dir} lost its typecheck`).toBeTruthy();
     }
   });
 
