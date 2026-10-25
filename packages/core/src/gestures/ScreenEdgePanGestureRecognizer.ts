@@ -18,7 +18,7 @@
  */
 
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
-import type {NativeTouchBehavior} from './GestureRecognizer';
+import {ALL_NATIVE_TOUCH, type NativeTouchBehavior} from './GestureRecognizer';
 import {
   PanGestureRecognizer,
   type PanGestureRecognizerOptions,
@@ -55,8 +55,15 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
       options.edgeRegion ?? UIKIT_GESTURES.screenEdgePan.edgeRegion.value;
   }
 
-  /** The browser keeps the axis along the edges. */
+  /**
+   * A pan from one edge goes one way, inward, so the browser keeps every
+   * touch behavior and the pan claims its touch as it begins (spec:AST-094
+   * FR18). Pans from several edges keep the browser the axis along them.
+   */
   override get nativeTouchBehavior(): NativeTouchBehavior {
+    if (this.edges.length === 1) {
+      return ALL_NATIVE_TOUCH;
+    }
     const horizontal = this.edges.some(
       edge => edge !== 'top' && edge !== 'bottom',
     );

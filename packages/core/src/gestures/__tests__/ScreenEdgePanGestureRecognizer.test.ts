@@ -8,6 +8,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {ALL_NATIVE_TOUCH} from '../GestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {createHarness} from './harness';
 
@@ -55,5 +56,15 @@ describe('ScreenEdgePanGestureRecognizer', () => {
       .drag(0, 20, 50);
     expect(edge.state).toBe('failed');
     expect(h.claims).toEqual([]);
+  });
+
+  it('leaves the browser every touch behavior for a pan from one edge (spec:AST-094 FR18)', () => {
+    expect(new ScreenEdgePanGestureRecognizer().nativeTouchBehavior).toEqual(
+      ALL_NATIVE_TOUCH,
+    );
+    expect(
+      new ScreenEdgePanGestureRecognizer({edges: ['left', 'right']})
+        .nativeTouchBehavior.panX,
+    ).toBe(false);
   });
 });
