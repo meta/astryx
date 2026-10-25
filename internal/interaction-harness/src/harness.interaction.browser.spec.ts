@@ -10,14 +10,14 @@
  *   and its end, and judge rest by presented values even while an animation
  *   holds its end; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
- *   document-timeline animations, each at its own offset, adds a second hold
- *   to the held set, drops one the page cancels, and releases only them;
- *   storyboards write a sheet and a trace that follows the curve, and an
- *   endless animation does not set their length, and a touch filmstrip keeps
- *   scripted event times while a handler clock sees its pacing; the timer
- *   gate holds a component timer until the filmstrip is done, drops callbacks
- *   the page cancels, stamps held frames with the time they run, and leaves
- *   the harness its own frames.
+ *   document-timeline animations, each at its own offset, holds each where it
+ *   was read, adds a second hold to the held set, drops one the page cancels,
+ *   and releases only them; storyboards write a sheet and a trace that follows
+ *   the curve, and an endless animation does not set their length, and a touch
+ *   filmstrip keeps scripted event times while a handler clock sees its pacing;
+ *   the timer gate holds a component timer until the filmstrip is done, drops
+ *   callbacks the page cancels, stamps held frames with the time they run, and
+ *   leaves the harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -443,6 +443,35 @@ test.describe('holding', () => {
     expect(fade.maxError, JSON.stringify(fade.worst)).toBeLessThanOrEqual(
       0.002,
     );
+    await releaseAnimations(page);
+  });
+
+  test('a hold stays where it was read, not a frame later', async ({page}) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      document
+        .getElementById('box')
+        ?.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+          {duration: 1000, easing: 'linear'},
+        );
+    });
+    const box = page.locator('#box');
+    await waitForAnimation(box, {minProgressMs: 50});
+    const [held] = await holdAnimations(page, box);
+    // Two frames later, the held animation is still where the hold read it.
+    const after = await box.evaluate(
+      el =>
+        new Promise<number>(resolve =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              resolve(Number(el.getAnimations()[0]?.currentTime)),
+            ),
+          ),
+        ),
+    );
+    expect(held.heldAtMs).not.toBeNull();
+    expect(Math.abs(after - (held.heldAtMs ?? 0))).toBeLessThan(0.5);
     await releaseAnimations(page);
   });
 
