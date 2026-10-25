@@ -30,7 +30,8 @@
  *
  * While a finger or a pen is down on a surface, its text selection and the
  * touch callout are off (gestures/selectionLock.ts, shared with the gesture
- * host), as on UIKit's controls and cells; a mouse never takes the lock.
+ * host), as on UIKit's controls and cells, where the primary pointer is
+ * coarse; elsewhere every contact keeps the browser's selection.
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
  * utils/interactionOverlay.stylex.ts, gestures/selectionLock.ts and
@@ -302,8 +303,9 @@ function onPointerDown(event: PointerEvent): void {
     pointerId: event.pointerId,
     timer: null,
     // A held finger never starts text selection on the surface (UIKit's
-    // controls and cells never do). A pen locks only on a touch device, so a
-    // desktop pen tablet keeps selection as a mouse does.
+    // controls and cells never do), where the primary pointer is coarse: a
+    // touchscreen laptop's finger and a desktop pen keep selection, as a
+    // mouse does (spec:AST-094 FR19).
     unlock: locksSelectionFor(
       event.pointerType,
       element.ownerDocument.defaultView,

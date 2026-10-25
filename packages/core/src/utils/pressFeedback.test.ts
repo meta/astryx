@@ -63,6 +63,27 @@ function pressable(tag = 'div'): HTMLElement {
   return element;
 }
 
+/**
+ * The primary pointer is coarse (a phone, a tablet) until the returned
+ * restore runs: jsdom's matchMedia models a desktop, where touch work stays
+ * off (`spec:AST-094` FR19).
+ */
+function coarsePrimaryPointer(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    ...matchMedia(query),
+    matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+  });
+  const restore = (): void => {
+    window.matchMedia = matchMedia;
+  };
+  matchMediaRestorers.push(restore);
+  return restore;
+}
+
+/** Restores every pointer stub a test left, so none leaks into the next. */
+const matchMediaRestorers: (() => void)[] = [];
+
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.innerHTML = '';
@@ -83,10 +104,14 @@ beforeEach(() => {
 afterEach(() => {
   release();
   vi.useRealTimers();
+  for (const restore of matchMediaRestorers.splice(0).reverse()) {
+    restore();
+  }
 });
 
 describe('the press reaches the surface the finger landed on', () => {
-  it('locks text selection on the row and its switch input while a finger is held, on any coarse pointer', () => {
+  it('locks text selection on the row and its switch input while a finger is held, where the primary pointer is coarse', () => {
+    coarsePrimaryPointer();
     const row = pressable('label');
     const input = document.createElement('input');
     input.type = 'checkbox';
@@ -107,6 +132,7 @@ describe('the press reaches the surface the finger landed on', () => {
   });
 
   it("keeps a link's native long-press menu: no callout lock on a link or under one", () => {
+    coarsePrimaryPointer();
     // jsdom drops -webkit-touch-callout, so the lock's writes are recorded.
     const written = new Map<Element, string[]>();
     const setProperty = CSSStyleDeclaration.prototype.setProperty;
@@ -164,7 +190,7 @@ describe('the press reaches the surface the finger landed on', () => {
     spy.mockRestore();
   });
 
-  it('keeps selection under a mouse and under a pen where the primary pointer is fine, as on main (spec:AST-017 FR59)', () => {
+  it('keeps selection under a mouse, a pen and a finger where the primary pointer is fine, as on main (spec:AST-094 FR19, spec:AST-017 FR59)', () => {
     const row = rows[2];
     press(row, 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(600);
@@ -176,12 +202,14 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(row.style.getPropertyValue('user-select')).toBe('');
     press(row, 'pointerup', 10, 10, 'pen');
     vi.advanceTimersByTime(600);
+    // A finger on a touchscreen laptop: the primary pointer is still fine.
+    press(row, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10);
+    vi.advanceTimersByTime(600);
     // On a touch device a pen locks, as a finger does.
-    const matchMedia = window.matchMedia;
-    window.matchMedia = (query: string) => ({
-      ...matchMedia(query),
-      matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
-    });
+    const restore = coarsePrimaryPointer();
     try {
       press(row, 'pointerdown', 10, 10, 'pen');
       vi.advanceTimersByTime(600);
@@ -189,7 +217,7 @@ describe('the press reaches the surface the finger landed on', () => {
       press(row, 'pointerup', 10, 10, 'pen');
       expect(row.style.getPropertyValue('user-select')).toBe('');
     } finally {
-      window.matchMedia = matchMedia;
+      restore();
     }
   });
 

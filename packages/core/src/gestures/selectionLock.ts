@@ -46,20 +46,18 @@ const TEXT_ENTRY_TYPES = new Set([
 ]);
 
 /**
- * Whether a contact of this pointer kind takes the lock. A finger always
- * does. A pen does only where the primary pointer is coarse (an iPad's
- * pencil): a pen on a desktop tablet is a fine pointer, and keeps selection
- * exactly as a mouse does (`spec:AST-017` FR59). A mouse never does.
+ * Whether a contact of this pointer kind takes the lock: a finger or a pen,
+ * and only where the primary pointer is coarse (a phone, an iPad and its
+ * pencil). Where the primary pointer is fine (a laptop's touchscreen, a
+ * desktop pen tablet), a finger and a pen get the browser's defaults, as a
+ * mouse does (`spec:AST-094` FR19, `spec:AST-017` FR59). A mouse never does.
  */
 export function locksSelectionFor(
   pointerType: string,
   view: Window | null | undefined,
 ): boolean {
-  if (pointerType === 'touch') {
-    return true;
-  }
   return (
-    pointerType === 'pen' &&
+    pointerType !== 'mouse' &&
     typeof view?.matchMedia === 'function' &&
     view.matchMedia('(pointer: coarse)').matches
   );

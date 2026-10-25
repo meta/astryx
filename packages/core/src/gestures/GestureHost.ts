@@ -43,8 +43,9 @@
  *   are off on the press-tracked element (attached or delegated), on the
  *   elements of recognizers with `preventsTextSelection`, and on a non-text
  *   input under the finger inside them (WebKit's own style makes every
- *   input selectable); restored when the contact ends. A mouse never takes
- *   this lock.
+ *   input selectable); restored when the contact ends. Only where the
+ *   primary pointer is coarse: a mouse never takes this lock, nor a finger
+ *   or a pen where the primary pointer is fine.
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch, a rotation) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
@@ -587,8 +588,9 @@ export class GestureHost {
    * Turn text selection and the touch callout off on the press-tracked
    * element and on the elements of recognizers that ask, for as long as this
    * finger or pen is down: a UIKit control or cell never starts a selection
-   * under a held finger. Restored when the contact ends; a mouse never gets
-   * here, so desktop selection is untouched.
+   * under a held finger. Restored when the contact ends. Callers lock only
+   * where the primary pointer is coarse (locksSelectionFor), so desktop
+   * selection is untouched.
    */
   private lockSelection(
     id: number,
@@ -660,7 +662,9 @@ export class GestureHost {
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
-      this.lockSelection(id, recognizers, consumerElement, target);
+      if (locksSelectionFor('touch', this.doc.defaultView)) {
+        this.lockSelection(id, recognizers, consumerElement, target);
+      }
       this.watchTarget(touch.identifier, target);
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target});
