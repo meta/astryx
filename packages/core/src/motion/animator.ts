@@ -413,6 +413,11 @@ interface Segment {
  */
 interface StartGroup {
   readonly provisional: number;
+  /**
+   * Its animations were created in the running task: the browser cannot have
+   * started them yet, so nothing reads their start time until it ends.
+   */
+  fresh: boolean;
   readonly segments: Segment[];
   readonly animations: Animation[];
   readonly channels: Set<Channel>;
@@ -494,15 +499,22 @@ export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
   opacity: 0.001,
 };
 
-/** Keyframes are added until linear interpolation is within this. */
+/**
+ * Keyframes are added until linear interpolation is within this: a quarter of
+ * a CSS pixel, a twentieth of a degree, a 2000th of the size, about one step
+ * of an 8-bit alpha. Every one is below what a moving element can show.
+ */
 const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
-  x: 0.05,
-  y: 0.05,
-  rotate: 0.02,
-  scaleX: 0.0002,
-  scaleY: 0.0002,
-  opacity: 0.002,
+  x: 0.25,
+  y: 0.25,
+  rotate: 0.05,
+  scaleX: 0.0005,
+  scaleY: 0.0005,
+  opacity: 0.004,
 };
+
+/** Keyframes start on this grid (ms) and are split where the curve needs it. */
+const SAMPLE_GRID_MS = 1000 / 30;
 
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
@@ -888,9 +900,9 @@ export function createAnimator(
     for (let e = 0; e + 1 < edges.length; e++) {
       const a = edges[e];
       const b = edges[e + 1];
-      // A 120 Hz grid, each interval split until the chord is within the
+      // A 30 Hz grid, each interval split until the chord is within the
       // tolerance at its quarter points.
-      const steps = Math.max(1, Math.ceil((b - a) / (1000 / 120)));
+      const steps = Math.max(1, Math.ceil((b - a) / SAMPLE_GRID_MS));
       const split = (t0: number, t1: number, depth: number) => {
         const v0 = value(t0);
         const v1 =
@@ -1317,6 +1329,7 @@ export function createAnimator(
     });
     return {
       provisional: time,
+      fresh: false,
       segments: [],
       animations: [],
       channels: new Set(),
@@ -1356,6 +1369,10 @@ export function createAnimator(
       return;
     }
     pendingGroups.add(group);
+    group.fresh = true;
+    queueMicrotask(() => {
+      group.fresh = false;
+    });
     for (const animation of group.animations) {
       // A cancel before the first frame rejects each one's ready promise.
       (animation as Partial<Animation>).ready?.catch(() => {});
@@ -1408,10 +1425,16 @@ export function createAnimator(
     }
   };
 
-  /** Reads the start of every call whose first frame has been committed. */
+  /**
+   * Reads the start of every call whose first frame may have been committed:
+   * not those created in the running task, whose start the browser cannot
+   * have set (reading it there can cost a style update per call).
+   */
   const syncPending = () => {
     for (const group of pendingGroups) {
-      syncGroup(group);
+      if (!group.fresh) {
+        syncGroup(group);
+      }
     }
   };
 

@@ -210,7 +210,7 @@ function sampleAt(
 }
 
 describe('animate: keyframes on the compositor', () => {
-  it('bakes the spring into keyframes within a twentieth of a pixel of the curve', async () => {
+  it('bakes the spring into keyframes within a quarter of a pixel of the curve', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
     const [animation] = live('translate');
@@ -229,7 +229,7 @@ describe('animate: keyframes on the compositor', () => {
     expect(duration).toBeCloseTo(curve.settleTime(0.05) * 1000, 6);
     for (let t = 0; t <= duration; t += 0.5) {
       const [x, y] = sampleAt(animation, 'translate', 1000 + t);
-      expect(Math.abs(x - curve.value(t / 1000))).toBeLessThan(0.06);
+      expect(Math.abs(x - curve.value(t / 1000))).toBeLessThan(0.26);
       expect(y).toBe(0);
       expect(animator.get('x', 1000 + t)).toBeCloseTo(curve.value(t / 1000), 9);
     }
@@ -242,7 +242,7 @@ describe('animate: keyframes on the compositor', () => {
   it('keeps the keyframe count modest (adaptive sampling)', () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
-    expect(live('translate')[0].keyframes.length).toBeLessThan(200);
+    expect(live('translate')[0].keyframes.length).toBeLessThan(60);
   });
 
   it('clears an identity transform at rest, so a fixed child stays fixed', async () => {
@@ -680,8 +680,8 @@ describe('animatorFor: one animator per element', () => {
     const y = solveSpring(toSpring(springs.smooth), {from: 0, to: -44});
     expect(swipe.get('y', clock + 30)).toBeCloseTo(y.value(0.03), 9);
     const [tx, ty] = sampleAt(tracks[0], 'translate', clock + 30);
-    expect(tx).toBeCloseTo(x.value(0.08), 1);
-    expect(ty).toBeCloseTo(y.value(0.03), 1);
+    expect(Math.abs(tx - x.value(0.08))).toBeLessThan(0.26);
+    expect(Math.abs(ty - y.value(0.03))).toBeLessThan(0.26);
   });
 });
 
@@ -869,10 +869,12 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
     animator.animate({x: 0}, {spring: springs.smooth});
     const [animation] = live('translate');
     for (let t = clock; t < clock + 400; t += 7) {
-      expect(sampleAt(animation, 'translate', t)[1]).toBeCloseTo(
-        yCurve.value((t - 1000) / 1000),
-        1,
-      );
+      expect(
+        Math.abs(
+          sampleAt(animation, 'translate', t)[1] -
+            yCurve.value((t - 1000) / 1000),
+        ),
+      ).toBeLessThan(0.26);
       expect(animator.get('y', t)).toBeCloseTo(
         yCurve.value((t - 1000) / 1000),
         9,
@@ -1443,7 +1445,7 @@ describe('decay: UIScrollView coasts', () => {
         Math.abs(
           sampleAt(animation, 'translate', 1000 + t)[1] - coast.value(t / 1000),
         ),
-      ).toBeLessThan(0.11);
+      ).toBeLessThan(0.26);
     }
     expect(animator.get('y', 1e7)).toBeCloseTo(coast.rest, 9);
   });

@@ -365,8 +365,8 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   });
   expect(result.count).toBe(2);
   expect(new Set(result.starts).size).toBe(1);
-  expect(result.worstX).toBeLessThan(0.06);
-  expect(result.worstOpacity).toBeLessThan(0.003);
+  expect(result.worstX).toBeLessThan(0.26);
+  expect(result.worstOpacity).toBeLessThan(0.0045);
 });
 
 test('a theme that retunes a table spring changes the curve the engine plays', async ({
@@ -436,8 +436,8 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
   });
   // Each box plays its own spring: the themed one overshoots, the table's
   // (critically damped) does not.
-  expect(result.plain.worst).toBeLessThan(0.06);
-  expect(result.themed.worst).toBeLessThan(0.06);
+  expect(result.plain.worst).toBeLessThan(0.26);
+  expect(result.themed.worst).toBeLessThan(0.26);
   expect(result.themed.lowest).toBeLessThan(-10);
   expect(result.plain.lowest).toBeGreaterThan(-0.5);
 });
@@ -551,7 +551,7 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
     description: JSON.stringify(result),
   });
   expect(result.count).toBe(1);
-  expect(result.worst).toBeLessThan(0.003);
+  expect(result.worst).toBeLessThan(0.0045);
   expect(result.held).toBeCloseTo(1, 6);
 });
 
