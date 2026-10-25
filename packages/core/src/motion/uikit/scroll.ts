@@ -107,7 +107,7 @@ export const scroll = {
    * Scroll-to-top after a status-bar tap: not a spring. The offset
    * approaches the top as 1 − e^(−9.7 t) whatever the distance (done in about
    * 1.6 s for 500, 2000 or 8000 pt), which is a decay at this per-millisecond
-   * rate (e^(−0.0097)) whose rest point is the top: `animator.decay` with a
+   * rate (e^(−0.0097)) whose rest point is the top: a coast (coast.ts) with a
    * starting velocity of 9.7 × the distance per second.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, setContentOffset log after status-bar taps (starts 85–95

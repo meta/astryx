@@ -2,7 +2,7 @@
 
 /**
  * @file animator.ts
- * @input An element, target values, and a spring or a decay
+ * @input An element, target values, and a spring or momentum curves
  * @output Exports `createAnimator`: a compositor animator for translate,
  *   rotate, scale and opacity, with presentation values and velocities read
  *   from the analytic curves, velocity-preserving retargeting, freeze-in-place
@@ -14,8 +14,9 @@
  * HOW IT RUNS
  *
  * Each animated value (x, y, rotate, scaleX, scaleY, opacity) follows a
- * closed-form curve: a spring (spring.ts), a UIScrollView coast with an edge
- * bounce (decay.ts), or a Reduced Motion cross-fade. The curves are baked into
+ * closed-form curve: a spring (spring.ts), momentum curves its caller built (a
+ * UIScrollView coast with an edge bounce, coast.ts), or a Reduced Motion
+ * cross-fade. The curves are baked into
  * Web Animations keyframes on the individual transform properties (`translate`,
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
  * interpolation between keyframes is within a fraction of a pixel, and played
@@ -76,9 +77,7 @@
  */
 
 import {cubicBezier} from './bezier';
-import {solveDecay} from './decay';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {scroll} from './uikit/scroll';
 import {timing} from './uikit/timing';
 
 /** A value the animator can drive. */
@@ -99,13 +98,20 @@ export interface SpringTransition {
   velocity?: MotionValues;
 }
 
-export interface DecayOptions {
-  /** Per-millisecond velocity factor; UIScrollView's normal rate by default. */
-  rate?: number;
-  /** Edges: a coast crossing one hands its velocity to `bounce`. */
-  bounds?: Partial<Record<MotionProperty, {min: number; max: number}>>;
-  /** The edge spring; `scroll.bounce` by default. */
-  bounce?: SpringDescription;
+/**
+ * Any closed-form curve to play on the compositor: a momentum coast
+ * (`coast.ts`), a spring chasing a moving target, a fitted UIKit curve.
+ * Times are seconds from the curve's start; the value at `duration` is the
+ * end state. Start it at the property's presentation value (`get`) to
+ * continue without a jump.
+ */
+export interface MotionCurve {
+  /** Length, s. */
+  readonly duration: number;
+  /** Value `t` seconds after the start (0 ≤ t ≤ duration). */
+  at(t: number): number;
+  /** Velocity `t` seconds after the start, units/s. */
+  velocity(t: number): number;
 }
 
 export interface AnimateOptions {
@@ -175,10 +181,15 @@ export interface Animator {
     transition: SpringTransition,
     options?: AnimateOptions,
   ): MotionHandle;
-  /** Coasts with `velocity` like a released scroll view. */
+  /**
+   * Plays momentum curves as given, one per property: a released scroll
+   * view's coast and edge bounce, which `coast()` (coast.ts) builds.
+   * Reduced Motion does not apply: a throw continues the finger. Only a
+   * surface that coasts imports the coast math and the scroll table.
+   */
   decay(
-    velocity: MotionValues,
-    options?: DecayOptions & Pick<AnimateOptions, 'at'>,
+    curves: Partial<Record<MotionProperty, MotionCurve>>,
+    options?: Pick<AnimateOptions, 'at'>,
   ): MotionHandle;
   /** Freezes properties (all by default) at their presentation values. */
   stop(properties?: ReadonlyArray<MotionProperty | 'scale'>): void;
@@ -233,7 +244,7 @@ const IDENTITY: Record<MotionProperty, number> = {
 };
 
 /** Within this of its target a curve is over (in the property's own unit). */
-const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
+export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
   x: 0.05,
   y: 0.05,
   rotate: 0.01,
@@ -1013,98 +1024,29 @@ export function createAnimator(
       return makeHandle(owner, changed, finished, time);
     },
 
-    decay(velocity, decayOptions = {}) {
+    decay(curves, decayOptions = {}) {
       const time = decayOptions.at ?? now();
-      const velocities = expand(velocity);
       const {owner, finished} = newOwner();
-      const rate = decayOptions.rate ?? scroll.decelerationRate.normal;
-      const bounce = toSpring(decayOptions.bounce ?? scroll.bounce);
-      const properties = Object.keys(velocities) as MotionProperty[];
+      const properties = PROPERTIES.filter(
+        property => curves[property] != null,
+      );
       for (const property of properties) {
-        const from = valueAt(property, time);
-        const v0 = velocities[property] as number;
-        const bounds = decayOptions.bounds?.[property];
-        const threshold = SETTLE_THRESHOLD[property];
+        const curve = curves[property] as MotionCurve;
         interrupt(property, time);
-        let segment: Segment | null;
-        if (bounds != null && (from < bounds.min || from > bounds.max)) {
-          // Released past an edge: straight back with the release velocity.
-          const edge = from < bounds.min ? bounds.min : bounds.max;
-          const curve = solveSpring(bounce, {from, to: edge, velocity: v0});
-          segment = {
-            start: time,
-            duration: Math.min(
-              MAX_DURATION_MS,
-              curve.settleTime(threshold) * 1000,
-            ),
-            target: edge,
-            at: t => curve.value(t / 1000),
-            speed: t => curve.velocity(t / 1000),
-            jumps: [],
-            owner,
-          };
-        } else {
-          const coast = solveDecay({from, velocity: v0, rate});
-          const edge =
-            bounds == null
-              ? null
-              : coast.rest < bounds.min
-                ? bounds.min
-                : coast.rest > bounds.max
-                  ? bounds.max
-                  : null;
-          const hit = edge == null ? null : coast.timeToReach(edge);
-          if (edge != null && hit != null) {
-            // The coast reaches the edge: the edge spring takes its velocity.
-            const contact = hit * 1000;
-            const spring = solveSpring(bounce, {
-              from: edge,
-              to: edge,
-              velocity: coast.velocity(hit),
-            });
-            segment = {
-              start: time,
-              duration: Math.min(
-                MAX_DURATION_MS,
-                contact + spring.settleTime(threshold) * 1000,
-              ),
-              target: edge,
-              at: t =>
-                t < contact
-                  ? coast.value(t / 1000)
-                  : spring.value((t - contact) / 1000),
-              speed: t =>
-                t < contact
-                  ? coast.velocity(t / 1000)
-                  : spring.velocity((t - contact) / 1000),
-              jumps: [],
-              owner,
-            };
-          } else {
-            const rest = edge ?? coast.rest;
-            segment =
-              v0 === 0
-                ? null
-                : {
-                    start: time,
-                    duration: Math.min(
-                      MAX_DURATION_MS,
-                      coast.settleTime(threshold * 2) * 1000,
-                    ),
-                    target: rest,
-                    at: t => coast.value(t / 1000),
-                    speed: t => coast.velocity(t / 1000),
-                    jumps: [],
-                    owner,
-                  };
-          }
-        }
-        if (segment == null) {
+        if (!(curve.duration > 0)) {
           segments.delete(property);
-          resting[property] = from;
-        } else {
-          segments.set(property, segment);
+          resting[property] = curve.at(0);
+          continue;
         }
+        segments.set(property, {
+          start: time,
+          duration: Math.min(MAX_DURATION_MS, curve.duration * 1000),
+          target: curve.at(curve.duration),
+          at: t => curve.at(t / 1000),
+          speed: t => curve.velocity(t / 1000),
+          jumps: [],
+          owner,
+        });
       }
       commit(properties, time);
       return makeHandle(owner, properties, finished, time);

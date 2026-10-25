@@ -20,10 +20,11 @@ from the package entry point; components import it by path.
 | `MEASUREMENTS.md`     | The UIKit reference captures each unconfirmed value still needs.                                                        |
 | `spring.ts`           | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.           |
 | `decay.ts`            | UIScrollView's momentum coast.                                                                                          |
+| `coast.ts`            | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                   |
 | `rubberBand.ts`       | UIScrollView's resistance past an edge, and its inverse.                                                                |
 | `projection.ts`       | Release targets: the rest point nearest the projected coast; paging.                                                    |
 | `bezier.ts`           | Cubic-bézier timing functions (Core Animation's named curves).                                                          |
-| `animator.ts`         | Compositor animator: springs and decays compiled to Web Animations, read back analytically.                             |
+| `animator.ts`         | Compositor animator: springs and momentum curves compiled to Web Animations, read back analytically.                    |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
 menu's timeline) live in a domain file per component, `uikit/<component>.ts`,
@@ -48,8 +49,8 @@ const y = animator.get('y', event.timeStamp);
 const v = animator.getVelocity('y', event.timeStamp);
 animator.stop(['y']); // freezes at the value on screen
 
-// A throw on a scroll-like surface, with an edge:
-animator.decay({x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}});
+// A throw on a scroll-like surface, with an edge (coast.ts builds the curves):
+animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
 await handle.finished; // true if it ran to the end, false if interrupted
 ```

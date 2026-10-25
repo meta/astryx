@@ -7,14 +7,18 @@
  * @output Checks what the animator hands the browser: keyframes that follow
  *   the analytic curves, the clock, the inline end state; and what it reads
  *   back: presentation values and velocities, retarget continuity, stop,
- *   completion, Reduced Motion substitutions, decays with edges, late attach
+ *   completion, Reduced Motion substitutions, momentum curves (a coast with
+ *   edges), late attach
  * @position Testing; the compositor itself is proven in
  *   __tests__/animator.compositor.spec.ts
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createAnimator, END_HOLD_MS, type AnimatorOptions} from './animator';
 import {cubicBezier} from './bezier';
+import {coast} from './coast';
 import {solveDecay} from './decay';
 import {solveSpring, toSpring} from './spring';
 import {scroll} from './uikit/scroll';
@@ -573,31 +577,33 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
   });
 });
 
-describe('decay: UIScrollView coasts', () => {
-  it('follows the coast and comes to rest where it projects', () => {
+describe('decay: momentum curves (a coast)', () => {
+  it('plays a coast and comes to rest where it projects', () => {
     const {animator} = setup();
-    animator.decay({y: -2400});
-    const coast = solveDecay({from: 0, velocity: -2400});
+    animator.decay(coast(animator, {y: -2400}));
+    const glide = solveDecay({from: 0, velocity: -2400});
     for (const t of [0, 16, 100, 400, 1200]) {
-      expect(animator.get('y', 1000 + t)).toBeCloseTo(coast.value(t / 1000), 9);
+      expect(animator.get('y', 1000 + t)).toBeCloseTo(glide.value(t / 1000), 9);
     }
     const [animation] = live('translate');
     for (let t = 0; t < 1500; t += 3) {
       expect(
         Math.abs(
-          sampleAt(animation, 'translate', 1000 + t)[1] - coast.value(t / 1000),
+          sampleAt(animation, 'translate', 1000 + t)[1] - glide.value(t / 1000),
         ),
       ).toBeLessThan(0.11);
     }
-    expect(animator.get('y', 1e7)).toBeCloseTo(coast.rest, 9);
+    expect(animator.get('y', 1e7)).toBeCloseTo(glide.rest, 9);
   });
 
   it('a coast that reaches an edge hands its velocity to the edge spring', () => {
     const {animator} = setup();
     animator.set({y: -100});
-    animator.decay({y: 3000}, {bounds: {y: {min: -2000, max: 0}}});
-    const coast = solveDecay({from: -100, velocity: 3000});
-    const contact = 1000 + (coast.timeToReach(0) as number) * 1000;
+    animator.decay(
+      coast(animator, {y: 3000}, {bounds: {y: {min: -2000, max: 0}}}),
+    );
+    const glide = solveDecay({from: -100, velocity: 3000});
+    const contact = 1000 + (glide.timeToReach(0) as number) * 1000;
     expect(animator.get('y', contact)).toBeCloseTo(0, 6);
     expect(animator.getVelocity('y', contact - 1e-6)).toBeCloseTo(
       animator.getVelocity('y', contact + 1e-6),
@@ -611,7 +617,9 @@ describe('decay: UIScrollView coasts', () => {
   it('a release past an edge springs straight back with the release velocity', () => {
     const {animator} = setup();
     animator.set({x: 60});
-    animator.decay({x: 400}, {bounds: {x: {min: -500, max: 0}}});
+    animator.decay(
+      coast(animator, {x: 400}, {bounds: {x: {min: -500, max: 0}}}),
+    );
     expect(animator.getVelocity('x')).toBeCloseTo(400, 6);
     const curve = solveSpring(toSpring(scroll.bounce), {
       from: 60,
@@ -621,10 +629,51 @@ describe('decay: UIScrollView coasts', () => {
     expect(animator.get('x', 1100)).toBeCloseTo(curve.value(0.1), 9);
   });
 
-  it('keeps moving under Reduced Motion: a throw is the finger\u2019s', () => {
-    const {animator} = setup({prefersReducedMotion: () => true});
-    animator.decay({x: 1000});
+  it('a coast continues a running spring from its presentation value', () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    clock += 80;
+    const from = animator.get('x');
+    animator.decay(coast(animator, {x: 900}));
+    expect(animator.get('x', clock)).toBeCloseTo(from, 9);
+    expect(animator.getVelocity('x', clock)).toBeCloseTo(900, 6);
+  });
+
+  it('plays any curve as given, and a zero-length one rests at its value', () => {
+    const {animator, element} = setup();
+    const linear = {
+      duration: 0.5,
+      at: (t: number) => 200 * t,
+      velocity: () => 200,
+    };
+    animator.decay({
+      x: linear,
+      opacity: {duration: 0, at: () => 0.5, velocity: () => 0},
+    });
+    expect(animator.get('x', 1250)).toBeCloseTo(50, 9);
+    expect(animator.get('x', 1e7)).toBeCloseTo(100, 9);
+    expect(animator.get('opacity')).toBe(0.5);
+    expect(element.style.opacity).toBe('0.5');
+  });
+
+  it('keeps moving under Reduced Motion: a throw is the finger’s', () => {
+    const {animator, element} = setup({prefersReducedMotion: () => true});
+    animator.decay(coast(animator, {x: 1000}));
     expect(animator.getVelocity('x', 1016)).toBeGreaterThan(900);
+    // No cross-fade: the coast moves the element and leaves opacity alone.
+    expect(live('translate')).toHaveLength(1);
+    expect(live('opacity')).toHaveLength(0);
+    expect(element.style.opacity).toBe('');
+  });
+
+  it('imports neither the coast math nor the scroll table', () => {
+    // Only a surface that coasts pays for them (coast.ts).
+    const source = fs.readFileSync(
+      path.resolve(__dirname, 'animator.ts'),
+      'utf8',
+    );
+    expect(source).not.toMatch(/from '\.\/decay'/);
+    expect(source).not.toMatch(/from '\.\/uikit\/scroll'/);
   });
 });
 
