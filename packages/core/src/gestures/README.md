@@ -76,6 +76,7 @@ in `shouldBegin`, so two fingers stay the browser's pinch.
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                     |
 | `RotationGestureRecognizer`      | `UIRotationGestureRecognizer`      | continuous | `rotation` in radians, unwrapped, clockwise positive; `velocity` in rad/s                                                                                                                             |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges` including `leading` / `trailing` (resolved against the writing direction); fails as soon as the touch lands outside                                                                           |
+| `ScrollViewPanGestureRecognizer` | `UIScrollView`’s pan               | continuous | a pan whose `velocity()` is a scroll view's release (see Velocity)                                                                                                                                    |
 | `HoverGestureRecognizer`         | `UIHoverGestureRecognizer`         | continuous | a mouse or a hovering pen; silent for fingers                                                                                                                                                         |
 
 A recognizer created with `claimsTouches: false` is a watcher (a tab bar
@@ -388,24 +389,29 @@ timestamps and no real time.
 
 ## Velocity
 
-`VelocityTracker` reports px per second, UIKit's unit, and is the one
-velocity tracker every continuous recognizer uses
-(`architecture:interaction-modality` INV10, `spec:AST-100` FR1, FR2; no
-alternative estimators). One filter, iOS's measured blend, updated on each
-moved sample (a sample at the newest position is not motion):
+`VelocityTracker` reports px per second, UIKit's unit, with one filter for
+every gesture and every pointer (`spec:AST-100`), UIKit's own, measured:
 
-- `uikit` (default): `UIPanGestureRecognizer.velocity(in:)` itself, measured.
-  Each event's instantaneous velocity is the position change over the
-  timestamp change since the previous event (the touch-down counts as the
-  first), and the velocity is 0.2 times the newest one plus 0.8 times the
-  one before. It reproduces every value UIKit reported on six recorded touch
-  streams. Like UIKit's, it reacts a frame late to an acceleration, includes
-  a hold before the first move, and never decays: a finger at rest sends no
-  events, so a release after a pause reports the last moving value. Feed it
-  one sample per event.
-- `window`: the two-point average over 100 ms that BottomSheet uses on
-  main, for a path that keeps main's behavior (a release off iOS that must
-  stay byte-identical). Not UIKit.
+- A pan reads `velocity(in:)`. Each event's instantaneous velocity is the
+  position change over the timestamp change since the previous event (the
+  touch-down counts as the first), and the velocity is 0.2 times the newest
+  one plus 0.8 times the one before. It reproduces every value UIKit
+  reported on six recorded touch streams.
+- A scroll view's pan (`ScrollViewPanGestureRecognizer`) reads what a
+  UIScrollView hands `scrollViewWillEndDragging`: its pan's last two
+  velocities blended once more, 0.25 times the newest plus 0.75 times the
+  one before. It reproduces four recorded UIPickerView releases. Wheels,
+  pickers, pagers and momentum carousels use it.
+- Neither has a timer. A finger at rest sends no events, so a release after
+  a silent pause reports the last moving value (a UIScrollView coasts after
+  it too); moves that report the same point bring a pan to 0 on the second
+  (a scroll view on the third). The lift updates nothing.
+- Times are the events' own. A finger the browser reports on both pointer
+  and touch events is sampled from its pointer events alone, so the two
+  copies of one move never both count.
+
+FR2's fixed window and stillness interval depart from UIKit, which has
+neither: proposed, pending owner review on the spec.
 
 ## Haptics
 
@@ -510,9 +516,9 @@ tokens under a mouse.
   click dispositions, cancellation, and multiple fingers.
 - `__tests__/GestureHost.test.ts`: the DOM integration through real
   listeners in jsdom.
-- `__tests__/VelocityTracker.test.ts`: UIKit's filter against the velocities
-  UIKit reported on recorded touch streams, and each strategy against the
-  true velocity.
+- `__tests__/VelocityTracker.test.ts`: the pan and scroll-view readings
+  against the velocities UIKit reported on recorded touch streams, rests,
+  and the event clock.
 - `__tests__/delegatedPress.test.ts`: delegated press tracking.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
