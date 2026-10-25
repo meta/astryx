@@ -232,6 +232,11 @@ export async function holdAnimations(
     );
     const held = all.map(animation => {
       animation.pause();
+      // `pause()` only schedules the pause: the engine takes the hold time at
+      // its next frame, a frame past where this read it. Setting the current
+      // time completes a pending pause at once, here.
+      // eslint-disable-next-line no-self-assign
+      animation.currentTime = animation.currentTime;
       return animation;
     });
     // A later hold adds to the held set: what an earlier one held stays held
