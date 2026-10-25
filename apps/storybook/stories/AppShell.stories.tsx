@@ -240,6 +240,8 @@ const meta: Meta<typeof AppShell> = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
+    // AppShell sizes itself to the viewport: no story gutter around it.
+    pageFrame: true,
   },
   argTypes: {
     height: {

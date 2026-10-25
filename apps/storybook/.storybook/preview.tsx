@@ -18,6 +18,8 @@ import {y2kTheme} from '@astryxdesign/theme-y2k';
 // Import the base reset stylesheet
 import '@astryxdesign/core/reset.css';
 
+import {storyPadding} from './storyFrame';
+
 /**
  * Every shipped theme, so the toolbar can reach them and the visual gate can
  * photograph a component under each theme that overrides it. A theme missing
@@ -45,12 +47,16 @@ const themes = {
  * Theme wrapper div.  Without this, the iframe's `<html>` and
  * `<body>` keep the browser-default `color-scheme` (typically "light")
  * and toggling the toolbar has no visible effect.
+ *
+ * Wraps every story in a 16 px gutter, except stories with the `pageFrame`
+ * parameter, which render page frames edge to edge (see `storyPadding`).
  */
 const withTheme: Decorator = (Story, context) => {
   // Get theme selection from toolbar
   const themeKey = (context.globals?.astryxTheme || 'neutral') as string;
   const mode = context.globals?.colorMode === 'dark' ? 'dark' : 'light';
   const direction = context.globals?.direction === 'rtl' ? 'rtl' : 'ltr';
+  const padding = storyPadding(context.parameters);
 
   // Sync color-scheme to the document root so light-dark() works
   // everywhere, including on <html>/<body> backgrounds and any
@@ -67,7 +73,7 @@ const withTheme: Decorator = (Story, context) => {
           dir={direction}
           style={{
             colorScheme: mode,
-            padding: 16,
+            padding,
           }}>
           <Story />
         </div>
@@ -85,7 +91,7 @@ const withTheme: Decorator = (Story, context) => {
             dir={direction}
             style={{
               backgroundColor: 'var(--color-background-surface)',
-              padding: 16,
+              padding,
             }}>
             <Story />
           </div>
