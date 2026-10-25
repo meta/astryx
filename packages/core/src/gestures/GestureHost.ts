@@ -52,8 +52,10 @@
  *   scroll a finger drives (a finger that landed inside the scroller is down
  *   while it scrolls, then the momentum after the lift) from one the program
  *   starts (`scrollTo`, a status-bar tap): the finger's lasts until the
- *   scroller's own `scrollend`. A component that animates differently for
- *   the two asks here instead of listening to touches itself.
+ *   scroller's own `scrollend`, or, where the browser fires none (mobile
+ *   Safari before 26), until its scroll events go quiet. A component that
+ *   animates differently for the two asks here instead of listening to
+ *   touches itself.
  *
  * WHAT THE BROWSER IS TOLD
  *
@@ -172,6 +174,13 @@ export interface GestureHostOptions {
  * verdict comes before the browser commits to a scroll.
  */
 const PAGE_HOLD_SLOP = 5;
+
+/**
+ * Where the browser fires no `scrollend` (mobile Safari before 26), a watched
+ * scroller's scroll counts as ended once no scroll event came for this long.
+ * GUESS: six 60 Hz frames; a scroll reports every frame until it stops.
+ */
+const SCROLL_QUIET_MS = 100;
 
 /**
  * Decides, once per one-finger touch, whether its pan would scroll the page:
@@ -329,6 +338,12 @@ export class GestureHost {
     null;
   /** Page-scroll holds; while any is held, page pans under a finger are judged. */
   private readonly pageHolds = new Set<{readonly decide: PageScrollDecision}>();
+  /** Whether the holds' listeners are on: while held and the pointer is coarse. */
+  private isHoldListening = false;
+  private stopWatchingHoldPointer: (() => void) | null = null;
+  private readonly clock: GestureClock;
+  /** The quiet-window timers of finger scrolls, where there is no scrollend. */
+  private readonly quietTimers = new Map<Node, unknown>();
   /** The one finger of the gesture the page-scroll holds are judging. */
   private pageHoldTouch: {
     readonly id: number;
@@ -383,8 +398,9 @@ export class GestureHost {
       isRtl: view =>
         view instanceof Element && isRtlElement(view as HTMLElement),
     };
+    this.clock = options.clock ?? browserClock;
     this.arena = new GestureArena({
-      clock: options.clock ?? browserClock,
+      clock: this.clock,
       environment,
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
@@ -489,6 +505,35 @@ export class GestureHost {
     const hold = {decide};
     this.pageHolds.add(hold);
     if (this.pageHolds.size === 1) {
+      // Only where the primary pointer is coarse (FR19, FR24), following it.
+      const view = this.doc.defaultView;
+      this.stopWatchingHoldPointer = watchCoarsePointer(view, isCoarse =>
+        this.listenForHolds(isCoarse),
+      );
+      this.listenForHolds(isCoarsePointer(view));
+    }
+    let isHeld = true;
+    return () => {
+      if (!isHeld) {
+        return;
+      }
+      isHeld = false;
+      this.pageHolds.delete(hold);
+      if (this.pageHolds.size === 0) {
+        this.stopWatchingHoldPointer?.();
+        this.stopWatchingHoldPointer = null;
+        this.listenForHolds(false);
+      }
+    };
+  }
+
+  /** Turn the page holds' document listeners on or off. */
+  private listenForHolds(on: boolean): void {
+    if (on === this.isHoldListening) {
+      return;
+    }
+    this.isHoldListening = on;
+    if (on) {
       this.doc.addEventListener(
         'touchstart',
         this.onHoldTouchStart,
@@ -499,28 +544,19 @@ export class GestureHost {
         this.onHoldTouchMove,
         ACTIVE_CAPTURE,
       );
+    } else {
+      this.doc.removeEventListener(
+        'touchstart',
+        this.onHoldTouchStart,
+        PASSIVE_CAPTURE,
+      );
+      this.doc.removeEventListener(
+        'touchmove',
+        this.onHoldTouchMove,
+        ACTIVE_CAPTURE,
+      );
+      this.pageHoldTouch = null;
     }
-    let isHeld = true;
-    return () => {
-      if (!isHeld) {
-        return;
-      }
-      isHeld = false;
-      this.pageHolds.delete(hold);
-      if (this.pageHolds.size === 0) {
-        this.doc.removeEventListener(
-          'touchstart',
-          this.onHoldTouchStart,
-          PASSIVE_CAPTURE,
-        );
-        this.doc.removeEventListener(
-          'touchmove',
-          this.onHoldTouchMove,
-          ACTIVE_CAPTURE,
-        );
-        this.pageHoldTouch = null;
-      }
-    };
   }
 
   /** Re-derive an element's styles after its recognizers' options changed. */
@@ -595,6 +631,7 @@ export class GestureHost {
         this.scrollWatchers.delete(scroller);
         this.fingerScrollers.delete(scroller);
         this.endedWhileDown.delete(scroller);
+        this.clearQuietTimer(scroller);
       }
       this.uninstallIfIdle();
     };
@@ -605,8 +642,9 @@ export class GestureHost {
    * finger that landed inside it was down when it scrolled, and the scroll
    * has not ended since (its `scrollend` comes after the momentum that
    * follows the lift). A scroll the program starts while no finger is down
-   * there (`scrollTo`, a status-bar tap) is not. No clock is involved: the
-   * scroller's own `scrollend` closes a finger's scroll.
+   * there (`scrollTo`, a status-bar tap) is not. The scroller's own
+   * `scrollend` closes a finger's scroll; where the browser fires none, the
+   * end of its scroll events does (`SCROLL_QUIET_MS`, a guess).
    */
   isFingerScroll(scroller: Node): boolean {
     return this.fingerScrollers.has(scroller);
@@ -1763,6 +1801,17 @@ export class GestureHost {
     ) {
       this.fingerScrollers.add(scroller);
     }
+    if (this.fingerScrollers.has(scroller) && !this.firesScrollEnd()) {
+      // No scrollend here: the scroll ends once its events go quiet.
+      this.clearQuietTimer(scroller);
+      this.quietTimers.set(
+        scroller,
+        this.clock.setTimeout(() => {
+          this.quietTimers.delete(scroller);
+          this.endFingerScroll(scroller);
+        }, SCROLL_QUIET_MS),
+      );
+    }
     // A scroll is a finger's only if that finger was inside this scroller,
     // recently; anything else is the program moving something.
     const last = this.lastTouch;
@@ -1855,7 +1904,14 @@ export class GestureHost {
 
   private readonly onScrollEnd = (event: Event): void => {
     const scroller = event.target === this.doc ? this.doc : event.target;
-    if (!(scroller instanceof Node) || !this.fingerScrollers.has(scroller)) {
+    if (scroller instanceof Node) {
+      this.endFingerScroll(scroller);
+    }
+  };
+
+  /** A watched scroller's scroll ended (its scrollend, or its quiet window). */
+  private endFingerScroll(scroller: Node): void {
+    if (!this.fingerScrollers.has(scroller)) {
       return;
     }
     if (this.isFingerDownIn(scroller)) {
@@ -1864,7 +1920,20 @@ export class GestureHost {
     } else {
       this.fingerScrollers.delete(scroller);
     }
-  };
+  }
+
+  /** Whether this document's browser fires `scrollend` (Safari from 26). */
+  private firesScrollEnd(): boolean {
+    const view = this.doc.defaultView;
+    return view == null || 'onscrollend' in view;
+  }
+
+  private clearQuietTimer(scroller: Node): void {
+    if (this.quietTimers.has(scroller)) {
+      this.clock.clearTimeout(this.quietTimers.get(scroller));
+      this.quietTimers.delete(scroller);
+    }
+  }
 
   private readonly onVisibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
