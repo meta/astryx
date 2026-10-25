@@ -27,7 +27,6 @@ import {
 } from './GestureRecognizer';
 import type {GestureEventContext, GestureTouch, Point} from './types';
 
-/** @experimental */
 export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<TapGestureRecognizer> {
   /** @default 1 */
   numberOfTapsRequired?: number;
@@ -41,7 +40,6 @@ export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<Ta
 
 const TAP = UIKIT_GESTURES.tap;
 
-/** @experimental */
 export class TapGestureRecognizer extends GestureRecognizer {
   /** @internal The host's brand: a tap decides at the lift, so it never claims mid-move (recognizerInternals). */
   protected get family(): 'tap' {
