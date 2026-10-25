@@ -23,6 +23,7 @@ import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {VelocityTracker} from '../VelocityTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
+import {gestureHosts} from '../hostRegistry';
 import {holdPageScroll} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
@@ -1443,7 +1444,7 @@ describe('holdPageScroll', () => {
   it('cancels a one-finger pan the decision says would scroll the page, for the rest of its touch', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(holdPageScroll(host, decide));
+    detachers.push(holdPageScroll(document, decide));
 
     touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
     const first = touch(
@@ -1470,7 +1471,7 @@ describe('holdPageScroll', () => {
   it('judges a pan once it clears the slop, so a first wobble does not fix its axis', () => {
     const {strip} = mount('<div id="strip"></div>');
     const decide = vi.fn((_origin: EventTarget | null, dx: number) => dx === 0);
-    detachers.push(holdPageScroll(host, decide));
+    detachers.push(holdPageScroll(document, decide));
 
     touch('touchstart', strip, at(1, 100, 300), at(1, 100, 300), 0);
     const wobble = touch(
@@ -1496,7 +1497,7 @@ describe('holdPageScroll', () => {
 
   it('lets a pan through when the decision says something under the finger takes it', () => {
     const {list} = mount('<div id="list"></div>');
-    detachers.push(holdPageScroll(host, () => false));
+    detachers.push(holdPageScroll(document, () => false));
 
     touch('touchstart', list, at(1, 100, 300), at(1, 100, 300), 0);
     expect(
@@ -1508,7 +1509,7 @@ describe('holdPageScroll', () => {
   it('never cancels a two-finger gesture, so pinch-zoom keeps working', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(holdPageScroll(host, decide));
+    detachers.push(holdPageScroll(document, decide));
     const both = [
       {id: 1, x: 100, y: 300},
       {id: 2, x: 200, y: 300},
@@ -1530,7 +1531,7 @@ describe('holdPageScroll', () => {
     const inner = document.createElement('div');
     outer.attachShadow({mode: 'open'}).append(inner);
     const decide = vi.fn(() => false);
-    detachers.push(holdPageScroll(host, decide));
+    detachers.push(holdPageScroll(document, decide));
 
     touch('touchstart', inner, at(1, 100, 300), at(1, 100, 300), 0);
     touch('touchmove', inner, at(1, 100, 250), at(1, 100, 250), 16);
@@ -1538,10 +1539,39 @@ describe('holdPageScroll', () => {
     expect(decide).toHaveBeenCalledWith(inner, 0, -50);
   });
 
+  it('holds the page of a document that has no gesture host, and creates none', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    gestureHosts.delete(document);
+    detachers.push(holdPageScroll(document, () => true));
+
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
+    expect(
+      touch('touchmove', scrim, at(1, 100, 250), at(1, 100, 250), 16)
+        .defaultPrevented,
+    ).toBe(true);
+    expect(gestureHosts.get(document)).toBeUndefined();
+  });
+
+  it("leaves a touch that a recognizer of the document's host owns to that recognizer", () => {
+    const {box} = mount('<div id="box"></div>');
+    gestureHosts.set(document, host);
+    detachers.push(() => gestureHosts.delete(document));
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    detachers.push(host.attach(box, pan));
+    const decide = vi.fn(() => true);
+    detachers.push(holdPageScroll(document, decide));
+
+    touch('touchstart', box, at(1, 100, 300), at(1, 100, 300), 0);
+    touch('touchmove', box, at(1, 100, 250), at(1, 100, 250), 16);
+
+    expect(pan.state).toBe('began');
+    expect(decide).not.toHaveBeenCalled();
+  });
+
   it('stacks holds and stops judging pans once the last one is released', () => {
     const {scrim} = mount('<div id="scrim"></div>');
-    const releaseFirst = holdPageScroll(host, () => true);
-    const releaseSecond = holdPageScroll(host, () => true);
+    const releaseFirst = holdPageScroll(document, () => true);
+    const releaseSecond = holdPageScroll(document, () => true);
     const pan = (time: number) => {
       touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), time);
       return touch(

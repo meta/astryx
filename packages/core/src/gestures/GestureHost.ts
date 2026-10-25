@@ -136,6 +136,7 @@ import type {
 import {internals} from './recognizerInternals';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {lockSelection, locksSelectionFor} from './selectionLock';
+import {gestureHosts} from './hostRegistry';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -1787,14 +1788,12 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
   }));
 }
 
-const hosts = new WeakMap<Document, GestureHost>();
-
 /** The gesture host of a document, created on first use. */
 export function getGestureHost(doc: Document): GestureHost {
-  let host = hosts.get(doc);
+  let host = gestureHosts.get(doc);
   if (host == null) {
     host = new GestureHost(doc);
-    hosts.set(doc, host);
+    gestureHosts.set(doc, host);
   }
   return host;
 }

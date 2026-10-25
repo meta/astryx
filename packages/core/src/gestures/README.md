@@ -367,9 +367,11 @@ shadow-tree scroller scrolls with it, as the hit path does).
 ### Holding the page still
 
 A scroll lock (`useScrollLock`) holds the page with
-`holdPageScroll(getGestureHost(document), decide)` from `pageHold.ts`, which
-returns the release. It lives in its own module, so a page without a scroll
-lock never ships it. While any hold is active, there is a non-passive
+`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
+release. It lives in its own module, so a page without a scroll lock never
+ships it, and it imports nothing of the gesture host: it asks the document's
+host whether a recognizer owns a touch only if a host exists, and a document
+without one has no recognizer to own it. While any hold is active, there is a non-passive
 `touchmove` listener on the document. Once per one-finger touch that no recognizer owns, after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
