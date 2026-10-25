@@ -59,7 +59,7 @@ interface PageHolds {
   readonly onTouchStart: (event: TouchEvent) => void;
   readonly onTouchMove: (event: TouchEvent) => void;
   /** The input stream subscriptions while held and the pointer is coarse. */
-  unsubscribers: Array<() => void>;
+  unsubscribers: (() => void)[];
   stopWatchingPointer: (() => void) | null;
 }
 
