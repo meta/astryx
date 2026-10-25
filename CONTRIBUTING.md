@@ -171,6 +171,7 @@ astryx/
 | `pnpm build`      | Build all packages                           |
 | `pnpm test`       | Run all tests                                |
 | `pnpm test:watch` | Run tests in watch mode                      |
+| `pnpm typecheck`  | Typecheck every package (after `pnpm build`) |
 | `pnpm storybook`  | Start Storybook at localhost:6006            |
 | `pnpm lint`       | Lint all packages                            |
 
@@ -478,6 +479,11 @@ pnpm test:watch
 
 # Specific package
 pnpm -F @astryxdesign/core test
+
+# One Vitest project, as CI runs it (CI shards each across legs)
+pnpm test:ui            # the ui project, without the FR23 benchmark
+pnpm test:ui:isolated   # the FR23 benchmark alone, as test-ui leg 1 runs it
+pnpm test:node
 
 # With coverage
 pnpm test:coverage

@@ -1,83 +1,102 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // Adapted from github.com/ejc3/astryx-swift (MIT).
 
-import SwiftUI
-
-/// Core's `Text` semantic types this package draws so far.
-public enum AstryxTextType: String, CaseIterable, Sendable {
-  case body
-  case large
-  case label
-  case supporting
-
-  var token: String { "text-\(rawValue)" }
-
-  /// The color core's Text uses when none is given: secondary for supporting
-  /// text, primary otherwise.
-  var defaultColor: AstryxTextColor { self == .supporting ? .secondary : .primary }
-}
-
-/// Core's `Text` colors this package draws so far.
-public enum AstryxTextColor: String, CaseIterable, Sendable {
-  case primary
-  case secondary
-  case disabled
-  case accent
-
-  var token: String { "color-text-\(rawValue)" }
-}
-
-/// Core's `Text` weights.
-public enum AstryxTextWeight: String, CaseIterable, Sendable {
-  case normal
-  case medium
-  case semibold
-  case bold
-
-  var token: String { "font-weight-\(rawValue)" }
-}
-
-/// Core's `Text` sizes this package draws so far, used to override the size
-/// a semantic type sets. Core spells the extra-small size `xsm`; its token is
-/// `font-size-xs`.
-public enum AstryxTextSize: String, CaseIterable, Sendable {
-  case xsm
-  case sm
-  case base
-  case lg
-  case xl
-
-  var token: String { self == .xsm ? "font-size-xs" : "font-size-\(rawValue)" }
-}
-
-/// A run of text in a semantic type, painted with the theme's type tokens.
+/// A run of text in one of core's type styles, painted with the theme's type
+/// tokens. It takes core's Text props (`TextProps`).
 public struct Text: View {
-  let content: String
-  let type: AstryxTextType
-  let color: AstryxTextColor?
-  let size: AstryxTextSize?
-  let weight: AstryxTextWeight?
+  public let props: TextProps
   @Environment(\.astryx) private var astryx
+  @Environment(\.multilineTextAlignment) private var inheritedAlignment
 
+  public init(_ props: TextProps) {
+    self.props = props
+  }
+
+  /// - Parameters:
+  ///   - children: the words, core's `children`.
+  ///   - type: core's `type`; `body` when nil. `inherit` keeps the
+  ///     surrounding font and color, unless `size` is also set (below).
+  ///   - size: core's `size`, replacing the type's size. With `inherit`,
+  ///     SwiftUI cannot change only the size of an inherited font, so the text
+  ///     draws in the theme's body family at normal weight (or at `weight`,
+  ///     when set) at that size: a documented Swift gap from core, where an
+  ///     inherited family and weight keep their face.
+  ///   - color: core's `color`; secondary for `supporting`, primary otherwise.
+  ///   - weight: core's `weight`, replacing the type's weight.
+  ///   - maxLines: core's `maxLines`; text past it is truncated. Unset, a
+  ///     surrounding `.lineLimit` still applies.
+  ///   - justify: core's `justify`, the alignment of wrapped lines.
+  ///   - hasStrikethrough: core's `hasStrikethrough`.
+  ///   - hasTabularNumbers: core's `hasTabularNumbers`; digits take equal
+  ///     widths.
+  ///   - base: core's base props.
   public init(
-    _ content: String,
-    type: AstryxTextType = .body,
-    color: AstryxTextColor? = nil,
-    size: AstryxTextSize? = nil,
-    weight: AstryxTextWeight? = nil
+    _ children: String,
+    type: TextType? = nil,
+    size: TextSize? = nil,
+    color: TextColor? = nil,
+    weight: TextWeight? = nil,
+    maxLines: Double? = nil,
+    justify: TextJustify? = nil,
+    hasStrikethrough: Bool? = nil,
+    hasTabularNumbers: Bool? = nil,
+    base: AstryxBaseProps = AstryxBaseProps()
   ) {
-    self.content = content
-    self.type = type
-    self.color = color
-    self.size = size
-    self.weight = weight
+    self.init(
+      TextProps(
+        type: type,
+        children: children,
+        size: size,
+        color: color,
+        weight: weight,
+        maxLines: maxLines,
+        justify: justify,
+        hasStrikethrough: hasStrikethrough,
+        hasTabularNumbers: hasTabularNumbers,
+        base: base
+      )
+    )
   }
 
   public var body: some View {
-    let sizeToken = size?.token ?? "\(type.token)-size"
-    let weightToken = weight?.token ?? "\(type.token)-weight"
-    SwiftUI.Text(content)
-      .font(astryx.font(size: sizeToken, 14, weight: weightToken))
-      .foregroundStyle(astryx.color((color ?? type.defaultColor).token))
+    styled(SwiftUI.Text(props.children))
+      .astryxMaxLines(props.maxLines)
+      .multilineTextAlignment(props.justify?.alignment ?? inheritedAlignment)
+      .astryxBase(props.base)
+  }
+
+  func styled(_ text: SwiftUI.Text) -> SwiftUI.Text {
+    var text = text
+    let font = astryx.tokens.font
+    let type = props.type ?? .body
+    if let style = font.style(type) {
+      var style = style
+      if let size = props.size { style.size = font.size(size) }
+      if let weight = props.weight { style.weight = font.weight(named: weight.rawValue) }
+      text = text.font(astryx.font(style))
+    } else if let size = props.size {
+      // `inherit` with a size: SwiftUI cannot change only the size of an
+      // inherited font, so it draws the body family at normal weight (or the
+      // given weight) at that size, a documented gap.
+      let weight = font.weight(named: props.weight?.rawValue ?? "normal")
+      text = text.font(astryx.font(TypeStyle(size: font.size(size), weight: weight, families: font.familyBody)))
+    } else if let weight = props.weight {
+      text = text.fontWeight(astryx.fontWeight(font.weight(named: weight.rawValue)))
+    }
+    if let color = astryx.tokens.color.text(named: (props.color ?? Self.defaultColor(type)).rawValue) {
+      text = text.foregroundStyle(color)
+    }
+    if props.hasStrikethrough == true { text = text.strikethrough() }
+    if props.hasTabularNumbers == true { text = text.monospacedDigit() }
+    return text
+  }
+
+  /// The color core's Text uses when none is given.
+  static func defaultColor(_ type: TextType) -> TextColor {
+    switch type {
+    case .supporting: .secondary
+    case .inherit: .inherit
+    default: .primary
+    }
   }
 }

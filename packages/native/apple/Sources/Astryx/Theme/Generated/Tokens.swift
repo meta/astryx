@@ -999,6 +999,30 @@ public struct FontTokens: Equatable, Sendable {
   public var bodySize: CGFloat
   /// `--text-body-weight`
   public var bodyWeight: CGFloat
+  /// `--text-code-leading`
+  public var codeLeading: CGFloat
+  /// `--text-code-size`
+  public var codeSize: CGFloat
+  /// `--text-code-weight`
+  public var codeWeight: CGFloat
+  /// `--text-display-1-leading`
+  public var display1Leading: CGFloat
+  /// `--text-display-1-size`
+  public var display1Size: CGFloat
+  /// `--text-display-1-weight`
+  public var display1Weight: CGFloat
+  /// `--text-display-2-leading`
+  public var display2Leading: CGFloat
+  /// `--text-display-2-size`
+  public var display2Size: CGFloat
+  /// `--text-display-2-weight`
+  public var display2Weight: CGFloat
+  /// `--text-display-3-leading`
+  public var display3Leading: CGFloat
+  /// `--text-display-3-size`
+  public var display3Size: CGFloat
+  /// `--text-display-3-weight`
+  public var display3Weight: CGFloat
   /// `--font-family-body`
   public var familyBody: [String]
   /// `--font-family-code`
@@ -1096,6 +1120,18 @@ public struct FontTokens: Equatable, Sendable {
     bodyLeading: CGFloat,
     bodySize: CGFloat,
     bodyWeight: CGFloat,
+    codeLeading: CGFloat,
+    codeSize: CGFloat,
+    codeWeight: CGFloat,
+    display1Leading: CGFloat,
+    display1Size: CGFloat,
+    display1Weight: CGFloat,
+    display2Leading: CGFloat,
+    display2Size: CGFloat,
+    display2Weight: CGFloat,
+    display3Leading: CGFloat,
+    display3Size: CGFloat,
+    display3Weight: CGFloat,
     familyBody: [String],
     familyCode: [String],
     familyHeading: [String],
@@ -1146,6 +1182,18 @@ public struct FontTokens: Equatable, Sendable {
     self.bodyLeading = bodyLeading
     self.bodySize = bodySize
     self.bodyWeight = bodyWeight
+    self.codeLeading = codeLeading
+    self.codeSize = codeSize
+    self.codeWeight = codeWeight
+    self.display1Leading = display1Leading
+    self.display1Size = display1Size
+    self.display1Weight = display1Weight
+    self.display2Leading = display2Leading
+    self.display2Size = display2Size
+    self.display2Weight = display2Weight
+    self.display3Leading = display3Leading
+    self.display3Size = display3Size
+    self.display3Weight = display3Weight
     self.familyBody = familyBody
     self.familyCode = familyCode
     self.familyHeading = familyHeading
@@ -1201,6 +1249,18 @@ public struct FontTokens: Equatable, Sendable {
     case "text-body-leading": bodyLeading
     case "text-body-size": bodySize
     case "text-body-weight": bodyWeight
+    case "text-code-leading": codeLeading
+    case "text-code-size": codeSize
+    case "text-code-weight": codeWeight
+    case "text-display-1-leading": display1Leading
+    case "text-display-1-size": display1Size
+    case "text-display-1-weight": display1Weight
+    case "text-display-2-leading": display2Leading
+    case "text-display-2-size": display2Size
+    case "text-display-2-weight": display2Weight
+    case "text-display-3-leading": display3Leading
+    case "text-display-3-size": display3Size
+    case "text-display-3-weight": display3Weight
     case "text-heading-1-leading": heading1Leading
     case "text-heading-1-size": heading1Size
     case "text-heading-1-weight": heading1Weight

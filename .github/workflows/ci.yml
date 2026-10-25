@@ -40,8 +40,11 @@ on:
 
 permissions: {}
 
+# One group per pull request (a fork's branch name can repeat across forks),
+# so a new push cancels the superseded run. Merge-queue entries and dispatches
+# get their own groups and are never cancelled by a pull request.
 concurrency:
-  group: 'ci-${{ github.event.merge_group.head_sha || github.head_ref || github.run_id }}'
+  group: 'ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.run_id }}'
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
@@ -663,14 +666,14 @@ jobs:
         run: pnpm lab:readiness:check
 
       - name: Run this shard of the UI tests
-        run: pnpm vitest run --project ui --exclude packages/core/src/Markdown/Markdown.fr23.perf.test.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
 
       # A child process isolates engine state, not CPU or memory contention.
       # FR23 must wait until this runner's other UI workers have exited
       # (AST-036); the other shards run on other machines.
       - name: Run the isolated Markdown benchmark
-        run: pnpm vitest run --project ui packages/core/src/Markdown/Markdown.fr23.perf.test.ts --no-file-parallelism
+        run: pnpm test:ui:isolated
         if: matrix.shard == 1 && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
 
   test-node:
@@ -705,7 +708,7 @@ jobs:
       - uses: ./.github/actions/setup
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true'
 
-      - run: pnpm vitest run --project node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true'
 
       # Theme-family compilation is owned by `theme-build`, not Build. Until
@@ -716,17 +719,9 @@ jobs:
         if: matrix.shard == 1 && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
-      - name: Build theme-family compiler dependencies
+      - name: Run the theme-family contract
         if: matrix.shard == 1 && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/core build
-
-      - name: Generate the maintained theme-family fixture
-        if: matrix.shard == 1 && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/sandbox generate:theme-family
-
-      - name: Run theme family cascade guard
-        if: matrix.shard == 1 && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: node .github/scripts/theme-family-cascade.js
+        run: pnpm test:theme-family
 
   # Native Swift: the Swift packages of the experimental, canary-only
   # @astryxdesign/native (AST-082) build and test only on macOS. They are
@@ -1190,85 +1185,25 @@ jobs:
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
         run: pnpm build
 
-      - name: Typecheck component docs
+      # Every workspace package's own `typecheck` script: its sources and
+      # tests, its doc examples, and any declarations it emits. A new package
+      # or tsconfig joins by defining or extending that script, not this job.
+      # A PR head cut before `pnpm typecheck` existed runs the previous list,
+      # loaded from the merge commit these steps come from.
+      - name: Typecheck every package
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/core typecheck:docs
-
-      - name: Typecheck lab docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/lab typecheck:docs
-
-      - name: Typecheck charts docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/charts typecheck:docs
-
-      - name: Typecheck rich text docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/richtext typecheck:docs
-
-      - name: Typecheck Vega docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/vega typecheck:docs
-
-      - name: Typecheck template docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/cli typecheck:template-docs
-
-      # Full-package strict checkJs over the CLI (src, bin, scripts, docs, and
-      # the emitted templates). Requires the `pnpm build` above so the template
-      # .tsx sources can resolve the built @astryxdesign/{core,charts,lab} types.
-      - name: Typecheck CLI (strict)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/cli typecheck:strict
-
-      - name: Typecheck storybook
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/storybook typecheck
-
-      - name: Typecheck core (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/core typecheck
-
-      # The other component packages' own sources and tests, like core's: their
-      # typecheck:docs steps above cover only their .doc.mjs files.
-      - name: Typecheck lab (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/lab typecheck
-
-      - name: Typecheck charts (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/charts typecheck
-
-      - name: Typecheck rich text (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/richtext typecheck
-
-      - name: Typecheck Vega (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/vega typecheck
-
-      # The accessibility spec-test contracts are consumed as TypeScript source
-      # by Vitest and Playwright, and neither runner typechecks. This is the
-      # only gate over them.
-      - name: Typecheck accessibility spec-test contracts
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/a11y-spec typecheck
-
-      # The canary-only @astryxdesign/native is outside the root build, and
-      # Vitest neither typechecks its source nor loads every platform's types.
-      # Its build emits one declaration file per type-resolution condition
-      # (ios, android, macos, windows, shared); the last step checks them all.
-      - name: Typecheck native
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native typecheck
-
-      - name: Build native platform types
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native build
-
-      - name: Typecheck native platform types
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native typecheck:types
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.typecheck ? 0 : 1)"; then
+            pnpm typecheck
+          else
+            echo "::notice title=Head predates pnpm typecheck::Running the previous typecheck list; merge main to use pnpm typecheck."
+            legacy="$RUNNER_TEMP/typecheck-predating-head.sh"
+            git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+            git show "$WORKFLOW_SHA:.github/scripts/typecheck-predating-head.sh" > "$legacy"
+            bash "$legacy"
+          fi
 
   # Sandbox preview build — the single slowest piece of PR CI (~4min), run as
   # its own job so it overlaps build-storybook instead of serializing after it.
@@ -3819,27 +3754,14 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Verify packed consumer dependency contract
-        run: pnpm vitest run packages/build/src/packed-consumer.test.mjs --project node --maxWorkers=1
-
       - name: Install Playwright
         run: npx playwright install chromium
 
-      # The guard imports the plugin's build artifact, the same one a consumer
-      # installs.
-      - name: Build the Vite plugin
-        run: pnpm -F @astryxdesign/build build
-
-      - name: Run Build CSS-layer cascade guard
-        run: node .github/scripts/theme-layer-cascade.js
-
-      # A compile-time ancestor selector on another workspace package's marker
-      # (lab's rule on core's indicatorScope) matches in a real browser: see
-      # scripts/stylex-module-resolution.cjs.
-      - name: Run cross-package StyleX marker browser check
-        env:
-          ASTRYX_STYLEX_BROWSER: '1'
-        run: pnpm vitest run scripts/stylex-module-resolution.browser.test.mjs --project node --maxWorkers=1
+      # The Build package's contracts: the packed consumer's dependencies, the
+      # production CSS-layer cascade, and cross-package StyleX markers in a
+      # real browser. `pnpm test:build` owns the list.
+      - name: Run Build package contracts
+        run: pnpm test:build
 
   # Guest token boundaries cross portals and the host light/dark cascade. This
   # requires a production browser render; source and jsdom checks cannot prove

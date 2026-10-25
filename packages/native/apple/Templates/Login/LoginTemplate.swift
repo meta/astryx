@@ -71,8 +71,8 @@ struct LoginTemplateContent: View {
       Card(padding: 8) {
         VStack(alignment: .leading, spacing: astryx.space(4)) {
           VStack(spacing: astryx.space(1)) {
-            Heading("Sign in", level: 2)
-            Text("Enter your credentials to continue", color: .secondary, size: .sm)
+            Heading("Sign in", level: .v2)
+            Text("Enter your credentials to continue", size: .sm, color: .secondary)
           }
           .frame(maxWidth: .infinity)
 

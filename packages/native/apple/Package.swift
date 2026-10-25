@@ -32,6 +32,10 @@ let package = Package(
       resources: [.process("Resources")]
     ),
     .testTarget(name: "AstryxNativeTests", dependencies: ["AstryxNative"], path: "Tests/AstryxNativeTests"),
-    .testTarget(name: "AstryxTests", dependencies: ["Astryx"], path: "Tests/AstryxTests"),
+    .testTarget(
+      name: "AstryxTests", dependencies: ["Astryx"], path: "Tests/AstryxTests",
+      // A tiny image that stands in for an app-shipped icon asset.
+      resources: [.process("Resources")]
+    ),
   ]
 )

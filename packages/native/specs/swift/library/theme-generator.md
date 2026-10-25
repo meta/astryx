@@ -63,7 +63,8 @@ re-implements theme logic.
   core's resolved token names: `color-*`, `spacing-*`, `radius-*`,
   `size-element-*`, `border-width`, `font-size-*`, `font-weight-*`,
   `font-family-*`, and `text-<style>-*` for `heading-1` to `heading-6`,
-  `body`, `large`, `label`, and `supporting`. Core fills every shared token a
+  `display-1` to `display-3`, `body`, `large`, `label`, `supporting`, and
+  `code`, the type styles core's Text and Heading draw. Core fills every shared token a
   theme leaves out, so every theme has the same shared members. Adding a group
   changes this spec, the generator, and the Swift reader in one pull request,
   together with the first component that reads it.
@@ -180,7 +181,9 @@ re-implements theme logic.
   portable theme. When the first component reads `material`, the generator
   takes the native theme, reads the wrapped portable theme from it, and fills
   `Theme.native` already resolved per OS version range, so one call
-  produces one file. Composing native intent inside `defineTheme` is outside
+  produces one file. A platform entry's icons (`{systemName}` or
+  `{assetName}`, AST-082 FR17) become `Theme.icons` entries of
+  `.systemName(_:)` or `.assetName(_:)`. Composing native intent inside `defineTheme` is outside
   this spec.
 
 - **D4 — Increase Contrast is outside this spec.** Core themes have light and

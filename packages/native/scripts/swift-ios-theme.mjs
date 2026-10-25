@@ -39,7 +39,7 @@ const REGENERATE = 'pnpm -F @astryxdesign/native generate:swift-ios';
 // G5: the token groups Swift keeps. Everything else (shadows, motion, layout
 // breakpoints) stays out until a component needs it.
 const KEEP =
-  /^--(color-|spacing-|radius-|size-element-|border-width$|font-size-|font-weight-|font-family-|text-(heading-\d|body|large|label|supporting)-)/;
+  /^--(color-|spacing-|radius-|size-element-|border-width$|font-size-|font-weight-|font-family-|text-(heading-\d|display-\d|body|large|label|supporting|code)-)/;
 const REM = 16;
 
 // Words Swift reserves as identifiers. A member or theme name that equals one
