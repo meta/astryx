@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[feat] `astryx upgrade` now reports stale generated files in a new `regenerate` receipt field, and reports code a codemod can identify but not migrate safely in the existing `declinedCandidates` list instead of failing. A manual migration is a `declinedCandidates` row with the file, its line as `location` when known, and a `reason` that starts with `manual migration needed (<codemod>):` followed by what to change (a file with several declined findings keeps one row listing each, with its own prefix, joined by `; `); it is printed after the run, does not fail the upgrade, and the run completes and exits 0. A generated file that must be rebuilt, such as stale theme CSS that `validate-data-token-ownership` reports and `astryx theme build` regenerates, is listed in `regenerate` with its rebuild command until it is rebuilt; a `hooks.postCodemod` command that rebuilds it clears it. When the project protects the file (for example an `@generated` header), the run is incomplete exactly as for a protected file (`complete: false`, `errorCode: "ERR_CODEMOD_PROTECTED"`, exit 1); when nothing protects it, it stays a codemod error (`ERR_CODEMOD_FAILED`, as before), now with the rebuild command in `regenerate`. Protected generated files also appear in `regenerate` with their header's `Command:`, and a reported file the project marks generated also appears in `protectedFiles` with the rule that protects it. A real codemod failure keeps its `ERR_CODEMOD_FAILED` error, and the `receipt` it carries lists both too.
+
+@ejhammond

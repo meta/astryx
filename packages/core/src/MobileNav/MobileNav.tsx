@@ -632,6 +632,9 @@ export function MobileNav({
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isOpen,
     onDismiss: () => onOpenChange(false),
+    // The dialog's document is this layer's: rendered into an iframe or a
+    // Picture-in-Picture window, it ranks with the layers opened inside it.
+    getContainer: () => dialogRef.current,
   });
 
   // The native `cancel` event is the browser's own close-watcher firing: an

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^internal/a11y-spec/src/patterns/toggle-button
 
 /**
  * @file ToggleButton.a11y.chromium.spec.ts
