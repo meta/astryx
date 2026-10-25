@@ -907,8 +907,7 @@ for (const globals of [
     }
     // A fence that names no language keeps its corner copy button beside the
     // code, never over it: the text ends as far from the frame's inline end
-    // on both surfaces, so a long line wraps at the same place in read and
-    // edit mode.
+    // on both surfaces.
     const textInset = (surface: string, key: string) =>
       page.evaluate(
         ({selector}) => {
