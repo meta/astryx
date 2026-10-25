@@ -9,17 +9,24 @@
  * @position Test for GestureRecognizerOptions.claimsTouches
  */
 
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {createHarness, ManualClock} from './harness';
+import {coarsePrimaryPointer} from './pointerQuery';
 
 describe('a recognizer that never claims (a watcher)', () => {
   let detach: (() => void)[] = [];
+  // A phone: the host attaches only where the primary pointer is coarse.
+  let restorePointer: () => void;
+  beforeEach(() => {
+    restorePointer = coarsePrimaryPointer();
+  });
   afterEach(() => {
     detach.forEach(release => release());
     detach = [];
     document.body.innerHTML = '';
+    restorePointer();
   });
 
   it('runs alongside a claiming pan on the same touch, and claims nothing', () => {
@@ -89,5 +96,42 @@ describe('a recognizer that never claims (a watcher)', () => {
         (options as AddEventListenerOptions | undefined)?.passive === false,
     );
     expect(blocking).toHaveLength(0);
+  });
+
+  it('leaves the browser every touch behavior: its direction writes no touch-action', () => {
+    document.body.innerHTML = '<div id="list"></div><div id="row"></div>';
+    const list = document.getElementById('list') as HTMLElement;
+    const row = document.getElementById('row') as HTMLElement;
+    const host = new GestureHost(document, {clock: new ManualClock()});
+    const listStyle = vi.spyOn(list.style, 'setProperty');
+    const rowStyle = vi.spyOn(row.style, 'setProperty');
+    detach.push(
+      host.attach(
+        list,
+        new PanGestureRecognizer({
+          name: 'watcher',
+          direction: 'vertical',
+          claimsTouches: false,
+        }),
+      ),
+      host.attach(
+        row,
+        new PanGestureRecognizer({
+          name: 'watcher',
+          direction: 'vertical',
+          claimsTouches: false,
+        }),
+      ),
+      // A claiming pan beside it on the same element keeps its own.
+      host.attach(
+        row,
+        new PanGestureRecognizer({name: 'swipe', direction: 'horizontal'}),
+      ),
+    );
+    expect(listStyle).not.toHaveBeenCalledWith(
+      'touch-action',
+      expect.anything(),
+    );
+    expect(rowStyle).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
   });
 });

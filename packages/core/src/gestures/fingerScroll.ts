@@ -14,15 +14,24 @@
  * (the momentum after the lift is still the finger's). A scroll that ends
  * while its finger still rests there stays the finger's until the lift. A
  * scroll the program starts while no finger is down there (`scrollTo`, a
- * status-bar tap) is not. No clock is involved. The host keeps the one
- * finger record; this module adds only passive scroll listeners, and only
- * while something is watched.
+ * status-bar tap) is not. Where the browser fires no `scrollend` (mobile
+ * Safari before 26), a finger's scroll ends once its scroll events go quiet
+ * for `SCROLL_QUIET_MS`, on the host's clock. The host keeps the one finger
+ * record; this module adds only passive scroll listeners, and only while
+ * something is watched.
  */
 
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import type {GestureHost} from './GestureHost';
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+
+/**
+ * Where the browser fires no `scrollend` (mobile Safari before 26), a watched
+ * scroller's scroll counts as ended once no scroll event came for this long.
+ * GUESS: six 60 Hz frames; a scroll reports every frame until it stops.
+ */
+const SCROLL_QUIET_MS = 100;
 
 interface Watch {
   /** Watched scrollers, and how many watchers each has. */
@@ -42,6 +51,30 @@ function start(host: GestureHost, watch: Watch): () => void {
     const target = event.target === doc ? doc : event.target;
     return target instanceof Node ? target : null;
   };
+  // A finger's scroll ends at the scroller's scrollend, or, where the
+  // browser fires none, once its scroll events go quiet (host's clock).
+  const endScroll = (scroller: Node): void => {
+    if (!watch.fingerScrollers.has(scroller)) {
+      return;
+    }
+    if (host.isFingerDownIn(scroller)) {
+      // The finger still rests there: the scroll is its until the lift.
+      watch.endedWhileDown.add(scroller);
+    } else {
+      watch.fingerScrollers.delete(scroller);
+    }
+  };
+  const quietTimers = new Map<Node, unknown>();
+  const clearQuietTimer = (scroller: Node): void => {
+    if (quietTimers.has(scroller)) {
+      host.clock.clearTimeout(quietTimers.get(scroller));
+      quietTimers.delete(scroller);
+    }
+  };
+  const firesScrollEnd = (): boolean => {
+    const view = doc.defaultView;
+    return view == null || 'onscrollend' in view;
+  };
   const onScroll = (event: Event): void => {
     const scroller = scrollerOf(event);
     if (scroller == null || !watch.scrollers.has(scroller)) {
@@ -51,17 +84,21 @@ function start(host: GestureHost, watch: Watch): () => void {
     if (host.isFingerDownIn(scroller)) {
       watch.fingerScrollers.add(scroller);
     }
+    if (watch.fingerScrollers.has(scroller) && !firesScrollEnd()) {
+      clearQuietTimer(scroller);
+      quietTimers.set(
+        scroller,
+        host.clock.setTimeout(() => {
+          quietTimers.delete(scroller);
+          endScroll(scroller);
+        }, SCROLL_QUIET_MS),
+      );
+    }
   };
   const onScrollEnd = (event: Event): void => {
     const scroller = scrollerOf(event);
-    if (scroller == null || !watch.fingerScrollers.has(scroller)) {
-      return;
-    }
-    if (host.isFingerDownIn(scroller)) {
-      // The finger still rests there: the scroll is its until the lift.
-      watch.endedWhileDown.add(scroller);
-    } else {
-      watch.fingerScrollers.delete(scroller);
+    if (scroller != null) {
+      endScroll(scroller);
     }
   };
   // A scroll that ended while its finger rested ends with the lift.
@@ -88,6 +125,9 @@ function start(host: GestureHost, watch: Watch): () => void {
     } else {
       doc.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
       doc.removeEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+      for (const scroller of [...quietTimers.keys()]) {
+        clearQuietTimer(scroller);
+      }
       watch.fingerScrollers.clear();
       watch.endedWhileDown.clear();
     }
