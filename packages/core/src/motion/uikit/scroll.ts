@@ -20,18 +20,17 @@
 
 import {registerMotionTable} from '../roles';
 
-/**
- * UIScrollView's deceleration, rubber band, bounce, paging and touch-delay
- * values.
- * @experimental
- */
+// The value of `scroll.delaysContentTouchesMs` (sourced there), its own
+// export so the press clocks read it without the rest of the table
+// (`architecture:component-style-authoring` INV6).
+export const DELAYS_CONTENT_TOUCHES_MS = 150;
 
 export const scroll = {
   decelerationRate: {
     /**
      * Normal deceleration: the release velocity is multiplied by this every
      * millisecond, as a continuous exponential (UIScrollView keeps ln r,
-     * −0.002002, and velocities in pt/ms; decay.ts). The scroll view's own
+     * −0.002002, and velocities in pt/ms). The scroll view's own
      * target for a release (`scrollViewWillEndDragging`) is
      * v · r ÷ (1 − r), within 1 %: WWDC18 803's projection function.
      * @source apple-docs https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.struct/normal
@@ -59,7 +58,7 @@ export const scroll = {
   rubberBand: {
     /**
      * c in b = (1 − 1 ÷ (x·c ÷ d + 1))·d, d = the scroll view's size on the
-     * axis (rubberBand.ts), x = the finger's travel past the edge after the
+     * axis, x = the finger's travel past the edge after the
      * pan's 10 pt hysteresis.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, UIScrollView offsets released 100 / 300 / 600 pt past
@@ -86,7 +85,7 @@ export const scroll = {
   paging: {
     /**
      * Deceleration rate a paging release is projected with to pick the next
-     * page (projection.ts `selectPage`).
+     * page.
      * @source GUESS — UIScrollView paging behaves like a fast scroll view;
      *   the rate it uses internally is not documented
      * @measure M-PG1
@@ -110,12 +109,12 @@ export const scroll = {
    *   real HID touches at 60 fps, recorded with the touch press model
    *   (PRESS_ONSET_MS in packages/core/src/utils/pressGesture.ts, 2026-10-06)
    */
-  delaysContentTouchesMs: 150,
+  delaysContentTouchesMs: DELAYS_CONTENT_TOUCHES_MS,
   /**
    * Scroll-to-top after a status-bar tap: not a spring. The offset
    * approaches the top as 1 − e^(−9.7 t) whatever the distance (done in about
    * 1.6 s for 500, 2000 or 8000 pt), which is a decay at this per-millisecond
-   * rate (e^(−0.0097)) whose rest point is the top: `animator.decay` with a
+   * rate (e^(−0.0097)) whose rest point is the top: a coast (coast.ts) with a
    * starting velocity of 9.7 × the distance per second.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, setContentOffset log after status-bar taps (starts 85–95
@@ -129,7 +128,6 @@ export const scroll = {
  * retune (motion/roles.ts). Nothing registers on import: the touch code that
  * animates with this table calls it once (it is idempotent), so a page that
  * never does ships no registry.
- * @experimental
  */
 export function registerScrollTable(): void {
   registerMotionTable('scroll', scroll, {

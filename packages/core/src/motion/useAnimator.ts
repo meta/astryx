@@ -26,10 +26,6 @@
 import {useState} from 'react';
 import {createAnimator, type Animator, type AnimatorOptions} from './animator';
 
-/**
- * What `useAnimator` returns.
- * @experimental
- */
 export interface UseAnimatorResult {
   /** Callback ref for the animated element; stable. */
   readonly ref: (element: HTMLElement | null) => void;
@@ -42,11 +38,13 @@ export interface UseAnimatorResult {
  *
  * @example
  * ```
+ * // Once, at module scope, so the springs follow the theme's roles:
+ * registerSpringsTable();
+ *
  * const {ref, animator} = useAnimator();
  * const open = () => animator.animate({y: 0}, {spring: springs.sheetPresent});
  * return <div ref={ref} />;
  * ```
- * @experimental
  */
 export function useAnimator(options?: AnimatorOptions): UseAnimatorResult {
   const [result] = useState<UseAnimatorResult>(() => {

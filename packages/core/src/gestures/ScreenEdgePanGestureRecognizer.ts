@@ -25,11 +25,9 @@ import {
 } from './PanGestureRecognizer';
 import type {GestureEventContext, GestureTouch} from './types';
 
-/** @experimental */
 export type ScreenEdge =
   'left' | 'right' | 'top' | 'bottom' | 'leading' | 'trailing';
 
-/** @experimental */
 export interface ScreenEdgePanGestureRecognizerOptions extends Omit<
   PanGestureRecognizerOptions,
   'direction'
@@ -40,7 +38,6 @@ export interface ScreenEdgePanGestureRecognizerOptions extends Omit<
   edgeRegion?: number;
 }
 
-/** @experimental */
 export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
   edges: ReadonlyArray<ScreenEdge>;
   edgeRegion: number;

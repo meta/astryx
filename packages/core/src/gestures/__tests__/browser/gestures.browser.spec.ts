@@ -8,7 +8,7 @@
  * @output Browser proof of the negotiation the unit tests cannot see:
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
- *   with no ghost click, scroll handoff at the content's edge, pinch-zoom
+ *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
  *   left to the browser, a second finger that never breaks the first, and
  *   timing taken from event timestamps under a blocked main thread
  * @position Browser tests of packages/core/src/gestures (see
@@ -30,7 +30,6 @@ interface Entry {
   x?: number;
   y?: number;
   scale?: number;
-  handoff?: boolean;
   beganAt?: number | null;
   startedAt?: number;
 }
@@ -500,7 +499,7 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   );
 });
 
-test('scroll handoff: at the top the pull is the sheet’s at once', async ({
+test('scroll edge: at the top the pull is the sheet’s at once', async ({
   page,
   browserName,
 }) => {
@@ -510,14 +509,13 @@ test('scroll handoff: at the top the pull is the sheet’s at once', async ({
   const entries = await log(page);
   const sheet = entries.filter(entry => entry.name === 'sheet');
   expect(sheet[0]?.state).toBe('began');
-  expect(sheet[0]?.handoff).toBe(false);
   expect(
     sheet.filter(entry => entry.state === 'changed').at(-1)?.y,
   ).toBeCloseTo(96 - 10, 0);
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test('scroll handoff: mid-content the browser scrolls first and the sheet takes the rest', async ({
+test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({
   page,
   browserName,
 }) => {
@@ -534,14 +532,10 @@ test('scroll handoff: mid-content the browser scrolls first and the sheet takes 
   await driver.play(drag(start, {x: start.x, y: start.y + 200}, 25));
   const entries = await log(page);
   const sheet = entries.filter(entry => entry.name === 'sheet');
+  // The content takes the whole drag: it scrolls to its top, and the travel
+  // past that point never becomes the sheet's.
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
-  expect(sheet[0]?.state).toBe('began');
-  expect(sheet[0]?.handoff).toBe(true);
-  // The content took the first 60 px (and the browser its touch slop); the
-  // sheet got the rest of the finger's travel.
-  const final = sheet.filter(entry => entry.state === 'changed').at(-1)?.y ?? 0;
-  expect(final).toBeGreaterThan(200 - 60 - 24);
-  expect(final).toBeLessThanOrEqual(200 - 60 + 1);
+  expect(sheet.some(entry => entry.state === 'began')).toBe(false);
 });
 
 /** Two fingers that land one after the other and spread apart. */
