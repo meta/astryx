@@ -19,6 +19,7 @@ import {
   generateAdaptationCSS,
   generateThemeCSS,
   type DefineThemeInput,
+  type DefinedTheme,
 } from './index';
 
 describe('motion roles in a theme', () => {
@@ -31,7 +32,7 @@ describe('motion roles in a theme', () => {
             'springs.alertPresent': {response: 0.5, dampingRatio: 0.85},
           },
           durations: {'navigation.transitionMs': 300},
-          curves: {'timing.curves.easeInOut': [0.4, 0, 0.2, 1]},
+          curves: {'timing.curves.move': [0.4, 0, 0.2, 1]},
         },
         'motion',
       ),
@@ -39,7 +40,7 @@ describe('motion roles in a theme', () => {
       '--motion-springs-sheet-present': '0.6s 0.1',
       '--motion-springs-alert-present': '0.5s 0.15',
       '--motion-navigation-transition-ms': '300ms',
-      '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
     });
   });
 
@@ -53,14 +54,17 @@ describe('motion roles in a theme', () => {
       expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
     ).toThrow(/"springs\.sheetPresent" is a spring/);
     expect(() =>
-      expandMotionRoles(
-        {curves: {'timing.curves.easeIn': [1.5, 0, 1, 1]}},
-        'm',
-      ),
-    ).toThrow(/m\.curves\["timing\.curves\.easeIn"\]: a curve's x1 and x2/);
+      expandMotionRoles({curves: {'timing.curves.exit': [1.5, 0, 1, 1]}}, 'm'),
+    ).toThrow(/m\.curves\["timing\.curves\.exit"\]: a curve's x1 and x2/);
     expect(() =>
       expandMotionRoles({durations: {'timing.press.flashMs': -5}}, 'm'),
     ).toThrow(/≥ 0/);
+    expect(() =>
+      expandMotionRoles(
+        {springs: {'springs.sheetPresent': {duration: 0.5, bounce: 1}}},
+        'm',
+      ),
+    ).toThrow(/m\.springs\["springs\.sheetPresent"\]: a spring must settle/);
   });
 
   it('takes the duration scale whole or not at all', () => {
@@ -111,6 +115,60 @@ describe('motion roles in a theme', () => {
   });
 });
 
+describe('a theme written to spec:AST-094 FR4', () => {
+  // FR4's role table: every role the record names, at its own default.
+  const FR4_ROLES = {
+    springs: {
+      'springs.fingerTracking': {response: 0.15, dampingRatio: 0.86},
+      'springs.emphasis': {duration: 0.5, bounce: 0.3},
+      'springs.settle': {duration: 0.5, bounce: 0},
+      'springs.quickChange': {duration: 0.5, bounce: 0.15},
+      'springs.viewChange': {mass: 3, stiffness: 1000, damping: 500},
+      'springs.timedChange': {duration: 0.5, bounce: 0},
+      'springs.stateChange': {response: 0.55, dampingRatio: 1},
+      'springs.directChange': {response: 0.5, dampingRatio: 0.825},
+      'springs.menuOpen': {response: 0.32, dampingRatio: 0.8},
+      'springs.menuClose': {response: 0.35, dampingRatio: 0.85},
+      'springs.subMenuOpen': {response: 0.4, dampingRatio: 0.85},
+      'springs.subMenuBack': {response: 0.4, dampingRatio: 1},
+    },
+    durations: {'timing.stateChangeMs': 250},
+    curves: {
+      'timing.curves.viewChange': [0.25, 0.1, 0.25, 1],
+      'timing.curves.exit': [0.42, 0, 1, 1],
+      'timing.curves.entrance': [0, 0, 0.58, 1],
+      'timing.curves.move': [0.42, 0, 0.58, 1],
+    },
+  } as const;
+
+  it('compiles every role the record names, one variable each', () => {
+    const theme = defineTheme({name: 'fr4', motion: FR4_ROLES});
+    const motionTokens = Object.keys(theme.tokens).filter(name =>
+      name.startsWith('--motion-'),
+    );
+    expect(motionTokens).toHaveLength(17);
+    expect(theme.tokens['--motion-springs-sub-menu-back']).toBe('0.4s 0');
+    expect(theme.tokens['--motion-timing-curves-move']).toBe(
+      'cubic-bezier(0.42, 0, 0.58, 1)',
+    );
+  });
+
+  it('refuses keyboard motion, which follows the keyboard', () => {
+    expect(() =>
+      expandMotionRoles(
+        {springs: {'springs.keyboard': {response: 0.5, dampingRatio: 1}}},
+        'm',
+      ),
+    ).toThrow(/"springs\.keyboard" is not a motion role/);
+    expect(() =>
+      expandMotionRoles(
+        {durations: {'timing.keyboardNotificationMs': 400}},
+        'm',
+      ),
+    ).toThrow(/"timing\.keyboardNotificationMs" is not a motion role/);
+  });
+});
+
 describe('motion roles in adaptation rules', () => {
   function adaptive(
     rules: NonNullable<NonNullable<DefineThemeInput['adaptations']>['rules']>,
@@ -132,6 +190,82 @@ describe('motion roles in adaptation rules', () => {
     expect(() =>
       adaptive([{when: {motion: 'reduce'}, value: {motion: {fast: 100}}}]),
     ).toThrow(/must supply `fast`, `medium`, and `ratio`/);
+  });
+
+  it('keeps duplicate conditions and a later root-restoring role write, in order', () => {
+    const theme = defineTheme({
+      name: 'ordered-motion',
+      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              motion: {
+                springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+              },
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              motion: {
+                springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}},
+              },
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+    expect(css.split('@media (pointer: coarse)')).toHaveLength(3);
+    const quick = css.indexOf('--motion-springs-sheet-present: 0.4s 0;');
+    const restored = css.lastIndexOf(
+      '--motion-springs-sheet-present: 0.6s 0.1',
+    );
+    expect(quick).toBeGreaterThan(-1);
+    expect(restored).toBeGreaterThan(quick);
+  });
+
+  it('carries role writes through a built theme to its adaptation blocks', () => {
+    const live = adaptive([
+      {
+        when: {pointer: 'coarse'},
+        value: {
+          motion: {
+            springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+          },
+        },
+      },
+    ]);
+    const built = {
+      name: live.name,
+      __built: true,
+      tokens: live.tokens,
+      components: live.components,
+      __adaptations: live.__adaptations,
+      __axes: live.__axes,
+    } as DefinedTheme;
+    const child = defineTheme({name: 'built-motion-child', extends: built});
+    expect(generateAdaptationCSS(child).component).toContain(
+      '--motion-springs-sheet-present: 0.4s 0',
+    );
+  });
+
+  it('merges roles by role through extends', () => {
+    const base = defineTheme({
+      name: 'roles-base',
+      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+    });
+    const child = defineTheme({
+      name: 'roles-child',
+      extends: base,
+      motion: {
+        springs: {'springs.alertPresent': {response: 0.5, dampingRatio: 1}},
+      },
+    });
+    expect(child.tokens['--motion-springs-sheet-present']).toBe('0.6s 0.1');
+    expect(child.tokens['--motion-springs-alert-present']).toBe('0.5s 0');
   });
 
   it('refuses a platform condition, which adaptations do not have', () => {

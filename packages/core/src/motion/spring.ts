@@ -71,7 +71,6 @@ const TAU = 2 * Math.PI;
 /**
  * A spring, in Core Animation's physical vocabulary. Every other way of
  * describing a spring converts to this one.
- * @experimental
  */
 export interface Spring {
   /** Mass m of the attached object (`CASpringAnimation.mass`). */
@@ -82,10 +81,7 @@ export interface Spring {
   readonly damping: number;
 }
 
-/**
- * SwiftUI's two-parameter description: `Spring(duration:bounce:)`.
- * @experimental
- */
+/** SwiftUI's two-parameter description: `Spring(duration:bounce:)`. */
 export interface DurationBounce {
   /**
    * Perceptual duration in seconds: the period of the undamped spring, "the
@@ -99,10 +95,7 @@ export interface DurationBounce {
   readonly bounce: number;
 }
 
-/**
- * WWDC18's design-friendly description: response and damping ratio.
- * @experimental
- */
+/** WWDC18's design-friendly description: response and damping ratio. */
 export interface ResponseDamping {
   /** Period of the undamped spring in seconds. */
   readonly response: number;
@@ -231,7 +224,6 @@ export function responseDampingOf(spring: Spring): ResponseDamping {
  * (mass, stiffness, damping), SwiftUI (duration, bounce) or WWDC18
  * (response, dampingRatio). Tables keep the vocabulary of their source so a
  * value reads exactly as it was published.
- * @experimental
  */
 export type SpringDescription =
   | {
@@ -246,7 +238,6 @@ export type SpringDescription =
  * Normalizes a description to the physical `Spring`. A physical description
  * gets `springFromPhysics`' treatment: overdamping is clamped to critical, as
  * SwiftUI and Core Animation do by default.
- * @experimental
  */
 export function toSpring(description: SpringDescription): Spring {
   if ('stiffness' in description) {
@@ -281,10 +272,7 @@ export function absoluteVelocity(
   return relative * (to - from);
 }
 
-/**
- * A spring released from a value with a velocity, heading for a target.
- * @experimental
- */
+/** A spring released from a value with a velocity, heading for a target. */
 export interface SpringCurve {
   readonly spring: Spring;
   readonly from: number;
@@ -318,7 +306,6 @@ const CRITICAL_TOLERANCE = 1e-6;
  * const curve = solveSpring(springFromDurationBounce({duration: 0.5, bounce: 0}), {from: 0, to: 300});
  * curve.value(0.1); // px after 100 ms
  * ```
- * @experimental
  */
 export function solveSpring(
   spring: Spring,
