@@ -1793,8 +1793,11 @@ export function createAnimator(
         Math.abs((targets[property] as number) - valueAt(property, time)) >
           1e-9,
     );
-    let entering = opacityTo > opacityNow + 1e-6;
-    let leaving = opacityTo < opacityNow - 1e-6;
+    // Only the call's own opacity (or its role) makes it an entrance or an
+    // exit: a fade it does not name, such as a dip still running, does not.
+    const named = targets.opacity != null;
+    let entering = named && opacityTo > opacityNow + 1e-6;
+    let leaving = named && opacityTo < opacityNow - 1e-6;
     let fadeFrom = opacityNow;
     let fadeTo = opacityTo;
     let restore: number | null = null;

@@ -1092,6 +1092,45 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a drop, its reorder\u2019s rebase and the move to the new slot in one task dip once', async () => {
+    // A list row's drop under Reduce Motion: the drop from where the finger
+    // left it, then the reorder's commit (the layout moved the row by 56 px)
+    // and the move to its new slot, in one task on one clock.
+    const {animator} = reduced();
+    animator.set({y: 30});
+    const at = clock;
+    animator.animate(
+      {y: 0},
+      {spring: springs.smooth, velocity: {y: 0}},
+      {at, touchRelease: true},
+    );
+    // The commit comes a few ms later, once the first fade has begun.
+    clock += 8;
+    const at2 = clock;
+    animator.rebase({y: 56}, {at: at2});
+    animator.animate(
+      {y: 0},
+      {spring: springs.smooth},
+      {at: at2, touchRelease: true},
+    );
+    await commitFrame(clock);
+    // It never moves while visible, and fades all the way out once.
+    let lowest = 1;
+    for (let t = 0; t <= fade / 2; t += 10) {
+      const opacity = animator.get('opacity', at2 + t);
+      lowest = Math.min(lowest, opacity);
+      if (opacity > 0.01) {
+        expect(animator.get('y', at2 + t)).toBe(86);
+      }
+    }
+    expect(lowest).toBeLessThanOrEqual(0.1);
+    await advance(fade / 2);
+    expect(animator.get('y')).toBe(0);
+    await advance(fade);
+    expect(animator.get('y')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a later opacity change lands a waiting move instead of dropping it', async () => {
     const {animator} = reduced();
     const move = animator.animate({x: 100}, {spring: springs.navigationPush});
