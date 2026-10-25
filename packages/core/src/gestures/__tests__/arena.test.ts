@@ -682,3 +682,19 @@ describe('arena: review fixes', () => {
     h.finger(1).up(32);
   });
 });
+
+describe('arena: a lift that decides a waiting recognition', () => {
+  it('answers the click with the final outcome, not a defer it already resolved', () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    // r recognizes at the lift but waits for q to fail; q lifts undecided.
+    const q = new Scripted('q', {ended: () => {}});
+    const r = atLift('r');
+    r.requireToFail(q);
+    h.finger(1).down(0, 0, 0, {recognizers: [r, q], consumer});
+    const click = h.finger(1).up(40);
+    expect(h.log).toContain('r:ended@40');
+    expect(click).toBe('suppress');
+    expect(h.deferredClicks).toEqual([]);
+  });
+});

@@ -300,6 +300,10 @@ export class GestureArena {
       for (const recognizer of [...this.active]) {
         recognizer.deliverEnded(changed, context);
       }
+      // A lift can decide a waiting recognition (its requirement lifted
+      // undecided and failed): settle those first, so each click's answer is
+      // the final one, never a `defer` for a click already replayed (FR21).
+      this.reviewPending();
       for (const touch of changed) {
         const record = this.records.get(touch.id);
         if (record == null) {
