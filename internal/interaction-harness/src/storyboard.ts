@@ -26,6 +26,7 @@ import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
+import {frames} from './story';
 import type {TouchDriver} from './touch';
 
 export interface ClipBox {
@@ -54,8 +55,21 @@ export interface StoryboardOptions {
   readonly cellScale?: number;
 }
 
+/**
+ * Chromium photographs the page by copying its compositor surface. Right after
+ * the page's surface changes (a navigation, a resize) the copy can come back
+ * empty, and Chromium answers "Unable to capture screenshot" once its own five
+ * retries, issued without waiting for a new frame, have all found no surface.
+ * A capture that fails that way is taken again after the page has presented
+ * two more frames, at most this many attempts in all.
+ */
+const CAPTURE_ATTEMPTS = 3;
+const EMPTY_SURFACE_COPY = /Unable to capture screenshot/;
+
 export class Storyboard {
   readonly frames: StoryboardFrame[] = [];
+  /** Captures Chromium returned empty and that were taken again two frames later. */
+  readonly recaptures: {label: string; error: string}[] = [];
   private clipBox: ClipBox | undefined;
 
   constructor(
@@ -63,20 +77,36 @@ export class Storyboard {
     readonly options: StoryboardOptions,
   ) {}
 
-  /** Photographs the clip now and records `data` with it. */
+  /**
+   * Photographs the clip now and records `data` with it. An empty surface
+   * copy (see CAPTURE_ATTEMPTS) is taken again once the page has presented two
+   * more frames; any other failure, or a third empty copy, throws.
+   */
   async capture(
     label: string,
     t: number,
     data: Readonly<Record<string, unknown>> = {},
   ): Promise<void> {
     const clip = await this.resolveClip();
-    const png = await this.page.screenshot({
-      clip,
-      scale: 'css',
-      animations: 'allow',
-      caret: 'hide',
-    });
-    this.frames.push({label, t, data, png});
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const png = await this.page.screenshot({
+          clip,
+          scale: 'css',
+          animations: 'allow',
+          caret: 'hide',
+        });
+        this.frames.push({label, t, data, png});
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt >= CAPTURE_ATTEMPTS || !EMPTY_SURFACE_COPY.test(message)) {
+          throw error;
+        }
+        this.recaptures.push({label, error: message.split('\n')[0]});
+        await frames(this.page, 2);
+      }
+    }
   }
 
   private async resolveClip(): Promise<ClipBox | undefined> {
@@ -122,6 +152,7 @@ export class Storyboard {
       browser: this.page.context().browser()?.browserType().name() ?? null,
       viewport: this.page.viewportSize(),
       clip: this.clipBox ?? null,
+      ...(this.recaptures.length > 0 ? {recaptures: this.recaptures} : {}),
       ...extra,
       frames: this.frames.map(({label, t, data}) => ({label, t, data})),
     };
@@ -229,8 +260,11 @@ async function composeSheet(
 
 export interface AnimationStoryboardOptions extends StoryboardOptions {
   /**
-   * Frame times, ms (default every 16.7 ms to the end of the longest held
-   * animation's curve; a held end value is not filmed).
+   * Frame times, ms from the film's start: the earliest start among the held
+   * animations that end (an animation that repeats forever, such as a
+   * spinner that started earlier, neither starts nor ends the film). Default:
+   * every 16.7 ms to the latest curve end among them, and that end itself,
+   * each animation at its own offset (a held end value is not filmed).
    */
   readonly times?: readonly number[];
   /** Restrict to animations inside this element. */
@@ -251,13 +285,38 @@ export async function animationStoryboard(
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
-  const longest = Math.max(...held.map(a => a.curveEndMs));
-  const times = options.times ?? timeline(longest);
+  // An animation that repeats forever (a spinner, a pulsing skeleton) has no
+  // end to film to: the film runs over the animations that end, from the
+  // earliest of their starts to the latest of their curve ends. Seeks are on
+  // the held timeline (from the earliest held start), so both carry offsets.
+  const ending = held.filter(a => Number.isFinite(a.curveEndMs));
+  if (options.times == null && ending.length === 0) {
+    throw new Error(
+      `storyboard ${options.name}: every held animation repeats forever ` +
+        `(${held.map(a => a.name ?? a.kind).join(', ')}); pass \`times\``,
+    );
+  }
+  const origin = ending.length ? Math.min(...ending.map(a => a.offsetMs)) : 0;
+  const length =
+    Math.max(...ending.map(a => a.offsetMs + a.curveEndMs)) - origin;
+  // The 16.7 ms grid, plus the end itself when the grid misses it: the last
+  // frame is the one the page presents at the end.
+  const grid = options.times == null ? timeline(length) : [];
+  if (options.times == null && length - (grid.at(-1) ?? 0) > 1e-3) {
+    grid.push(+length.toFixed(3));
+  }
+  const times = options.times ?? grid;
   const storyboard = new Storyboard(page, options);
   for (const t of times) {
-    await seekAnimations(page, t);
+    // Labelled with the time the page presents (just inside an end), from
+    // the film's start.
+    const presentedAt = (await seekAnimations(page, origin + t)) - origin;
     const data = (await options.measure?.()) ?? {};
-    await storyboard.capture(`t=${+t.toFixed(1)} ms`, t, data);
+    await storyboard.capture(
+      `t=${+presentedAt.toFixed(1)} ms`,
+      presentedAt,
+      data,
+    );
   }
   return {storyboard, held};
 }
@@ -268,9 +327,17 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
 
 /**
  * Plays a touch script without wall-clock pacing and photographs the page
- * after every event. In Chromium the page still sees the scripted timestamps,
- * so velocity-dependent behavior is unchanged; in WebKit the page sees the
- * real (slower) dispatch times.
+ * after every event. In Chromium each event's `timeStamp` is still its
+ * scripted time, so velocity read from event timestamps is unchanged; in
+ * WebKit it is the real (slower) dispatch time.
+ *
+ * A handler that reads the clock instead (`performance.now()`, `Date.now()`)
+ * sees the filmstrip's pacing in both engines: two frames, `measure` and a
+ * photograph per event, about 100 ms between moves instead of the script's
+ * 16.7. Its release velocity is that much lower, so a flick that dismisses
+ * when played can settle back when filmed: a storyboard cannot show such a
+ * gesture; record it in real time instead (`startScreencast`,
+ * `castStoryboard`).
  */
 export async function touchStoryboard(
   page: Page,
@@ -284,12 +351,7 @@ export async function touchStoryboard(
     realtime: false,
     onEvent: async step => {
       // Let the page run its handlers and present the frame before the photo.
-      await page.evaluate(
-        () =>
-          new Promise<void>(resolve =>
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-          ),
-      );
+      await frames(page, 2);
       const data = (await options.measure?.()) ?? {};
       const where = step.changed
         .map(f => `${Math.round(f.x)},${Math.round(f.y)}`)

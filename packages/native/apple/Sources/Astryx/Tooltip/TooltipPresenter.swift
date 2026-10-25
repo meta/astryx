@@ -163,6 +163,24 @@ struct TooltipPresenter: ViewModifier {
     !bubbleFrame.contains(point) && !(isTap && viewFrame.contains(point))
   }
 
+  /// Whether focus holds the bubble up: only focus the keyboard brought, so a
+  /// bubble a pointer opened on a view a click focused hides when the pointer
+  /// leaves, as core's does.
+  nonisolated static func holdsByFocus(isFocused: Bool, focusIsKeyboard: Bool) -> Bool {
+    isFocused && focusIsKeyboard
+  }
+
+  /// Whether the bubble should be up now, as `update()` decides it: words,
+  /// and the pointer on the view or the bubble, or focus the keyboard brought.
+  nonisolated static func showsBubble(
+    hasText: Bool, isHovering: Bool, isHoveringBubble: Bool, isFocused: Bool, focusIsKeyboard: Bool,
+    focus: TooltipFocus
+  ) -> Bool {
+    wantsBubble(
+      hasText: hasText, isHovering: isHovering, isHoveringBubble: isHoveringBubble,
+      isFocused: holdsByFocus(isFocused: isFocused, focusIsKeyboard: focusIsKeyboard), focus: focus)
+  }
+
   /// Whether focus came from the keyboard, as core's `:focus-visible`: not
   /// while a pointer rests on the view, and not within a press of it.
   nonisolated static func isKeyboardFocus(isHovering: Bool, sincePress: TimeInterval) -> Bool {
@@ -247,10 +265,10 @@ struct TooltipPresenter: ViewModifier {
   /// Shows the bubble after the delay; hides it after the bridge.
   private func update() {
     pending?.cancel()
-    let keyboardFocused = isFocused && focusIsKeyboard
-    let wants = Self.wantsBubble(
-      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble,
-      isFocused: keyboardFocused || (isShown && isFocused), focus: focus)
+    let keyboardFocused = Self.holdsByFocus(isFocused: isFocused, focusIsKeyboard: focusIsKeyboard)
+    let wants = Self.showsBubble(
+      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble, isFocused: isFocused,
+      focusIsKeyboard: focusIsKeyboard, focus: focus)
     guard wants != isShown else { return }
     let byFocus = keyboardFocused && focus != .none && !isHovering && !isHoveringBubble
     let wait = Self.wait(showing: wants, byFocus: byFocus)

@@ -7,8 +7,8 @@ import Testing
 @MainActor
 @Test func severalChildrenStackInOneCard() {
   let card = Astryx.Card(padding: .v0) {
-    Color(astryxHex: "#FF0000FF").frame(width: 80, height: 40)
-    Color(astryxHex: "#0000FFFF").frame(width: 80, height: 40)
+    Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(width: 80, height: 40)
+    Color(.sRGB, red: 0, green: 0, blue: 1, opacity: 1).frame(width: 80, height: 40)
   }
   .frame(width: 120)
   let pixels = Pixels(card)
@@ -51,7 +51,7 @@ import Testing
 
 @MainActor
 @Test func paddingHalfStepsAreCoresSpacingTokens() {
-  let child = Color(astryxHex: "#FF0000FF").frame(width: 20, height: 20)
+  let child = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(width: 20, height: 20)
   let half = Pixels(Astryx.Card(padding: .v0_5) { child }.fixedSize())
   let four = Pixels(Astryx.Card(padding: .v4) { child }.fixedSize())
   #expect(four.height > half.height)
@@ -67,8 +67,18 @@ import Testing
 
 @MainActor
 @Test func aTransparentCardDrawsNoGroundAndNoBorder() {
-  let card = Pixels(Astryx.Card(variant: .transparent) { Color.clear.frame(width: 40, height: 40) }.frame(width: 80))
-  #expect(card.contains { $0[3] > 0 } == false)
+  // An opaque marker beside the card keeps the rendered image from being
+  // empty, which the iOS Simulator's image renderer does not draw reliably;
+  // only the card's 80 points are checked.
+  let view = SwiftUI.HStack(spacing: 0) {
+    Astryx.Card(variant: .transparent) { Color.clear.frame(width: 40, height: 40) }.frame(width: 80)
+    Color.black.frame(width: 8)
+  }
+  let pixels = Pixels(view.fixedSize())
+  #expect(close(pixels.at(pixels.width - 4, pixels.height / 2), [0, 0, 0, 255]))
+  for y in 0..<pixels.height {
+    for x in 0..<80 { #expect(pixels.at(x, y)[3] == 0, "pixel \(x),\(y)") }
+  }
 }
 
 @MainActor
@@ -122,7 +132,7 @@ import Testing
   // A theme whose border token is a color nothing else uses: a card draws
   // that color exactly when it draws a border.
   var theme = Theme.default
-  theme.light.color.border = Color(astryxRGBA: 0xFF00FFFF)
+  theme.light.color.border = Color(.sRGB, red: 1, green: 0, blue: 1, opacity: 1)
   let magenta = [255, 0, 255, 255]
   for variant in CardVariant.allCases {
     // Visible content, so a see-through variant still draws an image.
@@ -138,9 +148,9 @@ import Testing
   // As CSS draws an inset shadow inside an element's border: the border on the
   // edge, the ring just inside it.
   var theme = Theme.default
-  theme.light.color.border = Color(astryxRGBA: 0xFF00FFFF)
+  theme.light.color.border = Color(.sRGB, red: 1, green: 0, blue: 1, opacity: 1)
   theme.light.size.borderWidth = 1
-  theme.light.shadow.low = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, isInset: true, color: Color(astryxRGBA: 0x00FFFFFF))]
+  theme.light.shadow.low = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, isInset: true, color: Color(.sRGB, red: 0, green: 1, blue: 1, opacity: 1))]
   let card = Astryx.Card(elevation: .low) { Color.black.frame(width: 40, height: 40) }.frame(width: 80)
   let pixels = Pixels(card, theme: theme)
   let x = pixels.width / 2

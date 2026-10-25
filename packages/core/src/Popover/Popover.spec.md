@@ -58,6 +58,10 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
+- `presentation` (DEC-6) defaults to `popover`, the released anchored surface;
+  `presentation="popover"` is also the value that keeps it wherever a touch
+  default would otherwise apply (`architecture:public-component-api` INV16,
+  `spec:AST-017` FR3, DEC-23). Popover does not implement `presentation` yet.
 - Canonical target: `popover` owns the broad painted-surface contract for
   `<Popover>` and public `usePopover` compositions
 - Removed alias: 0.7.0 removes `popover-surface`; themes and CSS selectors migrate
@@ -120,6 +124,7 @@ surface, not the Layer entry point. There is no installable
 | Popup semantics              | Dialog or neutral wrapper                                    | Exposes dialog semantics or lets child menu/listbox semantics own the popup                                                | Popover and hook          | Dialog                                                                       | `component:Popover`                                                                 | Current public behavior        | A dialog without a label warns in development. Neutral mode omits dialog role and modal semantics.                                                         |
 | Focus entry                  | Automatic or caller-preserved                                | Focuses genuine caller content, falls back to the labeled dialog surface when none exists, or preserves current focus      | Popover and hook          | Automatic                                                                    | `component:Popover`                                                                 | Current public behavior        | The injected fallback close control is excluded from initial-focus candidates and reveals only when reached sequentially.                                  |
 | Dismissal                    | Outside/Escape enabled or disabled within native constraints | Controls light dismiss and explicit Escape participation                                                                   | Popover and hook          | Both enabled                                                                 | `component:Popover`; `family:overlay-dismissal` owns Escape/platform-close ordering | Current public behavior        | Disabling Escape alone cannot override the native Escape behavior of an auto popover; explicit-dismiss behavior requires light dismiss to be disabled too. |
+| Presentation                 | `popover`, `bottom-sheet`, or `adaptive`                     | Chooses the surface that holds the content: anchored, a BottomSheet, or a BottomSheet on a compact touch screen            | Popover                   | `popover`                                                                    | `component:Popover`; `component:BottomSheet` owns the sheet                         | Decided (DEC-6)                | —                                                                                                                                                          |
 | Surface treatment            | Default surface or caller-owned treatment                    | Applies the shared painted surface and optional consumer styling                                                           | Popover and hook          | Default surface                                                              | `component:Popover`                                                                 | Current public behavior        | Custom styling does not change lifecycle, focus, or dismissal semantics.                                                                                   |
 | Surface padding              | A spacing-scale step, `0` through `10`                       | Sets the inset the painted surface keeps around caller content; `0` is a flush surface for content that owns its own edges | Popover and hook          | Popover: step 3; hook: none                                                  | `component:Popover`                                                                 | Pending owner review (DEC-4)   | The rung lands on the painted surface, so a theme's `padding` on the `popover` target replaces it rather than nesting; consumer `xstyle` merges after it.  |
 | Surface target ownership     | Shared baseline or component-specific refinement             | Assigns `popover` as the broad surface owner and lets a composed component add its own target on that same element         | Popover and hook          | `popover` baseline; no component-specific refinement                         | `component:Popover`; the composed component owns its refinement target              | Current compatibility contract | `popover-surface` is compatibility output, not a new target for consumers or a second anatomy owner.                                                       |
@@ -392,6 +397,18 @@ visibility lifecycle. Public API signatures remain unchanged.
 Rejected: moving focus to the dialog surface on every pointer opening solely to
 avoid a keyboard-looking outline. That mixes visual modality with semantic focus
 placement and bypasses the shared focus-indication owner.
+
+### DEC-6 — Presentation: the anchored popover, a sheet, or adaptive
+
+**Reference:** `component:Popover/DEC-6`
+**Decider:** `cixzhang`, `2026-10-25`
+
+Popover takes `presentation` with the vocabulary the menus already use:
+`popover`, `bottom-sheet`, or `adaptive`. `popover` is the default and the
+released anchored surface. `bottom-sheet` presents the content in a
+BottomSheet. `adaptive` chooses exactly as the menus do: the sheet under
+`spec:AST-094` FR13's touch rule, with compact governed by `spec:AST-012` FR9,
+and the anchored popover elsewhere.
 
 ## Verification gaps
 
