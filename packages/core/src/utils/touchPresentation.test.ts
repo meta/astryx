@@ -96,28 +96,24 @@ describe('touch presentation', () => {
     expect(result.current).toEqual({
       isTouch: false,
       isCompact: false,
-      isCompactTouch: false,
     });
     // A tablet: a finger at any width.
     act(() => setDevice({coarse: true, width: 1024, height: 1366}));
     expect(result.current).toEqual({
       isTouch: true,
       isCompact: false,
-      isCompactTouch: false,
     });
     // A narrowed desktop window: compact, still a mouse.
     act(() => setDevice({coarse: false, width: 600, height: 900}));
     expect(result.current).toEqual({
       isTouch: false,
       isCompact: true,
-      isCompactTouch: false,
     });
     // A phone: both.
     act(() => setDevice({coarse: true, width: 390, height: 844}));
     expect(result.current).toEqual({
       isTouch: true,
       isCompact: true,
-      isCompactTouch: true,
     });
   });
 
@@ -129,7 +125,7 @@ describe('touch presentation', () => {
     // The same phone size in iOS WebKit gets the same answer.
     act(() => setDevice({iosWebKit: true}));
     expect(result.current).toEqual(android);
-    expect(result.current.isCompactTouch).toBe(true);
+    expect(result.current).toEqual({isTouch: true, isCompact: true});
   });
 
   it('keeps one answer object while nothing changes', () => {
@@ -147,7 +143,7 @@ describe('touch presentation', () => {
       return createElement(
         'span',
         null,
-        `${presentation.isTouch}/${presentation.isCompactTouch}`,
+        `${presentation.isTouch}/${presentation.isCompact}`,
       );
     };
     setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
@@ -178,12 +174,10 @@ describe('touch presentation', () => {
     expect(readTouchPresentation()).toEqual({
       isTouch: true,
       isCompact: true,
-      isCompactTouch: true,
     });
     expect(readTouchPresentation(null)).toEqual({
       isTouch: false,
       isCompact: false,
-      isCompactTouch: false,
     });
   });
 

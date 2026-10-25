@@ -56,8 +56,8 @@ test('a finger gets the touch presentation in every engine', async ({page}) => {
   expect(answers).toMatchObject({
     coarse: true,
     touchCallout: false,
-    presentation: {isTouch: true, isCompact: true, isCompactTouch: true},
-    read: {isTouch: true, isCompact: true, isCompactTouch: true},
+    presentation: {isTouch: true, isCompact: true},
+    read: {isTouch: true, isCompact: true},
   });
   // The touch style applies; the iOS-only style does not.
   expect(await color(page, 'touch')).toBe('rgb(255, 0, 0)');

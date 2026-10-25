@@ -102,8 +102,6 @@ export interface TouchPresentation {
   readonly isTouch: boolean;
   /** The viewport is compact. */
   readonly isCompact: boolean;
-  /** Both. */
-  readonly isCompactTouch: boolean;
 }
 
 /**
@@ -124,7 +122,7 @@ export function useCompactDefinition(): CompactDefinition {
  * update after hydration.
  */
 export function useTouchPresentation(
-  serverDefault: Partial<Omit<TouchPresentation, 'isCompactTouch'>> = {},
+  serverDefault: Partial<TouchPresentation> = {},
 ): TouchPresentation {
   const compact = useCompactDefinition();
   const isTouch = useMediaQuery(TOUCH_QUERY, serverDefault.isTouch ?? false);
@@ -132,10 +130,7 @@ export function useTouchPresentation(
     compact.query,
     serverDefault.isCompact ?? false,
   );
-  return useMemo(
-    () => ({isTouch, isCompact, isCompactTouch: isTouch && isCompact}),
-    [isTouch, isCompact],
-  );
+  return useMemo(() => ({isTouch, isCompact}), [isTouch, isCompact]);
 }
 
 /**
@@ -148,9 +143,9 @@ export function readTouchPresentation(
   compact: CompactDefinition = DEFAULT_COMPACT_DEFINITION,
 ): TouchPresentation {
   if (view == null || typeof view.matchMedia !== 'function') {
-    return {isTouch: false, isCompact: false, isCompactTouch: false};
+    return {isTouch: false, isCompact: false};
   }
   const isTouch = view.matchMedia(TOUCH_QUERY).matches;
   const isCompact = view.matchMedia(compact.query).matches;
-  return {isTouch, isCompact, isCompactTouch: isTouch && isCompact};
+  return {isTouch, isCompact};
 }
