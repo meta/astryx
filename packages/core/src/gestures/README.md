@@ -258,14 +258,14 @@ warning, so two writers never fight over the paint. Pass another
   attached, so the page stays zoomable (WCAG 1.4.4). A long press also turns
   off the iOS callout and text selection on its element.
 
-  While a finger or a pen is down, the host turns them off too on the
-  element of a press tracker (attached or delegated: a control or a cell)
-  and of a recognizer with `preventsTextSelection` (a slider's, a segmented
+  While a finger or a pen is down, the host turns them off too only where
+  the hold does something (`spec:AST-094` FR41): on the element of a
+  recognizer with `preventsTextSelection` (a slider's thumb, a segmented
   control's or a switch's drag) that would take the touch (enabled, and
-  accepting its pointer), and restores them when the contact ends: UIKit
-  never starts a selection under a held control or cell. The document press
-  controller (`usePressFeedback` rows) takes the same lock on its surface,
-  iOS or not (`selectionLock.ts` is shared). A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the
+  accepting its pointer), restored when the contact ends. A press-tracked
+  control or row whose hold does nothing, and the document press
+  controller's surfaces (`usePressFeedback` rows), keep the browser's
+  long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the
   primary pointer is coarse: a mouse never takes the lock, nor a finger or a
   pen where the primary pointer is fine (a touchscreen laptop, a desktop pen
   tablet), so desktop selection is unchanged (`spec:AST-094` FR19); content
