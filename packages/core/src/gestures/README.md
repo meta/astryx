@@ -357,10 +357,12 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 ### Holding the page still
 
-A scroll lock can hold the page through the host:
-`getGestureHost(document).holdPageScroll(decide)` returns the release. While
-any hold is active, and only where the primary pointer is coarse, the host
-listens to the document with a non-passive `touchmove`. Once per one-finger touch that no recognizer owns, after the
+A caller that needs the page still holds it through the host:
+`getGestureHost(document).holdPageScroll(decide)` returns the release
+(`useScrollLock` does not use it). While any hold is active, and only where
+the primary pointer is coarse, the host listens to the document with a
+non-passive `touchmove`. Once per one-finger touch that no recognizer owns,
+after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
 being the innermost node under the finger (the composed path's first node),

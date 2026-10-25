@@ -15,7 +15,6 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
-import type {GestureClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
@@ -155,55 +154,6 @@ afterEach(() => {
   document.body.innerHTML = '';
   restorePointer();
 });
-
-/** A clock whose timers run when the test advances it. */
-class TimerClock implements GestureClock {
-  time = 0;
-  private timers: {at: number; callback: () => void; id: number}[] = [];
-  private nextId = 1;
-  now(): number {
-    return this.time;
-  }
-  setTimeout(callback: () => void, ms: number): number {
-    const id = this.nextId;
-    this.nextId += 1;
-    this.timers.push({at: this.time + ms, callback, id});
-    return id;
-  }
-  clearTimeout(handle: unknown): void {
-    this.timers = this.timers.filter(timer => timer.id !== handle);
-  }
-  advance(ms: number): void {
-    this.time += ms;
-    for (const timer of this.timers.filter(due => due.at <= this.time)) {
-      this.timers = this.timers.filter(other => other !== timer);
-      timer.callback();
-    }
-  }
-}
-
-/** The browser fires no `scrollend` (mobile Safari before 26) until restored. */
-function withoutScrollEnd(): () => void {
-  let owner: object | null = window;
-  while (
-    owner != null &&
-    !Object.prototype.hasOwnProperty.call(owner, 'onscrollend')
-  ) {
-    owner = Object.getPrototypeOf(owner) as object | null;
-  }
-  const descriptor =
-    owner == null
-      ? undefined
-      : Object.getOwnPropertyDescriptor(owner, 'onscrollend');
-  if (owner == null || descriptor == null) {
-    return () => {};
-  }
-  const from = owner;
-  Reflect.deleteProperty(from, 'onscrollend');
-  return () => {
-    Object.defineProperty(from, 'onscrollend', descriptor);
-  };
-}
 
 describe('GestureHost', () => {
   it('sets touch-action and the long-press styles on attach, and restores them on detach', () => {
@@ -789,28 +739,6 @@ describe('GestureHost', () => {
       expect(host.isFingerScroll(list)).toBe(false);
     });
 
-    it("ends the finger's scroll once its scroll events go quiet where the browser fires no scrollend (mobile Safari before 26)", () => {
-      detachers.push(withoutScrollEnd());
-      const timers = new TimerClock();
-      const quiet = new GestureHost(document, {clock: timers});
-      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
-      detachers.push(quiet.watchFingerScrolls(list));
-      const finger = {id: 1, x: 10, y: 10};
-      touch('touchstart', row, [finger], [finger], 0);
-      list.dispatchEvent(new Event('scroll'));
-      touch('touchend', row, [finger], [], 120);
-      // The momentum reports every frame: the quiet window restarts.
-      list.dispatchEvent(new Event('scroll'));
-      timers.advance(99);
-      expect(quiet.isFingerScroll(list)).toBe(true);
-      list.dispatchEvent(new Event('scroll'));
-      timers.advance(99);
-      expect(quiet.isFingerScroll(list)).toBe(true);
-      // No scroll for the whole window: it ended.
-      timers.advance(1);
-      expect(quiet.isFingerScroll(list)).toBe(false);
-    });
-
     it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
       detachers.push(host.watchFingerScrolls(list));
@@ -858,6 +786,43 @@ describe('GestureHost', () => {
       // Lifting without moving the list again ends it.
       touch('touchend', row, [finger], [], 300);
       expect(host.isFingerScroll(list)).toBe(false);
+    });
+
+    it('ends a finger’s scroll after a quiet spell where the browser sends no scrollend', () => {
+      vi.useFakeTimers();
+      const own = Object.getOwnPropertyDescriptor(window, 'onscrollend');
+      const proto = Object.getPrototypeOf(window) as object;
+      const inherited = Object.getOwnPropertyDescriptor(proto, 'onscrollend');
+      Reflect.deleteProperty(window, 'onscrollend');
+      Reflect.deleteProperty(proto, 'onscrollend');
+      try {
+        expect('onscrollend' in window).toBe(false);
+        const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+        detachers.push(host.watchFingerScrolls(list));
+        const finger = {id: 1, x: 10, y: 10};
+        touch('touchstart', row, [finger], [finger], 0);
+        list.dispatchEvent(new Event('scroll'));
+        touch('touchend', row, [finger], [], 120);
+        // The momentum keeps scrolling: still the finger's.
+        vi.advanceTimersByTime(100);
+        list.dispatchEvent(new Event('scroll'));
+        vi.advanceTimersByTime(100);
+        expect(host.isFingerScroll(list)).toBe(true);
+        // Quiet for the fallback spell: the scroll has ended.
+        vi.advanceTimersByTime(60);
+        expect(host.isFingerScroll(list)).toBe(false);
+        // A program's scroll afterwards is not the finger's.
+        list.dispatchEvent(new Event('scroll'));
+        expect(host.isFingerScroll(list)).toBe(false);
+      } finally {
+        if (inherited != null) {
+          Object.defineProperty(proto, 'onscrollend', inherited);
+        }
+        if (own != null) {
+          Object.defineProperty(window, 'onscrollend', own);
+        }
+        vi.useRealTimers();
+      }
     });
 
     it('forgets a scroller once nobody watches it', () => {
