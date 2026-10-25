@@ -8,8 +8,6 @@ unpublished.** Specs live next to their component as
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
-The exemplar to copy is
-[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
 every positive check has a negative control beside it (a rAF animation that
@@ -21,7 +19,7 @@ freezes, a `top` animation that lays out every frame).
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction BottomSheetDetent   # one spec, both engines
+pnpm test:interaction <spec file>         # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
