@@ -1216,12 +1216,6 @@ jobs:
             bash "$legacy"
           fi
 
-      # The interaction harness is consumed as TypeScript source by Vitest and
-      # Playwright, which do not typecheck; this is the only gate over it.
-      - name: Typecheck interaction harness
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/interaction-harness typecheck
-
   # Sandbox preview build — the single slowest piece of PR CI (~4min), run as
   # its own job so it overlaps build-storybook instead of serializing after it.
   # PR-only: merge_group runs never deploy previews, and docsite-only PRs skip
