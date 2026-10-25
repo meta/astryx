@@ -13,7 +13,7 @@
  * A motion role is one value of a motion table that a theme may retune: a
  * spring, a duration (a key ending in `Ms`, in milliseconds) or a curve (four
  * cubic-bézier control points). It is named by its table path, for example
- * `springs.sheetDetent`, `timing.curves.easeInOut` or `scroll.bounce`, and
+ * `springs.sheetDetent`, `timing.curves.move` or `scroll.bounce`, and
  * carried by one CSS custom property, `--motion-` followed by the path in
  * kebab case (`--motion-springs-sheet-detent`). A theme writes that property
  * only for the roles it sets; an empty property means the table's value, so
@@ -204,7 +204,7 @@ export function parseMotionRoleValue(
     }
     const duration = Number(m[1]);
     const bounce = Number(m[2]);
-    return duration > 0 && bounce > -1 && bounce <= 1
+    return duration > 0 && bounce > -1 && bounce < 1
       ? {duration, bounce}
       : null;
   }

@@ -26,7 +26,6 @@ interface Entry {
   x?: number;
   y?: number;
   scale?: number;
-  handoff?: boolean;
   beganAt?: number | null;
   startedAt?: number;
 }
@@ -141,12 +140,8 @@ const sheet = new PanGestureRecognizer({
   name: 'sheet',
   direction: 'down',
   scrollEdge: true,
-  scrollHandoff: true,
 });
-record(sheet, () => ({
-  y: sheet.translation().y,
-  handoff: sheet.isHandoff,
-}));
+record(sheet, () => ({y: sheet.translation().y}));
 host.attach(element('sheetBody'), sheet);
 
 // A one-way pan over the scrollable page, as a toast's upward swipe is: it

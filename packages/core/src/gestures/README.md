@@ -68,7 +68,7 @@ the same and returns a detach function.
 | -------------------------------- | ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TapGestureRecognizer`           | `UITapGestureRecognizer`           | discrete   | `numberOfTapsRequired`, `numberOfTouchesRequired`; fails past 45 px of travel, on extra fingers, a hold over 1.5 s, a late or far next tap                                                            |
 | `LongPressGestureRecognizer`     | `UILongPressGestureRecognizer`     | continuous | `minimumPressDuration` 500 ms, `allowableMovement` 10 px (a distance, not per axis), `numberOfTapsRequired`; a zero duration begins on the touch itself (a selection tracker over a group of actions) |
-| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`, `scrollHandoff`; `translation()`, `totalTranslation()`, `velocity()`                                       |
+| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`; `translation()`, `totalTranslation()`, `velocity()`                                                        |
 | `SwipeGestureRecognizer`         | `UISwipeGestureRecognizer`         | discrete   | recognized during the motion; one or more directions, `numberOfTouchesRequired`; 50 px along, at most 50 px across, 500 ms                                                                            |
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                     |
 | `RotationGestureRecognizer`      | `UIRotationGestureRecognizer`      | continuous | `rotation` in radians, unwrapped, clockwise positive; `velocity` in rad/s                                                                                                                             |
@@ -212,15 +212,15 @@ warning, so two writers never fight over the paint. Pass another
   stays in force, as the intersection of both. It is set inline on attach
   and restored on detach (opt out with `manageStyle: false`):
 
-  | Recognizers on the element                         | `touch-action`      |
-  | -------------------------------------------------- | ------------------- |
-  | tap, long press                                    | `manipulation`      |
-  | horizontal pan or swipe, horizontal edge pan       | `pan-y pinch-zoom`  |
-  | vertical pan or swipe                              | `pan-x pinch-zoom`  |
-  | one-way pan, pan with `scrollEdge`/`scrollHandoff` | left as is (`auto`) |
-  | free pan                                           | `pinch-zoom`        |
-  | pinch or rotation                                  | `pan-x pan-y`       |
-  | pinch or rotation together with a free pan         | `none`              |
+  | Recognizers on the element                   | `touch-action`      |
+  | -------------------------------------------- | ------------------- |
+  | tap, long press                              | `manipulation`      |
+  | horizontal pan or swipe, horizontal edge pan | `pan-y pinch-zoom`  |
+  | vertical pan or swipe                        | `pan-x pinch-zoom`  |
+  | one-way pan, pan with `scrollEdge`           | left as is (`auto`) |
+  | free pan                                     | `pinch-zoom`        |
+  | pinch or rotation                            | `pan-x pan-y`       |
+  | pinch or rotation together with a free pan   | `none`              |
 
   A one-way pan leaves the browser its own axis too: a toast dragged away
   from its edge scrolls the page. It claims its direction by cancelling
@@ -284,8 +284,7 @@ warning, so two writers never fight over the paint. Pass another
   finger's main axis. (Chromium also stops asking after one unconsumed
   `touchmove` when `touch-action` keeps it from panning that way, as for a
   horizontal drag under `pan-y`; that is not a claim.) Possible recognizers that share it fail, active ones are
-  cancelled, and the view's press is cancelled. The exception is a pan with
-  `scrollHandoff`, which keeps watching.
+  cancelled, and the view's press is cancelled.
 - **Clicks.** When a touch's gesture cancelled the view's touches, its
   `touchend` is cancelled (no click and no compatibility mouse events) and a
   one-shot guard swallows the next trusted click. A click held back for a
@@ -300,22 +299,16 @@ warning, so two writers never fight over the paint. Pass another
 
 ### Native scrolling
 
-`scrollEdge` and `scrollHandoff` make a pan share its axis with the native
-scrollers under the finger. This is the sheet over its own list:
+`scrollEdge` makes a pan share its axis with the native scrollers under the
+finger. This is the sheet over its own list: the pan begins only if nothing
+under the touch could scroll for that movement, the finger landed at the
+edge and pulls away from it. The browser has not committed yet, so beginning
+claims the touch and the content never moves.
 
-- With `scrollEdge`, the pan begins only if nothing under the touch could
-  scroll for that movement: the finger landed at the edge and pulls away
-  from it. The browser has not committed yet, so beginning claims the touch
-  and the content never moves.
-- With `scrollHandoff` (one-way directions only), once the browser has taken
-  the touch to scroll, the pan keeps watching. When the content runs out in
-  the pan's direction, the travel past that point becomes the pan, after
-  `contentEndHandoffSlop`. The point is placed from the distance the content
-  had left, not at the next sample. If the finger comes back, the
-  translation clamps at zero while the content scrolls again. This is NOT
-  UIKit: a UIKit sheet decides when the drag begins, and a drag that began
-  as a scroll stays the scroll view's for its whole length (it scrolls to
-  the top, then rubber-bands). For parity use `scrollEdge` alone.
+Who gets a drag is decided once, when it begins, as in UIKit: a drag that
+began as a scroll stays the scroll view's for its whole length (it scrolls
+to the top, then rubber-bands), and never changes hands midway
+(`spec:AST-094` FR14).
 
 "Could scroll" follows the browser's own rules: `touch-action` between the
 touch and each scroller, scroll chaining stopped by `overscroll-behavior`,
@@ -477,5 +470,5 @@ tokens under a mouse.
   `pnpm exec playwright test --config packages/core/src/gestures/__tests__/browser/playwright.config.ts`;
   where WebKit cannot launch on the host, its project runs in the official
   Playwright image (see the config header). The same fixture passed in
-  Mobile Safari on the iOS 26.2 simulator: claims, click suppression, scroll
-  handoff, pinch, and a long press at exactly 500 ms.
+  Mobile Safari on the iOS 26.2 simulator: claims, click suppression, the
+  scroll edge, pinch, and a long press at exactly 500 ms.

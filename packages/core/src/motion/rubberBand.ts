@@ -29,7 +29,6 @@ import {scroll} from './uikit/scroll';
 /**
  * Displayed overflow for a finger `overflow` past the edge (signed: the sign
  * is kept). `dimension` is the scroll view's size on the axis.
- * @experimental
  */
 export function rubberBand(
   overflow: number,
@@ -44,10 +43,7 @@ export function rubberBand(
   return overflow < 0 ? -banded : banded;
 }
 
-/**
- * The finger overflow that displays `displayed`; ±Infinity at ±dimension.
- * @experimental
- */
+/** The finger overflow that displays `displayed`; ±Infinity at ±dimension. */
 export function rubberBandInverse(
   displayed: number,
   dimension: number,
