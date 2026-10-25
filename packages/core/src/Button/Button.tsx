@@ -19,6 +19,7 @@
  */
 
 import {
+  use,
   useEffect,
   useRef,
   useState,
@@ -51,6 +52,7 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles as inputGroupStyles} from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -615,7 +617,9 @@ export function Button({
   // the consumer is deliberately showing it.
   const delaySpinner = isPending || isInterruptible;
   const groupDisabled = buttonGroup?.isDisabled ?? false;
-  const isTrueDisabled = isDisabled || groupDisabled;
+  const inputGroupState = use(InputGroupInternalContext);
+  const isTrueDisabled =
+    isDisabled || groupDisabled || inputGroupState.isDisabled;
   // Busy-only: the button can't fire again purely because an action is in
   // flight, not because it's genuinely isDisabled/group-disabled. Per the API
   // Conventions "Disabled vs Busy" rule, busy is visual-only (aria-busy +
