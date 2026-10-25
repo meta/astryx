@@ -31,13 +31,19 @@ export type UsePressTrackerOptions = Omit<
 
 /**
  * Track presses on the element behind `ref` with UIControl semantics. The
- * callbacks are read through a ref, like a recognizer's listener.
+ * callbacks are read through a ref, like a recognizer's listener. Releasing
+ * the element (unmount, or a replaced node) ends any press without calling
+ * them: that release runs in an Effect, which never calls a caller's
+ * callback (react-component-runtime INV2, INV3).
  */
 export function usePressTracker(
   ref: RefObject<Element | null>,
   options: UsePressTrackerOptions = {},
 ): PressTracker {
   const optionsRef = useRef(options);
+  // True while an Effect releases the tracker, so the press it ends reaches
+  // no caller callback.
+  const isReleasingRef = useRef(false);
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
@@ -64,12 +70,12 @@ export function usePressTracker(
           return ref.current;
         },
         onControlEvent: (event, touch) => {
-          if (!isUnmountedRef.current) {
+          if (!isReleasingRef.current && !isUnmountedRef.current) {
             optionsRef.current.onControlEvent?.(event, touch);
           }
         },
         onHighlightChange: isHighlighted => {
-          if (!isUnmountedRef.current) {
+          if (!isReleasingRef.current && !isUnmountedRef.current) {
             optionsRef.current.onHighlightChange?.(isHighlighted);
           }
         },
@@ -118,8 +124,13 @@ export function usePressTracker(
         tracker,
       );
       return () => {
-        detach();
-        tracker.dispose();
+        isReleasingRef.current = true;
+        try {
+          detach();
+          tracker.dispose();
+        } finally {
+          isReleasingRef.current = false;
+        }
       };
     },
     tracker,
