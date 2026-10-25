@@ -35,6 +35,10 @@
  *   still receives its own `cancel` (Escape): the caller ignores it while
  *   held.
  *
+ * The shield sets its own `pointer-events` and `visibility`, so a layer root
+ * that takes no hits itself (its content or a backdrop child opts back in)
+ * is held all the same.
+ *
  * One hold per layer: holds on a held layer stack, and the layer comes back
  * when the last one ends (when what ends it settles, resolved or rejected;
  * when its release runs; on unmount, for the hook). Nothing is written to
@@ -140,6 +144,12 @@ function addShield(layer: Element): HTMLElement {
     background: 'transparent',
     overflow: 'hidden',
     touchAction: 'none',
+    // The two inherited properties that decide hit-testing, set here so the
+    // shield takes hits whatever its layer root opts out of (a full-viewport
+    // layer that is `pointer-events: none` and lets a backdrop child take the
+    // hits): inherited, they would let a held tap fall through to the page.
+    pointerEvents: 'auto',
+    visibility: 'visible',
   });
   for (const type of SWALLOWED) {
     shield.addEventListener(type, swallow, {capture: true, passive: false});

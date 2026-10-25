@@ -51,6 +51,10 @@ describe('holdPresentation', () => {
     expect(shield.getAttribute('popover')).toBe('manual');
     expect(shield.style.position).toBe('fixed');
     expect(shield.style.touchAction).toBe('none');
+    // Its own hit-testing, whatever the layer root's (the browser proof holds
+    // a root that is pointer-events: none).
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.visibility).toBe('visible');
     expect(isInHeldLayer(child)).toBe(true);
     expect(isInHeldLayer(shield)).toBe(true);
     expect(isInHeldLayer(outside)).toBe(false);

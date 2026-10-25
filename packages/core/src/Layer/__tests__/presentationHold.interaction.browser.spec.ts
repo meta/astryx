@@ -8,7 +8,9 @@
  *   is the hit target over the whole viewport, above a modal dialog in the
  *   top layer; a tap during a hold reaches no click and no recognizer on the
  *   layer (the gesture host's touch gate) and leaves a light-dismissing
- *   popover open; keys still act while a presentation holds; a dismissal's
+ *   popover open; a layer root that takes no hits itself (pointer-events:
+ *   none, or visibility: hidden, its content opting back in) is held all the
+ *   same; keys still act while a presentation holds; a dismissal's
  *   hold makes the content inert and moves focus out of it, so no key acts
  *   on it either (a focused button that turns inert still takes Enter and
  *   Space in both engines); each release gives input back
@@ -24,11 +26,12 @@ import {touchDriver, type TouchDriver} from '@astryxdesign/interaction-harness';
 
 type Point = {x: number; y: number};
 type Scope = 'viewport' | 'layer';
+type LayerId = 'dialog' | 'pop' | 'lift';
 
 interface HoldApi {
   log: {clicks: string[]; taps: number; toggles: string[]};
-  open: (id: 'dialog' | 'pop') => void;
-  hold: (id: 'dialog' | 'pop', scope: Scope) => void;
+  open: (id: LayerId) => void;
+  hold: (id: LayerId, scope: Scope) => void;
   release: () => void;
   hitAt: (x: number, y: number) => string;
 }
@@ -65,11 +68,11 @@ async function load(page: Page): Promise<TouchDriver> {
 
 type HoldWindow = {__hold: HoldApi};
 
-const open = async (page: Page, id: 'dialog' | 'pop') =>
+const open = async (page: Page, id: LayerId) =>
   page.evaluate(layer => {
     (window as unknown as HoldWindow).__hold.open(layer);
   }, id);
-const hold = async (page: Page, id: 'dialog' | 'pop', scope: Scope) =>
+const hold = async (page: Page, id: LayerId, scope: Scope) =>
   page.evaluate(
     ([layer, how]) => {
       (window as unknown as HoldWindow).__hold.hold(layer, how);
@@ -200,3 +203,35 @@ test('a light-dismissing popover stays open when a hold takes a tap outside it; 
     .poll(async () => (await readLog(page)).toggles)
     .toEqual(['pop:open', 'pop:closed']);
 });
+
+// A full-viewport layer whose root takes no hits itself and lets its tint
+// and content take them (ContextMenu's lift layer is pointer-events: none):
+// the shield, inside that root, must not inherit that.
+for (const rootStyle of ['pointer-events: none', 'visibility: hidden']) {
+  test(`a layer root with ${rootStyle} (its content opting back in) is held all the same: a tap reaches neither the content nor the page`, async ({
+    page,
+  }) => {
+    const driver = await load(page);
+    await page.evaluate(style => {
+      const lift = document.getElementById('lift');
+      if (lift != null) {
+        lift.style.cssText += `; ${style}`;
+      }
+    }, rootStyle);
+    await open(page, 'lift');
+    const action = await centre(page, 'liftAction');
+    const tint = {x: 12, y: 12};
+    // Unheld, the content and the tint take the hits.
+    expect(await hitAt(page, action)).toBe('liftAction');
+    expect(await hitAt(page, tint)).toBe('tint');
+    await hold(page, 'lift', 'layer');
+    expect(await hitAt(page, action)).toBe('shield:lift');
+    expect(await hitAt(page, tint)).toBe('shield:lift');
+    await driver.tap(action);
+    await driver.tap(tint);
+    await settle(page);
+    expect((await readLog(page)).clicks).toEqual([]);
+    await release(page);
+    expect(await hitAt(page, action)).toBe('liftAction');
+  });
+}

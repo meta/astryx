@@ -5,8 +5,10 @@
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page whose whole area is a button (`#under`), a modal dialog
  *   (`#dialog`: text, an action, and a gesture-host tap recognizer on the
- *   dialog itself, an ancestor of the hold's shield) and a light-dismissing
- *   popover (`#pop`), plus `window.__hold`: open either layer, hold and
+ *   dialog itself, an ancestor of the hold's shield), a light-dismissing
+ *   popover (`#pop`) and a full-viewport layer (`#lift`) whose content and
+ *   tint take the hits while a test may make its root take none, plus
+ *   `window.__hold`: open a layer, hold and
  *   release it, read what an element at a point is, and a log of every
  *   click, tap recognition and popover toggle
  * @position Browser fixture of presentationHold.interaction.browser.spec.ts;
@@ -20,6 +22,8 @@ import {
   type PresentationHoldScope,
 } from '../presentationHold';
 
+type LayerId = 'dialog' | 'pop' | 'lift';
+
 interface HoldLog {
   clicks: string[];
   taps: number;
@@ -30,8 +34,8 @@ declare global {
   interface Window {
     __hold: {
       log: HoldLog;
-      open: (id: 'dialog' | 'pop') => void;
-      hold: (id: 'dialog' | 'pop', scope: PresentationHoldScope) => void;
+      open: (id: LayerId) => void;
+      hold: (id: LayerId, scope: PresentationHoldScope) => void;
       release: () => void;
       hitAt: (x: number, y: number) => string;
     };
@@ -47,6 +51,10 @@ document.body.innerHTML = `
   </dialog>
   <div id="pop" popover="auto" style="width: 200px; padding: 16px; font: 14px sans-serif">
     <button id="popAction" style="width: 160px; height: 48px">Copy</button>
+  </div>
+  <div id="lift" style="position: fixed; inset: 0; display: none; font: 14px sans-serif">
+    <div id="tint" style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.2); pointer-events: auto; visibility: visible"></div>
+    <button id="liftAction" style="position: absolute; top: 120px; left: 40px; width: 160px; height: 48px; pointer-events: auto; visibility: visible">Copy</button>
   </div>`;
 
 function element(id: string): HTMLElement {
@@ -93,8 +101,10 @@ window.__hold = {
   open(id) {
     if (id === 'dialog') {
       (element('dialog') as HTMLDialogElement).showModal();
-    } else {
+    } else if (id === 'pop') {
       element('pop').showPopover();
+    } else {
+      element('lift').style.display = 'block';
     }
   },
   hold(id, scope) {
