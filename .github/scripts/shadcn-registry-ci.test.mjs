@@ -37,7 +37,7 @@ describe('ShadCN registry CI contract', () => {
     expect(job.needs).toEqual(['check-scope']);
     expect(job.if).toContain('always()');
     expect(job['runs-on']).toBe('4-core-ubuntu');
-    expect(job['timeout-minutes']).toBe(30);
+    expect(job['timeout-minutes']).toBe(15);
     expect(step('Require successful scope classification').run).toContain(
       'refusing to skip required work',
     );

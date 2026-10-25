@@ -8,7 +8,7 @@ import Testing
   for tokens in [Theme.default.light, Theme.default.dark] {
     #expect(tokens.size.elementMd == 32)
     #expect(tokens.radius.element == 8)
-    #expect(tokens.font.familyBody.isEmpty == false)
+    #expect(tokens.font.family.body.isEmpty == false)
   }
   #expect(Theme.default.light.color.textPrimary != Theme.default.dark.color.textPrimary)
 }
@@ -24,7 +24,7 @@ import Testing
   #expect(style.space(4) == Theme.default.light.space.s4)
   #expect(style.size("radius-element", 0) == 8)
   #expect(style.size("size-missing", 7) == 7)
-  #expect(style.fontSize("text-body-size", 0) == Theme.default.light.font.bodySize * 1.5)
+  #expect(style.fontSize("text-body-size", 0) == Theme.default.light.font.body.size * 1.5)
   #expect(style.color("color-accent") == Theme.default.light.color.accent)
   #expect(style.color("color-missing") == .clear)
 }

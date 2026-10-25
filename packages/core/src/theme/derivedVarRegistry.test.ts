@@ -91,6 +91,11 @@ const STRUCTURAL_VARS = new Set([
   // Private counterpart of the public token above: one ancestor Section's
   // padding, propagated down the tree. Structural, never authored by a theme.
   '--_section-padding-propagated',
+  // Layout's middle row tells LayoutContent that a divider-less header or
+  // footer sits beside it (Layout/layoutEdges.stylex.ts). Structural, never
+  // authored by a theme.
+  '--_layout-flush-block-start',
+  '--_layout-flush-block-end',
 ]);
 
 /**
