@@ -19,6 +19,7 @@ import {
   generateAdaptationCSS,
   generateThemeCSS,
   type DefineThemeInput,
+  type DefinedTheme,
 } from './index';
 
 describe('motion roles in a theme', () => {
@@ -192,6 +193,82 @@ describe('motion roles in adaptation rules', () => {
     expect(() =>
       adaptive([{when: {motion: 'reduce'}, value: {motion: {fast: 100}}}]),
     ).toThrow(/must supply `fast`, `medium`, and `ratio`/);
+  });
+
+  it('keeps duplicate conditions and a later root-restoring role write, in order', () => {
+    const theme = defineTheme({
+      name: 'ordered-motion',
+      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              motion: {
+                springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+              },
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              motion: {
+                springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}},
+              },
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+    expect(css.split('@media (pointer: coarse)')).toHaveLength(3);
+    const quick = css.indexOf('--motion-springs-sheet-present: 0.4s 0;');
+    const restored = css.lastIndexOf(
+      '--motion-springs-sheet-present: 0.6s 0.1',
+    );
+    expect(quick).toBeGreaterThan(-1);
+    expect(restored).toBeGreaterThan(quick);
+  });
+
+  it('carries role writes through a built theme to its adaptation blocks', () => {
+    const live = adaptive([
+      {
+        when: {pointer: 'coarse'},
+        value: {
+          motion: {
+            springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+          },
+        },
+      },
+    ]);
+    const built = {
+      name: live.name,
+      __built: true,
+      tokens: live.tokens,
+      components: live.components,
+      __adaptations: live.__adaptations,
+      __axes: live.__axes,
+    } as DefinedTheme;
+    const child = defineTheme({name: 'built-motion-child', extends: built});
+    expect(generateAdaptationCSS(child).component).toContain(
+      '--motion-springs-sheet-present: 0.4s 0',
+    );
+  });
+
+  it('merges roles by role through extends', () => {
+    const base = defineTheme({
+      name: 'roles-base',
+      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+    });
+    const child = defineTheme({
+      name: 'roles-child',
+      extends: base,
+      motion: {
+        springs: {'springs.alertPresent': {response: 0.5, dampingRatio: 1}},
+      },
+    });
+    expect(child.tokens['--motion-springs-sheet-present']).toBe('0.6s 0.1');
+    expect(child.tokens['--motion-springs-alert-present']).toBe('0.5s 0');
   });
 
   it('refuses a platform condition, which adaptations do not have', () => {
