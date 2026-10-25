@@ -5,7 +5,7 @@
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
  *   useListFocus, the presentation resolver (usePresentation), useLongPress,
- *   and the touch layer (ContextMenuTouchLayer, loaded on demand)
+ *   and the touch layer (ContextMenuTouchLayer)
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -21,8 +21,9 @@
  * device, iOS and Android alike) the trigger behaves like UIKit's
  * UIContextMenuInteraction: a finger held still commits the menu at UIKit's
  * moment (`contextMenu.press.commitMs`), with the press feedback, the page
- * stays put while that menu is up, and the press sends no click. That touch
- * layer loads on demand, only under the touch model. A fine
+ * stays put while that menu is up, and the press sends no click. The touch
+ * layer is part of ContextMenu, so it runs from the first render under the
+ * touch model (a phone pays no extra request for it). A fine
  * primary pointer keeps the right-click menu and today's long press for a
  * finger (500 ms, `useLongPress`), as `presentation="popover"` does; the
  * touch recognizer stays off there.
@@ -90,8 +91,10 @@ import {useTypeahead} from '../hooks/useTypeahead';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {readPresentation, usePresentation} from '../utils/presentation';
 import {useCompactDefinition} from '../utils/touchPresentation';
-import {ContextMenuTouchLayer} from './lazyContextMenuTouchLayer';
-import type {ContextMenuTouchHandle} from './ContextMenuTouchLayer';
+import {
+  ContextMenuTouchLayer,
+  type ContextMenuTouchHandle,
+} from './ContextMenuTouchLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {
   colorVars,
@@ -401,17 +404,12 @@ export function ContextMenu({
 
   // Whether a finger opened the menu that is up (touch invocation, below).
   const [isTouchOpen, setIsTouchOpen] = useState(false);
-  // The mounted touch layer (loaded on demand), for its press feedback and
-  // whether it is timing a finger.
+  // The mounted touch layer, for its press feedback and whether it is timing
+  // a finger.
   const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
-  // Whether the touch layer has attached. Until it has (its module is still
-  // loading), a finger keeps today's 500 ms long press, so a hold that lands
-  // first still opens the menu.
-  const [isTouchLayerReady, setIsTouchLayerReady] = useState(false);
   const setTouchHandle = useCallback(
     (handle: ContextMenuTouchHandle | null) => {
       touchHandleRef.current = handle;
-      setIsTouchLayerReady(handle != null);
     },
     [],
   );
@@ -746,8 +744,7 @@ export function ContextMenu({
   );
 
   // Touch invocation (menus-8). Under the touch model the touch layer
-  // (ContextMenuTouchLayer.tsx, loaded on demand so a fine-pointer page never
-  // downloads it) runs UIKit's long press and asks for the menu here, at the
+  // (ContextMenuTouchLayer.tsx) runs UIKit's long press and asks for the menu here, at the
   // client point where the finger landed.
   const openFromFinger = useCallback(
     (point: {x: number; y: number}) => {
@@ -779,7 +776,7 @@ export function ContextMenu({
     onTouchEnd: handleLongPressTouchEnd,
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
-    disabled: isDisabled || (touchModes && isTouchLayerReady),
+    disabled: isDisabled || touchModes,
     onLongPress: useCallback(
       (point: {x: number; y: number}) => {
         const rect = getAnchorBaseRect();
@@ -989,15 +986,13 @@ export function ContextMenu({
         />
       </TriggerElement>
       {touchModes && !isDisabled ? (
-        <Suspense fallback={null}>
-          <ContextMenuTouchLayer
-            triggerRef={triggerRef}
-            isShown={triggerAs !== 'span'}
-            triggerKey={triggerAs}
-            onHandleChange={setTouchHandle}
-            onOpen={openFromFinger}
-          />
-        </Suspense>
+        <ContextMenuTouchLayer
+          triggerRef={triggerRef}
+          isShown={triggerAs !== 'span'}
+          triggerKey={triggerAs}
+          onHandleChange={setTouchHandle}
+          onOpen={openFromFinger}
+        />
       ) : null}
 
       {usesBottomSheet ? (

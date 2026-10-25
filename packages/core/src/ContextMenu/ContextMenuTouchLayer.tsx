@@ -8,9 +8,8 @@
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
  *   recognizer and press feedback while ContextMenu is under the touch model
- * @position Loaded on demand by ContextMenu (lazyContextMenuTouchLayer.ts),
- *   only while the touch model applies, so a fine-pointer page never loads the
- *   touch code
+ * @position Imported by ContextMenu, which renders it only while the touch
+ *   model applies: a fine pointer runs none of it
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
