@@ -399,9 +399,10 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
   it('holds its start until the browser starts it', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.smooth});
-    // Nothing has moved on screen yet, whatever the clock says.
+    // Nothing has moved on screen yet, whatever the clock says, but the model
+    // is moving: a retarget carries this velocity.
     expect(animator.get('x', 1100)).toBe(0);
-    expect(animator.getVelocity('x', 1100)).toBe(0);
+    expect(animator.getVelocity('x', 1100)).toBeCloseTo(curve.velocity(0.1), 9);
     clock = 1250;
     await commitFrame(1250);
     expect(animator.get('x', 1350)).toBeCloseTo(curve.value(0.1), 9);
@@ -470,8 +471,64 @@ describe('review fixes', () => {
     animator.animate({x: 100}, {spring: springs.smooth});
     expect(animator.get('x')).toBe(0);
     await commitFrame(1150);
-    const from0 = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    // From where it is drawn, with the velocity the first curve had reached.
+    const first = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    const from0 = solveSpring(toSpring(springs.smooth), {
+      from: 0,
+      to: 100,
+      velocity: first.velocity(0.15),
+    });
     expect(animator.get('x', 1250)).toBeCloseTo(from0.value(0.1), 9);
+  });
+
+  it('retargets the browser has not started keep a flick\u2019s velocity', async () => {
+    const {animator} = setup();
+    const tracking = {response: 0.08, dampingRatio: 1};
+    // Ten moves at 120 Hz retarget the tracking spring, and the browser starts
+    // none of them before the finger lifts.
+    for (let i = 1; i <= 10; i++) {
+      clock = 1000 + (i * 1000) / 120;
+      animator.animate({x: -12 * i}, {spring: tracking});
+    }
+    // Nothing has moved on screen, but the model is moving with the finger.
+    expect(animator.get('x')).toBe(0);
+    const velocity = animator.getVelocity('x');
+    expect(velocity).toBeLessThan(-100);
+    // The release springs with that velocity.
+    animator.animate({x: -200}, {spring: springs.smooth});
+    await commitFrame(clock);
+    const release = solveSpring(toSpring(springs.smooth), {
+      from: 0,
+      to: -200,
+      velocity,
+    });
+    expect(animator.get('x', clock + 50)).toBeCloseTo(release.value(0.05), 6);
+  });
+
+  it('a pager settle after drags the browser has not started is already moving', async () => {
+    const {animator} = setup();
+    const tracking = {response: 0.08, dampingRatio: 1};
+    // A page drag toward the next page, its moves all held.
+    for (let i = 1; i <= 6; i++) {
+      clock = 1000 + (i * 1000) / 60;
+      animator.animate({x: -20 * i}, {spring: tracking});
+    }
+    const velocity = animator.getVelocity('x');
+    expect(velocity).toBeLessThan(0);
+    // The settle to the next page starts with the drag's velocity.
+    animator.animate({x: -400}, {spring: springs.smooth});
+    expect(animator.getVelocity('x')).toBeCloseTo(velocity, 6);
+    await commitFrame(clock);
+    const first = animator.get('x', clock + 16);
+    const settle = solveSpring(toSpring(springs.smooth), {
+      from: 0,
+      to: -400,
+      velocity,
+    });
+    expect(first).toBeCloseTo(settle.value(0.016), 6);
+    expect(first).toBeLessThan(
+      solveSpring(toSpring(springs.smooth), {from: 0, to: -400}).value(0.016),
+    );
   });
 
   it('a call adopted by a later same-task call starts with it', async () => {

@@ -762,7 +762,10 @@ export function createAnimator(
     return segment;
   };
 
-  /** A curve whose call the browser has not started yet: still at its start. */
+  /**
+   * A curve whose call the browser has not started yet: still at its start
+   * on screen (valueAt), already moving in the model (velocityAt).
+   */
   const isHeld = (segment: Segment) =>
     segment.group != null && !segment.group.resolved;
 
@@ -791,7 +794,10 @@ export function createAnimator(
   const velocityAt = (property: MotionProperty, time: number): number => {
     const held = segments.get(property);
     if (held != null && isHeld(held)) {
-      return held.speed(0);
+      // Still at its start on screen, but moving in the model: a retarget
+      // carries the velocity the curve has reached by now, so a flick whose
+      // moves all land before the browser starts any keeps its speed.
+      return held.speed(Math.max(0, time - held.start));
     }
     const segment = segmentAt(property, time);
     if (segment == null || time < segment.start) {
