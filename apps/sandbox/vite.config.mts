@@ -192,7 +192,6 @@ export default defineConfig({
         unstable_moduleResolution: stylexResolution.stylexModuleResolution,
       },
       stylexPrefix: 'x',
-      undefinedVariables: 'error',
     }),
     react({
       babel: {

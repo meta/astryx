@@ -41,17 +41,6 @@ export interface AstryxVitePluginLegacyOptions {
     library?: string;
     product?: string;
   };
-
-  /**
-   * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that no stylesheet in the build declares,
-   * which browsers drop unless the app sets it at runtime: `'warn'` reports
-   * the variable and the rule that reads it;
-   * `'error'` fails the build.
-   *
-   * @default 'warn'
-   */
-  undefinedVariables?: 'warn' | 'error';
 }
 
 export interface AstryxVitePluginOptions {
@@ -109,17 +98,6 @@ export interface AstryxVitePluginOptions {
    * Extra StyleX options to merge.
    */
   stylexOverrides?: Record<string, unknown>;
-
-  /**
-   * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that no stylesheet in the build declares,
-   * which browsers drop unless the app sets it at runtime: `'warn'` reports
-   * the variable and the rule that reads it;
-   * `'error'` fails the build.
-   *
-   * @default 'warn'
-   */
-  undefinedVariables?: 'warn' | 'error';
 }
 
 /**
@@ -155,7 +133,6 @@ export function astryxStylex(
     lightningcssTargets = LIGHTNINGCSS_TARGETS,
     stylexPrefix = 'astryx',
     stylexOverrides = {},
-    undefinedVariables = 'warn',
   } = opts;
 
   const libraryLayer = layers.library ?? 'astryx-base';
@@ -334,7 +311,6 @@ export function astryxStylex(
       productLayer,
       lightningcssOptions: stylexOptions.lightningcssOptions,
       classNamePrefixes,
-      undefinedVariables,
     }),
   ];
 }
@@ -491,8 +467,6 @@ function buildLayerSplitPlugin(
     lightningcssOptions?: unknown;
     /** The StyleX class-name prefixes in play: library, then product. */
     classNamePrefixes: readonly string[];
-    /** Warn about, or fail on, generated variables nothing declares. */
-    undefinedVariables: 'warn' | 'error';
   },
 ): Plugin {
   const stylex = basePlugin as {
@@ -537,10 +511,7 @@ function buildLayerSplitPlugin(
         emittedCss,
       );
       if (undeclared.length > 0) {
-        const report = (
-          options.undefinedVariables === 'error' ? this.error : this.warn
-        ).bind(this);
-        report(
+        this.warn(
           'astryx-build-layer-split: the StyleX stylesheet reads ' +
             `${undeclared.length} generated custom ` +
             `propert${undeclared.length === 1 ? 'y' : 'ies'} ` +
@@ -729,7 +700,6 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
     libraryPattern = LIBRARY_PATTERN,
     stylexPrefix = 'astryx',
     layers = {},
-    undefinedVariables = 'warn',
   } = options;
 
   const libraryLayer = layers.library ?? 'astryx-base';
@@ -846,7 +816,6 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
         validatedStylexOptions as {lightningcssOptions?: unknown}
       ).lightningcssOptions,
       classNamePrefixes,
-      undefinedVariables,
     }),
   ];
 }

@@ -153,15 +153,6 @@ first.
   rule that a shared value table ships only the rows a component uses, are
   `architecture:component-style-authoring` INV6.
 
-- **FR9 — A production source build reports custom properties nothing
-  declares.** A production build through `@astryxdesign/build` reports every
-  StyleX-generated custom property its StyleX stylesheet reads that no
-  stylesheet in the build declares, naming the property and the rule that reads
-  it. A generated property is a class-name prefix the build uses followed by a
-  StyleX hash. The report is a warning; with the build's option
-  `undefinedVariables: 'error'`, the build fails instead. Proposed; pending
-  owner review (DEC-5).
-
 ### Platform support
 
 - Supported feature/engine floor: unchanged; cascade layers are already required
@@ -169,7 +160,7 @@ first.
 - Unsupported behavior: none added.
 - Browser evidence: real-browser computed styles for FR2, FR3, and FR7. FR1, FR4,
   FR5, and FR6 are proven at the package, bundler, and documentation layer. FR8
-  is proven by the pull-request size report, and FR9 by build-package tests.
+  is proven by the pull-request size report.
 
 ## Current-state impact
 
@@ -217,7 +208,6 @@ first.
 | FR5–FR6  | consumer-doc checks                                  | every setup snippet in the styling overview, getting started, and migration setup; each package README                                                                                              | a default setup omits `astryx.css` or a used package stylesheet; a setup loads a prebuilt stylesheet and compiles the same package's source; a package import is missing |
 | FR7      | build-package compile tests and real-browser cascade | every Core module compiled through the build package; a subset of modules; a development build; Core source-built beside a prebuilt Lab stylesheet; a source-built component under a theme override | the every-module compile differs from the prebuilt rules or order; an Astryx rule sits in a nested or other layer; the theme override loses                              |
 | FR8      | pull-request size report against base                | a component whose styles change; a touch-only feature adding 0.9 KB and 1.1 KB gzip CSS to one component; a pull request with no styled change                                                      | a changed package stylesheet or component with no base-against-head gzip figure; a touch-only feature over 1 KB gzip CSS per component that is not flagged               |
-| FR9      | build-package compile tests                          | a property no stylesheet declares; one the product's own stylesheet declares; a short name the product chose; a custom product prefix; error mode                                                   | an undeclared property or its rule goes unreported; a declared or non-generated property is reported; error mode does not fail                                           |
 
 The real-browser cascade check uses a component whose theme changes its base
 colors, such as a theme that restyles the destructive Button, and asserts the
@@ -285,22 +275,6 @@ uses, so one component's tuning does not ride along with every other import.
 
 Rejected: splitting touch-only CSS into a separate stylesheet, because it
 breaks the one-import setup DEC-3 keeps.
-
-### DEC-5 — A source build reports the custom properties nothing declares
-
-**Reference:** `spec:AST-080/DEC-5`
-**Decider:** pending owner review
-
-A generated custom property that no stylesheet declares comes from a value
-StyleX cannot resolve: a `defineConsts` value whose module never reached the
-build, or a plain `.stylex.ts` export read as if it were a token. Browsers drop
-every declaration that reads it, with no error. The prebuilt stylesheet build
-fails on the same condition. A source build names the property and the rule
-that reads it. It warns by default, so a defect a product already ships does not
-break its build; `undefinedVariables: 'error'` fails the build for a product
-that wants it.
-
-Rejected: failing every product's build by default, which turns a silent defect into a break on upgrade.
 
 ## Open questions
 
