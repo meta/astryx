@@ -52,6 +52,20 @@ describe('native contracts', () => {
     expect(selector!.core).not.toHaveProperty('controlXstyle');
   });
 
+  it('moves a prop only some native platforms carry out of the core and onto those platforms', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const switchContract = contracts.find(
+      contract => contract.name === 'Switch',
+    )!;
+    for (const name of ['labelPosition', 'labelSpacing']) {
+      expect(switchContract.core).not.toHaveProperty(name);
+      expect(switchContract.platforms.android).toHaveProperty(name);
+      expect(switchContract.platforms.windows).toHaveProperty(name);
+      expect(switchContract.platforms.ios ?? {}).not.toHaveProperty(name);
+      expect(switchContract.platforms.macos ?? {}).not.toHaveProperty(name);
+    }
+  });
+
   it('keeps value callbacks, typed text slots, and number sets in the core', async () => {
     const {contracts} = await buildContracts(loadCoreDoc);
     const byName = new Map(

@@ -62,4 +62,36 @@ describe('RotationGestureRecognizer', () => {
       expect(rotation.velocity).toBeGreaterThan(1.5);
     }
   });
+
+  it('keeps its release velocity when a listener re-bases on every change', () => {
+    const h = createHarness();
+    const rotation = new RotationGestureRecognizer({name: 'rotation'});
+    rotation.addListener(r => {
+      if (r.state === 'changed') {
+        r.rotation = 0;
+      }
+    });
+    let released = Number.NaN;
+    rotation.addListener(r => {
+      if (r.state === 'ended') {
+        released = r.velocity;
+      }
+    });
+    h.finger(1).down(0, 0, 0, {recognizers: [rotation]});
+    h.finger(2).down(100, 0, 0, {recognizers: [rotation]});
+    let time = 0;
+    let degrees = 0;
+    for (let i = 0; i < 8; i++) {
+      time += 16;
+      degrees += 2;
+      h.finger(2).move(
+        100 * Math.cos((degrees * Math.PI) / 180),
+        100 * Math.sin((degrees * Math.PI) / 180),
+        time,
+      );
+    }
+    // Lift 8 ms after the last move: 2 degrees every 16 ms, about 2.18 rad/s.
+    h.finger(2).up(time + 8);
+    expect(released).toBeGreaterThan(1.5);
+  });
 });
