@@ -58,6 +58,11 @@ function Sheet() {
   rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
   `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
   calls neither `onHighlightChange` nor `onControlEvent`.
+- `useFingerScroll(scroller)` (proposed; pending owner review) returns a
+  reader, `true` while the scroller's scroll is a finger's: from a scroll
+  while a finger that landed inside it is down, until its `scrollend` (the
+  momentum is still the finger's). Pass a ref, or the document for the
+  page. No timers.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
 the same and returns a detach function. `getGestureHost(document).fingersDown()`
@@ -458,6 +463,38 @@ is right. Behaviour reads
 `readTouchPresentation()`, and a component with no interaction to infer
 from reads `useMotionPresentation()`: UIKit timings under a finger, theme
 tokens under a mouse.
+
+## Migrating a raw-touch drag
+
+A component that listens to touches itself moves onto the recognizers this
+way:
+
+1. No window or document touch listeners: attach a recognizer with
+   `useGestureRecognizer` and read `translation()` and `velocity()` per
+   state. The host owns the document's listeners.
+2. Pick the kind: a drag that coasts like a scroll view (a wheel, a picker,
+   a pager, a carousel) uses `ScrollViewPanGestureRecognizer`; anything else
+   `PanGestureRecognizer`. A one-way drag sets `direction`. The host derives
+   `touch-action`, so delete a hand-written one.
+3. Native scrolling: a sheet over its own list uses `scrollEdge` and
+   `scrollHandoff`, not `scrollTop` checks. A banner that must win against a
+   page scroll at once sets `claimDistance: 'early'`.
+4. A behavior that only watches the person's scrolling uses a watcher
+   (`claimsTouches: false`) and `useFingerScroll`.
+5. A scroll lock holds the page with `holdPageScroll`; no `preventDefault`
+   of its own.
+6. A drag limited to one finger checks `fingersDown()`; a second finger
+   already gives such a pan up.
+7. The release hands `velocity()` (px/s, event time) to the animator.
+   Delete local estimators, sample buffers and time windows; a flick, fling
+   or commit threshold stays in the component, compared against it.
+8. A control's drag sets `preventsTextSelection: true`; content drags keep
+   selection.
+9. Presses use `usePressTracker`; `keepsTouch: true` only for a control that
+   tracks a held finger across its own area.
+10. Unit tests drive the gesture harness (`__tests__/harness.ts`) with
+    timestamped touches; interaction specs use real touch input, never
+    synthetic DOM events.
 
 ## Known limits
 
