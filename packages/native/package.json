@@ -76,7 +76,7 @@
     "generate:apple": "pnpm build && node scripts/generate.mjs --apple",
     "generate:swift-ios": "pnpm -F @astryxdesign/core build && node scripts/swift-ios-theme.mjs && node scripts/swift-ios-strings.mjs",
     "test": "vitest run --root ../.. packages/native",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm build && pnpm typecheck:types",
     "typecheck:types": "tsc --project tsconfig.types.json"
   },
   "peerDependencies": {

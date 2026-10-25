@@ -14,7 +14,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: 'cli-smoke-${{ github.event.merge_group.head_sha || github.head_ref }}'
+  group: 'cli-smoke-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}'
   cancel-in-progress: true
 
 jobs:

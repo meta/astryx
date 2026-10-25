@@ -107,8 +107,11 @@ typed members comes next.
 `Icon(.search)` draws a shared icon name as the platform's SF Symbol, at
 core's icon size and color, hidden from VoiceOver unless it has a `label`.
 `IconName` holds every built-in name as a static member; a theme maps a name
-to another symbol, or registers a `<library>:<name>` name, with
-`Theme(…, icons: ["acme:rocket": "airplane"])`.
+to another symbol or to an image the app ships, or registers a
+`<library>:<name>` name, with
+`Theme(…, icons: ["acme:rocket": "airplane", "close": .assetName("brand.close")])`.
+An asset the app does not ship stops a development build with a message that
+names it, and draws nothing in a release build.
 
 Font families come from the theme's `font-family-*` stacks: the first family
 the device has wins, and a system family such as `-apple-system` or
