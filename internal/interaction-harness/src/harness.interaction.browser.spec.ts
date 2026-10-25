@@ -44,6 +44,7 @@ import {
   sampleCurve,
   seekAnimations,
   springStep,
+  Storyboard,
   tap,
   thawTimers,
   timeline,
@@ -728,6 +729,56 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(xs.at(-1)).toBeCloseTo(260, 1);
     expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
     expect(files['sheet.png']).toMatch(/sheet\.png$/);
+  });
+
+  test('a capture Chromium returns empty is taken again a frame later', async ({
+    page,
+  }) => {
+    await fixture(page);
+    // Counts the page's frames, so the wait before the second capture shows.
+    await page.evaluate(() => {
+      const w = window as unknown as {__frames: number};
+      w.__frames = 0;
+      const tick = () => {
+        w.__frames += 1;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const screenshot = page.screenshot.bind(page);
+    const calledAt: number[] = [];
+    let failures = 1;
+    // What Chromium answers when its surface copy comes back empty.
+    page.screenshot = (async (options?: Parameters<Page['screenshot']>[0]) => {
+      calledAt.push(
+        await page.evaluate(
+          () => (window as unknown as {__frames: number}).__frames,
+        ),
+      );
+      if (failures-- > 0) {
+        throw new Error(
+          'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot',
+        );
+      }
+      return screenshot(options);
+    }) as Page['screenshot'];
+    const storyboard = new Storyboard(page, {
+      name: 'harness-self-test-recapture',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+    });
+    await storyboard.capture('t=0 ms', 0);
+    expect(storyboard.frames).toHaveLength(1);
+    expect(calledAt).toHaveLength(2);
+    expect(calledAt[1] - calledAt[0]).toBeGreaterThanOrEqual(2);
+    expect(storyboard.trace().recaptures).toEqual([
+      {label: 't=0 ms', error: expect.stringContaining('Unable to capture')},
+    ]);
+    // Captures that keep failing still fail, with Chromium's error.
+    failures = Infinity;
+    await expect(storyboard.capture('t=1 ms', 1)).rejects.toThrow(
+      /Unable to capture screenshot/,
+    );
+    expect(storyboard.frames).toHaveLength(1);
   });
 
   test('a touch filmstrip photographs every scripted event', async ({
