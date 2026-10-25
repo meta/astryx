@@ -52,7 +52,6 @@ const STEP = 1e-4;
 /**
  * The progress of `spring` from 0 to 1, starting with `velocity` (progress
  * per second): exactly 1 once it settles within `epsilon`.
- * @experimental
  */
 export function progressCurve(
   spring: SpringDescription,
@@ -77,7 +76,6 @@ export function progressCurve(
  * is any MotionCurve, not only a progress from 0 to 1. A companion played on
  * another animator starts with its driver (`{at: start}`; see the file
  * header).
- * @experimental
  */
 export function mapProgress(
   driver: MotionCurve,
@@ -100,7 +98,6 @@ export function mapProgress(
  * `input` unless `clamp` is false: what most companions are (a scrim's dim
  * along a sheet's travel, a parallax, a dismissal's fade). Either range may
  * run backward (`[openY, closedY]`).
- * @experimental
  */
 export function mapRange(
   input: readonly [number, number],
@@ -122,7 +119,6 @@ export function mapRange(
 /**
  * One channel of a path: an animator property and its value at each
  * progress.
- * @experimental
  */
 export interface ProgressChannel {
   readonly property: MotionProperty;
@@ -141,7 +137,6 @@ export interface ProgressChannel {
  * presents at `now` along a path that starts there: the presented velocity
  * projected on the path's tangent at progress 0, v·t / (t·t). 0 when the
  * path does not move any of its channels.
- * @experimental
  */
 export function presentedProgressVelocity(
   animator: Pick<Animator, 'getVelocity'>,

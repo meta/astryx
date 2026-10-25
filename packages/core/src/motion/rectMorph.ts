@@ -69,7 +69,6 @@ import type {SpringDescription} from './spring';
 
 /**
  * A box in viewport px.
- * @experimental
  */
 export interface MorphRect {
   readonly x: number;
@@ -82,20 +81,17 @@ export interface MorphRect {
  * How the element is scaled onto a path's rect: each axis to the rect
  * (`'axes'`), or both by the rect's width (`'uniform'`, keeping the
  * element's aspect).
- * @experimental
  */
 export type MorphScale = 'axes' | 'uniform';
 
 /**
  * The end of a path a restarted path heads for.
- * @experimental
  */
 export type MorphEnd = 'source' | 'rest';
 
 /**
  * The rect an element shows at each progress of a presentation: 0 on its
  * source, 1 at rest.
- * @experimental
  */
 export interface MorphPath {
   /** The element's box as laid out: its rect with no transform. */
@@ -123,7 +119,6 @@ const lerp = (a: number, b: number, p: number) =>
  * size move together, as an anchored menu grows out of a square on its
  * control, a lifted preview grows to its box, a sub-menu's parent card
  * shrinks back.
- * @experimental
  */
 export function lerpPath(
   from: MorphRect,
@@ -219,7 +214,6 @@ function growPath(
  * s = s₀ + (1 − s₀)·p across the axis and s·(L₀ + (1 − L₀)·p) along it,
  * about `origin`, and its opacity p, so it widens before it lengthens. An
  * interrupted motion continues from the scale and length on screen.
- * @experimental
  */
 export function edgeGrowPath({
   box,
@@ -267,7 +261,6 @@ function travelAt(path: MorphPath, p: number): Record<TravelProperty, number> {
  * Curves for `Animator.play` that put an element laid out in `path.box`, with
  * `transform-origin: 0 0`, on the path's rect as `progress` moves, and its
  * opacity on `path.opacityAt` as `fade` moves (`progress` by default).
- * @experimental
  */
 export function morphCurves(
   path: MorphPath,
@@ -347,7 +340,6 @@ const INLINE_PROPERTIES = ['translate', 'scale', 'transform-origin'] as const;
 
 /**
  * How a present or a dismissal plays.
- * @experimental
  */
 export interface RectMorphPlayOptions {
   /**
@@ -368,7 +360,6 @@ export interface RectMorphPlayOptions {
 
 /**
  * Where a dismissal plays.
- * @experimental
  */
 export interface RectMorphDismissOptions extends RectMorphPlayOptions {
   /**
@@ -385,7 +376,6 @@ export interface RectMorphDismissOptions extends RectMorphPlayOptions {
 
 /**
  * The present and the dismissal of one element.
- * @experimental
  */
 export interface RectMorph {
   /**
@@ -434,7 +424,6 @@ function defaultNow(): number {
  * // …on close, with a copy placed where the menu stands:
  * morph.dismiss(path, springs.menuClose, {target: copy});
  * ```
- * @experimental
  */
 export function createRectMorph(
   element: HTMLElement,
