@@ -788,6 +788,43 @@ describe('GestureHost', () => {
       expect(host.isFingerScroll(list)).toBe(false);
     });
 
+    it('ends a finger’s scroll after a quiet spell where the browser sends no scrollend', () => {
+      vi.useFakeTimers();
+      const own = Object.getOwnPropertyDescriptor(window, 'onscrollend');
+      const proto = Object.getPrototypeOf(window) as object;
+      const inherited = Object.getOwnPropertyDescriptor(proto, 'onscrollend');
+      Reflect.deleteProperty(window, 'onscrollend');
+      Reflect.deleteProperty(proto, 'onscrollend');
+      try {
+        expect('onscrollend' in window).toBe(false);
+        const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+        detachers.push(host.watchFingerScrolls(list));
+        const finger = {id: 1, x: 10, y: 10};
+        touch('touchstart', row, [finger], [finger], 0);
+        list.dispatchEvent(new Event('scroll'));
+        touch('touchend', row, [finger], [], 120);
+        // The momentum keeps scrolling: still the finger's.
+        vi.advanceTimersByTime(100);
+        list.dispatchEvent(new Event('scroll'));
+        vi.advanceTimersByTime(100);
+        expect(host.isFingerScroll(list)).toBe(true);
+        // Quiet for the fallback spell: the scroll has ended.
+        vi.advanceTimersByTime(60);
+        expect(host.isFingerScroll(list)).toBe(false);
+        // A program's scroll afterwards is not the finger's.
+        list.dispatchEvent(new Event('scroll'));
+        expect(host.isFingerScroll(list)).toBe(false);
+      } finally {
+        if (inherited != null) {
+          Object.defineProperty(proto, 'onscrollend', inherited);
+        }
+        if (own != null) {
+          Object.defineProperty(window, 'onscrollend', own);
+        }
+        vi.useRealTimers();
+      }
+    });
+
     it('forgets a scroller once nobody watches it', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
       const stop = host.watchFingerScrolls(list);

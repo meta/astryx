@@ -174,6 +174,14 @@ export interface GestureHostOptions {
 const PAGE_HOLD_SLOP = 5;
 
 /**
+ * Where the browser sends no `scrollend`, how long a finger-driven scroller
+ * stays quiet (no scroll event) before its scroll counts as ended, in ms:
+ * longer than the gap between a momentum scroll's events, short enough that
+ * a program's scroll right after it is not read as the finger's.
+ */
+const SCROLL_END_FALLBACK_MS = 150;
+
+/**
  * Decides, once per one-finger touch, whether its pan would scroll the page:
  * `origin` is the innermost node under the finger (the composed path's first
  * node, so a scroller inside a shadow root is seen), `dx` and `dy` the touch's
@@ -351,6 +359,14 @@ export class GestureHost {
    * rested on them: the scroll stays the finger's until the lift.
    */
   private readonly endedWhileDown = new Set<Node>();
+  /**
+   * Where the browser has no `scrollend`: per finger-driven scroller, the
+   * quiet spell after its last scroll event that ends the scroll instead.
+   */
+  private readonly scrollEndFallbacks = new Map<
+    Node,
+    ReturnType<typeof setTimeout>
+  >();
   /**
    * Where each finger now on the screen landed, from the last touch event's
    * `touches` (every finger, whether or not a recognizer tracks it).
@@ -595,6 +611,7 @@ export class GestureHost {
         this.scrollWatchers.delete(scroller);
         this.fingerScrollers.delete(scroller);
         this.endedWhileDown.delete(scroller);
+        this.clearScrollEndFallback(scroller);
       }
       this.uninstallIfIdle();
     };
@@ -605,8 +622,10 @@ export class GestureHost {
    * finger that landed inside it was down when it scrolled, and the scroll
    * has not ended since (its `scrollend` comes after the momentum that
    * follows the lift). A scroll the program starts while no finger is down
-   * there (`scrollTo`, a status-bar tap) is not. No clock is involved: the
-   * scroller's own `scrollend` closes a finger's scroll.
+   * there (`scrollTo`, a status-bar tap) is not. The scroller's own
+   * `scrollend` closes a finger's scroll; where the browser has no
+   * `scrollend`, a quiet spell of SCROLL_END_FALLBACK_MS after its last
+   * scroll event does.
    */
   isFingerScroll(scroller: Node): boolean {
     return this.fingerScrollers.has(scroller);
@@ -845,6 +864,9 @@ export class GestureHost {
     view?.removeEventListener('click', this.onClick, ACTIVE_CAPTURE);
     view?.removeEventListener('blur', this.onBlur);
     this.cancelEverything(this.arena.now());
+    for (const scroller of [...this.scrollEndFallbacks.keys()]) {
+      this.clearScrollEndFallback(scroller);
+    }
     this.lastTouch = null;
     this.lastScroll = null;
   }
@@ -1763,6 +1785,16 @@ export class GestureHost {
     ) {
       this.fingerScrollers.add(scroller);
     }
+    if (this.fingerScrollers.has(scroller) && !this.hasScrollEnd()) {
+      this.clearScrollEndFallback(scroller);
+      this.scrollEndFallbacks.set(
+        scroller,
+        setTimeout(() => {
+          this.scrollEndFallbacks.delete(scroller);
+          this.endFingerScroll(scroller);
+        }, SCROLL_END_FALLBACK_MS),
+      );
+    }
     // A scroll is a finger's only if that finger was inside this scroller,
     // recently; anything else is the program moving something.
     const last = this.lastTouch;
@@ -1855,7 +1887,28 @@ export class GestureHost {
 
   private readonly onScrollEnd = (event: Event): void => {
     const scroller = event.target === this.doc ? this.doc : event.target;
-    if (!(scroller instanceof Node) || !this.fingerScrollers.has(scroller)) {
+    if (scroller instanceof Node) {
+      this.endFingerScroll(scroller);
+    }
+  };
+
+  /** Whether the browser sends `scrollend`. */
+  private hasScrollEnd(): boolean {
+    const view = this.doc.defaultView;
+    return view != null && 'onscrollend' in view;
+  }
+
+  private clearScrollEndFallback(scroller: Node): void {
+    const timer = this.scrollEndFallbacks.get(scroller);
+    if (timer != null) {
+      clearTimeout(timer);
+      this.scrollEndFallbacks.delete(scroller);
+    }
+  }
+
+  /** A finger-driven scroll stopped: it ends, or at the lift if it rests. */
+  private endFingerScroll(scroller: Node): void {
+    if (!this.fingerScrollers.has(scroller)) {
       return;
     }
     if (this.isFingerDownIn(scroller)) {
@@ -1864,7 +1917,7 @@ export class GestureHost {
     } else {
       this.fingerScrollers.delete(scroller);
     }
-  };
+  }
 
   private readonly onVisibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
