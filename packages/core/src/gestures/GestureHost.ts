@@ -189,6 +189,13 @@ export type PageScrollDecision = (
 export interface AttachOptions {
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
+  /**
+   * The recognizer reads each event's pointer itself, as `spec:AST-057`'s row
+   * swipe does, so it attaches even where the primary pointer is fine: the
+   * host installs what it needs there, styles its element and raises no
+   * warning. Every other recognizer stays inactive there. @default false
+   */
+  perEventPointer?: boolean;
 }
 
 /**
@@ -358,6 +365,8 @@ export class GestureHost {
   private isCoarse = false;
   private stopWatchingPointer: (() => void) | null = null;
   private hasWarnedFinePointer = false;
+  /** Recognizers attached with `perEventPointer`: active on any pointer. */
+  private readonly perEventRecognizers = new Set<GestureRecognizer>();
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -393,6 +402,11 @@ export class GestureHost {
     const registration = this.registrationFor(element);
     registration.manageStyle = options.manageStyle ?? registration.manageStyle;
     recognizer.view = element;
+    if (options.perEventPointer === true) {
+      this.perEventRecognizers.add(recognizer);
+    } else if (!this.isCoarse) {
+      this.warnFinePointer();
+    }
     if (recognizer instanceof HoverGestureRecognizer) {
       registration.hovers.push(recognizer);
     } else {
@@ -401,6 +415,10 @@ export class GestureHost {
     this.refresh(element, registration);
     this.install();
     return () => {
+      if (this.perEventRecognizers.delete(recognizer) && !this.needsInput()) {
+        // The last recognizer that needed input where the pointer is fine.
+        this.uninstall();
+      }
       const index = registration.recognizers.indexOf(recognizer);
       if (index >= 0) {
         registration.recognizers.splice(index, 1);
@@ -426,6 +444,9 @@ export class GestureHost {
   attachConsumer(element: Element, consumer: TouchConsumer): () => void {
     const registration = this.registrationFor(element);
     registration.consumer = consumer;
+    if (!this.isCoarse) {
+      this.warnFinePointer();
+    }
     this.install();
     this.refresh(element, registration);
     return () => {
@@ -445,6 +466,10 @@ export class GestureHost {
    */
   addDelegatedConsumer(type: DelegatedConsumerType): () => void {
     this.delegated.add(type);
+    this.watchPointer();
+    if (!this.isCoarse) {
+      this.warnFinePointer();
+    }
     this.install();
     return () => {
       this.delegated.delete(type);
@@ -605,15 +630,31 @@ export class GestureHost {
     return registration;
   }
 
+  /**
+   * Whether `recognizer` takes input now: where the primary pointer is
+   * coarse, or with `perEventPointer` (FR19; `spec:AST-057`).
+   */
+  private isActive(recognizer: GestureRecognizer): boolean {
+    return this.isCoarse || this.perEventRecognizers.has(recognizer);
+  }
+
+  /** Whether anything attached takes input now. */
+  private needsInput(): boolean {
+    return this.isCoarse || this.perEventRecognizers.size > 0;
+  }
+
   private refresh(element: Element, registration: Registration): void {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    // Where the primary pointer is fine, no touch listener (FR19).
+    // Where the primary pointer is fine, no touch listener but a
+    // perEventPointer recognizer's (FR19).
     const needsListener =
-      this.isCoarse &&
-      (registration.recognizers.some(claimsWhileMoving) ||
-        registration.consumer?.keepsTouch != null);
+      registration.recognizers.some(
+        recognizer =>
+          this.isActive(recognizer) && claimsWhileMoving(recognizer),
+      ) ||
+      (this.isCoarse && registration.consumer?.keepsTouch != null);
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -626,10 +667,12 @@ export class GestureHost {
   }
 
   private applyStyle(element: HTMLElement, registration: Registration): void {
-    // Where the primary pointer is fine, the browser's own styles (FR19).
-    const style = this.isCoarse
-      ? gestureHostStyle(registration.recognizers)
-      : {};
+    // Where the primary pointer is fine, the browser's own styles, but a
+    // perEventPointer recognizer's (FR19).
+    const active = registration.recognizers.filter(recognizer =>
+      this.isActive(recognizer),
+    );
+    const style = active.length > 0 ? gestureHostStyle(active) : {};
     for (const key of Object.keys(
       STYLE_PROPERTIES,
     ) as (keyof GestureHostStyle)[]) {
@@ -714,7 +757,9 @@ export class GestureHost {
       this.install();
     } else {
       this.cancelEverything(this.arena.now());
-      this.uninstall();
+      if (!this.needsInput()) {
+        this.uninstall();
+      }
     }
     for (const [element, registration] of this.registry) {
       this.refresh(element, registration);
@@ -726,10 +771,11 @@ export class GestureHost {
     if (process.env.NODE_ENV !== 'production' && !this.hasWarnedFinePointer) {
       this.hasWarnedFinePointer = true;
       console.warn(
-        'Astryx: a gesture recognizer, press tracker or finger-scroll watch ' +
-          'was attached where the primary pointer is fine. It stays inactive ' +
-          'until the pointer is coarse (spec:AST-094 FR19), so attach touch ' +
-          'work only under a touch presentation.',
+        'Astryx: a gesture recognizer or press tracker was attached where ' +
+          'the primary pointer is fine. It stays inactive until the pointer ' +
+          'is coarse (spec:AST-094 FR19), so attach touch work only under a ' +
+          'touch presentation, or pass perEventPointer for a recognizer that ' +
+          "reads each event's pointer itself (spec:AST-057).",
       );
     }
   }
@@ -738,8 +784,7 @@ export class GestureHost {
 
   private install(): void {
     this.watchPointer();
-    if (!this.isCoarse) {
-      this.warnFinePointer();
+    if (!this.needsInput()) {
       return;
     }
     if (this.isInstalled) {
@@ -841,10 +886,18 @@ export class GestureHost {
       }
       const registration = this.registry.get(node);
       if (registration != null) {
-        recognizers.push(...registration.recognizers);
-        hovers.push(...registration.hovers);
+        // Where the primary pointer is fine, only perEventPointer
+        // recognizers take part (FR19; `spec:AST-057`).
+        recognizers.push(
+          ...registration.recognizers.filter(recognizer =>
+            this.isActive(recognizer),
+          ),
+        );
+        if (this.isCoarse) {
+          hovers.push(...registration.hovers);
+        }
       }
-      if (hasConsumerOwner || pointerType == null) {
+      if (hasConsumerOwner || pointerType == null || !this.isCoarse) {
         continue;
       }
       if (registration?.consumer != null) {

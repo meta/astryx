@@ -16,7 +16,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
-import {coarsePrimaryPointer} from './pointerQuery';
+import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 function touch(
   type: string,
@@ -190,6 +190,35 @@ describe('useGestureRecognizer', () => {
     (pan as PanGestureRecognizer | null)?.setEnabled(false);
     expect(states).toEqual(['began', 'cancelled']);
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+  });
+
+  it("attaches a recognizer that reads each event's pointer where the primary pointer is fine (spec:AST-057)", () => {
+    const pointer = pointerQuery(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const onPan = vi.fn();
+      function Swipe() {
+        const ref = useRef<HTMLDivElement>(null);
+        useGestureRecognizer(
+          ref,
+          () => new PanGestureRecognizer({direction: 'horizontal'}),
+          onPan,
+          {perEventPointer: true},
+        );
+        return <div data-testid="surface" ref={ref} />;
+      }
+      const {getByTestId, unmount} = render(<Swipe />);
+      const surface = getByTestId('surface');
+      touch('touchstart', surface, {id: 9, x: 0, y: 0}, 0);
+      touch('touchmove', surface, {id: 9, x: 30, y: 0}, 16);
+      expect(onPan).toHaveBeenCalled();
+      touch('touchend', surface, {id: 9, x: 30, y: 0}, 32, true);
+      unmount();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      pointer.restore();
+    }
   });
 
   it('detaches on unmount', () => {

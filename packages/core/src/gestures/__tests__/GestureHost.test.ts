@@ -1631,6 +1631,82 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(states).toHaveLength(count);
   });
 
+  it("attaches a recognizer that reads each event's pointer where it is fine, with its own listener and style and no warning (spec:AST-057)", () => {
+    const warn = quietWarning();
+    detachers.push(pointerQuery(false).restore);
+    const {box} = mount('<div id="box"></div>');
+    const set = vi.spyOn(box.style, 'setProperty');
+    const swipe = new PanGestureRecognizer({
+      name: 'swipe',
+      direction: 'horizontal',
+    });
+    const states: string[] = [];
+    swipe.addTransitionListener((_current, _from, to) => states.push(to));
+    detachers.push(host.attach(box, swipe, {perEventPointer: true}));
+    expect(set).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
+    const finger = {id: 1, x: 5, y: 5};
+    const moved = {id: 1, x: 60, y: 5};
+    touch('touchstart', box, [finger], [finger], 0);
+    touch('touchmove', box, [moved], [moved], 16);
+    touch('touchend', box, [moved], [], 32);
+    expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('keeps every other recognizer and press consumer beside it inactive where it is fine, and warns for them', () => {
+    const warn = quietWarning();
+    detachers.push(pointerQuery(false).restore);
+    const {box, row} = mount('<div id="box"></div><div id="row"></div>');
+    const set = vi.spyOn(row.style, 'setProperty');
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const taps: string[] = [];
+    tap.addTransitionListener((_current, _from, to) => taps.push(to));
+    const consumer = new RecordingConsumer();
+    detachers.push(
+      host.attach(box, new PanGestureRecognizer({name: 'swipe'}), {
+        perEventPointer: true,
+      }),
+      host.attach(row, tap),
+      host.attachConsumer(row, consumer),
+    );
+    expect(set).not.toHaveBeenCalled();
+    const finger = {id: 2, x: 5, y: 5};
+    touch('touchstart', row, [finger], [finger], 0);
+    touch('touchend', row, [finger], [], 50);
+    expect(taps).toEqual([]);
+    expect(consumer.events).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps it working when the pointer turns fine, as the rest comes down', () => {
+    quietWarning();
+    const pointer = pointerQuery(true);
+    detachers.push(pointer.restore);
+    const {box, row} = mount('<div id="box"></div><div id="row"></div>');
+    const removed = vi.spyOn(box.style, 'removeProperty');
+    const swipe = new PanGestureRecognizer({
+      name: 'swipe',
+      direction: 'horizontal',
+    });
+    const states: string[] = [];
+    swipe.addTransitionListener((_current, _from, to) => states.push(to));
+    detachers.push(
+      host.attach(box, swipe, {perEventPointer: true}),
+      host.attach(row, new LongPressGestureRecognizer({name: 'press'})),
+    );
+    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    pointer.set(false);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    // The swipe's own touch-action stays.
+    expect(removed).not.toHaveBeenCalledWith('touch-action');
+    const finger = {id: 3, x: 5, y: 5};
+    const moved = {id: 3, x: 60, y: 5};
+    touch('touchstart', box, [finger], [finger], 0);
+    touch('touchmove', box, [moved], [moved], 16);
+    touch('touchend', box, [moved], [], 32);
+    expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
+  });
+
   it('warns once in development when something attaches where it is fine', () => {
     const warn = quietWarning();
     detachers.push(pointerQuery(false).restore);

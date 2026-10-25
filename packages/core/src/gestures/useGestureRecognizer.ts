@@ -39,6 +39,12 @@ export interface UseGestureRecognizerOptions {
   isEnabled?: boolean;
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
+  /**
+   * The recognizer reads each event's pointer itself (`spec:AST-057`'s row
+   * swipe), so it attaches even where the primary pointer is fine; see the
+   * host's AttachOptions. @default false
+   */
+  perEventPointer?: boolean;
 }
 
 /**
@@ -70,7 +76,11 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   useIsomorphicLayoutEffect(() => {
     onGestureRef.current = onGesture;
   });
-  const {isEnabled = true, manageStyle = true} = options;
+  const {
+    isEnabled = true,
+    manageStyle = true,
+    perEventPointer = false,
+  } = options;
   const isUnmountedRef = useIsUnmountedRef();
 
   // The listener runs inside input events, never during a render or an
@@ -90,8 +100,9 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     element =>
       getGestureHost(element.ownerDocument).attach(element, recognizer, {
         manageStyle,
+        perEventPointer,
       }),
-    manageStyle,
+    `${manageStyle}:${perEventPointer}`,
   );
 
   useIsomorphicLayoutEffect(() => {

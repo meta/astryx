@@ -225,7 +225,12 @@ warning, so two writers never fight over the paint. Pass another
   follows the query (a tablet docking or undocking a mouse): turning coarse
   installs it and styles every element; turning fine cancels every touch in
   flight and removes it all. A development warning names the first attach
-  under a fine pointer: attach touch work under a touch presentation.
+  under a fine pointer: attach touch work under a touch presentation. The
+  one carve-out is a recognizer that reads each event's pointer itself,
+  `spec:AST-057`'s row swipe: attached with `perEventPointer: true` (an
+  option of `attach` and of `useGestureRecognizer`), it gets the host's
+  listeners and its own element's style on any pointer, with no warning,
+  while every other recognizer and press tracker beside it stays inactive.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
