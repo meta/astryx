@@ -19,12 +19,18 @@
  */
 
 import {registerMotionTable} from '../roles';
+
+// The value of `scroll.delaysContentTouchesMs` (sourced there), its own
+// export so the press clocks read it without the rest of the table
+// (`architecture:component-style-authoring` INV6).
+export const DELAYS_CONTENT_TOUCHES_MS = 150;
+
 export const scroll = {
   decelerationRate: {
     /**
      * Normal deceleration: the release velocity is multiplied by this every
      * millisecond, as a continuous exponential (UIScrollView keeps ln r,
-     * −0.002002, and velocities in pt/ms; decay.ts). The scroll view's own
+     * −0.002002, and velocities in pt/ms). The scroll view's own
      * target for a release (`scrollViewWillEndDragging`) is
      * v · r ÷ (1 − r), within 1 %: WWDC18 803's projection function.
      * @source apple-docs https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.struct/normal
@@ -103,7 +109,7 @@ export const scroll = {
    *   real HID touches at 60 fps, recorded with the touch press model
    *   (PRESS_ONSET_MS in packages/core/src/utils/pressGesture.ts, 2026-10-06)
    */
-  delaysContentTouchesMs: 150,
+  delaysContentTouchesMs: DELAYS_CONTENT_TOUCHES_MS,
   /**
    * Scroll-to-top after a status-bar tap: not a spring. The offset
    * approaches the top as 1 − e^(−9.7 t) whatever the distance (done in about

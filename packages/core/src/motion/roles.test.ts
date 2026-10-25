@@ -48,14 +48,14 @@ const DISCOVERED = new Set(
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
     expect(isMotionRoleId('sheet.present')).toBe(true);
-    expect(isMotionRoleId('timing.curves.easeInOut')).toBe(true);
+    expect(isMotionRoleId('timing.curves.move')).toBe(true);
     expect(isMotionRoleId('sheet')).toBe(false);
     expect(isMotionRoleId('Sheet.present')).toBe(false);
     expect(motionRoleVariable('springs.sheetDetent')).toBe(
       '--motion-springs-sheet-detent',
     );
-    expect(motionRoleVariable('timing.curves.easeInOut')).toBe(
-      '--motion-timing-curves-ease-in-out',
+    expect(motionRoleVariable('timing.curves.move')).toBe(
+      '--motion-timing-curves-move',
     );
     expect(() => motionRoleVariable('sheet')).toThrow(/dotted table path/);
   });
@@ -92,10 +92,10 @@ describe('motion roles', () => {
 
   it('makes the shared tables roles, without their thresholds and arbitration timings', () => {
     expect(motionRoleOf(springs.sheetPresent)?.id).toBe('springs.sheetPresent');
-    expect(motionRoleOf(springs.uikitDefault)?.id).toBe('springs.uikitDefault');
-    expect(springs.sheetPresent).toEqual(springs.uikitDefault);
+    expect(motionRoleOf(springs.viewChange)?.id).toBe('springs.viewChange');
+    expect(springs.sheetPresent).toEqual(springs.viewChange);
     expect(motionRoleOf(scroll.bounce)?.kind).toBe('spring');
-    expect(motionRoleOf(timing.curves.easeInOut)?.kind).toBe('curve');
+    expect(motionRoleOf(timing.curves.move)?.kind).toBe('curve');
     expect(motionRoleIn(timing.press, 'flashMs')?.kind).toBe('duration');
     // The Reduced Motion fade is not a role: no theme lengthens it.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
