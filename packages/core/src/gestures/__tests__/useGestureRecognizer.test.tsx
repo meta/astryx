@@ -162,6 +162,26 @@ describe('useGestureRecognizer', () => {
     touch('touchend', second, {id: 7, x: 30, y: 0}, 132, true);
   });
 
+  it('reports cancelled to a handler that disables the recognizer itself, from that handler', () => {
+    const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
+    const {getByTestId} = render(
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          pan = r;
+        }}
+      />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
+    // A handler (here, the test) turns it off: UIKit's .cancelled, at once.
+    (pan as PanGestureRecognizer | null)?.setEnabled(false);
+    expect(states).toEqual(['began', 'cancelled']);
+    touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+  });
+
   it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
@@ -175,9 +195,21 @@ describe('useGestureRecognizer', () => {
   });
 });
 
-function Button({onEvent}: {onEvent: (event: ControlEvent) => void}) {
+function Button({
+  onEvent,
+  cancelTravel,
+  isBraking,
+}: {
+  onEvent: (event: ControlEvent) => void;
+  cancelTravel?: number;
+  isBraking?: () => boolean;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
-  usePressTracker(ref, {onControlEvent: event => onEvent(event)});
+  usePressTracker(ref, {
+    onControlEvent: event => onEvent(event),
+    cancelTravel,
+    isBraking,
+  });
   return (
     <button data-testid="button" ref={ref} type="button">
       Go
@@ -242,5 +274,16 @@ describe('usePressTracker', () => {
     touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
     expect(isBraking).toHaveBeenCalled();
     expect(events).not.toContain('touchDown');
+  });
+
+  it("uses the caller's scroll brake", () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId} = render(
+      <Button onEvent={event => events.push(event)} isBraking={() => true} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
+    expect(events).toEqual([]);
   });
 });

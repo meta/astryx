@@ -30,12 +30,10 @@ import {
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
-/** @experimental */
 export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<PinchGestureRecognizer> {
   hysteresis?: number;
 }
 
-/** @experimental */
 export class PinchGestureRecognizer extends GestureRecognizer {
   hysteresis: number;
   private initialSpan = 0;
