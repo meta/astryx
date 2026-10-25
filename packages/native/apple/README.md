@@ -26,12 +26,13 @@ apple/
 │   │   │   └── Generated/ # typed tokens and every published theme, generated; do not edit
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
-│   │   ├── Text/          # AstryxText
-│   │   ├── Heading/       # AstryxHeading
-│   │   ├── Button/        # AstryxButton
-│   │   ├── TextInput/     # AstryxTextInput
-│   │   ├── Card/          # AstryxCard
-│   │   └── Banner/        # AstryxBanner
+│   │   ├── Icon/          # Icon, Icon.spec.md
+│   │   ├── Text/          # Text
+│   │   ├── Heading/       # Heading
+│   │   ├── Button/        # Button
+│   │   ├── TextInput/     # TextInput
+│   │   ├── Card/          # Card
+│   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
 │       └── Generated/     # generated; do not edit
 ├── Tests/
@@ -44,17 +45,21 @@ apple/
 ```
 
 - **`Sources/Astryx/<Name>/`** holds one folder per component, named as in
-  `packages/core/src/<Name>/`. A component's parameters use core's prop names
+  `packages/core/src/<Name>/`. Each view has core's component name in the
+  `Astryx` module (`Button`, `Text`), which re-exports SwiftUI and the
+  generated contracts, so an app file writes `import Astryx` alone. In a file
+  that also imports SwiftUI, write `Astryx.Button` and `SwiftUI.Button`. A
+  component's parameters use core's prop names
   and values (`variant: .primary`, `size: .lg`, `isLoading`), so code reads
   the same across web and native, with six exceptions, the interim shape
   AST-093 FR5 exempts until the components move onto the generated contracts:
-  - `AstryxButton` takes `action` where core has `onClick`.
-  - `AstryxButton` takes `fillsWidth` where core has `width="100%"`.
-  - `AstryxButton` takes `icon` as a shared icon name (`"search"`), which the
+  - `Button` takes `action` where core has `onClick`.
+  - `Button` takes `fillsWidth` where core has `width="100%"`.
+  - `Button` takes `icon` as a shared icon name (`"search"`), which the
     generated `ButtonProps` does not carry yet.
-  - `AstryxTextInput` takes a `Binding` where core has `value` and `onChange`.
-  - `AstryxHeading`'s `level` is optional where core requires it.
-  - `AstryxCard` takes `padding` as a whole spacing step, so it cannot spell
+  - `TextInput` takes a `Binding` where core has `value` and `onChange`.
+  - `Heading`'s `level` is optional where core requires it.
+  - `Card` takes `padding` as a whole spacing step, so it cannot spell
     core's `0.5` and `1.5` steps.
 - **`Templates/`** holds one folder per page template, named after the
   `astryx template` id. Templates are clone-only, as on the web: you copy a
@@ -74,7 +79,6 @@ app.
 
 ```swift
 import Astryx
-import SwiftUI
 
 @main
 struct DemoApp: App {
@@ -99,6 +103,12 @@ tokens in the current mode as typed members (`tokens.color.textPrimary`,
 compile. Text sizes grow with Dynamic Type. The components still read some
 tokens by core's name (`astryx.color("color-accent")`); moving them onto the
 typed members comes next.
+
+`Icon(.search)` draws a shared icon name as the platform's SF Symbol, at
+core's icon size and color, hidden from VoiceOver unless it has a `label`.
+`IconName` holds every built-in name as a static member; a theme maps a name
+to another symbol, or registers a `<library>:<name>` name, with
+`Theme(…, icons: ["acme:rocket": "airplane"])`.
 
 Font families come from the theme's `font-family-*` stacks: the first family
 the device has wins, and a system family such as `-apple-system` or
@@ -173,8 +183,9 @@ Both packages also declare macOS 14 so they build and test on a Mac without a
 simulator; iOS 17 is the target. Open `Templates/Package.swift` in Xcode to
 run `LoginTemplate` in an iOS simulator through its preview.
 
-To add a component, create `Sources/Astryx/<Name>/Astryx<Name>.swift` with
-core's prop names, read its tokens from `astryx`, and add tests under
+To add a component, create `Sources/Astryx/<Name>/<Name>.swift` declaring
+`<Name>` with core's prop names, writing `SwiftUI.<Name>` wherever it means the
+system type, read its tokens from `astryx`, and add tests under
 `Tests/AstryxTests/`. To add a template, create
 `Templates/<Name>/<Name>Template.swift` from the output of
 `astryx template <id>`, with tests under `Templates/Tests/`.
