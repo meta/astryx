@@ -10,7 +10,9 @@
  * 4-core runner, and otherwise it passes on Linux without work.
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -26,6 +28,54 @@ const step = (job, name) =>
   job.steps.find(candidate => candidate.name === name);
 const decide = () => step(scope, 'Decide whether the interaction proofs apply');
 const applies = "needs.interaction-scope.outputs.applies == 'true'";
+
+// Runs a step's script as Actions runs it (bash -eo pipefail) with a stub
+// `git` first on PATH: `fetch` exits FETCH, and `show` prints a helper that
+// exits HELPER (or fails when HELPER is 'missing'). Returns the exit status
+// and the outputs the script wrote.
+function runStep(script, {env = {}, fetch = 0, helper = 0} = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-interaction-'));
+  try {
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'git'),
+      [
+        '#!/usr/bin/env bash',
+        'case "$1" in',
+        `  fetch) exit ${fetch} ;;`,
+        helper === 'missing'
+          ? '  show) exit 128 ;;'
+          : `  show) echo 'exit ${helper}' ;;`,
+        '  *) exit 3 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+      {mode: 0o755},
+    );
+    const output = path.join(dir, 'output');
+    fs.writeFileSync(output, '');
+    const result = spawnSync(
+      'bash',
+      ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script],
+      {
+        encoding: 'utf8',
+        env: {
+          PATH: `${bin}:${process.env.PATH}`,
+          GITHUB_OUTPUT: output,
+          EVENT_NAME: 'pull_request',
+          DOCSITE_ONLY: 'false',
+          TOOLING_ONLY: 'false',
+          BASE_SHA: '0123456789abcdef0123456789abcdef01234567',
+          ...env,
+        },
+      },
+    );
+    return {status: result.status, output: fs.readFileSync(output, 'utf8')};
+  } finally {
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+}
 
 describe('interaction proof routing', () => {
   it('is joined by test', () => {
@@ -82,6 +132,41 @@ describe('interaction proof routing', () => {
     );
     // Only "out of scope" (exit 1) skips; unknown (2) runs the proofs.
     expect(decide().run).toContain('if [ "$scope" = 1 ]; then');
+  });
+
+  // AST-030 FR9: removing a fail-closed edge fails a test. Only a helper that
+  // answers "out of scope" (exit 1) skips the proofs; an unknown answer, a
+  // failed fetch, a helper missing at the base, or no base runs them.
+  it('runs the proofs unless the helper answers "out of scope"', () => {
+    const decided = options => runStep(decide().run, options);
+    for (const [label, options, expected] of [
+      ['in scope (helper exit 0)', {helper: 0}, 'true'],
+      ['out of scope (helper exit 1)', {helper: 1}, 'false'],
+      ['unknown (helper exit 2)', {helper: 2}, 'true'],
+      ['the base cannot be fetched', {fetch: 1}, 'true'],
+      ['the helper is missing at the base', {helper: 'missing'}, 'true'],
+      ['no base SHA', {env: {BASE_SHA: ''}}, 'true'],
+      ['docsite only', {env: {DOCSITE_ONLY: 'true'}, helper: 0}, 'false'],
+      [
+        'not a pull request',
+        {env: {EVENT_NAME: 'merge_group'}, helper: 0},
+        'false',
+      ],
+    ]) {
+      const {status, output} = decided(options);
+      expect(status, label).toBe(0);
+      expect(output, label).toBe(`applies=${expected}\n`);
+    }
+  });
+
+  it('fails each guard step when it runs', () => {
+    for (const [job, name] of [
+      [scope, 'Require successful scope classification'],
+      [proofs, 'Require a decided interaction scope'],
+      [proofs, "Require this pull request's Storybook build"],
+    ]) {
+      expect(runStep(step(job, name).run).status, name).toBe(1);
+    }
   });
 
   it('keeps the harness, components, Storybook and its own setup in scope', () => {
