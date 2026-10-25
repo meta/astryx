@@ -46,11 +46,19 @@ function matchesPattern(pattern, value) {
  *   files: ReadonlyMap<string, string>,
  *   coreExports: readonly string[],
  *   tsconfigPaths: Readonly<Record<string, readonly string[]>>,
+ *   internalSpecifier: RegExp,
  * }} input `files` by path, `coreExports` as core's `exports` keys
- *   (`./Button`), `tsconfigPaths` as each Lab tsconfig's `paths` keys
+ *   (`./Button`), `tsconfigPaths` as each Lab tsconfig's `paths` keys, and
+ *   `internalSpecifier` the internal module paths core lists
+ *   (`CORE_INTERNAL_SPECIFIER`)
  * @returns {string[]}
  */
-function findLabCoreImportProblems({files, coreExports, tsconfigPaths}) {
+function findLabCoreImportProblems({
+  files,
+  coreExports,
+  tsconfigPaths,
+  internalSpecifier,
+}) {
   const problems = [];
   for (const [file, source] of files) {
     const text = source
@@ -62,7 +70,7 @@ function findLabCoreImportProblems({files, coreExports, tsconfigPaths}) {
       if (coreExports.some(key => matchesPattern(key, subpath))) {
         continue;
       }
-      if (!CORE_INTERNAL_SPECIFIER.test(specifier)) {
+      if (!internalSpecifier.test(specifier)) {
         problems.push(
           `${file}: ${specifier} is neither exported by core nor a listed internal module path; add it to CORE_INTERNAL_SPECIFIER in scripts/core-internal-modules.cjs, with test cases`,
         );
@@ -122,6 +130,7 @@ describe('Lab imports of core modules core does not export', () => {
           'tsconfig.json': pathsOf('tsconfig.json'),
           'tsconfig.build.json': pathsOf('tsconfig.build.json'),
         },
+        internalSpecifier: CORE_INTERNAL_SPECIFIER,
       }),
     ).toEqual([]);
   });
@@ -133,7 +142,7 @@ describe('Lab imports of core modules core does not export', () => {
         [
           "import {Button} from '@astryxdesign/core/Button';",
           "import {createAnimator} from '@astryxdesign/core/motion/animator';",
-          "import type {ReorderState} from '@astryxdesign/core/List/useListReorder';",
+          "import type {PagerState} from '@astryxdesign/core/Pager/pagerState';",
           "const strings = import('@astryxdesign/core/locales/en.json');",
           "// import {gone} from '@astryxdesign/core/List/ListReorderHandle';",
         ].join('\n'),
@@ -149,14 +158,18 @@ describe('Lab imports of core modules core does not export', () => {
       tsconfigPaths: {
         'tsconfig.json': [
           '@astryxdesign/core/motion/*',
-          '@astryxdesign/core/List/useListReorder',
+          '@astryxdesign/core/Pager/pagerState',
         ],
         'tsconfig.build.json': ['@astryxdesign/core/motion/*'],
       },
+      // The fixture's own list of internal paths, so a path a later pull
+      // request adds to CORE_INTERNAL_SPECIFIER cannot change this case.
+      internalSpecifier:
+        /^@astryxdesign\/core\/(?:motion|gestures)(?:\/[\w.-]+)*$/,
     });
     expect(problems).toEqual([
-      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/List/useListReorder is neither exported by core nor a listed internal module path; add it to CORE_INTERNAL_SPECIFIER in scripts/core-internal-modules.cjs, with test cases',
-      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/List/useListReorder has no paths entry in packages/lab/tsconfig.build.json',
+      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/Pager/pagerState is neither exported by core nor a listed internal module path; add it to CORE_INTERNAL_SPECIFIER in scripts/core-internal-modules.cjs, with test cases',
+      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/Pager/pagerState has no paths entry in packages/lab/tsconfig.build.json',
       'packages/lab/src/Sheet/Sheet.tsx: @astryxdesign/core/gestures has no paths entry in packages/lab/tsconfig.json',
       'packages/lab/src/Sheet/Sheet.tsx: @astryxdesign/core/gestures has no paths entry in packages/lab/tsconfig.build.json',
     ]);
