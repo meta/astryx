@@ -91,7 +91,6 @@ of a page scroll, so many of these can be read off Safari itself.
 | M-G10 | `UIKIT_GESTURES.rotation.hysteresis`            | Maps: two touches rotating at 10 deg/s filmed at 60 fps; angle at the first frame the map turns. The simulator HID cannot rotate two fingers: a device run or an XCUITest rotate.                | B, C   |
 | M-G11 | `UIKIT_GESTURES.screenEdgePan.edgeRegion`       | Settings > General (UINavigationController pop): HID drags inward starting at x = 5, 10 ... 40 pt; largest x that still pops.                                                                    | C      |
 | M-G12 | `UIKIT_GESTURES.control.trackingExpansion`      | Calculator (UIButton): HID press, drag away at 20 px/s filmed at 60 fps; distance from the frame at which the highlight turns off, then back on.                                                 | B, C   |
-| M-G13 | `UIKIT_GESTURES.scroll.contentEndHandoffSlop`   | A UIKit sheet (Maps place card at the medium detent) over a scrolled list: HID drag down from mid-list; finger travel between the list reaching its top and the sheet moving.                    | C      |
 | M-G14 | `UIKIT_GESTURES.velocity.scrollReleaseWeight`   | Safari page scroll (UIScrollView): HID flings with known speed profiles; back out the release velocity from the coast distance (0.998/ms decay) and compare with this blend on the same samples. | C      |
 | M-G16 | `UIKIT_GESTURES.velocity.stillness`             | Safari page scroll: HID drag, pause P ms, lift; smallest P after which the page does not coast.                                                                                                  | C      |
 | M-G17 | `UIKIT_GESTURES.click.strayClickWindow`         | Not a parity value: confirm in Safari and Chromium that the click follows touchend within one frame.                                                                                             | C      |
@@ -110,8 +109,8 @@ instantaneous velocity + 0.8 × the previous one's (it reproduces every value
 UIKit reported on six recorded streams), does not decay through a rest and
 ignores the lift (M-G14 is the scroll-view release blend still to confirm;
 M-G16 is Astryx’s stillness reset, spec:AST-100 FR2, not a UIKit value); a sheet over a scrolled list
-leaves the whole drag to the list (no mid-gesture handoff), which leaves
-M-G13 without a parity value.
+leaves the whole drag to the list (no mid-gesture handoff, `spec:AST-094`
+FR14).
 
 ## Switch (UISwitch)
 
