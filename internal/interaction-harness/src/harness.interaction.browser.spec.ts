@@ -13,9 +13,10 @@
  *   document-timeline animations, each at its own offset, adds a second hold
  *   to the held set, and releases only them; storyboards write a sheet and a
  *   trace that follows the curve, and an endless animation does not set their
- *   length; the timer gate holds a component timer until the filmstrip is
- *   done, drops callbacks the page cancels, stamps held frames with the time
- *   they run, and leaves the harness its own frames.
+ *   length, and a touch filmstrip keeps scripted event times while a handler
+ *   clock sees its pacing; the timer gate holds a component timer until the
+ *   filmstrip is done, drops callbacks the page cancels, stamps held frames
+ *   with the time they run, and leaves the harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -697,6 +698,48 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     // before + touchStart + 6 moves + touchEnd
     expect(storyboard.frames).toHaveLength(9);
     expect(storyboard.frames.at(-2)?.data.x).toBeCloseTo(300, 0);
+  });
+
+  test('a touch filmstrip keeps the scripted event times, and a handler clock sees its pacing', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'WebKit stamps events with their real dispatch time',
+    );
+    await fixture(page);
+    await page.evaluate(() => {
+      const w = window as unknown as {__moves: [number, number][]};
+      w.__moves = [];
+      document.getElementById('pad')?.addEventListener('pointermove', e => {
+        w.__moves.push([e.timeStamp, performance.now()]);
+      });
+    });
+    const driver = await touchDriver(page);
+    await touchStoryboard(
+      page,
+      driver,
+      drag({x: 60, y: 60}, {x: 300, y: 240}, {durationMs: 100, hz: 60}),
+      {
+        name: 'harness-self-test-touch-clock',
+        clip: {x: 0, y: 0, width: 402, height: 300},
+      },
+    );
+    const moves = await page.evaluate(
+      () => (window as unknown as {__moves: [number, number][]}).__moves,
+    );
+    const gaps = (column: 0 | 1) =>
+      moves.slice(1).map((move, i) => move[column] - moves[i][column]);
+    expect(moves.length).toBeGreaterThanOrEqual(5);
+    // The events carry the script's 60 Hz times…
+    for (const gap of gaps(0)) {
+      expect(gap).toBeCloseTo(1000 / 60, 0);
+    }
+    // …but the clock a handler reads advances by a photograph per event.
+    for (const gap of gaps(1)) {
+      expect(gap).toBeGreaterThan(2 * (1000 / 60));
+    }
   });
 
   test('the timer gate holds a component timer until the filmstrip is done', async ({

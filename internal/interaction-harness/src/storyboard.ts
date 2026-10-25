@@ -297,9 +297,16 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
 
 /**
  * Plays a touch script without wall-clock pacing and photographs the page
- * after every event. In Chromium the page still sees the scripted timestamps,
- * so velocity-dependent behavior is unchanged; in WebKit the page sees the
- * real (slower) dispatch times.
+ * after every event. In Chromium each event's `timeStamp` is still its
+ * scripted time, so velocity read from event timestamps is unchanged; in
+ * WebKit it is the real (slower) dispatch time.
+ *
+ * A handler that reads the clock instead (`performance.now()`, `Date.now()`)
+ * sees the filmstrip's pacing in both engines: two frames, `measure` and a
+ * photograph per event, about 100 ms between moves instead of the script's
+ * 16.7. Its release velocity is that much lower, so a flick that dismisses
+ * when played can settle back when filmed: film such a gesture from a
+ * screencast (`startScreencast`, `castStoryboard`) instead.
  */
 export async function touchStoryboard(
   page: Page,
