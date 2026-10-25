@@ -73,7 +73,8 @@
  * pseudo-element) already has a compositing layer; without one, a block
  * right after that commit freezes it (iOS 26.2 simulator: 2 of 7 runs kept
  * moving, 0 of 5 on a ::before). Every animation the animator creates, and
- * every `set`, therefore promotes its channels in the same task: inline
+ * every `set` (unless it passes `{promote: false}`), therefore promotes its
+ * channels in the same task: inline
  * `will-change` on the element, merged with the element's own, or the custom
  * property `--astryx-motion-will-change-<pseudo>` on the host for a
  * pseudo-element, whose style opts in with
@@ -248,6 +249,21 @@ export interface MotionCurve {
  * Options of `createAnimator`.
  * @experimental
  */
+/** How `set` puts values in place. */
+export interface SetOptions {
+  /**
+   * Whether the write promotes its channels to a compositing layer, as a
+   * drag's per-frame writes need so each is a composite only (default
+   * true). `false` writes the values and nothing else: a one-off switch that
+   * must not give its element a layer, such as a veil under a sticky header
+   * switched during a programmatic scroll (on iOS 26.2, a layer there blanks
+   * the header's painted items for about two frames). A channel another
+   * motion keeps promoted stays promoted, and a channel with other motion
+   * still running gets its animation's layer as usual.
+   */
+  promote?: boolean;
+}
+
 export interface AnimatorOptions {
   /**
    * Animates a pseudo-element of the element instead (`'::backdrop'` of a
@@ -329,7 +345,7 @@ export interface Animator {
    * of a drag (one style write per channel, no animation when nothing else
    * on the channel is moving).
    */
-  set(values: MotionValues): void;
+  set(values: MotionValues, options?: SetOptions): void;
   /** Springs to `to` from the presentation values. */
   animate(
     to: MotionValues,
@@ -1918,7 +1934,7 @@ export function createAnimator(
       return velocityAt(property === 'scale' ? 'scaleX' : property, time);
     },
 
-    set(values) {
+    set(values, setOptions = {}) {
       syncPending();
       const time = now();
       const next = expand(values);
@@ -1931,8 +1947,10 @@ export function createAnimator(
         resting[property] = value;
       }
       // Direct manipulation: the layer makes each write a composite only.
-      for (const property of Object.keys(next) as MotionProperty[]) {
-        promote(CHANNEL_OF[property]);
+      if (setOptions.promote !== false) {
+        for (const property of Object.keys(next) as MotionProperty[]) {
+          promote(CHANNEL_OF[property]);
+        }
       }
       commit(Object.keys(next) as MotionProperty[], time);
     },

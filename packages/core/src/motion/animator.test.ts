@@ -773,6 +773,34 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('');
   });
 
+  it('set with promote: false writes the values without a layer, and leaves other promotion alone', async () => {
+    // A one-off switch (a veil under a sticky header during a programmatic
+    // scroll) must not give its element a layer.
+    const {animator, element} = setup();
+    animator.set({opacity: 0.5}, {promote: false});
+    expect(element.style.opacity).toBe('0.5');
+    expect(element.style.willChange).toBe('');
+    await advance(PROMOTION_LINGER_MS + 10);
+    expect(element.style.willChange).toBe('');
+
+    // A channel a running motion promoted stays promoted, on its own clock.
+    const moving = setup();
+    moving.animator.animate({x: 120}, {spring: springs.smooth});
+    expect(moving.element.style.willChange).toBe('translate');
+    moving.animator.set({opacity: 0.25}, {promote: false});
+    expect(moving.element.style.opacity).toBe('0.25');
+    expect(moving.element.style.willChange).toBe('translate');
+    await advance(5000 + PROMOTION_LINGER_MS);
+    expect(moving.element.style.willChange).toBe('');
+
+    // A channel with other motion still running gets its animation's layer.
+    const shared = setup();
+    shared.animator.animate({y: 80}, {spring: springs.smooth});
+    shared.animator.set({x: 10}, {promote: false});
+    expect(live('translate').length).toBeGreaterThan(0);
+    expect(shared.element.style.willChange).toBe('translate');
+  });
+
   it('promotes a pseudo-element through a custom property on its host', async () => {
     const {animator, element} = setup({pseudoElement: '::backdrop'});
     animator.set({opacity: 0});
