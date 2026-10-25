@@ -180,4 +180,11 @@ export interface TouchConsumer {
    * (attached above this consumer) from beginning for a touch on it.
    */
   allowsAncestorRecognizer?(recognizer: unknown): boolean;
+  /**
+   * Whether the consumer holds its touch now (a control whose press was
+   * delivered): the host cancels the browser's pan for that finger, as
+   * UIKit's `touchesShouldCancel(in:)` is false for a tracking control. A
+   * move before the press is delivered still scrolls.
+   */
+  keepsTouch?(): boolean;
 }

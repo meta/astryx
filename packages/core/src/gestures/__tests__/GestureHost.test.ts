@@ -1311,6 +1311,45 @@ describe('touch gates and a second finger', () => {
   });
 });
 
+describe('a delivered press keeps its touch', () => {
+  it('cancels the browser pan once the consumer keeps the touch, and not before', () => {
+    const {row} = mount('<div id="row"></div>');
+    class Keeper extends RecordingConsumer {
+      kept = false;
+      keepsTouch(): boolean {
+        return this.kept;
+      }
+    }
+    const control = new Keeper();
+    detachers.push(host.attachConsumer(row, control));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [finger], [finger], 0);
+    // Before the press is delivered, a move still scrolls.
+    const early = touch(
+      'touchmove',
+      row,
+      [{...finger, y: 14}],
+      [{...finger, y: 14}],
+      40,
+    );
+    expect(early.defaultPrevented).toBe(false);
+    // Delivered (highlighted past the content delay): the touch is the control's.
+    control.kept = true;
+    const late = touch(
+      'touchmove',
+      row,
+      [{...finger, y: 54}],
+      [{...finger, y: 54}],
+      200,
+    );
+    expect(late.defaultPrevented).toBe(true);
+    expect(control.events.some(event => event.startsWith('cancelled'))).toBe(
+      false,
+    );
+    touch('touchend', row, [{...finger, y: 54}], [], 260);
+  });
+});
+
 describe('GestureHost.fingersDown', () => {
   it('counts every finger on the screen, one on a plain element too', () => {
     const {handle, row} = mount(

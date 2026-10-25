@@ -158,6 +158,11 @@ export class GestureArena {
     return this.records.get(id)?.isClaimed === true;
   }
 
+  /** @internal The view-level consumer of this touch, if any. */
+  consumerOf(id: number): TouchConsumer | null {
+    return this.records.get(id)?.consumer ?? null;
+  }
+
   /**
    * @internal Give these touches back to the browser (the host's second
    * finger rule: a pinch is the browser's).
