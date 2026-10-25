@@ -1600,16 +1600,18 @@ describe('decay: momentum curves (a coast)', () => {
   });
 
   it('ships the Reduce Motion fade, not the rest of the timing table', () => {
-    // Bundled for a page, the animator reads two timing values; the table's
-    // other rows stay out (architecture:component-style-authoring INV6).
+    // Bundled for a page, the animator and reducedMotionFade() read two
+    // timing values; the table's other rows stay out
+    // (architecture:component-style-authoring INV6).
     // esbuild runs in its own process: it needs a native TextEncoder.
     const script = [
       "import {build} from 'esbuild';",
       'const result = await build({',
-      `  entryPoints: [${JSON.stringify(path.resolve(__dirname, 'animator.ts'))}],`,
+      `  entryPoints: ${JSON.stringify(['animator.ts', 'reducedMotion.ts'].map(file => path.resolve(__dirname, file)))},`,
+      '  outdir: "out",',
       "  bundle: true, write: false, format: 'esm', logLevel: 'silent',",
       '});',
-      'process.stdout.write(result.outputFiles[0].text);',
+      'process.stdout.write(result.outputFiles.map(file => file.text).join("\\n"));',
     ].join('\n');
     const bundle = execFileSync(
       process.execPath,
