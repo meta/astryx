@@ -66,8 +66,17 @@ interface ChainEntry {
 const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
 const EDGE_TOLERANCE = 1;
 
-/** The node's parent, crossing out of shadow roots. */
+/**
+ * The node's parent in the flat tree: a slotted node's slot, then out of
+ * shadow roots to their hosts, so a scroller inside a shadow tree around the
+ * slot is found.
+ */
 export function parentAcrossShadow(node: Node): Node | null {
+  const slot =
+    node instanceof Element || node instanceof Text ? node.assignedSlot : null;
+  if (slot != null) {
+    return slot;
+  }
   if (node.parentNode != null) {
     return node.parentNode instanceof ShadowRoot
       ? node.parentNode.host

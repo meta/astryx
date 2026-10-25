@@ -214,6 +214,22 @@ describe('createNativeScrollProbe', () => {
     expect(probe.distanceToEdge?.(0, 20)).toBe(600);
   });
 
+  it('finds a scroller in a shadow tree around the slot a light-DOM row is slotted into', () => {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.innerHTML =
+      '<div id="host"><button id="row">Row</button></div>';
+    const host = document.getElementById('host') as HTMLElement;
+    const row = document.getElementById('row') as HTMLElement;
+    const shadow = host.attachShadow({mode: 'open'});
+    shadow.innerHTML =
+      '<div id="list" style="overflow-y: auto"><slot></slot></div>';
+    const list = shadow.getElementById('list') as HTMLElement;
+    scroller(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+    const probe = createNativeScrollProbe(row);
+    expect(probe.isInsideScroller).toBe(true);
+    expect(probe.canScroll(0, -20)).toBe(true);
+  });
+
   it('honors touch-action between the touch and the scroller', () => {
     const {list, row} = setup('overflow-y: auto');
     row.setAttribute('data-touch-action', 'pan-x');
