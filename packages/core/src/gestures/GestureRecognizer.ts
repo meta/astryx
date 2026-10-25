@@ -396,6 +396,18 @@ export abstract class GestureRecognizer {
     return false;
   }
 
+  /**
+   * A touch began elsewhere (off this recognizer's hit path) while this
+   * recognizer tracks touches of its own. It is not this recognizer's touch
+   * and is never delivered as one; a recognizer that a foreign finger should
+   * end (a menu's press slide) cancels itself here. By default nothing
+   * happens.
+   */
+  protected touchBeganElsewhere(
+    _touches: ReadonlyArray<GestureTouch>,
+    _event: GestureEventContext,
+  ): void {}
+
   /** Clear per-gesture state before the next attempt. */
   protected reset(): void {}
 
@@ -474,6 +486,17 @@ export abstract class GestureRecognizer {
     }
     this.location();
     this.touchesBegan(touches, event);
+  }
+
+  /** @internal */
+  deliverBeganElsewhere(
+    touches: ReadonlyArray<GestureTouch>,
+    event: GestureEventContext,
+  ): void {
+    if (isTerminal(this.state)) {
+      return;
+    }
+    this.touchBeganElsewhere(touches, event);
   }
 
   /** @internal */
@@ -558,7 +581,8 @@ export abstract class GestureRecognizer {
       this.arena.stop(this);
     } else if (isActive(this.state)) {
       this.applyState('cancelled');
-    } else if (this.state === 'possible') {
+    } else if (this.state === 'possible' && this.isInvolved()) {
+      // An idle recognizer stays `possible`: nothing would ever reset it.
       this.applyState('failed');
     }
   }
