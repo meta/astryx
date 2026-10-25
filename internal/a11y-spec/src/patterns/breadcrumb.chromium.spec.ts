@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /** Real-browser positive and mutation proof for the Breadcrumb contract. */
 
