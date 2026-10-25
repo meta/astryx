@@ -136,16 +136,42 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   Reflect.deleteProperty(HTMLElement.prototype, 'animate');
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-function setup(options: AnimatorOptions = {}) {
+/**
+ * The person's settings, through `matchMedia` as the animator reads them: no
+ * option overrides them.
+ */
+function stubMedia(reduced: boolean, coarse: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-reduced-motion')
+      ? reduced
+      : query.includes('pointer: coarse')
+        ? coarse
+        : false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
+
+function setup({
+  reduced = false,
+  coarse = false,
+  ...options
+}: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
+  stubMedia(reduced, coarse);
   const element = document.createElement('div');
   const animator = createAnimator(element, {
     now: () => clock,
-    prefersReducedMotion: () => false,
     requestFrame,
     ...options,
   });
@@ -666,8 +692,8 @@ describe('review fixes', () => {
 
   it('under Reduced Motion on a fine pointer, a move leaves a running fade alone', async () => {
     const {animator} = setup({
-      prefersReducedMotion: () => true,
-      isCoarsePointer: () => false,
+      reduced: true,
+      coarse: false,
     });
     animator.set({opacity: 0});
     animator.animate({opacity: 1}, {spring: springs.smooth});
@@ -885,7 +911,6 @@ describe('animatorFor: one animator per element', () => {
     const row = document.createElement('div');
     const options = {
       now: () => clock,
-      prefersReducedMotion: () => false,
       requestFrame,
     };
     const swipe = animatorFor(row, options);
@@ -972,6 +997,34 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('translate');
     await advance(20);
     expect(element.style.willChange).toBe('');
+  });
+
+  it('set with promote: false writes the values without a layer, and leaves other promotion alone', async () => {
+    // A one-off switch (a veil under a sticky header during a programmatic
+    // scroll) must not give its element a layer.
+    const {animator, element} = setup();
+    animator.set({opacity: 0.5}, {promote: false});
+    expect(element.style.opacity).toBe('0.5');
+    expect(element.style.willChange).toBe('');
+    await advance(PROMOTION_LINGER_MS + 10);
+    expect(element.style.willChange).toBe('');
+
+    // A channel a running motion promoted stays promoted, on its own clock.
+    const moving = setup();
+    moving.animator.animate({x: 120}, {spring: springs.smooth});
+    expect(moving.element.style.willChange).toBe('translate');
+    moving.animator.set({opacity: 0.25}, {promote: false});
+    expect(moving.element.style.opacity).toBe('0.25');
+    expect(moving.element.style.willChange).toBe('translate');
+    await advance(5000 + PROMOTION_LINGER_MS);
+    expect(moving.element.style.willChange).toBe('');
+
+    // A channel with other motion still running gets its animation's layer.
+    const shared = setup();
+    shared.animator.animate({y: 80}, {spring: springs.smooth});
+    shared.animator.set({x: 10}, {promote: false});
+    expect(live('translate').length).toBeGreaterThan(0);
+    expect(shared.element.style.willChange).toBe('translate');
   });
 
   it('promotes a pseudo-element through a custom property on its host', async () => {
@@ -1193,8 +1246,7 @@ describe('finished', () => {
 describe('Reduced Motion (design:reduced-motion)', () => {
   // A coarse primary pointer cross-fades (DR2); any other completes at once
   // unless a touch release started the call (DR3).
-  const reduced = (coarse = true) =>
-    setup({prefersReducedMotion: () => true, isCoarsePointer: () => coarse});
+  const reduced = (coarse = true) => setup({reduced: true, coarse});
   const fade = timing.reducedMotionCrossFadeMs;
   const ease = cubicBezier(timing.curves.easeInOut);
   /** Every animation the browser was handed changes opacity only. */
@@ -1617,8 +1669,8 @@ describe('play: any closed-form curve', () => {
 
   it('under Reduced Motion a played travel cross-fades to its end', async () => {
     const reduced = setup({
-      prefersReducedMotion: () => true,
-      isCoarsePointer: () => true,
+      reduced: true,
+      coarse: true,
     });
     reduced.animator.play({
       x: {duration: 0.3, at: t => 300 * t, velocity: () => 300},
@@ -1703,7 +1755,7 @@ describe('decay: UIScrollView coasts', () => {
   });
 
   it('keeps moving under Reduced Motion: a throw is the finger\u2019s', () => {
-    const {animator} = setup({prefersReducedMotion: () => true});
+    const {animator} = setup({reduced: true});
     animator.decay({x: 1000});
     expect(animator.getVelocity('x', 1016)).toBeGreaterThan(900);
   });
@@ -1763,7 +1815,6 @@ describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
     const animator = createAnimator(null, {
       now: () => clock,
-      prefersReducedMotion: () => false,
     });
     animator.animate({x: 300}, {spring: springs.smooth});
     expect(recorded).toHaveLength(0);

@@ -13,11 +13,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import stylex from '@stylexjs/unplugin';
-import {
-  astryxStylex,
-  LIGHTNINGCSS_TARGETS,
-  undefinedGeneratedVariables,
-} from './vite';
+import {astryxStylex, LIGHTNINGCSS_TARGETS} from './vite';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

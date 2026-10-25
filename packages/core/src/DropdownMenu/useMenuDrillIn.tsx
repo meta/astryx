@@ -23,20 +23,21 @@
 import {useCallback, useMemo, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {DropdownMenuDrillIn} from './DropdownMenuContext';
-import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {useCompactDefinition} from '../utils/touchPresentation';
 
 /**
- * The same query the root presentation uses to decide the bottom sheet, so
+ * The same compact-touch condition the root presentation uses to decide the
+ * bottom sheet (the active theme's, spec:AST-012 FR9), so
  * one component carries one meaning of "adaptive". A bare `(pointer: coarse)`
  * would disagree with it on a large touch tablet: the menu would stay an
  * anchored popover while its sub-menus replaced rows in place, a combination
  * nobody designed.
  */
-function matchesCompactTouch(): boolean {
+function matchesCompactTouch(query: string): boolean {
   return (
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
-    window.matchMedia(COMPACT_TOUCH_PRESENTATION_QUERY).matches
+    window.matchMedia(query).matches
   );
 }
 
@@ -70,6 +71,7 @@ export interface UseMenuDrillInReturn {
  *   opens and the stack empties when it closes.
  */
 export function useMenuDrillIn(isOpen: boolean): UseMenuDrillInReturn {
+  const compactTouchQuery = useCompactDefinition().coarsePointerQuery;
   const [isCompactTouch, setIsCompactTouch] = useState(false);
   const [viewStack, setViewStack] = useState<ReadonlyArray<string>>([]);
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -81,7 +83,7 @@ export function useMenuDrillIn(isOpen: boolean): UseMenuDrillInReturn {
   if (wasOpen !== isOpen) {
     setWasOpen(isOpen);
     if (isOpen) {
-      setIsCompactTouch(matchesCompactTouch());
+      setIsCompactTouch(matchesCompactTouch(compactTouchQuery));
     } else if (viewStack.length > 0) {
       setViewStack([]);
     }

@@ -26,7 +26,6 @@ from the package entry point; components import it by path.
 | `projection.ts`                                  | Release targets: the rest point nearest the projected coast; paging.                                                                                                 |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, decays and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
-| `experimental.ts`                                | The experimental public subpath (`@astryxdesign/core/motion/experimental`).                                                                                          |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -48,16 +47,10 @@ Gesture thresholds and the timings that decide who gets a touch are not roles
 (`exclude`). `pnpm generate:motion-roles` regenerates the role table in the
 motion docs.
 
-## Experimental subpath
+## Internal
 
-`@astryxdesign/core/motion/experimental` exposes this foundation to lab
-components, outside the stable compatibility promise (`spec:AST-017` FR21): it
-may change or be removed in a patch release, it is never re-exported from the
-package root or an ordinary subpath, and every declaration it exposes carries
-`@experimental`. It exports `createAnimator`, `animatorFor`, `useAnimator`,
-`toSpring`, `solveSpring`, `rubberBand`, `rubberBandInverse`, `cubicBezier`,
-`prefersReducedMotion`, `resolveMotion` and the table as the read-only `uikit` namespace. The
-gestures have their own, `@astryxdesign/core/gestures/experimental`.
+Nothing here is exported from the package. Core components import it from
+`../motion`, and Lab through internal workspace imports.
 
 ## Animator
 
@@ -100,7 +93,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `get` / `getVelocity` evaluate the curves; the DOM is never read.
 - Promotion: every animation the animator creates, and every `set`, gives its
   channels a compositing layer in the same task (inline `will-change`, merged
-  with the element's own), cleared 500 ms after the last motion. Mobile Safari
+  with the element's own), cleared 500 ms after the last motion.
+  `set(values, {promote: false})` writes without one, for a one-off switch
+  that must not give its element a layer. Mobile Safari
   needs it to run a curve through a blocked main thread. A pseudo-element is
   promoted through `--astryx-motion-will-change-<pseudo>` on its host; its
   style opts in with

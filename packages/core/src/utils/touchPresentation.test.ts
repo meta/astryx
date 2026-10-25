@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {act, renderHook} from '@testing-library/react';
-import {createElement} from 'react';
+import {createElement, type ComponentProps, type ReactNode} from 'react';
 import {renderToString} from 'react-dom/server';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
@@ -23,6 +23,7 @@ import {
   useAdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
 import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {Theme, defineTheme} from '../theme';
 import {
   COMPACT_QUERY,
   COMPACT_TOUCH_QUERY,
@@ -95,28 +96,24 @@ describe('touch presentation', () => {
     expect(result.current).toEqual({
       isTouch: false,
       isCompact: false,
-      isCompactTouch: false,
     });
     // A tablet: a finger at any width.
     act(() => setDevice({coarse: true, width: 1024, height: 1366}));
     expect(result.current).toEqual({
       isTouch: true,
       isCompact: false,
-      isCompactTouch: false,
     });
     // A narrowed desktop window: compact, still a mouse.
     act(() => setDevice({coarse: false, width: 600, height: 900}));
     expect(result.current).toEqual({
       isTouch: false,
       isCompact: true,
-      isCompactTouch: false,
     });
     // A phone: both.
     act(() => setDevice({coarse: true, width: 390, height: 844}));
     expect(result.current).toEqual({
       isTouch: true,
       isCompact: true,
-      isCompactTouch: true,
     });
   });
 
@@ -128,7 +125,7 @@ describe('touch presentation', () => {
     // The same phone size in iOS WebKit gets the same answer.
     act(() => setDevice({iosWebKit: true}));
     expect(result.current).toEqual(android);
-    expect(result.current.isCompactTouch).toBe(true);
+    expect(result.current).toEqual({isTouch: true, isCompact: true});
   });
 
   it('keeps one answer object while nothing changes', () => {
@@ -146,7 +143,7 @@ describe('touch presentation', () => {
       return createElement(
         'span',
         null,
-        `${presentation.isTouch}/${presentation.isCompactTouch}`,
+        `${presentation.isTouch}/${presentation.isCompact}`,
       );
     };
     setDevice({iosWebKit: true, coarse: true, width: 390, height: 844});
@@ -174,15 +171,13 @@ describe('touch presentation', () => {
 
   it('reads the conditions at one moment, and without a window', () => {
     setDevice({coarse: true, width: 390, height: 844});
-    expect(readTouchPresentation()).toEqual({
+    expect(readTouchPresentation(window, DEFAULT_COMPACT_DEFINITION)).toEqual({
       isTouch: true,
       isCompact: true,
-      isCompactTouch: true,
     });
-    expect(readTouchPresentation(null)).toEqual({
+    expect(readTouchPresentation(null, DEFAULT_COMPACT_DEFINITION)).toEqual({
       isTouch: false,
       isCompact: false,
-      isCompactTouch: false,
     });
   });
 
@@ -285,6 +280,31 @@ describe('touch presentation', () => {
     expect(COMPACT_TOUCH_QUERY).toBe(
       DEFAULT_COMPACT_DEFINITION.coarsePointerQuery,
     );
+  });
+
+  it("follows the active theme's md point (spec:AST-012 FR9)", () => {
+    const wideMd = defineTheme({
+      name: 'wide-md-touch',
+      adaptations: {widthBreakpoints: {md: 1000, lg: 1100}},
+    });
+    const wrapper = ({children}: {children: ReactNode}) =>
+      createElement(
+        Theme,
+        {theme: wideMd} as ComponentProps<typeof Theme>,
+        children,
+      );
+    setDevice({coarse: true, width: 900, height: 1024});
+    // Under the default md point (768) this screen is not compact.
+    const plain = renderHook(() => useAdaptivePresentation('adaptive'));
+    expect(plain.result.current).toBe('popover');
+    plain.unmount();
+    // Under a theme whose md is 1000, the same screen is compact.
+    const themed = renderHook(() => useAdaptivePresentation('adaptive'), {
+      wrapper,
+    });
+    expect(themed.result.current).toBe('bottom-sheet');
+    const touch = renderHook(() => useTouchPresentation(), {wrapper});
+    expect(touch.result.current.isCompact).toBe(true);
   });
 
   it('is the query the adaptive popover-or-sheet presentation reads', () => {

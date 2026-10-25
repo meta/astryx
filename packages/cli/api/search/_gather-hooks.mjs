@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Search's hook candidates, read from Core's hook docs, leaving out
- * experimental hooks. Imported only by the adapter.
+ * @file Search's hook candidates, read from Core's hook docs. Imported only
+ * by the adapter.
  */
 
 import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
@@ -33,11 +33,6 @@ export async function gatherHooks(coreDir) {
     let importPath = '@astryxdesign/core/hooks';
     if (docPath) {
       const doc = await loadModuleDoc(docPath, 'docs', 'hooks');
-      // An experimental hook (spec:AST-017 FR27) is never a search result:
-      // search answers as it would without it.
-      if (doc?.stability === 'experimental') {
-        continue;
-      }
       if (doc) {
         keywords = Array.isArray(doc.keywords) ? doc.keywords : [];
         description = doc.usage?.description || doc.description || '';

@@ -72,19 +72,6 @@ const STATIC_EXPORTS = {
     types: './dist/naming.d.ts',
     default: './dist/naming.js',
   },
-  // Experimental subpaths (spec:AST-017 FR21): outside the stable
-  // compatibility promise and never re-exported from the root or an ordinary
-  // subpath.
-  './motion/experimental': {
-    source: './src/motion/experimental.ts',
-    types: './dist/motion/experimental.d.ts',
-    default: './dist/motion/experimental.js',
-  },
-  './gestures/experimental': {
-    source: './src/gestures/experimental.ts',
-    types: './dist/gestures/experimental.d.ts',
-    default: './dist/gestures/experimental.js',
-  },
   './theme/tokens': {
     source: './src/theme/tokens.ts',
     types: './dist/theme/tokens.d.ts',
@@ -189,13 +176,6 @@ const STATIC_EXPORTS = {
     source: './src/utils/interactionOverlay.stylex.ts',
     types: './dist/utils/interactionOverlay.stylex.d.ts',
     default: './dist/utils/interactionOverlay.stylex.js',
-  },
-  // Proposed; pending owner review (spec:AST-094 OQ4): the Reduce Motion
-  // media keys and fade constants, for a transition in another package.
-  './motion/reducedMotion.stylex': {
-    source: './src/motion/reducedMotion.stylex.ts',
-    types: './dist/motion/reducedMotion.stylex.d.ts',
-    default: './dist/motion/reducedMotion.stylex.js',
   },
   './docs.mjs': './docs.mjs',
   './groups.doc.mjs': './groups.doc.mjs',

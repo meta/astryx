@@ -9,8 +9,15 @@
  * SYNC: When useFocusTrap.ts changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  cleanup,
+} from '@testing-library/react';
+import {createPortal} from 'react-dom';
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useFocusTrap} from './useFocusTrap';
 
@@ -497,6 +504,68 @@ describe('useFocusTrap focus restoration', () => {
     // Because focus was inside the trap at some point, the restore fires and
     // returns focus to the element that was focused before activation.
     rerender(<RestoreFixture isActive={false} />);
+    expect(prev).toHaveFocus();
+  });
+});
+
+describe('useFocusTrap in a second document', () => {
+  // A same-origin iframe stands in for any second document an app renders a
+  // trap into through a portal, Document Picture-in-Picture included. Its
+  // elements belong to the iframe's own window, and its key presses and focus
+  // changes never reach this document.
+  let frame: HTMLIFrameElement;
+  let secondDocument: Document;
+
+  beforeEach(() => {
+    frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    secondDocument = frame.contentDocument!;
+  });
+
+  afterEach(() => {
+    // Unmount before the frame goes, or React removes nodes from a document
+    // that no longer exists.
+    cleanup();
+    frame.remove();
+  });
+
+  it('keeps Tab on a programmatic focus target when nothing inside is tabbable', () => {
+    render(
+      createPortal(
+        <Trap>
+          <div tabIndex={-1} data-testid="programmatic-target">
+            Read-only dialog content
+          </div>
+        </Trap>,
+        secondDocument.body,
+      ),
+    );
+    const target = within(secondDocument.body).getByTestId(
+      'programmatic-target',
+    );
+    target.focus();
+
+    expect(fireEvent.keyDown(target, {key: 'Tab'})).toBe(false);
+    expect(target).toHaveFocus();
+  });
+
+  it('returns focus to the element focused before it in that document', () => {
+    const {rerender} = render(
+      createPortal(<RestoreFixture isActive={false} />, secondDocument.body),
+    );
+    const view = within(secondDocument.body);
+    const prev = view.getByTestId('prev');
+    prev.focus();
+
+    rerender(
+      createPortal(<RestoreFixture isActive={true} />, secondDocument.body),
+    );
+    view.getByTestId('inside').focus();
+    (secondDocument.activeElement as HTMLElement).blur();
+
+    rerender(
+      createPortal(<RestoreFixture isActive={false} />, secondDocument.body),
+    );
     expect(prev).toHaveFocus();
   });
 });
