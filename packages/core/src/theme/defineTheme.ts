@@ -260,7 +260,7 @@ export interface DefineThemeInput {
    * // completion callbacks):
    * motion: {
    *   springs: { 'springs.sheetPresent': { duration: 0.6, bounce: 0.1 } },
-   *   durations: { 'navigation.transitionMs': 300 },
+   *   durations: { 'navigation.transitionMs': 450 },
    * }
    * ```
    */
