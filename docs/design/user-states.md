@@ -52,12 +52,13 @@ surface.
 - **DR1 — Press the manipulated surface.** During pointer hold or drag, each
   enabled surface in the matrix below MUST paint `--color-overlay-pressed` on
   the named visual part. The overlay is transient and MUST clear when the press
-  or drag ends.
+  or drag ends. Under a finger, the overlay's timing follows `spec:AST-094` FR11's press profiles.
 - **DR2 — Disabled means no response.** A disabled control in the matrix MUST
   remain inoperable and MUST NOT gain a pressed visual treatment.
 - **DR3 — Persistent selection wins.** A selected SegmentedControl item MUST
   keep its raised selected surface during pointer hold; only an unselected item
-  receives the pressed overlay.
+  receives the pressed overlay. Under a finger the item keeps that surface, and its press timing follows
+  `spec:AST-094` FR11.
 
 ## Anatomy and hierarchy
 

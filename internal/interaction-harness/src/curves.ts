@@ -6,8 +6,8 @@
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
  * @output `holdAnimations` (pause every running animation and describe it),
- *   `seekAnimations` (move them to t ms, each keeping its offset from the
- *   earliest), `sampleCurve` (the presented
+ *   `seekAnimations` (move them to t ms from the held origin, each keeping
+ *   its offset), `sampleCurve` (the presented
  *   transform/opacity at each t, with the individual `translate`, `rotate` and
  *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
  *   picks one channel out of the samples for ./math's `compareCurve`, and the
@@ -37,7 +37,10 @@ export const END_INSET_MS = 0.5;
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
- * ends before a test looks is still seen, with the time it finished.
+ * ends before a test looks is still seen, with the time it finished. Each
+ * entry keeps the animation's start time too: a page that cancels a finished
+ * animation (an entrance whose class is removed on `animationend`) nulls its
+ * `startTime`.
  */
 function animationRecorder(): void {
   const w = window as unknown as {__harnessAnimations?: unknown};
@@ -57,7 +60,10 @@ function animationRecorder(): void {
     animation: Animation;
     seenAt: number;
     finishedAt: number | null;
+    startedAt: number | null;
   }[] = [];
+  // Entries whose start time has not resolved yet (still pending when seen).
+  let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
   const remember = (animation: Animation) => {
     // A running animation is recorded while still pending: on a cold page the
@@ -70,9 +76,26 @@ function animationRecorder(): void {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
+      startedAt:
+        animation.startTime == null ? null : Number(animation.startTime),
     };
-    animation.addEventListener('finish', () => {
+    if (entry.startedAt == null) {
+      unstarted.push(entry);
+    }
+    animation.addEventListener('finish', event => {
       entry.finishedAt = performance.now();
+      if (entry.startedAt == null) {
+        // Cancelled before a frame read its start: back from where it ended.
+        const end = Number(
+          (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+            .endTime ?? 0,
+        );
+        const at = (event as AnimationPlaybackEvent).timelineTime;
+        entry.startedAt =
+          animation.startTime != null
+            ? Number(animation.startTime)
+            : (at == null ? entry.finishedAt : Number(at)) - end;
+      }
     });
     log.push(entry);
     if (log.length > 5000) {
@@ -83,11 +106,21 @@ function animationRecorder(): void {
     for (const animation of document.getAnimations()) {
       remember(animation);
     }
+    unstarted = unstarted.filter(entry => {
+      if (entry.startedAt == null && entry.animation.startTime != null) {
+        entry.startedAt = Number(entry.animation.startTime);
+      }
+      return entry.startedAt == null && entry.animation.playState !== 'idle';
+    });
   };
   const tick = () => {
     record();
     frame(tick);
   };
+  // What already runs when the recorder starts (a spinner on a page the
+  // harness touches for the first time) is seen now, before any watch arms;
+  // first seen a frame later, it would read as started by the watched action.
+  record();
   frame(tick);
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
     document.addEventListener(type, record, true);
@@ -185,8 +218,10 @@ export interface HeldAnimation {
   /** Where it was when held, ms. */
   readonly heldAtMs: number | null;
   /**
-   * How much later than the earliest held animation it started, ms: a seek to
-   * t moves it to its own t - offsetMs, so staggered starts stay staggered.
+   * How much later than the held origin (the earliest start among the
+   * animations the first hold took) it started, ms; negative for an earlier
+   * start held by a later hold. A seek to t moves it to its own t - offsetMs,
+   * so staggered starts stay staggered.
    */
   readonly offsetMs: number;
 }
@@ -196,9 +231,10 @@ export interface HeldAnimation {
  * target is inside `scope`) and returns what was held. Finished animations,
  * animations the page paused, and animations on a scroll or view timeline are
  * left as they are. Later `seekAnimations` calls move exactly the held set,
- * each by its offset from the earliest start, and `releaseAnimations` resumes
+ * each by its offset from the held origin, and `releaseAnimations` resumes
  * only it. A second call adds to the held set: what the first held stays held
- * until the release, and offsets count from the earliest start of all of it.
+ * until the release, and offsets keep counting from the origin the first call
+ * set (the earliest start it took), so offsets already returned stay true.
  * An animation the page cancels after the hold (retargeting a CSS transition
  * cancels it) leaves the held set: seeking, sampling and releasing skip it
  * rather than revive it.
@@ -257,11 +293,15 @@ export async function holdAnimations(
     };
     w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
     w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
-    // Times count from the earliest start of everything held until the
-    // release, so dropping one later never moves the others.
-    const earliest = Math.min(w.__harnessHeldOrigin ?? Infinity, ...starts);
-    w.__harnessHeldOrigin = earliest;
-    const offsets = starts.map(start => start - earliest);
+    // Times count from the origin the first hold set (its earliest start)
+    // until the release: a later hold, even of an animation that started
+    // earlier (its offset is then negative), and dropping one never move it,
+    // so every offsetMs already returned stays true.
+    const origin = Number.isFinite(w.__harnessHeldOrigin ?? Number.NaN)
+      ? (w.__harnessHeldOrigin as number)
+      : Math.min(...starts);
+    w.__harnessHeldOrigin = origin;
+    const offsets = starts.map(start => start - origin);
     return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
       const timing = effect?.getComputedTiming();
@@ -293,7 +333,7 @@ export async function holdAnimations(
 }
 
 /**
- * Moves every held animation to `timeMs` from the earliest held start (delay
+ * Moves every held animation to `timeMs` from the held origin (delay
  * included): each to its own `timeMs - offsetMs`. A time at or past an
  * animation's end is clamped to END_INSET_MS before it: an animation without
  * `fill` stops applying its effect exactly at the end, and the frame wanted
@@ -423,7 +463,7 @@ export interface CurveSample {
 
 /**
  * The presented transform and opacity of `locator` at each time (ms from the
- * held animations' start). Hold the animations first. An animation of the
+ * held origin, as for `seekAnimations`). Hold the animations first. An animation of the
  * individual `translate`, `rotate` or `scale` properties is included: they
  * are composed with `transform` into one matrix.
  */
@@ -644,6 +684,7 @@ export async function waitForAnimation(
               animation: Animation;
               seenAt: number;
               finishedAt: number | null;
+              startedAt: number | null;
             }[];
             record: () => void;
             armedAt: () => number;
@@ -652,10 +693,17 @@ export async function waitForAnimation(
         const curveEnd = w.__harnessCurveEnd;
         const recorder = w.__harnessAnimations;
         recorder.record();
-        const describe = (a: Animation, finishedAt: number | null) => {
+        const describe = (
+          a: Animation,
+          finishedAt: number | null,
+          recordedStart: number | null,
+        ) => {
           const effect = a.effect as KeyframeEffect | null;
           const timing = effect?.getComputedTiming();
-          const startedAt = performance.timeOrigin + Number(a.startTime);
+          // The recorded start stands in once the page has cancelled it.
+          const startedAt =
+            performance.timeOrigin +
+            Number(a.startTime ?? recordedStart ?? Number.NaN);
           const name =
             'transitionProperty' in a
               ? (a as unknown as {transitionProperty: string})
@@ -697,7 +745,7 @@ export async function waitForAnimation(
           a => Number(a.currentTime ?? 0) >= minProgress,
         );
         if (progressed.length > 0) {
-          return progressed.map(a => describe(a, null));
+          return progressed.map(a => describe(a, null, null));
         }
         if (running.length > 0) {
           return [];
@@ -716,7 +764,7 @@ export async function waitForAnimation(
             : null);
         return recorded
           .filter(e => finishedAt(e) != null)
-          .map(e => describe(e.animation, finishedAt(e)));
+          .map(e => describe(e.animation, finishedAt(e), e.startedAt));
       },
       {minProgress: minProgressMs, since: since ?? null},
     );

@@ -143,10 +143,12 @@ export interface FlickOptions {
 /**
  * A throw: the finger moves with the given velocity profile and lifts while
  * still moving (the lift lands a quarter frame after the last move, as on a
- * device). Its last move runs at `velocity` times `profile(1)`, so with the
- * default constant profile, or any profile that ends at 1, the release
- * velocity (what `releaseVelocity` and a velocity tracker read from the last
- * move) is exactly `velocity`.
+ * device). Its last move runs at `velocity` times `profile(1)`, so with any
+ * profile that ends at 1 the last move, which is what `releaseVelocity`
+ * reads, runs at exactly `velocity`. A tracker that blends recent intervals
+ * (a Core component's, `architecture:interaction-modality` INV10) reads
+ * exactly `velocity` only when the profile is flat over those intervals, as
+ * the default constant profile is.
  */
 export function flick(from: Point, options: FlickOptions): TouchScript {
   const {

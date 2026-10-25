@@ -55,8 +55,21 @@ export interface StoryboardOptions {
   readonly cellScale?: number;
 }
 
+/**
+ * Chromium photographs the page by copying its compositor surface. Right after
+ * the page's surface changes (a navigation, a resize) the copy can come back
+ * empty, and Chromium answers "Unable to capture screenshot" once its own five
+ * retries, issued without waiting for a new frame, have all found no surface.
+ * A capture that fails that way is taken again after the page has presented
+ * two more frames, at most this many attempts in all.
+ */
+const CAPTURE_ATTEMPTS = 3;
+const EMPTY_SURFACE_COPY = /Unable to capture screenshot/;
+
 export class Storyboard {
   readonly frames: StoryboardFrame[] = [];
+  /** Captures Chromium returned empty and that were taken again two frames later. */
+  readonly recaptures: {label: string; error: string}[] = [];
   private clipBox: ClipBox | undefined;
 
   constructor(
@@ -64,20 +77,36 @@ export class Storyboard {
     readonly options: StoryboardOptions,
   ) {}
 
-  /** Photographs the clip now and records `data` with it. */
+  /**
+   * Photographs the clip now and records `data` with it. An empty surface
+   * copy (see CAPTURE_ATTEMPTS) is taken again once the page has presented two
+   * more frames; any other failure, or a third empty copy, throws.
+   */
   async capture(
     label: string,
     t: number,
     data: Readonly<Record<string, unknown>> = {},
   ): Promise<void> {
     const clip = await this.resolveClip();
-    const png = await this.page.screenshot({
-      clip,
-      scale: 'css',
-      animations: 'allow',
-      caret: 'hide',
-    });
-    this.frames.push({label, t, data, png});
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const png = await this.page.screenshot({
+          clip,
+          scale: 'css',
+          animations: 'allow',
+          caret: 'hide',
+        });
+        this.frames.push({label, t, data, png});
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (attempt >= CAPTURE_ATTEMPTS || !EMPTY_SURFACE_COPY.test(message)) {
+          throw error;
+        }
+        this.recaptures.push({label, error: message.split('\n')[0]});
+        await frames(this.page, 2);
+      }
+    }
   }
 
   private async resolveClip(): Promise<ClipBox | undefined> {
@@ -123,6 +152,7 @@ export class Storyboard {
       browser: this.page.context().browser()?.browserType().name() ?? null,
       viewport: this.page.viewportSize(),
       clip: this.clipBox ?? null,
+      ...(this.recaptures.length > 0 ? {recaptures: this.recaptures} : {}),
       ...extra,
       frames: this.frames.map(({label, t, data}) => ({label, t, data})),
     };

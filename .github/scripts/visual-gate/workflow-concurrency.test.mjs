@@ -253,7 +253,7 @@ describe('PR report and deployment workflow contracts', () => {
     expect(workflow('vibe-screenshots.yml')).not.toContain('gh-pages');
     const main = workflow('deploy.yml');
     expect(main).toContain('name: Main');
-    expect(main).toContain('pnpm vitest run --project ui');
+    expect(main).toContain('pnpm test:ui');
     expect(main).not.toContain('deploy-storybook');
     expect(main).not.toContain('gh-pages');
   });
