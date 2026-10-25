@@ -486,9 +486,10 @@ way:
    picker, a pager, a carousel) releases with the pan's `scrollVelocity()`;
    anything else with `velocity()`. A one-way drag sets `direction`. The host derives
    `touch-action`, so delete a hand-written one.
-3. Native scrolling: a sheet over its own list uses `scrollEdge` and
-   `scrollHandoff`, not `scrollTop` checks. A banner that must win against a
-   page scroll at once sets `claimDistance: 'early'`.
+3. Native scrolling: a sheet over its own list uses `scrollEdge`, not
+   `scrollTop` checks; who gets a drag is decided once, when it begins
+   (`spec:AST-094` FR14). A banner that must win against a page scroll at
+   once sets `claimDistance: 'early'`.
 4. A behavior that only watches the person's scrolling uses a watcher
    (`claimsTouches: false`) and `useFingerScroll`.
 5. A scroll lock holds the page with `holdPageScroll`; no `preventDefault`

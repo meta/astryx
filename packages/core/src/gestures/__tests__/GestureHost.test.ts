@@ -417,10 +417,11 @@ describe('GestureHost', () => {
 
   it('samples a finger from its touch events once the browser cancels its pointer', () => {
     const {box} = mount('<div id="box"></div>');
+    // A watcher follows the touch the browser takes (AST-094 FR20, DEC-7).
     const pan = new PanGestureRecognizer({
       name: 'pan',
-      scrollHandoff: true,
-      direction: 'down',
+      claimsTouches: false,
+      direction: 'vertical',
     });
     detachers.push(host.attach(box, pan));
     pointer('pointerdown', box, {
