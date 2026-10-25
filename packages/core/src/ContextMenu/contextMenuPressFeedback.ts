@@ -48,7 +48,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {PRESSED_ATTRIBUTE, type pressableProps} from '../utils/pressFeedback';
 import {createAnimator, type Animator} from '../motion/animator';
 import {resolveMotion} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit';
+import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {
   contextMenu,
   registerContextMenuTable,
