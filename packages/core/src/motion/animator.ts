@@ -259,14 +259,6 @@ export interface AnimatorOptions {
   initial?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
-  /** The Reduced Motion preference; `prefers-reduced-motion` by default. */
-  prefersReducedMotion?: () => boolean;
-  /**
-   * Whether the primary pointer is coarse; `(pointer: coarse)` by default.
-   * Under Reduced Motion a coarse pointer cross-fades and any other completes
-   * at once.
-   */
-  isCoarsePointer?: () => boolean;
   /**
    * Runs a callback in the next animation frame; `requestAnimationFrame` by
    * default. A call from rest reads the start the browser gave it there.
@@ -728,9 +720,10 @@ export function createAnimator(
         }
       : null);
   const pseudoElement = options.pseudoElement;
-  const prefersReducedMotion =
-    options.prefersReducedMotion ?? defaultPrefersReducedMotion;
-  const isCoarsePointer = options.isCoarsePointer ?? defaultIsCoarsePointer;
+  // Reduced Motion reads the person's settings and nothing else: no option
+  // overrides them (design:reduced-motion DR4).
+  const prefersReducedMotion = defaultPrefersReducedMotion;
+  const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,
     ...expand(options.initial ?? {}),
