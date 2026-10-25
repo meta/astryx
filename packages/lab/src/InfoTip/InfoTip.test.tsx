@@ -167,12 +167,16 @@ describe('InfoTip', () => {
     expect(screen.getByTestId('rich-content')).toBeInTheDocument();
   });
   describe('touch', () => {
-    /** A tap: the pointer sequence a finger produces before hover is faked. */
+    /**
+     * A tap, in the order a browser dispatches it: the finger's pointer events,
+     * the hover it synthesizes, then the `click` that says the touch was a tap.
+     */
     const tap = (element: HTMLElement) => {
       fireEvent.pointerEnter(element, {pointerType: 'touch'});
       fireEvent.pointerDown(element, {pointerType: 'touch'});
       fireEvent.pointerUp(element, {pointerType: 'touch'});
       fireEvent.mouseEnter(element);
+      fireEvent.click(element);
     };
 
     it('opens on a tap, though the trigger is a button', async () => {
@@ -221,9 +225,10 @@ describe('InfoTip', () => {
         expect(popoverOpenState.get(layer)).toBe(true);
       });
 
-      fireEvent.pointerDown(screen.getByRole('button', {name: 'Elsewhere'}), {
-        pointerType: 'touch',
-      });
+      // The tap outside counts when the finger lifts.
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
 
       await waitFor(() => {
         expect(popoverOpenState.get(layer)).toBe(false);

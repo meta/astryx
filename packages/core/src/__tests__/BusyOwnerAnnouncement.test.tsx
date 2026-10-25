@@ -472,6 +472,65 @@ const SHEET_OWNERS: ReadonlyArray<
   ],
 ];
 
+/** A source whose searches settle in a frame callback that runs before the
+ * busy start's frame, as a fast or cached search can. */
+function frameSettledSource(): SearchSource<SearchableItem> {
+  return {
+    search: async () =>
+      new Promise<SearchableItem[]>(resolve =>
+        requestAnimationFrame(() => resolve([{id: 'alex', label: 'Alex'}])),
+      ),
+    bootstrap: () => [],
+  };
+}
+
+describe.each([
+  ...SEARCH_OWNERS.filter(([name]) => name !== 'Tokenizer'),
+  [
+    'CommandPalette',
+    (source: SearchSource<SearchableItem>) => (
+      <CommandPalette
+        isOpen
+        isInline
+        onOpenChange={() => {}}
+        searchSource={source}
+      />
+    ),
+  ] as const,
+])(
+  '%s search that settles before its busy start is announced (spec:AST-086 FR8)',
+  (_name, renderOwner) => {
+    // Browsers run microtasks after each frame callback, while jsdom runs a
+    // frame's callbacks back to back. One task per callback lets a search that
+    // settles in one callback announce its outcome before the next one runs.
+    const jsdomRequestFrame = window.requestAnimationFrame;
+    const jsdomCancelFrame = window.cancelAnimationFrame;
+    beforeEach(() => {
+      window.requestAnimationFrame = callback =>
+        window.setTimeout(() => callback(performance.now()), 16);
+      window.cancelAnimationFrame = frame => window.clearTimeout(frame);
+    });
+    afterEach(() => {
+      window.requestAnimationFrame = jsdomRequestFrame;
+      window.cancelAnimationFrame = jsdomCancelFrame;
+    });
+
+    it('announces the outcome and never the overtaken busy start', async () => {
+      render(renderOwner(frameSettledSource()));
+      await nextFrame();
+      announce.mockClear();
+      act(() => {
+        fireEvent.change(screen.getByRole('combobox'), {target: {value: 'Al'}});
+      });
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      expect(announce).toHaveBeenCalledWith('1 result');
+      expect(busyAnnouncements()).toEqual([]);
+    });
+  },
+);
+
 describe.each(SHEET_OWNERS)(
   '%s busy start from inside its open sheet (spec:AST-086 Platform support)',
   (_name, renderOwner, openSheet) => {

@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-10-23
+approved_at: 2026-10-24
 phase: accepted
 owners: [cixzhang]
 affects_architecture: []
@@ -52,18 +52,26 @@ validating, and reviewing individual native components while
 
 ## Requirements
 
-- **FR1 — Native component specs live in one place, in one shape.** A native
-  component's spec is `packages/native/specs/<language>/<Name>.md`, where
-  `<language>` is the language its implementations are written in (`swift`
-  first) and `<Name>` is the core component's name. It follows
-  `packages/native/specs/TEMPLATE.md`: summary, contract, native control,
-  platform guidelines, brand through the theme, states, accessibility, test and
-  validation, and open questions. One spec covers every implementation of the
+- **FR1 — A native component's spec lives beside its implementation.** Each
+  native component has its own folder in its language's implementation, named
+  as the core component, and its spec is `<Name>.spec.md` in that folder, as
+  core does (`packages/core/src/<Name>/<Name>.spec.md`). Each language has one
+  implementation package; for Swift that is `packages/native/apple/`, and the
+  spec is `packages/native/apple/Sources/Astryx/<Name>/<Name>.spec.md`, beside
+  the component's views. `<Name>` is the core component's name. The spec is a
+  knowledge record of kind `component` with id `component:<language>/<Name>`
+  that names its core component in `platform_of`, built from
+  `docs/templates/knowledge/component-spec.md`
+  (`architecture:knowledge-contracts` INV27). Until the core component has its
+  own record, `platform_of` still names `component:<Name>`, and the core
+  component's public source and documentation stand in as its contract. One spec covers every implementation of the
   component in that language, on every platform the language serves (Swift
-  serves `ios` and `macos`). A merged native component spec describes that
-  component's implementations in that language. It never changes the core
-  contract and never contradicts `spec:AST-082` or this record; where it does,
-  they win.
+  serves `ios` and `macos`). Rules that apply across a language's components
+  are architecture records under `packages/native/specs/<language>/`, named
+  `<slug>.spec.md`. A merged native component spec
+  describes that component's implementations in that language. It never changes
+  the core contract and never contradicts `spec:AST-082` or this record; where
+  it does, they win.
 - **FR2 — Native-first comes first.** A native component uses the platform's
   own control when one satisfies its contract (`spec:AST-082/FR11`). In Swift
   that is a SwiftUI control, or a UIKit or AppKit control where SwiftUI has
@@ -76,7 +84,8 @@ validating, and reviewing individual native components while
   including Reduce Motion, haptics, and VoiceOver. Each spec names the guideline
   pages it follows. The core contract keeps the component's meaning, words,
   states, and accessibility semantics; the guidelines decide how the platform
-  presents them.
+  presents them, except that a choice between presentations by screen size uses
+  the compact definition of `spec:AST-012` FR9 rather than size classes.
 - **FR4 — Brand shows through the theme everywhere else.** What FR2 and FR3
   leave open, such as accent and fill color, type family, corner shape,
   spacing, and icon choice, comes from the app's theme: tokens from its
@@ -89,8 +98,11 @@ validating, and reviewing individual native components while
   change to a native component ships with:
   - unit tests in its package's test target for parameter mapping, defaults,
     and state changes, built and run on every platform the package supports;
-  - parameters named and typed as the generated contract for the component
-    (`spec:AST-082/FR5`), with the contract drift tests passing;
+  - parameters named and typed as the platform's generated contract for the
+    component (`spec:AST-082/FR5`): the core props every platform honors plus
+    that platform's own props (`spec:AST-082/FR3`), never a prop kept for parity
+    alone, with the contract drift tests passing, except for the
+    interim Swift views listed in Current-state impact;
   - accessibility assertions for the label, traits, and value the core
     contract requires, plus a check at the largest Dynamic Type size;
   - a check that the component renders from two different themes with no
@@ -129,22 +141,41 @@ validating, and reviewing individual native components while
 
 ## Current-state impact
 
-- `@astryxdesign/native` gains `packages/native/specs/`, holding the template
-  and one directory per language, starting with `swift/`. The directory is not
-  published.
+- `@astryxdesign/native` gains `packages/native/specs/`, holding one directory
+  per language, starting with `swift/`. The directory is not published.
+- The Swift specs under `packages/native/specs/swift/` and the package template
+  `packages/native/specs/TEMPLATE.md` predate FR1's record form. They convert
+  to knowledge records in one change, which removes the template. Until then,
+  the package READMEs still name the template, and a new component spec follows
+  FR1 instead.
 - No architecture, family, contributing, or consumer-doc record changes.
 - No native component spec exists yet.
+- Component folders live inside a language's implementation package. For
+  Swift that is `packages/native/apple/`, whose `Astryx` product holds the
+  SwiftUI views.
+- The first Swift views in the `Astryx` product (Banner, Button, Card, Heading, Text,
+  and TextInput) take hand-written parameters, including `action` for the
+  contract's `onClick`, until they move to the generated contracts. Until then
+  they are the only native components exempt from FR5's generated-parameter
+  requirement; every other FR5 check applies to them. A new view never takes
+  this exemption.
+- Swift tests run as Swift package tests, where SwiftUI exposes no
+  accessibility tree, so FR5's accessibility assertions check the label,
+  traits, and value a view sets, not the tree VoiceOver reads. Until an
+  app-hosted iOS test target exists, a change reports the rendered tree's
+  accessibility as not measured, as FR5 reports a claim it could not capture.
+  Every other FR5 check applies.
 
 ## Verification
 
-| Contract | Verification                                                                                                    | Representative states                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                           |
-| -------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Review of the spec's path and sections against the template                                                     | a spec per language; a spec for a component with no core contract                                                                                            | A spec outside `packages/native/specs/<language>/`, missing a template section, or renaming a core prop passes review                                                                                                                     |
-| FR2      | The spec's native-control section and the state captures                                                        | a component built on a platform control; a component with no platform control                                                                                | A component draws its own control where a platform control fits, with no reason in its spec                                                                                                                                               |
-| FR3      | The spec's guideline section and the captures                                                                   | hit target size; largest Dynamic Type; Reduce Motion; VoiceOver focus                                                                                        | A capture shows a hit target below the platform minimum or text that does not scale                                                                                                                                                       |
-| FR4      | Theme test with two themes, plus source review for literals                                                     | default theme; a second theme with different color, type, and shape                                                                                          | A brand value stays the same across both themes, or a platform-only visual prop is added                                                                                                                                                  |
-| FR5      | The package's tests on every supported platform and the captures attached to the change                         | light; dark; largest text; every state the core contract names                                                                                               | A change merges without tests, without captures, or with a capture-based claim backed only by source                                                                                                                                      |
-| FR6      | Changed paths, commit authors, the review app's exact-head review, the spec review's findings, and the approval | all native paths by group members; a spec-defined requirement unmet; behavior no spec defines; a path outside `packages/native/`; a commit from someone else | An approval without an exact-head review-app pass or a spec review, an approval with a spec-defined requirement unmet, an out-of-scope pull request approved without review, or an in-scope one blocked only for behavior no spec defines |
+| Contract | Verification                                                                                                                 | Representative states                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Review of the spec's path beside the component, plus `pnpm check:knowledge` on its record frontmatter, id, and `platform_of` | a spec per language; a spec for a component with no core contract                                                                                            | A component spec outside its component's folder, without valid record frontmatter, under another id, naming no core component, or renaming a core prop passes                                                                             |
+| FR2      | The spec's account of the platform control it builds on, or why none fits, and the state captures                            | a component built on a platform control; a component with no platform control                                                                                | A component draws its own control where a platform control fits, with no reason in its spec                                                                                                                                               |
+| FR3      | The spec's account of the platform guidelines it follows, and the captures                                                   | hit target size; largest Dynamic Type; Reduce Motion; VoiceOver focus                                                                                        | A capture shows a hit target below the platform minimum or text that does not scale                                                                                                                                                       |
+| FR4      | Theme test with two themes, plus source review for literals                                                                  | default theme; a second theme with different color, type, and shape                                                                                          | A brand value stays the same across both themes, or a platform-only visual prop is added                                                                                                                                                  |
+| FR5      | The package's tests on every supported platform and the captures attached to the change                                      | light; dark; largest text; every state the core contract names                                                                                               | A change merges without tests, without captures, or with a capture-based claim backed only by source                                                                                                                                      |
+| FR6      | Changed paths, commit authors, the review app's exact-head review, the spec review's findings, and the approval              | all native paths by group members; a spec-defined requirement unmet; behavior no spec defines; a path outside `packages/native/`; a commit from someone else | An approval without an exact-head review-app pass or a spec review, an approval with a spec-defined requirement unmet, an out-of-scope pull request approved without review, or an in-scope one blocked only for behavior no spec defines |
 
 ## Decision log
 

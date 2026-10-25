@@ -26,12 +26,14 @@ export const docs = {
     {
       name: 'value',
       type: 'string',
+      required: true,
       description:
         "The value this item represents within its group. The group's value matches against this to determine the checked state.",
     },
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description: 'Primary label text identifying the option.',
     },
     {
@@ -50,7 +52,7 @@ export const docs = {
       type: 'boolean',
       default: 'false',
       description:
-        'Whether this individual radio item is disabled. Disabled items stay focusable (via aria-disabled) so they remain discoverable by keyboard and assistive technology, but selection is blocked.',
+        'Whether this individual radio item is disabled. Disabled items expose aria-disabled, block selection, and are currently skipped by DropdownMenu arrow-key navigation.',
     },
     {
       name: 'endContent',
@@ -94,7 +96,8 @@ export const docsDense = {
     label: 'primary label text',
     description: 'secondary text below label',
     icon: 'icon before label',
-    isDisabled: 'disabled; stays focusable via aria-disabled',
+    isDisabled:
+      'disabled; aria-disabled, blocks selection, skipped by arrow keys',
     endContent: 'content after label+description',
     ref: 'forwarded to the row root (the role="menuitemradio" element)',
   },

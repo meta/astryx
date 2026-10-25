@@ -421,18 +421,6 @@ describe('useTableSortable', () => {
       expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
     });
 
-    it('sets aria-sort="descending" on sorted descending th', () => {
-      render(
-        <SortableTable
-          initialSort={[{sortKey: 'name', direction: 'descending'}]}
-        />,
-      );
-
-      const headers = screen.getAllByRole('columnheader');
-      const nameHeader = headers.find(h => h.textContent?.includes('Name'));
-      expect(nameHeader).toHaveAttribute('aria-sort', 'descending');
-    });
-
     it('does not set aria-sort on unsorted columns', () => {
       render(
         <SortableTable

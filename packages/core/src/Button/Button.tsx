@@ -838,8 +838,10 @@ export function Button({
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
-        aria-busy={isLoadingState || undefined}
-        aria-disabled={useAriaDisabled || undefined}
+        // A caller's own busy or disabled state is kept, so a component that
+        // hands these props to a Button (a caller-rendered trigger) is heard.
+        aria-busy={isLoadingState || props['aria-busy'] || undefined}
+        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -857,8 +859,10 @@ export function Button({
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
-        aria-busy={isLoadingState || undefined}
-        aria-disabled={useAriaDisabled || undefined}
+        // A caller's own busy or disabled state is kept, so a component that
+        // hands these props to a Button (a caller-rendered trigger) is heard.
+        aria-busy={isLoadingState || props['aria-busy'] || undefined}
+        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}

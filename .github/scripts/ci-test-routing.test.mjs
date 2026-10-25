@@ -266,6 +266,77 @@ describe.each(Object.entries(WORKFLOWS))(
   },
 );
 
+describe('ci.yml pr-a11y steps against an older PR head', () => {
+  const steps = load('ci.yml').jobs['pr-a11y'].steps;
+  /** The spec files each `pnpm exec playwright test` in a step names. */
+  const specsOf = step =>
+    (step.run ?? '')
+      .replace(/\\\n/g, ' ')
+      .split('\n')
+      .filter(line => /pnpm exec playwright test\b/.test(line))
+      .flatMap(line =>
+        line
+          .trim()
+          .split(/\s+/)
+          .filter(token => /\.spec\.(ts|tsx|js|mjs)$/.test(token)),
+      );
+  const playwright = steps.filter(step => specsOf(step).length > 0);
+
+  // The wrapper skips spec files a PR head lacks, so a step that named a file
+  // missing on main would pass silently everywhere. Main's steps must name
+  // files that exist; only an older head skips anything.
+  it('names only spec files that exist', () => {
+    expect(playwright.length).toBeGreaterThan(0);
+    for (const step of playwright) {
+      for (const spec of specsOf(step)) {
+        expect(
+          fs.existsSync(path.join(root, spec)),
+          `${step.name}: ${spec}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  // A step that uploads its evidence with `if-no-files-found: error` must not
+  // promise a run the wrapper then skips on an older head.
+  it('promises heading-links evidence only when its spec is in the head', () => {
+    const run = steps.find(
+      step => step.name === 'Run heading-links module browser evidence',
+    ).run;
+    const spec =
+      'packages/core/src/Markdown/plugins/headingLinks.a11y.chromium.spec.ts';
+    const promise = run.indexOf("echo 'should_run=true'");
+    expect(promise).toBeGreaterThan(-1);
+    expect(run.slice(0, promise)).toContain(`if [ -e ${spec} ]; then`);
+  });
+
+  it("sources the merge commit's absent-spec wrapper before every Playwright step", () => {
+    const index = steps.findIndex(
+      step => step.name === 'Skip contract specs the PR head predates',
+    );
+    expect(index).toBeGreaterThan(-1);
+    const wrapper = steps[index];
+    expect(wrapper.if).toBe("github.event_name == 'pull_request'");
+    // The merge commit the steps come from, not the PR's recorded base, which
+    // can lag main and predate the wrapper.
+    expect(wrapper.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    expect(wrapper.env.BASE_SHA).toBeUndefined();
+    expect(wrapper.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/skip-absent-specs.sh" > "$wrapper"',
+    );
+    expect(wrapper.run).toContain('echo "BASH_ENV=$wrapper" >> "$GITHUB_ENV"');
+    expect(
+      fs.existsSync(path.join(root, '.github/scripts/skip-absent-specs.sh')),
+    ).toBe(true);
+    for (const step of playwright) {
+      expect(steps.indexOf(step), step.name).toBeGreaterThan(index);
+      // BASH_ENV reaches bash steps only, and only calls through the function.
+      expect(step.shell ?? 'bash', step.name).toMatch(/^bash/);
+      expect(step.run, step.name).not.toMatch(/\b(exec|command) pnpm\b/);
+    }
+  });
+});
+
 describe('ci.yml RTL package sharding', () => {
   const workflow = load('ci.yml');
   const shard = workflow.jobs['pr-rtl-shard'];
@@ -458,6 +529,30 @@ describe('ci.yml RTL package sharding', () => {
     expect(render('failure', 'skipped')).toBe('failure/skipped');
     expect(render('failure', 'failure')).toBe('failure');
   });
+});
+
+describe('full component typechecks', () => {
+  // Each component package's own sources and tests, in both typecheck lanes:
+  // typecheck:docs covers only its .doc.mjs files, so a type error in a test
+  // otherwise lands on main unseen (lab's MobileTokenizer.test.tsx did).
+  const packages = ['core', 'lab', 'charts', 'richtext', 'vega'];
+
+  it.each(['ci.yml', 'deploy.yml'])(
+    '%s typechecks every component package, tests included',
+    file => {
+      const steps = load(file).jobs.typecheck.steps;
+      const command = name => `pnpm -F @astryxdesign/${name} typecheck`;
+      const core = steps.find(step => step.run === command('core'));
+      for (const name of packages) {
+        const step = steps.find(candidate => candidate.run === command(name));
+        expect(step, `${file} does not typecheck ${name}`).toBeDefined();
+        // The same specialized-lane guard as core's (none in deploy.yml).
+        expect(step.if, `${file}: ${name} is not guarded like core`).toBe(
+          core.if,
+        );
+      }
+    },
+  );
 });
 
 describe('deploy.yml push gating', () => {

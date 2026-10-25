@@ -13,10 +13,27 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InputGroup} from '../InputGroup';
 import {TextInput} from './TextInput';
+
+// jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
+const RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
 
 // Mock showPopover/hidePopover since jsdom does not implement them. Used by the
 // disabledMessage tooltip.
@@ -138,9 +155,55 @@ describe('TextInput', () => {
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled attribute when isDisabled is true', () => {
+  it('exposes aria-disabled and read-only, not native disabled, when isDisabled is true', () => {
     render(<TextInput label="Name" isDisabled value="" onChange={() => {}} />);
-    expect(screen.getByRole('textbox')).toBeDisabled();
+    const input = screen.getByRole('textbox');
+    expect(input).not.toBeDisabled();
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+  });
+
+  it('keeps a disabled input in the tab order (spec:AST-085)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <TextInput label="First" value="" onChange={() => {}} />
+        <TextInput label="Second" isDisabled value="" onChange={() => {}} />
+        <TextInput label="Third" value="" onChange={() => {}} />
+      </>,
+    );
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('textbox', {name: 'Second'})).toHaveFocus();
+  });
+
+  it('runs no caller handler and submits no form from a disabled input (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const handlers = {onEnter: vi.fn(), onKeyDown: vi.fn(), onPaste: vi.fn()};
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <TextInput
+          label="Name"
+          isDisabled
+          value=""
+          onChange={() => {}}
+          {...handlers}
+        />
+      </form>,
+    );
+    await user.click(screen.getByRole('textbox'));
+    await user.keyboard('{Enter}');
+    await user.paste('x');
+    for (const handler of [...Object.values(handlers), onSubmit]) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rings a disabled input under keyboard focus (spec:AST-085 FR6)', () => {
+    render(<TextInput label="Name" isDisabled value="" onChange={() => {}} />);
+    const wrapper = screen.getByRole('textbox').parentElement!;
+    expect(wrapper).toHaveClass(RING);
   });
 
   it('does not fire onChange when disabled', async () => {
@@ -515,7 +578,10 @@ describe('TextInput', () => {
           />
         </form>,
       );
-      expect(screen.getByRole('textbox')).toBeDisabled();
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
@@ -888,13 +954,13 @@ describe('TextInput', () => {
       expect(input).toHaveValue('');
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable when disabled without a reason', () => {
       render(
         <TextInput label="Owner" value="" onChange={() => {}} isDisabled />,
       );
       const input = screen.getByRole('textbox');
-      expect(input).toBeDisabled();
-      expect(input).not.toHaveAttribute('aria-disabled');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -1093,8 +1159,12 @@ describe('TextInput clear button focus behavior', () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it('defers focus restoration via requestAnimationFrame on pointer activation', () => {
+  it('focuses the input inside the tap on pointer activation, without scrolling', () => {
+    // iOS Safari brings up its keyboard only for a focus made while handling
+    // the touch: a deferred focus would leave an unfocused field focused but
+    // keyboardless.
     const handleChange = vi.fn();
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame');
     render(
       <TextInput
@@ -1104,14 +1174,17 @@ describe('TextInput clear button focus behavior', () => {
         onChange={handleChange}
       />,
     );
-
+    const input = screen.getByRole('textbox');
     const clearButton = screen.getByRole('button', {name: /clear/i});
+    expect(document.activeElement).not.toBe(input);
 
-    // Pointer activation (detail > 0)
     fireEvent.click(clearButton, {detail: 1});
 
     expect(handleChange).toHaveBeenCalledWith('', expect.any(Object));
-    expect(rafSpy).toHaveBeenCalled();
+    expect(document.activeElement).toBe(input);
+    expect(focusSpy).toHaveBeenLastCalledWith({preventScroll: true});
+    expect(rafSpy).not.toHaveBeenCalled();
+    focusSpy.mockRestore();
     rafSpy.mockRestore();
   });
 });

@@ -2262,11 +2262,37 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     // focus-driven highlight follows the pointer instead of leaving two.
     // Focus must be scroll-free: scrolling the focused item into view moves
     // the next item under the stationary pointer, which re-highlights and
-    // scrolls again — a runaway auto-scroll loop.
+    // scrolls again — a runaway auto-scroll loop. And it is the mouse's focus,
+    // so it asks the browser not to match :focus-visible.
     const focusSpy = vi.spyOn(del, 'focus');
     fireEvent.pointerMove(del, {pointerType: 'mouse'});
     expect(del).toHaveFocus();
     expect(edit).not.toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
+  });
+
+  it('after a keyboard open, focus that follows the mouse keeps the keyboard indicator (the last input)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{ArrowDown}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    // No pointer press since the key: the browser keeps deciding the
+    // indicator, as for any focus the keyboard moved.
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    const focusSpy = vi.spyOn(del, 'focus');
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(del).toHaveFocus();
     expect(focusSpy).toHaveBeenCalledWith({preventScroll: true});
   });
 

@@ -39,9 +39,36 @@ const STAGGER_TIME = 100;
 // Animation Keyframes
 // =============================================================================
 
+/**
+ * The pulse climbs from 0.25 to 0.925 opacity in ten equal steps, then plays
+ * back down (`alternate`). The steps are written out as holds joined by
+ * 0.01% ramps, with a linear timing function, rather than produced by a
+ * `steps()` timing function: WebKit never runs a `steps()` animation on the
+ * compositor, so Safari would repaint the pulse on the main thread and freeze
+ * it whenever a script runs. These keyframes give the same values at the same
+ * times, which every engine can animate off the main thread.
+ */
 const skeletonFade = stylex.keyframes({
   '0%': {opacity: 0.25},
-  '100%': {opacity: 1},
+  '9.99%': {opacity: 0.25},
+  '10%': {opacity: 0.325},
+  '19.99%': {opacity: 0.325},
+  '20%': {opacity: 0.4},
+  '29.99%': {opacity: 0.4},
+  '30%': {opacity: 0.475},
+  '39.99%': {opacity: 0.475},
+  '40%': {opacity: 0.55},
+  '49.99%': {opacity: 0.55},
+  '50%': {opacity: 0.625},
+  '59.99%': {opacity: 0.625},
+  '60%': {opacity: 0.7},
+  '69.99%': {opacity: 0.7},
+  '70%': {opacity: 0.775},
+  '79.99%': {opacity: 0.775},
+  '80%': {opacity: 0.85},
+  '89.99%': {opacity: 0.85},
+  '90%': {opacity: 0.925},
+  '100%': {opacity: 0.925},
 });
 
 // =============================================================================
@@ -78,7 +105,8 @@ const styles = stylex.create({
       default: skeletonFade,
       '@media (prefers-reduced-motion: reduce)': 'none',
     },
-    animationTimingFunction: 'steps(10, end)',
+    // Linear between the keyframes' holds; see skeletonFade.
+    animationTimingFunction: 'linear',
   },
 });
 

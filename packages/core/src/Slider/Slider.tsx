@@ -4,8 +4,8 @@
 
 /**
  * @file Slider.tsx
- * @input Uses React, useId, useRef, useCallback, Field, Tooltip, useTooltip, VisuallyHidden
- * @output Exports Slider and its props; unfilled marks share the track token; modifier-only key presses do not restore the thumb focus ring
+ * @input Uses React, useId, useRef, useCallback, useEffect, Field, Tooltip, useTooltip, VisuallyHidden
+ * @output Exports Slider and its props; unfilled marks share the track token; modifier-only key presses do not restore the thumb focus ring; a drag belongs to the pointer that started it
  * @position Core implementation; consumed by index.ts, tested by Slider.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -17,6 +17,7 @@
  */
 
 import {
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -736,12 +737,47 @@ export function Slider({ref, ...props}: SliderProps) {
   );
 
   // Pointer handlers
+  // The pointer that owns the drag in progress. A control tracks one touch
+  // (UIKit's `isMultipleTouchEnabled` is false by default): another finger
+  // landing on the slider, moving or lifting never takes over or ends the
+  // drag the first one owns.
+  const dragPointerRef = useRef<number | null>(null);
+
+  // Removes the document lostpointercapture listener of the drag in progress.
+  // It exists only while a drag does, so an idle slider holds no document
+  // listener (react-component-runtime INV5).
+  const detachLostCaptureRef = useRef<(() => void) | null>(null);
+
+  const endDrag = useCallback(
+    (pointerId: number) => {
+      if (
+        draggingThumbRef.current !== null &&
+        pointerId === dragPointerRef.current
+      ) {
+        detachLostCaptureRef.current?.();
+        detachLostCaptureRef.current = null;
+        draggingThumbRef.current = null;
+        dragPointerRef.current = null;
+        setDraggingThumb(null);
+        fireChangeEnd();
+      }
+    },
+    [fireChangeEnd],
+  );
+
+  // A slider unmounted mid-drag leaves no listener behind.
+  useEffect(() => () => detachLostCaptureRef.current?.(), []);
+
   const handlePointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       if (isDisabled) {
         return;
       }
       e.preventDefault();
+      if (draggingThumbRef.current !== null) {
+        return;
+      }
+      dragPointerRef.current = e.pointerId;
 
       // If the click originated from a mark element, snap to that mark's value
       // instead of calculating from pointer position (avoids off-by-one when
@@ -776,18 +812,36 @@ export function Slider({ref, ...props}: SliderProps) {
       // through the drag.
       setKeyboardFocusThumb(null);
 
+      // A capture lost without an up or a cancel (the browser releases it, or
+      // script does) still ends the drag, so the slider never stays held by a
+      // pointer that is gone. The listener sits on the document, where
+      // lostpointercapture bubbles to and where the browser fires it when the
+      // captured node is removed, so a control node replaced during the drag
+      // (a FormLayout direction change) is still covered. It lives only for
+      // this drag.
+      const doc = (e.currentTarget as HTMLElement).ownerDocument;
+      const onLostCapture = (event: globalThis.PointerEvent) =>
+        endDrag(event.pointerId);
+      doc.addEventListener('lostpointercapture', onLostCapture);
+      detachLostCaptureRef.current = () =>
+        doc.removeEventListener('lostpointercapture', onLostCapture);
+
       if (
         typeof (e.currentTarget as HTMLElement).setPointerCapture === 'function'
       ) {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       }
     },
-    [isDisabled, getValueFromPosition, getClosestThumb, updateValue],
+    [isDisabled, getValueFromPosition, getClosestThumb, updateValue, endDrag],
   );
 
   const handlePointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
-      if (draggingThumbRef.current === null || isDisabled) {
+      if (
+        draggingThumbRef.current === null ||
+        e.pointerId !== dragPointerRef.current ||
+        isDisabled
+      ) {
         return;
       }
       const newVal = getValueFromPosition(e.clientX, e.clientY);
@@ -797,14 +851,8 @@ export function Slider({ref, ...props}: SliderProps) {
   );
 
   const handlePointerUp = useCallback(
-    (_e: PointerEvent<HTMLDivElement>) => {
-      if (draggingThumbRef.current !== null) {
-        draggingThumbRef.current = null;
-        setDraggingThumb(null);
-        fireChangeEnd();
-      }
-    },
-    [fireChangeEnd],
+    (e: PointerEvent<HTMLDivElement>) => endDrag(e.pointerId),
+    [endDrag],
   );
 
   // Keyboard handler
