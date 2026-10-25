@@ -9,7 +9,8 @@
  *   arrive as distinct pointers; the screencast shows a compositor animation
  *   advancing through a blocked main thread while a rAF animation freezes;
  *   the trace counts zero Layout for a transform animation and one per frame
- *   for a `top` animation; sampled curves match the oracles, individual
+ *   for a `top` animation; the long-task log records the page's own long
+ *   task but not a DevTools evaluate, which the trace counts; sampled curves match the oracles, individual
  *   transform properties included; a sample at an end reports the time it was
  *   read at; holding takes only running document-timeline animations, each at
  *   its own offset, holds each where it was read, adds a second hold to the
@@ -43,6 +44,7 @@ import {
   freezeTimers,
   holdAnimations,
   installInputLog,
+  installLongTaskLog,
   installTimerGate,
   markElement,
   merge,
@@ -50,6 +52,7 @@ import {
   PARTIAL_LIFT_SKIP,
   pinch,
   readInputLog,
+  readLongTasks,
   releaseAnimations,
   sampleCurve,
   sampleRects,
@@ -391,7 +394,7 @@ test.describe('frame evidence', () => {
   });
 
   test('in the WebKit container, compiled shaders outlive the run', async ({
-    page,
+    browser,
   }, testInfo) => {
     // The official Playwright image keeps its browsers here.
     test.skip(
@@ -408,18 +411,33 @@ test.describe('frame evidence', () => {
       fs.readFileSync(path.join(dir ?? '', 'ASTRYX-SHADER-CACHE'), 'utf8'),
     ).toContain('playwright');
     // Mesa writes what it compiles there once a page draws a blurred layer.
-    await page.setContent(
-      '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
-    );
-    await page.evaluate(
-      () =>
-        document
-          .getElementById('glass')
-          ?.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200}).finished,
-    );
-    expect(
-      fs.readdirSync(dir ?? '').filter(name => name !== 'ASTRYX-SHADER-CACHE'),
-    ).not.toEqual([]);
+    // Earlier runs have filled the cache already, so this run's browser gets
+    // an empty directory beside them, in the same host-kept mount, and the
+    // test watches its own writes arrive.
+    const fresh = fs.mkdtempSync(path.join(dir ?? '', 'self-test-'));
+    try {
+      const own = await browser.browserType().launch({
+        env: {...process.env, MESA_SHADER_CACHE_DIR: fresh},
+      });
+      try {
+        const page = await own.newPage();
+        await page.setContent(
+          '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
+        );
+        await page.evaluate(
+          () =>
+            document
+              .getElementById('glass')
+              ?.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200})
+              .finished,
+        );
+      } finally {
+        await own.close();
+      }
+      expect(fs.readdirSync(fresh, {recursive: true})).not.toEqual([]);
+    } finally {
+      fs.rmSync(fresh, {recursive: true, force: true});
+    }
   });
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
@@ -487,6 +505,52 @@ test.describe('frame evidence', () => {
     expect(transform.Paint ?? 0).toBe(0);
     // ~24 frames in 400 ms: one layout per frame.
     expect(top.Layout ?? 0).toBeGreaterThan(18);
+  });
+
+  test("the long-task log records the page's own long task but not a DevTools evaluate, which the trace counts", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the Long Tasks API and rendering traces are Chromium-only',
+    );
+    await installLongTaskLog(page);
+    await fixture(page);
+    // The page's own task: a timer that spins 120 ms.
+    const own = await page.evaluate(
+      () =>
+        new Promise<{from: number; to: number}>(resolve => {
+          setTimeout(() => {
+            const from = performance.timeOrigin + performance.now();
+            const end = performance.now() + 120;
+            while (performance.now() < end) {
+              // spin
+            }
+            resolve({from, to: performance.timeOrigin + performance.now()});
+          }, 0);
+        }),
+    );
+    await frames(page, 2);
+    const recorded = await readLongTasks(page, own);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].durationMs).toBeGreaterThanOrEqual(110);
+    // A DevTools evaluate that spins 300 ms: the trace counts it, the log
+    // never sees it.
+    let block = {from: 0, to: 0};
+    const trace = await traceRendering(page, async () => {
+      block = await blockMainThread(page, 300);
+    });
+    await frames(page, 2);
+    expect(
+      trace.longTasks.some(
+        t =>
+          t.durationMs >= 290 &&
+          t.start < block.to &&
+          t.start >= block.from - 20,
+      ),
+    ).toBe(true);
+    expect(await readLongTasks(page, block)).toEqual([]);
   });
 });
 
