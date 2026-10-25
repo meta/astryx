@@ -232,19 +232,18 @@ export function PanelSearchInput({
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       onValueChange('');
       // Clearing puts the caret back where the user was typing, matching
-      // TextInput's built-in clear. Defer focus restoration past the button's
-      // unmount task so touch browsers don't jump page scroll on tap, while
-      // preserving synchronous focus for keyboard users.
-      if (!e || e.detail === 0) {
-        if (typeof ref === 'object' && ref?.current) {
-          ref.current.focus();
-        }
-      } else {
-        requestAnimationFrame(() => {
-          if (typeof ref === 'object' && ref?.current) {
-            ref.current.focus({preventScroll: true});
-          }
-        });
+      // TextInput's built-in clear, and it does so inside the tap: iOS raises
+      // the software keyboard only for a focus made while the browser is
+      // still dispatching the person's tap, and a UIKit search field's clear
+      // button makes the field first responder, keyboard and all (measured on
+      // iOS 26.2). A frame later the focus came with no keyboard. When the
+      // input already has focus, the clear button's pressed state never takes
+      // it, so this is a no-op and the keyboard stays where it is.
+      // `preventScroll` keeps a pointer tap from scrolling the page.
+      if (typeof ref === 'object' && ref?.current) {
+        ref.current.focus(
+          e == null || e.detail === 0 ? undefined : {preventScroll: true},
+        );
       }
     },
     [onValueChange, ref],

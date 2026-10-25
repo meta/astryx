@@ -13,7 +13,9 @@
  * The busy Spinner inside a control is decorative (hidden, no live role); the
  * control announces its busy state instead (`spec:AST-086` FR8), once per busy
  * start (FR6): rerenders and StrictMode replay do not repeat it, and settling
- * re-arms it. While a native modal is open, the body-level channel is not
+ * re-arms it. The returned function is called by an owner announcing the
+ * busy operation's outcome: a busy start not yet announced is dropped, so it
+ * never follows its own outcome (FR8). While a native modal is open, the body-level channel is not
  * exposed, so a control inside it announces through one persistent polite
  * region in that dialog, inserted empty and filled a frame later (Platform
  * support, FR3).
@@ -22,8 +24,12 @@
  * this is a shared implementation detail of Astryx's busy controls.
  */
 
-import {useEffect, useRef, type RefObject} from 'react';
-import {useAnnounce} from './useAnnounce';
+import {useCallback, useEffect, useRef, type RefObject} from 'react';
+import {
+  takeJoinedAnnouncement,
+  useAnnounce,
+  withdrawPendingAnnouncement,
+} from './useAnnounce';
 
 const REGION_ATTR = 'data-astryx-modal-busy-region';
 const VISUALLY_HIDDEN_CSS =
@@ -73,12 +79,17 @@ export function useBusyAnnouncement(
   isBusy: boolean,
   message: string,
   elementRef: RefObject<Element | null>,
-): void {
+): () => void {
   const announce = useAnnounce();
   const hasAnnouncedRef = useRef(false);
+  const frameRef = useRef<number | null>(null);
+  // This busy start's share of the shared channel's pending text, until it
+  // settles.
+  const channelMessageRef = useRef<object | null>(null);
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;
+      channelMessageRef.current = null;
       return;
     }
     if (hasAnnouncedRef.current) {
@@ -87,14 +98,34 @@ export function useBusyAnnouncement(
     // Choose the route a frame later: a Dialog opening in the same commit
     // calls showModal() in its own Effect, which runs after this one.
     const frame = requestAnimationFrame(() => {
+      frameRef.current = null;
       hasAnnouncedRef.current = true;
       const dialog = elementRef.current?.closest('dialog');
       if (dialog?.open && dialog.matches(':modal')) {
         announceInModal(dialog, message);
       } else {
         announce(message, 'polite');
+        channelMessageRef.current = takeJoinedAnnouncement();
       }
     });
-    return () => cancelAnimationFrame(frame);
+    frameRef.current = frame;
+    return () => {
+      cancelAnimationFrame(frame);
+      frameRef.current = null;
+    };
   }, [announce, elementRef, isBusy, message]);
+
+  return useCallback(() => {
+    if (frameRef.current != null) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      // Still busy until the settled state commits; do not schedule again.
+      hasAnnouncedRef.current = true;
+    }
+    // Written to the channel but not yet exposed: withdraw it too.
+    if (channelMessageRef.current != null) {
+      withdrawPendingAnnouncement(channelMessageRef.current, 'polite');
+      channelMessageRef.current = null;
+    }
+  }, []);
 }

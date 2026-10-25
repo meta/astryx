@@ -208,8 +208,14 @@ async function reconcile({
   createIfMissing,
   fallbackMessage,
   execute,
+  baseStats,
 } = {}) {
   const paths = fixture(value, {analysis});
+  const baseStatsPath = path.join(
+    path.dirname(paths.analysis),
+    'size-base.json',
+  );
+  if (baseStats) fs.writeFileSync(baseStatsPath, JSON.stringify(baseStats));
   const {github, state} = githubFixture({
     value: githubFixtureValue,
     comments,
@@ -225,6 +231,7 @@ async function reconcile({
     expectedIdentity: value,
     analysisPath: paths.analysis,
     metadataPath: paths.metadata,
+    baseStatsPath,
     a11yPath: paths.a11y,
     lookupPreview: async () => (previewAvailable ? VERCEL_ORIGIN : null),
     probePreview: async () => true,
@@ -893,6 +900,25 @@ describe('PR comment preview reconciliation', () => {
     expect(withPrior.state.created).toHaveLength(0);
     expect(withPrior.state.updated).toHaveLength(1);
   });
+
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes base size stats only when they name %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        baseStats: {headSha, baseComponentStats: {}, baseBundlePackages: []},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0].includes('--base-stats')).toBe(used);
+    },
+  );
 
   it('falls back to a safe current message when analysis rendering fails', async () => {
     const stale = {

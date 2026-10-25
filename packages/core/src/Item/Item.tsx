@@ -503,11 +503,13 @@ const styles = stylex.create({
   },
   // Swipe actions. The root translates by the drag's travel and settles on
   // the clock the gesture writes; `pan-y` lets the browser keep scrolling the
-  // list while the row owns horizontal movement. The hover transition keeps
-  // its own clock beside the transform's.
+  // list while the row owns horizontal movement, and `pinch-zoom` leaves a
+  // two-finger pinch that starts on the row to the browser, so the page stays
+  // zoomable (WCAG 1.4.4). The hover transition keeps its own clock beside
+  // the transform's.
   swipeRoot: {
     isolation: 'isolate',
-    touchAction: 'pan-y',
+    touchAction: 'pan-y pinch-zoom',
     transform: `translate3d(${SWIPE_TRAVEL}, 0, 0)`,
     transitionProperty: 'background-color, transform',
     transitionDuration: `${durationVars['--duration-fast-min']}, ${SWIPE_DURATION}`,

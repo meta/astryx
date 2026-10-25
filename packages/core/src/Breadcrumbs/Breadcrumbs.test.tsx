@@ -457,6 +457,28 @@ describe('BreadcrumbItem menu', () => {
     ).toBeInTheDocument();
   });
 
+  it('after a pointer open, a row the mouse rests on takes focus without :focus-visible', async () => {
+    // Nothing else in this file activates the shared modality tracking, so
+    // the menu crumb must activate it for its rows to follow the last input
+    // (architecture:interaction-modality INV1).
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem menu={items}>Teams</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const design = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    const focusSpy = vi.spyOn(design, 'focus');
+    fireEvent.pointerMove(design, {pointerType: 'mouse'});
+    expect(design).toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
+  });
+
   it('fires the item onClick and closes the menu on select', async () => {
     const user = userEvent.setup();
     const onDesign = vi.fn();

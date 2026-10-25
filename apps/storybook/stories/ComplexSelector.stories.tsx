@@ -409,6 +409,12 @@ const styles = stylex.create({
     width: 280,
     padding: spacingVars['--spacing-3'],
   },
+  auditMatrix: {
+    width: 'min(720px, calc(100vw - 32px))',
+  },
+  auditPopupContent: {
+    width: 220,
+  },
 });
 
 function formatFruitValue(value: FruitValue) {
@@ -832,7 +838,7 @@ export const SecondaryVariant: Story = {
     const widthBefore = root.getBoundingClientRect().width;
     expect(widthBefore).toBeCloseTo(190, 0);
 
-    const trigger = canvas.getByRole('button', {name: 'View density'});
+    const trigger = canvas.getByRole('combobox', {name: 'View density'});
     await userEvent.click(trigger);
     const dialog = within(document.body).getByRole('dialog', {
       name: 'View density',
@@ -920,6 +926,102 @@ export const ControlledToolbarTrigger: Story = {
       description: {
         story:
           'A compact toolbar composition using the ghost trigger, a leading icon, end-aligned content, and an external control that opens the selector imperatively through its handleRef. The selector still owns its own visibility, focus restoration, and light dismiss.',
+      },
+    },
+  },
+};
+
+export const AuditMatrix: Story = {
+  name: 'Audit matrix',
+  tags: ['no-visual'],
+  render: () => {
+    const content = () => <Button label="Apply selection" size="sm" />;
+
+    return (
+      <VStack gap={4} xstyle={styles.auditMatrix} data-testid="audit-matrix">
+        <ComplexSelector label="Empty small" value="" size="sm">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Selected medium"
+          value="Design systems"
+          triggerLabel="Design systems"
+          data-testid="rtl-trigger">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Long large"
+          value="A long selected destination"
+          triggerLabel="A long selected destination that must truncate without widening the field"
+          size="lg">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Ghost trigger"
+          value="Compact"
+          triggerLabel="Compact"
+          variant="ghost"
+          startIcon="viewColumns">
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Loading value"
+          value="Saving"
+          triggerLabel="Saving destination"
+          isLoading>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Disabled value"
+          value="Unavailable"
+          triggerLabel="Unavailable"
+          isDisabled>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Invalid required value"
+          value="Needs attention"
+          triggerLabel="Needs attention"
+          isRequired
+          status={{type: 'error', message: 'Choose an available destination.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Warning value"
+          value="Draft destination"
+          triggerLabel="Draft destination"
+          status={{type: 'warning', message: 'This destination is archived.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Successful value"
+          value="Ready"
+          triggerLabel="Ready"
+          status={{type: 'success', message: 'Destination is available.'}}>
+          {content}
+        </ComplexSelector>
+        <ComplexSelector
+          label="Custom trigger selector"
+          value="Custom"
+          contentXstyle={styles.auditPopupContent}
+          renderTrigger={props => (
+            <Button
+              data-testid="rtl-custom-trigger"
+              label="Custom trigger"
+              variant="secondary"
+              {...props}
+            />
+          )}>
+          {content}
+        </ComplexSelector>
+      </VStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A bounded audit fixture for the built-in sizes, variants, busy, disabled, validation, overflow, and caller-rendered trigger paths. Browser evidence drives this one fixture through light, dark, RTL, interaction, and 320px states.',
       },
     },
   },
