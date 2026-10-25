@@ -1,7 +1,7 @@
 {
-  "$comment": "Known axe violations tolerated by the pr-a11y CI gate. Entries are keyed Component::Story::rule-id. Regenerate with `pnpm a11y:baseline` (requires a built Storybook + Playwright chromium). Remove entries as violations are fixed.",
+  "$comment": "Known axe violations tolerated by the pr-a11y CI gate. Entries are keyed package/component::story-id::rule-id; legacy Component::Story::rule-id entries are preserved until their exact story can be migrated. Regenerate with `pnpm a11y:baseline` (requires a built Storybook + Playwright chromium). Remove entries as violations are fixed.",
   "version": 1,
-  "generatedAt": "2026-07-31T09:21:12.717Z",
+  "generatedAt": "2026-10-24T15:57:55.439Z",
   "entries": [
     {
       "key": "Badge::Status Labels::color-contrast",
@@ -747,6 +747,11 @@
       "key": "Tokenizer::Disabled::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
+    },
+    {
+      "key": "core/Tooltip::core-tooltip--tall-content-moving-host::scrollable-region-focusable",
+      "impact": "serious",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/scrollable-region-focusable?application=playwright"
     }
   ]
 }
