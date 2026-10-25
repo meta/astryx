@@ -10,4 +10,5 @@
 
 export {createAnimator} from '../animator';
 export {solveSpring, toSpring} from '../spring';
-export {springs} from '../uikit/springs';
+export {registerSpringsTable, springs} from '../uikit/springs';
+export {motionRoleOf} from '../roles';
