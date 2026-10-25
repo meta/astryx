@@ -306,7 +306,8 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
  * photograph per event, about 100 ms between moves instead of the script's
  * 16.7. Its release velocity is that much lower, so a flick that dismisses
  * when played can settle back when filmed: a storyboard cannot show such a
- * gesture; record it in real time instead.
+ * gesture; record it in real time instead (`startScreencast`,
+ * `castStoryboard`).
  */
 export async function touchStoryboard(
   page: Page,
