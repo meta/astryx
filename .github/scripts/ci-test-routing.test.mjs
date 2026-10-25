@@ -531,6 +531,30 @@ describe('ci.yml RTL package sharding', () => {
   });
 });
 
+describe('full component typechecks', () => {
+  // Each component package's own sources and tests, in both typecheck lanes:
+  // typecheck:docs covers only its .doc.mjs files, so a type error in a test
+  // otherwise lands on main unseen (lab's MobileTokenizer.test.tsx did).
+  const packages = ['core', 'lab', 'charts', 'richtext', 'vega'];
+
+  it.each(['ci.yml', 'deploy.yml'])(
+    '%s typechecks every component package, tests included',
+    file => {
+      const steps = load(file).jobs.typecheck.steps;
+      const command = name => `pnpm -F @astryxdesign/${name} typecheck`;
+      const core = steps.find(step => step.run === command('core'));
+      for (const name of packages) {
+        const step = steps.find(candidate => candidate.run === command(name));
+        expect(step, `${file} does not typecheck ${name}`).toBeDefined();
+        // The same specialized-lane guard as core's (none in deploy.yml).
+        expect(step.if, `${file}: ${name} is not guarded like core`).toBe(
+          core.if,
+        );
+      }
+    },
+  );
+});
+
 describe('deploy.yml push gating', () => {
   const workflow = load('deploy.yml');
 

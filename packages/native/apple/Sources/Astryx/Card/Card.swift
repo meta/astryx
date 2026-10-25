@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A card: one independent item on the theme's card ground, with a hairline
 /// border and the container radius.
-public struct AstryxCard<Content: View>: View {
+public struct Card<Content: View>: View {
   let padding: Int
   let content: Content
   @Environment(\.astryx) private var astryx
