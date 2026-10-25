@@ -54,7 +54,7 @@ the limits below. Read positions a frame after a move: Chromium delivers
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
 animations, ones the page paused and ones on a scroll or view timeline are left
-alone; held animations keep their offsets from the earliest start, and release
+alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to

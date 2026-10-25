@@ -12,8 +12,8 @@
  *   already running; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, holds each where it
- *   was read, adds a second hold to the held set, drops one the page cancels,
- *   and releases only them.
+ *   was read, adds a second hold to the held set without moving the first
+ *   hold's times, drops one the page cancels, and releases only them.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -500,6 +500,47 @@ test.describe('holding', () => {
           document.getAnimations().filter(a => a.playState === 'paused').length,
       ),
     ).toBe(0);
+  });
+
+  test("a later hold of an earlier-started animation keeps the first hold's times", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // #early starts 100 ms before #box's 600 ms linear move to 300 px.
+    await page.evaluate(
+      () =>
+        new Promise<void>(resolve => {
+          const early = document.createElement('div');
+          early.id = 'early';
+          document.body.append(early);
+          early.animate([{opacity: 0}, {opacity: 1}], {duration: 2000});
+          setTimeout(() => {
+            document
+              .getElementById('box')
+              ?.animate(
+                [
+                  {transform: 'translateX(0px)'},
+                  {transform: 'translateX(300px)'},
+                ],
+                {duration: 600, easing: 'linear'},
+              );
+            resolve();
+          }, 100);
+        }),
+    );
+    const box = page.locator('#box');
+    await waitForAnimation(box);
+    // The later-started element is held first.
+    const [first] = await holdAnimations(page, box);
+    const [later] = await holdAnimations(page, page.locator('#early'));
+    const samples = await sampleCurve(box, [0, 150, 300]);
+    expect(
+      samples.map(sample => Math.round(sample.transform.translateX)),
+    ).toEqual([0, 75, 150]);
+    // A later hold's earlier start has a negative offset; the origin stays.
+    expect(first.offsetMs).toBe(0);
+    expect(later.offsetMs).toBeLessThan(-50);
+    await releaseAnimations(page);
   });
 
   test('a held transition the page retargets is dropped, not revived', async ({

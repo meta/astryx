@@ -180,8 +180,10 @@ export interface HeldAnimation {
   /** Where it was when held, ms. */
   readonly heldAtMs: number | null;
   /**
-   * How much later than the earliest held animation it started, ms: a seek to
-   * t moves it to its own t - offsetMs, so staggered starts stay staggered.
+   * How much later than the held origin (the earliest start among the
+   * animations the first hold took) it started, ms; negative for an earlier
+   * start held by a later hold. A seek to t moves it to its own t - offsetMs,
+   * so staggered starts stay staggered.
    */
   readonly offsetMs: number;
 }
@@ -191,9 +193,10 @@ export interface HeldAnimation {
  * target is inside `scope`) and returns what was held. Finished animations,
  * animations the page paused, and animations on a scroll or view timeline are
  * left as they are. Later `seekAnimations` calls move exactly the held set,
- * each by its offset from the earliest start, and `releaseAnimations` resumes
+ * each by its offset from the held origin, and `releaseAnimations` resumes
  * only it. A second call adds to the held set: what the first held stays held
- * until the release, and offsets count from the earliest start of all of it.
+ * until the release, and offsets keep counting from the origin the first call
+ * set (the earliest start it took), so offsets already returned stay true.
  * An animation the page cancels after the hold (retargeting a CSS transition
  * cancels it) leaves the held set: seeking, sampling and releasing skip it
  * rather than revive it.
@@ -252,11 +255,15 @@ export async function holdAnimations(
     };
     w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
     w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
-    // Times count from the earliest start of everything held until the
-    // release, so dropping one later never moves the others.
-    const earliest = Math.min(w.__harnessHeldOrigin ?? Infinity, ...starts);
-    w.__harnessHeldOrigin = earliest;
-    const offsets = starts.map(start => start - earliest);
+    // Times count from the origin the first hold set (its earliest start)
+    // until the release: a later hold, even of an animation that started
+    // earlier (its offset is then negative), and dropping one never move it,
+    // so every offsetMs already returned stays true.
+    const origin = Number.isFinite(w.__harnessHeldOrigin ?? Number.NaN)
+      ? (w.__harnessHeldOrigin as number)
+      : Math.min(...starts);
+    w.__harnessHeldOrigin = origin;
+    const offsets = starts.map(start => start - origin);
     return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
       const timing = effect?.getComputedTiming();
@@ -288,7 +295,7 @@ export async function holdAnimations(
 }
 
 /**
- * Moves every held animation to `timeMs` from the earliest held start (delay
+ * Moves every held animation to `timeMs` from the held origin (delay
  * included): each to its own `timeMs - offsetMs`. A time at or past an
  * animation's end is clamped to END_INSET_MS before it: an animation without
  * `fill` stops applying its effect exactly at the end, and the frame wanted
