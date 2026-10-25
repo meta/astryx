@@ -435,7 +435,7 @@ describe('a production build resolves defineConsts imported across files', () =>
 
 describe('a production build checks the custom properties its stylesheet reads', () => {
   const MESSAGE =
-    /reads 1 generated custom property that nothing declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
+    /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
 
   it('warns by default, naming the variable and the rule that reads it', async () => {
     const warnings: string[] = [];
@@ -463,7 +463,7 @@ describe('a production build checks the custom properties its stylesheet reads',
     });
     rmSync(built.outDir, {recursive: true, force: true});
     expect(warnings.join('\n')).toMatch(
-      /reads 1 generated custom property that nothing declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
+      /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
     );
   }, 180_000);
 
@@ -474,7 +474,9 @@ describe('a production build checks the custom properties its stylesheet reads',
       warnings,
     });
     rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).not.toMatch(/nothing declares/);
+    expect(warnings.join('\n')).not.toMatch(
+      /no stylesheet in the build declares/,
+    );
   }, 180_000);
 });
 
