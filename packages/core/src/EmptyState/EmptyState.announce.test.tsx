@@ -10,6 +10,7 @@
 import {act, StrictMode, useState} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createRoot, hydrateRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
 import {renderToString} from 'react-dom/server';
 import {renderedText} from '../hooks/useAnnounceRenderedText';
 
@@ -96,6 +97,32 @@ describe('EmptyState announcement (spec:AST-086 FR2)', () => {
         </StrictMode>,
       );
     });
+    await act(async () => showEmpty());
+    await settle();
+    polite.stop();
+    expect(polite.spoken).toEqual(['No results Try another search.']);
+    await act(async () => root.unmount());
+  });
+
+  it('announces when it appears later in a same-origin iframe it is portaled into', async () => {
+    const {EmptyState, paint} = await importEmptyState();
+    paint();
+    const frame = document.body.appendChild(document.createElement('iframe'));
+    const frameBody = frame.contentDocument!.body;
+    let showEmpty!: () => void;
+    function Results() {
+      const [isEmpty, setIsEmpty] = useState(false);
+      showEmpty = () => setIsEmpty(true);
+      return isEmpty
+        ? createPortal(
+            <EmptyState title="No results" description="Try another search." />,
+            frameBody,
+          )
+        : null;
+    }
+    const polite = recordPolite();
+    const root = mount();
+    await act(async () => root.render(<Results />));
     await act(async () => showEmpty());
     await settle();
     polite.stop();

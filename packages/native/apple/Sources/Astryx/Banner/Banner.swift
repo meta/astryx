@@ -49,9 +49,9 @@ public struct Banner: View {
 
   public var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: astryx.space(2)) {
-      if let symbol = astryx.icon(status.iconName) {
+      if let icon = astryx.icon(status.iconName) {
         // Sized with the title so it grows with Dynamic Type.
-        Image(systemName: symbol)
+        icon.sized(astryx.fontSize("text-body-size", 14))
           .font(astryx.font(size: "text-body-size", 14, weight: "text-body-weight"))
           .foregroundStyle(astryx.color(status.iconToken))
           .accessibilityHidden(true)

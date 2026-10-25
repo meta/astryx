@@ -41,6 +41,13 @@ declare global {
   interface Window {
     __gestures: Entry[];
     __listeners: ListenerEntry[];
+    /** Every touch listener added to the document or the window, by type. */
+    __pageTouchListeners: string[];
+    /**
+     * The same, as the page left them once loaded: the test driver adds its
+     * own window listeners when it first runs a script.
+     */
+    __pageTouchListenersAtLoad: string[];
   }
 }
 
@@ -49,6 +56,7 @@ window.__gestures = [];
 // Every touch listener added to an element with an id, as the engine sees
 // it: which elements make a scroll wait for the page.
 window.__listeners = [];
+window.__pageTouchListeners = [];
 const addListener = EventTarget.prototype.addEventListener;
 EventTarget.prototype.addEventListener = function (
   this: EventTarget,
@@ -56,6 +64,9 @@ EventTarget.prototype.addEventListener = function (
   listener: EventListenerOrEventListenerObject | null,
   options?: boolean | AddEventListenerOptions,
 ) {
+  if ((this === document || this === window) && type.startsWith('touch')) {
+    window.__pageTouchListeners.push(type);
+  }
   if (this instanceof Element && this.id !== '' && type.startsWith('touch')) {
     window.__listeners.push({
       id: this.id,
@@ -207,3 +218,5 @@ for (const type of ['click', 'mousedown']) {
     true,
   );
 }
+
+window.__pageTouchListenersAtLoad = [...window.__pageTouchListeners];

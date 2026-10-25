@@ -73,14 +73,15 @@ async function buildFixture(
   {
     libraryPattern = 'packages/core/',
     zeroConfig = false,
-    undefinedVariables,
+    stylexOverrides,
     warnings = [],
   }: {
     /** Which source paths land in the library layer. */
     libraryPattern?: string;
     /** Use `astryxStylex({...})` instead of the legacy `{stylexOptions}` form. */
     zeroConfig?: boolean;
-    undefinedVariables?: 'warn' | 'error';
+    /** Zero-config form only: `stylexOverrides`. */
+    stylexOverrides?: Record<string, unknown>;
     /** Receives every warning the build logs. */
     warnings?: string[];
   } = {},
@@ -114,7 +115,12 @@ async function buildFixture(
       plugins: [
         react(),
         ...(zeroConfig
-          ? astryxStylex({dev: false, rootDir: REPO_ROOT, libraryPattern})
+          ? astryxStylex({
+              dev: false,
+              rootDir: REPO_ROOT,
+              libraryPattern,
+              stylexOverrides,
+            })
           : astryxStylex({
               stylexOptions: {
                 dev: false,
@@ -128,7 +134,6 @@ async function buildFixture(
                 },
               },
               libraryPattern,
-              undefinedVariables,
             })),
       ],
     });
@@ -373,7 +378,9 @@ describe('a production build separates Astryx and product styles by layer', () =
 // left as `var(--x…){…}` and failed the build ("Invalid empty selector"); a
 // value shipped as a custom property nothing defines. And a constant defined
 // on one side of the layer split and read on the other was substituted only
-// within its own side.
+// within its own side, and one an Astryx package defines (compiled with the
+// library class-name prefix) never matched an app file's placeholder (written
+// with the product prefix).
 describe('a production build resolves defineConsts imported across files', () => {
   /** A constant reference StyleX left unsubstituted. */
   const PLACEHOLDER = /var\(--(?:astryx|x)[a-z0-9]{4,}\)/;
@@ -410,6 +417,10 @@ describe('a production build resolves defineConsts imported across files', () =>
           );
         });
 
+        it('substitutes a constant an Astryx package defines under the library prefix', () => {
+          expect(built.css).toMatch(/padding-bottom:\s*17px/);
+        });
+
         it('leaves no constant placeholder behind', () => {
           expect(built.css).not.toMatch(PLACEHOLDER);
         });
@@ -420,9 +431,9 @@ describe('a production build resolves defineConsts imported across files', () =>
 
 describe('a production build checks the custom properties its stylesheet reads', () => {
   const MESSAGE =
-    /reads 1 generated custom property that nothing declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
+    /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
 
-  it('warns by default, naming the variable and the rule that reads it', async () => {
+  it('warns, naming the variable and the rule that reads it', async () => {
     const warnings: string[] = [];
     const built = await buildFixture('stylex-undefined-var', ['index.html'], {
       warnings,
@@ -431,12 +442,28 @@ describe('a production build checks the custom properties its stylesheet reads',
     expect(warnings.join('\n')).toMatch(MESSAGE);
   }, 180_000);
 
-  it("fails the build with undefinedVariables: 'error'", async () => {
-    await expect(
-      buildFixture('stylex-undefined-var', ['index.html'], {
-        undefinedVariables: 'error',
-      }),
-    ).rejects.toThrow(MESSAGE);
+  it('checks the product prefix a zero-config build sets in stylexOverrides', async () => {
+    const warnings: string[] = [];
+    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
+      zeroConfig: true,
+      stylexOverrides: {classNamePrefix: 'app'},
+      warnings,
+    });
+    rmSync(built.outDir, {recursive: true, force: true});
+    expect(warnings.join('\n')).toMatch(
+      /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
+    );
+  }, 180_000);
+
+  it("never reports an app's own custom properties, declared in its own CSS", async () => {
+    const warnings: string[] = [];
+    const built = await buildFixture('stylex-app-vars', ['index.html'], {
+      warnings,
+    });
+    rmSync(built.outDir, {recursive: true, force: true});
+    expect(warnings.join('\n')).not.toMatch(
+      /no stylesheet in the build declares/,
+    );
   }, 180_000);
 });
 

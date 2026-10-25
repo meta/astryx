@@ -308,38 +308,39 @@ export const UIKIT_GESTURES = {
      * instantaneous velocity plus the rest times the previous event's
      * (instantaneous velocity: position change over timestamp change between
      * consecutive events, the touch-down counting as the first). The lift
-     * does not update it, and a finger at rest sends no events, so a release
-     * after a pause reports the last moving value.
+     * does not update it. (A release after a rest longer than `stillness`
+     * reads 0 in Astryx: spec:AST-100 FR2.)
      */
     currentWeight: {
       value: 0.2,
       unit: 'ratio',
       source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
     },
-    /** For the least-squares alternative: samples older than this are ignored. */
-    horizon: {
-      value: 100,
-      unit: 'ms',
+    /**
+     * A scrolling surface's release (paging, a wheel) is this times the
+     * newest pan value plus the rest times the previous one
+     * (architecture:interaction-modality INV10).
+     */
+    scrollReleaseWeight: {
+      value: 0.25,
+      unit: 'ratio',
       guess:
-        "Android's VelocityTracker and Flutter's fit the last 100 ms (least squares, degree 2); UIKit itself uses currentWeight.",
-      measure: 'M-G14: Not a parity value: UIKit uses the two-event filter.',
-    },
-    /** For the least-squares alternative: at most this many samples. */
-    maxSamples: {
-      value: 20,
-      unit: 'count',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
-      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
+        "architecture:interaction-modality INV10 states UIScrollView's release as 0.25 x the newest pan value + 0.75 x the previous one.",
+      measure:
+        'M-G14: Confirm against UIScrollView flings: back the release velocity out of the coast distance.',
     },
     /**
-     * For the least-squares alternative: a gap this long between samples
-     * separates two motions.
+     * A contact that has not moved for longer than this before it lifts
+     * releases at 0 (spec:AST-100 FR2). Not a UIKit value: UIKit's filter
+     * never decays, so it flings after a rest.
      */
-    assumeStopped: {
+    stillness: {
       value: 40,
       unit: 'ms',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker use 40 ms.',
-      measure: 'M-G16: Not a parity value: UIKit uses the two-event filter.',
+      guess:
+        'Android VelocityTracker and Flutter VelocityTracker treat a pointer that has not moved for 40 ms as stopped.',
+      measure:
+        'M-G16: Not a parity value (spec:AST-100 FR2 departs from UIKit here); confirm on a device that a drag, a rest of this long and a lift does not fling.',
     },
   },
   click: {

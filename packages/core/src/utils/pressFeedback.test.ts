@@ -26,9 +26,10 @@ import {
   pressConsts,
 } from './interactionOverlay.stylex';
 import {
-  installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  installPressFeedback,
+  subscribePressPaint,
 } from './pressFeedback';
 import {
   PRESS_FADE_MS,
@@ -37,6 +38,7 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   PRESS_SLOP_PX,
 } from './pressGesture';
+import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -63,6 +65,27 @@ function pressable(tag = 'div'): HTMLElement {
   return element;
 }
 
+/**
+ * The primary pointer is coarse (a phone, a tablet) until the returned
+ * restore runs: jsdom's matchMedia models a desktop, where touch work stays
+ * off (`spec:AST-094` FR19).
+ */
+function coarsePrimaryPointer(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    ...matchMedia(query),
+    matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+  });
+  const restore = (): void => {
+    window.matchMedia = matchMedia;
+  };
+  matchMediaRestorers.push(restore);
+  return restore;
+}
+
+/** Restores every pointer stub a test left, so none leaks into the next. */
+const matchMediaRestorers: (() => void)[] = [];
+
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.innerHTML = '';
@@ -83,10 +106,14 @@ beforeEach(() => {
 afterEach(() => {
   release();
   vi.useRealTimers();
+  for (const restore of matchMediaRestorers.splice(0).reverse()) {
+    restore();
+  }
 });
 
 describe('the press reaches the surface the finger landed on', () => {
-  it('locks text selection on the row and its switch input while a finger is held, on any coarse pointer', () => {
+  it('locks text selection on the row and its switch input while a finger is held, where the primary pointer is coarse', () => {
+    coarsePrimaryPointer();
     const row = pressable('label');
     const input = document.createElement('input');
     input.type = 'checkbox';
@@ -107,6 +134,7 @@ describe('the press reaches the surface the finger landed on', () => {
   });
 
   it("keeps a link's native long-press menu: no callout lock on a link or under one", () => {
+    coarsePrimaryPointer();
     // jsdom drops -webkit-touch-callout, so the lock's writes are recorded.
     const written = new Map<Element, string[]>();
     const setProperty = CSSStyleDeclaration.prototype.setProperty;
@@ -162,6 +190,37 @@ describe('the press reaches the surface the finger landed on', () => {
       'user-select',
     ]);
     spy.mockRestore();
+  });
+
+  it('keeps selection under a mouse, a pen and a finger where the primary pointer is fine, as on main (spec:AST-094 FR19, spec:AST-017 FR59)', () => {
+    const row = rows[2];
+    press(row, 'pointerdown', 10, 10, 'mouse');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'mouse');
+    // A desktop pen tablet: a fine primary pointer.
+    press(row, 'pointerdown', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    // A finger on a touchscreen laptop: the primary pointer is still fine.
+    press(row, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10);
+    vi.advanceTimersByTime(600);
+    // On a touch device a pen locks, as a finger does.
+    const restore = coarsePrimaryPointer();
+    try {
+      press(row, 'pointerdown', 10, 10, 'pen');
+      vi.advanceTimersByTime(600);
+      expect(row.style.getPropertyValue('user-select')).toBe('none');
+      press(row, 'pointerup', 10, 10, 'pen');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+    } finally {
+      restore();
+    }
   });
 
   it('paints the row after the delay, not before', () => {
@@ -520,6 +579,139 @@ describe('what the list pays for it', () => {
     press(row, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(added).toEqual([]);
+  });
+
+  it('registers no touch listener on the window or the document where the primary pointer is fine (spec:AST-094 FR24)', () => {
+    release();
+    matchMediaRestorers.push(pointerQuery(false).restore);
+    const added = [
+      vi.spyOn(window, 'addEventListener'),
+      vi.spyOn(document, 'addEventListener'),
+    ];
+    try {
+      release = installPressFeedback();
+      // A finger lands, as on a touchscreen laptop: still none.
+      press(rows[0], 'pointerdown', 10, 10);
+      press(rows[0], 'pointerup', 10, 10);
+      const types = added.flatMap(spy => spy.mock.calls.map(([type]) => type));
+      expect(types.filter(type => type.startsWith('touch'))).toEqual([]);
+      expect(types).toContain('pointerdown');
+    } finally {
+      for (const spy of added) {
+        spy.mockRestore();
+      }
+    }
+  });
+
+  it('asks no media query when it installs: a page no one touches never reads the pointer', () => {
+    release();
+    const matchMedia = vi.spyOn(window, 'matchMedia');
+    try {
+      release = installPressFeedback();
+      expect(matchMedia).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
+  it('hears touchcancel only while the primary pointer is coarse, and follows it', () => {
+    release();
+    const pointer = pointerQuery(false);
+    matchMediaRestorers.push(pointer.restore);
+    release = installPressFeedback();
+    // A tablet undocks its mouse: the browser's touchcancel ends a press.
+    pointer.set(true);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(0);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(-1);
+    // It docks one again: the touch listener comes down.
+    pointer.set(false);
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(1);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(1);
+  });
+
+  it("reports each change of a surface's paint to its subscribers: on, fading, none", () => {
+    const paints: string[] = [];
+    const stop = subscribePressPaint(rows[0], paint => paints.push(paint));
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(rows[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FADE_MS + 50);
+    expect(paints).toEqual(['on', 'fading', 'none']);
+    stop();
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(paints).toHaveLength(3);
+    press(rows[0], 'pointercancel', 10, 10);
+  });
+
+  it('follows 200 subscribed surfaces with no observer and no listener per surface', () => {
+    const observers = vi.fn();
+    vi.stubGlobal('MutationObserver', observers);
+    const added = [
+      vi.spyOn(window, 'addEventListener'),
+      vi.spyOn(document, 'addEventListener'),
+    ];
+    const surfaces = Array.from({length: 200}, () => pressable('button'));
+    const perSurface = surfaces.map(surface =>
+      vi.spyOn(surface, 'addEventListener'),
+    );
+    const stops: (() => void)[] = [];
+    try {
+      for (const surface of surfaces) {
+        stops.push(subscribePressPaint(surface, () => {}));
+      }
+      expect(observers).not.toHaveBeenCalled();
+      for (const spy of [...added, ...perSurface]) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+    } finally {
+      for (const stop of stops) {
+        stop();
+      }
+      for (const spy of [...added, ...perSurface]) {
+        spy.mockRestore();
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps reporting to a surface's other subscribers when one throws", () => {
+    const paints: string[] = [];
+    const errors: unknown[] = [];
+    const queued = vi
+      .spyOn(globalThis, 'queueMicrotask')
+      .mockImplementation(callback => {
+        try {
+          callback();
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+    const stops = [
+      subscribePressPaint(rows[1], () => {
+        throw new Error('a broken subscriber');
+      }),
+      subscribePressPaint(rows[1], paint => paints.push(paint)),
+    ];
+    try {
+      press(rows[1], 'pointerdown', 10, 100);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      expect(paints).toEqual(['on']);
+      expect(errors).toHaveLength(1);
+      expect(pressedRow()).toBe(1);
+    } finally {
+      for (const stop of stops) {
+        stop();
+      }
+      queued.mockRestore();
+      press(rows[1], 'pointercancel', 10, 100);
+    }
   });
 
   it('installs once, however many times it is called, and stays while any holder remains', () => {

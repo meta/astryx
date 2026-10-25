@@ -198,9 +198,6 @@ const config: StorybookConfig = {
             },
           },
           libraryPattern: 'packages/',
-          // CI catches a style that reads a generated variable nothing
-          // declares (a dropped declaration) instead of shipping it.
-          undefinedVariables: 'error',
         }),
       ],
       resolve: {

@@ -4,7 +4,8 @@
  * @file selectionLock.ts
  * @input The elements a held touch contact presses, and the touch's target
  * @output Exports lockSelection: text selection and the touch callout off,
- *   inline and refcounted, until the returned release runs
+ *   inline and refcounted, until the returned release runs; and
+ *   locksSelectionFor: which contacts take it
  * @position Shared by the gesture host (press consumers, and recognizers
  *   that set `preventsTextSelection`) and the document press controller
  *   (utils/pressFeedback.ts), so every press on a coarse pointer gets it
@@ -21,6 +22,7 @@
  * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts.
  */
 
+import {isCoarsePointer} from './coarsePointer';
 import {parentAcrossShadow} from './nativeScroll';
 
 /** What a held finger must not start on a control or a cell. */
@@ -43,6 +45,20 @@ const TEXT_ENTRY_TYPES = new Set([
   'password',
   'number',
 ]);
+
+/**
+ * Whether a contact of this pointer kind takes the lock: a finger or a pen,
+ * and only where the primary pointer is coarse (a phone, an iPad and its
+ * pencil). Where the primary pointer is fine (a laptop's touchscreen, a
+ * desktop pen tablet), a finger and a pen get the browser's defaults, as a
+ * mouse does (`spec:AST-094` FR19, `spec:AST-017` FR59). A mouse never does.
+ */
+export function locksSelectionFor(
+  pointerType: string,
+  view: Window | null | undefined,
+): boolean {
+  return pointerType !== 'mouse' && isCoarsePointer(view);
+}
 
 /** Locked elements, how many contacts hold each, and what to restore. */
 const locks = new WeakMap<

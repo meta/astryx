@@ -93,7 +93,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `get` / `getVelocity` evaluate the curves; the DOM is never read.
 - Promotion: every animation the animator creates, and every `set`, gives its
   channels a compositing layer in the same task (inline `will-change`, merged
-  with the element's own), cleared 500 ms after the last motion. Mobile Safari
+  with the element's own), cleared 500 ms after the last motion.
+  `set(values, {promote: false})` writes without one, for a one-off switch
+  that must not give its element a layer. Mobile Safari
   needs it to run a curve through a blocked main thread. A pseudo-element is
   promoted through `--astryx-motion-will-change-<pseudo>` on its host; its
   style opts in with

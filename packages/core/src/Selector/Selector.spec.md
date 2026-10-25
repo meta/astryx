@@ -362,8 +362,9 @@ FR3 implements the system decision owned by `spec:AST-004/DEC-1`.
 
 An omitted `presentation` resolves `adaptive` (FR4): the modal bottom sheet on
 compact coarse-pointer screens and the anchored popover elsewhere, so
-fine-pointer and large-screen output matches `popover`. `adaptive` keeps its
-width-and-pointer query; a pointer-only test belongs to `spec:AST-043` OQ1.
+fine-pointer and large-screen output matches `popover`. `adaptive` resolves
+through `spec:AST-094` FR13: a coarse primary pointer and the `spec:AST-012` FR9
+compact definition.
 Rejected: keeping `popover` as the default, because a phone then gets a
 pointer-sized anchored list unless the caller opts in.
 

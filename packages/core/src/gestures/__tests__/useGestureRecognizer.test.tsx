@@ -12,10 +12,11 @@
 
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
+import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 function touch(
   type: string,
@@ -59,6 +60,15 @@ function Draggable({
   onRecognizer?.(pan);
   return <div data-testid="surface" ref={ref} />;
 }
+
+// A phone: the host attaches only where the primary pointer is coarse.
+let restorePointer: () => void;
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
+});
 
 describe('useGestureRecognizer', () => {
   afterEach(() => {
@@ -112,15 +122,13 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 2, x: 30, y: 0}, 32, true);
   });
 
-  it('ends a gesture in flight when it is disabled, without calling the listener from that commit', () => {
+  it('cancels a gesture in flight when it is disabled, without calling the listener from the effect', () => {
     const states: string[] = [];
     let pan: PanGestureRecognizer | null = null;
     const {getByTestId, rerender} = render(
       <Draggable
         onPan={r => states.push(r.state)}
-        onRecognizer={r => {
-          pan = r;
-        }}
+        onRecognizer={r => (pan = r)}
       />,
     );
     const surface = getByTestId('surface');
@@ -131,13 +139,37 @@ describe('useGestureRecognizer', () => {
         <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
       );
     });
-    // The handler that turned it off owns the end: no callback from an Effect
-    // (architecture:react-component-runtime INV2).
+    expect(pan!.state).toBe('cancelled');
     expect(states).toEqual(['began']);
-    expect((pan as PanGestureRecognizer | null)?.state).not.toBe('changed');
-    touch('touchmove', surface, {id: 3, x: 60, y: 0}, 32);
+    touch('touchend', surface, {id: 3, x: 30, y: 0}, 32, true);
     expect(states).toEqual(['began']);
-    touch('touchend', surface, {id: 3, x: 60, y: 0}, 48, true);
+  });
+
+  it('follows the element when the node behind the ref is replaced', () => {
+    const onPan = vi.fn();
+    function Swappable({tag}: {tag: 'div' | 'section'}) {
+      const ref = useRef<HTMLElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        onPan,
+      );
+      const Tag = tag;
+      return <Tag data-testid="surface" ref={ref as never} />;
+    }
+    const {getByTestId, rerender} = render(<Swappable tag="div" />);
+    const first = getByTestId('surface');
+    rerender(<Swappable tag="section" />);
+    const second = getByTestId('surface');
+    expect(second).not.toBe(first);
+    touch('touchstart', first, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 6, x: 30, y: 0}, 16);
+    touch('touchend', first, {id: 6, x: 30, y: 0}, 32, true);
+    expect(onPan).not.toHaveBeenCalled();
+    touch('touchstart', second, {id: 7, x: 0, y: 0}, 100);
+    touch('touchmove', second, {id: 7, x: 30, y: 0}, 116);
+    expect(onPan).toHaveBeenCalled();
+    touch('touchend', second, {id: 7, x: 30, y: 0}, 132, true);
   });
 
   it('reports cancelled to a handler that disables the recognizer itself, from that handler', () => {
@@ -158,6 +190,35 @@ describe('useGestureRecognizer', () => {
     (pan as PanGestureRecognizer | null)?.setEnabled(false);
     expect(states).toEqual(['began', 'cancelled']);
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+  });
+
+  it("attaches a recognizer that reads each event's pointer where the primary pointer is fine (spec:AST-057)", () => {
+    const pointer = pointerQuery(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const onPan = vi.fn();
+      function Swipe() {
+        const ref = useRef<HTMLDivElement>(null);
+        useGestureRecognizer(
+          ref,
+          () => new PanGestureRecognizer({direction: 'horizontal'}),
+          onPan,
+          {perEventPointer: true},
+        );
+        return <div data-testid="surface" ref={ref} />;
+      }
+      const {getByTestId, unmount} = render(<Swipe />);
+      const surface = getByTestId('surface');
+      touch('touchstart', surface, {id: 9, x: 0, y: 0}, 0);
+      touch('touchmove', surface, {id: 9, x: 30, y: 0}, 16);
+      expect(onPan).toHaveBeenCalled();
+      touch('touchend', surface, {id: 9, x: 30, y: 0}, 32, true);
+      unmount();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      pointer.restore();
+    }
   });
 
   it('detaches on unmount', () => {
@@ -193,6 +254,115 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 5, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 5, x: 1, y: 1}, 50, true);
     expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+
+  it('ends a held press on unmount without calling back from the effect', () => {
+    const highlights: boolean[] = [];
+    const events: ControlEvent[] = [];
+    function HeldButton() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+      });
+      return (
+        <button data-testid="held" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId, unmount} = render(<HeldButton />);
+    touch('touchstart', getByTestId('held'), {id: 9, x: 1, y: 1}, 0);
+    const seenHighlights = [...highlights];
+    const seenEvents = [...events];
+    unmount();
+    expect(highlights).toEqual(seenHighlights);
+    expect(events).toEqual(seenEvents);
+  });
+
+  it("attaches a press tracker that reads each event's pointer where the primary pointer is fine, beside one that stays inactive", () => {
+    const pointer = pointerQuery(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const held: ControlEvent[] = [];
+      const inactive: ControlEvent[] = [];
+      function Stepper({
+        events,
+        perEventPointer,
+        testId,
+      }: {
+        events: ControlEvent[];
+        perEventPointer: boolean;
+        testId: string;
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        usePressTracker(ref, {
+          onControlEvent: event => events.push(event),
+          perEventPointer,
+        });
+        return (
+          <button data-testid={testId} ref={ref} type="button">
+            +
+          </button>
+        );
+      }
+      const {getByTestId} = render(
+        <>
+          <Stepper events={held} perEventPointer testId="held" />
+          <Stepper events={inactive} perEventPointer={false} testId="other" />
+        </>,
+      );
+      const mouse = (type: string, target: Element, id: number) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: id,
+          pointerType: 'mouse',
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          buttons: type === 'pointerdown' ? 1 : 0,
+        });
+        target.dispatchEvent(event);
+      };
+      const stepper = getByTestId('held');
+      boundsOf(stepper, 44, 44);
+      mouse('pointerdown', stepper, 1);
+      mouse('pointerup', stepper, 1);
+      expect(held).toEqual(['touchDown', 'touchUpInside']);
+      const other = getByTestId('other');
+      boundsOf(other, 44, 44);
+      mouse('pointerdown', other, 2);
+      mouse('pointerup', other, 2);
+      expect(inactive).toEqual([]);
+    } finally {
+      warn.mockRestore();
+      pointer.restore();
+    }
+  });
+
+  it('passes isBraking through to the tracker', () => {
+    const events: ControlEvent[] = [];
+    const isBraking = vi.fn(() => true);
+    function BrakingButton() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        isBraking,
+      });
+      return (
+        <button data-testid="braking" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId} = render(<BrakingButton />);
+    const button = getByTestId('braking');
+    touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
+    expect(isBraking).toHaveBeenCalled();
+    expect(events).not.toContain('touchDown');
   });
 });
 

@@ -173,7 +173,14 @@ const LONG_TASK_SCRIPT = `(() => {
   } catch {}
 })()`;
 
-/** Records every long task (> 50 ms) the page runs (install before navigation; Chromium). */
+/**
+ * Records every long task (> 50 ms) the page runs (install before navigation;
+ * Chromium), through the Long Tasks API. That sees the tasks of the page's own
+ * event loop: a timer, an event handler, `blockMainThread(page, ms, {during})`.
+ * A DevTools `page.evaluate`, such as `blockMainThread(page, ms)` without
+ * `during`, is not one of them and is never recorded here; the trace's
+ * `longTasks` (`traceRendering`) counts every main-thread task over 50 ms.
+ */
 export async function installLongTaskLog(page: Page): Promise<void> {
   await page.addInitScript(LONG_TASK_SCRIPT);
 }
