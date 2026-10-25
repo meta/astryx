@@ -457,10 +457,12 @@ be updated only as that work ships.
   entry/return, and controlled close behavior.
 - A browser fallback change updates public `useLayer` and Popover docs and tests
   for both the native path and actual fallback.
-- An exit-copy change verifies the copy's reach and accessibility, its top-layer
-  show (from script and by light dismiss), the refused show's wait, its place
-  mid-entrance, and that a layer keeps one copy, in jsdom and in Chromium and
-  WebKit.
+- An exit-copy change verifies, where each can be observed: the copy's reach,
+  accessibility and form exclusion in jsdom; its top-layer show (from script
+  and by light dismiss), its place mid-entrance, and that a layer keeps one
+  copy, in jsdom and in Chromium and WebKit; and the refused show's wait in
+  jsdom and on Android Chromium, the engine that refuses a show during another
+  popover's toggle.
 
 ## Owning code
 
