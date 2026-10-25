@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[experimental] Gesture hooks follow their element: `useGestureRecognizer` and `usePressTracker` attach to a node rendered after mount or swapped behind the same ref, and call the consumer back neither from cleanup nor after unmount. `usePressTracker` takes `isBraking` (by default the host's) and applies a changed `trackingExpansion`, `highlightDelay`, `cancelTravel` or `quickTapFlash` from the next touch. The recognizer's arena plumbing (`arena`, `pending`, touch delivery, `applyState`, `resetToPossible` and the failure and simultaneity checks) is now `protected`. `attachTapHaptic` gives focus straight back from its hidden switch and adds none to a label that already labels another control.
+[chore] Internal: the gesture hooks follow their element and call nothing back after unmount, and turning `isEnabled` off mid-gesture ends the gesture without calling the listener from an Effect; `usePressTracker` takes `isBraking` and applies option changes from the next touch; the recognizer's arena plumbing is `protected`; `attachTapHaptic` gives focus straight back. Not exported from the package entry point; no component uses it yet.
 
 @vjeux
