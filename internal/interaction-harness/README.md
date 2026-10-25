@@ -20,14 +20,6 @@ pnpm test:interaction --project chromium  # everything, Chromium
 pnpm test:interaction <spec file>         # one spec, both engines
 ```
 
-On Linux distributions whose system libraries are older than Playwright's
-WebKit build needs, run the WebKit project inside the official Playwright
-image (podman or docker; the repository is mounted at the same path):
-
-```sh
-node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
-```
-
 ## Instruments
 
 | Module       | What it gives a spec                                                                                                                                                                                                          |
