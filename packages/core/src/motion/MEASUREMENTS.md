@@ -92,7 +92,8 @@ of a page scroll, so many of these can be read off Safari itself.
 | M-G11 | `UIKIT_GESTURES.screenEdgePan.edgeRegion`       | Settings > General (UINavigationController pop): HID drags inward starting at x = 5, 10 ... 40 pt; largest x that still pops.                                                     | C      |
 | M-G12 | `UIKIT_GESTURES.control.trackingExpansion`      | Calculator (UIButton): HID press, drag away at 20 px/s filmed at 60 fps; distance from the frame at which the highlight turns off, then back on.                                  | B, C   |
 | M-G13 | `UIKIT_GESTURES.scroll.contentEndHandoffSlop`   | A UIKit sheet (Maps place card at the medium detent) over a scrolled list: HID drag down from mid-list; finger travel between the list reaching its top and the sheet moving.     | C      |
-| M-G15 | `UIKIT_GESTURES.velocity.maxSamples`            | Not a parity value: the filter reads the last four samples; a bound on the buffer.                                                                                                | C      |
+| M-G15 | `UIKIT_GESTURES.velocity.maxSamples`            | Not a parity value: the filter reads the newest three samples.                                                                                                                    | C      |
+| M-G16 | `UIKIT_GESTURES.velocity.stillness`             | Safari page scroll: HID drag, pause P ms, lift; smallest P after which the page does not coast.                                                                                   | C      |
 | M-G17 | `UIKIT_GESTURES.click.strayClickWindow`         | Not a parity value: confirm in Safari and Chromium that the click follows touchend within one frame.                                                                              | C      |
 | M-G18 | `HAPTIC_VIBRATION_PATTERNS` (every kind)        | On an Android device, compare against the platform HapticFeedbackConstants for the same moments.                                                                                  | C      |
 | M-G19 | `UIKIT_GESTURES.press.momentumMemory`           | Safari page, hardest HID flick: time from the lift to the last scroll event.                                                                                                      | C      |
@@ -107,9 +108,11 @@ from the starting span moved by its hysteresis; the swipe is recognized
 during the motion; `velocity(in:)` is 0.2 × the newest event's
 instantaneous velocity + 0.8 × the previous one's (it reproduces every value
 UIKit reported on six recorded streams), does not decay through a rest and
-ignores the lift; a scroll view's release blends its pan recognizer's last
-two values once more (0.25 × the newest + 0.75 × the previous), which
-reproduces UIPickerView's four recorded releases; a sheet over a scrolled list
+ignores the lift, which settles M-G15 for parity (M-G16 is Astryx's
+stillness reset, spec:AST-100 FR2, not a UIKit value); a scroll view's
+release blends its pan recognizer's last two values once more (0.25 × the
+newest + 0.75 × the previous), which reproduces UIPickerView's four recorded
+releases; a sheet over a scrolled list
 leaves the whole drag to the list (no mid-gesture handoff), which leaves
 M-G13 without a parity value.
 

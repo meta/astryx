@@ -2,33 +2,29 @@
 
 /**
  * @file VelocityTracker.ts
- * @input Timestamped positions of a moving contact
+ * @input Timestamped positions of a moving contact, and the release time
  * @output Exports VelocityTracker, the one release-velocity filter every
- *   continuous recognizer uses (`spec:AST-100`), read as a pan recognizer
- *   reads it or as a scroll view reads it
+ *   continuous recognizer uses (spec:AST-100 FR1, FR2)
  * @position Pure math under packages/core/src/gestures; no DOM
  *
- * What a release hands to a spring or a deceleration: the contact's velocity
- * when it lifted, in px per SECOND. One filter for every gesture and every
- * pointer (FR1), UIKit's own, measured. Each sample's instantaneous velocity
- * (position change over timestamp change since the previous sample, the
- * touch-down counting as the first) is blended with the previous one:
+ * What a release hands to a spring or a deceleration: the finger's velocity
+ * when it lifted, in px per SECOND (UIKit's unit for `velocity(in:)`).
  *
- *   pan(n) = w * v(n) + (1 - w) * v(n-1), w = `velocity.currentWeight`,
+ * The filter is UIPanGestureRecognizer's own, measured: each event's
+ * instantaneous velocity is the position change over the timestamp change
+ * since the previous event (the touch-down counts as the first), and the
+ * velocity is 0.2 times the newest one plus 0.8 times the one before. It
+ * reproduces every value UIKit reported on six HID streams, and like UIKit's
+ * it reacts a frame late to an acceleration and includes a hold before the
+ * first move.
  *
- * which is UIPanGestureRecognizer's `velocity(in:)`. A scroll view smooths
- * its pan recognizer once more for the velocity it hands
- * `scrollViewWillEndDragging`:
+ * One difference from UIKit (spec:AST-100 FR2): a contact that stayed still
+ * for longer than the stillness interval before it lifted releases at 0.
+ * UIKit's filter never decays, because a finger at rest sends no events, so
+ * it flings after a rest; `velocity(releaseTime)` does not.
  *
- *   scroll(n) = s * pan(n) + (1 - s) * pan(n-1), s = `velocity.scrollReleaseWeight`.
- *
- * Samples update it: a resting contact that keeps reporting brings it to 0
- * within two samples (three for a scroll view). Read at the lift, a contact
- * still for longer than the stillness interval (`velocity.stillness`) reads
- * 0 (FR2: a still finger never flicks), the one place it differs from iOS,
- * whose blend keeps the last motion through a silent rest. Times are the
- * input events' own timestamps (FR4); thresholds stay with each component
- * (FR3).
+ * Feed it one sample per input event: coalesced samples would change its
+ * timing.
  *
  * SYNC: When modified, update VelocityTracker.test.ts.
  */
@@ -39,29 +35,35 @@ import type {Point, TouchSample} from './types';
 export interface VelocityTrackerOptions {
   /** At most this many samples are kept. */
   maxSamples?: number;
+  /**
+   * A contact that has not moved for longer than this (ms) before its
+   * release releases at 0 (spec:AST-100 FR2).
+   */
+  stillness?: number;
 }
 
 const ZERO: Point = {x: 0, y: 0};
-const PAN_WEIGHT = UIKIT_GESTURES.velocity.currentWeight.value;
-const STILLNESS = UIKIT_GESTURES.velocity.stillness.value;
-const SCROLL_RELEASE_WEIGHT = UIKIT_GESTURES.velocity.scrollReleaseWeight.value;
 
 export class VelocityTracker {
   private readonly maxSamples: number;
+  private readonly stillness: number;
   private samples: TouchSample[] = [];
+  /** When the position last changed (the first sample counts). */
+  private lastMoveTime: number | null = null;
 
   constructor(options: VelocityTrackerOptions = {}) {
-    this.maxSamples =
-      options.maxSamples ?? UIKIT_GESTURES.velocity.maxSamples.value;
+    this.maxSamples = Math.max(
+      3,
+      options.maxSamples ?? UIKIT_GESTURES.velocity.maxSamples.value,
+    );
+    this.stillness =
+      options.stillness ?? UIKIT_GESTURES.velocity.stillness.value;
   }
 
   /** Forget every sample (a new gesture). */
   reset(): void {
-    this.newest = null;
-    this.moved = [];
-    this.moves = 0;
-    this.pan = ZERO;
-    this.previousPan = ZERO;
+    this.samples = [];
+    this.lastMoveTime = null;
   }
 
   /**
@@ -71,13 +73,22 @@ export class VelocityTracker {
    * no velocity.
    */
   add(x: number, y: number, time: number): void {
-    if (this.newest != null && time < this.newest.time) {
+    const newest = this.samples[this.samples.length - 1];
+    if (newest != null && time <= newest.time) {
+      if (time === newest.time) {
+        this.samples[this.samples.length - 1] = {x, y, time};
+        if (x !== newest.x || y !== newest.y) {
+          this.lastMoveTime = time;
+        }
+      }
       return;
     }
-    this.newest = {x, y, time};
-    const last = this.moved[this.moved.length - 1];
-    if (last != null && x === last.x && y === last.y) {
-      return;
+    if (newest == null || x !== newest.x || y !== newest.y) {
+      this.lastMoveTime = time;
+    }
+    this.samples.push({x, y, time});
+    if (this.samples.length > this.maxSamples) {
+      this.samples.shift();
     }
     if (last != null && time === last.time) {
       this.moved[this.moved.length - 1] = {x, y, time};
@@ -107,63 +118,43 @@ export class VelocityTracker {
   }
 
   /**
-   * The velocity in px/s as a pan recognizer reports it: pan(n). `at`, the
-   * lift's event time, applies the stillness reset.
+   * The velocity in px/s at the newest sample. Pass the release's event time
+   * to read the release velocity: 0 when the contact was still for longer
+   * than the stillness interval before it (spec:AST-100 FR2).
    */
-  velocity(at?: number): Point {
-    if (this.isStill(at)) {
+  velocity(releaseTime?: number): Point {
+    if (
+      releaseTime != null &&
+      this.lastMoveTime != null &&
+      releaseTime - this.lastMoveTime > this.stillness
+    ) {
       return ZERO;
     }
-    return panVelocity(this.samples, this.samples.length);
-  }
-
-  /**
-   * The velocity in px/s as a scroll view releases it: scroll(n), its pan
-   * recognizer's last two values blended once more. With one interval so
-   * far, the pan's value.
-   */
-  scrollReleaseVelocity(at?: number): Point {
-    if (this.isStill(at)) {
-      return ZERO;
-    }
-    const end = this.samples.length;
-    if (end < 3) {
-      return panVelocity(this.samples, end);
-    }
-    return blend(
-      panVelocity(this.samples, end),
-      panVelocity(this.samples, end - 1),
-      SCROLL_RELEASE_WEIGHT,
-    );
-  }
-
-  /** No sample for longer than the stillness interval before `at`. */
-  private isStill(at: number | undefined): boolean {
-    const newest = this.samples[this.samples.length - 1];
-    return at != null && newest != null && at - newest.time > STILLNESS;
+    return uikitVelocity(this.samples);
   }
 }
 
-/** pan(n) over `samples[0..end)`: one interval so far is reported whole. */
-function panVelocity(samples: ReadonlyArray<TouchSample>, end: number): Point {
-  if (end < 2) {
+const UIKIT_CURRENT_WEIGHT = UIKIT_GESTURES.velocity.currentWeight.value;
+
+/** UIPanGestureRecognizer's filter: 0.2 x newest + 0.8 x previous event velocity. */
+function uikitVelocity(samples: ReadonlyArray<TouchSample>): Point {
+  const n = samples.length;
+  if (n < 2) {
     return ZERO;
   }
-  const current = pairVelocity(samples[end - 2], samples[end - 1]);
-  if (end === 2) {
+  const current = pairVelocity(samples[n - 2], samples[n - 1]);
+  if (n === 2) {
+    // One interval so far: UIKit reports it whole (a pinch's first value).
     return current;
   }
-  return blend(
-    current,
-    pairVelocity(samples[end - 3], samples[end - 2]),
-    PAN_WEIGHT,
-  );
-}
-
-function blend(current: Point, previous: Point, weight: number): Point {
+  const previous = pairVelocity(samples[n - 3], samples[n - 2]);
   return {
-    x: weight * current.x + (1 - weight) * previous.x,
-    y: weight * current.y + (1 - weight) * previous.y,
+    x:
+      UIKIT_CURRENT_WEIGHT * current.x +
+      (1 - UIKIT_CURRENT_WEIGHT) * previous.x,
+    y:
+      UIKIT_CURRENT_WEIGHT * current.y +
+      (1 - UIKIT_CURRENT_WEIGHT) * previous.y,
   };
 }
 

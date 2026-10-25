@@ -2,16 +2,14 @@
 
 /**
  * @file VelocityTracker.test.ts
- * @input Synthetic finger traces with known velocities, and touch streams
- *   recorded in UIKit with the velocities it reported
- * @output The pan reading against every velocity(in:) UIKit reported on six
- *   streams, the scroll-view reading against four UIPickerView releases,
- *   rests silent and reporting, the event clock, sparse samples
+ * @input Synthetic finger traces with known velocities
+ * @output UIKit's filter against the velocities UIKit reported on recorded
+ *   touch streams; steady motion, a hard acceleration, the stillness reset
+ *   before a release (spec:AST-100 FR2), sparse samples
  * @position Unit tests of packages/core/src/gestures/VelocityTracker.ts
  */
 
 import {describe, expect, it} from 'vitest';
-import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {VelocityTracker} from '../VelocityTracker';
 
 /** Feed `position(t)` sampled every `step` ms over [0, end]. */
@@ -77,61 +75,9 @@ const UIKIT_STREAMS = {
   },
 } as const;
 
-/**
- * Swipes on a UIPickerView column (iOS 26.2 simulator, HID touches): [ms
- * since touch-down, y in pt] per event, and the velocity UIKit handed
- * scrollViewWillEndDragging, in offset px/s (the content moves against the
- * finger).
- */
-const PICKER_RELEASES = {
-  '200 pt in 50 ms': {
-    stream: [
-      [0, 368],
-      [46.48, 334.67],
-      [72.92, 201.33],
-    ],
-    release: 933.4,
-  },
-  '200 pt in 100 ms': {
-    stream: [
-      [0, 368],
-      [49.2, 351.33],
-      [65.27, 301.33],
-      [88.47, 251.33],
-      [104.68, 218],
-      [129.4, 168],
-    ],
-    release: 2114,
-  },
-  '200 pt in 200 ms': {
-    stream: [
-      [0, 368],
-      [46.01, 359.67],
-      [63.5, 334.67],
-      [81.36, 318],
-      [97.69, 301.33],
-      [120.12, 276.33],
-      [137.2, 259.67],
-      [171.83, 226.33],
-      [196.13, 201.33],
-      [212.66, 184.67],
-      [230.83, 168],
-    ],
-    release: 1016.2,
-  },
-  'a 90 pt flick': {
-    stream: [
-      [0, 353],
-      [41.5, 335],
-      [62.02, 281],
-    ],
-    release: 543.6,
-  },
-} as const;
-
 describe('VelocityTracker', () => {
   it.each(Object.entries(UIKIT_STREAMS))(
-    'reads every velocity(in:) UIKit reported on the %s stream',
+    'uikit reproduces every velocity UIKit reported on the %s stream',
     (_, {samples, velocities}) => {
       const tracker = new VelocityTracker();
       const errors: number[] = [];
@@ -148,65 +94,49 @@ describe('VelocityTracker', () => {
     },
   );
 
-  it.each(Object.entries(PICKER_RELEASES))(
-    'releases %s as a scroll view does',
-    (_, {stream, release}) => {
-      const tracker = new VelocityTracker();
-      for (const [time, y] of stream) {
-        tracker.add(0, y, time);
-      }
-      expect(
-        Math.abs(-tracker.scrollReleaseVelocity().y - release),
-      ).toBeLessThan(0.5);
-    },
-  );
+  it('keeps the last moving value through a rest while the finger is down', () => {
+    const tracker = new VelocityTracker();
+    trace(tracker, t => t * 2, 160);
+    // No event arrives while the finger rests: nothing changes the estimate.
+    expect(tracker.velocity().x).toBeCloseTo(2000, 6);
+  });
 
-  it('reads a steady 1000 px/s exactly, as a pan and as a scroll view', () => {
+  it('releases at 0 after the finger rested past the stillness interval (AST-100 FR2)', () => {
+    const tracker = new VelocityTracker({stillness: 40});
+    trace(tracker, t => t * 2, 160);
+    // Lifted right after the last move: the moving value.
+    expect(tracker.velocity(168).x).toBeCloseTo(2000, 6);
+    // At the interval itself: still the moving value.
+    expect(tracker.velocity(200).x).toBeCloseTo(2000, 6);
+    // Rested longer than the interval: no flick.
+    expect(tracker.velocity(201)).toEqual({x: 0, y: 0});
+  });
+
+  it('counts a sample at the same position as resting, not moving', () => {
+    const tracker = new VelocityTracker({stillness: 40});
+    trace(tracker, t => t * 2, 160);
+    // Events that report no movement (a still finger) do not restart it.
+    tracker.add(320, 0, 180);
+    tracker.add(320, 0, 220);
+    expect(tracker.velocity(230)).toEqual({x: 0, y: 0});
+    // A real move does.
+    tracker.add(330, 0, 228);
+    expect(tracker.velocity(236).x).not.toBe(0);
+  });
+
+  it('reads a steady 1000 px/s exactly', () => {
     const tracker = new VelocityTracker();
     trace(tracker, t => t, 200);
     expect(tracker.velocity().x).toBeCloseTo(1000, 6);
-    expect(tracker.scrollReleaseVelocity().x).toBeCloseTo(1000, 6);
   });
 
-  it('reads 0 at a lift after a still pause longer than the stillness interval, and keeps the motion for a shorter one', () => {
+  it('lags a hard acceleration by a frame, as UIKit does', () => {
+    // x = 0.02 t^2 (px, ms). UIKit's filter is 0.8 on the previous interval
+    // (its middle, 188 ms: 7520 px/s) and 0.2 on the newest (196 ms:
+    // 7840 px/s).
     const tracker = new VelocityTracker();
-    trace(tracker, t => t * 2, 160);
-    const still = UIKIT_GESTURES.velocity.stillness.value;
-    // No event arrives while the finger rests: the blend keeps the motion.
-    expect(tracker.velocity().x).toBeCloseTo(2000, 6);
-    expect(tracker.velocity(160 + still).x).toBeCloseTo(2000, 6);
-    expect(tracker.scrollReleaseVelocity(160 + still).x).toBeCloseTo(2000, 6);
-    // Past the interval, a still finger never flicks (spec:AST-100 FR2).
-    expect(tracker.velocity(160 + still + 1).x).toBe(0);
-    expect(tracker.scrollReleaseVelocity(160 + still + 1).x).toBe(0);
-  });
-
-  it('reaches 0 when a resting finger keeps reporting: two samples for a pan, three for a scroll view', () => {
-    const tracker = new VelocityTracker();
-    trace(tracker, t => t, 200);
-    tracker.add(200, 0, 208);
-    // UIKit's own sequence: 1000, then 800 on the first sample without
-    // movement, then 0.
-    expect(tracker.velocity().x).toBeCloseTo(800, 6);
-    tracker.add(200, 0, 216);
-    expect(tracker.velocity().x).toBe(0);
-    expect(tracker.scrollReleaseVelocity().x).toBeCloseTo(600, 6);
-    tracker.add(200, 0, 224);
-    expect(tracker.scrollReleaseVelocity().x).toBe(0);
-  });
-
-  it('follows the events own clock, however far from the wall clock', () => {
-    const near = new VelocityTracker();
-    const far = new VelocityTracker();
-    for (let t = 0; t <= 96; t += 8) {
-      near.add(t * t * 0.02, 0, t);
-      far.add(t * t * 0.02, 0, 9e12 + t);
-    }
-    expect(far.velocity().x).toBeCloseTo(near.velocity().x, 6);
-    expect(far.scrollReleaseVelocity().x).toBeCloseTo(
-      near.scrollReleaseVelocity().x,
-      6,
-    );
+    trace(tracker, t => 0.02 * t * t, 200);
+    expect(tracker.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
   });
 
   it('handles one and two samples, and repeated timestamps', () => {

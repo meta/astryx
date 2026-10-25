@@ -323,13 +323,12 @@ export const UIKIT_GESTURES = {
      * (instantaneous velocity: position change over timestamp change between
      * consecutive events, the touch-down counting as the first). The lift
      * does not update it, and a finger at rest sends no events, so a release
-     * after a silent pause reports the last moving value; moved samples at
-     * the same point bring it to 0 on the second.
+     * after a pause reports the last moving value.
      */
     currentWeight: {
       value: 0.2,
       unit: 'ratio',
-      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s; synthetic touches, Oct 24 2026: a 1000 pt/s stroke then same-point moved samples reads 1000, 800, 0 at .ended`,
+      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
     },
     /**
      * A scroll view's release (the velocity it hands
@@ -342,24 +341,25 @@ export const UIKIT_GESTURES = {
       source:
         'measured: UIKit lab, iOS 26.2 simulator, HID swipes on a UIPickerView recorded by Oct 24 2026: scrollViewWillEndDragging velocity 933.4, 2114, 1016.2 and 543.6 px/s on 200 pt in 50, 100 and 200 ms and a 90 pt flick, reproduced to 0.03%; a UIScrollView coasts after a silent rest of up to 1 s as after none (Oct 24 2026)',
     },
-    /**
-     * A contact still for longer than this before lifting releases at 0
-     * (`spec:AST-100` FR2: a still finger never flicks). iOS has no such
-     * reset: its blend keeps the last motion through a silent rest.
-     */
-    stillness: {
-      value: 40,
-      unit: 'ms',
-      source:
-        'aosp frameworks/native/libs/input/VelocityTracker.cpp: ASSUME_POINTER_STOPPED_TIME is 40 ms; the AST-100 FR2 stillness reset (#8312) takes its value from Android, since iOS has no time cutoff',
-    },
-    /** The tracker keeps at most this many samples (a bound on its buffer). */
+    /** Samples kept; the filter reads the newest three. */
     maxSamples: {
       value: 20,
       unit: 'count',
       guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
+      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
+    },
+    /**
+     * A contact that has not moved for longer than this before it lifts
+     * releases at 0 (spec:AST-100 FR2). Not a UIKit value: UIKit's filter
+     * never decays, so it flings after a rest.
+     */
+    stillness: {
+      value: 40,
+      unit: 'ms',
+      guess:
+        'Android VelocityTracker and Flutter VelocityTracker treat a pointer that has not moved for 40 ms as stopped.',
       measure:
-        'M-G15: Not a parity value: the filter reads the last four samples.',
+        'M-G16: Not a parity value (spec:AST-100 FR2 departs from UIKit here); confirm on a device that a drag, a rest of this long and a lift does not fling.',
     },
   },
   click: {

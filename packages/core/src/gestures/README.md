@@ -398,30 +398,33 @@ timestamps and no real time.
 
 ## Velocity
 
-`VelocityTracker` reports px per second, UIKit's unit, with one filter for
-every gesture and every pointer (`spec:AST-100`), UIKit's own, measured:
+`VelocityTracker` reports px per second, UIKit's unit, and is the one
+release-velocity filter (spec:AST-100 FR1, FR2; no alternative estimators).
+It is `UIPanGestureRecognizer.velocity(in:)` itself, measured: each event's
+instantaneous velocity is the position change over the timestamp change since
+the previous event (the touch-down counts as the first), and the velocity is
+0.2 times the newest one plus 0.8 times the one before. It reproduces every
+value UIKit reported on six recorded touch streams, and like UIKit's it
+reacts a frame late to an acceleration and includes a hold before the first
+move. Feed it one sample per event.
 
-- A pan reads `velocity(in:)`. Each event's instantaneous velocity is the
-  position change over the timestamp change since the previous event (the
-  touch-down counts as the first), and the velocity is 0.2 times the newest
-  one plus 0.8 times the one before. It reproduces every value UIKit
-  reported on six recorded touch streams.
-- A scroll view's pan (`ScrollViewPanGestureRecognizer`) reads what a
-  UIScrollView hands `scrollViewWillEndDragging`: its pan's last two
-  velocities blended once more, 0.25 times the newest plus 0.75 times the
-  one before. It reproduces four recorded UIPickerView releases. Wheels,
-  pickers, pagers and momentum carousels use it.
-- Moves that report the same point bring a pan to 0 on the second (a
-  scroll view on the third). A contact still for longer than the stillness
-  interval (`velocity.stillness`, 40 ms, Android's `ASSUME_POINTER_STOPPED_TIME`)
-  before lifting releases at 0: a still finger never flicks (`spec:AST-100`
-  FR2). That is the one place it differs from iOS, whose blend keeps the
-  last motion through a silent rest.
-  The lift itself adds no sample.
-- Times are the events' own. A finger the browser reports on both pointer
-  and touch events is sampled from its pointer events alone (from its touch
-  events once the browser cancels its pointer), so the two copies of one
-  move never both count.
+One difference from UIKit: a finger that stayed still for longer than the
+stillness interval (`UIKIT_GESTURES.velocity.stillness`) before lifting
+releases at 0. UIKit's filter never decays, because a resting finger sends no
+events, so it flings after a rest. Pass the lift's event time to
+`velocity(releaseTime)` to read a release.
+
+A scrolling surface (FR2: paging, a wheel picker) reads a scroll view's
+release instead: `ScrollViewPanGestureRecognizer` (or `ScrollViewRelease`
+over a tracker) blends the pan's last two velocities once more, 0.25 times the
+newest plus 0.75 times the one before, which is what a UIScrollView hands
+`scrollViewWillEndDragging`; it reproduces four recorded UIPickerView
+releases. The same stillness reset applies at its release.
+
+Times are the events' own. A finger the browser reports on both pointer and
+touch events is sampled from its pointer events alone (from its touch events
+once the browser cancels its pointer), so the two copies of one move never
+both count.
 
 ## Haptics
 
@@ -559,9 +562,10 @@ way:
   click dispositions, cancellation, and multiple fingers.
 - `__tests__/GestureHost.test.ts`: the DOM integration through real
   listeners in jsdom.
-- `__tests__/VelocityTracker.test.ts`: the pan and scroll-view readings
-  against the velocities UIKit reported on recorded touch streams, rests,
-  and the event clock.
+- `__tests__/VelocityTracker.test.ts`: the filter against the velocities
+  UIKit reported on recorded touch streams, and the stillness reset.
+- `__tests__/ScrollViewPanGestureRecognizer.test.ts`: a scroll view's
+  release against four UIPickerView releases, rests, and the event clock.
 - `__tests__/delegatedPress.test.ts`: delegated press tracking.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/importGraph.test.ts`: a gesture-only component's static
