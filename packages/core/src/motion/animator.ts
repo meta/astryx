@@ -142,8 +142,8 @@ import {
   type SpringDescription,
 } from './spring';
 import {resolveMotion} from './resolveMotion';
-import {scroll} from './uikit/scroll';
-import {timing} from './uikit/timing';
+import {registerScrollTable, scroll} from './uikit/scroll';
+import {registerTimingTable, timing} from './uikit/timing';
 
 /** A value the animator can drive. */
 export type MotionProperty =
@@ -1427,6 +1427,7 @@ export function createAnimator(
     stops: ReadonlyArray<{at: number; value: number}>,
     jumps: ReadonlyArray<number> = [],
   ): Segment => {
+    registerTimingTable();
     const ease = cubicBezier(resolveMotion(target, timing.curves.easeInOut));
     const duration = stops[stops.length - 1].at;
     const at = (t: number) => {
@@ -1843,6 +1844,7 @@ export function createAnimator(
       const velocities = expand(velocity);
       const {owner, finished} = newOwner();
       const rate = decayOptions.rate ?? scroll.decelerationRate.normal;
+      registerScrollTable();
       const bounce = toSpring(
         resolveMotion(target, decayOptions.bounce ?? scroll.bounce),
       );

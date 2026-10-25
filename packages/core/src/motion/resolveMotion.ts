@@ -10,6 +10,10 @@
  *   it is handed with it, and components resolve the durations they time
  *   with it
  *
+ * Only a registered table's leaves are roles: the touch code that animates
+ * with a table calls its register<Name>Table() first, and a leaf of a table
+ * nothing registered plays its own value. Nothing here imports a table.
+ *
  * A theme sets a role by writing its CSS variable (motion/roles.ts) on its
  * scope, the nearest `[data-astryx-theme]` element (or the root element). The
  * value is read from that scope's computed style when a motion starts: a style
@@ -33,7 +37,6 @@ import {
   type MotionRole,
 } from './roles';
 import type {SpringDescription} from './spring';
-import {registerSharedTables} from './uikit/registerTables';
 
 interface ScopeValues {
   /** The task the values were read in. */
@@ -139,8 +142,6 @@ export function resolveMotion(
   leafOrGroup: object,
   key?: string,
 ): unknown {
-  // The shared tables register their roles here, not on import.
-  registerSharedTables();
   if (key === undefined) {
     return resolveRole(element, motionRoleOf(leafOrGroup), leafOrGroup);
   }
