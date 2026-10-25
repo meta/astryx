@@ -281,6 +281,68 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
+  it("attaches a press tracker that reads each event's pointer where the primary pointer is fine, beside one that stays inactive", () => {
+    const pointer = pointerQuery(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const held: ControlEvent[] = [];
+      const inactive: ControlEvent[] = [];
+      function Stepper({
+        events,
+        perEventPointer,
+        testId,
+      }: {
+        events: ControlEvent[];
+        perEventPointer: boolean;
+        testId: string;
+      }) {
+        const ref = useRef<HTMLButtonElement>(null);
+        usePressTracker(ref, {
+          onControlEvent: event => events.push(event),
+          perEventPointer,
+        });
+        return (
+          <button data-testid={testId} ref={ref} type="button">
+            +
+          </button>
+        );
+      }
+      const {getByTestId} = render(
+        <>
+          <Stepper events={held} perEventPointer testId="held" />
+          <Stepper events={inactive} perEventPointer={false} testId="other" />
+        </>,
+      );
+      const mouse = (type: string, target: Element, id: number) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: id,
+          pointerType: 'mouse',
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          buttons: type === 'pointerdown' ? 1 : 0,
+        });
+        target.dispatchEvent(event);
+      };
+      const stepper = getByTestId('held');
+      boundsOf(stepper, 44, 44);
+      mouse('pointerdown', stepper, 1);
+      mouse('pointerup', stepper, 1);
+      expect(held).toEqual(['touchDown', 'touchUpInside']);
+      const other = getByTestId('other');
+      boundsOf(other, 44, 44);
+      mouse('pointerdown', other, 2);
+      mouse('pointerup', other, 2);
+      expect(inactive).toEqual([]);
+    } finally {
+      warn.mockRestore();
+      pointer.restore();
+    }
+  });
+
   it('passes isBraking through to the tracker', () => {
     const events: ControlEvent[] = [];
     const isBraking = vi.fn(() => true);
