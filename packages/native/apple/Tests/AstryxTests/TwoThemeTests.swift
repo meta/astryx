@@ -28,7 +28,7 @@ private let secondTheme: Theme = {
 
 @MainActor
 @Test func cardFollowsTheThemesGroundAndShape() {
-  let card = AstryxCard { Color.clear.frame(width: 80, height: 40) }.frame(width: 120)
+  let card = Astryx.Card { Color.clear.frame(width: 80, height: 40) }.frame(width: 120)
   let standard = Pixels(card, theme: .default)
   let second = Pixels(card, theme: secondTheme)
 
@@ -43,7 +43,7 @@ private let secondTheme: Theme = {
 
 @MainActor
 @Test func buttonFollowsTheThemesAccentTypeAndShape() {
-  let button = AstryxButton(label: "Continue", variant: .primary) {}.fixedSize()
+  let button = Astryx.Button(label: "Continue", variant: .primary) {}.fixedSize()
   let standard = Pixels(button, theme: .default)
   let second = Pixels(button, theme: secondTheme)
 
@@ -55,7 +55,7 @@ private let secondTheme: Theme = {
 
 @MainActor
 @Test func textFollowsTheThemesColorAndTypeSize() {
-  let text = AstryxText("Hello").fixedSize()
+  let text = Astryx.Text("Hello").fixedSize()
   let standard = Pixels(text, theme: .default)
   let second = Pixels(text, theme: secondTheme)
 

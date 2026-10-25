@@ -5,7 +5,7 @@ import SwiftUI
 
 /// A heading at levels 1 through 6, painted with the theme's heading tokens
 /// and exposed to VoiceOver as a heading.
-public struct AstryxHeading: View {
+public struct Heading: View {
   let content: String
   let level: Int
   @Environment(\.astryx) private var astryx
@@ -16,7 +16,7 @@ public struct AstryxHeading: View {
   }
 
   public var body: some View {
-    Text(content)
+    SwiftUI.Text(content)
       .font(
         astryx.font(
           size: "text-heading-\(level)-size",
