@@ -38,7 +38,8 @@ describe('SwipeGestureRecognizer', () => {
     diagonal
       .finger(1)
       .down(0, 0, 0, {recognizers: [b]})
-      .move(45, 40, 60);
+      .move(45, 55, 60);
+    // 55 px across is past the 50 px secondary allowance.
     expect(b.state).toBe('failed');
 
     const wrong = createHarness();
@@ -62,5 +63,26 @@ describe('SwipeGestureRecognizer', () => {
     h.finger(1).move(0, 140, 50);
     h.finger(2).move(40, 140, 50);
     expect(swipe.recognizedDirection).toBe('up');
+  });
+
+  it('gives the same verdict for the same path however its events are spaced', () => {
+    // A straight drag to (55, 40): along 55 past the 50 px distance, 40 px
+    // across within the 50 px allowance.
+    const sparse = createHarness();
+    const a = new SwipeGestureRecognizer({name: 'a'});
+    sparse
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [a]})
+      .move(55, 40, 40);
+    expect(a.state).toBe('ended');
+
+    const dense = createHarness();
+    const b = new SwipeGestureRecognizer({name: 'b'});
+    const finger = dense.finger(1).down(0, 0, 0, {recognizers: [b]});
+    for (let step = 1; step <= 10; step += 1) {
+      finger.move(5.5 * step, 4 * step, 4 * step);
+    }
+    expect(b.state).toBe('ended');
+    expect(b.recognizedDirection).toBe('right');
   });
 });

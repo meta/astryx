@@ -265,22 +265,6 @@ export const UIKIT_GESTURES = {
         'M-G19: Safari page, hardest HID flick: time from the lift to the last scroll event.',
     },
   },
-  scroll: {
-    /**
-     * Travel past the point where a native scroll ran out of content before
-     * an opt-in `scrollHandoff` pan takes the rest of the gesture. UIKit
-     * itself never hands a drag over mid-gesture (a sheet over a scrolled
-     * list leaves the whole drag to the list), so this is not a parity value.
-     */
-    contentEndHandoffSlop: {
-      value: 4,
-      unit: 'px',
-      guess:
-        'The BottomSheet value (useSheetGestures.ts): enough to ignore a fling coming to rest on the last pixel.',
-      measure:
-        'M-G13: None for parity: UIKit decides sheet versus scroll when the drag begins (a sheet over a scrolled list leaves the whole drag to the list).',
-    },
-  },
   velocity: {
     /**
      * UIPanGestureRecognizer.velocity(in:) is this times the newest event's

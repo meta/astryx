@@ -31,4 +31,27 @@ describe('RotationGestureRecognizer', () => {
     expect(rotation.rotation).toBeCloseTo((270 * Math.PI) / 180, 5);
     expect(rotation.velocity).toBeGreaterThan(0);
   });
+
+  it('setting rotation (UIKit\u2019s incremental read) never moves the velocity', () => {
+    const h = createHarness();
+    const rotation = new RotationGestureRecognizer({name: 'rotation'});
+    h.finger(1).down(0, 0, 0, {recognizers: [rotation]});
+    h.finger(2).down(100, 0, 0, {recognizers: [rotation]});
+    const at = (degrees: number, time: number) =>
+      h
+        .finger(2)
+        .move(
+          100 * Math.cos((degrees * Math.PI) / 180),
+          100 * Math.sin((degrees * Math.PI) / 180),
+          time,
+        );
+    let time = 0;
+    for (let degrees = 10; degrees <= 60; degrees += 10) {
+      time += 16;
+      at(degrees, time);
+      // Read and reset each frame, as an incremental consumer does.
+      rotation.rotation = 0;
+    }
+    expect(rotation.velocity).toBeGreaterThan(0);
+  });
 });

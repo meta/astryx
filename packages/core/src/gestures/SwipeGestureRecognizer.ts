@@ -10,9 +10,11 @@
  * Recognized WHILE the fingers move, as UIKit's is: as soon as the centroid
  * has travelled `minimumDistance` along an allowed direction, within
  * `maximumDuration` of touch-down, with off-axis travel no more than
- * `maximumSecondaryMovement` px across it. Travel that clears the distance in no allowed
- * direction fails it, as do too many fingers, the duration running out, and
- * a lift before it was recognized.
+ * `maximumSecondaryMovement` px across it. Off-axis travel past that
+ * allowance, or the distance travelled the wrong way, rules a direction out;
+ * the swipe fails once every allowed direction is ruled out, as it does for
+ * too many fingers, the duration running out, and a lift before it was
+ * recognized.
  */
 
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
@@ -48,6 +50,8 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
   recognizedDirection: SwipeDirection | null = null;
 
   private origin: Point = {x: 0, y: 0};
+  /** Directions this touch's path has ruled out. */
+  private readonly ruledOut = new Set<SwipeDirection>();
 
   constructor(options: SwipeGestureRecognizerOptions = {}) {
     super(options);
@@ -114,16 +118,26 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
             : direction === 'up'
               ? [-dy, dx]
               : [dy, dx];
+      if (this.ruledOut.has(direction)) {
+        continue;
+      }
+      // Off-axis travel past the allowance, or the distance the wrong way,
+      // rules a direction out for good, so the verdict follows the path and
+      // not how far apart the events were.
       if (
-        along >= this.minimumDistance &&
-        Math.abs(across) <= this.maximumSecondaryMovement
+        Math.abs(across) > this.maximumSecondaryMovement ||
+        along <= -this.minimumDistance
       ) {
+        this.ruledOut.add(direction);
+        continue;
+      }
+      if (along >= this.minimumDistance) {
         this.recognizedDirection = direction;
         this.setState('ended');
         return;
       }
     }
-    if (Math.hypot(dx, dy) >= this.minimumDistance) {
+    if (this.directions.every(direction => this.ruledOut.has(direction))) {
       this.setState('failed');
     }
   }
@@ -134,6 +148,7 @@ export class SwipeGestureRecognizer extends GestureRecognizer {
 
   protected override reset(): void {
     this.recognizedDirection = null;
+    this.ruledOut.clear();
     this.origin = {x: 0, y: 0};
   }
 }
