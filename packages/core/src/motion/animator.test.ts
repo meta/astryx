@@ -66,9 +66,28 @@ beforeEach(() => {
   vi.spyOn(window, 'getComputedStyle').mockImplementation(
     element =>
       ({
-        getPropertyValue: (property: string) =>
-          (element as HTMLElement).style.getPropertyValue(property) ||
-          (stylesheet[property] ?? ''),
+        getPropertyValue: (property: string) => {
+          // A live animation wins over the inline value, holding its last
+          // keyframe (the end-state tail) until it is cancelled.
+          const held = recorded
+            .filter(
+              animation =>
+                animation.element === element &&
+                !animation.cancelled &&
+                animation.keyframes.some(frame => property in frame),
+            )
+            .at(-1);
+          const last = held?.keyframes
+            .filter(frame => property in frame)
+            .at(-1) as Record<string, unknown> | undefined;
+          if (last != null) {
+            return String(last[property]);
+          }
+          return (
+            (element as HTMLElement).style.getPropertyValue(property) ||
+            (stylesheet[property] ?? '')
+          );
+        },
       }) as unknown as CSSStyleDeclaration,
   );
   vi.useFakeTimers();
@@ -292,6 +311,19 @@ describe('animate: keyframes on the compositor', () => {
     animator.animate({scale: 1}, {spring: springs.snappy});
     await advance(5000);
     expect(element.style.scale).toBe('none');
+  });
+
+  it('keeps a fade to 1 inline where the stylesheet rests at 0', async () => {
+    const {animator, element} = setup();
+    // A scroll edge layer: transparent in its stylesheet, faded in on a
+    // spring. At retire the end-state tail still holds 1, so the end can only
+    // be judged against the stylesheet once the animation is gone.
+    stylesheet.opacity = '0';
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.snappy});
+    await advance(5000);
+    expect(live('opacity')).toHaveLength(0);
+    expect(element.style.opacity).toBe('1');
   });
 
   it('holds the value on screen inline while a curve runs, and the end once it retires', async () => {

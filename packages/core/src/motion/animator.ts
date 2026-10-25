@@ -912,6 +912,7 @@ export function createAnimator(
   const writeInline = (
     channel: Channel,
     value: (property: MotionProperty) => number,
+    release = true,
   ) => {
     if (target == null || pseudoElement != null) {
       return;
@@ -924,7 +925,7 @@ export function createAnimator(
     if (target.style.getPropertyValue(channel) !== text) {
       target.style.setProperty(channel, text);
     }
-    if (text === IDENTITY_TEXT[channel]) {
+    if (release && text === IDENTITY_TEXT[channel]) {
       // Identity leaves the element when nothing else would move it.
       releaseIdentity(channel);
     }
@@ -1207,8 +1208,11 @@ export function createAnimator(
       if (pseudoElement != null) {
         hold(channel, now());
       } else {
-        // The end goes inline in the task that cancels the animation.
-        writeInline(channel, finalValue);
+        // The end goes inline in the task that cancels the animation. Whether
+        // an identity end may leave the element is judged after the cancel:
+        // until then the end-state tail still holds the end, so the computed
+        // style would hide a stylesheet value (an opacity 0) under it.
+        writeInline(channel, finalValue, false);
       }
       animation.cancel();
       releaseIdentity(channel);
