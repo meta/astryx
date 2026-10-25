@@ -21,6 +21,14 @@ pnpm test:interaction <spec file>         # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
+On Linux distributions whose system libraries are older than Playwright's
+WebKit build needs, run the WebKit project inside the official Playwright
+image (podman or docker; the repository is mounted at the same path):
+
+```sh
+node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
+```
+
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
