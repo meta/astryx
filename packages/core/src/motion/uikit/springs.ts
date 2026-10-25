@@ -26,8 +26,6 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
-import {registerMotionTable} from '../roles';
-
 /**
  * UIKit's default spring (see `springs.uikitDefault` for its sources), shared
  * by the system transitions measured to run on it.
@@ -114,7 +112,7 @@ export const springs = {
    *   `UIView.animate` with curve 7 outside the keyboard is this spring with
    *   its duration forced to 0.5 s
    */
-  uikitDefault: UIKIT_DEFAULT_SPRING,
+  uikitDefault: {...UIKIT_DEFAULT_SPRING},
 
   // ---------------------------------------------------------------------
   // Navigation (UINavigationController)
@@ -130,13 +128,13 @@ export const springs = {
    *   writes to the cards' CAPresentationModifiers every frame (rms 5e-4 of
    *   the travel), Oct 23 2026
    */
-  navigationPush: NAVIGATION_SPRING,
+  navigationPush: {...NAVIGATION_SPRING},
   /**
    * Pop (back button or programmatic): identical to the push.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CAPresentationModifier fit as for the push, Oct 23 2026
    */
-  navigationPop: NAVIGATION_SPRING,
+  navigationPop: {...NAVIGATION_SPRING},
   /**
    * Interactive pop finishing or cancelling after the finger lifts, starting
    * from the finger's velocity; which one is `navigation.interactivePop*`.
@@ -166,14 +164,14 @@ export const springs = {
    *   iPhone 17 Pro, CAAnimation dump (mass 3, stiffness 1000, damping 500,
    *   duration 0.5, allowsOverdamping off), Oct 23 2026
    */
-  sheetPresent: UIKIT_DEFAULT_SPRING,
+  sheetPresent: {...UIKIT_DEFAULT_SPRING},
   /**
    * Sheet dismissed programmatically (Cancel / Done / a scrim tap).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CAAnimation dump, the same spring as the presentation,
    *   Oct 23 2026
    */
-  sheetDismiss: UIKIT_DEFAULT_SPRING,
+  sheetDismiss: {...UIKIT_DEFAULT_SPRING},
   /**
    * Detent change (`animateChanges`) and the settle after a slow release
    * (below the sheet's fast-release speed, which the sheet's own table
@@ -192,14 +190,14 @@ export const springs = {
    *   iPhone 17 Pro, CASpringAnimation dump over 36 releases (mass 1,
    *   stiffness 333.333, damping 29.212), Oct 23 2026
    */
-  sheetReleaseFast: SHEET_RELEASE_FAST_SPRING,
+  sheetReleaseFast: {...SHEET_RELEASE_FAST_SPRING},
   /**
    * Sheet dismissed by a swipe: the fast-release spring.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CASpringAnimation dump (300 pt swipe in 0.15 s:
    *   stiffness 333.333, damping 29.212), Oct 23 2026
    */
-  sheetDismissSwipe: SHEET_RELEASE_FAST_SPRING,
+  sheetDismissSwipe: {...SHEET_RELEASE_FAST_SPRING},
 
   // ---------------------------------------------------------------------
   // Alerts, action sheets, menus
@@ -216,26 +214,26 @@ export const springs = {
    *   (mass 1, stiffness 522.350, damping 45.710, duration 0.404),
    *   Oct 23 2026
    */
-  alertPresent: ALERT_SPRING,
+  alertPresent: {...ALERT_SPRING},
   /**
    * Alert dismissing: the same spring, opacity only.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CASpringAnimation dump, Oct 23 2026
    */
-  alertDismiss: ALERT_SPRING,
+  alertDismiss: {...ALERT_SPRING},
   /**
    * Action sheet (UIAlertController .actionSheet) appearing: identical to
    * the alert.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CASpringAnimation dump, Oct 23 2026
    */
-  actionSheetPresent: ALERT_SPRING,
+  actionSheetPresent: {...ALERT_SPRING},
   /**
    * Action sheet dismissing: identical to the alert.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, CASpringAnimation dump, Oct 23 2026
    */
-  actionSheetDismiss: ALERT_SPRING,
+  actionSheetDismiss: {...ALERT_SPRING},
   /**
    * UIMenu (from a button) opening; UIKit drives it per frame and lets it
    * track a finger still on the screen.
@@ -243,26 +241,26 @@ export const springs = {
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked (0.8, 0.32, tracking), Oct 23 2026
    */
-  menuOpen: MENU_OPEN_SPRING,
+  menuOpen: {...MENU_OPEN_SPRING},
   /**
    * UIMenu closing (a tap outside).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, the same hook (0.85, 0.35, not tracking), Oct 23 2026
    */
-  menuClose: MENU_CLOSE_SPRING,
+  menuClose: {...MENU_CLOSE_SPRING},
   /**
    * Context menu (UIContextMenuInteraction): the preview lifting once the
    * long press commits.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, the same hook (0.8, 0.32, tracking), Oct 23 2026
    */
-  contextMenuLift: MENU_OPEN_SPRING,
+  contextMenuLift: {...MENU_OPEN_SPRING},
   /**
    * Context menu dismissing (a tap outside).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, the same hook (0.85, 0.35, not tracking), Oct 23 2026
    */
-  contextMenuDismiss: MENU_CLOSE_SPRING,
+  contextMenuDismiss: {...MENU_CLOSE_SPRING},
   /**
    * Menus opening and closing under Reduce Motion: critically damped,
    * slower, no overshoot.
@@ -325,9 +323,8 @@ export const springs = {
    * @source GUESS — UIKit's default spring
    * @measure M-T1
    */
-  banner: UIKIT_DEFAULT_SPRING,
+  banner: {...UIKIT_DEFAULT_SPRING},
 } as const;
 
 // Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts).
-registerMotionTable('springs', springs);
+// (motion/roles.ts); registerTables.ts registers them.

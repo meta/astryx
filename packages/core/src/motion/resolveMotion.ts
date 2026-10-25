@@ -33,6 +33,7 @@ import {
   type MotionRole,
 } from './roles';
 import type {SpringDescription} from './spring';
+import {registerSharedTables} from './uikit/registerTables';
 
 interface ScopeValues {
   /** The task the values were read in. */
@@ -138,6 +139,8 @@ export function resolveMotion(
   leafOrGroup: object,
   key?: string,
 ): unknown {
+  // The shared tables register their roles here, not on import.
+  registerSharedTables();
   if (key === undefined) {
     return resolveRole(element, motionRoleOf(leafOrGroup), leafOrGroup);
   }
