@@ -27,7 +27,8 @@
  * tap-to-click, long press, double tap and the start of a page scroll, so
  * many guesses can be settled by measuring Safari itself.
  *
- * SYNC: When modified, update packages/core/src/motion/uikit/gestures.test.ts.
+ * SYNC: When modified, update packages/core/src/motion/uikit/gestures.test.ts
+ * and the thresholds packages/core/src/gestures/README.md describes.
  */
 
 import {scroll} from './scroll';

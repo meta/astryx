@@ -119,6 +119,10 @@ interface Timer {
   callback: () => void;
 }
 
+/**
+ * The arena that decides which recognizer gets a touch.
+ * @experimental
+ */
 export class GestureArena {
   readonly environment: GestureEnvironment;
   private readonly clock: GestureClock;

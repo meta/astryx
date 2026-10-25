@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: swipe, pinch, rotation, screen-edge pan and hover gesture recognizers. Not exported from the package entry point; no component uses them yet.
+[chore] Swipe, pinch, rotation, screen-edge pan and hover gesture recognizers. Not exported from the package root; touch presentations reach them through the experimental subpaths (see their entry). No component uses them yet.
 
 @vjeux

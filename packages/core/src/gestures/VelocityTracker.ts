@@ -35,6 +35,11 @@
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import type {Point, TouchSample} from './types';
 
+/**
+ * How a pan estimates its release velocity: one of the filters this file's
+ * header describes, `uikit` by default.
+ * @experimental
+ */
 export type VelocityStrategy = 'uikit' | 'lsq2' | 'iosFling' | 'window';
 
 export interface VelocityTrackerOptions {

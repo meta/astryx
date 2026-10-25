@@ -90,6 +90,7 @@ function swallow(event: Event): void {
  * Make every real tap on `label` play iOS Safari's light impact, by giving it
  * a hidden switch to toggle. Returns a function that removes the switch.
  * Harmless where switches have no haptics.
+ * @experimental
  */
 export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const doc = label.ownerDocument;
