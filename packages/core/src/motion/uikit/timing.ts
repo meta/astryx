@@ -152,9 +152,22 @@ export const timing = {
  */
 export function registerTimingTable(): void {
   registerMotionTable('timing', timing, {
-    // Arbitration: who gets the touch, not how anything moves; and the
-    // Reduced Motion fade, which no theme may lengthen
-    // (design:reduced-motion DR4).
-    exclude: ['press.scrollBrakeMs', 'reducedMotionCrossFadeMs'],
+    // Arbitration: who gets the touch, not how anything moves; the Reduced
+    // Motion fade, which no theme may lengthen (design:reduced-motion DR4);
+    // and the keyboard's own timing, which motion in step with the keyboard
+    // rides (spec:AST-094 FR4).
+    exclude: [
+      'press.scrollBrakeMs',
+      'reducedMotionCrossFadeMs',
+      'keyboardNotificationMs',
+    ],
+    // The roles spec:AST-094 FR4 names for their use.
+    rename: {
+      implicitAnimationMs: 'stateChangeMs',
+      'curves.caDefault': 'curves.viewChange',
+      'curves.easeIn': 'curves.exit',
+      'curves.easeOut': 'curves.entrance',
+      'curves.easeInOut': 'curves.move',
+    },
   });
 }

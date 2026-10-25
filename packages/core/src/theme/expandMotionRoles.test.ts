@@ -31,7 +31,7 @@ describe('motion roles in a theme', () => {
             'springs.alertPresent': {response: 0.5, dampingRatio: 0.85},
           },
           durations: {'navigation.transitionMs': 300},
-          curves: {'timing.curves.easeInOut': [0.4, 0, 0.2, 1]},
+          curves: {'timing.curves.move': [0.4, 0, 0.2, 1]},
         },
         'motion',
       ),
@@ -39,25 +39,20 @@ describe('motion roles in a theme', () => {
       '--motion-springs-sheet-present': '0.6s 0.1',
       '--motion-springs-alert-present': '0.5s 0.15',
       '--motion-navigation-transition-ms': '300ms',
-      '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
     });
   });
 
   it('names the role in every refusal', () => {
     expect(() =>
       expandMotionRoles({springs: {sheet: {duration: 0.5, bounce: 0}}}, 'm'),
-    ).toThrow(
-      /m\.springs\["sheet"\]: a motion role is named by its table path/,
-    );
+    ).toThrow(/m\.springs\["sheet"\]: a motion role is named for its use/);
     expect(() =>
       expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
     ).toThrow(/"springs\.sheetPresent" is a spring/);
     expect(() =>
-      expandMotionRoles(
-        {curves: {'timing.curves.easeIn': [1.5, 0, 1, 1]}},
-        'm',
-      ),
-    ).toThrow(/m\.curves\["timing\.curves\.easeIn"\]: a curve's x1 and x2/);
+      expandMotionRoles({curves: {'timing.curves.exit': [1.5, 0, 1, 1]}}, 'm'),
+    ).toThrow(/m\.curves\["timing\.curves\.exit"\]: a curve's x1 and x2/);
     expect(() =>
       expandMotionRoles({durations: {'timing.press.flashMs': -5}}, 'm'),
     ).toThrow(/≥ 0/);
