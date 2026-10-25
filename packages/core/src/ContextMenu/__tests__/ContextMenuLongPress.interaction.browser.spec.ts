@@ -72,7 +72,10 @@ interface TouchStory {
 }
 
 /** The touch story under the engine's own finger (a coarse pointer). */
-async function openTouchStory(page: Page): Promise<TouchStory> {
+async function openTouchStory(
+  page: Page,
+  story = 'core-contextmenu--touch-long-press',
+): Promise<TouchStory> {
   await installInputLog(page);
   await installLongTaskLog(page);
   // Note when the menu is asked to show, on the page clock (no per-frame
@@ -108,7 +111,7 @@ async function openTouchStory(page: Page): Promise<TouchStory> {
       return show.apply(this, args);
     };
   });
-  await openStory(page, storybook(), 'core-contextmenu--touch-long-press');
+  await openStory(page, storybook(), story);
   const driver = await touchDriver(page);
   const trigger = page.getByTestId('touch-context-menu');
   const box = await trigger.boundingBox();
@@ -166,6 +169,82 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
   expect(after).toBeLessThan(menuDisplayMs + 20);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+});
+
+test('with presentation="popover" a finger keeps today’s long press: the menu at 500 ms, with no growth and no iOS timeline', async ({
+  page,
+}) => {
+  const {driver, trigger, center} = await openTouchStory(
+    page,
+    'core-contextmenu--touch-long-press-popover',
+  );
+  // A coarse primary pointer: only the caller's choice keeps today's menu.
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  expect(await trigger.getAttribute('data-astryx-pressable')).toBeNull();
+  const playing = driver.play(hold(center, 1000));
+  await page.waitForTimeout(350);
+  const scaleBeforeOpen = await presentedScale(trigger);
+  // Still held: the menu is up. (On the lift, emulated Chromium sends the
+  // compatibility mouse events a long press sends no click for on a device,
+  // and they dismiss today's menu as they do on main; the touch model's
+  // recognizer claims the finger instead.)
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible({
+    timeout: 550,
+  });
+  await playing;
+  const start = await touchStartedAt(page);
+  const shown = await menuShownAt(page);
+  expect(shown, 'the menu never showed').not.toBeNull();
+  const after = (shown as number) - start;
+  // Today's 500 ms, give or take a task and the render that shows the menu;
+  // far from the touch model's 735 ms.
+  expect(after).toBeGreaterThanOrEqual(500);
+  expect(after).toBeLessThan(550);
+  expect(scaleBeforeOpen).toBe(1);
+});
+
+test('a finger where the primary pointer is fine keeps today’s long press: the menu at 500 ms, with no growth', async ({
+  browser,
+  page,
+}) => {
+  // A touch screen whose primary pointer is fine (a laptop with a trackpad).
+  const context = await browser.newContext({
+    viewport: page.viewportSize() ?? {width: 402, height: 874},
+    hasTouch: true,
+    isMobile: false,
+  });
+  const fine = await context.newPage();
+  try {
+    await installInputLog(fine);
+    await openStory(fine, storybook(), 'core-contextmenu--touch-long-press');
+    const coarse = await fine.evaluate(
+      () => matchMedia('(pointer: coarse)').matches,
+    );
+    test.skip(
+      coarse,
+      'this engine reports a coarse primary pointer whenever touch is emulated; the fine-primary finger is covered in jsdom',
+    );
+    const trigger = fine.getByTestId('touch-context-menu');
+    const box = await trigger.boundingBox();
+    if (box == null) {
+      throw new Error('no trigger');
+    }
+    expect(await trigger.getAttribute('data-astryx-pressable')).toBeNull();
+    const driver = await touchDriver(fine);
+    const center = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const playing = driver.play(hold(center, 1000));
+    await fine.waitForTimeout(350);
+    const scaleBeforeOpen = await presentedScale(trigger);
+    await expect(fine.getByRole('menu', {name: 'Photo actions'})).toBeVisible({
+      timeout: 550,
+    });
+    await playing;
+    expect(scaleBeforeOpen).toBe(1);
+  } finally {
+    await context.close();
+  }
 });
 
 test('under Reduce Motion the card does not grow, and the menu still opens at 735 ms', async ({

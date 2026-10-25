@@ -22,7 +22,9 @@
  * UIContextMenuInteraction: a finger held still commits the menu at UIKit's
  * moment (`contextMenu.press.commitMs`), with the press feedback, the page
  * stays put while that menu is up, and the press sends no click. A fine
- * pointer keeps the right-click menu, and the touch recognizer stays off.
+ * primary pointer keeps the right-click menu and today's long press for a
+ * finger (500 ms, `useLongPress`), as `presentation="popover"` does; the
+ * touch recognizer stays off there.
  *
  * Supports two content modes with a single keyboard/focus path:
  * - **Data-driven**: pass `items` array (converted to components internally)
@@ -79,6 +81,7 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
+import {useLongPress} from '../hooks/useLongPress';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -272,7 +275,7 @@ interface ContextMenuBaseProps extends BaseProps {
    * - omitted: the menu at the pointer; under a finger, a held finger opens it
    *   on iOS's timeline (the touch model).
    * - `popover`: the menu at the pointer on every device, as before; a held
-   *   finger is the browser's own.
+   *   finger opens it at 500 ms through today's long press.
    * - `bottom-sheet`: open as an action sheet.
    * - `adaptive`: use a BottomSheet on compact coarse-pointer viewports and
    *   the cursor-positioned popover elsewhere.
@@ -337,6 +340,10 @@ export function ContextMenu({
   xstyle,
   triggerXstyle,
   onContextMenu: onContextMenuProp,
+  onTouchStart: onTouchStartProp,
+  onTouchMove: onTouchMoveProp,
+  onTouchEnd: onTouchEndProp,
+  onTouchCancel: onTouchCancelProp,
   'data-testid': testId,
   ...rest
 }: ContextMenuProps) {
@@ -780,6 +787,61 @@ export function ContextMenu({
   // UIKit's context menu. A sheet locks the page itself.
   useScrollLock(isOpen && isTouchOpen && !usesBottomSheet);
 
+  // Today's long press for a finger outside the touch model: under a fine
+  // primary pointer, or with `presentation="popover"` (the way back,
+  // public-component-api INV16). iOS Safari never synthesizes a `contextmenu`
+  // event on a long press, so the menu opens at the touch point once the
+  // finger has been held for 500 ms (useLongPress: the timer, the move cancel
+  // and the cleanup). Under the touch model the recognizer above owns the
+  // finger instead.
+  const {
+    onTouchStart: handleLongPressTouchStart,
+    onTouchMove: handleLongPressTouchMove,
+    onTouchEnd: handleLongPressTouchEnd,
+    onTouchCancel: handleLongPressTouchCancel,
+  } = useLongPress({
+    disabled: isDisabled || touchModes,
+    onLongPress: useCallback(
+      (point: {x: number; y: number}) => {
+        const rect = getAnchorBaseRect();
+        openAtLocalPoint(
+          rect ? point.x - rect.left : point.x,
+          rect ? point.y - rect.top : point.y,
+          triggerRef.current,
+        );
+      },
+      [openAtLocalPoint, getAnchorBaseRect],
+    ),
+  });
+  const handleTriggerTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      handleLongPressTouchStart(event);
+      onTouchStartProp?.(event);
+    },
+    [handleLongPressTouchStart, onTouchStartProp],
+  );
+  const handleTriggerTouchMove = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      handleLongPressTouchMove(event);
+      onTouchMoveProp?.(event);
+    },
+    [handleLongPressTouchMove, onTouchMoveProp],
+  );
+  const handleTriggerTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      handleLongPressTouchEnd();
+      onTouchEndProp?.(event);
+    },
+    [handleLongPressTouchEnd, onTouchEndProp],
+  );
+  const handleTriggerTouchCancel = useCallback(
+    (event: React.TouchEvent<HTMLElement>) => {
+      handleLongPressTouchCancel();
+      onTouchCancelProp?.(event);
+    },
+    [handleLongPressTouchCancel, onTouchCancelProp],
+  );
+
   // ContextMenu owns invocation. Consumer handlers are notified too, but
   // preventing their default does not cancel component-owned behavior that
   // the public API does not promise as cancelable.
@@ -916,6 +978,10 @@ export function ContextMenu({
         {...triggerProps}
         {...(touchModes ? pressFeedback.pressable : null)}
         onContextMenu={handleTriggerContextMenu}
+        onTouchStart={handleTriggerTouchStart}
+        onTouchMove={handleTriggerTouchMove}
+        onTouchEnd={handleTriggerTouchEnd}
+        onTouchCancel={handleTriggerTouchCancel}
         data-testid={testId}
         {...stylex.props(
           styles.trigger,

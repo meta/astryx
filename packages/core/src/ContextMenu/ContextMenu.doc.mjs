@@ -132,7 +132,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        'Presentation policy. Omitted, the menu opens at the pointer position, and under a finger a held finger opens it on iOS timing (the touch model). `popover` opens at the pointer position on every device, with a held finger left to the browser, as before. `bottom-sheet` always uses an action sheet, and `adaptive` uses the BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px.',
+        'Presentation policy. Omitted, the menu opens at the pointer position, and under a finger a held finger opens it on iOS timing (the touch model). `popover` opens at the pointer position on every device, and a held finger opens it at 500 ms (the long press), as before; so does a finger where the primary pointer is fine. `bottom-sheet` always uses an action sheet, and `adaptive` uses the BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px.',
     },
     {
       name: 'isDisabled',

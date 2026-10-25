@@ -903,17 +903,43 @@ describe.each([
       expect(trigger).toHaveAttribute('data-astryx-pressable');
     });
 
-    it('keeps today’s menu with presentation="popover": a held finger is the browser’s, and its contextmenu opens the menu at the finger', () => {
+    it('keeps today’s menu with presentation="popover": a held finger opens it at 500 ms through today’s long press, with no growth and no scroll lock', () => {
       const trigger = renderMenu({presentation: 'popover'});
+      const shows = () =>
+        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
       expect(trigger).not.toHaveAttribute('data-astryx-pressable');
       const press = finger(trigger);
       press.down();
-      advance(1000);
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-      const lift = press.up();
-      expect(lift.defaultPrevented).toBe(false);
+      advance(499);
+      expect(shows()).toBe(0);
+      advance(1);
+      expect(shows()).toBe(1);
+      // Today’s menu: the first row takes the focus, nothing grows, the page
+      // is not locked.
+      expect(trigger.style.getPropertyValue('scale')).toBe('');
+      expect(document.body.style.overflow).not.toBe('hidden');
+      press.up();
+      // The browser’s own long-press menu (Android Chrome) still opens it.
       fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(shows()).toBeGreaterThanOrEqual(1);
+    });
+
+    it('with presentation="popover", a drift past 10 px or a lift before 500 ms opens nothing (today’s long press)', () => {
+      const trigger = renderMenu({presentation: 'popover'});
+      const shows = () =>
+        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+      let press = finger(trigger);
+      press.down();
+      advance(300);
+      press.up();
+      advance(400);
+      expect(shows()).toBe(0);
+      press = finger(trigger);
+      press.down();
+      press.moveTo(31, 20);
+      advance(600);
+      expect(shows()).toBe(0);
+      press.up();
     });
 
     it('opens nothing on touch when disabled', () => {
@@ -950,21 +976,63 @@ describe('ContextMenu under a fine pointer: the touch model costs nothing', () =
     vi.unstubAllGlobals();
   });
 
-  it('leaves a held finger to the browser and opens the cursor menu on a right-click, as before', () => {
+  it('opens today’s menu for a finger held 500 ms (today’s long press), with no touch model: no growth, no scroll lock, the first row focused', () => {
     // A fine pointer in this context, before any check.
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const onTouchStart = vi.fn();
     render(
-      <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+      <ContextMenu
+        items={[{label: 'Item 1'}]}
+        data-testid="ctx"
+        onTouchStart={onTouchStart}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('ctx');
+    expect(trigger).not.toHaveAttribute('data-astryx-pressable');
+    const press = finger(trigger);
+    press.down();
+    expect(onTouchStart).toHaveBeenCalledTimes(1);
+    advance(499);
+    expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+    advance(1);
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    expect(trigger.style.getPropertyValue('scale')).toBe('');
+    expect(document.body.style.overflow).not.toBe('hidden');
+    advance(20);
+    expect(
+      screen.getByRole('menuitem', {name: 'Item 1', hidden: true}),
+    ).toHaveFocus();
+    press.up();
+  });
+
+  it('does not hand the finger that opened the menu on to it: a slide onto a row and a lift pick nothing', () => {
+    const onClick = vi.fn();
+    render(
+      <ContextMenu items={[{label: 'Item 1', onClick}]} data-testid="ctx">
         <div>Right-click me</div>
       </ContextMenu>,
     );
     const trigger = screen.getByTestId('ctx');
     const press = finger(trigger);
     press.down();
-    advance(1000);
-    const lift = press.up();
-    expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-    expect(lift.defaultPrevented).toBe(false);
+    advance(500);
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    const row = screen.getByRole('menuitem', {name: 'Item 1', hidden: true});
+    const box = row.getBoundingClientRect();
+    press.moveTo(box.left + 4, box.top + 4);
+    press.up();
+    advance(50);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('opens the cursor menu on a right-click, as before', () => {
+    render(
+      <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('ctx');
     fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
     advance(20);
