@@ -503,10 +503,15 @@ export function ContextMenu({
   });
   layerAnchorIdRef.current = layer.anchorId;
 
+  // A lifted menu shrinks back into the finger as it closes: the lift takes
+  // its exit copy while the menu still shows (set once the menu's list ref
+  // exists, below; a no-op when nothing is lifted).
+  const dismissLiftedMenuRef = useRef<() => void>(() => {});
   const closeMenu = useCallback(() => {
     if (usesBottomSheet) {
       updateOpenState(false);
     } else {
+      dismissLiftedMenuRef.current();
       layer.hide();
     }
   }, [layer, updateOpenState, usesBottomSheet]);
@@ -547,6 +552,12 @@ export function ContextMenu({
     wrap: true,
     hasPaging: true,
   });
+  dismissLiftedMenuRef.current = () => {
+    const list = listRef.current;
+    if (list != null) {
+      touchHandleRef.current?.presentation.dismissMenu(list);
+    }
+  };
 
   // Join the shared stack so an Escape press dismisses exactly one top-most
   // surface. BottomSheet owns its own dismissal path.

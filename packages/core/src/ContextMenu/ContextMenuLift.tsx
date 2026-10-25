@@ -8,8 +8,8 @@
  *   constants and springs, the app's declared layer inset (LayerProvider)
  * @output Exports useContextMenuLift: lift() / drop() to show UIKit's lifted
  *   preview over a tinted backdrop and to return it to its place, and the
- *   menu's growth out of the finger beside it, on the lift module with
- *   UIKit's numbers
+ *   menu's growth out of the finger beside it and its shrink back into it,
+ *   on the lift module with UIKit's numbers
  * @position The lift presentation of ContextMenu's touch invocation, run by
  *   the touch layer (ContextMenuTouchLayer.tsx); ContextMenu.tsx places the
  *   menu beside the preview it lifts
@@ -19,8 +19,8 @@
  * gave it to its lifted size, a shadow rising under it, above a backdrop
  * that tints the page (no blur, no zoom), and the menu grows out of the
  * finger beside it.
- * When the menu closes, the view returns to its place while the backdrop and
- * the shadow clear.
+ * When the menu closes, it shrinks back into the finger as it fades, while
+ * the view returns to its place and the backdrop and the shadow clear.
  *
  * The lift module (lift/lift.ts) plays it: the trigger itself lifts into the
  * top layer, with one placeholder holding its spot, and nothing of the lift
@@ -85,6 +85,12 @@ export interface ContextMenuLift {
    * until the lift and the menu settle (spec:AST-094 FR35).
    */
   morphMenu(menu: HTMLElement, press: {x: number; y: number}): void;
+  /**
+   * The menu is closing: its exit copy (the layer runtime's) shrinks back
+   * into the finger from wherever its growth stands, with its velocity.
+   * Call it while the menu still shows; a no-op when nothing is lifted.
+   */
+  dismissMenu(menu: HTMLElement): void;
   /** Return the preview to its place. */
   drop(): void;
 }
@@ -132,6 +138,9 @@ export function useContextMenuLift(
       },
       morphMenu(menu, press) {
         lift.presentSurface(menu, press);
+      },
+      dismissMenu(menu) {
+        lift.dismissSurface(menu);
       },
       drop() {
         lift.drop();

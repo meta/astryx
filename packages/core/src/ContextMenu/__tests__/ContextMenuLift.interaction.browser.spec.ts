@@ -689,6 +689,261 @@ test('the menu grows out of the finger on morphSpring, translate, scale and opac
   ).toEqual(['', '']);
 });
 
+test('closing shrinks the menu back into the finger on the layer runtime’s exit copy, translate, scale and opacity only, while the card returns on the morph spring', async ({
+  page,
+}) => {
+  const story = await openLiftStory(page);
+  await liftAndSettle(page, story);
+  // The menu's frame as laid out (its popover's box).
+  const menuBox = await page.evaluate(() => {
+    const r = document
+      .querySelector('[role="menu"]')
+      ?.closest('[popover]')
+      ?.getBoundingClientRect();
+    return r == null
+      ? null
+      : {x: r.x + r.width / 2, y: r.y + r.height / 2, width: r.width};
+  });
+  await page.keyboard.press('Escape');
+  await holdAnimations(page);
+  const read = async (t: number) => {
+    await seekAnimations(page, t);
+    return page.evaluate(() => {
+      const copy = document.querySelector<HTMLElement>(
+        '[data-astryx-context-menu-lift-exit]',
+      );
+      const card = document.querySelector('[data-testid="touch-context-menu"]');
+      const box = copy?.getBoundingClientRect();
+      const scale = card == null ? 'none' : getComputedStyle(card).scale;
+      const moving = new Set<string>();
+      for (const animation of copy?.getAnimations() ?? []) {
+        const frames =
+          (animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+        for (const property of ['translate', 'scale', 'opacity', 'filter']) {
+          if (new Set(frames.map(frame => String(frame[property]))).size > 1) {
+            moving.add(property);
+          }
+        }
+      }
+      return {
+        copy:
+          box == null || copy == null
+            ? null
+            : {
+                x: box.x + box.width / 2,
+                y: box.y + box.height / 2,
+                width: box.width,
+                opacity: Number(getComputedStyle(copy).opacity),
+                inert: copy.inert,
+              },
+        moving: [...moving].sort(),
+        cardScale: scale === 'none' ? 1 : Number.parseFloat(scale),
+      };
+    });
+  };
+  const start = await read(0);
+  const middle = await read(120);
+  await releaseAnimations(page);
+  await page.waitForTimeout(900);
+  const after = await page.evaluate(() => ({
+    exit:
+      document.querySelector('[data-astryx-context-menu-lift-exit]') != null,
+    layer: document.querySelector('[data-astryx-context-menu-lift]') != null,
+  }));
+  const returning = solveSpring(toSpring(contextMenu.lift.morphSpring), {
+    from: 1.13,
+    to: 1,
+  });
+  const detail = JSON.stringify({
+    menuBox,
+    center: story.center,
+    start,
+    middle,
+    after,
+  });
+  // It starts as the menu stands, opaque and inert.
+  expect(start.copy?.x, detail).toBeCloseTo(menuBox?.x ?? NaN, 0);
+  expect(start.copy?.y, detail).toBeCloseTo(menuBox?.y ?? NaN, 0);
+  expect(start.copy?.width, detail).toBeCloseTo(menuBox?.width ?? NaN, 0);
+  expect(start.copy?.opacity, detail).toBeCloseTo(1, 2);
+  expect(start.copy?.inert, detail).toBe(true);
+  // Partway: smaller, nearer the finger, fading.
+  expect(middle.copy?.width ?? Infinity, detail).toBeLessThan(
+    (menuBox?.width ?? 0) * 0.8,
+  );
+  expect(
+    Math.abs((middle.copy?.y ?? NaN) - story.center.y),
+    detail,
+  ).toBeLessThan(Math.abs((menuBox?.y ?? NaN) - story.center.y));
+  expect(middle.copy?.opacity ?? 1, detail).toBeLessThan(1);
+  expect(middle.moving, detail).toEqual(['opacity', 'scale', 'translate']);
+  expect(middle.cardScale, detail).toBeCloseTo(returning.value(0.12), 2);
+  // Done: the exit copy and the lift are gone.
+  expect(after, detail).toEqual({exit: false, layer: false});
+});
+
+test('a close while the menu is still growing shrinks it back from where it stands, with no jump to its full size (AST-094 FR6)', async ({
+  page,
+}) => {
+  const story = await openLiftStory(page);
+  // The finger lifts just after the menu shows (it stays open).
+  await story.driver.play(tap(story.center, {holdMs: menuDisplayMs + 40}));
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  // In one task: the menu's drawn width as the close comes, the close
+  // (Escape on the menu), and the width its exit copy starts from.
+  const {entrance, exitStart} = await page.evaluate(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    const popover = menu?.closest<HTMLElement>('[popover]');
+    const drawn = popover?.getBoundingClientRect().width ?? null;
+    const full = popover?.offsetWidth ?? null;
+    menu?.dispatchEvent(
+      new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+    );
+    return {
+      entrance: {drawn, full},
+      exitStart:
+        document
+          .querySelector('[data-astryx-context-menu-lift-exit]')
+          ?.getBoundingClientRect().width ?? null,
+    };
+  });
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  await page.waitForTimeout(900);
+  const after = await page.evaluate(() => ({
+    exit: document.querySelectorAll('[data-astryx-context-menu-lift-exit]')
+      .length,
+    style:
+      document
+        .querySelector('[role="menu"]')
+        ?.closest('[popover]')
+        ?.getAttribute('style') ?? '',
+    layer: document.querySelector('[data-astryx-context-menu-lift]') != null,
+  }));
+  const detail = JSON.stringify({entrance, exitStart, after});
+  // Mid-growth the menu is still smaller than its frame; the exit continues
+  // from the growth's curve where it stands now (at most a frame on from the
+  // frame last drawn), not from the frame.
+  expect(entrance.drawn ?? Infinity, detail).toBeLessThan(
+    (entrance.full ?? 0) - 10,
+  );
+  expect(exitStart ?? 0, detail).toBeGreaterThan((entrance.drawn ?? 0) - 2);
+  expect(exitStart ?? Infinity, detail).toBeLessThan((entrance.full ?? 0) - 10);
+  expect(after.exit, detail).toBe(0);
+  expect(after.layer, detail).toBe(false);
+  expect(after.style, detail).not.toMatch(/translate|scale/u);
+});
+
+test('a press during the close lands on the fading dim and, held past the close’s end, still reaches nothing: nothing opens, and the layer waits for the lift', async ({
+  page,
+}) => {
+  const story = await openLiftStory(page);
+  await liftAndSettle(page, story);
+  await page.evaluate(() => {
+    const w = window as unknown as {__cardEvents: string[]};
+    w.__cardEvents = [];
+    const card = document.querySelector('[data-testid="touch-context-menu"]');
+    for (const type of ['touchstart', 'pointerdown', 'click']) {
+      card?.addEventListener(type, () => w.__cardEvents.push(type), {
+        capture: true,
+        passive: true,
+      });
+    }
+  });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(80);
+  // The close holds the layer (the layer runtime's presentation hold): a
+  // shield in the top layer covers it until the hold ends.
+  const heldState = async () =>
+    page.evaluate(() => {
+      const layer = document.querySelector('[data-astryx-context-menu-lift]');
+      return {
+        exit:
+          document.querySelector('[data-astryx-context-menu-lift-exit]') !=
+          null,
+        held:
+          layer != null &&
+          [...layer.children].some(child =>
+            child.matches('div[popover]:popover-open'),
+          ),
+      };
+    });
+  const during = await heldState();
+  // A new finger held on the card while it is still on its way back, and on
+  // well past the close's end: the layer stays up (bare) under it.
+  const holdMs = menuDisplayMs + 200;
+  const playing = story.driver.play(tap(story.center, {holdMs}));
+  await page.waitForTimeout(holdMs - 150);
+  const heldPastExit = await readLift(page);
+  const heldWhilePressed = await heldState();
+  await playing;
+  await page.waitForTimeout(600);
+  const after = await readLift(page);
+  const heldAfter = await heldState();
+  const cardEvents = await page.evaluate(
+    () => (window as unknown as {__cardEvents: string[]}).__cardEvents,
+  );
+  const detail = JSON.stringify({
+    during,
+    heldPastExit,
+    heldWhilePressed,
+    after,
+    heldAfter,
+    cardEvents,
+  });
+  expect(during, detail).toEqual({exit: true, held: true});
+  expect(heldWhilePressed.held, detail).toBe(true);
+  expect(heldAfter.held, detail).toBe(false);
+  expect(heldPastExit.layerOpen, detail).toBe(true);
+  expect(heldPastExit.preview, detail).toBeNull();
+  expect(cardEvents, detail).toEqual([]);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  expect(after.preview, detail).toBeNull();
+  expect(after.layerOpen, detail).toBe(false);
+});
+
+test('picking an action closes the menu the same way: it shrinks back into the finger and the card returns', async ({
+  page,
+}) => {
+  const story = await openLiftStory(page);
+  await liftAndSettle(page, story);
+  await page.evaluate(() => {
+    const w = window as unknown as {__picked: string[]};
+    w.__picked = [];
+    document.addEventListener(
+      'click',
+      event => {
+        const row = (event.target as Element).closest('[role="menuitem"]');
+        if (row != null) {
+          w.__picked.push(row.textContent ?? '');
+        }
+      },
+      {capture: true},
+    );
+  });
+  const share = await page.getByRole('menuitem', {name: 'Share'}).boundingBox();
+  if (share == null) {
+    throw new Error('no Share row');
+  }
+  await story.driver.play(
+    tap({x: share.x + share.width / 2, y: share.y + share.height / 2}),
+  );
+  const exiting = await page.evaluate(
+    () =>
+      document.querySelector('[data-astryx-context-menu-lift-exit]') != null,
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  await page.waitForTimeout(900);
+  const after = await readLift(page);
+  const picked = await page.evaluate(
+    () => (window as unknown as {__picked: string[]}).__picked,
+  );
+  const detail = JSON.stringify({exiting, after, picked});
+  expect(picked, detail).toEqual(['Share']);
+  expect(exiting, detail).toBe(true);
+  expect(after.preview, detail).toBeNull();
+  expect(after.layerOpen, detail).toBe(false);
+});
+
 test('closing returns the card to its place and clears the backdrop', async ({
   page,
 }) => {
