@@ -2,7 +2,8 @@
 
 /**
  * @file undefinedVariables.ts
- * @input A stylesheet's text and the StyleX class-name prefixes
+ * @input A stylesheet's text, the StyleX class-name prefixes, and the other
+ *   stylesheets the build emits
  * @output undefinedGeneratedVariables, the generated custom properties the
  *   stylesheet reads but never declares
  * @position Internal to @astryxdesign/build: astryxStylex (vite.ts) runs it
@@ -22,26 +23,33 @@
  * (`--<prefix>-<property>`) and component variables with a dash after the
  * prefix are not generated names and are never reported.
  *
+ * Only a hash-shaped name counts as generated: the prefix and four to seven
+ * base-36 characters (StyleX's hash is a 32-bit value in base 36, shorter than
+ * four characters about once in a hundred thousand). An app's own short names
+ * (`--xl`) are never reported, and a property declared in any stylesheet the
+ * build emits (`others`, the app's own CSS) is declared.
+ *
  * SYNC: scripts/build-css.mjs `undefinedStyleXVariables` is the same check
  * for the prebuilt package stylesheets.
  */
 export function undefinedGeneratedVariables(
   css: string,
   prefixes: readonly string[],
+  others: readonly string[] = [],
 ): string[] {
   const names = prefixes
     .map(prefix => prefix.replace(/[^a-zA-Z0-9_-]/g, ''))
     .filter(Boolean)
     .join('|');
   const declared = new Set(
-    [...css.matchAll(new RegExp(`(--(?:${names})[a-z0-9]+)\\s*:`, 'g'))].map(
-      match => match[1],
+    [css, ...others].flatMap(text =>
+      [...text.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)].map(match => match[1]),
     ),
   );
   const read = new Set(
     [
       ...css.matchAll(
-        new RegExp(`var\\(\\s*(--(?:${names})[a-z0-9]+)\\s*[,)]`, 'g'),
+        new RegExp(`var\\(\\s*(--(?:${names})[a-z0-9]{4,7})\\s*[,)]`, 'g'),
       ),
     ].map(match => match[1]),
   );
