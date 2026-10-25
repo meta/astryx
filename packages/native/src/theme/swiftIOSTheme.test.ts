@@ -161,8 +161,12 @@ describe('swift theme generator: values (G7)', () => {
       tokens: {'--color-accent': 'light-dark(#000, #fff)'},
     });
     const swift = await renderSwiftTheme(theme);
-    expect(swift).toContain('accent: Color(astryxRGBA: 0x000000FF)');
-    expect(swift).toContain('accent: Color(astryxRGBA: 0xFFFFFFFF)');
+    expect(swift).toContain(
+      'accent: Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)',
+    );
+    expect(swift).toContain(
+      'accent: Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 1)',
+    );
   });
 
   it('fails on a value Swift cannot read, naming theme, mode, token, and value', async () => {
@@ -204,8 +208,12 @@ describe('swift theme generator: themes (G3, G4, G12)', () => {
     });
     const swift = await renderSwiftTheme(theme, {source: 'acme'});
     expect(swift).toContain('public static let acmeBrand = Theme(');
-    expect(swift).toContain('accent: Color(astryxRGBA: 0xC2410CFF)');
-    expect(swift).toContain('accent: Color(astryxRGBA: 0xFB923CFF)');
+    expect(swift).toContain(
+      'accent: Color(.sRGB, red: 0.7607843137254902, green: 0.2549019607843137, blue: 0.047058823529411764, opacity: 1)',
+    );
+    expect(swift).toContain(
+      'accent: Color(.sRGB, red: 0.984313725490196, green: 0.5725490196078431, blue: 0.23529411764705882, opacity: 1)',
+    );
     expect(swift).toContain('from acme, theme "acme-brand"');
     expect(swift).not.toMatch(/\d+\.\d+\.\d+/);
     expect(await renderSwiftTheme(theme, {source: 'acme'})).toBe(swift);

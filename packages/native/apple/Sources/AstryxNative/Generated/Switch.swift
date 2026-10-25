@@ -16,14 +16,6 @@ public struct SwitchStatus: Equatable, Codable, Sendable {
     self.message = message
   }
 }
-public enum SwitchLabelPosition: String, CaseIterable, Codable, Sendable {
-  case start = "start"
-  case end = "end"
-}
-public enum SwitchLabelSpacing: String, CaseIterable, Codable, Sendable {
-  case hug = "hug"
-  case spread = "spread"
-}
 #if os(iOS)
 public struct SwitchProps {
   /// Base props attach to this part on every platform.
@@ -42,9 +34,7 @@ public struct SwitchProps {
   public var isRequired: Bool?
   public var status: SwitchStatus?
   public var labelTooltip: String?
-  public var labelPosition: SwitchLabelPosition?
-  public var labelSpacing: SwitchLabelSpacing?
-  public init(label: String, value: Bool, onChange: ((Bool) -> Void)? = nil, isLoading: Bool? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isDisabled: Bool? = nil, size: SwitchSize? = nil, disabledMessage: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SwitchStatus? = nil, labelTooltip: String? = nil, labelPosition: SwitchLabelPosition? = nil, labelSpacing: SwitchLabelSpacing? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, value: Bool, onChange: ((Bool) -> Void)? = nil, isLoading: Bool? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isDisabled: Bool? = nil, size: SwitchSize? = nil, disabledMessage: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SwitchStatus? = nil, labelTooltip: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.value = value
     self.onChange = onChange
@@ -58,8 +48,6 @@ public struct SwitchProps {
     self.isRequired = isRequired
     self.status = status
     self.labelTooltip = labelTooltip
-    self.labelPosition = labelPosition
-    self.labelSpacing = labelSpacing
     self.base = base
   }
 }
@@ -77,8 +65,6 @@ public struct SwitchNode: Decodable, Equatable, Sendable {
     public var isRequired: Bool?
     public var status: SwitchStatus?
     public var labelTooltip: String?
-    public var labelPosition: SwitchLabelPosition?
-    public var labelSpacing: SwitchLabelSpacing?
   }
   public let key: String
   public let base: AstryxBaseProps?
@@ -105,8 +91,6 @@ public struct SwitchNode: Decodable, Equatable, Sendable {
       isRequired: props.isRequired,
       status: props.status,
       labelTooltip: props.labelTooltip,
-      labelPosition: props.labelPosition,
-      labelSpacing: props.labelSpacing,
       base: base ?? AstryxBaseProps()
     )
   }
@@ -130,9 +114,7 @@ public struct SwitchProps {
   public var isRequired: Bool?
   public var status: SwitchStatus?
   public var labelTooltip: String?
-  public var labelPosition: SwitchLabelPosition?
-  public var labelSpacing: SwitchLabelSpacing?
-  public init(label: String, value: Bool, onChange: ((Bool) -> Void)? = nil, isLoading: Bool? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isDisabled: Bool? = nil, size: SwitchSize? = nil, disabledMessage: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SwitchStatus? = nil, labelTooltip: String? = nil, labelPosition: SwitchLabelPosition? = nil, labelSpacing: SwitchLabelSpacing? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public init(label: String, value: Bool, onChange: ((Bool) -> Void)? = nil, isLoading: Bool? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isDisabled: Bool? = nil, size: SwitchSize? = nil, disabledMessage: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, status: SwitchStatus? = nil, labelTooltip: String? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.label = label
     self.value = value
     self.onChange = onChange
@@ -146,8 +128,6 @@ public struct SwitchProps {
     self.isRequired = isRequired
     self.status = status
     self.labelTooltip = labelTooltip
-    self.labelPosition = labelPosition
-    self.labelSpacing = labelSpacing
     self.base = base
   }
 }
@@ -165,8 +145,6 @@ public struct SwitchNode: Decodable, Equatable, Sendable {
     public var isRequired: Bool?
     public var status: SwitchStatus?
     public var labelTooltip: String?
-    public var labelPosition: SwitchLabelPosition?
-    public var labelSpacing: SwitchLabelSpacing?
   }
   public let key: String
   public let base: AstryxBaseProps?
@@ -193,8 +171,6 @@ public struct SwitchNode: Decodable, Equatable, Sendable {
       isRequired: props.isRequired,
       status: props.status,
       labelTooltip: props.labelTooltip,
-      labelPosition: props.labelPosition,
-      labelSpacing: props.labelSpacing,
       base: base ?? AstryxBaseProps()
     )
   }
