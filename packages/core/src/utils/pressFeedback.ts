@@ -28,17 +28,15 @@
  * (`@media (pointer: coarse)`) and this writes `data-astryx-press="on"` when the
  * press is believed and `data-astryx-press="fading"` for the release's exit.
  *
- * While a finger or a pen is down on a surface, its text selection and the
- * touch callout are off (gestures/selectionLock.ts, shared with the gesture
- * host), as on UIKit's controls and cells, where the primary pointer is
- * coarse; elsewhere every contact keeps the browser's selection.
+ * A surface's hold does nothing, so it keeps the browser's long-press text
+ * selection (`spec:AST-094` FR41); only an element whose hold does something
+ * suppresses it, through the gesture host (gestures/selectionLock.ts).
  *
  * Its one touch-only listener, `touchcancel`, is on only while the primary
  * pointer is coarse (coarsePointer.ts, `spec:AST-094` FR24).
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
- * utils/interactionOverlay.stylex.ts, gestures/selectionLock.ts and
- * pressFeedback.test.ts.
+ * utils/interactionOverlay.stylex.ts and pressFeedback.test.ts.
  */
 
 import type {PressGesture, PressPaint, PressStep} from './pressGesture';
@@ -52,7 +50,6 @@ import {
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
-import {lockSelection, locksSelectionFor} from './selectionLock';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -88,8 +85,6 @@ interface LiveGesture {
   /** The pointer this gesture belongs to; a second finger is ignored. */
   pointerId: number | null;
   timer: ReturnType<typeof setTimeout> | null;
-  /** Releases the selection lock the finger holds while it is down. */
-  unlock: (() => void) | null;
 }
 
 let live: LiveGesture | null = null;
@@ -295,16 +290,7 @@ function scrollerIsBraking(element: HTMLElement): boolean {
 function releaseIfDead(): void {
   if (live?.gesture.phase === 'dead') {
     clearTimer();
-    unlockLive();
     live = null;
-  }
-}
-
-/** The finger is up or gone: text selection comes back. */
-function unlockLive(): void {
-  live?.unlock?.();
-  if (live != null) {
-    live.unlock = null;
   }
 }
 
@@ -314,7 +300,6 @@ function finish(): void {
     return;
   }
   clearTimer();
-  unlockLive();
   const {element} = live;
   const wasPainted = element.hasAttribute(PRESSED_ATTRIBUTE);
   element.removeAttribute(PRESSED_ATTRIBUTE);
@@ -363,16 +348,6 @@ function onPointerDown(event: PointerEvent): void {
     gesture: idlePressGesture(),
     pointerId: event.pointerId,
     timer: null,
-    // A held finger never starts text selection on the surface (UIKit's
-    // controls and cells never do), where the primary pointer is coarse: a
-    // touchscreen laptop's finger and a desktop pen keep selection, as a
-    // mouse does (spec:AST-094 FR19).
-    unlock: locksSelectionFor(
-      event.pointerType,
-      element.ownerDocument.defaultView,
-    )
-      ? lockSelection([element], event.target)
-      : null,
   };
   apply(
     pressGestureStep(live.gesture, {
@@ -419,7 +394,6 @@ function onPointerUp(event: PointerEvent): void {
   ) {
     return;
   }
-  unlockLive();
   apply(pressGestureStep(live.gesture, {kind: 'up'}));
   releaseIfDead();
 }
@@ -436,7 +410,6 @@ function onCancel(): void {
   if (live == null) {
     return;
   }
-  unlockLive();
   apply(pressGestureStep(live.gesture, {kind: 'cancel'}));
   // The pointer is gone: a scroll-claimed gesture sends no further pointer
   // events, so nothing else would ever free the slot.
