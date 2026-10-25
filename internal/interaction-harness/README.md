@@ -8,8 +8,6 @@ unpublished.** Specs live next to their component as
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
-The exemplar to copy is
-[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
 every positive check has a negative control beside it (a rAF animation that
@@ -21,7 +19,7 @@ freezes, a `top` animation that lays out every frame).
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction BottomSheetDetent   # one spec, both engines
+pnpm test:interaction <spec file>         # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -48,7 +46,7 @@ committed: a pull request links or attaches it.
 
 | Module          | What it gives a spec                                                                                                                                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, and a verdict.                                                                                        |
@@ -75,7 +73,7 @@ the limits below. Read positions a frame after a move: Chromium delivers
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
 animations, ones the page paused and ones on a scroll or view timeline are left
-alone; held animations keep their offsets from the earliest start, and release
+alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
@@ -149,7 +147,10 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 `Date.now()` sees one event per photograph, about 100 ms apart, so a
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
-`startScreencast` and `castStoryboard`.
+`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
+the page's surface right after it changes ("Unable to capture screenshot"); a
+storyboard takes that photograph again two frames later, up to three attempts
+in all, and lists each retake under `recaptures` in the trace.
 
 ## Engine limits (measured with Playwright 1.61)
 
