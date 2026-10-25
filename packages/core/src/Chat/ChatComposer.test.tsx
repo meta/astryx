@@ -307,4 +307,26 @@ describe('ChatComposer status announcement (spec:AST-086)', () => {
     render(composer({type: 'warning'}));
     expect(announce).not.toHaveBeenCalled();
   });
+
+  it('is silent for a status shown while the page loads, then announces a later one (FR11)', () => {
+    let readyState: DocumentReadyState = 'loading';
+    const spy = vi
+      .spyOn(document, 'readyState', 'get')
+      .mockImplementation(() => readyState);
+    try {
+      const {rerender} = render(composer({type: 'error', message: 'Offline'}));
+      expect(announce).not.toHaveBeenCalled();
+      readyState = 'complete';
+      rerender(composer({type: 'error', message: 'Send failed'}));
+      expect(announce.mock.calls).toEqual([['Send failed', 'assertive']]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('announces only the message, not the decorative icon (FR12)', () => {
+    const {rerender} = render(composer());
+    rerender(composer({type: 'warning', message: 'Offline'}));
+    expect(announce.mock.calls).toEqual([['Offline', 'polite']]);
+  });
 });

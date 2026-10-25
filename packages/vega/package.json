@@ -48,7 +48,7 @@
     "test": "vitest run --root ../..",
     "test:watch": "vitest --root ../..",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "react": ">=19.2.0",

@@ -44,7 +44,7 @@ import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps, mergeRefs, rtlStyles} from '../utils';
-import {switchFocusScope, switchScope} from './switch.markers.stylex';
+import {switchFocusInput, switchScope} from './switch.markers.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
@@ -258,20 +258,22 @@ const styles = stylex.create({
     },
   },
   // The one ring in the system not drawn by focusOutlineStyles. The focusable
-  // input is a sibling of the track, so the condition has to reach the shared
-  // scope marker — and a marker cannot be shared across components without
-  // leaking focus state from an outer one, so it cannot live in the utility.
-  // StyleX also cannot inline a constant imported from another module, so the
-  // values are read from the tokens the utility reads.
+  // input is the track's preceding sibling, so the condition reads that input
+  // through its own marker: a sibling relation, never a `:has()` scan of the
+  // row, which would restyle everything under it on any change. A marker
+  // cannot be shared across components without leaking focus state from an
+  // outer one, so it cannot live in the utility. StyleX also cannot inline a
+  // constant imported from another module, so the values are read from the
+  // tokens the utility reads.
   trackFocus: {
     outline: {
       default: 'none',
-      [stylex.when.ancestor(':has(:focus-visible)', switchFocusScope)]:
+      [stylex.when.siblingBefore(':focus-visible', switchFocusInput)]:
         `${focusVars['--focus-outline-width']} ${focusVars['--focus-outline-style']} ${focusVars['--focus-outline-color']}`,
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(':has(:focus-visible)', switchFocusScope)]:
+      [stylex.when.siblingBefore(':focus-visible', switchFocusInput)]:
         focusVars['--focus-outline-offset'],
     },
   },
@@ -686,6 +688,7 @@ export function Switch({
           inputSizeStyles[size],
           isDisabled && styles.inputDisabled,
           isBusy && styles.inputBusy,
+          switchFocusInput,
         )}
       />
       <div
@@ -773,7 +776,6 @@ export function Switch({
           isLabelHidden && styles.containerLabelHidden,
           labelSpacing === 'spread' && styles.containerSpread,
           !isDisabled && switchScope,
-          switchFocusScope,
           // The touch press's strength and release live on the row the
           // controller writes to; the track and thumb inherit and paint it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,
