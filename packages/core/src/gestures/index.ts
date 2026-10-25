@@ -66,6 +66,8 @@ export type {
 export {RotationGestureRecognizer} from './RotationGestureRecognizer';
 export type {RotationGestureRecognizerOptions} from './RotationGestureRecognizer';
 export {ScreenEdgePanGestureRecognizer} from './ScreenEdgePanGestureRecognizer';
+export {ScrollViewPanGestureRecognizer} from './ScrollViewPanGestureRecognizer';
+export type {ScrollViewPanGestureRecognizerOptions} from './ScrollViewPanGestureRecognizer';
 export type {
   ScreenEdge,
   ScreenEdgePanGestureRecognizerOptions,

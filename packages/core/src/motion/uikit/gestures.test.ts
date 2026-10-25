@@ -54,7 +54,8 @@ describe('UIKIT_GESTURES', () => {
     expect(UIKIT_GESTURES.pan.hysteresis.value).toBe(10);
     expect(UIKIT_GESTURES.pinch.hysteresis.value).toBe(8);
     expect(UIKIT_GESTURES.control.trackingExpansion.value).toBe(70);
-    expect(UIKIT_GESTURES.velocity.stillSamples.value).toBe(2);
+    expect(UIKIT_GESTURES.velocity.currentWeight.value).toBe(0.2);
+    expect(UIKIT_GESTURES.velocity.scrollReleaseWeight.value).toBe(0.25);
   });
 
   it('keeps the pan decision within the distance WebKit claims a scroll at', () => {

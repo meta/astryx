@@ -196,25 +196,16 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * Velocity in px/s, UIKit's way, for a dragged surface. At the release it
-   * is 0 when the finger rested longer than the stillness interval before
-   * lifting, or moved fewer than twice (spec:AST-100 FR2).
+   * Velocity in px/s, UIKit's way (`velocity(in:)`): after a silent rest it
+   * is the last moving value, since a finger at rest sends no events.
    */
   velocity(): Point {
-    return this.locked(this.tracker.velocity(this.releaseTime));
+    return this.locked(this.readVelocity(this.tracker));
   }
 
-  /**
-   * A scrolling surface's release velocity in px/s (paging, a wheel): the
-   * scroll-view blend of the pan's last two values, with the same release
-   * rules (architecture:interaction-modality INV10).
-   */
-  scrollVelocity(): Point {
-    return this.locked(
-      this.tracker.scrollVelocity(
-        this.releaseTime ?? this.tracker.lastSample?.time ?? 0,
-      ),
-    );
+  /** The tracker's reading this kind of recognizer reports: a pan's. */
+  protected readVelocity(tracker: VelocityTracker): Point {
+    return tracker.velocity();
   }
 
   /**

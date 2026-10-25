@@ -318,32 +318,36 @@ export const UIKIT_GESTURES = {
   },
   velocity: {
     /**
-     * The release filter's window (`spec:AST-100` FR2): motion older than
-     * this before the lift does not count.
+     * UIPanGestureRecognizer.velocity(in:) is this times the newest event's
+     * instantaneous velocity plus the rest times the previous event's
+     * (instantaneous velocity: position change over timestamp change between
+     * consecutive events, the touch-down counting as the first). The lift
+     * does not update it, and a finger at rest sends no events, so a release
+     * after a silent pause reports the last moving value; moved samples at
+     * the same point bring it to 0 on the second.
      */
-    horizon: {
-      value: 100,
-      unit: 'ms',
-      guess:
-        "BottomSheet's two-point window on main, and Android's and Flutter's 100 ms fit window.",
-      measure: 'M-G14: Not a parity value: UIKit uses the two-event filter.',
+    currentWeight: {
+      value: 0.2,
+      unit: 'ratio',
+      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s; a 1000 pt/s stroke then same-point moved samples reads 1000, 800, 0 at .ended`,
     },
     /**
-     * Moves in a row with no movement after which the release velocity is 0
-     * (`spec:AST-100` FR2): a resting finger still reports, and UIKit's
-     * estimate reaches 0 on the second such sample. No time-based reset.
+     * A scroll view's release (the velocity it hands
+     * scrollViewWillEndDragging) is this times its pan recognizer's newest
+     * velocity(in:) plus the rest times the previous one.
      */
-    stillSamples: {
-      value: 2,
-      unit: 'count',
-      source: `${UIKIT_LAB}: UIPanGestureRecognizer velocity(in:) at .ended after a 1000 pt/s stroke: .moved samples at the same point every 8.33 ms give 1000, then 800, then 0 (v = 0.8 prev + 0.2 latest, updated only on moved samples); a silent rest keeps 1000 for every rest up to 500 ms`,
+    scrollReleaseWeight: {
+      value: 0.25,
+      unit: 'ratio',
+      source: `${UIKIT_LAB}: UIPickerView's scrollViewWillEndDragging velocity on four HID swipes (200 pt in 50, 100 and 200 ms; a 90 pt flick): 933.4, 2114, 1016.2 and 543.6 px/s, reproduced to 0.03%; a scroll view coasts after a silent rest of up to 1 s as after none`,
     },
     /** The tracker keeps at most this many samples (a bound on its buffer). */
     maxSamples: {
       value: 20,
       unit: 'count',
       guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
-      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
+      measure:
+        'M-G15: Not a parity value: the filter reads the last four samples.',
     },
   },
   click: {
