@@ -1228,12 +1228,27 @@ export function createAnimator(
     properties: Iterable<MotionProperty>,
     at: number | undefined,
   ): StartGroup | null => {
-    if (at != null || target == null || typeof target.animate !== 'function') {
+    if (target == null || typeof target.animate !== 'function') {
       return null;
     }
     const channels = new Set<Channel>();
     for (const property of properties) {
       channels.add(CHANNEL_OF[property]);
+    }
+    if (at != null) {
+      // An explicit clock is the caller's, except the clock of a call from
+      // rest on these channels still waiting for the browser's start (a drop
+      // and the reorder that rebases it in the same task): the new call joins
+      // that call, and the browser's start moves both.
+      for (const channel of channels) {
+        for (const property of CHANNELS[channel]) {
+          const group = segments.get(property)?.group;
+          if (group != null && !group.resolved && at >= group.provisional - 1) {
+            return group;
+          }
+        }
+      }
+      return null;
     }
     for (const channel of channels) {
       for (const property of CHANNELS[channel]) {

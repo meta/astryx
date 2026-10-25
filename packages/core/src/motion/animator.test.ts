@@ -574,6 +574,24 @@ describe('review fixes', () => {
     expect(animator.get('x', 1400)).toBeCloseTo(-10, 6);
   });
 
+  it('a rebase and a retarget in the task of a drop from rest start on the browser\u2019s clock', async () => {
+    // A list row's drop: it springs home from where the finger left it.
+    const {animator} = setup();
+    animator.set({y: 30});
+    animator.animate({y: 0}, {spring: springs.smooth, velocity: {y: 0}});
+    // The reorder commits in the same task, on the call's clock: the layout
+    // moved the row by 56 px, and the row springs home from there.
+    animator.rebase({y: 56}, {at: 1000});
+    const home = animator.animate({y: 0}, {spring: springs.smooth}, {at: 1000});
+    clock = 1004;
+    await commitFrame(1004);
+    await expect(home.started).resolves.toBe(1004);
+    const curve = solveSpring(toSpring(springs.smooth), {from: 86, to: 0});
+    for (const t of [0, 16, 50, 100, 200]) {
+      expect(animator.get('y', 1004 + t)).toBeCloseTo(curve.value(t / 1000), 6);
+    }
+  });
+
   it('writing another axis before the first frame keeps the channel on the call\u2019s start', async () => {
     const {animator} = setup();
     animator.animate({opacity: 0.5, x: 100}, {spring: springs.smooth});
