@@ -237,27 +237,35 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
   await markElement(sheet);
   const cast = await startScreencast(page);
-  await driver.play(slowDragTo(handle, Math.round((halfTop - tallTop) * 0.66)));
   // The settle must be running (and composited) before the block: an
-  // animation cannot start while the main thread is held. The page blocks
-  // itself in the frame the settle has run 16 ms, however busy the machine.
-  const block = await blockMainThread(page, 700, {
+  // animation cannot start while the main thread is held. Armed before the
+  // release, the page waits for the settle itself (the sheet runs no other
+  // animation during the drag) and blocks once it has run 16 ms, however busy
+  // the machine; armed after, the round trip would leave little of the settle
+  // to judge.
+  const blocking = blockMainThread(page, 700, {
     during: sheet,
     minProgressMs: 16,
   });
-  await page.waitForTimeout(150);
+  await driver.play(slowDragTo(handle, Math.round((halfTop - tallTop) * 0.66)));
+  const block = await blocking;
+  // Where the settle ends, from the page: a frame after the block can still
+  // show a stale position (see `settledAt`).
+  await waitForRest(sheet);
+  const settledAt = await sheet.evaluate(el => el.getBoundingClientRect().y);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   // Judge the part of the block during which the settle was still moving:
   // until it is within 2 px of rest (the screencast rounds to whole pixels,
   // so the easing tail shows plateaus there).
-  const proof = busyWindowProof(tracked, block, {settledWithin: 2});
+  const proof = busyWindowProof(tracked, block, {settledWithin: 2, settledAt});
   await writeEvidence(
     'busy-main-thread/bottomsheet-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
           block,
+          settledAt,
           proof,
           frames: tracked.map(f => ({
             t: +(f.t - block.from).toFixed(1),

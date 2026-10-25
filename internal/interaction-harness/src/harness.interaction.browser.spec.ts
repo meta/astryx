@@ -309,6 +309,38 @@ test.describe('frame evidence', () => {
     expect(raf.verdict.failures.join('\n')).toMatch(/expected frames moved/);
   });
 
+  test('a block that starts during a just-started transition still lets the compositor advance it', async ({
+    page,
+  }, testInfo) => {
+    // `during` blocks in the frame the transition has run 16 ms. In WebKit
+    // the transition reaches the compositor in that frame's rendering update,
+    // so a loop inside the rAF callback froze it (2 of 29 frames moved).
+    // Linear and longer than the block, so every frame of the block moves a
+    // whole pixel or more and the transition is still running when it ends.
+    await fixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const cast = await startScreencast(page);
+    await box.evaluate(el => {
+      el.style.transition = 'transform 1600ms linear';
+      el.getBoundingClientRect();
+      el.style.transform = 'translateX(280px)';
+    });
+    const window = await blockMainThread(page, 700, {
+      during: box,
+      minProgressMs: 16,
+    });
+    await waitForRest(box);
+    const tracked = await trackMarker(page, await cast.stop());
+    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    testInfo.annotations.push({
+      type: 'busy-main-thread transition',
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.monotonic).toBe(true);
+  });
+
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
     browserName,

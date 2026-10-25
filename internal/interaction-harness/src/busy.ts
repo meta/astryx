@@ -35,9 +35,16 @@ export interface BusyWindow {
  * under a busy main thread is a simulator proof, not a Playwright one.
  *
  * With `during`, the page itself waits until an animation on that element (or
- * inside it) has run `minProgressMs`, then blocks in the same frame. A round
- * trip from the test would start the block later the busier the machine is,
- * leaving less of a short animation to judge.
+ * inside it) has run `minProgressMs`, then blocks from a task it queues in
+ * that frame. A round trip from the test would start the block later the
+ * busier the machine is, leaving less of a short animation to judge. The task
+ * runs after the frame's rendering update, which is where WebKit hands a newly
+ * started animation to its compositor: a loop inside the rAF callback itself
+ * holds that hand-off, and even a compositor animation freezes. To catch a
+ * settle near its start, call it before the release that starts the settle and
+ * await it after: the page is already waiting when the animation begins. Any
+ * animation inside `during` counts, so pick an element that runs nothing
+ * else meanwhile.
  */
 export async function blockMainThread(
   page: Page,
@@ -72,13 +79,17 @@ export async function blockMainThread(
                 Number(a.currentTime ?? 0) >= minProgress,
             );
           if (running) {
-            // The same loop as above, in the frame that saw the animation.
-            const from = performance.timeOrigin + performance.now();
-            const end = performance.now() + duration;
-            while (performance.now() < end) {
-              // Busy: nothing else runs.
-            }
-            resolve({from, to: performance.timeOrigin + performance.now()});
+            // The same loop as above, from a task queued in the frame that saw
+            // the animation: it runs once that frame's rendering update has
+            // handed the animation to the compositor.
+            setTimeout(() => {
+              const from = performance.timeOrigin + performance.now();
+              const end = performance.now() + duration;
+              while (performance.now() < end) {
+                // Busy: nothing else runs.
+              }
+              resolve({from, to: performance.timeOrigin + performance.now()});
+            }, 0);
           } else if (performance.now() > deadline) {
             reject(new Error('blockMainThread: no animation started'));
           } else {
@@ -118,6 +129,8 @@ export interface BusyProof extends FrameStats {
    * window.
    */
   readonly longestStallMs: number;
+  /** Where the longest stall starts, ms after the window's start. */
+  readonly longestStallAtMs: number;
   /**
    * `longestStallMs` in screencast intervals, rounded: 1 is no frame missed,
    * 2 is one dropped frame. Rounding absorbs timestamp jitter.
@@ -149,7 +162,11 @@ export interface BusyProof extends FrameStats {
  *   `maxMedianFrameMs` (display rate);
  * - no stall spans more than `maxStallFrames` screencast intervals;
  * - at least `minMovedFraction` of the frames the window should present at
- *   that cadence moved the tracked axis (a short window may still miss one).
+ *   that cadence moved the tracked axis (a short window may still miss one);
+ * - the judged part spans at least `minJudgedFrames` frames. Fewer means the
+ *   animation under test was not moving during the block (it settled before
+ *   the block, or the block caught another animation), so there is nothing to
+ *   judge, and that fails rather than passes.
  */
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
@@ -158,9 +175,11 @@ export function busyWindowProof(
     axis = 'y',
     marginMs = 20,
     settledWithin,
+    settledAt,
     maxMedianFrameMs = 20,
     maxStallFrames = 3,
     minMovedFraction = 0.9,
+    minJudgedFrames = 4,
   }: {
     axis?: 'x' | 'y' | 'width' | 'height';
     marginMs?: number;
@@ -174,6 +193,8 @@ export function busyWindowProof(
      * stricter than a long one.
      */
     minMovedFraction?: number;
+    /** The fewest whole frame intervals the judged part of the window may span. */
+    minJudgedFrames?: number;
     /**
      * Stop judging once the value is within this many px of where it ends.
      * The screencast reports whole CSS pixels, so an easing tail that still
@@ -181,6 +202,14 @@ export function busyWindowProof(
      * as a stall: 2 is the usual value.
      */
     settledWithin?: number;
+    /**
+     * Where the value ends, for `settledWithin`: read it from the page once the
+     * animation has ended (`waitForRest`). Defaults to the last frame's value,
+     * which can be stale: once an accelerated animation ends while the main
+     * thread is still blocked, WebKit presents the layer's last committed
+     * position until the main thread commits the end state.
+     */
+    settledAt?: number;
   } = {},
 ): BusyProof {
   let end = window.to - marginMs;
@@ -188,7 +217,8 @@ export function busyWindowProof(
     const valued = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
     );
-    const final = valued.length > 0 ? valued[valued.length - 1].value : null;
+    const final =
+      settledAt ?? (valued.length > 0 ? valued[valued.length - 1].value : null);
     const arrived = valued.find(
       f =>
         f.t >= window.from &&
@@ -223,9 +253,10 @@ export function busyWindowProof(
     }
   }
   const edges = [inner.from, ...changes, inner.to];
-  const longestStallMs = Math.max(
-    ...edges.slice(1).map((t, i) => t - edges[i]),
-  );
+  const stalls = edges.slice(1).map((t, i) => t - edges[i]);
+  const longestStallMs = Math.max(...stalls);
+  // Where the longest stall starts, from the start of the window.
+  const longestStallAtMs = edges[stalls.indexOf(longestStallMs)] - window.from;
   const around = tracked
     .filter(f => f.t >= inner.from - 250 && f.t <= inner.to + 250)
     .map(f => f.t);
@@ -252,6 +283,11 @@ export function busyWindowProof(
       `longest stall ${longestStallMs.toFixed(1)} ms = ${longestStallFrames} intervals > ${maxStallFrames}`,
     );
   }
+  if (expectedFrames < minJudgedFrames) {
+    failures.push(
+      `${(inner.to - inner.from).toFixed(0)} ms judged = ${expectedFrames} frames < ${minJudgedFrames}: the animation under test was not moving during the block`,
+    );
+  }
   const allowedMisses = Math.max(
     1,
     Math.floor((1 - minMovedFraction) * expectedFrames + 1e-9),
@@ -265,7 +301,7 @@ export function busyWindowProof(
     `${(inner.to - inner.from).toFixed(0)} ms judged at ${cadence.toFixed(1)} ms/frame: ${stats.frames} frames presented, ` +
     `${moved}/${expectedFrames} moved (${(movedFraction * 100).toFixed(0)}%), ` +
     `median ${stats.medianFrameMs.toFixed(1)} ms, ` +
-    `longest stall ${longestStallMs.toFixed(1)} ms (${longestStallFrames} intervals), ` +
+    `longest stall ${longestStallMs.toFixed(1)} ms (${longestStallFrames} intervals) at +${longestStallAtMs.toFixed(0)} ms, ` +
     `${stats.monotonic ? 'monotonic' : 'not monotonic'}`;
   return {
     ...stats,
@@ -273,6 +309,7 @@ export function busyWindowProof(
     judged: inner,
     cadenceMs: cadence,
     longestStallMs,
+    longestStallAtMs,
     expectedFrames,
     longestStallFrames,
     moved,

@@ -105,7 +105,14 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. The `verdict` tolerates what a
+plateaus within a pixel or two of rest. A judged part shorter than four frames
+fails: the animation under test was not moving during the block. With
+`during`, `blockMainThread` starts the loop from a task queued in the frame
+that saw the animation, after that frame's rendering update: WebKit hands a
+newly started animation to its compositor there, and a loop inside the rAF
+callback would freeze even a compositor animation. Call it before the release
+that starts a settle and await it after, so the page is already waiting when
+the settle begins. The `verdict` tolerates what a
 loaded machine does to a screencast and nothing a frozen animation does: a
 median frame interval of at most 20 ms, no stall longer than three screencast
 intervals (two dropped frames), and at least 90% of the window's whole frame
