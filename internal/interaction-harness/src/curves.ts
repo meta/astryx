@@ -35,7 +35,10 @@ export const END_INSET_MS = 0.5;
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
- * ends before a test looks is still seen, with the time it finished.
+ * ends before a test looks is still seen, with the time it finished. Each
+ * entry keeps the animation's start time too: a page that cancels a finished
+ * animation (an entrance whose class is removed on `animationend`) nulls its
+ * `startTime`.
  */
 function animationRecorder(): void {
   const w = window as unknown as {__harnessAnimations?: unknown};
@@ -48,7 +51,10 @@ function animationRecorder(): void {
     animation: Animation;
     seenAt: number;
     finishedAt: number | null;
+    startedAt: number | null;
   }[] = [];
+  // Entries whose start time has not resolved yet (still pending when seen).
+  let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
   const remember = (animation: Animation) => {
     // A running animation is recorded while still pending: on a cold page the
@@ -61,9 +67,26 @@ function animationRecorder(): void {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
+      startedAt:
+        animation.startTime == null ? null : Number(animation.startTime),
     };
-    animation.addEventListener('finish', () => {
+    if (entry.startedAt == null) {
+      unstarted.push(entry);
+    }
+    animation.addEventListener('finish', event => {
       entry.finishedAt = performance.now();
+      if (entry.startedAt == null) {
+        // Cancelled before a frame read its start: back from where it ended.
+        const end = Number(
+          (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+            .endTime ?? 0,
+        );
+        const at = (event as AnimationPlaybackEvent).timelineTime;
+        entry.startedAt =
+          animation.startTime != null
+            ? Number(animation.startTime)
+            : (at == null ? entry.finishedAt : Number(at)) - end;
+      }
     });
     log.push(entry);
     if (log.length > 5000) {
@@ -74,6 +97,12 @@ function animationRecorder(): void {
     for (const animation of document.getAnimations()) {
       remember(animation);
     }
+    unstarted = unstarted.filter(entry => {
+      if (entry.startedAt == null && entry.animation.startTime != null) {
+        entry.startedAt = Number(entry.animation.startTime);
+      }
+      return entry.startedAt == null && entry.animation.playState !== 'idle';
+    });
   };
   const tick = () => {
     record();
@@ -646,6 +675,7 @@ export async function waitForAnimation(
               animation: Animation;
               seenAt: number;
               finishedAt: number | null;
+              startedAt: number | null;
             }[];
             record: () => void;
             armedAt: () => number;
@@ -654,10 +684,17 @@ export async function waitForAnimation(
         const curveEnd = w.__harnessCurveEnd;
         const recorder = w.__harnessAnimations;
         recorder.record();
-        const describe = (a: Animation, finishedAt: number | null) => {
+        const describe = (
+          a: Animation,
+          finishedAt: number | null,
+          recordedStart: number | null,
+        ) => {
           const effect = a.effect as KeyframeEffect | null;
           const timing = effect?.getComputedTiming();
-          const startedAt = performance.timeOrigin + Number(a.startTime);
+          // The recorded start stands in once the page has cancelled it.
+          const startedAt =
+            performance.timeOrigin +
+            Number(a.startTime ?? recordedStart ?? Number.NaN);
           const name =
             'transitionProperty' in a
               ? (a as unknown as {transitionProperty: string})
@@ -699,7 +736,7 @@ export async function waitForAnimation(
           a => Number(a.currentTime ?? 0) >= minProgress,
         );
         if (progressed.length > 0) {
-          return progressed.map(a => describe(a, null));
+          return progressed.map(a => describe(a, null, null));
         }
         if (running.length > 0) {
           return [];
@@ -718,7 +755,7 @@ export async function waitForAnimation(
             : null);
         return recorded
           .filter(e => finishedAt(e) != null)
-          .map(e => describe(e.animation, finishedAt(e)));
+          .map(e => describe(e.animation, finishedAt(e), e.startedAt));
       },
       {minProgress: minProgressMs, since: since ?? null},
     );

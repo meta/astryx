@@ -9,7 +9,7 @@
  *   match the oracles; the animation-state waits report a running transition
  *   and its end, and judge rest by presented values even while an animation
  *   holds its end, and a watch taken on first contact ignores an animation
- *   already running; individual transform properties are sampled; a sample at
+ *   already running and keeps the start of one the page cancels when it ends; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, holds each where it
  *   was read, adds a second hold to the held set without moving the first
@@ -711,6 +711,44 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([70]);
+  });
+
+  test('an entrance the page cancels when it ends keeps its start', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes enter { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .entering { animation: enter 60ms linear }',
+    });
+    const watch = await watchAnimations(box);
+    // The page's time origin, where a lost start lands, is well before the
+    // trigger.
+    await page.waitForTimeout(200);
+    // Removing the class on animationend cancels the finished CSS animation,
+    // which nulls its startTime.
+    const triggeredAt = await box.evaluate(el => {
+      el.addEventListener(
+        'animationend',
+        () => el.classList.remove('entering'),
+        {once: true},
+      );
+      el.classList.add('entering');
+      return performance.timeOrigin + performance.now();
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.classList.contains('entering')))
+      .toBe(false);
+    const [entrance] = await watch.started();
+    expect(entrance.kind).toBe('CSSAnimation');
+    expect(entrance.finishedAt).not.toBeNull();
+    // It started on a frame after the trigger, not at the page's time origin.
+    expect(entrance.from).toBeGreaterThan(triggeredAt - 17);
+    expect(entrance.from).toBeLessThan(triggeredAt + 500);
+    expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
+    expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({
