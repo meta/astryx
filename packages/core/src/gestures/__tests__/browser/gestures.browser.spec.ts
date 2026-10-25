@@ -415,7 +415,7 @@ test('a one-way overlay pan keeps its direction from the page, and leaves the ot
   expect(states(await log(page), 'card')).toEqual(['failed', 'possible']);
 });
 
-test('a held finger turns text selection off on a press-tracked control and on a pan that asks, until it lifts; a mouse and other pans keep it', async ({
+test('a held finger turns text selection off only where the hold does something (a pan that asks), until it lifts; a press-tracked control, a mouse and other pans keep native selection (spec:AST-094 FR41)', async ({
   page,
   browserName,
 }) => {
@@ -443,7 +443,9 @@ test('a held finger turns text selection off on a press-tracked control and on a
   // The engine's own value otherwise: Chromium computes `auto`, WebKit `text`.
   const free = held.hpan[0];
   expect(free).not.toBe('none');
-  expect(held.passive).toEqual([free, 'none', free]);
+  // A control whose hold does nothing keeps the browser's long-press
+  // selection.
+  expect(held.passive).toEqual([free, free, free]);
   expect(held.slider).toEqual([free, 'none', free]);
   expect(held.hpan).toEqual([free, free, free]);
 
@@ -455,28 +457,34 @@ test('a held finger turns text selection off on a press-tracked control and on a
   expect(withMouse).toBe(free);
 });
 
-test('a held finger on a checkbox inside a press-tracked row turns its selection off too: WebKit makes every input selectable', async ({
+test('a held finger on a checkbox inside an element whose hold does something turns its selection off too, as WebKit makes every input selectable; inside a press-tracked row it stays native (spec:AST-094 FR41)', async ({
   page,
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  const selection = async () =>
-    page.evaluate(() => {
-      const style = getComputedStyle(
-        document.getElementById('check') ?? document.body,
-      );
-      return (
-        style.getPropertyValue('-webkit-user-select') ||
-        style.getPropertyValue('user-select')
-      );
-    });
-  await page.locator('#check').scrollIntoViewIfNeeded();
-  const at = await center(page, 'check');
-  const before = await selection();
-  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
-  const during = await selection();
-  await driver.play([{t: 0, down: []}]);
-  expect([before, during, await selection()]).toEqual([before, 'none', before]);
+  const heldSelection = async (id: string) => {
+    const selection = async () =>
+      page.evaluate(target => {
+        const style = getComputedStyle(
+          document.getElementById(target) ?? document.body,
+        );
+        return (
+          style.getPropertyValue('-webkit-user-select') ||
+          style.getPropertyValue('user-select')
+        );
+      }, id);
+    await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+    const at = await center(page, id);
+    const before = await selection();
+    await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+    const during = await selection();
+    await driver.play([{t: 0, down: []}]);
+    return [before, during, await selection()];
+  };
+  const locked = await heldSelection('switchInput');
+  expect(locked).toEqual([locked[0], 'none', locked[0]]);
+  const native = await heldSelection('check');
+  expect(native).toEqual([native[0], native[0], native[0]]);
 });
 
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({

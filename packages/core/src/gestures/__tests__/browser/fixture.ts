@@ -84,6 +84,7 @@ document.body.innerHTML = `
     <div id="passive" style="height: 60px; background: #dfd; touch-action: pan-y pinch-zoom">passive control</div>
     <div id="slider" style="height: 60px; background: #fdf">slider: a pan that turns selection off</div>
     <div id="checkRow" style="height: 60px; background: #eef">checkbox row <input id="check" type="checkbox" style="width: 40px; height: 40px"></div>
+    <div id="switchRow" style="height: 60px; background: #efe">switch: a drag that turns selection off <input id="switchInput" type="checkbox" style="width: 40px; height: 40px"></div>
     <div id="card" style="height: 80px; background: #def">card (swipe up)</div>
     <div id="cardLate" style="height: 80px; background: #fed">card, claims only when it begins</div>
     <div style="height: 1600px">page</div>
@@ -173,6 +174,15 @@ host.attach(
   element('slider'),
   new PanGestureRecognizer({
     name: 'slider',
+    direction: 'horizontal',
+    preventsTextSelection: true,
+  }),
+);
+
+host.attach(
+  element('switchRow'),
+  new PanGestureRecognizer({
+    name: 'switchRow',
     direction: 'horizontal',
     preventsTextSelection: true,
   }),
