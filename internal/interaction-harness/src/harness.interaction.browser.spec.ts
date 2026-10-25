@@ -8,7 +8,8 @@
  *   a second finger and a pinch arrive as distinct pointers; sampled curves
  *   match the oracles; the animation-state waits report a running transition
  *   and its end, and judge rest by presented values even while an animation
- *   holds its end; individual transform properties are sampled; a sample at
+ *   holds its end, and a watch taken on first contact ignores an animation
+ *   already running; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, holds each where it
  *   was read, adds a second hold to the held set, drops one the page cancels,
@@ -628,6 +629,29 @@ test.describe('animation state', () => {
     expect(entrance.kind).toBe('Animation');
     expect(entrance.durationMs).toBe(50);
     expect(entrance.finishedAt).not.toBeNull();
+  });
+
+  test("a watch taken on the page's first contact ignores an animation already running", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // An endless spinner, started before the harness has touched the page.
+    await box.evaluate(el =>
+      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 1000,
+        iterations: Infinity,
+      }),
+    );
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    await box.evaluate(el =>
+      el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 300}),
+    );
+    const started = await watch.started();
+    expect(started.map(a => a.durationMs)).toEqual([300]);
   });
 
   test('a watch reports only what started after it', async ({page}) => {

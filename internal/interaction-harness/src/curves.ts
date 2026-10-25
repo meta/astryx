@@ -79,6 +79,10 @@ function animationRecorder(): void {
     record();
     frame(tick);
   };
+  // What already runs when the recorder starts (a spinner on a page the
+  // harness touches for the first time) is seen now, before any watch arms;
+  // first seen a frame later, it would read as started by the watched action.
+  record();
   frame(tick);
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
     document.addEventListener(type, record, true);
