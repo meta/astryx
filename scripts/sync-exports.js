@@ -177,13 +177,6 @@ const STATIC_EXPORTS = {
     types: './dist/utils/interactionOverlay.stylex.d.ts',
     default: './dist/utils/interactionOverlay.stylex.js',
   },
-  // Proposed; pending owner review (spec:AST-094 OQ4): the Reduce Motion
-  // media keys and fade constants, for a transition in another package.
-  './motion/reducedMotion.stylex': {
-    source: './src/motion/reducedMotion.stylex.ts',
-    types: './dist/motion/reducedMotion.stylex.d.ts',
-    default: './dist/motion/reducedMotion.stylex.js',
-  },
   './docs.mjs': './docs.mjs',
   './groups.doc.mjs': './groups.doc.mjs',
   // Rich authoring catalogs keep their existing JSON paths. Generated string
