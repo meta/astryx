@@ -2,8 +2,8 @@
 
 /**
  * @file animator.ts
- * @input An element, target values, and a spring, a decay or any closed-form
- *   curve
+ * @input An element, target values, and a spring, momentum curves (coast.ts)
+ *   or any closed-form curve
  * @output Exports `createAnimator`: a compositor animator for translate,
  *   rotate, scale and opacity, with presentation values and velocities read
  *   from the analytic curves, velocity-preserving retargeting, freeze-in-place
@@ -15,8 +15,8 @@
  * HOW IT RUNS
  *
  * Each animated value (x, y, rotate, scaleX, scaleY, opacity) follows a
- * closed-form curve: a spring (spring.ts), a UIScrollView coast with an edge
- * bounce (decay.ts), a curve handed to `play` (a spring chasing a moving
+ * closed-form curve: a spring (spring.ts), momentum curves its caller built (a
+ * UIScrollView coast with an edge bounce, coast.ts), a curve handed to `play` (a spring chasing a moving
  * target, a fitted UIKit curve), or a Reduced Motion cross-fade. The curves are baked into
  * Web Animations keyframes on the individual transform properties (`translate`,
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
@@ -101,7 +101,7 @@
  * - on a coarse primary pointer (DR2), or for a call started by a touch
  *   drag's release on any pointer (`touchRelease`, DR3), it becomes an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
- *   on `timing.curves.easeInOut`:
+ *   on `timing.curves.move`:
  *   - entering (opacity rises in the same call, or `crossfadeAs:
  *     'entrance'`): lands in its new place at once and fades in;
  *   - leaving (opacity falls, or `crossfadeAs: 'exit'`): fades out in place,
@@ -117,13 +117,11 @@
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
  * the fade's length is not a theme role.
  *
- * Momentum under Reduce Motion: a decay only ever continues the velocity a
- * finger handed it on release (UIScrollView's coast after a flick, with its
- * bounce at an edge), so it keeps its motion, as a native scroll view's
- * momentum does under Reduce Motion: the content keeps moving with the
- * finger's own throw rather than playing a transition the component chose.
- * A spring a component starts on release toward a target it picks (a detent,
- * a page) is a transition, and cross-fades (DR2).
+ * Momentum under Reduce Motion: a decay keeps its motion. Momentum that
+ * continues a throw is direct movement, as scrolling keeps decelerating under
+ * iOS Reduce Motion (design:reduced-motion DR2, DEC-2). A spring a component
+ * starts on release toward a target it picks (a detent, a page) is a
+ * transition, and cross-fades (DR2).
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
@@ -138,9 +136,7 @@
  */
 
 import {cubicBezier} from './bezier';
-import {solveDecay} from './decay';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {scroll} from './uikit/scroll';
 import {timing} from './uikit/timing';
 
 /**
@@ -166,18 +162,6 @@ export interface SpringTransition {
    * has on screen.
    */
   velocity?: MotionValues;
-}
-
-/**
- * A momentum coast: UIScrollView's deceleration, with optional edges.
- */
-export interface DecayOptions {
-  /** Per-millisecond velocity factor; UIScrollView's normal rate by default. */
-  rate?: number;
-  /** Edges: a coast crossing one hands its velocity to `bounce`. */
-  bounds?: Partial<Record<MotionProperty, {min: number; max: number}>>;
-  /** The edge spring; `scroll.bounce` by default. */
-  bounce?: SpringDescription;
 }
 
 /**
@@ -327,10 +311,16 @@ export interface Animator {
     curves: Partial<Record<MotionProperty | 'scale', MotionCurve>>,
     options?: AnimateOptions,
   ): MotionHandle;
-  /** Coasts with `velocity` like a released scroll view. */
+  /**
+   * Plays momentum curves as given, one per property: a released scroll
+   * view's coast and edge bounce, which `coast()` (coast.ts) builds.
+   * Reduced Motion does not apply: momentum that continues a throw is direct
+   * movement (design:reduced-motion DR2, DEC-2). Only a surface that coasts
+   * imports the coast math and the scroll table.
+   */
   decay(
-    velocity: MotionValues,
-    options?: DecayOptions & Pick<AnimateOptions, 'at'>,
+    curves: Partial<Record<MotionProperty, MotionCurve>>,
+    options?: Pick<AnimateOptions, 'at'>,
   ): MotionHandle;
   /**
    * Moves properties by the given amounts at once, as when a layout shift
@@ -555,7 +545,6 @@ const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
  * animators on one element would overwrite each other. `options` apply
  * when it is created; later calls get the same animator. Never `attach` it
  * elsewhere or `dispose` it: it lives as long as the element.
- * @experimental
  */
 export function animatorFor(
   element: HTMLElement,
@@ -1560,7 +1549,7 @@ export function createAnimator(
     stops: ReadonlyArray<{at: number; value: number}>,
     jumps: ReadonlyArray<number> = [],
   ): Segment => {
-    const ease = cubicBezier(timing.curves.easeInOut);
+    const ease = cubicBezier(timing.curves.move);
     const duration = stops[stops.length - 1].at;
     const at = (t: number) => {
       for (let i = 0; i + 1 < stops.length; i++) {
@@ -2104,100 +2093,31 @@ export function createAnimator(
       return handle;
     },
 
-    decay(velocity, decayOptions = {}) {
+    decay(curves, decayOptions = {}) {
       syncPending();
       const time = decayOptions.at ?? now();
-      const velocities = expand(velocity);
       const {owner, finished} = newOwner();
-      const rate = decayOptions.rate ?? scroll.decelerationRate.normal;
-      const bounce = toSpring(decayOptions.bounce ?? scroll.bounce);
-      const properties = Object.keys(velocities) as MotionProperty[];
+      const properties = PROPERTIES.filter(
+        property => curves[property] != null,
+      );
       const group = beginGroup(time, properties, decayOptions.at);
       for (const property of properties) {
-        const from = valueAt(property, time);
-        const v0 = velocities[property] as number;
-        const bounds = decayOptions.bounds?.[property];
-        const threshold = SETTLE_THRESHOLD[property];
+        const curve = curves[property] as MotionCurve;
         interrupt(property, time);
-        let segment: Segment | null;
-        if (bounds != null && (from < bounds.min || from > bounds.max)) {
-          // Released past an edge: straight back with the release velocity.
-          const edge = from < bounds.min ? bounds.min : bounds.max;
-          const curve = solveSpring(bounce, {from, to: edge, velocity: v0});
-          segment = {
-            start: time,
-            duration: Math.min(
-              MAX_DURATION_MS,
-              curve.settleTime(threshold) * 1000,
-            ),
-            target: edge,
-            at: t => curve.value(t / 1000),
-            speed: t => curve.velocity(t / 1000),
-            jumps: [],
-            owner,
-          };
-        } else {
-          const coast = solveDecay({from, velocity: v0, rate});
-          const edge =
-            bounds == null
-              ? null
-              : coast.rest < bounds.min
-                ? bounds.min
-                : coast.rest > bounds.max
-                  ? bounds.max
-                  : null;
-          const hit = edge == null ? null : coast.timeToReach(edge);
-          if (edge != null && hit != null) {
-            // The coast reaches the edge: the edge spring takes its velocity.
-            const contact = hit * 1000;
-            const spring = solveSpring(bounce, {
-              from: edge,
-              to: edge,
-              velocity: coast.velocity(hit),
-            });
-            segment = {
-              start: time,
-              duration: Math.min(
-                MAX_DURATION_MS,
-                contact + spring.settleTime(threshold) * 1000,
-              ),
-              target: edge,
-              at: t =>
-                t < contact
-                  ? coast.value(t / 1000)
-                  : spring.value((t - contact) / 1000),
-              speed: t =>
-                t < contact
-                  ? coast.velocity(t / 1000)
-                  : spring.velocity((t - contact) / 1000),
-              jumps: [],
-              owner,
-            };
-          } else {
-            const rest = edge ?? coast.rest;
-            segment =
-              v0 === 0
-                ? null
-                : {
-                    start: time,
-                    duration: Math.min(
-                      MAX_DURATION_MS,
-                      coast.settleTime(threshold * 2) * 1000,
-                    ),
-                    target: rest,
-                    at: t => coast.value(t / 1000),
-                    speed: t => coast.velocity(t / 1000),
-                    jumps: [],
-                    owner,
-                  };
-          }
-        }
-        if (segment == null) {
+        if (!(curve.duration > 0)) {
           segments.delete(property);
-          resting[property] = from;
-        } else {
-          segments.set(property, segment);
+          resting[property] = curve.at(0);
+          continue;
         }
+        segments.set(property, {
+          start: time,
+          duration: Math.min(MAX_DURATION_MS, curve.duration * 1000),
+          target: curve.at(curve.duration),
+          at: t => curve.at(t / 1000),
+          speed: t => curve.velocity(t / 1000),
+          jumps: [],
+          owner,
+        });
       }
       commitCall(group, owner, properties, time);
       return makeHandle(owner, properties, finished, time, group);

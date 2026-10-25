@@ -11,7 +11,7 @@
  * Under Reduce Motion nothing moves, scales or springs. On a coarse primary
  * pointer (DR2), or for a change started by a touch drag's release on any
  * pointer (DR3), a change becomes an opacity-only cross-fade of
- * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.easeInOut`; on
+ * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.move`; on
  * any other primary pointer it completes at once (DR3). No theme value or
  * call site lengthens the fade (DR4). The animator follows the same policy on
  * its own (animator.ts).
@@ -86,7 +86,7 @@ export function reducedMotionFade(
   if (!fades) {
     return {duration: 0, easing: 'linear'};
   }
-  const curve = timing.curves.easeInOut;
+  const curve = timing.curves.move;
   return {
     duration: timing.reducedMotionCrossFadeMs,
     easing: `cubic-bezier(${curve.join(', ')})`,
