@@ -162,6 +162,26 @@ describe('useGestureRecognizer', () => {
     touch('touchend', second, {id: 7, x: 30, y: 0}, 132, true);
   });
 
+  it('reports cancelled to a handler that disables the recognizer itself, from that handler', () => {
+    const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
+    const {getByTestId} = render(
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          pan = r;
+        }}
+      />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
+    // A handler (here, the test) turns it off: UIKit's .cancelled, at once.
+    (pan as PanGestureRecognizer | null)?.setEnabled(false);
+    expect(states).toEqual(['began', 'cancelled']);
+    touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+  });
+
   it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
