@@ -8,8 +8,8 @@
  *   surface and input modes on an iPhone; an omitted value follows the
  *   component's default (`'popover'` or `'touch'`), distinguishable from an
  *   explicit `'popover'`; `'adaptive'` and `'bottom-sheet'` keep their sheet
- *   meaning with touch modes under a finger; the idiom and motion follow the
- *   touch modes only; the surface equals useAdaptivePresentation's for every
+ *   meaning with touch modes under a finger, the same on every touch device;
+ *   the surface equals useAdaptivePresentation's for every
  *   value on every device; live pointer changes; the server default and
  *   hints; the one-moment read
  * @position Unit tests of packages/core/src/utils/presentation.ts
@@ -101,8 +101,6 @@ describe('presentation: a caller choice wins over touch defaults', () => {
       expect(resolve('popover', whenOmitted)).toEqual({
         surface: 'popover',
         touchModes: false,
-        idiom: 'default',
-        motion: 'theme',
       });
     }
   });
@@ -112,27 +110,22 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     expect(resolve(undefined, 'touch')).toEqual({
       surface: 'popover',
       touchModes: true,
-      idiom: 'ios',
-      motion: 'uikit',
     });
     // Today's components: omitted is popover.
     expect(resolve(undefined)).toEqual(resolve('popover'));
     expect(resolve(undefined, 'popover')).toEqual(resolve('popover'));
   });
 
-  it('turns touch modes on under a finger only, and the UIKit idiom on iOS only', () => {
+  it('turns touch modes on under a finger only, the same on every touch device', () => {
     setDevice(ANDROID);
     expect(resolve(undefined, 'touch')).toEqual({
       surface: 'popover',
       touchModes: true,
-      idiom: 'default',
-      motion: 'theme',
     });
     for (const desk of [DESKTOP, MAC_SAFARI]) {
       setDevice(desk);
       expect(resolve(undefined, 'touch')).toMatchObject({
         touchModes: false,
-        idiom: 'default',
       });
     }
   });
@@ -142,8 +135,6 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     expect(resolve('adaptive')).toEqual({
       surface: 'bottom-sheet',
       touchModes: true,
-      idiom: 'ios',
-      motion: 'uikit',
     });
     setDevice(IPAD);
     expect(resolve('adaptive')).toMatchObject({
@@ -181,9 +172,11 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     );
     expect(result.current.touchModes).toBe(true);
     act(() => setDevice({coarse: false}));
-    expect(result.current).toMatchObject({touchModes: false, idiom: 'default'});
+    // A fine pointer in this context, checked before the claim.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    expect(result.current).toMatchObject({touchModes: false});
     act(() => setDevice({coarse: true}));
-    expect(result.current).toMatchObject({touchModes: true, idiom: 'ios'});
+    expect(result.current).toMatchObject({touchModes: true});
   });
 
   it('renders the server default until hydrated, and honours a server hint', () => {
@@ -196,26 +189,24 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     }) {
       const resolved = usePresentation(presentation, {
         whenOmitted: 'touch',
-        serverDefault: hint === true ? {idiom: 'ios', isCompact: true} : {},
+        serverDefault: hint === true ? {isTouch: true, isCompact: true} : {},
       });
-      return `${resolved.surface}/${String(resolved.touchModes)}/${resolved.idiom}`;
+      return `${resolved.surface}/${String(resolved.touchModes)}`;
     }
-    expect(renderToString(createElement(Probe))).toContain(
-      'popover/false/default',
-    );
+    expect(renderToString(createElement(Probe))).toContain('popover/false');
     expect(renderToString(createElement(Probe, {hint: true}))).toContain(
-      'popover/true/ios',
+      'popover/true',
     );
     expect(
       renderToString(
         createElement(Probe, {presentation: 'adaptive', hint: true}),
       ),
-    ).toContain('bottom-sheet/true/ios');
+    ).toContain('bottom-sheet/true');
     expect(
       renderToString(
         createElement(Probe, {presentation: 'popover', hint: true}),
       ),
-    ).toContain('popover/false/default');
+    ).toContain('popover/false');
   });
 
   it('answers at one moment as the hook does, and as the server would with no window', () => {
@@ -232,8 +223,6 @@ describe('presentation: a caller choice wins over touch defaults', () => {
     ).toEqual({
       surface: 'popover',
       touchModes: false,
-      idiom: 'default',
-      motion: 'theme',
     });
   });
 });

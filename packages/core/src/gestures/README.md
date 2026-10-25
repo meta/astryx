@@ -362,7 +362,7 @@ caller's explicit value always wins over the touch default
 `usePresentation(presentation, {whenOmitted})` (`../utils/presentation.ts`;
 `readPresentation` at one moment): `surface` is the popover or the sheet;
 `touchModes` says whether its touch input modes apply (a finger, and not
-pinned to `'popover'`); `idiom` and `motion` follow those modes only. An
+pinned to `'popover'`), the same on every touch device. An
 omitted value means the component's default, `whenOmitted: 'popover'` or
 `'touch'` (the popover surface with touch input modes), so it stays
 distinguishable from an explicit `'popover'`, which pins the fine surface

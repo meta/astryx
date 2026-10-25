@@ -9,7 +9,7 @@
  *   (utils/touchPresentation.ts)
  * @output usePresentation and readPresentation (and the pure
  *   resolvePresentation): the surface to render and whether the component's
- *   touch input modes apply, with the idiom and motion those modes follow
+ *   touch input modes apply
  * @position Internal resolver for stable components that, under a finger,
  *   present a different surface or switch how an open surface follows input
  *   (architecture:public-component-api INV16)
@@ -28,9 +28,8 @@
  *   a released component's default is a functional default change
  *   (`spec:AST-017` FR3) whose Changeset names `presentation="popover"`.
  *
- * `idiom` is `ios` only where touch modes apply and the touch idiom is iOS,
- * so a UIKit-only mode checks `idiom === 'ios'` alone; `motion` follows it.
- * Touch styling (press paint, the iOS idiom's looks, the text-size floor)
+ * One touch model on every touch device: the modes depend on the pointer,
+ * never on the platform. Touch styling (press paint, the text-size floor)
  * and touch-only behavior that a component's own record defines (a row
  * swipe, a slider's thumb) do not read this: they keep the touch
  * presentation.
@@ -50,8 +49,6 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {
   readTouchPresentation,
   useTouchPresentation,
-  type MotionPresentation,
-  type TouchIdiom,
   type TouchPresentation,
 } from './touchPresentation';
 
@@ -66,10 +63,6 @@ export interface ResolvedPresentation {
    * not pinned to `'popover'`.
    */
   readonly touchModes: boolean;
-  /** The idiom those modes follow: `default` whenever they do not apply. */
-  readonly idiom: TouchIdiom;
-  /** UIKit's motion with touch modes in the iOS idiom, the theme's otherwise. */
-  readonly motion: MotionPresentation;
 }
 
 export interface PresentationOptions {
@@ -100,13 +93,7 @@ export function resolvePresentation(
       ? 'bottom-sheet'
       : 'popover';
   const touchModes = request !== 'popover' && touch.isTouch;
-  const idiom = touchModes ? touch.idiom : 'default';
-  return {
-    surface,
-    touchModes,
-    idiom,
-    motion: idiom === 'ios' ? 'uikit' : 'theme',
-  };
+  return {surface, touchModes};
 }
 
 /**
