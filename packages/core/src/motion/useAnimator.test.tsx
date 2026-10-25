@@ -44,11 +44,11 @@ describe('useAnimator', () => {
     const {rerender, getByTestId} = render(<Probe />);
     const before = renders;
     act(() => {
-      api?.animate({x: 100}, {spring: springs.smooth});
+      api?.animate({x: 100}, {spring: springs.settle});
       for (let x = 0; x < 50; x++) {
         api?.set({y: x});
       }
-      api?.animate({x: 10}, {spring: springs.smooth});
+      api?.animate({x: 10}, {spring: springs.settle});
       api?.stop();
     });
     expect(renders).toBe(before);

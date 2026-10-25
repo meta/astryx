@@ -31,7 +31,6 @@ import {
 } from './GestureRecognizer';
 import type {GestureEventContext, GestureTouch} from './types';
 
-/** @experimental */
 export interface LongPressGestureRecognizerOptions extends GestureRecognizerOptions<LongPressGestureRecognizer> {
   minimumPressDuration?: number;
   allowableMovement?: number;
@@ -41,7 +40,6 @@ export interface LongPressGestureRecognizerOptions extends GestureRecognizerOpti
   numberOfTouchesRequired?: number;
 }
 
-/** @experimental */
 export class LongPressGestureRecognizer extends GestureRecognizer {
   /** @internal The host's brand: a long press keeps the callout and selection off (recognizerInternals). */
   protected get family(): 'longPress' {

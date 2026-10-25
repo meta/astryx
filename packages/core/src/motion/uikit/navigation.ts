@@ -25,12 +25,6 @@
  */
 
 import {registerMotionTable} from '../roles';
-
-/**
- * UINavigationController's push, pop and interactive-pop values.
- * @experimental
- */
-
 export const navigation = {
   /**
    * The push and pop springs start moving at this many travels per second
@@ -84,7 +78,6 @@ export const navigation = {
  * retune (motion/roles.ts). Nothing registers on import: the touch code that
  * animates with this table calls it once (it is idempotent), so a page that
  * never does ships no registry.
- * @experimental
  */
 export function registerNavigationTable(): void {
   registerMotionTable('navigation', navigation);
