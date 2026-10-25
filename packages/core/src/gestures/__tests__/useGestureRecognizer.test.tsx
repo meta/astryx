@@ -257,6 +257,30 @@ describe('usePressTracker', () => {
     expect(events).toEqual(['touchDown', 'touchUpInside']);
   });
 
+  it('ends a held press on unmount without calling back from the effect', () => {
+    const highlights: boolean[] = [];
+    const events: ControlEvent[] = [];
+    function HeldButton() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+      });
+      return (
+        <button data-testid="held" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId, unmount} = render(<HeldButton />);
+    touch('touchstart', getByTestId('held'), {id: 9, x: 1, y: 1}, 0);
+    const seenHighlights = [...highlights];
+    const seenEvents = [...events];
+    unmount();
+    expect(highlights).toEqual(seenHighlights);
+    expect(events).toEqual(seenEvents);
+  });
+
   it('passes isBraking through to the tracker', () => {
     const events: ControlEvent[] = [];
     const isBraking = vi.fn(() => true);
