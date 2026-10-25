@@ -646,6 +646,92 @@ describe('review fixes', () => {
   });
 });
 
+describe('start: when a call\u2019s animations start', () => {
+  it('presented: shows the value at rest, and creates the animations two frames later', async () => {
+    const {animator, element} = setup();
+    animator.set({x: 20});
+    const handle = animator.animate(
+      {x: 100},
+      {spring: springs.smooth},
+      {start: 'presented'},
+    );
+    // Promoted and at rest: the next frame commits the layer where it is.
+    expect(live('translate')).toHaveLength(0);
+    expect(element.style.translate).toBe('20px 0px');
+    expect(element.style.willChange).toContain('translate');
+    expect(animator.get('x')).toBe(20);
+    clock = 1016;
+    await commitFrame(1016);
+    expect(live('translate')).toHaveLength(0);
+    // The frame after it creates them; the browser starts them at its commit.
+    clock = 1033;
+    await commitFrame(1033);
+    expect(live('translate')).toHaveLength(1);
+    clock = 1050;
+    await commitFrame(1050);
+    await expect(handle.started).resolves.toBe(1050);
+    const curve = solveSpring(toSpring(springs.smooth), {from: 20, to: 100});
+    expect(animator.get('x', 1150)).toBeCloseTo(curve.value(0.1), 9);
+    expect(sampleAt(live('translate')[0], 'translate', 1150)[0]).toBeCloseTo(
+      curve.value(0.1),
+      0,
+    );
+  });
+
+  it('presented: another change before then creates the animations first', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.smooth}, {start: 'presented'});
+    animator.animate({y: 50}, {spring: springs.smooth});
+    expect(live('translate').length).toBeGreaterThan(0);
+    await commitFrame(clock);
+    const x = solveSpring(toSpring(springs.smooth), {from: 0, to: 100});
+    expect(animator.get('x', clock + 100)).toBeCloseTo(x.value(0.1), 9);
+  });
+
+  it('commit: a retarget is dated by the browser\u2019s commit, from the value on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    await commitFrame(1000);
+    clock = 1100;
+    const from = animator.get('x');
+    const velocity = animator.getVelocity('x');
+    const handle = animator.animate(
+      {x: 0},
+      {spring: springs.smooth},
+      {start: 'commit'},
+    );
+    const [animation] = live('translate');
+    expect(animation.startTime).toBeNull();
+    // Held where it is until the browser starts it.
+    expect(animator.get('x')).toBeCloseTo(from, 9);
+    clock = 1130;
+    await commitFrame(1130);
+    await expect(handle.started).resolves.toBe(1130);
+    const back = solveSpring(toSpring(springs.smooth), {
+      from,
+      to: 0,
+      velocity,
+    });
+    expect(animator.get('x', 1230)).toBeCloseTo(back.value(0.1), 6);
+  });
+
+  it('a handle hands out the curve it plays, for a companion on the same clock', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({y: 400}, {spring: springs.sheetPresent});
+    const curve = handle.curve('y');
+    expect(curve).not.toBeNull();
+    expect(handle.curve('x')).toBeNull();
+    await commitFrame(1000);
+    const y = solveSpring(toSpring(springs.sheetPresent), {from: 0, to: 400});
+    for (const t of [0, 0.05, 0.2]) {
+      expect(curve?.at(t)).toBeCloseTo(y.value(t), 9);
+      expect(curve?.velocity(t)).toBeCloseTo(y.velocity(t), 6);
+      expect(animator.get('y', 1000 + t * 1000)).toBeCloseTo(y.value(t), 9);
+    }
+    expect(curve?.at(curve.duration)).toBe(400);
+  });
+});
+
 describe('animatorFor: one animator per element', () => {
   it('gives every caller the same animator for an element', () => {
     const a = document.createElement('div');

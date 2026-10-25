@@ -64,7 +64,12 @@
  * `options.at` to line several animators up, so the new curve continues
  * from the frame on screen. Keyframes are sampled from the call's start, so
  * a value that keeps moving through a rebuild stays on its curve to the
- * frame.
+ * frame. `options.start` changes that per call: `'commit'` dates a retarget
+ * by the browser's commit as well, and `'presented'` creates the call's
+ * animations two frames later, once its element at rest has been presented
+ * (a new layer, or a UI process that applies commits late).
+ * `handle.curve(property)` hands out the curve a call plays, so a
+ * companion can follow it on the same clock.
  *
  * WebKit starts an animation created just before a block at its last frame
  * time before the block, so there the motion still skips into its curve;
@@ -220,6 +225,22 @@ export interface AnimateOptions {
    * changes nothing.
    */
   crossfadeAs?: 'entrance' | 'exit';
+  /**
+   * When the call's animations start. By default a call from rest starts
+   * when the browser commits it, and a call that continues motion on screen
+   * (a retarget) starts now, from the value on screen. Ignored with `at`.
+   * - `'commit'`: a call that continues motion also starts when the browser
+   *   commits it, dated by the browser rather than by the main thread, as a
+   *   call from rest is.
+   * - `'presented'`: the call promotes its element and shows its current
+   *   value at once, and creates its animations two frames later, once the
+   *   frame that carries the element at rest has been presented; they then
+   *   start at their commit. A new layer's first presentation or a busy UI
+   *   process delays the motion instead of skipping into it, for two frames
+   *   more before an idle start. Any other change to the animator before then
+   *   creates the animations first, in call order.
+   */
+  start?: 'commit' | 'presented';
 }
 
 /**
@@ -291,6 +312,14 @@ export interface MotionHandle {
   value(property: MotionProperty, time?: number): number;
   /** Presentation velocity of a property at `time`, units/s. */
   velocity(property: MotionProperty, time?: number): number;
+  /**
+   * The curve this call started on `property` (`scale` reads `scaleX`),
+   * in seconds from the call's start: what the keyframes play. Null for a
+   * property the call does not move, or moves without travel (Reduced
+   * Motion). Map it onto a companion property with `mapProgress`, and play
+   * that on the same clock.
+   */
+  curve(property: MotionProperty | 'scale'): MotionCurve | null;
   /** New targets for this call's properties, keeping their velocity. */
   retarget(
     to: MotionValues,
@@ -1288,6 +1317,7 @@ export function createAnimator(
     time: number,
     properties: Iterable<MotionProperty>,
     at: number | undefined,
+    start?: AnimateOptions['start'],
   ): StartGroup | null => {
     if (target == null || typeof target.animate !== 'function') {
       return null;
@@ -1311,7 +1341,9 @@ export function createAnimator(
       }
       return null;
     }
-    for (const channel of channels) {
+    // A call that continues motion starts now unless it asks for the
+    // browser's start.
+    for (const channel of start == null ? channels : []) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
         if (
@@ -1345,6 +1377,7 @@ export function createAnimator(
     owner: HandleState,
     changed: MotionProperty[],
     time: number,
+    presented = false,
   ) => {
     if (group != null) {
       for (const property of changed) {
@@ -1355,6 +1388,44 @@ export function createAnimator(
         }
       }
     }
+    if (presented && group != null && requestFrame != null) {
+      // Promoted and at rest now; the animations come two frames later.
+      for (const channel of new Set(changed.map(p => CHANNEL_OF[p]))) {
+        promote(channel);
+        writeInline(channel, p => valueAt(p, time));
+      }
+      deferredCalls.push({group, changed});
+      if (!deferredWait) {
+        deferredWait = true;
+        requestFrame(() =>
+          requestFrame(() => {
+            deferredWait = false;
+            flushDeferred();
+          }),
+        );
+      }
+      return;
+    }
+    startCall(group, changed, time);
+  };
+
+  /** Calls with `start: 'presented'` waiting for their second frame. */
+  const deferredCalls: {group: StartGroup; changed: MotionProperty[]}[] = [];
+  let deferredWait = false;
+
+  /** Creates the animations of every waiting call, in call order. */
+  const flushDeferred = () => {
+    for (const {group, changed} of deferredCalls.splice(0)) {
+      // From the call's own time: the curve starts at the browser's commit.
+      startCall(group, changed, group.provisional);
+    }
+  };
+
+  const startCall = (
+    group: StartGroup | null,
+    changed: MotionProperty[],
+    time: number,
+  ) => {
     callGroup = group;
     try {
       commit(changed, time);
@@ -1547,10 +1618,33 @@ export function createAnimator(
         Math.max(0, end - now()),
       );
     }
+    // The call's own curves, as it started them.
+    const curves = new Map<MotionProperty, Segment>();
+    for (const property of properties) {
+      const segment = segments.get(property);
+      if (segment != null && segment.owner === owner && !segment.steps) {
+        curves.set(property, segment);
+      }
+    }
     const handle: MotionHandle = {
       properties,
       finished,
       started: group?.started ?? Promise.resolve(time),
+      curve: property => {
+        const segment = curves.get(property === 'scale' ? 'scaleX' : property);
+        if (segment == null) {
+          return null;
+        }
+        return {
+          duration: segment.duration / 1000,
+          at: t =>
+            t * 1000 >= segment.duration
+              ? segment.target
+              : segment.at(Math.max(0, t * 1000)),
+          velocity: t =>
+            t * 1000 >= segment.duration ? 0 : segment.speed(t * 1000),
+        };
+      },
       value: (property, at = now()) => {
         syncPending();
         return valueAt(property, at);
@@ -1945,6 +2039,7 @@ export function createAnimator(
       if (next === target) {
         return;
       }
+      flushDeferred();
       demote();
       for (const animation of running.values()) {
         animation.cancel();
@@ -1982,6 +2077,7 @@ export function createAnimator(
 
     set(values) {
       syncPending();
+      flushDeferred();
       const time = now();
       const next = expand(values);
       for (const [property, value] of Object.entries(next) as [
@@ -2001,6 +2097,9 @@ export function createAnimator(
 
     animate(to, transition, animateOptions = {}) {
       syncPending();
+      if (animateOptions.start !== 'presented') {
+        flushDeferred();
+      }
       const time = animateOptions.at ?? now();
       const targets = expand(to);
       const velocities = expand(transition.velocity ?? {});
@@ -2038,6 +2137,7 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
+        animateOptions.start,
       );
       const carried =
         plan?.landing != null
@@ -2062,7 +2162,13 @@ export function createAnimator(
           segments.set(property, segment);
         }
       }
-      commitCall(group, owner, changed, time);
+      commitCall(
+        group,
+        owner,
+        changed,
+        time,
+        animateOptions.start === 'presented' && animateOptions.at == null,
+      );
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
@@ -2072,6 +2178,9 @@ export function createAnimator(
 
     play(curves, playOptions = {}) {
       syncPending();
+      if (playOptions.start !== 'presented') {
+        flushDeferred();
+      }
       const time = playOptions.at ?? now();
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
@@ -2132,6 +2241,7 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         playOptions.at,
+        playOptions.start,
       );
       const carried =
         plan?.landing != null
@@ -2156,7 +2266,13 @@ export function createAnimator(
           segments.set(property, segment);
         }
       }
-      commitCall(group, owner, changed, time);
+      commitCall(
+        group,
+        owner,
+        changed,
+        time,
+        playOptions.start === 'presented' && playOptions.at == null,
+      );
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
@@ -2166,6 +2282,7 @@ export function createAnimator(
 
     decay(velocity, decayOptions = {}) {
       syncPending();
+      flushDeferred();
       const time = decayOptions.at ?? now();
       const velocities = expand(velocity);
       const {owner, finished} = newOwner();
@@ -2268,6 +2385,7 @@ export function createAnimator(
 
     stop(properties) {
       syncPending();
+      flushDeferred();
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
@@ -2287,6 +2405,7 @@ export function createAnimator(
 
     rebase(deltas, rebaseOptions = {}) {
       syncPending();
+      flushDeferred();
       const time = rebaseOptions.at ?? now();
       const changed: MotionProperty[] = [];
       const owners = new Set<HandleState>();
@@ -2414,6 +2533,7 @@ export function createAnimator(
     },
 
     dispose() {
+      flushDeferred();
       for (const landing of [...landings]) {
         endLanding(landing);
       }

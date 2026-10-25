@@ -120,7 +120,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
   delays the motion instead of skipping into it (WebKit starts it at the
   frame before the block). Everything the call starts shares that start
   (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
-  several animators on one clock.
+  several animators on one clock. `{start: 'commit'}` lets the browser date
+  a retarget too; `{start: 'presented'}` waits two frames, until the
+  element at rest has been presented. `handle.curve(property)` is the curve
+  a call plays, for a companion to follow.
 - Reduced Motion (`prefers-reduced-motion: reduce`, design:reduced-motion):
   every `animate` and `play` is replaced and nothing moves, scales or
   springs. On a coarse primary pointer, or for a call started by a touch
