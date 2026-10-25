@@ -98,8 +98,8 @@
  * Reduced Motion (design:reduced-motion): with `prefers-reduced-motion:
  * reduce`, every `animate` and `play` (travel or opacity, on a spring or any
  * curve) is replaced, and nothing moves, scales or springs:
- * - on a coarse primary pointer (DR2), or for a call started by a touch
- *   drag's release on any pointer (`touchRelease`, DR3), it becomes an
+ * - on a coarse primary pointer, or for a call started by a touch drag's
+ *   release on any pointer (`touchRelease`), it becomes (DR2) an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
  *   on `timing.curves.move`:
  *   - entering (opacity rises in the same call, or `crossfadeAs:
@@ -178,9 +178,9 @@ export interface AnimateOptions {
   /**
    * The call starts from the release of a touch drag (a sheet let go, a swipe
    * back released). Under Reduced Motion it then cross-fades whatever the
-   * primary pointer, where another call on a fine primary pointer completes
-   * at once (design:reduced-motion DR3). The gesture host knows; nothing is
-   * inferred from the last pointer.
+   * primary pointer (design:reduced-motion DR2), where another call on a
+   * fine primary pointer completes at once (DR3). The gesture host knows;
+   * nothing is inferred from the last pointer.
    */
   touchRelease?: boolean;
   /**

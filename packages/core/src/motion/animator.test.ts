@@ -1029,8 +1029,8 @@ describe('finished', () => {
 });
 
 describe('Reduced Motion (design:reduced-motion)', () => {
-  // A coarse primary pointer cross-fades (DR2); any other completes at once
-  // unless a touch release started the call (DR3).
+  // A coarse primary pointer, or a touch drag's release on any pointer,
+  // cross-fades (DR2); any other call completes at once (DR3).
   const reduced = (coarse = true) => setup({reduced: true, coarse});
   const fade = timing.reducedMotionCrossFadeMs;
   const ease = cubicBezier(timing.curves.move);
