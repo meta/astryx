@@ -54,10 +54,7 @@ describe('motion roles in a theme', () => {
       expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
     ).toThrow(/"springs\.sheetPresent" is a spring/);
     expect(() =>
-      expandMotionRoles(
-        {curves: {'timing.curves.exit': [1.5, 0, 1, 1]}},
-        'm',
-      ),
+      expandMotionRoles({curves: {'timing.curves.exit': [1.5, 0, 1, 1]}}, 'm'),
     ).toThrow(/m\.curves\["timing\.curves\.exit"\]: a curve's x1 and x2/);
     expect(() =>
       expandMotionRoles({durations: {'timing.press.flashMs': -5}}, 'm'),
