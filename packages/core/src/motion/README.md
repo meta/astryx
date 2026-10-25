@@ -64,12 +64,14 @@ await handle.finished; // true if it ran to the end, false if interrupted
   (`handle.retarget(to)` keeps the call's spring).
 - Everything one call starts shares one start time; `{at}` puts several
   animators on one clock.
-- Reduced Motion (`prefers-reduced-motion: reduce`): travel becomes UIKit's
-  cross-fade (Reduce Motion with Prefer Cross-Fade Transitions). An entrance
-  lands and fades in, an exit fades out then moves, any other move dips (fade
-  out, move, fade in), over `timing.reducedMotionCrossFadeMs` (UIKit's
-  navigation cross-fade). `{reducedMotion: 'keep'}` keeps the motion (direct
-  manipulation), `'instant'` jumps.
+- Reduced Motion (`prefers-reduced-motion: reduce`, `design:reduced-motion`
+  DR2–DR4): on a coarse primary pointer every `animate` cross-fades within
+  200 ms. An entrance lands and fades in, an exit fades out then moves, any
+  other move dips (fade out, move, fade in), and an opacity change fades, over
+  `timing.reducedMotionCrossFadeMs` capped at 200 ms. On any other pointer, or
+  with `{reducedMotion: 'instant'}`, every change completes at once. Nothing
+  keeps travel or a spring. A `decay` keeps moving: momentum after a throw is
+  direct movement.
 
 ### How it stays on the compositor
 

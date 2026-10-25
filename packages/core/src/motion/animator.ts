@@ -55,17 +55,22 @@
  * animators up). Keyframes are sampled from that time, so a value that keeps
  * moving through a rebuild stays on its curve to the frame.
  *
- * Reduced Motion (law M5): UIKit replaces travel with a cross-fade. With
- * `prefers-reduced-motion: reduce`, an `animate` that moves something
- * (x, y, rotate, scale) by default (`reducedMotion: 'crossfade'`):
- * - entering (opacity rises in the same call): jumps to the new place and
- *   fades in;
- * - leaving (opacity falls): fades out in place, then jumps;
- * - otherwise: dips (fades out, jumps at the midpoint, fades back in).
- * The fade runs `timing.reducedMotionCrossFadeMs` on `timing.curves.easeInOut`.
- * `'instant'` jumps without a fade; `'keep'` plays the motion unchanged (for
- * direct manipulation that UIKit keeps under Reduce Motion). Decays keep their
- * motion: they follow a finger's throw.
+ * Reduced Motion (`design:reduced-motion` DR2–DR4). With
+ * `prefers-reduced-motion: reduce`, every `animate` call is a transition:
+ * - on a coarse primary pointer (DR2) it changes opacity only and finishes
+ *   within 200 ms. A move that enters (opacity rises in the same call) jumps
+ *   to the new place and fades in; one that leaves (opacity falls) fades out
+ *   in place, then jumps; any other move dips (fades out, jumps at the
+ *   midpoint, fades back in). An opacity-only change fades. The fade runs
+ *   `timing.reducedMotionCrossFadeMs`, capped at 200 ms, on
+ *   `timing.curves.easeInOut`;
+ * - on any other pointer (DR3) it completes at once, opacity included;
+ * - `reducedMotion: 'instant'` asks for DR3's jump on any pointer. Nothing
+ *   keeps travel or a spring (DR4).
+ * A fade the call does not name ends where it was heading. Decays keep their
+ * motion: momentum that continues a throw is direct movement, as scrolling
+ * keeps decelerating under iOS Reduce Motion (`design:reduced-motion` DR2,
+ * DEC-2).
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -121,8 +126,11 @@ export interface AnimateOptions {
    * animations on one clock.
    */
   at?: number;
-  /** Reduced Motion substitution; see the file header. */
-  reducedMotion?: 'crossfade' | 'instant' | 'keep';
+  /**
+   * Reduced Motion substitution; see the file header. `'crossfade'` (the
+   * default) follows the pointer: a fade on a coarse one, a jump otherwise.
+   */
+  reducedMotion?: 'crossfade' | 'instant';
 }
 
 export interface AnimatorOptions {
@@ -132,6 +140,8 @@ export interface AnimatorOptions {
   now?: () => number;
   /** The Reduced Motion preference; `prefers-reduced-motion` by default. */
   prefersReducedMotion?: () => boolean;
+  /** Whether the primary pointer is coarse; `(pointer: coarse)` by default. */
+  isCoarsePointer?: () => boolean;
 }
 
 /** One `animate` / `decay` call's animations. */
@@ -396,13 +406,24 @@ function defaultNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
-function defaultPrefersReducedMotion(): boolean {
+function matchesMedia(query: string): boolean {
   return (
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    window.matchMedia(query).matches
   );
 }
+
+function defaultPrefersReducedMotion(): boolean {
+  return matchesMedia('(prefers-reduced-motion: reduce)');
+}
+
+function defaultIsCoarsePointer(): boolean {
+  return matchesMedia('(pointer: coarse)');
+}
+
+/** The longest a Reduced Motion cross-fade may run (`design:reduced-motion` DR2). */
+const REDUCED_MOTION_MAX_FADE_MS = 200;
 
 /**
  * Creates an animator for `element` (or for an element attached later).
@@ -424,6 +445,7 @@ export function createAnimator(
   const now = options.now ?? defaultNow;
   const prefersReducedMotion =
     options.prefersReducedMotion ?? defaultPrefersReducedMotion;
+  const isCoarsePointer = options.isCoarsePointer ?? defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,
     ...expand(options.initial ?? {}),
@@ -947,21 +969,25 @@ export function createAnimator(
       const {owner, finished} = newOwner();
       lastSpring.set(owner, transition.spring);
       const properties = Object.keys(targets) as MotionProperty[];
-      const mode = animateOptions.reducedMotion ?? 'crossfade';
-      const travels = properties.filter(
+      const reduce = prefersReducedMotion();
+      const instant =
+        reduce &&
+        (animateOptions.reducedMotion === 'instant' || !isCoarsePointer());
+      const travels = properties.some(
         p =>
           TRAVEL.includes(p) &&
           Math.abs((targets[p] as number) - valueAt(p, time)) > 1e-9,
       );
-      const reduce =
-        mode !== 'keep' && travels.length > 0 && prefersReducedMotion();
       const next: Partial<Record<MotionProperty, Segment | null>> = {};
+      // A fade the call does not name ends where it was heading.
+      const opacityTo = targets.opacity ?? finalValue('opacity');
 
       if (reduce) {
-        const fade = timing.reducedMotionCrossFadeMs;
+        const fade = Math.min(
+          timing.reducedMotionCrossFadeMs,
+          REDUCED_MOTION_MAX_FADE_MS,
+        );
         const opacityNow = valueAt('opacity', time);
-        // A fade the call does not name keeps going where it was heading.
-        const opacityTo = targets.opacity ?? finalValue('opacity');
         const entering = opacityTo > opacityNow + 1e-6;
         const leaving = opacityTo < opacityNow - 1e-6;
         for (const property of properties) {
@@ -970,7 +996,7 @@ export function createAnimator(
           }
           const from = valueAt(property, time);
           const toValue = targets[property] as number;
-          if (mode === 'instant' || entering) {
+          if (instant || entering || from === toValue) {
             next[property] = null; // in place at once (and fade in)
           } else if (leaving) {
             next[property] = jumpSegment(owner, time, from, toValue, fade); // fade out, then move
@@ -978,19 +1004,21 @@ export function createAnimator(
             next[property] = jumpSegment(owner, time, from, toValue, fade / 2); // dip
           }
         }
-        if (mode === 'instant') {
+        if (instant) {
           next.opacity = null;
         } else if (entering || leaving) {
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},
             {at: fade, value: opacityTo},
           ]);
-        } else {
+        } else if (travels) {
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},
             {at: fade / 2, value: 0},
             {at: fade, value: opacityTo},
           ]);
+        } else if (targets.opacity != null) {
+          next.opacity = null; // already there
         }
       } else {
         for (const property of properties) {
@@ -1015,7 +1043,10 @@ export function createAnimator(
         changed.push(property);
         if (segment == null) {
           segments.delete(property);
-          resting[property] = targets[property] ?? valueAt(property, time);
+          resting[property] =
+            property === 'opacity'
+              ? opacityTo
+              : (targets[property] ?? valueAt(property, time));
         } else {
           segments.set(property, segment);
         }

@@ -467,16 +467,16 @@ describe('finished', () => {
   });
 });
 
-describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
-  const reduced = () => setup({prefersReducedMotion: () => true});
-  const fade = timing.reducedMotionCrossFadeMs;
+describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or less', () => {
+  const reduced = () =>
+    setup({prefersReducedMotion: () => true, isCoarsePointer: () => true});
+  const fade = Math.min(timing.reducedMotionCrossFadeMs, 200);
   const ease = cubicBezier(timing.curves.easeInOut);
 
   it('a move during a running fade keeps that fade\u2019s target', async () => {
     const {animator} = reduced();
-    // Opacity alone is not travel: it keeps its spring.
     animator.animate({opacity: 0}, {spring: springs.smooth});
-    await advance(120);
+    await advance(fade / 2);
     expect(animator.get('opacity')).toBeGreaterThan(0.1);
     animator.animate({x: 100}, {spring: springs.navigationPush});
     await advance(fade + 100);
@@ -486,7 +486,7 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     const entrance = reduced().animator;
     entrance.set({opacity: 0});
     entrance.animate({opacity: 1}, {spring: springs.smooth});
-    await advance(120);
+    await advance(fade / 2);
     entrance.animate({x: 100}, {spring: springs.navigationPush});
     await advance(fade + 100);
     expect(entrance.get('opacity')).toBeCloseTo(1, 6);
@@ -552,28 +552,65 @@ describe('Reduced Motion (M5): UIKit cross-fades instead of travel', () => {
     );
   });
 
-  it("'instant' jumps, 'keep' keeps the motion", () => {
-    const a = reduced();
-    a.animator.animate(
-      {x: 50},
+  it("'instant' jumps, opacity included", () => {
+    const {animator} = reduced();
+    animator.animate(
+      {x: 50, opacity: 0},
       {spring: springs.smooth},
       {reducedMotion: 'instant'},
     );
-    expect(a.animator.get('x')).toBe(50);
+    expect(animator.get('x')).toBe(50);
+    expect(animator.get('opacity')).toBe(0);
     expect(recorded).toHaveLength(0);
-    const b = reduced();
-    b.animator.animate(
-      {x: 50},
-      {spring: springs.smooth},
-      {reducedMotion: 'keep'},
-    );
-    expect(b.animator.getVelocity('x', 1010)).toBeGreaterThan(0);
   });
 
-  it('an opacity-only change is not travel and keeps its spring', () => {
+  it('an opacity-only change fades within 200 ms, with no spring', () => {
     const {animator} = reduced();
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.smooth});
+    const [opacity] = live('opacity');
+    expect(Number(opacity.options.duration)).toBeLessThanOrEqual(
+      200 + END_HOLD_MS,
+    );
+    expect(animator.get('opacity', 1000 + 200)).toBe(1);
+  });
+
+  it('a move finishes within 200 ms', () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(animator.get('x', 1000 + 200)).toBe(100);
+    expect(animator.get('opacity', 1000 + 200)).toBe(1);
+  });
+});
+
+describe('Reduced Motion on a fine pointer (DR3): every change at once', () => {
+  const reduced = () =>
+    setup({prefersReducedMotion: () => true, isCoarsePointer: () => false});
+
+  it('a move and an opacity change complete in the call, with nothing animated', () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
     animator.animate({opacity: 0}, {spring: springs.smooth});
-    expect(animator.getVelocity('opacity', 1010)).toBeLessThan(0);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(0);
+    expect(recorded).toHaveLength(0);
+  });
+
+  it('a jump during a running fade ends that fade at its target', async () => {
+    const coarse = setup({
+      prefersReducedMotion: () => true,
+      isCoarsePointer: () => true,
+    }).animator;
+    coarse.animate({opacity: 0}, {spring: springs.smooth});
+    await advance(60);
+    expect(coarse.get('opacity')).toBeGreaterThan(0);
+    coarse.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {reducedMotion: 'instant'},
+    );
+    expect(coarse.get('x')).toBe(100);
+    expect(coarse.get('opacity')).toBe(0);
   });
 });
 
