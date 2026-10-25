@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[experimental] Gesture host fixes: a scroll the page makes under a still finger (scrollIntoView, a pinned transcript, scroll anchoring) no longer cancels the press or swallows its click; recognizers that never claim (`claimsTouches` false) get no blocking `touchmove` listener, and a finger's target listener is passive unless a recognizer on that touch can claim; a claimed pen holds only its own stylus touches; an element's own `touch-action` is never widened; content slotted into a shadow-tree scroller scrolls with it; the delegated press stays idle while the document press controller holds the same attribute.
+[chore] Internal: gesture host fixes from review. A page scroll under a still finger keeps the press and its click; watchers and touches nothing can claim get passive listeners only; a claimed pen holds only its own stylus touches; an element's own `touch-action` is never widened; slotted content scrolls with its shadow-tree scroller. Not exported from the package entry point; no component uses it yet.
 
 @vjeux
