@@ -646,6 +646,104 @@ describe('review fixes', () => {
   });
 });
 
+describe('additive: a retarget adds to the curve on screen', () => {
+  const old = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+  const oldEnd = old.settleTime(0.05);
+  const oldAt = (t: number) => (t >= oldEnd ? 300 : old.value(t));
+
+  it('starts from the old curve\u2019s value and velocity, and reads as their sum', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    await commitFrame(1000);
+    clock = 1150;
+    const x = animator.get('x');
+    const v = animator.getVelocity('x');
+    animator.animate({x: 100}, {spring: springs.smooth}, {additive: true});
+    expect(animator.get('x')).toBeCloseTo(x, 9);
+    expect(animator.getVelocity('x')).toBeCloseTo(v, 6);
+    const delta = solveSpring(toSpring(springs.smooth), {from: 0, to: -200});
+    for (const t of [0.02, 0.1, 0.4]) {
+      expect(animator.get('x', 1150 + t * 1000)).toBeCloseTo(
+        oldAt(0.15 + t) + delta.value(t),
+        6,
+      );
+    }
+    await advance(10_000);
+    expect(animator.get('x')).toBe(100);
+  });
+
+  it('a played reversal keeps the old velocity: a late first frame shows only the reversal\u2019s own start', async () => {
+    // An ease-in-out reversal starts at rest; replacing a curve that moves
+    // at v puts the old curve v·d ahead of it by a first frame d ms late.
+    const ease = cubicBezier(timing.curves.easeInOut);
+    const reversal = (from: number, to: number) => ({
+      duration: 0.35,
+      at: (t: number) => from + (to - from) * ease(Math.min(1, t / 0.35)),
+      velocity: (t: number) =>
+        ((to - from) / 0.35) *
+        ((ease(Math.min(1, t / 0.35 + 1e-4)) -
+          ease(Math.max(0, t / 0.35 - 1e-4))) /
+          2e-4),
+    });
+    const steps = async (additive: boolean) => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.smooth}, {at: 1000});
+      clock = 1120;
+      const from = animator.get('x');
+      animator.play({x: reversal(from, 0)}, {at: 1120, additive});
+      return [30, 60, 100].map(d =>
+        Math.abs(animator.get('x', 1120 + d) - oldAt((120 + d) / 1000)),
+      );
+    };
+    const replaced = await steps(false);
+    const added = await steps(true);
+    for (let i = 0; i < added.length; i++) {
+      expect(added[i]).toBeLessThan(replaced[i] / 2);
+    }
+    // What remains is the reversal's own first d ms, scaled to the targets.
+    expect(added[0]).toBeCloseTo(300 * ease(30 / 350), 6);
+  });
+
+  it('nests: a second retarget adds to the first', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth});
+    await commitFrame(1000);
+    clock = 1100;
+    animator.animate({x: 100}, {spring: springs.smooth}, {additive: true});
+    clock = 1200;
+    const x = animator.get('x');
+    const v = animator.getVelocity('x');
+    animator.animate({x: 250}, {spring: springs.smooth}, {additive: true});
+    expect(animator.get('x')).toBeCloseTo(x, 9);
+    expect(animator.getVelocity('x')).toBeCloseTo(v, 6);
+    const first = solveSpring(toSpring(springs.smooth), {from: 0, to: -200});
+    const second = solveSpring(toSpring(springs.smooth), {from: 0, to: 150});
+    expect(animator.get('x', 1300)).toBeCloseTo(
+      oldAt(0.3) + first.value(0.2) + second.value(0.1),
+      6,
+    );
+    await advance(10_000);
+    expect(animator.get('x')).toBe(250);
+  });
+
+  it('replaces as before for a property at rest or given a velocity', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.smooth}, {additive: true});
+    await commitFrame(1000);
+    const fromRest = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    expect(animator.get('x', 1100)).toBeCloseTo(fromRest.value(0.1), 9);
+    clock = 1100;
+    const x = animator.get('x');
+    animator.animate(
+      {x: 0},
+      {spring: springs.smooth, velocity: {x: 0}},
+      {additive: true},
+    );
+    const back = solveSpring(toSpring(springs.smooth), {from: x, to: 0});
+    expect(animator.get('x', 1200)).toBeCloseTo(back.value(0.1), 9);
+  });
+});
+
 describe('start: when a call\u2019s animations start', () => {
   it('presented: shows the value at rest, and creates the animations two frames later', async () => {
     const {animator, element} = setup();

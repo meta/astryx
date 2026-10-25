@@ -70,6 +70,10 @@
  * (a new layer, or a UI process that applies commits late).
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
+ * `options.additive` retargets as UIKit does: the old curve keeps going and a
+ * curve of the change between the targets is added on top, baked into one
+ * animation (two animations on one property leave the compositor in both
+ * engines), so the retarget keeps the velocity on screen.
  *
  * WebKit starts an animation created just before a block at its last frame
  * time before the block, so there the motion still skips into its curve;
@@ -241,6 +245,20 @@ export interface AnimateOptions {
    *   creates the animations first, in call order.
    */
   start?: 'commit' | 'presented';
+  /**
+   * A call that retargets a curve on screen adds to it instead of replacing
+   * it, as UIKit's animations do: the old curve keeps going (past its end, at
+   * its target) and a spring of the difference between the two targets runs
+   * from 0 on top, in the same animation. Its value and velocity at the call
+   * are the old curve's, so whichever frame first shows it (WebKit can apply
+   * a new curve tens of ms late), nothing steps back. Ignored for a property
+   * at rest or still waiting for the browser's start, for a property given a
+   * velocity, and under Reduced Motion. Use it for a played curve that starts
+   * at rest (an eased reversal) while the property moves; a spring retarget
+   * on the same spring moves the same either way, and a curve that already
+   * continues the velocity on screen must not add to it.
+   */
+  additive?: boolean;
 }
 
 /**
@@ -1707,6 +1725,80 @@ export function createAnimator(
     };
   };
 
+  /** The retarget of `additive`: the old curve plus a spring of the difference. */
+  const additiveSegment = (
+    owner: HandleState,
+    property: MotionProperty,
+    start: number,
+    to: number,
+    spring: SpringDescription,
+    old: Segment,
+  ): Segment => {
+    const oldEnd = old.start + old.duration;
+    const resolved = resolveMotion(target, spring);
+    const delta = solveSpring(toSpring(resolved), {
+      from: 0,
+      to: to - old.target,
+      velocity: 0,
+    });
+    const deltaMs = Math.min(
+      MAX_DURATION_MS,
+      delta.settleTime(SETTLE_THRESHOLD[property]) * 1000,
+    );
+    const ownAt = (t: number) =>
+      t >= deltaMs ? to - old.target : delta.value(t / 1000);
+    const oldAt = (time: number) =>
+      time >= oldEnd ? old.target : old.at(Math.max(0, time - old.start));
+    return {
+      start,
+      duration: Math.min(MAX_DURATION_MS, Math.max(oldEnd - start, deltaMs)),
+      target: to,
+      at: t => oldAt(start + t) + ownAt(t),
+      speed: t =>
+        (start + t >= oldEnd ? 0 : old.speed(start + t - old.start)) +
+        (t >= deltaMs ? 0 : delta.velocity(t / 1000)),
+      jumps: old.jumps
+        .map(jump => old.start + jump - start)
+        .filter(jump => jump > 0),
+      owner,
+      spring: resolved,
+    };
+  };
+
+  /**
+   * `additive` for a played curve: the old curve plus the new curve's shape,
+   * scaled to the difference between the two targets.
+   */
+  const additiveCurveSegment = (
+    owner: HandleState,
+    start: number,
+    curve: MotionCurve,
+    old: Segment,
+  ): Segment => {
+    const from = curve.at(0);
+    const to = curve.at(curve.duration);
+    const scale = (to - old.target) / (to - from);
+    const ms = Math.min(MAX_DURATION_MS, curve.duration * 1000);
+    const oldEnd = old.start + old.duration;
+    const oldAt = (time: number) =>
+      time >= oldEnd ? old.target : old.at(Math.max(0, time - old.start));
+    return {
+      start,
+      duration: Math.min(MAX_DURATION_MS, Math.max(oldEnd - start, ms)),
+      target: to,
+      at: t =>
+        oldAt(start + t) +
+        (t >= ms ? to - old.target : (curve.at(t / 1000) - from) * scale),
+      speed: t =>
+        (start + t >= oldEnd ? 0 : old.speed(start + t - old.start)) +
+        (t >= ms ? 0 : curve.velocity(t / 1000) * scale),
+      jumps: old.jumps
+        .map(jump => old.start + jump - start)
+        .filter(jump => jump > 0),
+      owner,
+    };
+  };
+
   const fadeSegment = (
     owner: HandleState,
     start: number,
@@ -2121,6 +2213,21 @@ export function createAnimator(
         Object.assign(next, plan.next);
       } else {
         for (const property of properties) {
+          const running =
+            animateOptions.additive === true && velocities[property] == null
+              ? segmentAt(property, time)
+              : null;
+          if (running != null && !isHeld(running) && !running.steps) {
+            next[property] = additiveSegment(
+              owner,
+              property,
+              time,
+              targets[property] as number,
+              transition.spring,
+              running,
+            );
+            continue;
+          }
           const velocity = velocities[property] ?? velocityAt(property, time);
           next[property] = springSegment(
             owner,
@@ -2224,6 +2331,18 @@ export function createAnimator(
           continue;
         }
         const curve = byProperty[property] as MotionCurve;
+        const running =
+          playOptions.additive === true ? segmentAt(property, time) : null;
+        if (
+          running != null &&
+          !isHeld(running) &&
+          !running.steps &&
+          curve.duration > 0 &&
+          Math.abs(curve.at(curve.duration) - curve.at(0)) > 1e-9
+        ) {
+          next[property] = additiveCurveSegment(owner, time, curve, running);
+          continue;
+        }
         next[property] =
           curve.duration === 0
             ? null
