@@ -10,12 +10,30 @@
  * SYNC: When Popover.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+  cleanup,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import React, {useRef} from 'react';
+import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
 import type {UsePopoverReturn} from './usePopover';
@@ -1025,6 +1043,183 @@ describe('Popover', () => {
 
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+  });
+
+  describe('in a second document', () => {
+    // An app can render a Popover into a same-origin iframe or a Document
+    // Picture-in-Picture window through a portal. Every press and focus change
+    // then happens in that document, and none of them reaches this one.
+    let frame: HTMLIFrameElement;
+    let secondDocument: Document;
+
+    beforeEach(() => {
+      frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      secondDocument = frame.contentDocument!;
+      // The Popover API stand-in above, on the second window's own prototype.
+      const {prototype} = secondDocument.defaultView!.HTMLElement;
+      prototype.showPopover = HTMLElement.prototype.showPopover;
+      prototype.hidePopover = HTMLElement.prototype.hidePopover;
+    });
+
+    afterEach(() => {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+    });
+
+    function renderInSecondDocument(hasLightDismiss = true) {
+      render(
+        createPortal(
+          <>
+            <Popover
+              label="Settings"
+              hasLightDismiss={hasLightDismiss}
+              content={
+                <>
+                  <button type="button">First</button>
+                  <button type="button">Last</button>
+                </>
+              }>
+              <button type="button">Settings</button>
+            </Popover>
+            <p>Outside</p>
+          </>,
+          secondDocument.body,
+        ),
+      );
+      const view = within(secondDocument.body);
+      const trigger = view.getByRole('button', {name: 'Settings'});
+      const surface = view.getByRole('dialog', {
+        name: 'Settings',
+        hidden: true,
+      });
+      const first = view.getByRole('button', {name: 'First', hidden: true});
+      return {trigger, surface, first, view};
+    }
+
+    /** Open from the trigger, as a pointer would, and wait for focus to enter. */
+    async function open(trigger: HTMLElement, surface: HTMLElement) {
+      trigger.focus();
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() =>
+        expect(surface.contains(secondDocument.activeElement)).toBe(true),
+      );
+    }
+
+    it('focuses the first content control on open', async () => {
+      const {trigger, surface, first} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      expect(first).toHaveFocus();
+    });
+
+    it('wraps Tab from the last control back to the first', async () => {
+      const {trigger, surface, first, view} = renderInSecondDocument();
+      await open(trigger, surface);
+      const last = view.getByRole('button', {
+        name: 'Close popover',
+        hidden: true,
+      });
+      last.focus();
+
+      expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+      expect(first).toHaveFocus();
+    });
+
+    it('closes on Escape through the layer stack and returns focus to the trigger', async () => {
+      const {trigger, surface} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      // The stack claims the press, so the browser's own close watcher does
+      // not act on it a second time.
+      expect(
+        fireEvent.keyDown(secondDocument.activeElement!, {key: 'Escape'}),
+      ).toBe(false);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('closes on Escape when light dismiss is off', async () => {
+      const {trigger, surface} = renderInSecondDocument(false);
+      await open(trigger, surface);
+
+      fireEvent.keyDown(secondDocument.activeElement!, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('returns focus to the trigger after an outside click', async () => {
+      const {trigger, surface} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      // The press on non-focusable content blurs focus to the body, then the
+      // browser's light dismiss closes the popover with a `toggle` event.
+      (secondDocument.activeElement as HTMLElement).blur();
+      expect(secondDocument.activeElement).toBe(secondDocument.body);
+      const toggle = new secondDocument.defaultView!.Event('toggle');
+      Object.defineProperty(toggle, 'newState', {value: 'closed'});
+      fireEvent(secondDocument.querySelector('[popover]')!, toggle);
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('keeps a Dialog and the Popover opened inside it in one order', () => {
+      // jsdom has no modal <dialog>; stand in for it on the second window.
+      const {prototype: dialogPrototype} =
+        secondDocument.defaultView!.HTMLDialogElement;
+      dialogPrototype.showModal = function (this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+      };
+      dialogPrototype.close = function (this: HTMLDialogElement) {
+        this.removeAttribute('open');
+      };
+      const onOpenChange = vi.fn();
+      render(
+        createPortal(
+          <Dialog
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            purpose="info"
+            aria-label="Host">
+            <Popover
+              label="Tip"
+              content={<button type="button">Inside</button>}>
+              <button type="button">Open tip</button>
+            </Popover>
+          </Dialog>,
+          secondDocument.body,
+        ),
+      );
+      const trigger = within(secondDocument.body).getByRole('button', {
+        name: 'Open tip',
+        hidden: true,
+      });
+      fireEvent.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      // A press in this document reaches neither layer of the other one.
+      fireEvent.keyDown(document, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // The Dialog declines a close request while the Popover is above it.
+      const closeRequest = new secondDocument.defaultView!.Event('cancel', {
+        cancelable: true,
+      });
+      fireEvent(secondDocument.querySelector('dialog')!, closeRequest);
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // In its own document, Escape closes the Popover, then the Dialog.
+      fireEvent.keyDown(secondDocument, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(onOpenChange).not.toHaveBeenCalled();
+      fireEvent.keyDown(secondDocument, {key: 'Escape'});
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
     });
   });
 

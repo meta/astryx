@@ -47,7 +47,9 @@ function attemptFocus(element: HTMLElement): boolean {
   } catch {
     // Ignore non-focusable elements; the caller will try the next target.
   }
-  return document.activeElement === element;
+  // The element's own document: a popover rendered into a second document
+  // (an iframe, a Picture-in-Picture window) never moves this one's focus.
+  return element.ownerDocument.activeElement === element;
 }
 
 function focusFirstContentControl(container: HTMLElement): boolean {

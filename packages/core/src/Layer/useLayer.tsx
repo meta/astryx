@@ -766,12 +766,18 @@ function useLayerImplementation(
         // trigger is an `SVGElement`, whose dictionary conversion throws
         // before the popover opens. Omitting the option for it still anchors
         // the layer, because positioning reads the anchor-name pair, and only
-        // gives up the invoker's focus order.
-        const trigger =
-          triggerRef.current instanceof HTMLElement
-            ? triggerRef.current
-            : undefined;
-        popover.showPopover({source: trigger});
+        // gives up the invoker's focus order. The check asks the trigger's own
+        // window: an HTML trigger rendered into another document (an iframe,
+        // a Picture-in-Picture window) is not an instance of this window's
+        // `HTMLElement`, and keeps its source.
+        const trigger = triggerRef.current;
+        const triggerView = trigger?.ownerDocument.defaultView;
+        popover.showPopover({
+          source:
+            triggerView != null && trigger instanceof triggerView.HTMLElement
+              ? trigger
+              : undefined,
+        });
       });
     } else {
       popover.style.display = 'block';

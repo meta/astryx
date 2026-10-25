@@ -160,7 +160,8 @@ the behavior.
   the requested direction. A containment policy MAY stop chaining, but its
   `overscroll-behavior` effect MUST be active only on axes that currently overflow.
   This avoids dead scroll zones in engines that honor containment on non-overflowing
-  `overflow: auto` elements.
+  `overflow: auto` elements. Inside a touch presentation under a finger, who
+  gets a drag is decided once, when it begins (`spec:AST-094` FR14).
 - **FR15 — Native scrollbars are the default presentation.** The default presenter
   MUST preserve native scrolling and use standards-based CSS such as
   `scrollbar-width`, `scrollbar-color`, and `scrollbar-gutter` where supported.

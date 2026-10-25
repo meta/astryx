@@ -72,10 +72,12 @@ requirements. Assistive-technology evidence remains separately owned.
   public [Browser Support guide](../../../packages/cli/assets/docs/browser-support.doc.mjs)
   and record their source and refresh date. TypeScript targets, build targets, and
   feature tables are not support evidence.
-- **FR3 — Two explicit browser support rows are always included.** Independently
+- **FR3 — Explicit browser support rows are always included.** Independently
   of the generated Baseline coverage, Astryx explicitly supports:
-  - the latest stable Chrome release on desktop; and
-  - Safari on the latest stable iOS release.
+  - the latest stable Chrome release on desktop;
+  - Safari on the latest stable iOS release; and
+  - for touch presentations, Chrome on the latest stable Android release
+    (`spec:AST-094`).
 
   “Latest” means the current stable release identified and refreshed from
   authoritative browser release data, not a handwritten version. Other browsers
