@@ -56,7 +56,7 @@ export const scroll = {
   rubberBand: {
     /**
      * c in b = (1 − 1 ÷ (x·c ÷ d + 1))·d, d = the scroll view's size on the
-     * axis (rubberBand.ts), x = the finger's travel past the edge after the
+     * axis, x = the finger's travel past the edge after the
      * pan's 10 pt hysteresis.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, UIScrollView offsets released 100 / 300 / 600 pt past
@@ -83,7 +83,7 @@ export const scroll = {
   paging: {
     /**
      * Deceleration rate a paging release is projected with to pick the next
-     * page (projection.ts `selectPage`).
+     * page.
      * @source GUESS — UIScrollView paging behaves like a fast scroll view;
      *   the rate it uses internally is not documented
      * @measure M-PG1
