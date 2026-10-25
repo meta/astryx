@@ -27,6 +27,17 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   projects: [
+    // A mouse in each engine: the compact edges never give it the sheet.
+    {
+      name: 'chromium-mouse',
+      testMatch: ['adaptiveEdges.browser.spec.ts'],
+      use: {...devices['Desktop Chrome']},
+    },
+    {
+      name: 'webkit-mouse',
+      testMatch: ['adaptiveEdges.browser.spec.ts'],
+      use: {...devices['Desktop Safari']},
+    },
     // Android Chrome: a finger, and an engine without -webkit-touch-callout.
     {name: 'chromium', use: {...devices['Pixel 7'], browserName: 'chromium'}},
     {

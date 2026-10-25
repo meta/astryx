@@ -21,6 +21,7 @@ import {
   readTouchPresentation,
   useTouchPresentation,
 } from '../../touchPresentation';
+import {useAdaptivePresentation} from '../../../hooks/useAdaptivePresentation';
 
 declare global {
   interface Window {
@@ -40,8 +41,14 @@ document.head.append(style);
 
 function Probe() {
   const presentation = useTouchPresentation();
+  // What an adaptive menu presents here: the sheet needs a coarse pointer
+  // and a compact viewport (spec:AST-012 FR9).
+  const adaptive = useAdaptivePresentation('adaptive');
   useEffect(() => {
     window.__answers = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      adaptive,
       presentation,
       read: readTouchPresentation(),
       touchCallout: CSS.supports(IOS_SUPPORTS_QUERY),
