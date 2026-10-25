@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. No shipped component reads these roles yet.',
+          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. No shipped component reads these roles yet.',
         },
         {
           type: 'code',
@@ -413,6 +413,12 @@ const calmTheme = defineTheme({
               '--motion-timing-press-highlight-in-ms',
               'duration',
               '0ms',
+            ],
+            [
+              'timing.press.highlightOutCurve',
+              '--motion-timing-press-highlight-out-curve',
+              'curve',
+              'cubic-bezier(0, 0, 0.2, 1)',
             ],
             [
               'timing.press.highlightOutMs',
