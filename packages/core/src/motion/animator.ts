@@ -110,7 +110,9 @@
  *   - otherwise: dips (fades out, lands, fades back in);
  *   travel lands with a plain style write while the element is transparent,
  *   never as an animated transform; a busy main thread only keeps it
- *   transparent longer, and a dip fades back in from the landing;
+ *   transparent longer, and a dip fades back in from the landing; a later
+ *   call that lands too carries a landing still waiting (two calls in one
+ *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
  * the fade's length is not a theme role. Decays keep their motion: they
@@ -444,6 +446,8 @@ interface Landing {
   fadeIn: {readonly to: number; readonly ms: number} | null;
   /** The opacity written with the landing (an exit by role). */
   restore: number | null;
+  /** Earlier calls whose landings this one carries: they land with it. */
+  readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -452,7 +456,7 @@ interface ReducedPlan {
   readonly next: Partial<Record<MotionProperty, Segment | null>>;
   /** Values that stay where they are until the landing writes them. */
   readonly holds: Partial<Record<MotionProperty, number>>;
-  readonly landing: Omit<Landing, 'owner' | 'timer'> | null;
+  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried'> | null;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -1403,7 +1407,10 @@ export function createAnimator(
     if (segment == null) {
       return;
     }
-    if (time < segment.start + segment.duration) {
+    if (
+      time < segment.start + segment.duration &&
+      !carriedOwners.has(segment.owner)
+    ) {
       settle(segment.owner, false);
     }
   };
@@ -1562,16 +1569,80 @@ export function createAnimator(
 
   /** Reduced Motion landings still waiting for the element to be transparent. */
   const landings = new Set<Landing>();
+  /** Calls a later call's landing carries: an interrupt does not settle them. */
+  const carriedOwners = new Set<HandleState>();
 
-  /** A later write to `property` takes it from any landing; opacity ends it. */
+  /**
+   * A later write to `property` takes it from any landing. A write to opacity
+   * decides what shows, so a landing still waiting writes its travel at once
+   * rather than never, and its calls settle as interrupted.
+   */
   const cancelLanding = (property: MotionProperty) => {
-    for (const landing of landings) {
+    for (const landing of [...landings]) {
       if (property === 'opacity') {
         endLanding(landing);
+        landNow(landing);
       } else {
         landing.values.delete(property);
       }
     }
+  };
+
+  const landNow = (landing: Landing) => {
+    const changed: MotionProperty[] = [];
+    for (const [property, value] of landing.values) {
+      segments.delete(property);
+      resting[property] = value;
+      changed.push(property);
+    }
+    if (changed.length > 0) {
+      commit(changed, now());
+    }
+    for (const owner of [landing.owner, ...landing.carried]) {
+      carriedOwners.delete(owner);
+      if (!owner.settled) {
+        settle(owner, false);
+      }
+    }
+  };
+
+  /**
+   * A later Reduced Motion call that lands too carries the landings still
+   * waiting: their travel lands with its own, which wins where both move a
+   * property, and their calls settle when it lands. So two calls in one
+   * frame (a drag cancel's position and scale) both land.
+   */
+  const adoptLandings = (
+    plan: NonNullable<ReducedPlan['landing']>,
+    properties: ReadonlyArray<MotionProperty>,
+  ): HandleState[] => {
+    const carried: HandleState[] = [];
+    for (const landing of [...landings]) {
+      for (const [property, value] of landing.values) {
+        if (!properties.includes(property) && !plan.values.has(property)) {
+          plan.values.set(property, value);
+        }
+      }
+      carried.push(landing.owner, ...landing.carried);
+      endLanding(landing);
+    }
+    for (const owner of carried) {
+      carriedOwners.add(owner);
+    }
+    return carried;
+  };
+
+  /** Where opacity is heading: past a waiting landing's fade back in. */
+  const opacityHeading = (): number => {
+    let to = finalValue('opacity');
+    for (const landing of landings) {
+      if (landing.fadeIn != null) {
+        to = landing.fadeIn.to;
+      } else if (landing.restore != null) {
+        to = landing.restore;
+      }
+    }
+    return to;
   };
 
   const endLanding = (landing: Landing) => {
@@ -1586,8 +1657,9 @@ export function createAnimator(
     owner: HandleState,
     started: Promise<number>,
     plan: NonNullable<ReducedPlan['landing']>,
+    carried: HandleState[],
   ) => {
-    const landing: Landing = {...plan, owner, timer: null};
+    const landing: Landing = {...plan, owner, carried, timer: null};
     landings.add(landing);
     // The handle settles when the landing (and its fade back in) is done.
     if (owner.timer != null) {
@@ -1637,6 +1709,13 @@ export function createAnimator(
       changed.push('opacity');
     }
     commit(changed, time);
+    // The calls it carries are done: their travel has landed.
+    for (const carried of landing.carried) {
+      carriedOwners.delete(carried);
+      if (!carried.settled) {
+        settle(carried, true);
+      }
+    }
     const {owner} = landing;
     if (owner.settled) {
       return;
@@ -1677,7 +1756,7 @@ export function createAnimator(
     }
     const opacityNow = valueAt('opacity', time);
     // A fade the call does not name keeps going where it was heading.
-    const opacityTo = targets.opacity ?? finalValue('opacity');
+    const opacityTo = targets.opacity ?? opacityHeading();
     const travel = properties.filter(
       property =>
         TRAVEL.includes(property) &&
@@ -1863,6 +1942,10 @@ export function createAnimator(
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
       );
+      const carried =
+        plan?.landing != null
+          ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
+          : [];
       const changed: MotionProperty[] = [];
       for (const [property, segment] of Object.entries(next) as [
         MotionProperty,
@@ -1885,7 +1968,7 @@ export function createAnimator(
       commitCall(group, owner, changed, time);
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
-        scheduleLanding(owner, handle.started, plan.landing);
+        scheduleLanding(owner, handle.started, plan.landing, carried);
       }
       return handle;
     },
@@ -1953,6 +2036,10 @@ export function createAnimator(
         Object.keys(next) as MotionProperty[],
         playOptions.at,
       );
+      const carried =
+        plan?.landing != null
+          ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
+          : [];
       const changed: MotionProperty[] = [];
       for (const [property, segment] of Object.entries(next) as [
         MotionProperty,
@@ -1975,7 +2062,7 @@ export function createAnimator(
       commitCall(group, owner, changed, time);
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
-        scheduleLanding(owner, handle.started, plan.landing);
+        scheduleLanding(owner, handle.started, plan.landing, carried);
       }
       return handle;
     },

@@ -950,6 +950,52 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(finished).toBe(true);
   });
 
+  it('two calls in one frame both land', async () => {
+    // A drag cancel: the position on one spring, the scale on another.
+    const {animator, element} = reduced();
+    animator.set({x: 6.3, y: 84, scale: 0.969});
+    const position = animator.animate(
+      {x: 0, y: 0},
+      {spring: springs.sheetPresent},
+      {touchRelease: true},
+    );
+    const scale = animator.animate(
+      {scale: 1},
+      {spring: springs.snappy},
+      {touchRelease: true},
+    );
+    const settled: boolean[] = [];
+    void position.finished.then(value => settled.push(value));
+    void scale.finished.then(value => settled.push(value));
+    await commitFrame(clock);
+    // Both land at the bottom of one dip, then fade back in together.
+    await advance(fade / 2);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('scaleX')).toBe(1);
+    expect(animator.get('opacity')).toBeCloseTo(0, 9);
+    await advance(fade);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('y')).toBe(0);
+    expect(animator.get('scaleX')).toBe(1);
+    expect(animator.get('opacity')).toBe(1);
+    // Back at identity with nothing running: the inline value is gone.
+    expect(element.style.translate).toBe('');
+    expect(settled).toEqual([true, true]);
+    expect(opacityOnly()).toBe(true);
+  });
+
+  it('a later opacity change lands a waiting move instead of dropping it', async () => {
+    const {animator} = reduced();
+    const move = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    animator.animate({opacity: 0.5}, {spring: springs.smooth});
+    expect(animator.get('x')).toBe(100);
+    await expect(move.finished).resolves.toBe(false);
+    await advance(fade * 2);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeCloseTo(0.5, 9);
+  });
+
   it('an entrance lands in place and fades in', async () => {
     const {animator} = reduced();
     animator.set({y: 400, opacity: 0});
