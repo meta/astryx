@@ -328,8 +328,10 @@ warning, so two writers never fight over the paint. Pass another
   cancelled, and the view's press is cancelled. The exception is a pan with
   `scrollHandoff`, which keeps watching.
 - **Clicks.** When a touch's gesture cancelled the view's touches, its
-  `touchend` is cancelled (no click and no compatibility mouse events) and a
-  one-shot guard swallows the next trusted click. A click held back for a
+  `touchend` is cancelled (no click and no compatibility mouse events) and
+  the shared click guard (`utils/clickGuard.ts`, the menu press model's
+  too) swallows the browser's next click, until the next `pointerdown` or
+  400 ms. A click held back for a
   recognizer that may still recognize (a double tap between taps) is
   swallowed at once and replayed on the original target if the recognizer
   fails. Clicks with `detail === 0` (keyboard, assistive technology, code)
@@ -567,7 +569,7 @@ there, with z-order and `pointer-events` as the engine sees them. Press
 trackers take their bounds from `presentedRect`, the reported box moved by
 the motion since. A retargeted tap cancels the engine's click,
 which would hit the start position, and clicks what it touched; the
-swallower drops a late engine click, so the tap acts once. Not covered:
+click guard drops a late engine click, so the tap acts once. Not covered:
 scale and rotate (a zoom transition, a lifted preview is hit at its
 unscaled box) and CSS transitions or animations the animator did not start.
 

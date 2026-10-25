@@ -96,8 +96,9 @@
  *   has travelled the slop; a scroll under a finger that has not moved is
  *   the page's own and leaves the touch alone.
  * - A lift whose click must not happen cancels its `touchend` (no click, no
- *   compatibility mouse events) and arms a one-shot swallower for the next
- *   trusted click; a click held for a recognizer that may still recognize is
+ *   compatibility mouse events) and arms the shared click guard
+ *   (utils/clickGuard.ts, the menu press model's too) for the browser's next
+ *   click; a click held for a recognizer that may still recognize is
  *   replayed if they all fail. Keyboard and assistive-technology clicks
  *   (`detail === 0`) always pass.
  * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
@@ -148,6 +149,11 @@ import type {
   TouchSample,
 } from './types';
 import {internals} from './recognizerInternals';
+import {
+  armClickGuard,
+  disarmClickGuard,
+  withoutClickGuard,
+} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
@@ -390,7 +396,6 @@ export class GestureHost {
   private unsubscribers: (() => void)[] = [];
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
-  private swallowDeadline = Number.NEGATIVE_INFINITY;
 
   constructor(doc: Document, options: GestureHostOptions = {}) {
     this.doc = doc;
@@ -597,7 +602,7 @@ export class GestureHost {
   /**
    * The click a retargeted tap earned, on what was drawn under the finger.
    * The engine's own click would hit the start position, so the caller
-   * cancels it (or the swallower drops it, a late one included) and this one
+   * cancels it (or the click guard drops it, a late one included) and this one
    * is the tap's single activation.
    */
   private clickRetargeted(target: EventTarget, x: number, y: number): void {
@@ -605,22 +610,24 @@ export class GestureHost {
     if (!(target instanceof Element) || !target.isConnected || view == null) {
       return;
     }
-    this.armSwallower();
+    armClickGuard(this.doc);
     if (
       target instanceof view.HTMLElement &&
       target.matches('input, textarea, select, [contenteditable]')
     ) {
       target.focus();
     }
-    target.dispatchEvent(
-      new view.MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        detail: 1,
-        clientX: x,
-        clientY: y,
-      }),
+    withoutClickGuard(() =>
+      target.dispatchEvent(
+        new view.MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          detail: 1,
+          clientX: x,
+          clientY: y,
+        }),
+      ),
     );
   }
 
@@ -915,7 +922,6 @@ export class GestureHost {
       subscribeInput(view, 'contextmenu', this.onContextMenu, {cancels: true}),
       subscribeInput(view, 'scroll', this.onScroll),
       subscribeInput(view, 'visibilitychange', this.onVisibilityChange),
-      subscribeInput(view, 'click', this.onClick, {cancels: true}),
       // The window's own blur; an element's blur (a Node's) reaches the
       // window's capture phase too and means nothing here.
       subscribeInput(view, 'blur', event => {
@@ -1319,7 +1325,7 @@ export class GestureHost {
       if (event.cancelable) {
         event.preventDefault();
       }
-      this.armSwallower();
+      armClickGuard(this.doc);
     }
   };
 
@@ -1576,7 +1582,7 @@ export class GestureHost {
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     // A new press: whatever click is still owed to the last one is not this.
-    this.disarmSwallower();
+    disarmClickGuard(this.doc);
     if (!isPointerKind(event.pointerType)) {
       return;
     }
@@ -1677,7 +1683,7 @@ export class GestureHost {
     const dispositions = this.arena.ended([
       {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
     ]);
-    // A retargeted tap's own click arms the swallower for the engine's.
+    // A retargeted tap's own click arms the click guard for the engine's.
     const landed = this.retargeted.get(id);
     this.retargeted.delete(id);
     const clicked = this.clickRetargetedTap(
@@ -1686,7 +1692,7 @@ export class GestureHost {
       dispositions.get(id),
     );
     if (!clicked && needsSuppression(dispositions)) {
-      this.armSwallower();
+      armClickGuard(this.doc);
     }
   };
 
@@ -1796,54 +1802,29 @@ export class GestureHost {
 
   // --- Clicks, menus, scrolls, focus -----------------------------------------
 
-  private armSwallower(): void {
-    this.swallowDeadline =
-      browserClock.now() + UIKIT_GESTURES.click.strayClickWindow.value;
-  }
-
-  private disarmSwallower(): void {
-    this.swallowDeadline = Number.NEGATIVE_INFINITY;
-  }
-
-  private readonly onClick = (event: MouseEvent): void => {
-    if (browserClock.now() > this.swallowDeadline) {
-      return;
-    }
-    if (!event.isTrusted || event.detail === 0) {
-      return;
-    }
-    if (
-      event.target instanceof Element &&
-      event.target.hasAttribute(HAPTIC_SWITCH_ATTRIBUTE)
-    ) {
-      return;
-    }
-    this.disarmSwallower();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-
   private replayClick(touch: GestureTouch, allowed: boolean): void {
     if (!allowed) {
       return;
     }
     // The browser's own click was swallowed while recognizers decided; they
     // all failed, so the click the touch earned is delivered now.
-    this.disarmSwallower();
+    disarmClickGuard(this.doc);
     const target = touch.target;
     const view = this.doc.defaultView;
     if (!(target instanceof Element) || !target.isConnected || view == null) {
       return;
     }
-    target.dispatchEvent(
-      new view.MouseEvent('click', {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        detail: 1,
-        clientX: touch.x,
-        clientY: touch.y,
-      }),
+    withoutClickGuard(() =>
+      target.dispatchEvent(
+        new view.MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          detail: 1,
+          clientX: touch.x,
+          clientY: touch.y,
+        }),
+      ),
     );
   }
 

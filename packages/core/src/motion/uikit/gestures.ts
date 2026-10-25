@@ -361,20 +361,6 @@ export const UIKIT_GESTURES = {
         'M-G16: Not a parity value (spec:AST-100 FR2 departs from UIKit here); confirm on a device that a drag, a rest of this long and a lift does not fling.',
     },
   },
-  click: {
-    /**
-     * Longest the system waits for the browser's click after a touch it
-     * swallows. iOS and Chromium deliver it right after `touchend`; this only
-     * bounds a click that never comes.
-     */
-    strayClickWindow: {
-      value: 1000,
-      unit: 'ms',
-      guess: 'A safety bound, not a UIKit number.',
-      measure:
-        'M-G17: Not a parity value: confirm in Safari and Chromium that the click follows touchend within one frame.',
-    },
-  },
 } as const satisfies Record<string, Record<string, GestureConstant>>;
 
 /**

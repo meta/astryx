@@ -185,21 +185,20 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     const end = touch('touchend', scrim, onDone, 80);
     expect(end.defaultPrevented).toBe(true);
     expect(clicks).toEqual(['done']);
-    // The engine's own click, however late, is swallowed: one activation.
-    const onClick = (gestures as unknown as {onClick: (e: MouseEvent) => void})
-      .onClick;
+    // The engine's own click, however late, is swallowed by the shared
+    // click guard: one activation.
     const late = () => {
-      const event = {
-        isTrusted: true,
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
         detail: 1,
-        target: scrim,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      onClick(event as unknown as MouseEvent);
-      return event.preventDefault.mock.calls.length > 0;
+      });
+      scrim.dispatchEvent(event);
+      return event.defaultPrevented;
     };
     expect(late()).toBe(true);
+    expect(clicks).toEqual(['done']);
+    // One click only: the guard is spent.
     expect(late()).toBe(false);
   });
 
