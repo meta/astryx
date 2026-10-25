@@ -117,11 +117,12 @@
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
  * the fade's length is not a theme role.
  *
- * Momentum under Reduce Motion: a decay keeps its motion. Momentum that
- * continues a throw is direct movement, as scrolling keeps decelerating under
- * iOS Reduce Motion (design:reduced-motion DR2, DEC-2). A spring a component
- * starts on release toward a target it picks (a detent, a page) is a
- * transition, and cross-fades (DR2).
+ * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
+ * decay only ever continues the velocity a finger handed it on release
+ * (UIScrollView's coast after a flick, with its bounce at an edge), so it
+ * keeps its motion, as native momentum does: it is direct movement, not a
+ * transition. A spring a component starts on release toward a target it
+ * picks (a detent, a page) is a transition, and cross-fades (DR2).
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
@@ -954,6 +955,9 @@ export function createAnimator(
           }
           group.adoptedBy = callGroup;
           segment.group = callGroup;
+          // Re-dated to this call's time: it starts at the commit too, not
+          // the work between the two calls into its curve.
+          segment.start += callGroup.provisional - group.provisional;
           callGroup.segments.push(segment);
         }
       }
@@ -1223,7 +1227,7 @@ export function createAnimator(
       for (const channel of channels) {
         for (const property of CHANNELS[channel]) {
           const group = segments.get(property)?.group;
-          if (group != null && !group.resolved && at >= group.provisional - 1) {
+          if (group != null && !group.resolved) {
             return group;
           }
         }
