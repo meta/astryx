@@ -112,7 +112,7 @@ afterEach(() => {
 });
 
 describe('the press reaches the surface the finger landed on', () => {
-  it('locks text selection on the row and its switch input while a finger is held, where the primary pointer is coarse', () => {
+  it('keeps native long-press selection on the row and its switch input while a finger is held: the hold does nothing (spec:AST-094 FR41)', () => {
     coarsePrimaryPointer();
     const row = pressable('label');
     const input = document.createElement('input');
@@ -122,8 +122,8 @@ describe('the press reaches the surface the finger landed on', () => {
     document.body.appendChild(row);
     press(input, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(600);
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
-    expect(input.style.getPropertyValue('user-select')).toBe('none');
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(input.style.getPropertyValue('user-select')).toBe('');
     press(input, 'pointerup', 10, 10);
     expect(row.style.getPropertyValue('user-select')).toBe('');
     expect(input.style.getPropertyValue('user-select')).toBe('');
@@ -133,12 +133,11 @@ describe('the press reaches the surface the finger landed on', () => {
     press(input, 'pointerup', 10, 10, 'mouse');
   });
 
-  it("keeps a link's native long-press menu: no callout lock on a link or under one", () => {
+  it('writes no selection or callout lock on any surface: a link keeps its native menu and a row its long-press selection (spec:AST-094 FR41)', () => {
     coarsePrimaryPointer();
-    // jsdom drops -webkit-touch-callout, so the lock's writes are recorded.
-    const written = new Map<Element, string[]>();
+    // jsdom drops -webkit-touch-callout, so every 'none' write is recorded.
+    const written: string[] = [];
     const setProperty = CSSStyleDeclaration.prototype.setProperty;
-    const owners = new WeakMap<CSSStyleDeclaration, Element>();
     const spy = vi
       .spyOn(CSSStyleDeclaration.prototype, 'setProperty')
       .mockImplementation(function (
@@ -147,48 +146,21 @@ describe('the press reaches the surface the finger landed on', () => {
         value: string | null,
         priority?: string,
       ) {
-        const owner = owners.get(this);
-        if (owner != null && value === 'none') {
-          written.set(owner, [...(written.get(owner) ?? []), name]);
+        if (value === 'none') {
+          written.push(name);
         }
         setProperty.call(this, name, value, priority);
       });
-    const track = (element: HTMLElement) => {
-      owners.set(element.style, element);
-      return element;
-    };
-    const link = track(pressable('a'));
+    const link = pressable('a');
     link.setAttribute('href', '/next');
-    const text = document.createElement('span');
-    text.textContent = 'Next';
-    link.appendChild(text);
+    link.textContent = 'Next';
     document.body.appendChild(link);
-    press(text, 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(600);
-    press(text, 'pointerup', 10, 10);
-    // iOS shows a link's menu and preview on a long press: no callout lock.
-    expect(written.get(link)).toEqual(['-webkit-user-select', 'user-select']);
-    // A link inside a pressable row keeps its menu too.
-    const row = track(pressable());
-    const inner = document.createElement('a');
-    inner.setAttribute('href', '/more');
-    inner.textContent = 'More';
-    row.appendChild(inner);
-    document.body.appendChild(row);
-    press(inner, 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(600);
-    press(inner, 'pointerup', 10, 10);
-    expect(written.get(row)).toEqual(['-webkit-user-select', 'user-select']);
-    // A plain row still loses the callout.
-    const plain = track(rows[0]);
-    press(plain, 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(600);
-    press(plain, 'pointerup', 10, 10);
-    expect(written.get(plain)).toEqual([
-      '-webkit-touch-callout',
-      '-webkit-user-select',
-      'user-select',
-    ]);
+    for (const surface of [link, rows[0]]) {
+      press(surface, 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(600);
+      press(surface, 'pointerup', 10, 10);
+    }
+    expect(written).toEqual([]);
     spy.mockRestore();
   });
 
@@ -210,12 +182,13 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(row.style.getPropertyValue('user-select')).toBe('');
     press(row, 'pointerup', 10, 10);
     vi.advanceTimersByTime(600);
-    // On a touch device a pen locks, as a finger does.
+    // On a touch device a pen keeps it too: a row's hold does nothing
+    // (spec:AST-094 FR41).
     const restore = coarsePrimaryPointer();
     try {
       press(row, 'pointerdown', 10, 10, 'pen');
       vi.advanceTimersByTime(600);
-      expect(row.style.getPropertyValue('user-select')).toBe('none');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
       press(row, 'pointerup', 10, 10, 'pen');
       expect(row.style.getPropertyValue('user-select')).toBe('');
     } finally {
