@@ -477,8 +477,12 @@ const IDENTITY: Record<MotionProperty, number> = {
   opacity: 1,
 };
 
-/** Within this of its target a curve is over (in the property's own unit). */
-const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
+/**
+ * Within this of its target a curve is over (in the property's own unit). A
+ * curve built outside the animator (a progress curve) settles where a call
+ * would with this as its epsilon.
+ */
+export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
   x: 0.05,
   y: 0.05,
   rotate: 0.01,
