@@ -416,6 +416,24 @@
     }
   },
   {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content-headerless",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
     "component": "FileInput",
     "storyId": "core-fileinput--with-error-status",
     "dims": ["D2"],
