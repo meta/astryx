@@ -486,6 +486,48 @@ test('a held finger on a checkbox inside an element whose hold does something tu
   expect(native).toEqual([native[0], native[0], native[0]]);
 });
 
+test('a scroll the page makes under a still finger keeps the touch and its tap; a drag that scrolls the feed takes it', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.locator('#feed').scrollIntoViewIfNeeded();
+  const at = await center(page, 'feedRow');
+  await clearLog(page);
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  // The page scrolls the feed under the resting finger (scrollIntoView, a
+  // pinned transcript): the finger never travelled, so the touch stays.
+  await page.evaluate(() => {
+    const feed = document.getElementById('feed');
+    if (feed != null) {
+      feed.scrollTop += 6;
+    }
+  });
+  await page.evaluate(async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+  await driver.play([{t: 0, down: []}]);
+  expect(states(await log(page), 'feedTap')).toEqual(['ended', 'possible']);
+
+  // A drag that scrolls the feed natively is the browser's: no tap.
+  await page.evaluate(() => {
+    const feed = document.getElementById('feed');
+    if (feed != null) {
+      feed.scrollTop = 0;
+    }
+  });
+  const start = await center(page, 'feedRow');
+  await clearLog(page);
+  await driver.play(drag(start, {x: start.x, y: start.y - 60}, 30));
+  const scrolled = await page.evaluate(
+    () => document.getElementById('feed')?.scrollTop ?? 0,
+  );
+  expect(scrolled).toBeGreaterThan(20);
+  expect(states(await log(page), 'feedTap')).not.toContain('ended');
+});
+
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
   page,
   browserName,
