@@ -21,14 +21,6 @@ pnpm test:interaction <spec file>         # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
-On Linux distributions whose system libraries are older than Playwright's
-WebKit build needs, run the WebKit project inside the official Playwright
-image (podman or docker; the repository is mounted at the same path):
-
-```sh
-node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
-```
-
 Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -38,7 +30,7 @@ committed: a pull request links or attaches it.
 
 | Module          | What it gives a spec                                                                                                                                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
@@ -62,7 +54,7 @@ the limits below. Read positions a frame after a move: Chromium delivers
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
 animations, ones the page paused and ones on a scroll or view timeline are left
-alone; held animations keep their offsets from the earliest start, and release
+alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to

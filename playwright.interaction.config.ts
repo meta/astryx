@@ -19,9 +19,6 @@
  *
  * A spec that needs Chromium-only evidence (CDP tracing, scripted touch
  * timestamps) skips itself in WebKit with the reason; see the harness README.
- * Where WebKit cannot launch on the host (missing system libraries on some
- * Linux distributions), internal/interaction-harness/scripts/webkit-container.mjs
- * runs the WebKit project inside the official Playwright image.
  *
  * SYNC: Keep the phone profile here equal to `phone` in
  *   internal/interaction-harness/src/story.ts.

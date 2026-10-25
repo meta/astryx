@@ -8,16 +8,19 @@
  *   a second finger and a pinch arrive as distinct pointers; sampled curves
  *   match the oracles; the animation-state waits report a running transition
  *   and its end, and judge rest by presented values even while an animation
- *   holds its end; individual transform properties are sampled; a sample at
+ *   holds its end, and a watch taken on first contact ignores an animation
+ *   already running and keeps the start of one the page cancels when it ends; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, holds each where it
- *   was read, adds a second hold to the held set, drops one the page cancels,
- *   and releases only them; storyboards write a sheet and a trace that follows
- *   the curve, and an endless animation does not set their length, and a touch
- *   filmstrip keeps scripted event times while a handler clock sees its pacing;
- *   the timer gate holds a component timer until the filmstrip is done, drops
- *   callbacks the page cancels, stamps held frames with the time they run, and
- *   leaves the harness its own frames.
+ *   was read, adds a second hold to the held set without moving the first
+ *   hold's times, drops one the page cancels, and releases only them;
+ *   storyboards write a sheet and a trace that follows the curve, an endless
+ *   animation does not set their length, and a photograph Chromium returns
+ *   empty is taken again two frames later; a touch filmstrip keeps scripted
+ *   event times while a handler clock sees its pacing; the timer gate holds a
+ *   component timer until the filmstrip is done, drops callbacks the page
+ *   cancels, stamps held frames with the time they run, and leaves the
+ *   harness its own frames.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -513,6 +516,47 @@ test.describe('holding', () => {
     ).toBe(0);
   });
 
+  test("a later hold of an earlier-started animation keeps the first hold's times", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // #early starts 100 ms before #box's 600 ms linear move to 300 px.
+    await page.evaluate(
+      () =>
+        new Promise<void>(resolve => {
+          const early = document.createElement('div');
+          early.id = 'early';
+          document.body.append(early);
+          early.animate([{opacity: 0}, {opacity: 1}], {duration: 2000});
+          setTimeout(() => {
+            document
+              .getElementById('box')
+              ?.animate(
+                [
+                  {transform: 'translateX(0px)'},
+                  {transform: 'translateX(300px)'},
+                ],
+                {duration: 600, easing: 'linear'},
+              );
+            resolve();
+          }, 100);
+        }),
+    );
+    const box = page.locator('#box');
+    await waitForAnimation(box);
+    // The later-started element is held first.
+    const [first] = await holdAnimations(page, box);
+    const [later] = await holdAnimations(page, page.locator('#early'));
+    const samples = await sampleCurve(box, [0, 150, 300]);
+    expect(
+      samples.map(sample => Math.round(sample.transform.translateX)),
+    ).toEqual([0, 75, 150]);
+    // A later hold's earlier start has a negative offset; the origin stays.
+    expect(first.offsetMs).toBe(0);
+    expect(later.offsetMs).toBeLessThan(-50);
+    await releaseAnimations(page);
+  });
+
   test('a held transition the page retargets is dropped, not revived', async ({
     page,
   }) => {
@@ -642,6 +686,29 @@ test.describe('animation state', () => {
     expect(entrance.finishedAt).not.toBeNull();
   });
 
+  test("a watch taken on the page's first contact ignores an animation already running", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // An endless spinner, started before the harness has touched the page.
+    await box.evaluate(el =>
+      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 1000,
+        iterations: Infinity,
+      }),
+    );
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    await box.evaluate(el =>
+      el.animate([{opacity: 1}, {opacity: 0.5}], {duration: 300}),
+    );
+    const started = await watch.started();
+    expect(started.map(a => a.durationMs)).toEqual([300]);
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
@@ -658,6 +725,44 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([70]);
+  });
+
+  test('an entrance the page cancels when it ends keeps its start', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes enter { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .entering { animation: enter 60ms linear }',
+    });
+    const watch = await watchAnimations(box);
+    // The page's time origin, where a lost start lands, is well before the
+    // trigger.
+    await page.waitForTimeout(200);
+    // Removing the class on animationend cancels the finished CSS animation,
+    // which nulls its startTime.
+    const triggeredAt = await box.evaluate(el => {
+      el.addEventListener(
+        'animationend',
+        () => el.classList.remove('entering'),
+        {once: true},
+      );
+      el.classList.add('entering');
+      return performance.timeOrigin + performance.now();
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.classList.contains('entering')))
+      .toBe(false);
+    const [entrance] = await watch.started();
+    expect(entrance.kind).toBe('CSSAnimation');
+    expect(entrance.finishedAt).not.toBeNull();
+    // It started on a frame after the trigger, not at the page's time origin.
+    expect(entrance.from).toBeGreaterThan(triggeredAt - 17);
+    expect(entrance.from).toBeLessThan(triggeredAt + 500);
+    expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
+    expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({

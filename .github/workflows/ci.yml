@@ -1216,12 +1216,6 @@ jobs:
             bash "$legacy"
           fi
 
-      # The interaction harness is consumed as TypeScript source by Vitest and
-      # Playwright, which do not typecheck; this is the only gate over it.
-      - name: Typecheck interaction harness
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/interaction-harness typecheck
-
   # Sandbox preview build — the single slowest piece of PR CI (~4min), run as
   # its own job so it overlaps build-storybook instead of serializing after it.
   # PR-only: merge_group runs never deploy previews, and docsite-only PRs skip
@@ -3790,6 +3784,10 @@ jobs:
 
       # The helper comes from the base, since an older head lacks it. Exit 1
       # means out of scope; 0 in scope; 2 unknown, so the proofs run.
+      # pr-interaction runs the proofs on the PR head. A head cut before they
+      # existed has no playwright.interaction.config.ts and passes with a
+      # notice; a PR that deletes the config (its diff changes it) still runs
+      # them, and fails. Anything undecided runs them.
       - name: Decide whether the interaction proofs apply
         id: scope
         env:
@@ -3797,6 +3795,7 @@ jobs:
           DOCSITE_ONLY: ${{ needs.check-scope.outputs.docsite_only }}
           TOOLING_ONLY: ${{ needs.check-scope.outputs.tooling_only }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$DOCSITE_ONLY" = true ] || [ "$TOOLING_ONLY" = true ]; then
             echo 'Specialized lane; no interaction proofs.'
@@ -3819,9 +3818,20 @@ jobs:
           if [ "$scope" = 1 ]; then
             echo 'No harness, component, Storybook or proof-setup change; skipping the interaction proofs.'
             echo 'applies=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'applies=true' >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          if [ "$scope" = 0 ] && [ -n "$HEAD_SHA" ] \
+            && git fetch --quiet --no-tags --depth=1 origin "$HEAD_SHA" \
+            && ! git cat-file -e "$HEAD_SHA:playwright.interaction.config.ts" 2>/dev/null; then
+            touches=0
+            bash "$helper" "$BASE_SHA" '^playwright\.interaction\.config\.ts$' || touches=$?
+            if [ "$touches" = 1 ]; then
+              echo "::notice title=Interaction proofs predate this branch::This pull request's head has no playwright.interaction.config.ts; merge main to run the interaction proofs."
+              echo 'applies=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'applies=true' >> "$GITHUB_OUTPUT"
 
   pr-interaction:
     needs: [check-scope, interaction-scope, build-storybook]

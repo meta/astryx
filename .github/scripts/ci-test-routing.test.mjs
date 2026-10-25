@@ -630,6 +630,7 @@ describe('deploy.yml push gating', () => {
       'packages/cli',
       'apps/storybook',
       'internal/a11y-spec',
+      'internal/interaction-harness',
     ]) {
       const {typecheck} = JSON.parse(read(`${dir}/package.json`)).scripts;
       expect(typecheck, `${dir} lost its typecheck`).toBeTruthy();
@@ -698,13 +699,5 @@ describe('ci.yml interaction proofs', () => {
     }
     // Unknown scope (exit 2) runs the proofs; only "out of scope" skips them.
     expect(scope).toContain('if [ "$scope" = 1 ]; then');
-  });
-
-  it('typechecks the harness in both workflows', () => {
-    for (const file of ['ci.yml', 'deploy.yml']) {
-      expect(runLines(load(file).jobs.typecheck), file).toContain(
-        '@astryxdesign/interaction-harness typecheck',
-      );
-    }
   });
 });
