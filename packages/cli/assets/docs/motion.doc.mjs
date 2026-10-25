@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A motion reads its roles as it starts, so a theme change applies from the next motion.',
+          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A motion reads its roles as it starts, so a theme change applies from the next motion. No component in this version plays touch motion yet, so a retuned role changes nothing on screen until one does.',
         },
         {
           type: 'code',
