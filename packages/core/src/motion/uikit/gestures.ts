@@ -318,29 +318,25 @@ export const UIKIT_GESTURES = {
   },
   velocity: {
     /**
-     * UIPanGestureRecognizer.velocity(in:) is this times the newest event's
-     * instantaneous velocity plus the rest times the previous event's
-     * (instantaneous velocity: position change over timestamp change between
-     * consecutive events, the touch-down counting as the first). The lift
-     * does not update it. (A release after a rest longer than `stillness`
-     * reads 0 in Astryx: spec:AST-100 FR2.)
+     * The release filter's window (`spec:AST-100` FR2): motion older than
+     * this before the lift does not count.
      */
-    currentWeight: {
-      value: 0.2,
-      unit: 'ratio',
-      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
+    horizon: {
+      value: 100,
+      unit: 'ms',
+      guess:
+        "BottomSheet's two-point window on main, and Android's and Flutter's 100 ms fit window.",
+      measure: 'M-G14: Not a parity value: UIKit uses the two-event filter.',
     },
     /**
-     * A scrolling surface's release (paging, a wheel) is this times the
-     * newest pan value plus the rest times the previous one
-     * (architecture:interaction-modality INV10).
+     * Moves in a row with no movement after which the release velocity is 0
+     * (`spec:AST-100` FR2): a resting finger still reports, and UIKit's
+     * estimate reaches 0 on the second such sample. No time-based reset.
      */
-    scrollReleaseWeight: {
-      value: 0.25,
-      unit: 'ratio',
-      guess:
-        "Android's VelocityTracker and Flutter's fit the last 100 ms (least squares, degree 2); UIKit itself uses currentWeight.",
-      measure: 'M-G14: Not a parity value: UIKit uses the two-event filter.',
+    stillSamples: {
+      value: 2,
+      unit: 'count',
+      source: `${UIKIT_LAB}: UIPanGestureRecognizer velocity(in:) at .ended after a 1000 pt/s stroke: .moved samples at the same point every 8.33 ms give 1000, then 800, then 0 (v = 0.8 prev + 0.2 latest, updated only on moved samples); a silent rest keeps 1000 for every rest up to 500 ms`,
     },
     /** The tracker keeps at most this many samples (a bound on its buffer). */
     maxSamples: {

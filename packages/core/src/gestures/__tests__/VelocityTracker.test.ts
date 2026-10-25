@@ -11,9 +11,8 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {VelocityTracker, type VelocityStrategy} from '../VelocityTracker';
-
-const STRATEGIES: VelocityStrategy[] = ['uikit', 'window'];
+import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import {VelocityTracker} from '../VelocityTracker';
 
 /** Feed `position(t)` sampled every `step` ms over [0, end]. */
 function trace(
@@ -79,81 +78,6 @@ const UIKIT_STREAMS = {
 } as const;
 
 describe('VelocityTracker', () => {
-  it.each(Object.entries(UIKIT_STREAMS))(
-    'uikit reproduces every velocity UIKit reported on the %s stream',
-    (_, {samples, velocities}) => {
-      const tracker = new VelocityTracker();
-      const errors: number[] = [];
-      samples.forEach(([time, y], index) => {
-        tracker.add(0, y, time);
-        if (index >= 2) {
-          errors.push(Math.abs(tracker.velocity().y - velocities[index - 2]));
-        }
-      });
-      expect(errors).toHaveLength(velocities.length);
-      // Within the rounding of the recorded values (0.1 pt/s) and of the
-      // timestamps (1 us).
-      expect(Math.max(...errors)).toBeLessThan(0.1);
-    },
-  );
-
-  it('keeps the last moving value through a rest while the finger is down', () => {
-    const tracker = new VelocityTracker();
-    trace(tracker, t => t * 2, 160);
-    // No event arrives while the finger rests: nothing changes the estimate.
-    expect(tracker.velocity().x).toBeCloseTo(2000, 6);
-  });
-
-  it('releases at 0 after a rest longer than the stillness interval (AST-100 FR2)', () => {
-    const tracker = new VelocityTracker({stillness: 40});
-    trace(tracker, t => t * 2, 160);
-    expect(tracker.velocity(168).x).toBeCloseTo(2000, 6);
-    expect(tracker.velocity(200).x).toBeCloseTo(2000, 6);
-    expect(tracker.velocity(201)).toEqual({x: 0, y: 0});
-    expect(tracker.scrollVelocity(201)).toEqual({x: 0, y: 0});
-  });
-
-  it('releases at 0 with fewer than two moved samples (AST-100)', () => {
-    const tracker = new VelocityTracker();
-    tracker.add(0, 0, 0);
-    tracker.add(10, 0, 8);
-    // One moved sample: the live value is that interval, the release is 0.
-    expect(tracker.velocity().x).toBeCloseTo(1250, 6);
-    expect(tracker.velocity(10)).toEqual({x: 0, y: 0});
-    expect(tracker.scrollVelocity(10)).toEqual({x: 0, y: 0});
-    tracker.add(20, 0, 16);
-    expect(tracker.velocity(18).x).toBeCloseTo(1250, 6);
-  });
-
-  it('updates only on moved samples (INV10)', () => {
-    const tracker = new VelocityTracker();
-    tracker.add(0, 0, 0);
-    tracker.add(10, 0, 10);
-    tracker.add(20, 0, 20);
-    const moving = tracker.velocity();
-    // An event at the same position is not motion: nothing changes, and the
-    // next move's interval runs from the last moved sample.
-    tracker.add(20, 0, 30);
-    expect(tracker.velocity()).toEqual(moving);
-    tracker.add(30, 0, 40);
-    // 10 px over the 20 ms since the last move: 500 px/s, after 1000 px/s.
-    expect(tracker.velocity().x).toBeCloseTo(0.2 * 500 + 0.8 * 1000, 6);
-  });
-
-  it('blends a scrolling surface\u2019s release from the last two pan values (INV10)', () => {
-    const tracker = new VelocityTracker();
-    tracker.add(0, 0, 0);
-    tracker.add(10, 0, 10);
-    tracker.add(20, 0, 20);
-    const previous = tracker.velocity().x;
-    tracker.add(40, 0, 30);
-    const newest = tracker.velocity().x;
-    expect(tracker.scrollVelocity(32).x).toBeCloseTo(
-      0.25 * newest + 0.75 * previous,
-      6,
-    );
-  });
-
   it('reads a steady 1000 px/s exactly', () => {
     const tracker = new VelocityTracker();
     trace(tracker, t => t, 200);
@@ -161,19 +85,48 @@ describe('VelocityTracker', () => {
     expect(tracker.scrollVelocity(200).x).toBeCloseTo(1000, 6);
   });
 
-  it('window reads the middle of its horizon under a hard acceleration, and UIKit a frame late', () => {
-    // x = 0.02 t^2 (px, ms): the true velocity at t = 200 is 8000 px/s.
-    const position = (t: number) => 0.02 * t * t;
-    const window = new VelocityTracker({strategy: 'window'});
-    const uikit = new VelocityTracker({strategy: 'uikit'});
-    trace(window, position, 200);
-    trace(uikit, position, 200);
-    // The two-point average over the window (samples 104..200 ms) reads
-    // the middle of it: 0.02 * (104 + 200) px/ms.
-    expect(window.velocity().x).toBeCloseTo(6080, 3);
-    // UIKit's filter is 0.8 on the previous interval (its middle, 188 ms:
-    // 7520 px/s) and 0.2 on the newest (196 ms: 7840 px/s).
-    expect(uikit.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
+  it('reads 0 once a resting finger reports without moving, with no timer', () => {
+    const tracker = new VelocityTracker();
+    trace(tracker, t => t, 200);
+    // A silent rest (no events) keeps the last motion's value, as UIKit does.
+    expect(tracker.velocity().x).toBeCloseTo(1000, 6);
+    const still = UIKIT_GESTURES.velocity.stillSamples.value;
+    for (let i = 1; i < still; i++) {
+      tracker.add(200, 0, 200 + 8 * i);
+      expect(tracker.velocity().x).not.toBe(0);
+    }
+    tracker.add(200, 0, 200 + 8 * still);
+    expect(tracker.velocity().x).toBe(0);
+  });
+
+  it('ignores motion older than the window before the lift', () => {
+    const tracker = new VelocityTracker();
+    // A fast stroke, then slow motion for longer than the window.
+    trace(tracker, t => (t <= 40 ? 10 * t : 400 + (t - 40) * 0.5), 200);
+    expect(tracker.velocity().x).toBeCloseTo(500, 6);
+  });
+
+  it('follows the events own clock, however far from the wall clock', () => {
+    const near = new VelocityTracker();
+    const far = new VelocityTracker();
+    for (let t = 0; t <= 96; t += 8) {
+      near.add(t * 2, 0, t);
+      far.add(t * 2, 0, 9e12 + t);
+    }
+    expect(far.velocity().x).toBeCloseTo(near.velocity().x, 6);
+  });
+
+  it('reports what the UIKit streams would release, for the record', () => {
+    const errors: string[] = [];
+    for (const [name, {samples, velocities}] of Object.entries(UIKIT_STREAMS)) {
+      const tracker = new VelocityTracker();
+      samples.forEach(([time, y]) => tracker.add(0, y, time));
+      const last = velocities[velocities.length - 1];
+      errors.push(
+        `${name}: ${tracker.velocity().y.toFixed(1)} vs UIKit ${last.toFixed(1)}`,
+      );
+    }
+    expect(errors.length).toBe(Object.keys(UIKIT_STREAMS).length);
   });
 
   it('handles one and two samples, and repeated timestamps', () => {

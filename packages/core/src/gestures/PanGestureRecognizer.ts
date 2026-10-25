@@ -155,9 +155,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.scrollEdge = options.scrollEdge ?? false;
     this.scrollHandoff = options.scrollHandoff ?? false;
     this.claimDistance = options.claimDistance ?? null;
-    this.tracker = new VelocityTracker({
-      strategy: options.velocityStrategy ?? 'uikit',
-    });
+    this.tracker = new VelocityTracker();
   }
 
   /**
@@ -609,7 +607,9 @@ export class PanGestureRecognizer extends GestureRecognizer {
       x: current.x + this.adjust.x,
       y: current.y + this.adjust.y,
     };
-    // UIKit's filter runs once per event.
+    // One sample per input event, at the event's own time (`spec:AST-100`
+    // FR4), for every pointer alike.
+    void touches;
     this.tracker.add(virtual.x, virtual.y, time);
     this.virtual = virtual;
     this.raw = {x: virtual.x - this.origin.x, y: virtual.y - this.origin.y};
