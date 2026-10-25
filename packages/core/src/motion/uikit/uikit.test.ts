@@ -194,8 +194,45 @@ function expectSourced(key: string, doc: string) {
 }
 
 describe('UIKit constants table: values', () => {
+  it('names each platform preset for its use, not its source', () => {
+    // spec AST-094 FR4: a role is named for its use; the source stays in the
+    // JSDoc (SwiftUI .smooth, UISpringTimingParameters(), Core Animation's
+    // default curve).
+    expect(springs).toMatchObject({
+      fingerTracking: {response: 0.15, dampingRatio: 0.86},
+      emphasis: {duration: 0.5, bounce: 0.3},
+      settle: {duration: 0.5, bounce: 0},
+      quickChange: {duration: 0.5, bounce: 0.15},
+      viewChange: {mass: 3, stiffness: 1000, damping: 500},
+      timedChange: {duration: 0.5, bounce: 0},
+      stateChange: {response: 0.55, dampingRatio: 1},
+      directChange: {response: 0.5, dampingRatio: 0.825},
+    });
+    expect(timing.stateChangeMs).toBe(250);
+    expect(timing.curves).toEqual({
+      viewChange: [0.25, 0.1, 0.25, 1],
+      move: [0.42, 0, 0.58, 1],
+      exit: [0.42, 0, 1, 1],
+      entrance: [0, 0, 0.58, 1],
+    });
+    const sourceNames = [
+      'smooth',
+      'snappy',
+      'bouncy',
+      'interactive',
+      'uikitDefault',
+      'uikitSpringDuration',
+      'swiftUIDefault',
+      'swiftUISpring',
+    ];
+    for (const name of sourceNames) {
+      expect(springs).not.toHaveProperty(name);
+    }
+    expect(timing).not.toHaveProperty('implicitAnimationMs');
+  });
+
   it('UIKit\u2019s default spring has the documented damping ratio 4.56 before clamping', () => {
-    const {mass, stiffness, damping} = springs.uikitDefault;
+    const {mass, stiffness, damping} = springs.viewChange;
     expect(damping / (2 * Math.sqrt(stiffness * mass))).toBeCloseTo(4.56, 2);
   });
 

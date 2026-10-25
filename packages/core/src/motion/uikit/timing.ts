@@ -60,7 +60,7 @@ export const timing = {
     scrollBrakeMs: 150,
     /**
      * UIButton (filled configuration) release: the label cross-fade and the
-     * background color both run 0.25 s on `curves.easeInOut`.
+     * background color both run 0.25 s on `curves.move`.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, CAAnimation read (CATransition fade and backgroundColor),
      *   Oct 23 2026
@@ -76,7 +76,7 @@ export const timing = {
      *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
      *   Oct 23 2026
      */
-    caDefault: [0.25, 0.1, 0.25, 1],
+    viewChange: [0.25, 0.1, 0.25, 1],
     /**
      * `easeInEaseOut`; UIKit's default curve (`UIView.AnimationCurve
      * .easeInOut`, "the default curve for most animations").
@@ -85,7 +85,7 @@ export const timing = {
      *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
      *   Oct 23 2026
      */
-    easeInOut: [0.42, 0, 0.58, 1],
+    move: [0.42, 0, 0.58, 1],
     /**
      * `easeIn`.
      * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easein
@@ -93,7 +93,7 @@ export const timing = {
      *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
      *   Oct 23 2026
      */
-    easeIn: [0.42, 0, 1, 1],
+    exit: [0.42, 0, 1, 1],
     /**
      * `easeOut`.
      * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easeout
@@ -101,7 +101,7 @@ export const timing = {
      *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
      *   Oct 23 2026
      */
-    easeOut: [0, 0, 0.58, 1],
+    entrance: [0, 0, 0.58, 1],
   },
   /**
    * `UINavigationController.hideShowBarDuration`, in ms.
@@ -126,10 +126,10 @@ export const timing = {
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, read, Oct 23 2026
    */
-  implicitAnimationMs: 250,
+  stateChangeMs: 250,
   /**
    * Reduce Motion with Prefer Cross-Fade Transitions: a navigation push or pop
-   * becomes a cross-fade of this length on `curves.easeInOut` (the new view
+   * becomes a cross-fade of this length on `curves.move` (the new view
    * fades in while the old one fades out, with no travel), in ms. Sheets,
    * full-screen modals and alerts fade on their own presentation spring
    * instead.
