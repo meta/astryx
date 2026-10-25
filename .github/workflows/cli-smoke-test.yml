@@ -14,12 +14,14 @@ on:
 permissions: {}
 
 concurrency:
-  group: 'cli-smoke-${{ github.event.merge_group.head_sha || github.head_ref }}'
+  group: 'cli-smoke-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}'
   cancel-in-progress: true
 
 jobs:
   smoke-test:
     runs-on: 2-core-ubuntu-arm
+    # PR CI's budget is 15 minutes (see ci.yml).
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:

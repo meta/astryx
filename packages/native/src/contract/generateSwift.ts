@@ -13,6 +13,7 @@
  *   committed under apple/ so a Swift package can pin a commit
  */
 
+import {BUILTIN_ICON_NAMES} from '../icons/defaults.js';
 import {SWIFT_KEYWORDS} from './names.js';
 import type {ComponentContract, PropMap, PropType} from './types.js';
 
@@ -85,6 +86,8 @@ class SwiftWriter {
         return `(${type.args.map((arg, i) => this.type(owner, `${prop}Arg${i}`, arg)).join(', ')}) -> Void`;
       case 'content':
         return '[AstryxNode]';
+      case 'icon':
+        return 'IconName';
       case 'named':
         return type.name;
     }
@@ -367,6 +370,40 @@ const BASE_FILE =
   ].join('\n') +
   '\n';
 
+/**
+ * `IconName`: a shared icon name (AST-082 FR17), string-backed so a
+ * registered `<library>:<name>` name is valid too, with every built-in name
+ * as a static member.
+ */
+function iconNameFile(): string {
+  return (
+    HEADER +
+    [
+      '/// A shared icon name (AST-082 FR17): a built-in name, or a registered',
+      '/// `<library>:<name>` name. A view draws the image the theme or the platform',
+      '/// maps it to.',
+      'public struct IconName: RawRepresentable, ExpressibleByStringLiteral, Hashable, Codable, Sendable {',
+      '  public let rawValue: String',
+      '  public init(rawValue: String) { self.rawValue = rawValue }',
+      '  public init(stringLiteral value: String) { self.rawValue = value }',
+      '  public init(from decoder: any Decoder) throws {',
+      '    self.rawValue = try decoder.singleValueContainer().decode(String.self)',
+      '  }',
+      '  public func encode(to encoder: any Encoder) throws {',
+      '    var container = encoder.singleValueContainer()',
+      '    try container.encode(rawValue)',
+      '  }',
+      '  /// Every built-in name, in the order AST-082 FR17 lists them.',
+      `  public static let builtIn: [IconName] = [${BUILTIN_ICON_NAMES.map(name => `.${ident(name)}`).join(', ')}]`,
+      ...BUILTIN_ICON_NAMES.map(
+        name => `  public static let ${ident(name)}: IconName = "${name}"`,
+      ),
+      '}',
+    ].join('\n') +
+    '\n'
+  );
+}
+
 /** Returns file name to contents, relative to the generated Swift folder. */
 export function generateSwift(
   contracts: readonly ComponentContract[],
@@ -375,6 +412,7 @@ export function generateSwift(
     'AstryxBase.swift': BASE_FILE,
     'AstryxNode.swift': nodeFile(contracts),
     'AstryxWire.swift': WIRE_FILE,
+    'IconName.swift': iconNameFile(),
   };
   for (const contract of contracts) {
     files[`${contract.name}.swift`] = componentFile(contract);

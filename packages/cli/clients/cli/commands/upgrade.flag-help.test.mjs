@@ -175,6 +175,43 @@ describe('astryx upgrade exit codes', () => {
     expect(status).toBe(1);
     expect(envelope.code).toBe('ERR_CODEMOD_FAILED');
     expect(envelope.error).toMatch(/Post-codemod hook failed/);
+    // Additive: the receipt names what the run had already changed.
+    expect(envelope).toMatchObject({
+      receipt: {
+        complete: false,
+        errorCode: 'ERR_CODEMOD_FAILED',
+        modifiedFiles: ['src/panel.tsx'],
+        errors: [
+          expect.objectContaining({
+            codemod: 'post-codemod-hook',
+            error: expect.stringMatching(/Post-codemod hook failed/),
+          }),
+        ],
+      },
+    });
+  }, SLOW);
+
+  it('reports what core codemods wrote when astryx.config then fails validation', async () => {
+    installPackage('@astryxdesign/core', '0.6.0');
+    write(
+      'src/panel.tsx',
+      "import {useResizable} from '@astryxdesign/core';\nexport const r = () => useResizable({minSizePx: 200});\n",
+    );
+    write('astryx.config.mjs', "export default {theme: 'neutral'};\n");
+    const {status, envelope} = await upgradeJson(['--from', '0.5.0', '--apply']);
+    expect(status).toBe(1);
+    expect(envelope).toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      receipt: {
+        complete: false,
+        errorCode: 'ERR_INVALID_ARGUMENT',
+        modifiedFiles: ['src/panel.tsx'],
+        errors: [expect.objectContaining({codemod: 'config'})],
+      },
+    });
+    expect(fs.readFileSync(path.join(tmpDir, 'src/panel.tsx'), 'utf8')).toContain(
+      'minSize: 200',
+    );
   }, SLOW);
 
   it('lists a missing jscodeshift and the refused flag combinations', () => {

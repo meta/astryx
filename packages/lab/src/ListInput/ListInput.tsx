@@ -809,6 +809,29 @@ export function ListInput<T>({
     }
   }, [isDisabled, isLoading, announce, t]);
 
+  // A second pointer that lands anywhere during a pointer reorder (the second
+  // finger of a pinch) cancels the reorder. A pinch whose first finger slid
+  // first zooms without a pointercancel, so the drag would otherwise commit on
+  // release and drop the row at the end of the list.
+  useEffect(() => {
+    if (!isPointerReorderActive) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const activeState = reorderStateRef.current;
+      if (
+        activeState?.mode === 'pointer' &&
+        activeState.pointerId !== event.pointerId
+      ) {
+        setReorderState(null);
+        announce(t('@astryx.listInput.announceReorderCancelled'));
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () =>
+      document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [isPointerReorderActive, announce, t]);
+
   useEffect(() => {
     const activeAnimations = activeMutationAnimationsRef.current;
     return () => {

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file MarkdownParitySandbox.a11y.chromium.spec.ts
@@ -807,7 +808,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(6);
+    ).toHaveCount(7);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -890,6 +891,7 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
     const richText = await surfaceGeometry(page, RICH_TEXT);
@@ -902,6 +904,42 @@ for (const globals of [
       expect(
         Math.abs(height(richText) - height(markdown)),
         `${key} height`,
+      ).toBeLessThanOrEqual(2);
+    }
+    // A fence that names no language keeps its corner copy button beside the
+    // code, never over it: the text ends as far from the frame's inline end
+    // on both surfaces.
+    const textInset = (surface: string, key: string) =>
+      page.evaluate(
+        ({selector}) => {
+          const block = document.querySelector<HTMLElement>(selector);
+          const frame = block?.matches('pre, code')
+            ? block
+            : block?.querySelector<HTMLElement>('pre, code');
+          if (frame == null) {
+            return -1;
+          }
+          const rect = frame.getBoundingClientRect();
+          const style = getComputedStyle(frame);
+          const rtl = style.direction === 'rtl';
+          const line = frame.querySelector('[data-line="1"]');
+          if (line != null) {
+            const text = line.getBoundingClientRect();
+            return rtl ? text.left - rect.left : rect.right - text.right;
+          }
+          return rtl
+            ? parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)
+            : parseFloat(style.borderRightWidth) +
+                parseFloat(style.paddingRight);
+        },
+        {selector: `${surface} [data-parity-block="${key}"]`},
+      );
+    for (const key of ['code-plain', 'code-plain-long']) {
+      const markdownInset = await textInset(MARKDOWN, key);
+      expect(markdownInset, `${key} markdown inset`).toBeGreaterThan(40);
+      expect(
+        Math.abs((await textInset(RICH_TEXT, key)) - markdownInset),
+        `${key} text inset`,
       ).toBeLessThanOrEqual(2);
     }
     // The label core Markdown shows for each fence.
@@ -926,14 +964,14 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(6);
+    await expect(headers).toHaveCount(7);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5]) {
+    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();

@@ -24,7 +24,7 @@ export const docs = {
       name: 'announce',
       type: '(message: string, politeness?: "polite" | "assertive") => void',
       description:
-        'Speaks a message through the shared live region. Politeness defaults to "polite"; an empty message clears any lingering status instead of announcing.',
+        'Speaks a message through the shared live region. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
     },
   ],
   usage: {
@@ -65,7 +65,7 @@ export const docsDense = {
     'Imperative screen-reader announcements via a visually-hidden live region. Polite + assertive regions created empty on first use + kept mounted, so announcements are reliable (most AT ignore a live region inserted together w/ its content). Messages auto-clear after ~2s.',
   returnDescriptions: {
     announce:
-      'speaks message through shared live region. politeness defaults "polite"; empty message clears lingering status.',
+      'speaks message through shared live region. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once; empty message clears lingering + not-yet-spoken status.',
   },
   usage: {
     description:

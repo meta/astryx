@@ -41,20 +41,11 @@ const styles = stylex.create({
     // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingInlineEnd: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
-    paddingBlockStart: {
-      default: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-      // When header has no divider, collapse top padding for seamless visual flow
-      [stylex.when.ancestor(
-        ':has(> .astryx-layout-header:not([data-divider]))',
-      )]: 0,
-    },
-    paddingBlockEnd: {
-      default: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-      // When footer has no divider, collapse bottom padding for seamless visual flow
-      [stylex.when.ancestor(
-        ':has(> .astryx-layout-footer:not([data-divider]))',
-      )]: 0,
-    },
+    // A header or footer without a divider collapses the adjacent padding
+    // for a seamless visual flow: Layout's middle row sets these to 0px then
+    // (see Layout.tsx `middle`).
+    paddingBlockStart: `var(--_layout-flush-block-start, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
+    paddingBlockEnd: `var(--_layout-flush-block-end, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
     // Publish container padding vars for bleed children (Table, Divider, etc.)
     '--container-padding-inline-start': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     '--container-padding-inline-end': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,

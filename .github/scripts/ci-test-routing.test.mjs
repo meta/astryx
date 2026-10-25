@@ -18,6 +18,9 @@
  * holds if every project has a lane in every workflow: a third project added
  * to the config with no job to run it would be collected by nobody and fail
  * nothing — the first failure again, one level up.
+ *
+ * The lanes call root package scripts (`pnpm test:ui`, `pnpm test:node`), so
+ * the commands are checked with each script expanded to its body.
  */
 
 import fs from 'node:fs';
@@ -68,7 +71,7 @@ const WORKFLOWS = {
     // other and so ride one lane of their own.
     lanes: ['test-ui', 'test-node', 'typecheck'],
     scopeConditional: false,
-    sharded: false,
+    sharded: true,
   },
 };
 
@@ -78,10 +81,23 @@ function load(file) {
   return yaml.parse(read(`.github/workflows/${file}`));
 }
 
+const rootScripts = JSON.parse(read('package.json')).scripts;
+
+/**
+ * A run block with each `pnpm <root script>` replaced by the script's body,
+ * recursively; arguments after the script name stay after its body.
+ */
+function expandScripts(run) {
+  return run.replace(/\bpnpm ([a-z][\w:-]*)(?=\s|$)/g, (whole, name) =>
+    Object.hasOwn(rootScripts, name) ? expandScripts(rootScripts[name]) : whole,
+  );
+}
+
 function runLines(job) {
   return (job?.steps ?? [])
     .map(step => step.run)
     .filter(Boolean)
+    .map(expandScripts)
     .join('\n');
 }
 
@@ -126,44 +142,42 @@ describe.each(Object.entries(WORKFLOWS))(
       const benchmark = 'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
       const job = workflow.jobs['test-ui'];
       const suites = job.steps.filter(step =>
-        step.run?.includes('--project ui'),
+        expandScripts(step.run ?? '').includes('--project ui'),
+      );
+      // The two package scripts every lane calls: the parallel suite without
+      // FR23, and FR23 alone with no file parallelism.
+      expect(rootScripts['test:ui']).toBe(
+        `vitest run --project ui --exclude ${benchmark}`,
+      );
+      expect(rootScripts['test:ui:isolated']).toBe(
+        `vitest run --project ui ${benchmark} --no-file-parallelism`,
       );
       expect(job['continue-on-error']).not.toBe(true);
       for (const suite of suites) {
         expect(suite['continue-on-error']).not.toBe(true);
       }
 
-      if (!sharded) {
-        // One conditional step preserves the existing scope gate for both
-        // runs. Exact foreground commands also reject backgrounding or
-        // ignored exits.
-        expect(suites).toHaveLength(1);
-        expect(suites[0].run.trim().split('\n')).toEqual([
-          `pnpm vitest run --project ui --exclude ${benchmark}`,
-          `pnpm vitest run --project ui ${benchmark} --no-file-parallelism`,
-        ]);
-        return;
-      }
-
       // Sharded: every leg runs its share without FR23, and exactly one leg
       // runs FR23 in a later step on the same runner, after its share exited.
       expect(suites).toHaveLength(2);
       const [share, isolated] = suites;
-      expect(share.run.trim()).toBe(
-        `pnpm vitest run --project ui --exclude ${benchmark} ${SHARD_ARG}`,
-      );
-      expect(isolated.run.trim()).toBe(
-        `pnpm vitest run --project ui ${benchmark} --no-file-parallelism`,
-      );
+      expect(share.run.trim()).toBe(`pnpm test:ui ${SHARD_ARG}`);
+      expect(isolated.run.trim()).toBe('pnpm test:ui:isolated');
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
-      expect(isolated.if).toBe(`matrix.shard == 1 && ${share.if}`);
+      expect(isolated.if).toBe(
+        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+      );
     });
 
     if (sharded) {
       it('splits each Vitest lane across legs that together run every file', () => {
-        for (const lane of lanes) {
+        const vitestLanes = lanes.filter(lane =>
+          /--project \w+/.test(runLines(workflow.jobs[lane])),
+        );
+        expect(vitestLanes).toEqual(['test-ui', 'test-node']);
+        for (const lane of vitestLanes) {
           const job = workflow.jobs[lane];
           const legs = job.strategy?.matrix?.shard;
           expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(true);
@@ -174,14 +188,16 @@ describe.each(Object.entries(WORKFLOWS))(
           expect(Object.keys(job.strategy.matrix)).toEqual(['shard']);
           expect(job.strategy['fail-fast']).toBe(false);
           const suites = job.steps.filter(step =>
-            /--project \w+/.test(step.run ?? ''),
+            /--project \w+/.test(expandScripts(step.run ?? '')),
           );
           // The one step that is not sharded is the isolated FR23 benchmark.
           const unsharded = suites.filter(
             step => !step.run.includes(SHARD_ARG),
           );
           for (const step of unsharded) {
-            expect(step.run).toContain('Markdown.fr23.perf.test.ts');
+            expect(expandScripts(step.run)).toContain(
+              'Markdown.fr23.perf.test.ts',
+            );
           }
           expect(suites.length - unsharded.length).toBe(1);
         }
@@ -190,12 +206,15 @@ describe.each(Object.entries(WORKFLOWS))(
 
     it('gives no lane the whole suite', () => {
       // A bare `pnpm test` runs every project in one job — the shape that hit
-      // the wall.
+      // the wall. Checked on the steps as written: expanded, it is just
+      // `vitest run`.
       for (const lane of lanes) {
-        expect(
-          runLines(workflow.jobs[lane]),
-          `${lane} runs the whole suite`,
-        ).not.toMatch(/^\s*pnpm test\s*$/m);
+        const raw = (workflow.jobs[lane]?.steps ?? [])
+          .map(step => step.run ?? '')
+          .join('\n');
+        expect(raw, `${lane} runs the whole suite`).not.toMatch(
+          /^\s*pnpm test\s*$/m,
+        );
       }
     });
 
@@ -247,7 +266,9 @@ describe.each(Object.entries(WORKFLOWS))(
         for (const lane of lanes) {
           expect(workflow.jobs[lane].if).toContain('always()');
           const steps = workflow.jobs[lane].steps;
-          const suite = steps.find(step => step.run?.includes('--project'));
+          const suite = steps.find(step =>
+            expandScripts(step.run ?? '').includes('--project'),
+          );
           expect(suite.if, `${lane} suite is unconditional`).toContain(
             "docsite_only != 'true'",
           );
@@ -265,6 +286,58 @@ describe.each(Object.entries(WORKFLOWS))(
     }
   },
 );
+
+describe('ci.yml pr-a11y browser specs', () => {
+  const steps = load('ci.yml').jobs['pr-a11y'].steps;
+  const run = steps.find(
+    step => step.name === 'Run browser accessibility specs',
+  );
+  const upload = steps.find(
+    step => step.name === 'Upload browser accessibility evidence',
+  );
+
+  // Specs are discovered, never listed: a step naming one spec file is the
+  // per-test workflow edit this lane exists to avoid.
+  it('names no spec file in any step', () => {
+    for (const step of steps) {
+      expect(step.run ?? '', step.name).not.toMatch(
+        /\.spec\.(ts|tsx|js|mjs)\b/,
+      );
+    }
+  });
+
+  it("runs the merge commit's runner against the PR head", () => {
+    expect(run.if).toBe('${{ !cancelled() }}');
+    // The merge commit the steps come from, not the PR's recorded base, which
+    // can lag main and predate the runner.
+    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    expect(run.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(run.run).toContain('node "$runner"');
+    expect(
+      JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
+    ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
+  });
+
+  it('uploads every spec receipt in one head-bound artifact', () => {
+    expect(upload.if).toBe('${{ !cancelled() }}');
+    expect(upload.with.name).toBe(
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+    );
+    for (const dir of [
+      'pr-a11y-evidence/',
+      'pr-a11y-output/',
+      'test-results/',
+      '*-audit-evidence/',
+    ]) {
+      expect(upload.with.path).toContain(dir);
+    }
+    expect(steps.indexOf(upload)).toBeGreaterThan(steps.indexOf(run));
+  });
+});
 
 describe('ci.yml RTL package sharding', () => {
   const workflow = load('ci.yml');
@@ -353,7 +426,10 @@ describe('ci.yml RTL package sharding', () => {
       expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
     }
     expect(shard['runs-on']).toBe('4-core-ubuntu');
-    expect(shard['timeout-minutes']).toBeLessThanOrEqual(30);
+    // Pull requests get the 15-minute PR budget; the full release roster, 30.
+    expect(shard['timeout-minutes']).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}",
+    );
     expect(shard['continue-on-error']).not.toBe(true);
     const scope = shard.steps.find(
       step => step.name === 'Resolve RTL shard scope',
@@ -460,6 +536,62 @@ describe('ci.yml RTL package sharding', () => {
   });
 });
 
+describe('full component typechecks', () => {
+  // Each component package's own sources and tests, in both typecheck lanes:
+  // typecheck:docs covers only its .doc.mjs files, so a type error in a test
+  // otherwise lands on main unseen (lab's MobileTokenizer.test.tsx did).
+  const packages = ['core', 'lab', 'charts', 'richtext', 'vega'];
+  const scriptsOf = dir => JSON.parse(read(`${dir}/package.json`)).scripts;
+
+  it.each(['ci.yml', 'deploy.yml'])(
+    '%s runs every package typecheck through pnpm typecheck',
+    file => {
+      const steps = load(file).jobs.typecheck.steps;
+      const step = steps.find(candidate =>
+        /^\s*pnpm typecheck\s*$/m.test(candidate.run ?? ''),
+      );
+      expect(step, `${file} does not run pnpm typecheck`).toBeDefined();
+      expect(scriptsOf('.').typecheck).toBe(
+        'pnpm -r --no-bail --workspace-concurrency=1 --if-present --filter "!@astryxdesign/docsite" --filter "!@astryxdesign/sandbox" run typecheck',
+      );
+    },
+  );
+
+  it.each(packages)(
+    "%s's typecheck covers its sources, tests, and docs",
+    name => {
+      const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
+      expect(docs).toBe('tsc --project tsconfig.docs.json');
+      expect(typecheck).toMatch(
+        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+      );
+    },
+  );
+
+  it('covers the CLI template docs and strict checkJs', () => {
+    expect(scriptsOf('packages/cli').typecheck).toBe(
+      'pnpm typecheck:template-docs && pnpm typecheck:strict',
+    );
+  });
+
+  it('keeps the previous list for a head that predates pnpm typecheck', () => {
+    const step = load('ci.yml').jobs.typecheck.steps.find(
+      candidate => candidate.name === 'Typecheck every package',
+    );
+    expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    expect(step.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/typecheck-predating-head.sh" > "$legacy"',
+    );
+    const legacy = read('.github/scripts/typecheck-predating-head.sh');
+    for (const name of packages) {
+      expect(legacy).toContain(`pnpm -F @astryxdesign/${name} typecheck\n`);
+      expect(legacy).toContain(
+        `pnpm -F @astryxdesign/${name} typecheck:docs\n`,
+      );
+    }
+  });
+});
+
 describe('deploy.yml push gating', () => {
   const workflow = load('deploy.yml');
 
@@ -483,7 +615,7 @@ describe('deploy.yml push gating', () => {
     // build has to precede the gates in the SAME lane.
     const steps = workflow.jobs.typecheck.steps.map(step => step.run ?? '');
     const build = steps.findIndex(step => step.trim() === 'pnpm build');
-    const strict = steps.findIndex(step => step.includes('typecheck:strict'));
+    const strict = steps.findIndex(step => /^pnpm typecheck$/m.test(step));
 
     expect(build).toBeGreaterThanOrEqual(0);
     expect(strict).toBeGreaterThan(build);
@@ -493,27 +625,97 @@ describe('deploy.yml push gating', () => {
     // These exist because a typecheck error can otherwise land on main and
     // break the `build` check on every open PR (#3197).
     const gates = runLines(workflow.jobs.typecheck);
-    for (const gate of [
-      'scripts/verify-exports.mjs',
-      '@astryxdesign/core typecheck:docs',
-      '@astryxdesign/lab typecheck:docs',
-      '@astryxdesign/charts typecheck:docs',
-      '@astryxdesign/cli typecheck:template-docs',
-      '@astryxdesign/cli typecheck:strict',
-      '@astryxdesign/storybook typecheck',
-      '@astryxdesign/core typecheck',
+    expect(gates).toContain('scripts/verify-exports.mjs');
+    // runLines expands root scripts, so look for the step as written.
+    const steps = workflow.jobs.typecheck.steps.map(step => step.run ?? '');
+    expect(steps.some(run => /^pnpm typecheck$/m.test(run))).toBe(true);
+    expect(gates).toContain('--if-present');
+    // Every package that guarded main still defines the script it reaches.
+    for (const dir of [
+      'packages/core',
+      'packages/lab',
+      'packages/charts',
+      'packages/cli',
+      'apps/storybook',
+      'internal/a11y-spec',
+      'internal/interaction-harness',
     ]) {
-      expect(gates, `lost the ${gate} gate`).toContain(gate);
+      const {typecheck} = JSON.parse(read(`${dir}/package.json`)).scripts;
+      expect(typecheck, `${dir} lost its typecheck`).toBeTruthy();
     }
   });
 
-  it('checks out main on every push-gate lane', () => {
-    // A lane that checks out the default ref would gate the wrong commit.
+  it('checks out one run-wide main commit on every push-gate lane and leg', () => {
+    // A lane that checks out the default ref would gate the wrong commit, and
+    // legs that each resolve `main` can straddle a merge and shard different
+    // file lists, so one job resolves the commit and every leg checks it out.
+    const resolve = workflow.jobs['main-commit'];
+    expect(resolve.outputs.sha).toBe('${{ steps.resolve.outputs.sha }}');
+    const script = resolve.steps[0].with.script;
+    expect(script).toContain('context.sha');
+    expect(script).toContain("branch: 'main'");
     for (const lane of ['test-ui', 'test-node', 'typecheck']) {
+      expect(workflow.jobs[lane].needs).toEqual(['main-commit']);
       const checkout = workflow.jobs[lane].steps.find(step =>
         step.uses?.startsWith('actions/checkout'),
       );
-      expect(checkout?.with?.ref, `${lane} does not pin main`).toBe('main');
+      expect(checkout?.with?.ref, `${lane} does not pin the run's commit`).toBe(
+        '${{ needs.main-commit.outputs.sha }}',
+      );
     }
+  });
+});
+
+describe('ci.yml interaction proofs', () => {
+  const workflow = load('ci.yml');
+  const job = workflow.jobs['pr-interaction'];
+  const step = name => job.steps.find(candidate => candidate.name === name);
+
+  it('runs the interaction config in Chromium against the exact PR head', () => {
+    // Four cores when the proofs apply, a slim runner when it passes without work.
+    const labels = [...job['runs-on'].matchAll(/'([^']+)'/g)]
+      .map(match => match[1])
+      .filter(label => label !== 'true');
+    expect(labels).toEqual(['4-core-ubuntu', 'ubuntu-slim']);
+    for (const label of labels)
+      expect(KNOWN_RUNNERS.has(label), label).toBe(true);
+    expect(job.needs).toEqual(
+      expect.arrayContaining(['check-scope', 'build-storybook']),
+    );
+    const checkout = job.steps.find(candidate =>
+      candidate.uses?.startsWith('actions/checkout@'),
+    );
+    expect(checkout?.with?.ref).toBe(
+      '${{ github.event.pull_request.head.sha }}',
+    );
+    const run = step('Run interaction proofs').run;
+    expect(run).toContain('--config playwright.interaction.config.ts');
+    expect(run).toContain('--project chromium');
+    const packageJson = JSON.parse(read('package.json'));
+    expect(packageJson.scripts['test:interaction']).toBe(
+      'playwright test --config playwright.interaction.config.ts',
+    );
+  });
+
+  it('runs whenever the harness, its config, a component or a story changes', () => {
+    const scope = workflow.jobs['interaction-scope'].steps.find(
+      candidate =>
+        candidate.name === 'Decide whether the interaction proofs apply',
+    ).run;
+    expect(scope).toContain('.github/scripts/pr-scope-touches.sh');
+    for (const path of [
+      'internal/interaction-harness/',
+      'internal/a11y-spec/',
+      'playwright\\.interaction\\.config\\.ts',
+      'packages/[^/]+/src/',
+      'apps/storybook/',
+      '\\.github/workflows/ci\\.yml$',
+      'package\\.json$',
+      'pnpm-lock\\.yaml$',
+    ]) {
+      expect(scope).toContain(path);
+    }
+    // Unknown scope (exit 2) runs the proofs; only "out of scope" skips them.
+    expect(scope).toContain('if [ "$scope" = 1 ]; then');
   });
 });

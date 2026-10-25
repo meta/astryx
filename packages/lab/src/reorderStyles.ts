@@ -65,18 +65,23 @@ export const reorderStyles = stylex.create({
       insetBlockEnd: `calc(-1 * ${spacingVars['--spacing-0-5']})`,
     },
   },
+  // A finger on a grip drags its row from the first move, so the grip refuses
+  // panning. It still allows pinch-zoom: a pinch whose first finger lands on a
+  // grip zooms the page (WCAG 1.4.4); the browser's pointercancel then ends
+  // the drag, as it would any drag the browser takes. `touch-action` is read
+  // when the touch starts, so the active state keeps the same value.
   handle: {
     cursor: {
       default: 'grab',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    touchAction: 'none',
+    touchAction: 'pinch-zoom',
   },
   handleActive: {
     cursor: {
       default: 'grabbing',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    touchAction: 'none',
+    touchAction: 'pinch-zoom',
   },
 });
