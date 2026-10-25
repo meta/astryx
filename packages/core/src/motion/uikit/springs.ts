@@ -265,7 +265,9 @@ export const springs = {
   contextMenuDismiss: {...MENU_CLOSE_SPRING},
   /**
    * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot.
+   * slower, no overshoot. The measured UIKit record only: under Reduce Motion
+   * nothing springs in Astryx (design:reduced-motion DR1), so no component
+   * plays it, and it is not a theme motion role (DR4).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026
@@ -335,5 +337,10 @@ export const springs = {
  * never does ships no registry.
  */
 export function registerSpringsTable(): void {
-  registerMotionTable('springs', springs);
+  registerMotionTable('springs', springs, {
+    // UIKit's menus under Reduce Motion: nothing springs under reduced
+    // motion (design:reduced-motion DR1), and no theme value may change a
+    // reduced-motion animation (DR4).
+    exclude: ['menuReducedMotion'],
+  });
 }

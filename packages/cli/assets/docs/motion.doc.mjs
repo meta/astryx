@@ -265,12 +265,6 @@ const calmTheme = defineTheme({
               '0.32s 0.2',
             ],
             [
-              'springs.menuReducedMotion',
-              '--motion-springs-menu-reduced-motion',
-              'spring',
-              '0.4s 0',
-            ],
-            [
               'springs.navigationBarElements',
               '--motion-springs-navigation-bar-elements',
               'spring',
