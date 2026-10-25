@@ -19,7 +19,7 @@ import Testing
 
 @MainActor
 @Test func textGrowsAtTheLargestDynamicTypeSize() {
-  let large = Pixels(AstryxText("Hello").fixedSize())
-  let largest = Pixels(AstryxText("Hello").fixedSize(), typeSize: .accessibility5)
+  let large = Pixels(Astryx.Text("Hello").fixedSize())
+  let largest = Pixels(Astryx.Text("Hello").fixedSize(), typeSize: .accessibility5)
   #expect(largest.width > large.width * 2)
 }
