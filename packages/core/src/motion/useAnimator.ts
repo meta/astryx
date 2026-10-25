@@ -38,6 +38,9 @@ export interface UseAnimatorResult {
  *
  * @example
  * ```
+ * // Once, at module scope, so the springs follow the theme's roles:
+ * registerSpringsTable();
+ *
  * const {ref, animator} = useAnimator();
  * const open = () => animator.animate({y: 0}, {spring: springs.sheetPresent});
  * return <div ref={ref} />;

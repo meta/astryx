@@ -43,8 +43,12 @@ Every spring, duration (a key ending in `Ms`) and curve of a table that calls
 `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role
 with `defineTheme({motion: {springs, durations, curves}})`, which writes the
 role's CSS variable (`--motion-springs-sheet-present: 0.6s 0.1`) only for the
-roles it sets; the table's value stays the default. The animator resolves each
-table spring and curve it is handed when the motion starts; code that times
+roles it sets; the table's value stays the default. A table's values become
+roles once its `register<Name>Table()` has run: the animator registers the
+timing table and a coast the scroll table, and code that plays springs calls
+`registerSpringsTable()` before its first motion, or its springs play the
+table's values whatever the theme sets. The animator resolves each table
+spring and curve it is handed when the motion starts; code that times
 something itself calls `resolveMotion(element, timing.press, 'highlightOutMs')`.
 Gesture thresholds and the timings that decide who gets a touch are not roles
 (`exclude`). `pnpm generate:motion-roles` regenerates the role table in the
@@ -55,7 +59,10 @@ motion docs.
 ```
 import {createAnimator} from '../motion/animator';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
-import {springs} from '../motion/uikit';
+import {registerSpringsTable, springs} from '../motion/uikit';
+
+// Once, so the springs follow the theme's roles:
+registerSpringsTable();
 
 const animator = createAnimator(sheet);
 

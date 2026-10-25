@@ -123,10 +123,13 @@
  * starts on release toward a target it picks (a detent, a page) is a
  * transition, and cross-fades (DR2).
  *
- * Theme: a spring or curve from a motion table (`springs.sheetPresent`,
- * `scroll.bounce`, the Reduce Motion fade's duration and curve) plays the
- * value the element's theme sets for that role, or the table's value when it
- * sets none (resolveMotion.ts). It is read once, when the motion starts, from
+ * Theme: a spring or curve from a registered motion table plays the value
+ * the element's theme sets for that role, or the table's value when it sets
+ * none (resolveMotion.ts): `springs.sheetPresent` once
+ * `registerSpringsTable()` has run, `scroll.bounce` (a coast registers the
+ * scroll table), the Reduce Motion fade's curve (the animator registers the
+ * timing table). A table never registered plays its own values, and the
+ * fade's length is not a role. It is read once, when the motion starts, from
  * the theme scope's computed style: no layout, and the start, the promotion
  * and the browser-set start time are unchanged. A spring written inline at the
  * call site is played as given.
