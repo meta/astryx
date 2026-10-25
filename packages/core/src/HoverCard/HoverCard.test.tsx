@@ -1049,7 +1049,11 @@ describe('HoverCard', () => {
       __resetInteractionModalityForTest();
     });
 
-    /** A tap: the pointer sequence a finger produces before hover is faked. */
+    /**
+     * A tap, in the order a browser dispatches it: the finger's pointer events,
+     * then the hover it synthesizes, then the `click` that says the touch was a
+     * tap and not the start of a scroll.
+     */
     const tap = (element: HTMLElement) => {
       // A finger's arrival fires pointerenter too, and that is the path a pen
       // must not take — cover it here rather than starting at pointerdown.
@@ -1058,6 +1062,7 @@ describe('HoverCard', () => {
       fireEvent.pointerUp(element, {pointerType: 'touch'});
       // Touch synthesizes hover after the press; the card must not act on it.
       fireEvent.mouseEnter(element);
+      fireEvent.click(element);
     };
 
     it('opens on a tap when the trigger performs no action', async () => {
@@ -1141,6 +1146,8 @@ describe('HoverCard', () => {
         hidden: true,
       });
       fireEvent.pointerDown(action, {pointerType: 'touch'});
+      fireEvent.pointerUp(action, {pointerType: 'touch'});
+      fireEvent.click(action);
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
@@ -1166,10 +1173,93 @@ describe('HoverCard', () => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
 
-      fireEvent.pointerDown(screen.getByRole('button', {name: 'Elsewhere'}), {
-        pointerType: 'touch',
-      });
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      // Not yet: a popover closes when the outside tap lifts.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
 
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('opens when the finger lifts, not when it lands', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Ruby Cheung
+        </HoverCard>,
+      );
+
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('never opens for a touch that turns into a scroll', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Ruby Cheung
+        </HoverCard>,
+      );
+
+      const trigger = screen.getByText('Ruby Cheung');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerCancel(trigger, {pointerType: 'touch'});
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('closes when a scroll starts outside, but not for one inside the card', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<p>Card content</p>}
+            onOpenChange={onOpenChange}
+            delay={0}
+            hideDelay={0}>
+            Ruby Cheung
+          </HoverCard>
+          <p>Page content</p>
+        </>,
+      );
+
+      tap(screen.getByText('Ruby Cheung'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      onOpenChange.mockClear();
+
+      // Scrolling the card's own content keeps it.
+      const inside = await screen.findByText('Card content');
+      fireEvent.pointerDown(inside, {pointerType: 'touch'});
+      fireEvent.pointerCancel(inside, {pointerType: 'touch'});
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+      const page = screen.getByText('Page content');
+      fireEvent.pointerDown(page, {pointerType: 'touch'});
+      fireEvent.pointerCancel(page, {pointerType: 'touch'});
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });

@@ -15,6 +15,7 @@
 import path from 'node:path';
 import postcss from 'postcss';
 import selectorParser from 'postcss-selector-parser';
+import {parseCss, processSelector} from '../../parse.mjs';
 import {
   V054_THEME_SELECTOR_DYNAMIC_AXES,
   V054_THEME_SELECTOR_TARGETS,
@@ -555,7 +556,7 @@ function migrateSelectorTextWithContext(
 ) {
   /** @type {TargetContext} */
   let context = {guaranteed: [], possible: []};
-  const text = selectorParser(selectors => {
+  const text = processSelector(selector, selectors => {
     /** @type {TargetContext[]} */
     const branchContexts = [];
     selectors.each(selectorNode => {
@@ -593,7 +594,7 @@ function migrateSelectorTextWithContext(
       });
     });
     context = combineSelectorListContexts(branchContexts);
-  }).processSync(selector, {lossless: true});
+  });
   return {text, context};
 }
 
@@ -677,7 +678,7 @@ export function migrateAstryxThemeSelectors(source, from = 'styles.css', data) {
 
 /** @param {string} source @param {string} from @returns {string} */
 function migrateWithActiveTables(source, from) {
-  const root = postcss.parse(source, {from});
+  const root = parseCss(source, {from});
   const existingComments = new Set();
   root.walkComments(comment => {
     existingComments.add(comment.text.trim());

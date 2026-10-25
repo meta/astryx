@@ -18,7 +18,8 @@
  *   pointer events stay with the element it landed on (implicit capture), so a
  *   menu container never sees a finger that slid onto it — the document does.
  * - The highlight follows the pointer (DOM focus with `preventScroll` in a
- *   menu; a callback for a picker that highlights by index).
+ *   menu, its indicator following the last input; a callback for a picker
+ *   that highlights by index).
  * - The row under the RELEASE acts, the way its own click would, carrying the
  *   release's button and modifier keys.
  * - The browser's stray `click` for a tracked gesture is swallowed at the
@@ -32,7 +33,8 @@
  * - `pointercancel`, a second pointer, or the window losing focus end the
  *   gesture with nothing acting; the model never re-implements scrolling.
  * - While a press is tracked in an overflowing menu, a pointer resting near
- *   the top or bottom edge scrolls the menu toward that edge.
+ *   the top or bottom edge scrolls the menu toward that edge (the shared
+ *   timer of utils/edgeAutoscroll.ts).
  *
  * The menu root is marked `data-astryx-menu-press` so a nested flyout (a DOM
  * descendant of its parent menu) can tell which level owns a press, and so a
@@ -47,7 +49,14 @@
  * - /packages/core/src/hooks/menuPressGesture.ts
  */
 
-import {useCallback, useEffect, useMemo, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
 import {
   IDLE_MENU_PRESS,
@@ -58,6 +67,9 @@ import {
   type MenuPressPointerType,
 } from './menuPressGesture';
 import {useLongPress, type UseLongPressHandlers} from './useLongPress';
+import {edgeAutoscroll} from '../utils/edgeAutoscroll';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
 /** Marks a menu root that carries this press model. */
 export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
@@ -327,6 +339,9 @@ interface ResolvedPoint {
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  // The highlight, and the hover focus of the rows in this menu, follow the
+  // last input, which this tracks for the document.
+  useInteractionModalityTracking();
 
   const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
@@ -338,10 +353,36 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // exists.
   const longPressApiRef = useRef<UseLongPressHandlers | null>(null);
   const touchMovePreventerRef = useRef<(() => void) | null>(null);
+  // The edge autoscroll running now: its scroller, its direction, and the
+  // re-read of the row under the resting pointer after each step.
   const autoscrollRef = useRef<{
-    timer: ReturnType<typeof setInterval>;
+    scroller: HTMLElement;
     direction: 1 | -1;
+    reread: () => void;
   } | null>(null);
+  const [autoscroll] = useState(() =>
+    edgeAutoscroll({
+      intervalMs: AUTOSCROLL_INTERVAL_MS,
+      immediate: true,
+      step: () => (autoscrollRef.current?.direction ?? 0) * AUTOSCROLL_STEP_PX,
+      apply: delta => {
+        const running = autoscrollRef.current;
+        if (running == null) {
+          return 0;
+        }
+        const before = running.scroller.scrollTop;
+        running.scroller.scrollTop = before + delta;
+        const moved = running.scroller.scrollTop - before;
+        if (moved === 0) {
+          // The edge is reached; nothing more to reveal.
+          autoscrollRef.current = null;
+          return 0;
+        }
+        running.reread();
+        return moved;
+      },
+    }),
+  );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
   // The second pointer that ended a gesture must not start the next one.
@@ -396,11 +437,9 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const stopAutoscroll = useCallback(() => {
-    if (autoscrollRef.current != null) {
-      clearInterval(autoscrollRef.current.timer);
-      autoscrollRef.current = null;
-    }
-  }, []);
+    autoscroll.stop();
+    autoscrollRef.current = null;
+  }, [autoscroll]);
 
   const endGesture = useCallback(() => {
     longPressApiRef.current?.cancel();
@@ -423,7 +462,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
       }
       // In a menu the highlight IS focus. A row whose root takes no
       // focus is highlighted through the control inside it; over nothing,
-      // the menu root holds focus so no row is lit.
+      // the menu root holds focus so no row is lit. The focus follows the
+      // last input (`architecture:interaction-modality` INV1): a held press
+      // is pointer input, so the row does not match :focus-visible, which a
+      // plain focus() would inherit from the focus before it.
       const target =
         row == null
           ? menuRef.current
@@ -431,7 +473,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             ? row
             : row.querySelector<HTMLElement>(INNER_CONTROL_SELECTOR);
       if (target != null && target !== getDocument().activeElement) {
-        target.focus({preventScroll: true});
+        focusForLastInput(target, {preventScroll: true});
       }
     },
     [getDocument],
@@ -580,36 +622,29 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         return;
       }
       stopAutoscroll();
-      const tick = () => {
-        const before = scroller.scrollTop;
-        scroller.scrollTop = before + direction * AUTOSCROLL_STEP_PX;
-        if (scroller.scrollTop === before) {
-          // The edge is reached; nothing more to reveal.
-          stopAutoscroll();
-          return;
-        }
-        // The rows moved under the resting pointer: re-read the row under it.
-        const last = lastPointerEventRef.current;
-        if (last != null) {
-          const point = resolvePoint(last);
-          stepRef.current(
-            {
-              type: 'move',
-              row: point.row,
-              isInMenu: point.isInMenu,
-              time: Date.now(),
-            },
-            last,
-          );
-        }
-      };
       autoscrollRef.current = {
+        scroller,
         direction,
-        timer: setInterval(tick, AUTOSCROLL_INTERVAL_MS),
+        // The rows moved under the resting pointer: re-read the row under it.
+        reread: () => {
+          const last = lastPointerEventRef.current;
+          if (last != null) {
+            const point = resolvePoint(last);
+            stepRef.current(
+              {
+                type: 'move',
+                row: point.row,
+                isInMenu: point.isInMenu,
+                time: Date.now(),
+              },
+              last,
+            );
+          }
+        },
       };
-      tick();
+      autoscroll.update();
     },
-    [getScroller, resolvePoint, stopAutoscroll],
+    [autoscroll, getScroller, resolvePoint, stopAutoscroll],
   );
 
   // --- Document-level tracking ----------------------------------------------

@@ -36,6 +36,21 @@ import {selectorPresentationStyles} from '../Selector/selectorPresentation.style
 import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+
+/**
+ * Enters a search query as one change. Typing it key by key can land several
+ * keystrokes in one frame, whose result announcements are then joined into
+ * one (spec:AST-086 FR9), so a test of what one query announces pastes it.
+ */
+async function enterQuery(
+  user: ReturnType<typeof userEvent.setup>,
+  input: HTMLElement,
+  query: string,
+): Promise<void> {
+  await user.click(input);
+  await user.paste(query);
+}
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -146,7 +161,7 @@ describe('MultiSelector', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -1172,7 +1187,7 @@ describe('MultiSelector', () => {
     );
 
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
-    await user.type(screen.getByRole('combobox', h), 'xyz');
+    await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
     // The panel message is role="presentation", so the live region is the
     // only thing a screen reader gets — it has to say the same words.
@@ -1204,7 +1219,7 @@ describe('MultiSelector', () => {
     );
 
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
-    await user.type(screen.getByRole('combobox', h), 'xyz');
+    await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
     await waitFor(() =>
       expect(politeRegion()?.textContent).toBe(
@@ -1258,7 +1273,7 @@ describe('MultiSelector', () => {
     );
 
     await user.click(screen.getByRole('button', {name: 'Fruit'}));
-    await user.type(screen.getByRole('combobox', h), 'xyz');
+    await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
     await waitFor(() =>
       expect(politeRegion()?.textContent).toBe('Nothing like that here'),
@@ -1396,7 +1411,7 @@ describe('MultiSelector', () => {
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
       // "an" matches Banana and Orange.
-      await user.type(screen.getByRole('combobox', h), 'an');
+      await enterQuery(user, screen.getByRole('combobox', h), 'an');
       await waitFor(() => {
         // The plural branch of a message no catalog supplies.
         expect(politeRegion()?.textContent).toBe('2 résultats');
@@ -1425,7 +1440,7 @@ describe('MultiSelector', () => {
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
       // "app" matches only Apple. Exact match, so "1 résultats" would fail.
-      await user.type(screen.getByRole('combobox', h), 'app');
+      await enterQuery(user, screen.getByRole('combobox', h), 'app');
       await waitFor(() => {
         expect(politeRegion()?.textContent).toBe('1 résultat');
       });
@@ -1449,7 +1464,7 @@ describe('MultiSelector', () => {
         </InternationalizationProvider>,
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
-      await user.type(screen.getByRole('combobox', h), 'xyz');
+      await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
       await waitFor(() => {
         expect(politeRegion()?.textContent).toBe('Aucun résultat');
       });
@@ -1479,7 +1494,7 @@ describe('MultiSelector', () => {
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
       // "an" matches Banana and Orange.
-      await user.type(screen.getByRole('combobox', h), 'an');
+      await enterQuery(user, screen.getByRole('combobox', h), 'an');
       await waitFor(() => {
         // Same key through the catalog path rather than `overrides`.
         expect(politeRegion()?.textContent).toBe('2 résultats');
@@ -2183,7 +2198,7 @@ describe('MultiSelector', () => {
       vi.mocked(matchMedia).mockImplementation(
         (query: string) =>
           ({
-            matches: query === '(max-width: 768px) and (pointer: coarse)',
+            matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
             media: query,
             onchange: null,
             addEventListener: vi.fn(),
@@ -3884,7 +3899,7 @@ describe('MultiSelector hasCreate', () => {
       />,
     );
     await user.click(screen.getByRole('button', {name: 'Labels'}));
-    await user.type(screen.getByRole('combobox', h), 'Urgent');
+    await enterQuery(user, screen.getByRole('combobox', h), 'Urgent');
     // The empty-state message is role="presentation", so the live region is
     // what a screen reader gets — it must say what is on screen: a row.
     await waitFor(() => {

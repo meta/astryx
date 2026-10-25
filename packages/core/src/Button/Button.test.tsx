@@ -149,6 +149,13 @@ describe('Button', () => {
     expect(button.className).toContain('styles.disabled');
   });
 
+  it('keeps a caller-supplied aria-disabled and aria-busy', () => {
+    render(<Button label="Assign" aria-disabled="true" aria-busy={true} />);
+    const button = screen.getByRole('button', {name: 'Assign'});
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('sets aria-busy synchronously while clickAction is pending', async () => {
     // The spinner reveal is visually delayed (CSS animation-delay), but the
     // loading DOM state — aria-busy and aria-disabled — must not be delayed.
