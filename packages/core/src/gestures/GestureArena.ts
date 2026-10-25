@@ -122,7 +122,6 @@ interface Timer {
 
 /**
  * The arena that decides which recognizer gets a touch.
- * @experimental
  */
 export class GestureArena {
   readonly environment: GestureEnvironment;

@@ -73,7 +73,7 @@ describe('the CSS side of the policy', () => {
       `${timing.reducedMotionCrossFadeMs}ms`,
     );
     expect(reducedMotionFadeConsts.easing).toBe(
-      `cubic-bezier(${timing.curves.easeInOut.join(', ')})`,
+      `cubic-bezier(${timing.curves.move.join(', ')})`,
     );
   });
 

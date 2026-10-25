@@ -51,7 +51,6 @@ import type {GestureRecognizer} from './GestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
 import type {GestureTouch, TouchConsumer} from './types';
 
-/** @experimental */
 export type ControlEvent =
   | 'touchDown'
   | 'touchDragInside'
@@ -62,7 +61,6 @@ export type ControlEvent =
   | 'touchUpOutside'
   | 'touchCancel';
 
-/** @experimental */
 export interface PressBounds {
   readonly left: number;
   readonly top: number;
@@ -70,7 +68,6 @@ export interface PressBounds {
   readonly bottom: number;
 }
 
-/** @experimental */
 export interface PressTrackerOptions {
   /** The control's bounds in client px, read when a finger lands. */
   getBounds: () => PressBounds | null;
@@ -119,12 +116,10 @@ export interface PressTrackerOptions {
 
 const PRESS = UIKIT_GESTURES.press;
 
-/** @experimental */
 export type PressHighlightDelay = 'inScrollers' | 'always' | 'never';
 
 /**
  * How a kind of pressable tracks a finger and how long its release takes.
- * @experimental
  */
 export interface PressProfile {
   readonly highlightDelay: PressHighlightDelay;
@@ -134,7 +129,6 @@ export interface PressProfile {
   readonly releaseMs: number;
 }
 
-/** @experimental */
 export const PRESS_PROFILES = {
   /** UIControl: same-frame highlight outside scrollers, 70 pt tracking. */
   control: {
@@ -151,7 +145,6 @@ export const PRESS_PROFILES = {
   },
 } as const satisfies Record<string, PressProfile>;
 
-/** @experimental */
 export type PressProfileName = keyof typeof PRESS_PROFILES;
 
 /** UIButton's rule: an ancestor's single-finger single tap. */
@@ -163,7 +156,6 @@ function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
   );
 }
 
-/** @experimental */
 export class PressTracker implements TouchConsumer {
   isHighlighted = false;
   private isKept = false;

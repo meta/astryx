@@ -28,7 +28,6 @@ import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
 
-/** @experimental */
 export interface UseGestureRecognizerOptions {
   /**
    * Live toggle; turning it off mid-gesture cancels the gesture. That cancel
@@ -60,7 +59,6 @@ export interface UseGestureRecognizerOptions {
  *   },
  * );
  * ```
- * @experimental
  */
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
@@ -117,7 +115,6 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   return recognizer;
 }
 
-/** @experimental */
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
   'getBounds' | 'view'
@@ -136,7 +133,6 @@ export type UsePressTrackerOptions = Omit<
  * the element (unmount, or a replaced node) ends any press without calling
  * them: that release runs in an Effect, which never calls a caller's
  * callback (react-component-runtime INV2, INV3).
- * @experimental
  */
 export function usePressTracker(
   ref: RefObject<Element | null>,
