@@ -17,8 +17,7 @@
  * dragged surface does not jump; `totalTranslation()` is the movement since
  * the fingers landed, and `travelAtBegan` what the threshold took.
  * `velocity()` is UIKit's own filter (see VelocityTracker), fed one sample
- * per event; the lift's position updates neither, as in UIKit, and a finger
- * that rested past the stillness interval releases at 0 (spec:AST-100 FR2). Adding or
+ * per event; the lift's position updates neither, as in UIKit. Adding or
  * lifting a finger never jumps the translation: the centroid is re-based so
  * the gesture continues where it was. Once moving, fingers past the maximum
  * are ignored, so a second finger never breaks a one-finger pan.
@@ -202,12 +201,25 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * Velocity in px/s, UIKit's way. At the release it is 0 when the finger
-   * rested longer than the stillness interval before lifting
-   * (spec:AST-100 FR2); UIKit would report the last moving value.
+   * Velocity in px/s, UIKit's way, for a dragged surface. At the release it
+   * is 0 when the finger rested longer than the stillness interval before
+   * lifting, or moved fewer than twice (spec:AST-100 FR2).
    */
   velocity(): Point {
     return this.locked(this.tracker.velocity(this.releaseTime));
+  }
+
+  /**
+   * A scrolling surface's release velocity in px/s (paging, a wheel): the
+   * scroll-view blend of the pan's last two values, with the same release
+   * rules (architecture:interaction-modality INV10).
+   */
+  scrollVelocity(): Point {
+    return this.locked(
+      this.tracker.scrollVelocity(
+        this.releaseTime ?? this.tracker.lastSample?.time ?? 0,
+      ),
+    );
   }
 
   /**
