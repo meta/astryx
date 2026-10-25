@@ -201,9 +201,14 @@ const STYLEX_MODULE = /\.stylex\.[cm]?[jt]sx?$/;
  * imports. Non-StyleX source files and explicitly retained distribution modules
  * are the entries; other variable modules join only through reachable imports.
  * This keeps source-like graphs selective without omitting Core's public dist
- * defaults. Modules in `provided` are left to the stylesheet that emits them.
+ * defaults. Modules in `provided` are left to the stylesheet that emits them;
+ * the ones this package imports are added to `providedImports`.
  */
-async function reachableSourceFiles(target, provided = new Set()) {
+async function reachableSourceFiles(
+  target,
+  provided = new Set(),
+  providedImports = new Set(),
+) {
   const files = await glob('**/*.{ts,tsx}', {
     cwd: target.src,
     absolute: true,
@@ -239,6 +244,8 @@ async function reachableSourceFiles(target, provided = new Set()) {
       }
       if (!provided.has(dependency)) {
         queue.push(dependency);
+      } else {
+        providedImports.add(dependency);
       }
     }
   }
@@ -260,9 +267,20 @@ async function providedStyleXModules(provider) {
   );
 }
 
+/** A `defineConsts` value as StyleX collects it: a rule with `constKey`/`constVal`. */
+function isConstantRule(rule) {
+  const body = Array.isArray(rule) ? rule[1] : undefined;
+  return body?.constKey != null && body?.constVal != null;
+}
+
 export async function collectStyleXCSS(target) {
   const provided = await providedStyleXModules(target.provider);
-  const reachable = await reachableSourceFiles(target, provided);
+  const providedImports = new Set();
+  const reachable = await reachableSourceFiles(
+    target,
+    provided,
+    providedImports,
+  );
   const allRules = [];
 
   console.log(`Processing ${reachable.size} reachable source files...`);
@@ -271,46 +289,62 @@ export async function collectStyleXCSS(target) {
     if (!code.includes('@stylexjs/stylex')) {
       continue;
     }
+    allRules.push(...(await compileStyleX(file, code, target)));
+  }
 
-    try {
-      const result = await transformAsync(code, {
-        babelrc: false,
-        filename: file,
-        presets: [
-          ['@babel/preset-typescript', {isTSX: true, allExtensions: true}],
-          ['@babel/preset-react', {runtime: 'automatic'}],
-        ],
-        plugins: [
-          [
-            stylexBabelPlugin,
-            {
-              dev: false,
-              runtimeInjection: false,
-              genConditionalClasses: true,
-              treeshakeCompensation: true,
-              aliases: target.aliases,
-              unstable_moduleResolution:
-                stylexResolution.stylexModuleResolution,
-            },
-          ],
-        ],
-      });
-
-      if (result?.metadata?.stylex?.length) {
-        allRules.push(...result.metadata.stylex);
-      }
-    } catch (err) {
-      throw new Error(
-        `Could not process ${path.relative(ROOT, file)}: ${err.message}`,
-        {cause: err},
-      );
-    }
+  // A constant read from a provider's module as a value (lab reading a core
+  // motion duration) compiles to a placeholder that only the constant's own
+  // rule resolves, and a constant is inlined where it is read; at-rule keys
+  // stay literal. So the constants of
+  // every provided module this package imports join its rules (they emit no
+  // CSS); the module's variables stay in the provider's stylesheet.
+  for (const file of providedImports) {
+    const rules = await compileStyleX(
+      file,
+      await fs.readFile(file, 'utf8'),
+      target,
+    );
+    allRules.push(...rules.filter(isConstantRule));
   }
 
   console.log(
     `Collected ${allRules.length} StyleX rules from ${reachable.size} reachable files`,
   );
   return allRules;
+}
+
+/** One file's StyleX rules, compiled as every package stylesheet compiles them. */
+async function compileStyleX(file, code, target) {
+  try {
+    const result = await transformAsync(code, {
+      babelrc: false,
+      filename: file,
+      presets: [
+        ['@babel/preset-typescript', {isTSX: true, allExtensions: true}],
+        ['@babel/preset-react', {runtime: 'automatic'}],
+      ],
+      plugins: [
+        [
+          stylexBabelPlugin,
+          {
+            dev: false,
+            runtimeInjection: false,
+            genConditionalClasses: true,
+            treeshakeCompensation: true,
+            aliases: target.aliases,
+            unstable_moduleResolution: stylexResolution.stylexModuleResolution,
+          },
+        ],
+      ],
+    });
+
+    return result?.metadata?.stylex ?? [];
+  } catch (err) {
+    throw new Error(
+      `Could not process ${path.relative(ROOT, file)}: ${err.message}`,
+      {cause: err},
+    );
+  }
 }
 
 /**
