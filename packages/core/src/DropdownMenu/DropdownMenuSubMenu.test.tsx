@@ -450,6 +450,54 @@ describe('DropdownMenuSubMenu host attributes', () => {
     ).toHaveAttribute('aria-labelledby', 'move-row');
   });
 
+  it('reports each flyout open and close to onOpenChange once', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to" onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    trigger.focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true]]);
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('menuDataTestId names the flyout menu, and data-testid the row', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu
+          label="Move to"
+          data-testid="move-row"
+          menuDataTestId="move-menu">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(trigger).toHaveAttribute('data-testid', 'move-row');
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(screen.getByTestId('move-menu')).toBe(
+      screen.getByRole('menu', {name: 'Move to', hidden: true}),
+    );
+  });
+
   it('a ref reaches the trigger row', async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLElement>();

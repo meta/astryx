@@ -150,4 +150,57 @@ describe('integration codemod file protection', () => {
       }),
     ]);
   });
+
+  it('declines a protected file that does not parse, as the core runner does', async () => {
+    write('.gitattributes', 'src/vendor/** linguist-vendored\n');
+    write('src/owned.js', "export const value = 'old';\n");
+    write('src/vendor/bundle.js', 'export const value = {;\n');
+    write('src/broken.js', 'export const value = {;\n');
+
+    const groups = [
+      {
+        version: '1.0.0',
+        codemods: [
+          {
+            id: 'code',
+            type: 'code',
+            package: '@acme/integration',
+            codemod: {
+              title: 'code',
+              fileExtensions: ['.js'],
+              transform: (file, {jscodeshift: j}) => {
+                const ast = j(file.source);
+                ast.find(j.Identifier, {name: 'value'}).forEach(p => {
+                  p.node.name = 'renamed';
+                });
+                return ast.toSource();
+              },
+            },
+          },
+        ],
+      },
+    ];
+    const jscodeshift = (await import('jscodeshift')).default;
+    const result = runIntegrationCodemods(groups, {
+      apply: true,
+      path: path.join(root, 'src'),
+      root,
+      jscodeshift,
+      silent: true,
+    });
+
+    expect(fs.readFileSync(path.join(root, 'src/owned.js'), 'utf8')).toContain(
+      'renamed',
+    );
+    expect(result.declinedCandidates).toEqual([
+      expect.objectContaining({
+        file: path.join('src', 'vendor', 'bundle.js'),
+        codemod: '@acme/integration:code',
+        location: '1:23',
+      }),
+    ]);
+    expect(result.errors).toEqual([
+      expect.objectContaining({file: path.join('src', 'broken.js')}),
+    ]);
+  });
 });

@@ -153,6 +153,23 @@ const TARGETS = [
       'on a coarse pointer, the compact combobox and full Clear all hit area remain separate in RTL as well',
   },
   {
+    component: 'PowerSearch',
+    story: 'core-powersearch--default-filters-beside-search',
+    guards:
+      'default filter tokens that reach past the field center never cover the search input, and pressing its center focuses it',
+  },
+  {
+    component: 'PowerSearch (RTL)',
+    story: 'core-powersearch--default-filters-beside-search-rtl',
+    guards: 'default filter tokens never cover the search input in RTL as well',
+  },
+  {
+    component: 'PowerSearch',
+    story: 'core-powersearch--token-row-when-resting-styles-win',
+    guards:
+      'whichever single resting declaration of the empty search input outranks its empty-query override, the input stays on the token row and the field grows no blank row',
+  },
+  {
     component: 'Tokenizer',
     story: 'core-tokenizer--caret-placement',
     guards:

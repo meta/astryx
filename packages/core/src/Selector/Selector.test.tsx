@@ -40,6 +40,20 @@ import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 
+/**
+ * Enters a search query as one change. Typing it key by key can land several
+ * keystrokes in one frame, whose result announcements are then joined into
+ * one (spec:AST-086 FR9), so a test of what one query announces pastes it.
+ */
+async function enterQuery(
+  user: ReturnType<typeof userEvent.setup>,
+  input: HTMLElement,
+  query: string,
+): Promise<void> {
+  await user.click(input);
+  await user.paste(query);
+}
+
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
@@ -1246,7 +1260,7 @@ describe('Selector', () => {
         />,
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
-      await user.type(screen.getByRole('combobox', h), 'xyz');
+      await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
       // The panel message is role="presentation", so the live region is the
       // only thing a screen reader gets — it has to say the same words.
@@ -1277,7 +1291,7 @@ describe('Selector', () => {
         />,
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
-      await user.type(screen.getByRole('combobox', h), 'xyz');
+      await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
       await waitFor(() =>
         expect(politeRegion()?.textContent).toBe(
@@ -1328,7 +1342,7 @@ describe('Selector', () => {
         />,
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
-      await user.type(screen.getByRole('combobox', h), 'xyz');
+      await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
 
       await waitFor(() =>
         expect(politeRegion()?.textContent).toBe('Nothing like that here'),
@@ -1362,7 +1376,7 @@ describe('Selector', () => {
       }
       const {rerender} = render(<Deferred loaded={false} />);
 
-      await user.type(screen.getByRole('combobox', h), 'xyz');
+      await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
       // Loading: the panel shows nothing, so the region claims nothing.
       expect(politeRegion()?.textContent ?? '').toBe('');
 
@@ -1682,7 +1696,7 @@ describe('Selector', () => {
         );
         await user.click(screen.getByRole('button', {name: 'Fruit'}));
         // "ban" matches only Banana. Exact, so "1 résultats" would fail.
-        await user.type(screen.getByRole('combobox', h), 'ban');
+        await enterQuery(user, screen.getByRole('combobox', h), 'ban');
         await waitFor(() => {
           expect(politeRegion()?.textContent).toBe('1 résultat');
         });
@@ -1706,7 +1720,7 @@ describe('Selector', () => {
           </InternationalizationProvider>,
         );
         await user.click(screen.getByRole('button', {name: 'Fruit'}));
-        await user.type(screen.getByRole('combobox', h), 'xyz');
+        await enterQuery(user, screen.getByRole('combobox', h), 'xyz');
         await waitFor(() => {
           expect(politeRegion()?.textContent).toBe('Aucun résultat');
         });
@@ -3827,6 +3841,50 @@ describe('Selector search affordances', () => {
     await user.click(clear);
     expect(search).toHaveValue('');
     expect(search).toHaveFocus();
+  });
+
+  // iOS raises the software keyboard only for a focus made while the browser
+  // still dispatches the tap, and a UIKit search field's clear button makes
+  // the field first responder even when it was not editing.
+  it('puts focus back in the search input inside the tap on clear, after the input lost focus', async () => {
+    const user = userEvent.setup();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Apple"
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    const search = screen.getByRole<HTMLInputElement>('combobox', {
+      hidden: true,
+    });
+    await user.type(search, 'ap');
+    const clear = screen.getByRole('button', {
+      name: 'Clear Search options',
+      hidden: true,
+    });
+    // The person dismissed the keyboard: the input no longer has focus.
+    act(() => search.blur());
+    expect(search).not.toHaveFocus();
+
+    const focusedDuring: (string | undefined)[] = [];
+    const focus = HTMLElement.prototype.focus;
+    Object.defineProperty(search, 'focus', {
+      configurable: true,
+      value(options?: FocusOptions) {
+        focusedDuring.push(window.event?.type);
+        focus.call(search, options);
+      },
+    });
+    fireEvent.click(clear, {detail: 1});
+
+    // No frame has run: the focus is in place when the tap's dispatch returns.
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+    expect(focusedDuring).toEqual(['click']);
   });
 
   it('does not render the clear button when the query is empty', async () => {

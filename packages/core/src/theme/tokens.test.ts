@@ -8,6 +8,8 @@ import {
   tokenVar,
   tokenVars,
 } from './tokens';
+import {colorDefaults} from './tokens.stylex';
+import {domainTokenDefaults} from './domainTokens';
 
 const testTheme = defineTheme({
   name: 'test',
@@ -327,5 +329,63 @@ describe('focus outline tokens', () => {
     expect(tokens['--focus-outline-color']).toBe('#00FF00');
     expect(tokens['--focus-outline-width']).toBe('4px');
     expect(tokens['--focus-outline-offset']).toBe('0px');
+  });
+});
+
+// INV10 governs only the colour tokens Astryx defines. The check reads Astryx's
+// own defaults, never consumer, application, or theme-author variables.
+describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
+  const property = '(?:text|icon|background|border)';
+  const intent = '(?:accent|neutral|info|success|warning|error)';
+  const hue = '(?:blue|cyan|gray|green|orange|pink|purple|red|teal|yellow)';
+  const emphasis = '(?:primary|secondary|disabled|emphasized)';
+  const surface = '(?:surface|body|card|popover|muted|inverted)';
+  const variant = '(?:-(?:muted|emphasized|hover|pressed|inverted))?';
+  const shapes = [
+    // 1 and 3: property first, then role, then an optional variant.
+    `^--color-${property}-(?:${emphasis}|${intent}|${surface}|${hue})${variant}$`,
+    // 2 and 3: the intent's own colour, then an optional variant.
+    `^--color-${intent}${variant}$`,
+    // 4: content on a fill.
+    `^--color-on-(?:${intent}${variant}|dark|light)$`,
+    // 5: domain layers.
+    '^--color-(?:data|syntax)-[a-z0-9-]+$',
+  ].map(source => new RegExp(source));
+  const utilityNames = new Set([
+    '--color-border',
+    '--color-overlay',
+    '--color-overlay-hover',
+    '--color-overlay-pressed',
+    '--color-shadow',
+    '--color-skeleton',
+    '--color-track',
+    '--color-tint-hover',
+  ]);
+  const colourNames = [
+    ...Object.keys(colorDefaults),
+    ...Object.keys(domainTokenDefaults),
+  ].filter(name => name.startsWith('--color-'));
+
+  it('checks a non-empty colour vocabulary', () => {
+    expect(colourNames.length).toBeGreaterThan(50);
+  });
+
+  it('gives every colour token Astryx defines one of the five shapes', () => {
+    const misfits = colourNames.filter(
+      name =>
+        !utilityNames.has(name) && !shapes.some(shape => shape.test(name)),
+    );
+    expect(misfits).toEqual([]);
+  });
+
+  it('rejects names outside the grammar', () => {
+    for (const name of [
+      '--color-status-foreground-success',
+      '--color-success-text',
+      '--color-foreground-error',
+      '--color-success-on',
+    ]) {
+      expect(shapes.some(shape => shape.test(name))).toBe(false);
+    }
   });
 });

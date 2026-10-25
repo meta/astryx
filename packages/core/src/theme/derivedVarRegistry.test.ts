@@ -292,12 +292,11 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
-  // The interaction overlay's fill and its transition on the ::after layer of
-  // the cards: written by the component's own hover / pressed arms (mouse
-  // `:active`, touch `data-astryx-press`), never a value a theme author sets; the
-  // overlay colours themselves are the shared interaction tokens.
+  // The interaction overlay's colour on the ::after layer of the cards:
+  // written by the component's own hover and mouse `:active` arms, never a
+  // value a theme author sets; the overlay colours themselves are the shared
+  // interaction tokens.
   '--_press-overlay',
-  '--_press-overlay-transition',
   // The touch press's paint at its current strength, declared once by the
   // shared overlay styles on the element the controller writes to and read
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
