@@ -126,9 +126,9 @@
  * a page) is a transition, and cross-fades (DR2).
  *
  * Theme: a spring or curve from a motion table (`springs.sheetPresent`,
- * `scroll.bounce`, the Reduce Motion fade's duration and curve) plays the
- * value the element's theme sets for that role, or the table's value when it
- * sets none (resolveMotion.ts). It is read once, when the motion starts, from
+ * `scroll.bounce`) plays the value the element's theme sets for that role, or
+ * the table's value when it sets none (resolveMotion.ts); the Reduce Motion
+ * fade is not a role. It is read once, when the motion starts, from
  * the theme scope's computed style: no layout, and the start, the promotion
  * and the browser-set start time are unchanged. A spring written inline at the
  * call site is played as given.

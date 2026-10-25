@@ -36,8 +36,10 @@ under the same rules.
 ## Theme
 
 Every spring, duration (a key ending in `Ms`) and curve of a table that calls
-`registerMotionTable` is a motion role named by its path, such as
-`springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role
+`registerMotionTable` is a motion role named for its use (`spec:AST-094` FR4):
+its table path, such as `springs.sheetPresent`, unless the table renames it,
+as the shared tables do (`springs.settle`, `timing.curves.move`). A theme
+retunes a role
 with `defineTheme({motion: {springs, durations, curves}})`, which writes the
 role's CSS variable (`--motion-springs-sheet-present: 0.6s 0.1`) only for the
 roles it sets; the table's value stays the default. The animator resolves each

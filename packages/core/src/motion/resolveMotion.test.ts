@@ -75,7 +75,7 @@ describe('resolveMotion', () => {
   it("takes the theme scope's value for a spring, a curve and a duration", () => {
     const {child} = themed('soft', {
       '--motion-springs-sheet-present': '0.8s 0.3',
-      '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
       '--motion-navigation-transition-ms': '300ms',
     });
     expect(resolveMotion(child, springs.sheetPresent)).toEqual({
