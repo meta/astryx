@@ -281,6 +281,138 @@ describe('analyze-pr component ownership', () => {
 });
 
 describe('analyze-pr base and head sizes', () => {
+  it('sizes a component whose bundle reaches a changed shared module', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-reach-'));
+    const write = (file, content) => {
+      fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
+      fs.writeFileSync(path.join(repo, file), content);
+    };
+    try {
+      write('package.json', '{}');
+      write('.gitignore', 'dist/\n*.json.out\nanalysis.json\n');
+      write('packages/core/package.json', '{"type": "module"}\n');
+      write('packages/core/src/index.ts', "export {Card} from './Card';\nexport {Badge} from './Badge';\n");
+      write('packages/core/src/Card/index.ts', "export {Card} from './Card';\n");
+      write('packages/core/src/Card/Card.tsx', "import {useHold} from '../hooks/useHold';\nexport function Card() { return useHold(); }\n");
+      write('packages/core/src/Card/Card.doc.mjs', "export const docs = {\n  name: 'Card',\n};\n");
+      write('packages/core/src/Badge/index.ts', "export {Badge} from './Badge';\n");
+      write('packages/core/src/Badge/Badge.tsx', 'export function Badge() {}\n');
+      write('packages/core/src/Badge/Badge.doc.mjs', "export const docs = {\n  name: 'Badge',\n};\n");
+      write('packages/core/src/hooks/useHold.ts', 'export function useHold() { return 1; }\n');
+      git(repo, ['init', '-q', '-b', 'main']);
+      git(repo, ['config', 'user.email', 'test@test.co']);
+      git(repo, ['config', 'user.name', 'Test']);
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-qm', 'base']);
+      git(repo, ['checkout', '-q', '-b', 'feature']);
+      write('packages/core/src/hooks/useHold.ts', 'export function useHold() { return 2; }\n');
+      git(repo, ['commit', '-qam', 'touch the shared hook only']);
+      write('packages/core/dist/Card/Card.js', "import {useHold} from '../hooks/useHold.js';\nexport function Card() { return useHold(); }\n");
+      write('packages/core/dist/Badge/Badge.js', 'export function Badge() { return 0; }\n');
+      write('packages/core/dist/hooks/useHold.js', 'export function useHold() { return 2; }\n');
+      write('packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
+
+      execFileSync(
+        process.execPath,
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
+        {cwd: repo, encoding: 'utf8'},
+      );
+      const analysis = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
+      expect(Object.keys(analysis.componentSizes)).toEqual(['core/Card']);
+    } finally {
+      fs.rmSync(repo, {recursive: true, force: true});
+    }
+  });
+
+  it('decides reach in the merge-base build when only the base is built', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-basereach-'));
+    const baseRoot = path.join(repo, '.size-base');
+    const write = (root, file, content) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), content);
+    };
+    try {
+      write(repo, 'package.json', '{}');
+      write(repo, '.gitignore', 'dist/\n.size-base/\nbase.json\n');
+      write(repo, 'packages/core/package.json', '{"type": "module"}\n');
+      write(repo, 'packages/core/src/index.ts', "export {Card} from './Card';\nexport {Badge} from './Badge';\n");
+      write(repo, 'packages/core/src/Card/index.ts', "export {Card} from './Card';\n");
+      write(repo, 'packages/core/src/Card/Card.tsx', "import {useHold} from '../hooks/useHold';\nexport function Card() { return useHold(); }\n");
+      write(repo, 'packages/core/src/Card/Card.doc.mjs', "export const docs = {\n  name: 'Card',\n};\n");
+      write(repo, 'packages/core/src/Badge/index.ts', "export {Badge} from './Badge';\n");
+      write(repo, 'packages/core/src/Badge/Badge.tsx', 'export function Badge() {}\n');
+      write(repo, 'packages/core/src/Badge/Badge.doc.mjs', "export const docs = {\n  name: 'Badge',\n};\n");
+      write(repo, 'packages/core/src/hooks/useHold.ts', 'export function useHold() { return 1; }\n');
+      git(repo, ['init', '-q', '-b', 'main']);
+      git(repo, ['config', 'user.email', 'test@test.co']);
+      git(repo, ['config', 'user.name', 'Test']);
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-qm', 'base']);
+      git(repo, ['worktree', 'add', '-q', '--detach', baseRoot, 'HEAD']);
+      git(repo, ['checkout', '-q', '-b', 'feature']);
+      write(repo, 'packages/core/src/hooks/useHold.ts', 'export function useHold() { return 2; }\n');
+      git(repo, ['commit', '-qam', 'touch the shared hook only']);
+      // Only the merge base is built, as in the size-base job.
+      write(baseRoot, 'packages/core/dist/Card/Card.js', "import {useHold} from '../hooks/useHold.js';\nexport function Card() { return useHold(); }\n");
+      write(baseRoot, 'packages/core/dist/Badge/Badge.js', 'export function Badge() { return 0; }\n');
+      write(baseRoot, 'packages/core/dist/hooks/useHold.js', 'export function useHold() { return 1; }\n');
+      write(baseRoot, 'packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
+
+      execFileSync(
+        process.execPath,
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8'},
+      );
+      const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
+      expect(Object.keys(base.baseComponentSizes)).toEqual(['core/Card']);
+      expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(repo, {recursive: true, force: true});
+    }
+  });
+
+  it('measures the merge base through its own defining module when the pull request renames it', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-rename-'));
+    const baseRoot = path.join(repo, '.size-base');
+    const write = (root, file, content) => {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), content);
+    };
+    try {
+      write(repo, 'package.json', '{}');
+      write(repo, '.gitignore', 'dist/\n.size-base/\nbase.json\n');
+      write(repo, 'packages/core/package.json', '{"type": "module"}\n');
+      write(repo, 'packages/core/src/index.ts', "export {Card} from './Card';\n");
+      write(repo, 'packages/core/src/Card/index.ts', "export {Card} from './Card';\n");
+      write(repo, 'packages/core/src/Card/Card.tsx', 'export function Card() {}\n');
+      write(repo, 'packages/core/src/Card/Card.doc.mjs', "export const docs = {\n  name: 'Card',\n};\n");
+      git(repo, ['init', '-q', '-b', 'main']);
+      git(repo, ['config', 'user.email', 'test@test.co']);
+      git(repo, ['config', 'user.name', 'Test']);
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '-qm', 'base']);
+      git(repo, ['worktree', 'add', '-q', '--detach', baseRoot, 'HEAD']);
+      git(repo, ['checkout', '-q', '-b', 'feature']);
+      git(repo, ['mv', 'packages/core/src/Card/Card.tsx', 'packages/core/src/Card/CardView.tsx']);
+      write(repo, 'packages/core/src/Card/index.ts', "export {Card} from './CardView';\n");
+      git(repo, ['commit', '-qam', 'rename the defining module']);
+      // Only the merge base is built; its package entry does not export Card,
+      // so a figure proves the defining module was measured.
+      write(baseRoot, 'packages/core/dist/Card/Card.js', 'export function Card() { return 1; }\n');
+      write(baseRoot, 'packages/core/dist/index.js', 'export const other = 1;\n');
+
+      execFileSync(
+        process.execPath,
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8'},
+      );
+      const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
+      expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(repo, {recursive: true, force: true});
+    }
+  });
+
   it('measures ESM entries by module type and reads base sizes from a merge-base build', () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-size-'));
     const baseRoot = path.join(repo, '.size-base');
@@ -295,7 +427,20 @@ describe('analyze-pr base and head sizes', () => {
       write(
         repo,
         'packages/core/src/index.ts',
-        "export {Card} from './Card';\n",
+        "export {Card} from './Card';\nexport {Chat, ChatComposer} from './Chat';\n",
+      );
+      write(
+        repo,
+        'packages/core/src/Chat/index.ts',
+        "export {Chat} from './Chat';\nexport {ChatComposer} from './ChatComposer';\n",
+      );
+      write(repo, 'packages/core/src/Chat/Chat.tsx', 'export function Chat() {}\n');
+      write(repo, 'packages/core/src/Chat/ChatComposer.tsx', 'export function ChatComposer() {}\n');
+      write(repo, 'packages/core/src/Chat/Chat.doc.mjs', "export const docs = {\n  name: 'Chat',\n};\n");
+      write(
+        repo,
+        'packages/core/src/Chat/ChatComposer.doc.mjs',
+        "export const docs = {\n  name: 'ChatComposer',\n};\n",
       );
       write(
         repo,
@@ -323,7 +468,11 @@ describe('analyze-pr base and head sizes', () => {
         path.join(repo, 'packages/core/src/Card/Card.tsx'),
         'export const changed = true;\n',
       );
-      git(repo, ['commit', '-qam', 'touch Card']);
+      fs.appendFileSync(
+        path.join(repo, 'packages/core/src/Chat/ChatComposer.tsx'),
+        'export const changed = true;\n',
+      );
+      git(repo, ['commit', '-qam', 'touch Card and the Chat family']);
 
       // Babel writes ES modules as `.js` in a "type": "module" package.
       write(baseRoot, 'packages/core/dist/Card/index.js', 'x'.repeat(100));
@@ -333,6 +482,19 @@ describe('analyze-pr base and head sizes', () => {
         'export const base = 1;\n'.repeat(10),
       );
       write(repo, 'packages/core/dist/Card/index.js', 'x'.repeat(160));
+      write(baseRoot, 'packages/core/dist/Card/Card.js', 'export function Card() {}\n');
+      write(
+        repo,
+        'packages/core/dist/Card/Card.js',
+        'export function Card() { return "a longer head body"; }\nexport const changed = true;\n',
+      );
+      write(baseRoot, 'packages/core/dist/Chat/Chat.js', 'export function Chat() {}\n');
+      write(repo, 'packages/core/dist/Chat/Chat.js', 'export function Chat() {}\n');
+      write(
+        repo,
+        'packages/core/dist/Chat/ChatComposer.js',
+        'export function ChatComposer() { return "new"; }\n',
+      );
       write(
         repo,
         'packages/core/dist/index.js',
@@ -360,6 +522,18 @@ describe('analyze-pr base and head sizes', () => {
       expect(analysis.componentStats.Card.esmBytes).toBe(160);
       expect(analysis.componentStats.Card.cjsBytes).toBeNull();
       expect(analysis.baseComponentStats.Card.esmBytes).toBe(100);
+      // Every public component in a changed folder is sized, family folders
+      // included, at head and at the merge base.
+      expect(Object.keys(analysis.componentSizes).sort()).toEqual([
+        'core/Card',
+        'core/Chat',
+        'core/ChatComposer',
+      ]);
+      expect(analysis.componentSizes['core/Card'].importGzipBytes).toBeGreaterThan(
+        analysis.baseComponentSizes['core/Card'].importGzipBytes,
+      );
+      expect(analysis.componentSizes['core/ChatComposer'].importGzipBytes).toBeGreaterThan(0);
+      expect(analysis.baseComponentSizes['core/ChatComposer'].importGzipBytes).toBeNull();
       const [headBundle] = analysis.bundlePackages;
       const [baseBundle] = analysis.baseBundlePackages;
       expect(headBundle.package).toBe('@astryxdesign/core');
@@ -390,6 +564,7 @@ describe('analyze-pr base and head sizes', () => {
       expect(baseOnly.baseSha).toBe(git(repo, ['rev-parse', 'main']));
       expect(baseOnly.baseComponentStats.Card.esmBytes).toBe(100);
       expect(baseOnly.componentStats).toBeUndefined();
+      expect(baseOnly.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
     } finally {
       fs.rmSync(repo, {recursive: true, force: true});
     }

@@ -75,6 +75,22 @@ export const docs = {
       description: 'Callback after the code is copied.',
     },
     {
+      name: 'endContent',
+      type: 'ReactNode',
+      description:
+        'Your own controls, shown just before Copy: in the header when the block has one, otherwise beside the code in the top inline-end corner, never over it. It never creates a header and never collapses the block. Use ghost sm IconButtons to match Copy.',
+      slotElements: [
+        {
+          __element: 'IconButton',
+          props: {
+            variant: 'ghost',
+            size: 'sm',
+            label: 'Run in terminal',
+          },
+        },
+      ],
+    },
+    {
       name: 'isWrapped',
       type: 'boolean',
       description: 'Wrap long lines instead of enabling horizontal scroll.',
@@ -230,7 +246,7 @@ export const docs = {
         name: 'Header Bar',
         required: false,
         description:
-          'Shows the title, visible language label, and copy button when a header is present. A title or visible language label creates the header; in a headerless block the copy button sits in its own column beside the code, centred on the first line, and never covers it.',
+          'Shows the title, visible language label, endContent, and copy button when a header is present. A title or visible language label creates the header at every line count. With no title and hasLanguageLabel={false}, endContent and the copy button sit in their own column beside the code, centred on the first line, and never cover it; a one-line block then reads as a single row.',
       },
       {
         name: 'Header Title',

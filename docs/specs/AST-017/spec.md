@@ -102,7 +102,11 @@ affects_consumer_docs: [release-process, templates]
       "FR54",
       "DEC-15",
       "DEC-16",
-      "DEC-22"
+      "DEC-22",
+      "FR59",
+      "DEC-25",
+      "FR60",
+      "DEC-26"
     ]
   }
 }
@@ -730,6 +734,23 @@ one removal merged ahead of the decision to allow it.
   (FR35), never in a patch release, and no surface record can make it patch-eligible by
   redefining a release rule. Components keep the rules in this record, including FR3 and
   FR53.
+- **FR59 — Touch work leaves fine-pointer behavior alone unless it has a reason.**
+  A change made for touch or coarse-pointer use may change what people using a mouse,
+  trackpad, or other fine pointer see or do only to fix a defect those people actually
+  hit, or for deliberate cross-device consistency the pull request names. Either way
+  the pull request shows fine-pointer evidence before and after the change. A new
+  fine-pointer look or feel is never part of touch work, including a
+  cross-device consistency change: it needs its own owner decision under the
+  governing design or component record. Otherwise fine-pointer behavior and
+  appearance stay as they were.
+- **FR60 — Components are built from minimal DOM, and reducing it is compatible.**
+  A component renders one element per role, themable part, or named wrapper,
+  expresses states through attributes and styles, renders content once, and
+  mounts one presentation per open layer, under the two budgets and the
+  exception path `architecture:component-style-authoring` INV7 states. Removing
+  or merging undocumented elements to meet it is compatible (FR3); an element a
+  current theme target or documented anatomy names stays. A component exceeds a
+  budget only through an owner exception recorded with its element counts.
 
 ### Platform support
 
@@ -823,7 +844,11 @@ Public lifecycle classification remains in force with these operational effects:
   `docs` command and machine-readable schemas stay contractual;
 - exact-main release comparison rejects unclassified deltas; and
 - a surface other than a component is classified by its own record's compatibility
-  contract, and the release process here applies to the result.
+  contract, and the release process here applies to the result;
+- touch work that changed fine-pointer behavior only as a side effect becomes
+  touch-only with fine pointers unchanged, and a fine-pointer visual change proposed
+  alongside touch work, such as a new modal backdrop dim, becomes its own design
+  decision (FR59).
 
 Main declares the next planned version, and Changeset admission uses that declaration
 to refuse `[breaking]` work on a patch plan. Pull-request lint does not compare the
@@ -875,6 +900,8 @@ lands, maintainers apply its requirement in review and release approval.
 | FR52      | Promotion fixtures plus every checked-in source consumer run before and after codemod promotion                                                                                                                                                                                                                                                                 | staged transform, promoted transform, missing source, ambiguous candidates, changed entry identity                                                                                                                                    | Evidence hardcodes only `next/`, keeps a duplicate source, silently chooses among candidates, or passes when the promoted transform no longer exposes the same identity and entries                                                                                                                                       |
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop               | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                     |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                       | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                 |
+| FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                   | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                           |
+| FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception                                                                                                                                                     | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking                                                                                                          |
 
 ## Decision log
 
@@ -1317,6 +1344,36 @@ such choice. Touch styling and touch-only behavior other records define keep
 their own rules.
 
 Rejected: a touch presentation or open-surface touch mode callers cannot pin.
+
+### DEC-25 — Touch work changes fine-pointer behavior only for a defect or deliberate consistency
+
+**Reference:** `spec:AST-017/DEC-25`
+**Decider:** `cixzhang`, `2026-10-24`
+
+People using a mouse or trackpad are a released audience, and touch work that
+changes their experience as a side effect surprises them without anyone deciding
+it. Allowing a fine-pointer change only to fix a defect they hit, or to make
+devices consistent on purpose, with before-and-after evidence, keeps touch work
+from reshaping desktop by accident while still letting it fix real desktop
+problems. A new desktop look or feel is a design choice of its own and gets its own
+owner decision.
+
+Rejected: letting touch work change fine-pointer behavior freely, and forbidding every fine-pointer change, which would block real desktop fixes.
+
+### DEC-26 — Components are built from minimal DOM
+
+**Reference:** `spec:AST-017/DEC-26`
+**Decider:** `cixzhang`, `2026-10-24`
+
+Correct construction, not a running change budget, is what keeps components
+light: one element per role, themable part, or named wrapper, states through
+attributes and styles, content rendered once, and one presentation per open
+layer. Two budgets make that checkable, one for surface components at rest and
+one for open layers, and an owner-recorded exception path covers the cases that
+genuinely need more. Because undocumented markup is not a released contract,
+reducing DOM to meet the rule is compatible.
+
+Rejected: a budget that only limits how many elements a change may add, which says nothing about what a correct component looks like.
 
 ## Open questions
 

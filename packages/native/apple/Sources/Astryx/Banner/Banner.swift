@@ -35,7 +35,7 @@ public enum AstryxBannerStatus: String, CaseIterable, Sendable {
 /// A message about the page or a section of it. The status sets the color
 /// and icon only; the title must say what happened, because the icon is
 /// decorative to VoiceOver.
-public struct AstryxBanner: View {
+public struct Banner: View {
   let status: AstryxBannerStatus
   let title: String
   let description: String?
@@ -49,17 +49,17 @@ public struct AstryxBanner: View {
 
   public var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: astryx.space(2)) {
-      if let symbol = astryx.icon(status.iconName) {
+      if let icon = astryx.icon(status.iconName) {
         // Sized with the title so it grows with Dynamic Type.
-        Image(systemName: symbol)
+        icon.sized(astryx.fontSize("text-body-size", 14))
           .font(astryx.font(size: "text-body-size", 14, weight: "text-body-weight"))
           .foregroundStyle(astryx.color(status.iconToken))
           .accessibilityHidden(true)
       }
       VStack(alignment: .leading, spacing: astryx.space(1)) {
-        AstryxText(title, weight: .semibold)
+        Text(title, weight: .semibold)
         if let description {
-          AstryxText(description, color: .secondary)
+          Text(description, color: .secondary)
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -70,7 +70,7 @@ public struct AstryxBanner: View {
         .fill(astryx.color(status.groundToken))
     )
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(Text(accessibilityText))
+    .accessibilityLabel(SwiftUI.Text(accessibilityText))
   }
 
   /// What VoiceOver reads: the title, then the description.

@@ -12,7 +12,7 @@ public enum AstryxTextInputType: String, CaseIterable, Sendable {
 
 /// A labeled one-line text field, painted with the theme's tokens. The label
 /// stays visible above the field and is the field's accessibility label.
-public struct AstryxTextInput: View {
+public struct TextInput: View {
   let label: String
   @Binding var value: String
   let type: AstryxTextInputType
@@ -39,7 +39,7 @@ public struct AstryxTextInput: View {
 
   public var body: some View {
     VStack(alignment: .leading, spacing: astryx.space(1)) {
-      AstryxText(label, type: .label, color: .secondary)
+      Text(label, type: .label, color: .secondary)
         .accessibilityHidden(true)
       field
         .font(astryx.font(size: "text-body-size", 14, weight: "text-body-weight"))
@@ -52,7 +52,7 @@ public struct AstryxTextInput: View {
         )
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.5 : 1)
-        .accessibilityLabel(Text(accessibilityText))
+        .accessibilityLabel(SwiftUI.Text(accessibilityText))
     }
   }
 
@@ -61,7 +61,7 @@ public struct AstryxTextInput: View {
   var accessibilityText: String { label }
 
   @ViewBuilder private var field: some View {
-    let prompt = placeholder.map { Text($0).foregroundStyle(astryx.color("color-text-secondary")) }
+    let prompt = placeholder.map { SwiftUI.Text($0).foregroundStyle(astryx.color("color-text-secondary")) }
     switch type {
     case .password:
       SecureField("", text: $value, prompt: prompt)

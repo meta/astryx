@@ -40,8 +40,11 @@ on:
 
 permissions: {}
 
+# One group per pull request (a fork's branch name can repeat across forks),
+# so a new push cancels the superseded run. Merge-queue entries and dispatches
+# get their own groups and are never cancelled by a pull request.
 concurrency:
-  group: 'ci-${{ github.event.merge_group.head_sha || github.head_ref || github.run_id }}'
+  group: 'ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.run_id }}'
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
@@ -1193,67 +1196,25 @@ jobs:
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
         run: pnpm build
 
-      - name: Typecheck component docs
+      # Every workspace package's own `typecheck` script: its sources and
+      # tests, its doc examples, and any declarations it emits. A new package
+      # or tsconfig joins by defining or extending that script, not this job.
+      # A PR head cut before `pnpm typecheck` existed runs the previous list,
+      # loaded from the merge commit these steps come from.
+      - name: Typecheck every package
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/core typecheck:docs
-
-      - name: Typecheck lab docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/lab typecheck:docs
-
-      - name: Typecheck charts docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/charts typecheck:docs
-
-      - name: Typecheck rich text docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/richtext typecheck:docs
-
-      - name: Typecheck Vega docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/vega typecheck:docs
-
-      - name: Typecheck template docs
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/cli typecheck:template-docs
-
-      # Full-package strict checkJs over the CLI (src, bin, scripts, docs, and
-      # the emitted templates). Requires the `pnpm build` above so the template
-      # .tsx sources can resolve the built @astryxdesign/{core,charts,lab} types.
-      - name: Typecheck CLI (strict)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/cli typecheck:strict
-
-      - name: Typecheck storybook
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/storybook typecheck
-
-      - name: Typecheck core (including tests)
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/core typecheck
-
-      # The accessibility spec-test contracts are consumed as TypeScript source
-      # by Vitest and Playwright, and neither runner typechecks. This is the
-      # only gate over them.
-      - name: Typecheck accessibility spec-test contracts
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/a11y-spec typecheck
-
-      # The canary-only @astryxdesign/native is outside the root build, and
-      # Vitest neither typechecks its source nor loads every platform's types.
-      # Its build emits one declaration file per type-resolution condition
-      # (ios, android, macos, windows, shared); the last step checks them all.
-      - name: Typecheck native
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native typecheck
-
-      - name: Build native platform types
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native build
-
-      - name: Typecheck native platform types
-        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
-        run: pnpm -F @astryxdesign/native typecheck:types
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.typecheck ? 0 : 1)"; then
+            pnpm typecheck
+          else
+            echo "::notice title=Head predates pnpm typecheck::Running the previous typecheck list; merge main to use pnpm typecheck."
+            legacy="$RUNNER_TEMP/typecheck-predating-head.sh"
+            git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+            git show "$WORKFLOW_SHA:.github/scripts/typecheck-predating-head.sh" > "$legacy"
+            bash "$legacy"
+          fi
 
       # The interaction harness is consumed as TypeScript source by Vitest and
       # Playwright, which do not typecheck; this is the only gate over it.
@@ -1782,6 +1743,17 @@ jobs:
             --project chromium \
             --output token-remove-target-output
 
+      # On a phone narrower than the drawer, the drawer must still leave a
+      # strip of the page to tap to close it (it is capped at 85vw). Viewport
+      # units, the backdrop's hit testing and a real tap only exist in a real
+      # engine.
+      - name: Run MobileNav width contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/MobileNav/__tests__/MobileNavWidth.a11y.chromium.spec.ts \
+            --project chromium \
+            --output mobile-nav-width-output
+
       # On a phone-width screen AppShell shows TopNav's compact bar. A long
       # heading must give way so the menu toggle stays inside the bar and the
       # drawer's close button stays inside the drawer; only a real engine lays
@@ -2276,6 +2248,16 @@ jobs:
           path: tooltip-contract/
           retention-days: 30
           if-no-files-found: warn
+
+      # Under Reduce Motion a layer that opens under a finger fades in, while
+      # under a mouse it still appears at once. Reduce Motion and a coarse
+      # pointer are media queries, which only a real engine resolves.
+      - name: Run layer reduced-motion entrance contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Layer/__tests__/LayerReducedMotion.a11y.chromium.spec.ts \
+            --project chromium \
+            --output layer-reduced-motion-output
 
       # The accordion contract's header role and name, the page Tab step between
       # headers, the absence of arrow-key focus movement, and the single-expansion
@@ -3941,6 +3923,14 @@ jobs:
 
       - name: Run Build CSS-layer cascade guard
         run: node .github/scripts/theme-layer-cascade.js
+
+      # A compile-time ancestor selector on another workspace package's marker
+      # (lab's rule on core's indicatorScope) matches in a real browser: see
+      # scripts/stylex-module-resolution.cjs.
+      - name: Run cross-package StyleX marker browser check
+        env:
+          ASTRYX_STYLEX_BROWSER: '1'
+        run: pnpm vitest run scripts/stylex-module-resolution.browser.test.mjs --project node --maxWorkers=1
 
   # Guest token boundaries cross portals and the host light/dark cascade. This
   # requires a production browser render; source and jsdom checks cannot prove
