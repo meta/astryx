@@ -171,6 +171,7 @@ astryx/
 | `pnpm build`      | Build all packages                           |
 | `pnpm test`       | Run all tests                                |
 | `pnpm test:watch` | Run tests in watch mode                      |
+| `pnpm typecheck`  | Typecheck every package (after `pnpm build`) |
 | `pnpm storybook`  | Start Storybook at localhost:6006            |
 | `pnpm lint`       | Lint all packages                            |
 
