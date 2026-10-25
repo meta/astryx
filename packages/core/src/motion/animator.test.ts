@@ -1059,6 +1059,20 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(opacityOnly()).toBe(true);
   });
 
+  it('a move during a dip\u2019s fade out dips once more and ends visible', async () => {
+    const {animator} = reduced();
+    animator.animate({y: 100}, {spring: springs.sheetPresent});
+    await commitFrame(clock);
+    // Half-way down the first dip's fade out, a frame or more later.
+    await advance(fade / 4);
+    animator.animate({y: 120}, {spring: springs.sheetPresent});
+    await commitFrame(clock);
+    await advance(fade / 2);
+    await advance(fade);
+    expect(animator.get('y')).toBe(120);
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a later opacity change lands a waiting move instead of dropping it', async () => {
     const {animator} = reduced();
     const move = animator.animate({x: 100}, {spring: springs.navigationPush});
