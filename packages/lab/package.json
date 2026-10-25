@@ -58,7 +58,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs",
     "generate:emoji-data": "node scripts/generate-emoji-data.mjs"
   },
   "peerDependencies": {

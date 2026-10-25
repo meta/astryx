@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/window-splitter|internal/a11y-spec/src/harness|packages/core/src/Resizable/|apps/storybook/stories/WindowSplitterA11y)
 
 /**
  * @file ResizeHandle.a11y.chromium.spec.ts

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/table\.|packages/core/src/Table/|apps/storybook/stories/TableA11y)
 
 /** Real-browser positive and mutation proof for the Table contract. */
 

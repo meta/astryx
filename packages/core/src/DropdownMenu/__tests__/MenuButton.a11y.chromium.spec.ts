@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/menu-button|packages/core/src/DropdownMenu/|packages/core/src/MoreMenu/|apps/storybook/stories/MenuButtonA11y)
 
 /**
  * @file MenuButton.a11y.chromium.spec.ts

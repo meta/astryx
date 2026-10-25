@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/tooltip\.|packages/core/src/Tooltip/|apps/storybook/stories/TooltipA11y)
 
 /**
  * @file tooltip.chromium.spec.ts
