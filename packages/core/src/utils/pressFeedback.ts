@@ -275,6 +275,7 @@ function onPointerDown(event: PointerEvent): void {
   if (event.pointerType === 'mouse') {
     return;
   }
+  armTouchCancel();
   if (live != null) {
     const fingerIsUp =
       live.gesture.phase === 'fading' || live.gesture.phase === 'flash';
@@ -448,13 +449,24 @@ function hearTouchCancel(on: boolean): void {
   }
 }
 
+/**
+ * Read the primary pointer when the first finger or pen lands, and follow it
+ * from then on: installing asks nothing, so a page no one touches never
+ * queries it.
+ */
+function armTouchCancel(): void {
+  if (stopWatchingPointer != null) {
+    return;
+  }
+  stopWatchingPointer = watchCoarsePointer(window, hearTouchCancel);
+  hearTouchCancel(isCoarsePointer(window));
+}
+
 function addListeners(): void {
   window.addEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
   window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
   window.addEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
   window.addEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  stopWatchingPointer = watchCoarsePointer(window, hearTouchCancel);
-  hearTouchCancel(isCoarsePointer(window));
   // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag has
   // taken the gesture, but a right-click is a mouse act this controller never
   // tracks, and listening for it would read as a takeover of the browser's

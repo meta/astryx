@@ -589,15 +589,27 @@ describe('what the list pays for it', () => {
     ];
     try {
       release = installPressFeedback();
-      const types = added.flatMap(spy =>
-        spy.mock.calls.map(([type]) => String(type)),
-      );
+      // A finger lands, as on a touchscreen laptop: still none.
+      press(rows[0], 'pointerdown', 10, 10);
+      press(rows[0], 'pointerup', 10, 10);
+      const types = added.flatMap(spy => spy.mock.calls.map(([type]) => type));
       expect(types.filter(type => type.startsWith('touch'))).toEqual([]);
       expect(types).toContain('pointerdown');
     } finally {
       for (const spy of added) {
         spy.mockRestore();
       }
+    }
+  });
+
+  it('asks no media query when it installs: a page no one touches never reads the pointer', () => {
+    release();
+    const matchMedia = vi.spyOn(window, 'matchMedia');
+    try {
+      release = installPressFeedback();
+      expect(matchMedia).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
     }
   });
 
