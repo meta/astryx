@@ -1775,6 +1775,14 @@ export function createAnimator(
       for (const property of properties) {
         next[property] = null;
       }
+      // A change at once also ends a fade still running, where it was heading.
+      if (
+        !('opacity' in targets) &&
+        (segments.has('opacity') || landings.size > 0)
+      ) {
+        next.opacity = null;
+        holds.opacity = opacityHeading();
+      }
       return {next, holds, landing: null};
     }
     const opacityNow = valueAt('opacity', time);
