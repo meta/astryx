@@ -171,11 +171,11 @@ describe('touch presentation', () => {
 
   it('reads the conditions at one moment, and without a window', () => {
     setDevice({coarse: true, width: 390, height: 844});
-    expect(readTouchPresentation()).toEqual({
+    expect(readTouchPresentation(window, DEFAULT_COMPACT_DEFINITION)).toEqual({
       isTouch: true,
       isCompact: true,
     });
-    expect(readTouchPresentation(null)).toEqual({
+    expect(readTouchPresentation(null, DEFAULT_COMPACT_DEFINITION)).toEqual({
       isTouch: false,
       isCompact: false,
     });

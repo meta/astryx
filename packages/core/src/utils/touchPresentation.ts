@@ -135,12 +135,14 @@ export function useTouchPresentation(
 
 /**
  * The touch presentation at this moment, for a decision taken once (a menu
- * deciding how it presents as it opens). Not touch and not compact where
- * there is no window.
+ * deciding how it presents as it opens). `compact` is the active theme's
+ * definition (`useCompactDefinition()`, read while rendering), required so a
+ * theme that moves `md` is never ignored (spec:AST-012 FR9). Not touch and
+ * not compact where there is no window.
  */
 export function readTouchPresentation(
-  view: Window | null = typeof window === 'undefined' ? null : window,
-  compact: CompactDefinition = DEFAULT_COMPACT_DEFINITION,
+  view: Window | null,
+  compact: CompactDefinition,
 ): TouchPresentation {
   if (view == null || typeof view.matchMedia !== 'function') {
     return {isTouch: false, isCompact: false};
