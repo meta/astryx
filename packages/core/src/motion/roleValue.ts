@@ -70,7 +70,8 @@ export function short(n: number): string {
  *   spring: mass folds into the duration, overdamping into a negative bounce);
  * - duration: `250ms`;
  * - curve: `cubic-bezier(0.42, 0, 0.58, 1)`, usable as is in CSS.
- * Throws on a value that is not a valid value of its kind.
+ * Throws on a value that is not a valid value of its kind, a spring that
+ * never settles included.
  */
 export function formatMotionRoleValue(
   kind: MotionRoleKind,
@@ -82,7 +83,15 @@ export function formatMotionRoleValue(
         'a spring is {response, dampingRatio}, {duration, bounce} or {mass?, stiffness, damping}',
       );
     }
-    const {duration, bounce} = durationBounceOf(toSpring(value));
+    const spring = toSpring(value);
+    // No damping (a bounce of 1 or more, a damping ratio or damping of 0)
+    // never settles: the animator would play the swing to its 30 s cap.
+    if (!(spring.damping > 0)) {
+      throw new RangeError(
+        'a spring must settle: a bounce under 1, or a damping ratio and damping above 0',
+      );
+    }
+    const {duration, bounce} = durationBounceOf(spring);
     return `${short(duration)}s ${short(bounce)}`;
   }
   if (kind === 'duration') {

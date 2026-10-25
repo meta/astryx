@@ -61,6 +61,12 @@ describe('motion roles in a theme', () => {
     expect(() =>
       expandMotionRoles({durations: {'timing.press.flashMs': -5}}, 'm'),
     ).toThrow(/≥ 0/);
+    expect(() =>
+      expandMotionRoles(
+        {springs: {'springs.sheetPresent': {duration: 0.5, bounce: 1}}},
+        'm',
+      ),
+    ).toThrow(/m\.springs\["springs\.sheetPresent"\]: a spring must settle/);
   });
 
   it('takes the duration scale whole or not at all', () => {

@@ -204,7 +204,7 @@ export function parseMotionRoleValue(
     }
     const duration = Number(m[1]);
     const bounce = Number(m[2]);
-    return duration > 0 && bounce > -1 && bounce <= 1
+    return duration > 0 && bounce > -1 && bounce < 1
       ? {duration, bounce}
       : null;
   }

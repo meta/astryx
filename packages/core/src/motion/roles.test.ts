@@ -164,6 +164,18 @@ describe('motion roles', () => {
     expect(() => formatMotionRoleValue('spring', {response: 0.5})).toThrow(
       /spring is/,
     );
+    // A spring with no damping never settles.
+    for (const never of [
+      {duration: 0.5, bounce: 1},
+      {duration: 0.5, bounce: 1.5},
+      {response: 0.5, dampingRatio: 0},
+      {mass: 1, stiffness: 100, damping: 0},
+    ]) {
+      expect(() => formatMotionRoleValue('spring', never)).toThrow(
+        /must settle/,
+      );
+    }
+    expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
     expect(parseMotionRoleValue('spring', '')).toBeNull();
     expect(parseMotionRoleValue('spring', 'fast')).toBeNull();
     expect(parseMotionRoleValue('spring', '0.4s 0.2')).toEqual({
