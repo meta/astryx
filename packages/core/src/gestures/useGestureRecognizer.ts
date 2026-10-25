@@ -29,7 +29,6 @@ import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {useAttachment, useIsUnmountedRef} from './useAttachment';
 
-/** @experimental */
 export interface UseGestureRecognizerOptions {
   /**
    * Live toggle; turning it off mid-gesture cancels the gesture. That cancel
@@ -61,7 +60,6 @@ export interface UseGestureRecognizerOptions {
  *   },
  * );
  * ```
- * @experimental
  */
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
