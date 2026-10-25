@@ -11,7 +11,8 @@
  *   its analytic curve; a spring that ends inside the block keeps its end
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
- *   within a frame or two of the curve's end; a dialog's ::backdrop follows
+ *   within a frame or two of the curve's end; a fade-in on an element its
+ *   stylesheet hides stays visible once it retires; a dialog's ::backdrop follows
  *   the curve and holds its end state; a frame painted before the compositor
  *   has a curve shows the element where it is; a theme that retunes a table spring
  *   changes the curve the engine plays
@@ -486,6 +487,53 @@ test('a finished animation leaves the element once the curve ends', async ({
   // Gone within a couple of frames of the curve's end, not after the hold.
   expect(result.leftAt).toBeGreaterThanOrEqual(result.curveEnd - 1);
   expect(result.leftAt).toBeLessThan(result.curveEnd + 100);
+});
+
+test('a fade-in on an element its stylesheet hides stays visible once it retires', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(
+    async spring => {
+      const sheet = document.createElement('style');
+      sheet.textContent = '.hidden { opacity: 0; }';
+      document.head.append(sheet);
+      const element = document.createElement('div');
+      element.className = 'hidden';
+      element.style.cssText =
+        'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
+      document.body.append(element);
+      const animator = Motion.createAnimator(element);
+      animator.set({opacity: 0});
+      animator.animate({opacity: 1}, {spring});
+      await new Promise<void>(resolve => {
+        const tick = () => {
+          if (element.getAnimations().length === 0) {
+            resolve();
+          } else {
+            requestAnimationFrame(tick);
+          }
+        };
+        requestAnimationFrame(tick);
+      });
+      // A frame after the retire.
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      return {
+        inline: element.style.opacity,
+        computed: getComputedStyle(element).opacity,
+      };
+    },
+    {response: 0.3, dampingRatio: 1},
+  );
+  test.info().annotations.push({
+    type: 'after retire',
+    description: JSON.stringify(result),
+  });
+  // The end stays inline over the stylesheet's opacity 0.
+  expect(result.computed).toBe('1');
+  expect(result.inline).toBe('1');
 });
 
 test('a fixed child stays fixed after a motion back to identity', async ({
