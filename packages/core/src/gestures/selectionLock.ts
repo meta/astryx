@@ -22,6 +22,7 @@
  * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts.
  */
 
+import {isCoarsePointer} from './coarsePointer';
 import {parentAcrossShadow} from './nativeScroll';
 
 /** What a held finger must not start on a control or a cell. */
@@ -56,11 +57,7 @@ export function locksSelectionFor(
   pointerType: string,
   view: Window | null | undefined,
 ): boolean {
-  return (
-    pointerType !== 'mouse' &&
-    typeof view?.matchMedia === 'function' &&
-    view.matchMedia('(pointer: coarse)').matches
-  );
+  return pointerType !== 'mouse' && isCoarsePointer(view);
 }
 
 /** Locked elements, how many contacts hold each, and what to restore. */
