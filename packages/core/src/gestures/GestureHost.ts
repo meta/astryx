@@ -10,6 +10,18 @@
  * @position Browser adapter of packages/core/src/gestures: turns real events
  *   into GestureArena input, and carries out what the arena decides
  *
+ * ONLY WHERE THE PRIMARY POINTER IS COARSE
+ *
+ * - Recognizers attach, and the host registers listeners, only while the
+ *   primary pointer is coarse (`spec:AST-094` FR19, FR24; coarsePointer.ts).
+ *   Where it is fine, an attach is recorded but nothing is installed: no
+ *   document, window or element listener, no `touch-action` or other style,
+ *   nothing delivered, so a finger on a touchscreen laptop gets the
+ *   browser's defaults. The host follows the query: turning coarse installs
+ *   it and styles every registration; turning fine cancels every touch in
+ *   flight and removes it all. A development warning names the first attach
+ *   under a fine pointer.
+ *
  * INPUT CHANNELS
  *
  * - Fingers begin and end with Touch Events: they are the only cancelable
@@ -123,6 +135,7 @@ import type {
   TouchSample,
 } from './types';
 import {internals} from './recognizerInternals';
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {lockSelection, locksSelectionFor} from './selectionLock';
 
 interface Registration {
@@ -338,6 +351,13 @@ export class GestureHost {
   private fingerTargets: ReadonlyArray<Node> = [];
   private nextId = 1;
   private isInstalled = false;
+  /**
+   * Whether the primary pointer is coarse (`spec:AST-094` FR19), read when
+   * something first attaches and kept current while anything is attached.
+   */
+  private isCoarse = false;
+  private stopWatchingPointer: (() => void) | null = null;
+  private hasWarnedFinePointer = false;
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -568,6 +588,7 @@ export class GestureHost {
   }
 
   private registrationFor(element: Element): Registration {
+    this.watchPointer();
     let registration = this.registry.get(element);
     if (registration == null) {
       registration = {
@@ -588,9 +609,11 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
+    // Where the primary pointer is fine, no touch listener (FR19).
     const needsListener =
-      registration.recognizers.some(claimsWhileMoving) ||
-      registration.consumer?.keepsTouch != null;
+      this.isCoarse &&
+      (registration.recognizers.some(claimsWhileMoving) ||
+        registration.consumer?.keepsTouch != null);
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -603,7 +626,10 @@ export class GestureHost {
   }
 
   private applyStyle(element: HTMLElement, registration: Registration): void {
-    const style = gestureHostStyle(registration.recognizers);
+    // Where the primary pointer is fine, the browser's own styles (FR19).
+    const style = this.isCoarse
+      ? gestureHostStyle(registration.recognizers)
+      : {};
     for (const key of Object.keys(
       STYLE_PROPERTIES,
     ) as (keyof GestureHostStyle)[]) {
@@ -658,12 +684,64 @@ export class GestureHost {
       this.scrollWatchers.size === 0
     ) {
       this.uninstall();
+      this.stopWatchingPointer?.();
+      this.stopWatchingPointer = null;
+    }
+  }
+
+  /** Read the primary pointer, and follow it while anything is attached. */
+  private watchPointer(): void {
+    if (this.stopWatchingPointer != null) {
+      return;
+    }
+    const view = this.doc.defaultView;
+    this.isCoarse = isCoarsePointer(view);
+    this.stopWatchingPointer = watchCoarsePointer(view, isCoarse =>
+      this.pointerChanged(isCoarse),
+    );
+  }
+
+  /**
+   * The primary pointer turned coarse or fine (a tablet docking a mouse):
+   * install or remove everything, as if each attach happened now.
+   */
+  private pointerChanged(isCoarse: boolean): void {
+    if (isCoarse === this.isCoarse) {
+      return;
+    }
+    this.isCoarse = isCoarse;
+    if (isCoarse) {
+      this.install();
+    } else {
+      this.cancelEverything(this.arena.now());
+      this.uninstall();
+    }
+    for (const [element, registration] of this.registry) {
+      this.refresh(element, registration);
+    }
+  }
+
+  /** Something attached where the primary pointer is fine: say so once. */
+  private warnFinePointer(): void {
+    if (process.env.NODE_ENV !== 'production' && !this.hasWarnedFinePointer) {
+      this.hasWarnedFinePointer = true;
+      console.warn(
+        'Astryx: a gesture recognizer, press tracker or finger-scroll watch ' +
+          'was attached where the primary pointer is fine. It stays inactive ' +
+          'until the pointer is coarse (spec:AST-094 FR19), so attach touch ' +
+          'work only under a touch presentation.',
+      );
     }
   }
 
   // --- Listeners -------------------------------------------------------------
 
   private install(): void {
+    this.watchPointer();
+    if (!this.isCoarse) {
+      this.warnFinePointer();
+      return;
+    }
     if (this.isInstalled) {
       return;
     }

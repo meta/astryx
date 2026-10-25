@@ -216,6 +216,16 @@ warning, so two writers never fight over the paint. Pass another
 
 ## What the browser is told
 
+- **Only where the primary pointer is coarse.** Recognizers attach, and the
+  host registers listeners, only while `TOUCH_QUERY` matches
+  (`spec:AST-094` FR19, FR24; `coarsePointer.ts`). Where the primary pointer
+  is fine, an attach is recorded and nothing else happens: no document,
+  window or element listener, no style below, nothing delivered, so a
+  finger on a touchscreen laptop gets the browser's defaults. The host
+  follows the query (a tablet docking or undocking a mouse): turning coarse
+  installs it and styles every element; turning fine cancels every touch in
+  flight and removes it all. A development warning names the first attach
+  under a fine pointer: attach touch work under a touch presentation.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
@@ -422,7 +432,8 @@ Whether a component presents itself the touch (UIKit) way is answered once,
 in `../utils/touchPresentation.ts`:
 
 - touch behaviours (this system, the press model, UIKit springs and
-  timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`);
+  timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`); the gesture
+  host itself installs nothing while it is fine (What the browser is told);
 - layout behaviours key on a compact viewport, narrower than 744 px or
   shorter than 500 px (`COMPACT_QUERY`), the closest a size can get to
   UIKit's compact size class (a Max-size iPhone in landscape is its one

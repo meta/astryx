@@ -22,6 +22,7 @@ import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {ManualClock, RecordingConsumer} from './harness';
+import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 interface Contact {
   id: number;
@@ -83,22 +84,8 @@ function pointer(
 let host: GestureHost;
 let clock: ManualClock;
 let detachers: (() => void)[];
-
-/**
- * The primary pointer is coarse (a phone, a tablet) until the returned
- * restore runs: jsdom's matchMedia models a desktop, where touch work stays
- * off (`spec:AST-094` FR19).
- */
-function coarsePrimaryPointer(): () => void {
-  const matchMedia = window.matchMedia;
-  window.matchMedia = (query: string) => ({
-    ...matchMedia(query),
-    matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
-  });
-  return () => {
-    window.matchMedia = matchMedia;
-  };
-}
+/** A phone: the host attaches only where the primary pointer is coarse. */
+let restorePointer: () => void;
 
 /** jsdom computes no layout: give a scroller its metrics. */
 function scrollable(
@@ -157,6 +144,7 @@ beforeEach(() => {
   clock = new ManualClock();
   host = new GestureHost(document, {clock});
   detachers = [];
+  restorePointer = coarsePrimaryPointer();
 });
 
 afterEach(() => {
@@ -164,6 +152,7 @@ afterEach(() => {
     detach();
   }
   document.body.innerHTML = '';
+  restorePointer();
 });
 
 describe('GestureHost', () => {
@@ -1129,6 +1118,7 @@ describe('GestureHost', () => {
   });
 
   it("keeps selection for every contact where the primary pointer is fine: a touchscreen laptop's finger, a desktop pen and a mouse (spec:AST-094 FR19, spec:AST-017 FR59)", () => {
+    detachers.push(pointerQuery(false).restore);
     const {row, slider} = mount('<div id="row"></div><div id="slider"></div>');
     detachers.push(
       host.attachConsumer(row, new RecordingConsumer()),
@@ -1566,5 +1556,92 @@ describe('GestureHost.fingersDown', () => {
     expect(host.fingersDown()).toBe(1);
     detach();
     expect(host.fingersDown()).toBe(0);
+  });
+});
+
+describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', () => {
+  /** Quiets the development warning, and returns its spy. */
+  function quietWarning() {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    detachers.push(() => warn.mockRestore());
+    return warn;
+  }
+
+  it('attaches nothing where it is fine: no touch or pointer listener, no style, nothing delivered', () => {
+    quietWarning();
+    detachers.push(pointerQuery(false).restore);
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    detachers.push(() => added.mockRestore());
+    const {box, row} = mount('<div id="box"></div><div id="row"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    const consumer = new RecordingConsumer();
+    detachers.push(
+      host.attach(box, pan),
+      host.attach(box, press),
+      host.attachConsumer(row, consumer),
+    );
+    expect(
+      added.mock.calls
+        .map(([type]) => type)
+        .filter(type => /^(touch|pointer)/.test(type)),
+    ).toEqual([]);
+    // The long press's callout and selection styles stay the browser's.
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+    const finger = {id: 1, x: 5, y: 5};
+    const moved = {id: 1, x: 60, y: 5};
+    touch('touchstart', box, [finger], [finger], 0);
+    touch('touchmove', box, [moved], [moved], 16);
+    touch('touchend', box, [moved], [], 32);
+    touch('touchstart', row, [finger], [finger], 100);
+    touch('touchend', row, [finger], [], 150);
+    expect(pan.state).toBe('possible');
+    expect(consumer.events).toEqual([]);
+  });
+
+  it('follows the pointer: turning coarse installs it, turning fine cancels the touch in flight and removes it all', () => {
+    quietWarning();
+    const pointer = pointerQuery(false);
+    detachers.push(pointer.restore);
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    const states: string[] = [];
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    detachers.push(
+      host.attach(box, pan),
+      host.attach(box, new LongPressGestureRecognizer({name: 'press'})),
+    );
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+    // A tablet undocks its mouse.
+    pointer.set(true);
+    expect(box.style.getPropertyValue('user-select')).toBe('none');
+    const finger = {id: 1, x: 5, y: 5};
+    const moved = {id: 1, x: 40, y: 5};
+    touch('touchstart', box, [finger], [finger], 0);
+    touch('touchmove', box, [moved], [moved], 16);
+    expect(pan.state).toBe('began');
+    // It docks one again mid-drag: the drag ends without acting.
+    pointer.set(false);
+    expect(states).toContain('cancelled');
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+    const count = states.length;
+    const later = {id: 1, x: 80, y: 5};
+    touch('touchmove', box, [later], [later], 32);
+    touch('touchend', box, [later], [], 48);
+    expect(states).toHaveLength(count);
+  });
+
+  it('warns once in development when something attaches where it is fine', () => {
+    const warn = quietWarning();
+    detachers.push(pointerQuery(false).restore);
+    const {a, b} = mount('<div id="a"></div><div id="b"></div>');
+    detachers.push(
+      host.attach(a, new PanGestureRecognizer()),
+      host.attach(b, new TapGestureRecognizer()),
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(
+      'where the primary pointer is fine',
+    );
   });
 });

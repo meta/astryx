@@ -12,12 +12,13 @@
  */
 
 import {render} from '@testing-library/react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Button} from '../../Button/Button';
 import {Item} from '../../Item/Item';
 import {GestureHost} from '../GestureHost';
 import {PressTracker} from '../PressTracker';
 import {ManualClock} from './harness';
+import {coarsePrimaryPointer} from './pointerQuery';
 
 function touchStart(target: Element): void {
   const event = new Event('touchstart', {bubbles: true, cancelable: true});
@@ -38,6 +39,15 @@ function blockingTouchMoves(spy: {mock: {calls: unknown[][]}}): number {
 afterEach(() => {
   vi.restoreAllMocks();
   document.body.innerHTML = '';
+});
+
+// A phone: the host attaches only where the primary pointer is coarse.
+let restorePointer: () => void;
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
 });
 
 describe('blocking touchmove listeners', () => {

@@ -17,6 +17,7 @@ import {installPressAttribute} from '../delegatedPress';
 import {PRESS_PROFILES} from '../PressTracker';
 import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {coarsePrimaryPointer} from './pointerQuery';
 
 interface Contact {
   id: number;
@@ -54,6 +55,15 @@ function mount(html: string): Record<string, HTMLElement> {
   }
   return elements;
 }
+
+// A phone: the host attaches only where the primary pointer is coarse.
+let restorePointer: () => void;
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
+});
 
 let release: () => void = () => {};
 

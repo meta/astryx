@@ -47,6 +47,8 @@ test.beforeAll(async () => {
     format: 'iife',
     platform: 'browser',
     target: 'es2022',
+    // A development build, as an app's bundler would make one.
+    define: {'process.env.NODE_ENV': '"development"'},
   });
   bundle = result.outputFiles[0].text;
 });
@@ -672,4 +674,44 @@ test('a long press begins at touch-down + 500 ms on the event clock, even when t
   expect((began?.beganAt ?? 0) - (began?.startedAt ?? 0)).toBeCloseTo(500, 6);
   expect(states(entries, 'press')).toEqual(['began', 'ended', 'possible']);
   expect(entries.some(entry => entry.name.startsWith('click:'))).toBe(false);
+});
+
+test.describe('where the primary pointer is fine', () => {
+  test.use({hasTouch: false, isMobile: false});
+
+  test('the host registers no touch listener and writes no style, though the page attaches recognizers (spec:AST-094 FR19)', async ({
+    page,
+  }) => {
+    const warnings: string[] = [];
+    page.on('console', message => {
+      if (message.type() === 'warning') {
+        warnings.push(message.text());
+      }
+    });
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bundle});
+    const seen = await page.evaluate(() => ({
+      isCoarse: matchMedia('(pointer: coarse)').matches,
+      page: window.__pageTouchListenersAtLoad,
+      elements: window.__listeners.map(entry => entry.id),
+      // What the host would write: none of it, in any engine's spelling.
+      styles: ['hpan', 'presser', 'slider', 'card'].map(id => {
+        const style = document.getElementById(id)?.style;
+        return ['touch-action', '-webkit-user-select', '-webkit-touch-callout']
+          .map(property => style?.getPropertyValue(property) ?? 'missing')
+          .join('|');
+      }),
+    }));
+    expect(seen.isCoarse).toBe(false);
+    expect(seen.page).toEqual([]);
+    expect(seen.elements).toEqual([]);
+    expect(seen.styles).toEqual(['||', '||', '||', '||']);
+    // The page's attaches are named once, in development.
+    expect(
+      warnings.filter(text => text.includes('primary pointer is fine')),
+    ).toHaveLength(1);
+  });
 });
