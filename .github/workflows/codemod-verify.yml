@@ -22,7 +22,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: "codemod-verify-${{ github.head_ref }}"
+  group: "codemod-verify-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:

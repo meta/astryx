@@ -38,10 +38,13 @@ places as on the web, read by VoiceOver in the same order.
   static member (`.search`, `.close`), generated from AST-082 FR17's shared
   icon names, read at build time through the icon-names read AST-082 FR16 lists
   (later through core's portable entry), never from core's web icon registry. A
-  namespaced name (`"acme:rocket"`) is valid once the app registers it in code
-  with the image to draw (an SF Symbol name or an asset). An unknown name
-  stops a development build with a message naming it, and draws nothing in a
-  release build, never a substitute.
+  namespaced name (`"acme:rocket"`) is valid once the theme maps it to an
+  image. `Theme(icons:)` maps a shared or namespaced name to an `IconImage`:
+  `.systemName(_:)` for an SF Symbol, or `.assetName(_:)` for an image in the
+  app's asset catalog, as AST-082 FR17 names a native icon by `systemName` or
+  `assetName`; a string literal is an SF Symbol name. An unknown name, or an
+  asset the app does not ship, stops a development build with a message
+  naming it, and draws nothing in a release build, never a substitute.
 - **S3 — Content slots are open, the SwiftUI way.** A content slot is a generic
   `@ViewBuilder` closure parameter named as the core prop
   (`startContent: () -> StartContent` where `StartContent: View`), as in

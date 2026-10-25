@@ -180,7 +180,9 @@ re-implements theme logic.
   portable theme. When the first component reads `material`, the generator
   takes the native theme, reads the wrapped portable theme from it, and fills
   `Theme.native` already resolved per OS version range, so one call
-  produces one file. Composing native intent inside `defineTheme` is outside
+  produces one file. A platform entry's icons (`{systemName}` or
+  `{assetName}`, AST-082 FR17) become `Theme.icons` entries of
+  `.systemName(_:)` or `.assetName(_:)`. Composing native intent inside `defineTheme` is outside
   this spec.
 
 - **D4 — Increase Contrast is outside this spec.** Core themes have light and
