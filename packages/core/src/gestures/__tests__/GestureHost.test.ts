@@ -2006,7 +2006,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     );
     const types = (spies: typeof added) =>
       spies
-        .flatMap(spy => spy.mock.calls.map(([type]) => String(type)))
+        .flatMap(spy => spy.mock.calls.map(([type]) => type))
         .filter(type => /^(touch|pointer|scroll)/.test(type));
     expect(types(added)).toEqual([]);
     pointer.set(true);
