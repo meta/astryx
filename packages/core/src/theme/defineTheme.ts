@@ -256,10 +256,11 @@ export interface DefineThemeInput {
    * //   Default:   { fast: 175, medium: 410, slow: 975, ratio: 0.75 }
    * //   Cinematic: { fast: 200, medium: 500, slow: 1200, ratio: 0.7 }
    *
-   * // A softer sheet and a slower reduced-motion fade:
+   * // A softer sheet, and a longer navigation transition (it paces
+   * // completion callbacks):
    * motion: {
    *   springs: { 'springs.sheetPresent': { duration: 0.6, bounce: 0.1 } },
-   *   durations: { 'timing.reducedMotionCrossFadeMs': 300 },
+   *   durations: { 'navigation.transitionMs': 300 },
    * }
    * ```
    */
