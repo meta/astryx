@@ -20,6 +20,8 @@ verified_by:
     packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
     packages/core/src/CommandPalette/CommandPalette.test.tsx,
+    packages/core/src/Popover/Popover.test.tsx,
+    packages/core/src/Popover/__tests__/PopoverSecondDocument.a11y.chromium.spec.ts,
   ]
 members:
   [
@@ -124,8 +126,9 @@ this record's current membership snapshot must be updated with it.
 
 - `useLayerDismissal` registers an active surface and adapts a
   browser-initiated close request to the shared topmost check.
-- `layerStack` owns presence filtering, ordering, and the single
-  document-level Escape listener.
+- `layerStack` owns presence filtering, ordering, and the document-level
+  Escape listener: one in each document that holds a registered member (FR8,
+  proposed; pending owner review).
 - `LayerDepthProvider` carries logical nesting through the React tree for members
   that provide it to their descendants. Members without that provider do not
   guarantee nested ordering after descendant content leaves DOM containment.
@@ -171,6 +174,19 @@ this record's current membership snapshot must be updated with it.
 - **FR7 — Registration does not define open-state ownership.** The stack invokes
   the selected member's dismissal callback. Whether that request immediately
   closes the surface is owned by the member's component contract and caller.
+- **FR8 — Each document ranks its own members.** A member belongs to the
+  document of the element it registers with: Dialog (and CommandPalette through
+  it), Lightbox, MobileNav, BottomSheet, BottomSheetSwitcher and Drawer register
+  their dialog, ContextMenu its menu, and a focus trap its container. An Escape
+  press or platform close request is ranked only among the registered present
+  members of the document it arrives in, and FR2 and FR3 apply within that
+  document, so a host and the members nested in it that register an element keep
+  one order wherever they render. A member of another document is never a
+  candidate. Tooltip and HoverCard register no element and read their presence
+  from the page's document: they belong to the page, and in another document
+  they take no request, so their host handles the first one. The stack listens
+  once in each document that holds a member and stops when its last member
+  leaves. Proposed; pending owner review (DEC-2).
 
 ## Allowed component variation
 
@@ -193,19 +209,22 @@ this record's current membership snapshot must be updated with it.
 | Dialog inside Dialog                          | Inner dialog handles the first request         | Dialog supplies native modality and focus behavior                            |
 | Popover inside Dialog                         | Popover handles the first Escape               | Popover supplies anchoring, portal placement, and focus policy                |
 | Registered descendant inside CommandPalette   | Descendant handles the first Escape            | CommandPalette inherits Dialog's shared stack participation                   |
-| Tooltip or HoverCard inside Dialog            | Present hover surface handles the first Escape | Hover families decide when they are present and how controlled state responds |
+| Tooltip or HoverCard inside Dialog, in page   | Present hover surface handles the first Escape | Hover families decide when they are present and how controlled state responds |
 | Lightbox or MobileNav above a required Dialog | Top member handles the request                 | Required Dialog uses `block` only when it is topmost                          |
 | Required Dialog alone                         | Request is consumed without closing            | Dialog purpose selects `block` behavior                                       |
 | Self-owned input popup                        | Popup participates while present               | Input owns selection, focus, open state, positioning, and outside dismissal   |
 | Two unrelated registered surfaces             | Later active-cycle registration is topmost     | Neither surface is treated as nested                                          |
 | Platform close request sent to a lower Dialog | Lower Dialog stays open                        | The platform targets a host; the shared check decides whether it may close    |
+| Popover in an iframe, Dialog in the page      | Request goes to its own document's top member  | The app renders into the second document through a portal                     |
+| Popover inside Dialog in an iframe            | Popover handles the iframe's first request     | Both register their own elements, so they rank in the iframe's order          |
+| Tooltip or HoverCard inside Dialog, in iframe | The Dialog handles the first Escape there      | Hover members register no element and read presence from the page (FR8)       |
 
 ## Adoption and exceptions
 
 | Components or surface                                                                                                                                                                                                                                                                              | Adoption                                                      | Current deviation or limitation                                                                                                                                         |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dialog, AlertDialog, Popover, DropdownMenu root, ContextMenu, MoreMenu, Lightbox, MobileNav, Drawer, CommandPalette                                                                                                                                                                                | shared owner; CommandPalette composes Dialog                  | none                                                                                                                                                                    |
-| Tooltip, HoverCard                                                                                                                                                                                                                                                                                 | shared owner with DOM presence reporting                      | Neither provides nesting depth to descendant layers                                                                                                                     |
+| Tooltip, HoverCard                                                                                                                                                                                                                                                                                 | shared owner with DOM presence reporting                      | Neither provides nesting depth to descendant layers; both read presence from the page's document, so in another document they take no request (FR8)                     |
 | Focus traps with `onEscape`                                                                                                                                                                                                                                                                        | shared owner through `useFocusTrap`                           | They provide DOM containment, not descendant depth                                                                                                                      |
 | BreadcrumbItem, ChatComposerInput, ComplexSelector, DateInput, DateRangeInput, DateTimeInput, Selector, MultiSelector, PowerSearch, BaseTypeahead, Typeahead, Tokenizer, SideNavHeading, SideNavItem, TabMenu, TopNavHeading, TopNavMenu, TopNavMegaMenu, Table, Lab TourStep, Lab ChatEmojiPicker | shared owner through `usePopover` or a composed Popover owner | Table filtering owns controlled Popover state and discards its draft on close; TourStep routes Popover close to the Tour; ChatEmojiPicker owns controlled Popover state |
 | BottomSheet, BottomSheetSwitcher                                                                                                                                                                                                                                                                   | shared owner                                                  | none                                                                                                                                                                    |
@@ -223,6 +242,8 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR2, FR3, FR4, FR6 | `layerDismissalInvariants.test.tsx`                                                                             | nested same-DOM Dialogs, Lightbox over Dialog, Dialog in BottomSheet, platform cancel, IME                                                                                                     | One request closes two surfaces, closes a host before its child, or dismisses during composition  |
 | FR1, FR2, FR3, FR7 | `layerDismissalFamilies.test.tsx`                                                                               | Dialog, Lightbox, MobileNav, BottomSheet, Tooltip, HoverCard; controlled and blocking states                                                                                                   | A family bypasses the stack, a lower member handles a request, or controlled ownership is ignored |
 | FR1                | `useFocusTrap.test.tsx`                                                                                         | active, nested, and deactivated traps with `onEscape`                                                                                                                                          | A dismissible trap stays off the shared stack or nested traps respond together                    |
+| FR8                | `useLayerDismissal.test.tsx`; `Popover.test.tsx`                                                                | members in the page and a same-origin iframe; a Popover alone and inside a Dialog, in an iframe                                                                                                | A press in one document dismisses a member of another, or a host closes over its nested layer     |
+| FR8                | `PopoverSecondDocument.a11y.chromium.spec.ts`                                                                   | a Popover in an iframe and in a Picture-in-Picture window, alone and with one open in the page                                                                                                 | A press in the second document misses its own layer or dismisses the page's                       |
 
 ## Decision links
 
@@ -241,6 +262,18 @@ are the audited current snapshot, not a closed set.
 
 A layer with no dismissal behavior does not participate. A visual-only outline
 rendered through Layer is the canonical nonparticipating example.
+
+### DEC-2 — Each document ranks its own members
+
+**Decider:** pending owner review
+
+A key press and a platform close request reach only the document they happen
+in, and each document keeps its own browser top layer. The stack therefore
+orders the members of each document separately and listens once per document.
+One request still affects exactly one surface: the topmost one in the document
+where the person acted.
+
+Rejected: one order across documents, where a press in one window dismisses a surface in another.
 
 ## Open questions
 

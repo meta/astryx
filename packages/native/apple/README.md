@@ -51,16 +51,15 @@ apple/
   that also imports SwiftUI, write `Astryx.Button` and `SwiftUI.Button`. A
   component's parameters use core's prop names
   and values (`variant: .primary`, `size: .lg`, `isLoading`), so code reads
-  the same across web and native, with six exceptions, the interim shape
-  AST-093 FR5 exempts until the components move onto the generated contracts:
+  the same across web and native. `Text`, `Heading`, and `Card` take the
+  generated `TextProps`, `HeadingProps`, and `CardProps`, as AST-093 FR5 asks;
+  the others keep four exceptions, the interim shape FR5 exempts until they move onto the generated
+  contracts:
   - `Button` takes `action` where core has `onClick`.
   - `Button` takes `fillsWidth` where core has `width="100%"`.
   - `Button` takes `icon` as a shared icon name (`"search"`), which the
     generated `ButtonProps` does not carry yet.
   - `TextInput` takes a `Binding` where core has `value` and `onChange`.
-  - `Heading`'s `level` is optional where core requires it.
-  - `Card` takes `padding` as a whole spacing step, so it cannot spell
-    core's `0.5` and `1.5` steps.
 - **`Templates/`** holds one folder per page template, named after the
   `astryx template` id. Templates are clone-only, as on the web: you copy a
   template's folder into your app and own it from then on. They are a
@@ -99,16 +98,21 @@ size.
 Components read every color, size, and font from the `astryx` environment
 value, never from a constant of their own. `astryx.tokens` holds the theme's
 tokens in the current mode as typed members (`tokens.color.textPrimary`,
-`tokens.space.s4`, `tokens.font.bodySize`), so a misspelled token fails to
-compile. Text sizes grow with Dynamic Type. The components still read some
+`tokens.space.s4`, `tokens.font.body.size`), so a misspelled token fails to
+compile. Font tokens come grouped: each type style (`tokens.font.body`,
+`tokens.font.heading1`) holds its `size`, `weight`, and `leading`, and
+`tokens.font.family`, `.size`, and `.weight` hold the scales. Text sizes grow with Dynamic Type. The components still read some
 tokens by core's name (`astryx.color("color-accent")`); moving them onto the
 typed members comes next.
 
 `Icon(.search)` draws a shared icon name as the platform's SF Symbol, at
 core's icon size and color, hidden from VoiceOver unless it has a `label`.
 `IconName` holds every built-in name as a static member; a theme maps a name
-to another symbol, or registers a `<library>:<name>` name, with
-`Theme(…, icons: ["acme:rocket": "airplane"])`.
+to another symbol or to an image the app ships, or registers a
+`<library>:<name>` name, with
+`Theme(…, icons: ["acme:rocket": "airplane", "close": .assetName("brand.close")])`.
+An asset the app does not ship stops a development build with a message that
+names it, and draws nothing in a release build.
 
 Font families come from the theme's `font-family-*` stacks: the first family
 the device has wins, and a system family such as `-apple-system` or

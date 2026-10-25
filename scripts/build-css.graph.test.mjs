@@ -124,6 +124,41 @@ describe('build-css dependency extraction', () => {
     expect(standaloneCSS).toBe(providerCSS);
   });
 
+  it("inlines a provider's defineConsts value, without emitting the provider's module", async () => {
+    // Lab reading a core motion constant as a value (a fade's duration): the
+    // constants module belongs to the provider's stylesheet, but a constant is
+    // inlined where it is read. (At-rule keys stay literal: StyleX gives an
+    // imported constant key a different priority than the literal at-rule.)
+    const {root, src} = await fixture();
+    const provider = path.join(root, 'provider');
+    await fs.mkdir(provider, {recursive: true});
+    await fs.writeFile(
+      path.join(provider, 'motion.stylex.ts'),
+      `import * as stylex from '@stylexjs/stylex';\nexport const motion = stylex.defineConsts({fade: '200ms'});\nexport const tones = stylex.defineVars({'--probe-tone': 'green'});\n`,
+    );
+    await fs.writeFile(
+      path.join(provider, 'Panel.ts'),
+      `import * as stylex from '@stylexjs/stylex';\nimport {motion, tones} from './motion.stylex';\nexport const styles = stylex.create({panel: {color: tones['--probe-tone'], transitionDuration: motion.fade}});\n`,
+    );
+    await fs.writeFile(
+      path.join(src, 'Consumer.ts'),
+      `import * as stylex from '@stylexjs/stylex';\nimport {motion} from '@probe/motion.stylex';\nexport const styles = stylex.create({row: {transitionProperty: 'opacity', transitionDuration: motion.fade}});\n`,
+    );
+    const providerTarget = {src: provider, aliases: {}};
+    const css = stylexBabelPlugin.processStylexRules(
+      await collectStyleXCSS({
+        src,
+        aliases: {'@probe/*': [path.join(provider, '*')]},
+        provider: providerTarget,
+      }),
+      false,
+    );
+    expect(css).toMatch(/transition-duration:\s*(200ms|\.2s)/);
+    expect(undefinedStyleXVariables(css)).toEqual([]);
+    // The provider's variable group stays in the provider's stylesheet.
+    expect(css).not.toContain('--probe-tone');
+  });
+
   it('fails closed when an explicit distribution entry is missing', async () => {
     const {src} = await fixture();
     await expect(
