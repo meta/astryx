@@ -227,7 +227,7 @@ describe('GestureHost', () => {
     expect(end.defaultPrevented).toBe(false);
   });
 
-  it('gives a claimed one-finger pan up when a second finger lands, so the pinch is the browser’s', () => {
+  it('keeps a claimed one-finger drag when a second finger lands on it (AST-094 FR10)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({maximumNumberOfTouches: 1});
     detachers.push(host.attach(box, pan));
@@ -235,17 +235,16 @@ describe('GestureHost', () => {
     touch('touchstart', box, [first], [first], 0);
     const moved = {...first, x: 40};
     touch('touchmove', box, [moved], [moved], 16);
+    expect(pan.state).toBe('began');
+    const before = pan.translation().x;
     const second = {id: 2, x: 200, y: 200};
     touch('touchstart', box, [second], [moved, second], 20);
-    const pinchLike = touch(
-      'touchmove',
-      box,
-      [{...second, x: 260}],
-      [moved, {...second, x: 260}],
-      32,
-    );
-    expect(pinchLike.defaultPrevented).toBe(false);
-    expect(pan.state).not.toBe('began');
+    // The first finger keeps driving it, and its moves stay the pan's.
+    const next = {...first, x: 70};
+    const drag = touch('touchmove', box, [next], [next, second], 32);
+    expect(pan.state).toBe('changed');
+    expect(pan.translation().x).toBe(before + 30);
+    expect(drag.defaultPrevented).toBe(true);
   });
 
   it('reads pointercancel on a finger as the browser taking it', () => {
@@ -1347,7 +1346,35 @@ describe('touch gates and a second finger', () => {
     touch('touchend', button, [finger], [], 140);
   });
 
-  it('gives a one-finger pan up when a second finger lands anywhere, so the browser can pinch', () => {
+  it('fails a one-finger pan that has not claimed when a second finger lands anywhere, so the browser can pinch', () => {
+    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
+    const swipe = new PanGestureRecognizer({
+      name: 'swipe',
+      direction: 'horizontal',
+      maximumNumberOfTouches: 1,
+    });
+    const states: string[] = [];
+    swipe.addListener(r => states.push(r.state));
+    detachers.push(host.attach(row, swipe));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [first], [first], 0);
+    // Under the hysteresis: still possible, nothing claimed.
+    touch('touchmove', row, [{...first, x: 15}], [{...first, x: 15}], 16);
+    const second = {id: 2, x: 200, y: 300};
+    touch('touchstart', text, [second], [{...first, x: 15}, second], 32);
+    // The pan can no longer claim the pair midway: the pinch is the browser's.
+    const pinch = touch(
+      'touchmove',
+      row,
+      [{...first, x: 60}],
+      [{...first, x: 60}, second],
+      48,
+    );
+    expect(pinch.defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+  });
+
+  it('keeps a claimed one-finger drag when a second finger lands anywhere (AST-094 FR10)', () => {
     const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
     const swipe = new PanGestureRecognizer({
       name: 'swipe',
@@ -1361,7 +1388,49 @@ describe('touch gates and a second finger', () => {
     expect(swipe.state).toBe('began');
     const second = {id: 2, x: 200, y: 300};
     touch('touchstart', text, [second], [{...first, x: 40}, second], 32);
-    expect(['cancelled', 'failed', 'possible']).toContain(swipe.state);
+    const drag = touch(
+      'touchmove',
+      row,
+      [{...first, x: 80}],
+      [{...first, x: 80}, second],
+      48,
+    );
+    expect(swipe.state).toBe('changed');
+    expect(drag.defaultPrevented).toBe(true);
+  });
+
+  it('keeps a claim a still-possible pan committed early when a second finger lands', () => {
+    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
+    // A one-way pan committing its claim at 5 px, before it begins.
+    const banner = new PanGestureRecognizer({
+      name: 'banner',
+      direction: 'up',
+      maximumNumberOfTouches: 1,
+      claimDistance: 5,
+    });
+    detachers.push(host.attach(row, banner));
+    const first = {id: 1, x: 100, y: 100};
+    touch('touchstart', row, [first], [first], 0);
+    const claimed = touch(
+      'touchmove',
+      row,
+      [{...first, y: 94}],
+      [{...first, y: 94}],
+      16,
+    );
+    expect(claimed.defaultPrevented).toBe(true);
+    expect(banner.state).toBe('possible');
+    const second = {id: 2, x: 200, y: 300};
+    touch('touchstart', text, [second], [{...first, y: 94}, second], 32);
+    // The claim stands: its moves are still not the browser's.
+    const next = touch(
+      'touchmove',
+      row,
+      [{...first, y: 88}],
+      [{...first, y: 88}, second],
+      48,
+    );
+    expect(next.defaultPrevented).toBe(true);
   });
 });
 

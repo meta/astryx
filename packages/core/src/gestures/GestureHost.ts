@@ -827,14 +827,6 @@ export class GestureHost {
   // --- Touch events ----------------------------------------------------------
 
   /**
-   * How many fingers are on the screen: the length of `touches` in the last
-   * touch event the host's listeners heard (`touchstart`, `touchmove`,
-   * `touchend`, `touchcancel`), whatever its target, so a finger on an
-   * element with no recognizer counts too. 0 before any, and while no
-   * listener is installed. A recognizer that claims only a lone finger reads
-   * it in `shouldBegin` (a second finger is the browser's pinch).
-   */
-  /**
    * Hold touches away from every participant while `gate(target)` answers
    * true (a presentation running in a layer: its content takes no touch
    * until it settles). Returns the release.
@@ -846,6 +838,14 @@ export class GestureHost {
     };
   }
 
+  /**
+   * How many fingers are on the screen: the length of `touches` in the last
+   * touch event the host's listeners heard (`touchstart`, `touchmove`,
+   * `touchend`, `touchcancel`), whatever its target, so a finger on an
+   * element with no recognizer counts too. 0 before any, and while no
+   * listener is installed. A recognizer that must not begin under a second
+   * finger reads it in `shouldBegin`.
+   */
   fingersDown(): number {
     return this.fingerTargets.length;
   }
@@ -865,7 +865,7 @@ export class GestureHost {
       return;
     }
     if (this.fingerTargets.length > 1) {
-      this.stopLoneFingerPans();
+      this.failUnclaimedLoneFingerPans();
     }
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
@@ -1690,21 +1690,27 @@ export class GestureHost {
 
   /**
    * A second finger landed somewhere (wherever: often on a plain row): a
-   * pan that takes one finger only gives the touch up, so the two fingers
-   * stay the browser's pinch (WCAG 1.4.4) instead of sliding the row until
-   * the browser cancels it.
+   * pan that takes one finger only and has not claimed its touch fails, so
+   * the two fingers stay the browser's pinch (WCAG 1.4.4) instead of the
+   * pan claiming them midway. A drag a recognizer has claimed keeps its
+   * finger: a second finger never cancels or redirects it (`spec:AST-094`
+   * FR10), and no claim is released here.
    */
-  private stopLoneFingerPans(): void {
+  private failUnclaimedLoneFingerPans(): void {
     for (const recognizer of [...this.arena.involvedRecognizers]) {
       if (
         recognizer instanceof PanGestureRecognizer &&
+        recognizer.state === 'possible' &&
+        // An early claim (claimDistance) is a claim too.
+        !recognizer.claimsEarly() &&
         recognizer.maximumNumberOfTouches === 1 &&
         recognizer.trackedTouches.length > 0 &&
-        recognizer.trackedTouches.every(touch => touch.pointerType === 'touch')
+        recognizer.trackedTouches.every(
+          touch =>
+            touch.pointerType === 'touch' && !this.arena.isClaimed(touch.id),
+        )
       ) {
-        const ids = recognizer.trackedTouches.map(touch => touch.id);
         recognizer.cancel();
-        this.arena.releaseClaims(ids);
       }
     }
   }
