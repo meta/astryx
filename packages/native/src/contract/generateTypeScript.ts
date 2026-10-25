@@ -8,6 +8,7 @@
  *   exports map selects one file per type-resolution condition
  */
 
+import {BUILTIN_ICON_NAMES} from '../icons/defaults.js';
 import {NATIVE_PLATFORMS, type NativePlatform} from '../platforms.js';
 import type {ComponentContract, PropMap, PropSpec, PropType} from './types.js';
 
@@ -37,6 +38,8 @@ function tsType(type: PropType, content = 'AstryxContentNode'): string {
       return `(${type.args.map((arg, i) => `arg${i}: ${tsType(arg, content)}`).join(', ')}) => void`;
     case 'content':
       return `ReadonlyArray<${content}>`;
+    case 'icon':
+      return 'IconName';
     case 'named':
       return type.name;
   }
@@ -80,13 +83,19 @@ function coreFile(contracts: readonly ComponentContract[]): string {
     'export interface AstryxSharedBaseProps {\n  id?: string;\n  isHidden?: boolean;\n}\n' +
     '/** One child Astryx component in a content slot (AST-082 FR4). */\n' +
     'export interface AstryxContentNode {\n  readonly component: string;\n  readonly key: string;\n}\n' +
+    '/** A shared icon name (AST-082 FR17): a built-in name or a registered `<library>:<name>`. */\n' +
+    `export type IconName = ${BUILTIN_ICON_NAMES.map(name => `'${name}'`).join(' | ')} | \`\${string}:\${string}\`;\n` +
     [...typeDecls, ...props].join('\n') +
     '\n'
   );
 }
 
 function reExports(contracts: readonly ComponentContract[]): string {
-  const names = new Set<string>(['AstryxSharedBaseProps', 'AstryxContentNode']);
+  const names = new Set<string>([
+    'AstryxSharedBaseProps',
+    'AstryxContentNode',
+    'IconName',
+  ]);
   for (const contract of contracts) {
     Object.keys(contract.types).forEach(name => names.add(name));
     names.add(`${contract.name}CoreProps`);
@@ -149,7 +158,7 @@ function platformFile(
   platform: NativePlatform | null,
 ): string {
   const named = contracts.flatMap(c => Object.keys(c.types));
-  const imports = `import type {${['AstryxSharedBaseProps', ...new Set(named), ...contracts.map(c => `${c.name}CoreProps`)].join(', ')}} from './core.js';\n`;
+  const imports = `import type {${['AstryxSharedBaseProps', 'IconName', ...new Set(named), ...contracts.map(c => `${c.name}CoreProps`)].join(', ')}} from './core.js';\n`;
   const components = contracts.map(contract => {
     const extra = platform ? (contract.platforms[platform] ?? {}) : {};
     const body = Object.keys(extra).length > 0 ? `\n  ${members(extra)}\n` : '';

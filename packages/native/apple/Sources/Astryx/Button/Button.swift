@@ -29,7 +29,7 @@ public enum AstryxButtonSize: String, CaseIterable, Sendable {
 
 /// A labeled action, painted with the theme's tokens. The tap area reaches
 /// the platform's 44-by-44-point minimum even when the drawn button is smaller.
-public struct AstryxButton: View {
+public struct Button: View {
   let label: String
   let variant: AstryxButtonVariant
   let size: AstryxButtonSize
@@ -66,14 +66,14 @@ public struct AstryxButton: View {
   }
 
   public var body: some View {
-    Button(action: activate) {
+    SwiftUI.Button(action: activate) {
       // The label keeps its place while loading so the width holds; the
       // spinner draws over it.
       HStack(spacing: astryx.space(2)) {
         if let icon, let symbol = astryx.icon(icon) {
           Image(systemName: symbol)
         }
-        Text(label).lineLimit(1)
+        SwiftUI.Text(label).lineLimit(1)
       }
       .opacity(isLoading ? 0 : 1)
       .overlay {
@@ -94,9 +94,9 @@ public struct AstryxButton: View {
     // As core's Button: a loading button stays undimmed and focusable, keeps
     // its label, and says Loading; taps do nothing until it finishes.
     .disabled(isDisabled)
-    .accessibilityLabel(Text(accessibilityText))
+    .accessibilityLabel(SwiftUI.Text(accessibilityText))
     .accessibilityAddTraits(Self.accessibilityTraits)
-    .accessibilityValue(Text(loadingValue ?? ""))
+    .accessibilityValue(SwiftUI.Text(loadingValue ?? ""))
     .onChange(of: isLoading) { _, loading in
       if loading { AccessibilityNotification.Announcement(AstryxStrings.buttonLoading).post() }
     }

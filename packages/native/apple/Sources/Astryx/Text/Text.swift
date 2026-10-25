@@ -51,7 +51,7 @@ public enum AstryxTextSize: String, CaseIterable, Sendable {
 }
 
 /// A run of text in a semantic type, painted with the theme's type tokens.
-public struct AstryxText: View {
+public struct Text: View {
   let content: String
   let type: AstryxTextType
   let color: AstryxTextColor?
@@ -76,7 +76,7 @@ public struct AstryxText: View {
   public var body: some View {
     let sizeToken = size?.token ?? "\(type.token)-size"
     let weightToken = weight?.token ?? "\(type.token)-weight"
-    Text(content)
+    SwiftUI.Text(content)
       .font(astryx.font(size: sizeToken, 14, weight: weightToken))
       .foregroundStyle(astryx.color((color ?? type.defaultColor).token))
   }

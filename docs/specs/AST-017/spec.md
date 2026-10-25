@@ -102,7 +102,9 @@ affects_consumer_docs: [release-process, templates]
       "FR54",
       "DEC-15",
       "DEC-16",
-      "DEC-22"
+      "DEC-22",
+      "FR59",
+      "DEC-25"
     ]
   }
 }
@@ -730,6 +732,15 @@ one removal merged ahead of the decision to allow it.
   (FR35), never in a patch release, and no surface record can make it patch-eligible by
   redefining a release rule. Components keep the rules in this record, including FR3 and
   FR53.
+- **FR59 — Touch work leaves fine-pointer behavior alone unless it has a reason.**
+  A change made for touch or coarse-pointer use may change what people using a mouse,
+  trackpad, or other fine pointer see or do only to fix a defect those people actually
+  hit, or for deliberate cross-device consistency the pull request names. Either way
+  the pull request shows fine-pointer evidence before and after the change. A new
+  fine-pointer look or feel is never part of touch work, including a
+  cross-device consistency change: it needs its own owner decision under the
+  governing design or component record. Otherwise fine-pointer behavior and
+  appearance stay as they were.
 
 ### Platform support
 
@@ -823,7 +834,11 @@ Public lifecycle classification remains in force with these operational effects:
   `docs` command and machine-readable schemas stay contractual;
 - exact-main release comparison rejects unclassified deltas; and
 - a surface other than a component is classified by its own record's compatibility
-  contract, and the release process here applies to the result.
+  contract, and the release process here applies to the result;
+- touch work that changed fine-pointer behavior only as a side effect becomes
+  touch-only with fine pointers unchanged, and a fine-pointer visual change proposed
+  alongside touch work, such as a new modal backdrop dim, becomes its own design
+  decision (FR59).
 
 Main declares the next planned version, and Changeset admission uses that declaration
 to refuse `[breaking]` work on a patch plan. Pull-request lint does not compare the
@@ -875,6 +890,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR52      | Promotion fixtures plus every checked-in source consumer run before and after codemod promotion                                                                                                                                                                                                                                                                 | staged transform, promoted transform, missing source, ambiguous candidates, changed entry identity                                                                                                                                    | Evidence hardcodes only `next/`, keeps a duplicate source, silently chooses among candidates, or passes when the promoted transform no longer exposes the same identity and entries                                                                                                                                       |
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop               | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                     |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                       | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                 |
+| FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                   | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                           |
 
 ## Decision log
 
@@ -1317,6 +1333,21 @@ such choice. Touch styling and touch-only behavior other records define keep
 their own rules.
 
 Rejected: a touch presentation or open-surface touch mode callers cannot pin.
+
+### DEC-25 — Touch work changes fine-pointer behavior only for a defect or deliberate consistency
+
+**Reference:** `spec:AST-017/DEC-25`
+**Decider:** `cixzhang`, `2026-10-24`
+
+People using a mouse or trackpad are a released audience, and touch work that
+changes their experience as a side effect surprises them without anyone deciding
+it. Allowing a fine-pointer change only to fix a defect they hit, or to make
+devices consistent on purpose, with before-and-after evidence, keeps touch work
+from reshaping desktop by accident while still letting it fix real desktop
+problems. A new desktop look or feel is a design choice of its own and gets its own
+owner decision.
+
+Rejected: letting touch work change fine-pointer behavior freely, and forbidding every fine-pointer change, which would block real desktop fixes.
 
 ## Open questions
 
