@@ -27,6 +27,7 @@
  * read fresh on every question, since a native scroll moves them.
  */
 
+import {isRtlElement} from '../hooks/isRtlElement';
 import type {NativeScrollProbe} from './types';
 
 export interface AllowedPans {
@@ -68,6 +69,12 @@ const EDGE_TOLERANCE = 1;
 
 /** The node's parent, crossing out of shadow roots. */
 export function parentAcrossShadow(node: Node): Node | null {
+  // The flat tree the browser scrolls and dispatches through: a slotted node
+  // goes to its slot, a shadow root to its host.
+  const slot = (node as Partial<Slottable>).assignedSlot;
+  if (slot != null) {
+    return slot;
+  }
   if (node.parentNode != null) {
     return node.parentNode instanceof ShadowRoot
       ? node.parentNode.host
@@ -120,7 +127,8 @@ function buildChain(target: Element): Chain {
         element,
         x: scrollsX && allowX,
         y: scrollsY && allowY,
-        isRtl: style.direction === 'rtl',
+        // The writing direction through core's one helper.
+        isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
       });

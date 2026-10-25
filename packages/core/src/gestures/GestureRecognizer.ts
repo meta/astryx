@@ -24,7 +24,8 @@
  * event, so a listener that writes a transform writes it in the same frame
  * as the input, with no React render in between.
  *
- * SYNC: When modified, update GestureArena.ts and README.md.
+ * SYNC: When modified, update GestureArena.ts, recognizerInternals.ts and
+ * README.md.
  */
 
 import type {GestureArena} from './GestureArena';
@@ -53,6 +54,15 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   /** Hold the view's touch-began until this recognizer fails. @default false */
   delaysTouchesBegan?: boolean;
   /**
+   * While a finger or a pen is down on this recognizer's element, text
+   * selection and the touch callout are off there, as on a UIKit control:
+   * a slider's, a segmented control's or a switch's drag sets it. Content
+   * under a sheet's or a pager's pan stays selectable, so it is off by
+   * default; a mouse keeps desktop selection either way. A long press
+   * always turns them off for its element. @default false
+   */
+  preventsTextSelection?: boolean;
+  /**
    * Hold the view's touch-ended (and the browser's click) while this
    * recognizer may still recognize. @default true
    */
@@ -61,6 +71,16 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   allowedPointerTypes?: ReadonlyArray<PointerKind>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */
   requiresExclusiveTouchType?: boolean;
+  /**
+   * Whether this recognizer takes its touches from the browser when it
+   * recognizes. `false` makes a watcher (a tab bar that minimizes while the
+   * page scrolls): it never claims, so it gets only passive listeners and
+   * never delays a scroll; it prevents no other recognizer and none prevents
+   * it; and it keeps tracking a touch the browser takes for a scroll,
+   * reporting through the native scroll and ending at the lift.
+   * @default true
+   */
+  claimsTouches?: boolean;
   /** gestureRecognizerShouldBegin: return false to fail instead of beginning. */
   shouldBegin?: (recognizer: R) => boolean;
   /** gestureRecognizer(_:shouldReceive:): return false to never see this touch. */
@@ -159,6 +179,8 @@ export abstract class GestureRecognizer {
   name: string;
   isEnabled: boolean;
   cancelsTouchesInView: boolean;
+  /** See GestureRecognizerOptions.preventsTextSelection. */
+  readonly preventsTextSelection: boolean;
   delaysTouchesBegan: boolean;
   delaysTouchesEnded: boolean;
   allowedPointerTypes: ReadonlySet<PointerKind> | null;
@@ -170,9 +192,9 @@ export abstract class GestureRecognizer {
   view: unknown = null;
 
   /** @internal The arena delivering touches to this recognizer, if any. */
-  arena: GestureArena | null = null;
+  protected arena: GestureArena | null = null;
   /** @internal A recognition waiting for a failure requirement. */
-  pending: 'began' | 'ended' | null = null;
+  protected pending: 'began' | 'ended' | null = null;
 
   /**
    * The delegate functions. Typed against the base so a subclass stays
@@ -191,7 +213,7 @@ export abstract class GestureRecognizer {
   /** Touches currently tracked, by id. */
   protected readonly touches = new Map<number, GestureTouch>();
   /** @internal Every touch id received since the last reset. */
-  readonly seenTouchIds = new Set<number>();
+  protected readonly seenTouchIds = new Set<number>();
   private lastLocation: Point = {x: 0, y: 0};
 
   constructor(options: GestureRecognizerOptions<never> = {}) {
@@ -200,6 +222,7 @@ export abstract class GestureRecognizer {
     this.name = options.name ?? this.constructor.name;
     this.isEnabled = options.isEnabled ?? true;
     this.cancelsTouchesInView = options.cancelsTouchesInView ?? true;
+    this.preventsTextSelection = options.preventsTextSelection ?? false;
     this.delaysTouchesBegan = options.delaysTouchesBegan ?? false;
     this.delaysTouchesEnded = options.delaysTouchesEnded ?? true;
     this.allowedPointerTypes =
@@ -221,7 +244,7 @@ export abstract class GestureRecognizer {
    * it. Every touch recognizer claims; hover has no touches to claim.
    */
   get claimsTouches(): boolean {
-    return true;
+    return this.options.claimsTouches ?? true;
   }
 
   get state(): GestureState {
@@ -238,7 +261,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal Whether this recognizer listens to touch at all. */
-  get acceptsTouchInput(): boolean {
+  protected get acceptsTouchInput(): boolean {
     return (
       this.allowedPointerTypes == null || this.allowedPointerTypes.has('touch')
     );
@@ -295,7 +318,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal Whether this recognizer must wait for `other` to fail. */
-  requiresFailureOf(other: GestureRecognizer): boolean {
+  protected requiresFailureOf(other: GestureRecognizer): boolean {
     return (
       this.failureRequirements.has(other) ||
       this.options.shouldRequireFailureOf?.(this, other) === true ||
@@ -304,7 +327,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal Whether this and `other` may be active together. */
-  allowsSimultaneous(other: GestureRecognizer): boolean {
+  protected allowsSimultaneous(other: GestureRecognizer): boolean {
     return (
       this.simultaneousWith.has(other) ||
       this.options.shouldRecognizeSimultaneously?.(this, other) === true ||
@@ -313,7 +336,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal The delegate's should-begin answer. */
-  shouldBegin(): boolean {
+  protected shouldBegin(): boolean {
     return this.options.shouldBegin?.(this) ?? true;
   }
 
@@ -401,6 +424,10 @@ export abstract class GestureRecognizer {
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): boolean {
+    if (!this.claimsTouches) {
+      // A watcher follows the browser's scroll to the lift.
+      return true;
+    }
     this.touchesCancelled(touches, event);
     return false;
   }
@@ -462,7 +489,7 @@ export abstract class GestureRecognizer {
   // --- Arena hooks (internal) ----------------------------------------------
 
   /** @internal Whether this recognizer takes `touch` right now. */
-  wantsTouch(touch: GestureTouch): boolean {
+  protected wantsTouch(touch: GestureTouch): boolean {
     if (this.state !== 'possible' && !isActive(this.state)) {
       return false;
     }
@@ -473,7 +500,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal */
-  deliverBegan(
+  protected deliverBegan(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
@@ -486,7 +513,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal */
-  deliverMoved(
+  protected deliverMoved(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
@@ -499,7 +526,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal */
-  deliverEnded(
+  protected deliverEnded(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
@@ -517,7 +544,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal */
-  deliverCancelled(
+  protected deliverCancelled(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
@@ -534,7 +561,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal */
-  deliverTakenByBrowser(
+  protected deliverTakenByBrowser(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
@@ -573,7 +600,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal Apply a transition the arena has approved. */
-  applyState(next: GestureState): void {
+  protected applyState(next: GestureState): void {
     const from = this.stateValue;
     if (from === next && next !== 'changed') {
       return;
@@ -596,7 +623,7 @@ export abstract class GestureRecognizer {
   }
 
   /** @internal Return to `possible` for the next attempt. */
-  resetToPossible(): void {
+  protected resetToPossible(): void {
     this.clearTimer();
     this.pending = null;
     this.touches.clear();

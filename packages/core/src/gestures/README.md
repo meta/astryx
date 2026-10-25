@@ -43,12 +43,27 @@ function Sheet() {
 - The listener is read through a ref. Passing a new function on each render
   attaches nothing new, and a gesture never causes a React render.
 - The recognizer attaches in a layout effect, so the element's `touch-action`
-  is set before the browser can see a finger.
+  is set before the browser can see a finger. It follows the element behind
+  the ref: a node rendered after mount, or swapped behind the same ref (a
+  trigger rendered `as` another element), is attached at that commit.
+- `isEnabled: false` mid-gesture ends the gesture without calling the
+  listener, since the handler that turned it off owns that end (no consumer
+  callback from an Effect). A handler that wants UIKit's `.cancelled` calls
+  `recognizer.setEnabled(false)` itself, which reports it at once. After
+  unmount the listener hears nothing, not even the cancellation of a
+  gesture the unmount ended.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
-  (see below).
+  (see below). It follows its element the same way, takes `isBraking` (by
+  default the host's: a touch that stops a flick presses nothing), and
+  rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
+  `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
+  calls neither `onHighlightChange` nor `onControlEvent`.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
-the same and returns a detach function.
+the same and returns a detach function. `getGestureHost(document).fingersDown()`
+is how many fingers are on the screen (the last touch event's `touches`,
+wherever they landed): a recognizer that claims only a lone finger checks it
+in `shouldBegin`, so two fingers stay the browser's pinch.
 
 ## Recognizers
 
@@ -62,6 +77,13 @@ the same and returns a detach function.
 | `RotationGestureRecognizer`      | `UIRotationGestureRecognizer`      | continuous | `rotation` in radians, unwrapped, clockwise positive; `velocity` in rad/s                                                                                                                             |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges` including `leading` / `trailing` (resolved against the writing direction); fails as soon as the touch lands outside                                                                           |
 | `HoverGestureRecognizer`         | `UIHoverGestureRecognizer`         | continuous | a mouse or a hovering pen; silent for fingers                                                                                                                                                         |
+
+A recognizer created with `claimsTouches: false` is a watcher (a tab bar
+that minimizes while the page scrolls): it never claims, so its element gets
+only passive listeners and a scroll never waits for it; it prevents no other
+recognizer and none prevents it; and it follows a touch the browser takes
+for a scroll to the lift. Attach it with `manageStyle: false` to leave the
+element's `touch-action` alone.
 
 Every recognizer also has UIKit's switches: `isEnabled` (use `setEnabled`;
 turning it off mid-gesture cancels), `cancelsTouchesInView` (default true),
@@ -116,7 +138,10 @@ each one that accepts it tracks it until it ends. Then:
   The delegates `shouldRequireFailureOf` and `shouldBeRequiredToFailBy`
   express the same thing dynamically.
 - **Delegates.** `shouldBegin`, `shouldReceiveTouch`, and `canPrevent` /
-  `canBePrevented` on subclasses.
+  `canBePrevented` on subclasses. The arena's plumbing (touch delivery,
+  approved transitions, a pending recognition) is `protected`: a subclass
+  overrides the `touches*` handlers and sets `state`, and only the gesture
+  system drives the rest.
 
 ```ts
 // Single tap waits for the double tap to fail, as in UIKit.
@@ -181,13 +206,20 @@ at once on a cancel; the marker's value picks the profile (empty or
 A touch that brakes a list the finger set moving paints nothing. A value the
 consumer did not write (a row kept `held` through a navigation push) is
 never overwritten or cleared. Installs are counted per attribute, so every
-component can call the hook.
+component can call the hook. The default attribute pair is the one the
+document press controller (`installPressFeedback`, behind
+`usePressFeedback`) writes: while that controller is installed, the
+delegated press on the same attribute stays idle, with one development
+warning, so two writers never fight over the paint. Pass another
+`attribute` and `pressedAttribute`, or uninstall the controller.
 
 ## What the browser is told
 
 - **`touch-action`.** Each element gets the intersection of what its
-  recognizers leave the browser. It is set inline on attach and restored on
-  detach (opt out with `manageStyle: false`):
+  recognizers leave the browser, and never more than the element's own
+  value allows: a caller's explicit `touch-action` (a trigger's `none`)
+  stays in force, as the intersection of both. It is set inline on attach
+  and restored on detach (opt out with `manageStyle: false`):
 
   | Recognizers on the element                         | `touch-action`      |
   | -------------------------------------------------- | ------------------- |
@@ -207,13 +239,36 @@ component can call the hook.
   attached, so the page stays zoomable (WCAG 1.4.4). A long press also turns
   off the iOS callout and text selection on its element.
 
+  While a finger or a pen is down, the host turns them off too on the
+  element of a press tracker (attached or delegated: a control or a cell)
+  and of a recognizer with `preventsTextSelection` (a slider's, a segmented
+  control's or a switch's drag) that would take the touch (enabled, and
+  accepting its pointer), and restores them when the contact ends: UIKit
+  never starts a selection under a held control or cell. The document press
+  controller (`usePressFeedback` rows) takes the same lock on its surface for
+  any coarse pointer, iOS or not (`selectionLock.ts` is shared). A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. A mouse never
+  takes the lock, so desktop selection is unchanged, and content under a
+  sheet's or a pager's pan stays selectable.
+
 - **Claiming.** When a recognizer recognizes, it owns its touches. Each
   element with a recognizer that can claim a moving touch (a pan, a swipe, a
   long press that then drags, a pinch, a rotation) has a non-passive
   `touchmove` listener that cancels the event only while one of its touches
   is owned. A touch nobody owns scrolls exactly as it would without the
-  system. Taps claim only at the lift, so an element with only taps, or only
-  a press consumer, gets no such listener (see the known limit below).
+  system. Taps claim only at the lift, and a recognizer that never claims
+  (`claimsTouches` false, such as a pull that only watches the scroll) never
+  owns a touch, so an element with only those, or only a press consumer,
+  gets no such listener (see the known limit below). A press tracker created
+  with `keepsTouch: true` (opt-in, for a continuous-tracking control such
+  as a held stepper; never plain buttons, links, cards or list cells) gets
+  one: once its press is delivered its finger's moves are cancelled, so the
+  browser's pan never takes the held control (UIKit's
+  `touchesShouldCancel(in:)` is false for a tracking control). A scroll that
+  starts on such a control waits on the main thread; a move before the
+  press is delivered still scrolls. The listener the host
+  adds to a finger's target at touch-down, for a target that leaves the
+  document mid-gesture, is passive too unless a recognizer on that touch can
+  claim while it moves.
 - **Early claim.** A one-way pan over content the browser could scroll (an
   overlay such as a toast or a banner) cancels its touch's moves once the
   finger has gone 5 px its way (`claimDistance`), before WebKit claims a
@@ -234,7 +289,11 @@ component can call the hook.
   scrolling therefore decides at 10 px or less (the toast's swipe decides at
   8).
 - **The browser's claim.** `pointercancel` on a finger, or a scroll above
-  the touch, means the browser took the finger; so does its first `touchmove`
+  the touch once the finger has travelled the slop (the browser starts a pan
+  no earlier), means the browser took the finger; a scroll under a finger
+  that has not moved (scrollIntoView, a transcript pinned to its end, scroll
+  anchoring) is the page's own and leaves the press and its click alone. So
+  does its first `touchmove`
   that can no longer be cancelled, when the browser could pan along the
   finger's main axis. (Chromium also stops asking after one unconsumed
   `touchmove` when `touch-action` keeps it from panning that way, as for a
@@ -274,14 +333,30 @@ scrollers under the finger. This is the sheet over its own list:
 
 "Could scroll" follows the browser's own rules: `touch-action` between the
 touch and each scroller, scroll chaining stopped by `overscroll-behavior`,
-and RTL `scrollLeft` ranges.
+and RTL `scrollLeft` ranges, along the flat tree (content slotted into a
+shadow-tree scroller scrolls with it, as the hit path does).
+
+### Holding the page still
+
+A scroll lock (`useScrollLock`) holds the page through the host:
+`getGestureHost(document).holdPageScroll(decide)` returns the release. While
+any hold is active, the host listens to the document with a non-passive
+`touchmove`. Once per one-finger touch that no recognizer owns, after the
+finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
+`decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
+being the innermost node under the finger (the composed path's first node),
+and cancels the touch's moves for its whole length if so. A second finger is
+never cancelled, so pinch-zoom keeps working. With no hold, the listener is
+gone and every touch scrolls as without the system.
 
 ### Multiple fingers
 
-A second finger never breaks a one-finger pan that is already moving: the
-pan ignores it, and the claim keeps the browser from zooming with it. A
-second finger that lands before any recognizer has claimed fails the
-one-finger recognizers, so the two fingers zoom the page.
+A drag a recognizer has claimed keeps its finger: a second finger never
+cancels or redirects it (`spec:AST-094` FR10), as in UIKit, where a pan
+ignores touches beyond its maximum. Before any claim, a second finger landing
+anywhere (often on a plain row no recognizer is on) fails a pan limited to
+one finger, so the two fingers zoom the page (WCAG 1.4.4) instead of the pan
+claiming them midway.
 
 ## Time
 
@@ -319,7 +394,9 @@ pattern per UIKit feedback kind. iOS Safari has no vibration API. It plays a
 light impact only when a real tap toggles an `<input type="checkbox"
 switch>`, and WebKit requires a trusted event for it. `attachTapHaptic(label)`
 puts a hidden switch inside a label the control renders as its tap target,
-so every real tap on it plays that impact. Nothing can play a haptic later
+so every real tap on it plays that impact; focus the activation gives the
+switch goes straight back, and a label that already labels another control
+gets no switch. Nothing can play a haptic later
 from script, so mid-drag haptics (detent snaps, picker ticks) are not
 possible in iOS Safari.
 
@@ -419,7 +496,9 @@ tokens under a mouse.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
   Chromium (CDP touches with timestamps) and WebKit (its own touch input).
-  Run it with
+  CI runs it in Chromium in the interaction lane
+  (`pnpm test:interaction --project chromium`, `playwright.interaction.config.ts`).
+  Run both engines with
   `pnpm exec playwright test --config packages/core/src/gestures/__tests__/browser/playwright.config.ts`;
   where WebKit cannot launch on the host, its project runs in the official
   Playwright image (see the config header). The same fixture passed in

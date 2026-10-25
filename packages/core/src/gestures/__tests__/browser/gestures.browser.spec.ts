@@ -309,7 +309,15 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
   // Pans (the cards' too), a long press, a pinch and the sheet's pan can take
   // a moving touch; a tap-only element and a press consumer never wait.
   expect(new Set(blocking)).toEqual(
-    new Set(['hpan', 'presser', 'pinchable', 'sheetBody', 'card', 'cardLate']),
+    new Set([
+      'hpan',
+      'presser',
+      'pinchable',
+      'sheetBody',
+      'slider',
+      'card',
+      'cardLate',
+    ]),
   );
 });
 
@@ -405,6 +413,70 @@ test('a one-way overlay pan keeps its direction from the page, and leaves the ot
   await driver.play(drag(start, {x: start.x, y: start.y + 60}, 30));
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before - 20);
   expect(states(await log(page), 'card')).toEqual(['failed', 'possible']);
+});
+
+test('a held finger turns text selection off on a press-tracked control and on a pan that asks, until it lifts; a mouse and other pans keep it', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const selection = async (id: string) =>
+    page.evaluate(target => {
+      const style = getComputedStyle(
+        document.getElementById(target) ?? document.body,
+      );
+      return (
+        style.getPropertyValue('-webkit-user-select') ||
+        style.getPropertyValue('user-select')
+      );
+    }, id);
+  const held: Record<string, string[]> = {};
+  for (const id of ['passive', 'slider', 'hpan']) {
+    await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+    const at = await center(page, id);
+    const before = await selection(id);
+    await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+    const during = await selection(id);
+    await driver.play([{t: 0, down: []}]);
+    held[id] = [before, during, await selection(id)];
+  }
+  // The engine's own value otherwise: Chromium computes `auto`, WebKit `text`.
+  const free = held.hpan[0];
+  expect(free).not.toBe('none');
+  expect(held.passive).toEqual([free, 'none', free]);
+  expect(held.slider).toEqual([free, 'none', free]);
+  expect(held.hpan).toEqual([free, free, free]);
+
+  const at = await center(page, 'passive');
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  const withMouse = await selection('passive');
+  await page.mouse.up();
+  expect(withMouse).toBe(free);
+});
+
+test('a held finger on a checkbox inside a press-tracked row turns its selection off too: WebKit makes every input selectable', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const selection = async () =>
+    page.evaluate(() => {
+      const style = getComputedStyle(
+        document.getElementById('check') ?? document.body,
+      );
+      return (
+        style.getPropertyValue('-webkit-user-select') ||
+        style.getPropertyValue('user-select')
+      );
+    });
+  await page.locator('#check').scrollIntoViewIfNeeded();
+  const at = await center(page, 'check');
+  const before = await selection();
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  const during = await selection();
+  await driver.play([{t: 0, down: []}]);
+  expect([before, during, await selection()]).toEqual([before, 'none', before]);
 });
 
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({

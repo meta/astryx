@@ -78,6 +78,16 @@ export interface PressTrackerOptions {
   view?: unknown;
   onControlEvent?: (event: ControlEvent, touch: GestureTouch) => void;
   onHighlightChange?: (isHighlighted: boolean) => void;
+  /**
+   * A continuous-tracking control (a held stepper) keeps its touch once its
+   * press is delivered: the host cancels the browser's pan for that finger,
+   * as UIKit's `touchesShouldCancel(in:)` is false for a tracking control.
+   * Its element then gets a blocking `touchmove` listener, so a scroll that
+   * starts on it waits on the main thread: never set it on plain buttons,
+   * links, cards or list cells.
+   * @default false
+   */
+  keepsTouch?: boolean;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -156,6 +166,7 @@ function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
 /** @experimental */
 export class PressTracker implements TouchConsumer {
   isHighlighted = false;
+  private isKept = false;
   isTracking = false;
   isTouchInside = false;
   trackingExpansion: number;
@@ -169,6 +180,9 @@ export class PressTracker implements TouchConsumer {
   private isPendingDead = false;
 
   constructor(options: PressTrackerOptions) {
+    if (options.keepsTouch === true) {
+      this.keepsTouch = () => this.isKept;
+    }
     this.options = options;
     this.trackingExpansion =
       options.trackingExpansion ??
@@ -239,6 +253,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     const inside = this.contains(touch);
     const wasPending = this.highlightTimer != null;
     this.clearHighlightTimer();
@@ -266,6 +281,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     this.clearHighlightTimer();
     this.emit('touchCancel', touch);
     this.setHighlighted(false);
@@ -312,8 +328,21 @@ export class PressTracker implements TouchConsumer {
       return;
     }
     this.isHighlighted = value;
+    if (value) {
+      // Delivered: the control keeps this touch until it ends.
+      this.isKept = true;
+    }
     this.options.onHighlightChange?.(value);
   }
+
+  /**
+   * Present only for a continuous-tracking control created with
+   * `keepsTouch: true` (a held stepper): once its press is delivered, the
+   * browser's pan must not take the touch. A plain pressable leaves it
+   * undefined and keeps passive listeners, so a scroll starting on it never
+   * waits on the main thread.
+   */
+  readonly keepsTouch?: () => boolean;
 
   private clearHighlightTimer(): void {
     if (this.highlightTimer != null) {
