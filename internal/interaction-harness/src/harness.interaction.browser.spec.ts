@@ -22,7 +22,8 @@
  *   scripted event times while a handler clock sees its pacing; the timer
  *   gate holds a component timer until the filmstrip is done, drops callbacks
  *   the page cancels, stamps held frames with the time they run, and leaves
- *   the harness its own frames.
+ *   the harness its own frames; a cast filmstrip keeps exactly the presented
+ *   frames of its window, labelled from its zero, as PNG.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -32,6 +33,7 @@ import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
 import {
   animationStoryboard,
+  castStoryboard,
   blockMainThread,
   busyWindowProof,
   compareCurve,
@@ -1312,5 +1314,59 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     });
     expect(state).toMatchObject({timer: false, frame: false});
     expect(state.heldFor).toBeGreaterThanOrEqual(140);
+  });
+
+  test('a cast filmstrip keeps exactly the presented frames of its window, labelled from its zero', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // JPEG frames (WebKit's are always JPEG) take the conversion path.
+    const cast = await startScreencast(page, {format: 'jpeg'});
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 600},
+      ),
+    );
+    await page.waitForTimeout(500);
+    const presented = await cast.stop();
+    expect(presented.length).toBeGreaterThan(8);
+    // A window of the middle frames, zeroed on one of them.
+    const zero = presented[2].t;
+    const from = presented[3].t;
+    const to = presented[presented.length - 3].t;
+    const inside = presented.filter(f => f.t >= from && f.t <= to);
+    const seen: number[] = [];
+    const film = await castStoryboard(page, presented, {
+      name: 'harness-self-test-cast',
+      zero,
+      from,
+      to,
+      data: t => {
+        seen.push(t);
+        return {t};
+      },
+    });
+    expect(film.frames.map(f => f.t)).toEqual(inside.map(f => f.t - zero));
+    expect(film.frames.map(f => f.label)).toEqual(
+      inside.map(f => `t=${(f.t - zero).toFixed(1)} ms`),
+    );
+    expect(seen).toEqual(inside.map(f => f.t));
+    // Every cell is a PNG, whatever the screencast delivered.
+    for (const frame of film.frames) {
+      expect([...frame.png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    }
+    const files = await film.write(testInfo);
+    expect(files['sheet.png']).toMatch(/sheet\.png$/);
+    // A window with no presented frame in it films nothing.
+    const empty = await castStoryboard(page, presented, {
+      name: 'harness-self-test-cast-empty',
+      zero,
+      from: to + 1,
+      to: to + 2,
+    });
+    expect(empty.frames).toEqual([]);
+    await expect(empty.write(testInfo)).rejects.toThrow(/no frames/);
   });
 });
