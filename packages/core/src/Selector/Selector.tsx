@@ -5,7 +5,7 @@
 /**
  * @file Selector.tsx
  * @input Uses React, StyleX, adaptive selection surfaces, theme-resolved
- *   indicators, Field, and InputGroup context
+ *   indicators, Field, its private live sheet-description bridge, and InputGroup context
  * @output Exports Selector with input, secondary, and ghost trigger treatments, content-derived option-mark layout, token-sized single-line triggers, and focus-preserving disabled popup search and value commits
  * @position Core implementation; consumed by index.ts
  *
@@ -24,7 +24,6 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useOptimistic,
   useRef,
@@ -51,11 +50,9 @@ import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
+import {SheetDescription} from '../Field/SheetDescription';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {
-  renderedText,
-  useAnnounceRenderedText,
-} from '../hooks/useAnnounceRenderedText';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
   colorVars,
   sizeVars,
@@ -2246,47 +2243,3 @@ export function Selector<T extends SelectorOptionType>(
 }
 
 Selector.displayName = 'Selector';
-
-/** Private text-only bridge for descriptions outside a modal sheet. */
-function SheetDescription({
-  id,
-  describedBy,
-}: {
-  id: string;
-  describedBy: string;
-}) {
-  const ref = useRef<HTMLElement>(null);
-  // IDs can keep the same spelling while their rendered text changes. Read
-  // after each commit and observe only those existing description subtrees;
-  // never copy caller elements or create a hidden link/button Tab stop.
-  useLayoutEffect(() => {
-    const target = ref.current;
-    if (!target) {
-      return;
-    }
-    const sources = describedBy
-      .split(/\s+/)
-      .map(sourceId => target.ownerDocument.getElementById(sourceId))
-      .filter((node): node is HTMLElement => node != null);
-    const sync = () => {
-      target.textContent = sources.map(renderedText).filter(Boolean).join(' ');
-    };
-    sync();
-    const observer = new MutationObserver(sync);
-    for (const source of sources) {
-      observer.observe(source, {
-        subtree: true,
-        childList: true,
-        characterData: true,
-        attributes: true,
-        attributeFilter: ['hidden', 'aria-hidden'],
-      });
-    }
-    return () => observer.disconnect();
-  });
-  return (
-    <VisuallyHidden ref={ref} id={id}>
-      {null}
-    </VisuallyHidden>
-  );
-}

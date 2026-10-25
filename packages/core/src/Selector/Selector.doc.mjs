@@ -3,7 +3,7 @@
 /**
  * @file Selector.doc.mjs
  * @input Selector public props and selection behavior
- * @output Consumer documentation, including disabled selection transitions
+ * @output Consumer documentation, including disabled transitions and live sheet descriptions
  * @position Selector consumer reference
  */
 
@@ -281,7 +281,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. If the popup is already open, the reason also describes its search input, search clear button, or focused listbox alongside the existing descriptions. Use this instead of wrapping a disabled Selector in Tooltip.',
+        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. If the popup is already open, the reason also describes its search input, search clear button, or focused listbox alongside the existing descriptions. In a bottom sheet, caller descriptions stay current when their referenced elements are updated, replaced, or removed. Use this instead of wrapping a disabled Selector in Tooltip.',
     },
     {
       name: 'isLabelHidden',

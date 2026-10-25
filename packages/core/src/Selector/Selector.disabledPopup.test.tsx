@@ -3,14 +3,14 @@
 /**
  * @file Selector.disabledPopup.test.tsx
  * @input Uses public Selector, Testing Library, and Vitest
- * @output Regressions for retained disabled popup owners and search mutation
+ * @output Regressions for retained disabled popup owners, independent description replacement, and search mutation
  * @position Testing; complements trigger/commit tests with popup availability
  */
 
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {StrictMode} from 'react';
+import {createRef, StrictMode} from 'react';
 import {Selector} from './Selector';
 
 beforeEach(() => {
@@ -48,8 +48,9 @@ function descriptions(owner: HTMLElement) {
 }
 
 describe('Selector disabled popup', () => {
-  it('keeps sheet descriptions text-only through updates, replacement and StrictMode cleanup', async () => {
+  it('tracks independent sheet description replacement, removal and reappearance without rerendering Selector', async () => {
     const user = userEvent.setup();
+    const triggerRef = createRef<HTMLButtonElement>();
     const external = render(
       <span id="external-help">
         <a href="#help">Caller help</a>
@@ -64,6 +65,9 @@ describe('Selector disabled popup', () => {
           presentation="bottom-sheet"
           isDisabled={isDisabled}
           aria-describedby="external-help"
+          description="Choose a fruit"
+          disabledMessage="Unavailable reason"
+          ref={triggerRef}
         />
       </StrictMode>
     );
@@ -73,24 +77,58 @@ describe('Selector disabled popup', () => {
     const input = screen.getByRole('combobox', h);
     await waitFor(() => expect(input).toHaveFocus());
     view.rerender(fixture(true));
-    expect(descriptions(input)).toBe('Caller help');
+    const trigger = triggerRef.current;
+    const expectDescription = (help: string) =>
+      expect(descriptions(input)).toBe(
+        `${help ? `${help} ` : ''}Choose a fruit Unavailable reason`,
+      );
+    expectDescription('Caller help');
     const mirror = document.getElementById(
-      input.getAttribute('aria-describedby') ?? '',
+      (input.getAttribute('aria-describedby') ?? '').split(/\s+/)[0],
     );
     expect(mirror?.querySelector('a, button, input, [tabindex]')).toBeNull();
     const link = screen.getByRole('link', h);
     act(() => {
       link.textContent = 'Updated help';
     });
-    await waitFor(() => expect(descriptions(input)).toBe('Updated help'));
+    await waitFor(() => expectDescription('Updated help'));
     external.rerender(
       <span key="replacement" id="external-help">
         Replacement help
       </span>,
     );
-    view.rerender(fixture(true));
-    expect(descriptions(input)).toBe('Replacement help');
+    // Only the independent source root renders from here on. A Selector
+    // rerender would mask a subscription still bound to the disconnected node.
+    await waitFor(() => expectDescription('Replacement help'));
+    const replacement = document.getElementById('external-help');
+    await act(async () => {
+      link.textContent = 'Disconnected help';
+      if (replacement) {
+        replacement.textContent = 'Replacement updated';
+      }
+    });
+    await waitFor(() => expectDescription('Replacement updated'));
+    external.rerender(null);
+    await waitFor(() => expectDescription(''));
+    await act(async () => {
+      if (replacement) {
+        replacement.textContent = 'Removed help';
+      }
+    });
+    expectDescription('');
+    external.rerender(<span id="external-help">Late help</span>);
+    await waitFor(() => expectDescription('Late help'));
+    await act(async () => {
+      const source = document.getElementById('external-help');
+      if (source) {
+        source.textContent = 'Late update';
+      }
+    });
+    await waitFor(() => expectDescription('Late update'));
+    expect(screen.getByRole('combobox', h)).toBe(input);
     expect(input).toHaveFocus();
+    expect(triggerRef.current).toBe(trigger);
+    expect(mirror?.querySelector('a, button, input, [tabindex]')).toBeNull();
     view.unmount();
     await act(async () => {
       const source = document.getElementById('external-help');
@@ -99,7 +137,7 @@ describe('Selector disabled popup', () => {
       }
       await Promise.resolve();
     });
-    expect(mirror?.textContent).toBe('Replacement help');
+    expect(mirror?.textContent).toBe('Late update Choose a fruit');
   });
 
   it.each(cases)(
