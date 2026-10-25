@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Selector.stories.tsx
+ * @input Selector props, controlled values, and availability transitions
+ * @output Interactive examples of selection and disabled popup behavior
+ * @position Storybook; demonstrates Selector consumer behavior
+ */
+
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, waitFor} from 'storybook/test';
 import {useState} from 'react';
@@ -1043,11 +1050,33 @@ export const Disabled: Story = {
   },
 };
 
+// The parent disables the selector during the opening click. Existing options
+// remain visible, but choosing one must not change the selected value.
+export const DisabledAfterOpening: Story = {
+  render: () => {
+    const [value, setValue] = useState('Apple');
+    const [isDisabled, setIsDisabled] = useState(false);
+    return (
+      <>
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana', 'Orange']}
+          value={value}
+          onChange={setValue}
+          isDisabled={isDisabled}
+          disabledMessage="Selection is unavailable"
+          onClick={() => setIsDisabled(true)}
+        />
+        <Button label="Enable again" onClick={() => setIsDisabled(false)} />
+      </>
+    );
+  },
+};
+
 // Disabled with an explanation tooltip. Hover or keyboard-focus the trigger to
 // see why it's disabled — the reason is announced to assistive tech via
 // aria-describedby, and the trigger stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled Selector in
-// Tooltip: disabled controls swallow the pointer events a Tooltip wrapper needs.
+// blocked). Use disabledMessage to associate the reason with the trigger.
 export const DisabledWithMessage: Story = {
   args: {
     label: 'Owner',

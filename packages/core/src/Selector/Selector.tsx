@@ -6,7 +6,7 @@
  * @file Selector.tsx
  * @input Uses React, StyleX, adaptive selection surfaces, theme-resolved
  *   indicators, Field, and InputGroup context
- * @output Exports Selector with input, secondary, and ghost trigger treatments, content-derived option-mark layout, and token-sized single-line triggers
+ * @output Exports Selector with input, secondary, and ghost trigger treatments, content-derived option-mark layout, token-sized single-line triggers, and availability-guarded value commits
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -1060,11 +1060,9 @@ export function Selector<T extends SelectorOptionType>(
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
   const announce = useAnnounce();
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip. The container receives hover and bubbled focus
+  // while the trigger stays focusable via aria-disabled. Opening and selection
+  // are guarded independently, including options in an already-open surface.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1299,6 +1297,9 @@ export function Selector<T extends SelectorOptionType>(
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValue = useCallback(() => {
+    if (isDisabled || isEffectivelyReadOnly) {
+      return;
+    }
     resetTypeaheadRef.current();
     onChange?.(null);
     if (changeAction) {
@@ -1307,7 +1308,14 @@ export function Selector<T extends SelectorOptionType>(
         await changeAction(null);
       });
     }
-  }, [onChange, changeAction, startTransition, setOptimisticValue]);
+  }, [
+    isDisabled,
+    isEffectivelyReadOnly,
+    onChange,
+    changeAction,
+    startTransition,
+    setOptimisticValue,
+  ]);
 
   // Type-to-find appends to the query rather than replacing it: characters
   // typed before focus reaches the search input must not be dropped. The ref
@@ -1327,6 +1335,11 @@ export function Selector<T extends SelectorOptionType>(
 
   const commitValue = useCallback(
     (newValue: string) => {
+      // A surface or pointer gesture can outlive the enabled state that opened
+      // it. Enforce current availability before callbacks or optimistic state.
+      if (isDisabled || isEffectivelyReadOnly) {
+        return;
+      }
       onChange?.(newValue);
       if (changeAction) {
         startTransition(async () => {
@@ -1335,7 +1348,14 @@ export function Selector<T extends SelectorOptionType>(
         });
       }
     },
-    [onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Selector behavior (keyboard nav, selection)
