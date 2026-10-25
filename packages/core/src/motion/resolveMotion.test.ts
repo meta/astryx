@@ -15,7 +15,19 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createAnimator} from './animator';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
-import {navigation, springs, timing} from './uikit';
+import {
+  navigation,
+  registerNavigationTable,
+  registerSpringsTable,
+  registerTimingTable,
+  springs,
+  timing,
+} from './uikit';
+
+// Like a touch module: register the tables these motions resolve from.
+registerSpringsTable();
+registerTimingTable();
+registerNavigationTable();
 
 /** Theme variables by scope element, as the stubbed computed style reports. */
 let variables: Map<Element, Record<string, string>>;
@@ -49,6 +61,15 @@ function themed(name: string, values: Record<string, string>) {
   variables.set(scope, values);
   return {scope, child};
 }
+
+describe('a table nothing registered', () => {
+  it('plays its own value, whatever the theme sets', () => {
+    const element = document.createElement('div');
+    element.style.setProperty('--motion-fixture-unregistered-push', '0.9s 0.4');
+    const table = {push: {response: 0.3, dampingRatio: 1}};
+    expect(resolveMotion(element, table.push)).toBe(table.push);
+  });
+});
 
 describe('resolveMotion', () => {
   it("takes the theme scope's value for a spring, a curve and a duration", () => {

@@ -54,6 +54,8 @@ export interface MotionRole {
 }
 
 const rolesById = new Map<string, MotionRole>();
+/** A table id → the table registered under it. */
+const tablesById = new Map<string, object>();
 /** A spring or curve leaf → its role. */
 const roleOfLeaf = new WeakMap<object, MotionRole>();
 /** A table or one of its groups → its path. */
@@ -65,6 +67,7 @@ const pathOfGroup = new WeakMap<object, string>();
  * two keys is replaced in the table by an equal copy, so each role has its own
  * object (an animator resolves a role from the object it is handed).
  * `exclude` lists paths, relative to the table, that are not motion.
+ * Registering the same table under the same id again does nothing.
  */
 export function registerMotionTable(
   id: string,
@@ -74,6 +77,12 @@ export function registerMotionTable(
   if (!/^[a-z][A-Za-z0-9]*$/.test(id)) {
     throw new Error(`motion table id "${id}" must be one camelCase word`);
   }
+  // Registering the same table again changes nothing: each table's
+  // register function may run from every touch module that uses it.
+  if (tablesById.get(id) === table) {
+    return;
+  }
+  tablesById.set(id, table);
   const skip = new Set(exclude.map(path => `${id}.${path}`));
   const walk = (group: Record<string, unknown>, prefix: string) => {
     pathOfGroup.set(group, prefix);

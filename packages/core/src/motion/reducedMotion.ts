@@ -46,7 +46,7 @@
 
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {resolveMotion} from './resolveMotion';
-import {timing} from './uikit/timing';
+import {registerTimingTable, timing} from './uikit/timing';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 /** Reduce Motion on a coarse primary pointer: an opacity-only cross-fade. */
@@ -91,6 +91,9 @@ export function reducedMotionFade(
     (options.isCoarsePointer ?? defaultIsCoarsePointer)();
   if (!fades) {
     return {duration: 0, easing: 'linear'};
+  }
+  if (element != null) {
+    registerTimingTable();
   }
   const curve =
     element != null

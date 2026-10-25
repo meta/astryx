@@ -18,11 +18,14 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 /**
  * UIScrollView's deceleration, rubber band, bounce, paging and touch-delay
  * values.
  * @experimental
  */
+
 export const scroll = {
   decelerationRate: {
     /**
@@ -121,5 +124,16 @@ export const scroll = {
   scrollToTopRate: 0.99035,
 } as const;
 
-// Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts); registerTables.ts registers them.
+/**
+ * Makes each spring, duration and curve above a motion role a theme may
+ * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * animates with this table calls it once (it is idempotent), so a page that
+ * never does ships no registry.
+ * @experimental
+ */
+export function registerScrollTable(): void {
+  registerMotionTable('scroll', scroll, {
+    // Arbitration: who gets the touch, not how anything moves.
+    exclude: ['delaysContentTouchesMs'],
+  });
+}

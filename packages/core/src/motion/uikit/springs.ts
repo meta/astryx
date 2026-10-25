@@ -26,6 +26,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 /**
  * UIKit's default spring (see `springs.uikitDefault` for its sources), shared
  * by the system transitions measured to run on it.
@@ -60,6 +62,7 @@ const MENU_CLOSE_SPRING = {response: 0.35, dampingRatio: 0.85} as const;
  * UIKit's interaction springs, each with its source.
  * @experimental
  */
+
 export const springs = {
   // ---------------------------------------------------------------------
   // Sourced presets
@@ -330,5 +333,13 @@ export const springs = {
   banner: {...UIKIT_DEFAULT_SPRING},
 } as const;
 
-// Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts); registerTables.ts registers them.
+/**
+ * Makes each spring, duration and curve above a motion role a theme may
+ * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * animates with this table calls it once (it is idempotent), so a page that
+ * never does ships no registry.
+ * @experimental
+ */
+export function registerSpringsTable(): void {
+  registerMotionTable('springs', springs);
+}

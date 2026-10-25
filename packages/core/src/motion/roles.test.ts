@@ -9,6 +9,7 @@
  * @position Testing for /packages/core/src/motion/roles.ts
  */
 
+import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {MOTION_ROLE_KINDS} from './roleKinds.generated';
 import {
@@ -24,9 +25,21 @@ import {
 } from './roles';
 import {dampingRatioOf, naturalFrequency, toSpring} from './spring';
 import {navigation, scroll, springs, timing} from './uikit';
-import {registerSharedTables} from './uikit/registerTables';
+import {
+  motionTableFiles,
+  REGISTER_EXPORT,
+} from '../../../../scripts/motion-table-files.mjs';
 
-registerSharedTables();
+// Every table the role list is generated from, registered the way the
+// generator does: through each module's register<Name>Table.
+for (const file of motionTableFiles(resolve(__dirname, '..'))) {
+  const module = (await import(file)) as Record<string, unknown>;
+  for (const [name, value] of Object.entries(module)) {
+    if (REGISTER_EXPORT.test(name) && typeof value === 'function') {
+      (value as () => void)();
+    }
+  }
+}
 
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
