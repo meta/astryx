@@ -358,8 +358,7 @@ export const myTheme = defineTheme({
    * authored order so later writes win.
    *
    * `from` includes its point; `below` excludes it. The other supported axes
-   * are primary-pointer precision, contrast preference, motion preference, and
-   * platform (`ios` for the browsers of iPhone and iPad, `other` for the rest).
+   * are primary-pointer precision, contrast preference, and motion preference.
    * Component writes in a rule are validated exactly like root `components`.
    * The one addition: a custom value that is valid only because a theme
    * enrolls it must be declared at the root first, since generated type
