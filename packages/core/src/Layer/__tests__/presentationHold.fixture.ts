@@ -1,0 +1,122 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file presentationHold.fixture.ts
+ * @input Nothing: bundled by esbuild and injected into a blank page
+ * @output A page whose whole area is a button (`#under`), a modal dialog
+ *   (`#dialog`: text, an action, and a gesture-host tap recognizer on the
+ *   dialog itself, an ancestor of the hold's shield) and a light-dismissing
+ *   popover (`#pop`), plus `window.__hold`: open either layer, hold and
+ *   release it, read what an element at a point is, and a log of every
+ *   click, tap recognition and popover toggle
+ * @position Browser fixture of presentationHold.interaction.browser.spec.ts;
+ *   test-only
+ */
+
+import {getGestureHost} from '../../gestures/GestureHost';
+import {TapGestureRecognizer} from '../../gestures/TapGestureRecognizer';
+import {
+  holdPresentation,
+  type PresentationHoldScope,
+} from '../presentationHold';
+
+interface HoldLog {
+  clicks: string[];
+  taps: number;
+  toggles: string[];
+}
+
+declare global {
+  interface Window {
+    __hold: {
+      log: HoldLog;
+      open: (id: 'dialog' | 'pop') => void;
+      hold: (id: 'dialog' | 'pop', scope: PresentationHoldScope) => void;
+      release: () => void;
+      hitAt: (x: number, y: number) => string;
+    };
+  }
+}
+
+document.body.style.margin = '0';
+document.body.innerHTML = `
+  <button id="under" style="position: fixed; inset: 0; width: 100vw; height: 100vh; font: 14px sans-serif">page</button>
+  <dialog id="dialog" style="width: 240px; padding: 16px; font: 14px sans-serif">
+    <p id="message" style="height: 48px; margin: 0 0 16px">Delete this item?</p>
+    <button id="action" style="width: 200px; height: 48px">Delete</button>
+  </dialog>
+  <div id="pop" popover="auto" style="width: 200px; padding: 16px; font: 14px sans-serif">
+    <button id="popAction" style="width: 160px; height: 48px">Copy</button>
+  </div>`;
+
+function element(id: string): HTMLElement {
+  const found = document.getElementById(id);
+  if (found == null) {
+    throw new Error(`missing #${id}`);
+  }
+  return found;
+}
+
+const log: HoldLog = {clicks: [], taps: 0, toggles: []};
+
+document.addEventListener(
+  'click',
+  event => {
+    const target = event.target;
+    if (target instanceof Element) {
+      const button = target.closest('button');
+      if (button != null) {
+        log.clicks.push(button.id);
+      }
+    }
+  },
+  true,
+);
+element('pop').addEventListener('toggle', event => {
+  log.toggles.push(`pop:${event.newState}`);
+});
+
+// A recognizer on the dialog itself sees every touch inside it, the hold's
+// shield included: only the gesture host's touch gate keeps it away.
+const tap = new TapGestureRecognizer({name: 'dialogTap'});
+tap.addTransitionListener((_current, _from, to) => {
+  if (to === 'ended') {
+    log.taps += 1;
+  }
+});
+getGestureHost(document).attach(element('dialog'), tap);
+
+let release: (() => void) | null = null;
+
+window.__hold = {
+  log,
+  open(id) {
+    if (id === 'dialog') {
+      (element('dialog') as HTMLDialogElement).showModal();
+    } else {
+      element('pop').showPopover();
+    }
+  },
+  hold(id, scope) {
+    release = holdPresentation(element(id), {
+      until: new Promise(() => {}),
+      scope,
+    });
+  },
+  release() {
+    release?.();
+    release = null;
+  },
+  hitAt(x, y) {
+    const hit = document.elementFromPoint(x, y);
+    if (hit == null) {
+      return 'nothing';
+    }
+    if (hit.id !== '') {
+      return hit.id;
+    }
+    return hit.matches('[popover="manual"]')
+      ? `shield:${hit.parentElement?.id ?? ''}`
+      : hit.tagName.toLowerCase();
+  },
+};
