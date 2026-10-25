@@ -21,8 +21,10 @@
  * - `scope: 'viewport'` (a presentation): a touch, a pointer press or a
  *   click anywhere reaches nothing. A transparent shield inside the layer
  *   covers the viewport from the top layer, so a tap on it lands inside the
- *   layer (a light-dismissing layer stays open) and starts no pan or zoom
- *   (iOS drops that input too while it presents); the gesture host holds
+ *   layer (a light-dismissing layer stays open) and starts no pan (iOS
+ *   drops that input too while it presents), while a pinch on it still
+ *   zooms the page, which stays the browser's (spec:AST-094 FR10, FR18,
+ *   FR35; WCAG 1.4.4); the gesture host holds
  *   the layer's touches away from every recognizer. Keys and assistive
  *   technology stay live, as on iOS.
  * - `scope: 'layer'` (a dismissal, an inert bar): the same shield, and the
@@ -120,7 +122,11 @@ const SWALLOWED = [
 ] as const;
 
 const swallow = (event: Event) => {
-  if (event.cancelable) {
+  // A touch's start stays uncancelled: cancelling it would cancel the page's
+  // pinch-zoom too. The shield's `touch-action: pinch-zoom` keeps a finger
+  // from panning, and a tap's mouse events and click land on the shield,
+  // which swallows them.
+  if (event.cancelable && event.type !== 'touchstart') {
     event.preventDefault();
   }
   event.stopPropagation();
@@ -143,7 +149,7 @@ function addShield(layer: Element): HTMLElement {
     border: '0',
     background: 'transparent',
     overflow: 'hidden',
-    touchAction: 'none',
+    touchAction: 'pinch-zoom',
     // The two inherited properties that decide hit-testing, set here so the
     // shield takes hits whatever its layer root opts out of (a full-viewport
     // layer that is `pointer-events: none` and lets a backdrop child take the

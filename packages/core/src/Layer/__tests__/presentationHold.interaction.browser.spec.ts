@@ -13,7 +13,10 @@
  *   same; keys still act while a presentation holds; a dismissal's
  *   hold makes the content inert and moves focus out of it, so no key acts
  *   on it either (a focused button that turns inert still takes Enter and
- *   Space in both engines); each release gives input back
+ *   Space in both engines); each release gives input back; a one-finger
+ *   pan on the shield scrolls nothing while a pinch on it still zooms the
+ *   page (spec:AST-094 FR10, FR18, FR35; Chromium, which pinch-zooms from
+ *   injected touches)
  * @position Browser tests of packages/core/src/Layer/presentationHold.ts, run
  *   by the interaction project (`pnpm test:interaction presentationHold`)
  */
@@ -22,7 +25,12 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {expect, test, type Page} from '@playwright/test';
-import {touchDriver, type TouchDriver} from '@astryxdesign/interaction-harness';
+import {
+  drag,
+  pinch,
+  touchDriver,
+  type TouchDriver,
+} from '@astryxdesign/interaction-harness';
 
 type Point = {x: number; y: number};
 type Scope = 'viewport' | 'layer';
@@ -233,5 +241,71 @@ for (const rootStyle of ['pointer-events: none', 'visibility: hidden']) {
     expect((await readLog(page)).clicks).toEqual([]);
     await release(page);
     expect(await hitAt(page, action)).toBe('liftAction');
+  });
+}
+
+// Page zoom stays the browser's while a layer is held (spec:AST-094 FR10,
+// FR18 and FR35; WCAG 1.4.4): the shield starts no pan, but a pinch on it
+// still zooms the page.
+for (const [id, scope] of [
+  ['pop', 'viewport'],
+  ['dialog', 'layer'],
+] as const) {
+  test(`while a ${scope === 'viewport' ? 'presentation' : 'dismissal'} holds ${id === 'pop' ? 'a popover' : 'a modal dialog'}, a one-finger pan scrolls nothing and a pinch still zooms the page; neither reaches the layer or the page`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName === 'webkit',
+      'needs native scrolling and pinch-zoom from injected touches (Mobile Safari on the simulator)',
+    );
+    const driver = await load(page);
+    const viewport = page.viewportSize();
+    if (viewport == null) {
+      throw new Error('no viewport');
+    }
+    const middle = {x: viewport.width / 2, y: viewport.height / 2};
+    const panUp = drag(
+      {x: middle.x, y: middle.y + 150},
+      {x: middle.x, y: middle.y - 150},
+      // A rest before the lift: no fling outlives the pan.
+      {durationMs: 200, restMs: 150},
+    );
+    // A page that scrolls under the layer: unheld, the same pan scrolls it.
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '300vh';
+      document.body.append(spacer);
+    });
+    await driver.play(panUp);
+    await expect
+      .poll(async () => page.evaluate(() => window.scrollY))
+      .toBeGreaterThan(0);
+    await settle(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await settle(page);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await open(page, id);
+    await hold(page, id, scope);
+    expect(await hitAt(page, middle)).toBe(`shield:${id}`);
+    await driver.play(panUp);
+    await settle(page);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await driver.play(
+      pinch({
+        center: middle,
+        fromDistance: 60,
+        toDistance: 220,
+        durationMs: 200,
+      }),
+    );
+    await expect
+      .poll(async () => page.evaluate(() => window.visualViewport?.scale ?? 1))
+      .toBeGreaterThan(1.2);
+    expect(await readLog(page)).toEqual({
+      clicks: [],
+      taps: 0,
+      toggles: id === 'pop' ? ['pop:open'] : [],
+    });
   });
 }
