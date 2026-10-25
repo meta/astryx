@@ -226,7 +226,7 @@ warning, so two writers never fight over the paint. Pass another
 
 - **Only where the primary pointer is coarse.** Recognizers attach, and the
   host registers listeners, only while `TOUCH_QUERY` matches
-  (`spec:AST-094` FR19, FR24; `coarsePointer.ts`). Where the primary pointer
+  (`spec:AST-094` FR19, FR24; `../utils/coarsePointer.ts`). Where the primary pointer
   is fine, an attach is recorded and nothing else happens: no document,
   window or element listener, no style below, nothing delivered, so a
   finger on a touchscreen laptop gets the browser's defaults. The host
@@ -363,6 +363,19 @@ touch and each scroller, scroll chaining stopped by `overscroll-behavior`,
 and RTL `scrollLeft` ranges, along the flat tree (content slotted into a
 shadow-tree scroller scrolls with it, as the hit path does).
 
+### The input stream
+
+The host listens through `utils/inputStream.ts`, which it shares with the
+press feedback controller: one native listener per event type, on the
+window's capture phase, fanned out to every subscriber in order. Window
+capture is the earliest point a page can intercept input, so an app's
+capture-phase `stopPropagation` at the document starves neither, as UIKit's
+recognizers see touches before views do. A type's listener is passive
+unless a subscriber cancels it: the host cancels `touchend`, `click` and
+`contextmenu` there, never a `touchstart` or a `touchmove` (a blocking
+`touchmove` sits on a claiming element, or on the window only while a page
+hold is held), so a page of pressables blocks no scroll.
+
 ### Holding the page still
 
 A scroll lock (`useScrollLock`) holds the page with
@@ -370,8 +383,8 @@ A scroll lock (`useScrollLock`) holds the page with
 release. It lives in its own module, so a page without a scroll lock never
 ships it, and it imports nothing of the gesture host: it asks the document's
 host whether a recognizer owns a touch only if a host exists, and a document
-without one has no recognizer to own it. While any hold is active, there is a non-passive
-`touchmove` listener on the document. Once per one-finger touch that no recognizer owns, after the
+without one has no recognizer to own it. While any hold is active, the input
+stream listens with a non-passive `touchmove`. Once per one-finger touch that no recognizer owns, after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
 being the innermost node under the finger (the composed path's first node),
@@ -479,7 +492,7 @@ way:
 
 1. No window or document touch listeners: attach a recognizer with
    `useGestureRecognizer` and read `translation()` and `velocity()` per
-   state. The host owns the document's listeners.
+   state. The host owns the page-wide listeners.
 2. Pick the reading: a drag that coasts like a scroll view (a wheel, a
    picker, a pager, a carousel) releases with the pan's `scrollVelocity()`;
    anything else with `velocity()`. A one-way drag sets `direction`. The host derives

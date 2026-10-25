@@ -22,7 +22,8 @@
  * SYNC: When modified, update the gestures README ("Holding the page still").
  */
 
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {subscribeInput} from '../utils/inputStream';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
 /**
@@ -46,9 +47,6 @@ export type PageScrollDecision = (
  */
 const PAGE_HOLD_SLOP = 5;
 
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
-const ACTIVE_CAPTURE = {capture: true, passive: false} as const;
-
 interface PageHolds {
   readonly decisions: Set<{readonly decide: PageScrollDecision}>;
   /** The one finger of the gesture the holds are judging. */
@@ -60,8 +58,8 @@ interface PageHolds {
   } | null;
   readonly onTouchStart: (event: TouchEvent) => void;
   readonly onTouchMove: (event: TouchEvent) => void;
-  /** Whether its listeners are on: while held, and the pointer is coarse. */
-  isListening: boolean;
+  /** The input stream subscriptions while held and the pointer is coarse. */
+  unsubscribers: Array<() => void>;
   stopWatchingPointer: (() => void) | null;
 }
 
@@ -75,7 +73,7 @@ function createHolds(doc: Document): PageHolds {
   const holds: PageHolds = {
     decisions: new Set(),
     touch: null,
-    isListening: false,
+    unsubscribers: [],
     stopWatchingPointer: null,
     onTouchStart: event => {
       const fingers = fingersOf(event);
@@ -133,16 +131,21 @@ function createHolds(doc: Document): PageHolds {
  * primary pointer is coarse (`spec:AST-094` FR19, FR24).
  */
 function listen(doc: Document, holds: PageHolds, on: boolean): void {
-  if (on === holds.isListening) {
+  const view = doc.defaultView;
+  if (view == null || on === holds.unsubscribers.length > 0) {
     return;
   }
-  holds.isListening = on;
   if (on) {
-    doc.addEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
-    doc.addEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+    // The window's capture phase, through the shared input stream, as the
+    // host listens; only the touchmove that cancels is non-passive.
+    holds.unsubscribers = [
+      subscribeInput(view, 'touchstart', holds.onTouchStart),
+      subscribeInput(view, 'touchmove', holds.onTouchMove, {cancels: true}),
+    ];
   } else {
-    doc.removeEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
-    doc.removeEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+    for (const unsubscribe of holds.unsubscribers.splice(0)) {
+      unsubscribe();
+    }
     holds.touch = null;
   }
 }

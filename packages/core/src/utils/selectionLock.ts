@@ -23,7 +23,7 @@
  */
 
 import {isCoarsePointer} from './coarsePointer';
-import {parentAcrossShadow} from './nativeScroll';
+import {parentAcrossShadow} from './flatTree';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [

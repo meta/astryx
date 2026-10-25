@@ -19,10 +19,9 @@
  * while something is watched.
  */
 
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {subscribeInput} from '../utils/inputStream';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import type {GestureHost} from './GestureHost';
-
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
 
 interface Watch {
   /** Watched scrollers, and how many watchers each has. */
@@ -75,24 +74,27 @@ function start(host: GestureHost, watch: Watch): () => void {
   };
   // Its listeners are on only while the primary pointer is coarse
   // (`spec:AST-094` FR19, FR24): elsewhere no finger scrolls, as far as the
-  // touch presentation is concerned.
-  let isListening = false;
+  // touch presentation is concerned. Passive, on the window's capture phase
+  // through the shared input stream.
+  const view = doc.defaultView;
+  let unsubscribers: (() => void)[] = [];
   const listen = (on: boolean): void => {
-    if (on === isListening) {
+    if (view == null || on === unsubscribers.length > 0) {
       return;
     }
-    isListening = on;
     if (on) {
-      doc.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-      doc.addEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+      unsubscribers = [
+        subscribeInput(view, 'scroll', onScroll),
+        subscribeInput(view, 'scrollend', onScrollEnd),
+      ];
     } else {
-      doc.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-      doc.removeEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+      for (const stop of unsubscribers.splice(0)) {
+        stop();
+      }
       watch.fingerScrollers.clear();
       watch.endedWhileDown.clear();
     }
   };
-  const view = doc.defaultView;
   const stopWatchingPointer = watchCoarsePointer(view, listen);
   listen(isCoarsePointer(view));
   const unsubscribe = host.onFingersChange(onFingers);

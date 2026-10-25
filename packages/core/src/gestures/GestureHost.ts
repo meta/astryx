@@ -148,8 +148,9 @@ import type {
   TouchSample,
 } from './types';
 import {internals} from './recognizerInternals';
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
-import {lockSelection, locksSelectionFor} from './selectionLock';
+import {subscribeInput} from '../utils/inputStream';
+import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
 interface Registration {
@@ -252,9 +253,6 @@ function isPanRecognizer(
 ): recognizer is PanGestureRecognizer {
   return internals(recognizer).family === 'pan';
 }
-
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
-const ACTIVE_CAPTURE = {capture: true, passive: false} as const;
 
 type StylusTouch = Touch & {touchType?: string};
 
@@ -388,6 +386,8 @@ export class GestureHost {
   private hasWarnedFinePointer = false;
   /** Recognizers attached with `perEventPointer`: active on any pointer. */
   private readonly perEventRecognizers = new Set<GestureRecognizer>();
+  /** The input stream subscriptions while installed. */
+  private unsubscribers: (() => void)[] = [];
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -892,25 +892,38 @@ export class GestureHost {
     this.isInstalled = true;
     this.usesTouchEvents =
       this.inputMode === 'auto' && view != null && 'ontouchstart' in view;
-    const doc = this.doc;
-    doc.addEventListener('touchstart', this.onTouchStart, PASSIVE_CAPTURE);
-    doc.addEventListener('touchmove', this.onTouchMove, PASSIVE_CAPTURE);
-    doc.addEventListener('touchend', this.onTouchEnd, ACTIVE_CAPTURE);
-    doc.addEventListener('touchcancel', this.onTouchCancel, PASSIVE_CAPTURE);
-    doc.addEventListener('pointerdown', this.onPointerDown, PASSIVE_CAPTURE);
-    doc.addEventListener('pointermove', this.onPointerMove, PASSIVE_CAPTURE);
-    doc.addEventListener('pointerup', this.onPointerUp, PASSIVE_CAPTURE);
-    doc.addEventListener(
-      'pointercancel',
-      this.onPointerCancel,
-      PASSIVE_CAPTURE,
-    );
-    doc.addEventListener('pointerout', this.onPointerOut, PASSIVE_CAPTURE);
-    doc.addEventListener('contextmenu', this.onContextMenu, ACTIVE_CAPTURE);
-    doc.addEventListener('scroll', this.onScroll, PASSIVE_CAPTURE);
-    doc.addEventListener('visibilitychange', this.onVisibilityChange);
-    view?.addEventListener('click', this.onClick, ACTIVE_CAPTURE);
-    view?.addEventListener('blur', this.onBlur);
+    if (view == null) {
+      // A document without a window receives no input.
+      return;
+    }
+    // The window's capture phase, through the shared input stream
+    // (utils/inputStream.ts): the earliest point a page can intercept input,
+    // so an app's capture-phase stopPropagation at the document starves no
+    // recognizer, as UIKit's recognizers see touches before views do. Only
+    // the listeners that cancel are non-passive; none of them is a
+    // touchstart or touchmove, so none of them holds a scroll.
+    this.unsubscribers = [
+      subscribeInput(view, 'touchstart', this.onTouchStart),
+      subscribeInput(view, 'touchmove', this.onTouchMove),
+      subscribeInput(view, 'touchend', this.onTouchEnd, {cancels: true}),
+      subscribeInput(view, 'touchcancel', this.onTouchCancel),
+      subscribeInput(view, 'pointerdown', this.onPointerDown),
+      subscribeInput(view, 'pointermove', this.onPointerMove),
+      subscribeInput(view, 'pointerup', this.onPointerUp),
+      subscribeInput(view, 'pointercancel', this.onPointerCancel),
+      subscribeInput(view, 'pointerout', this.onPointerOut),
+      subscribeInput(view, 'contextmenu', this.onContextMenu, {cancels: true}),
+      subscribeInput(view, 'scroll', this.onScroll),
+      subscribeInput(view, 'visibilitychange', this.onVisibilityChange),
+      subscribeInput(view, 'click', this.onClick, {cancels: true}),
+      // The window's own blur; an element's blur (a Node's) reaches the
+      // window's capture phase too and means nothing here.
+      subscribeInput(view, 'blur', event => {
+        if (!(event.target instanceof view.Node)) {
+          this.onBlur();
+        }
+      }),
+    ];
   }
 
   private uninstall(): void {
@@ -920,26 +933,9 @@ export class GestureHost {
     this.isInstalled = false;
     // Unheard from here on: no fingers to keep.
     this.fingerTargets = [];
-    const doc = this.doc;
-    const view = doc.defaultView;
-    doc.removeEventListener('touchstart', this.onTouchStart, PASSIVE_CAPTURE);
-    doc.removeEventListener('touchmove', this.onTouchMove, PASSIVE_CAPTURE);
-    doc.removeEventListener('touchend', this.onTouchEnd, ACTIVE_CAPTURE);
-    doc.removeEventListener('touchcancel', this.onTouchCancel, PASSIVE_CAPTURE);
-    doc.removeEventListener('pointerdown', this.onPointerDown, PASSIVE_CAPTURE);
-    doc.removeEventListener('pointermove', this.onPointerMove, PASSIVE_CAPTURE);
-    doc.removeEventListener('pointerup', this.onPointerUp, PASSIVE_CAPTURE);
-    doc.removeEventListener(
-      'pointercancel',
-      this.onPointerCancel,
-      PASSIVE_CAPTURE,
-    );
-    doc.removeEventListener('pointerout', this.onPointerOut, PASSIVE_CAPTURE);
-    doc.removeEventListener('contextmenu', this.onContextMenu, ACTIVE_CAPTURE);
-    doc.removeEventListener('scroll', this.onScroll, PASSIVE_CAPTURE);
-    doc.removeEventListener('visibilitychange', this.onVisibilityChange);
-    view?.removeEventListener('click', this.onClick, ACTIVE_CAPTURE);
-    view?.removeEventListener('blur', this.onBlur);
+    for (const unsubscribe of this.unsubscribers.splice(0)) {
+      unsubscribe();
+    }
     this.cancelEverything(this.arena.now());
     this.lastTouch = null;
     this.lastScroll = null;
