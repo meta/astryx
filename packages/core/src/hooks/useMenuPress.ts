@@ -70,6 +70,7 @@ import {useLongPress, type UseLongPressHandlers} from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 
 /** Marks a menu root that carries this press model. */
 export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
@@ -86,7 +87,7 @@ export const MENU_PRESS_SURFACE_ATTR = 'data-astryx-menu-press-surface';
 /** How long after a tracked release the browser's click is still swallowed. */
 export const MENU_PRESS_STRAY_CLICK_MS = 400;
 /** How long a finger must rest on the trigger before the menu opens under it. */
-export const MENU_PRESS_LONG_PRESS_MS = 500;
+export const MENU_PRESS_LONG_PRESS_MS = LONG_PRESS_DURATION_MS;
 /** Distance from a scrolling menu's edge within which a resting pointer scrolls. */
 export const MENU_PRESS_AUTOSCROLL_ZONE_PX = 24;
 const AUTOSCROLL_STEP_PX = 6;

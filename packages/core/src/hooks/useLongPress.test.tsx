@@ -124,6 +124,28 @@ describe('useLongPress', () => {
     expect(onLongPress).toHaveBeenCalledTimes(1);
   });
 
+  it('measures the travel as a distance, as UIKit: a (7, 7) drift keeps the press, (7.2, 7.2) ends it', () => {
+    // UIKit lab: allowableMovement 10 is a distance; a (7, 7) drift (9.9 px)
+    // begins, a (7.2, 7.2) drift (10.2 px) fails. Per axis, both are under 10.
+    const kept = vi.fn();
+    const {result: keeps} = renderHook(() => useLongPress({onLongPress: kept}));
+    act(() => {
+      keeps.current.onTouchStart(touchEvent([{clientX: 100, clientY: 100}]));
+      keeps.current.onTouchMove(touchEvent([{clientX: 107, clientY: 107}]));
+      vi.advanceTimersByTime(500);
+    });
+    expect(kept).toHaveBeenCalledTimes(1);
+
+    const ended = vi.fn();
+    const {result: ends} = renderHook(() => useLongPress({onLongPress: ended}));
+    act(() => {
+      ends.current.onTouchStart(touchEvent([{clientX: 100, clientY: 100}]));
+      ends.current.onTouchMove(touchEvent([{clientX: 107.2, clientY: 107.2}]));
+      vi.advanceTimersByTime(500);
+    });
+    expect(ended).not.toHaveBeenCalled();
+  });
+
   it('cancels on touch end', () => {
     const onLongPress = vi.fn();
     const {result} = renderHook(() => useLongPress({onLongPress}));

@@ -25,7 +25,8 @@ import {HAPTIC_VIBRATION_PATTERNS, UIKIT_GESTURES} from './gestures';
 
 // Domain files whose entries are typed constants ({value, unit, source} or
 // {value, unit, guess, measure}); the same rules are checked on the values.
-const TYPED_TABLE_FILES = ['gestures.ts'];
+// longPress.ts holds only the long-press values; gestures.ts's typed entries source them.
+const TYPED_TABLE_FILES = ['gestures.ts', 'longPress.ts'];
 // Every other domain file carries its sources as JSDoc tags: a new one is
 // enforced the moment it lands.
 const TABLE_FILES = fs

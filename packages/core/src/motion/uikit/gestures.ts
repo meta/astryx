@@ -33,6 +33,10 @@
 
 import {scroll} from './scroll';
 import {timing} from './timing';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from './longPress';
 
 /**
  * The unit of a gesture constant.
@@ -150,13 +154,13 @@ export const UIKIT_GESTURES = {
   longPress: {
     /** UILongPressGestureRecognizer.minimumPressDuration default. */
     minimumPressDuration: {
-      value: 500,
+      value: LONG_PRESS_DURATION_MS,
       unit: 'ms',
       source: `apple-docs ${APPLE}/uilongpressgesturerecognizer/minimumpressduration; ${UIKIT_LAB}: _minimumPressDuration 0.5`,
     },
     /** UILongPressGestureRecognizer.allowableMovement default, a distance. */
     allowableMovement: {
-      value: 10,
+      value: LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
       unit: 'px',
       source: `apple-docs ${APPLE}/uilongpressgesturerecognizer/allowablemovement; ${UIKIT_LAB}: a (7, 7) drift begins, (7.2, 7.2) fails`,
     },
