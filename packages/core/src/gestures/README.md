@@ -254,6 +254,7 @@ warning, so two writers never fight over the paint. Pass another
   | free pan                                           | `pinch-zoom`        |
   | pinch or rotation                                  | `pan-x pan-y`       |
   | pinch or rotation together with a free pan         | `none`              |
+  | a watcher (`claimsTouches: false`), any direction  | left as is (`auto`) |
 
   A one-way pan leaves the browser its own axis too: a toast dragged away
   from its edge scrolls the page. It claims its direction by cancelling
@@ -365,13 +366,14 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 ### Holding the page still
 
-A scroll lock (`useScrollLock`) holds the page with
-`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
-release. It lives in its own module, so a page without a scroll lock never
-ships it, and it imports nothing of the gesture host: it asks the document's
-host whether a recognizer owns a touch only if a host exists, and a document
-without one has no recognizer to own it. While any hold is active, there is a non-passive
-`touchmove` listener on the document. Once per one-finger touch that no recognizer owns, after the
+A scroll lock can hold the page with `holdPageScroll(document, decide)` from
+`pageHold.ts`, which returns the release. It lives in its own module, so a
+page without a scroll lock never ships it, and it imports nothing of the
+gesture host: it asks the document's host whether a recognizer owns a touch
+only if a host exists, and a document without one has no recognizer to own
+it. While any hold is active, and only where the primary pointer is coarse,
+there is a non-passive `touchmove` listener on the document. Once per
+one-finger touch that no recognizer owns, after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
 being the innermost node under the finger (the composed path's first node),
@@ -456,10 +458,10 @@ in `../utils/touchPresentation.ts`:
 - touch behaviours (this system, the press model, UIKit springs and
   timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`); the gesture
   host itself installs nothing while it is fine (What the browser is told);
-- layout behaviours key on a compact viewport, narrower than 744 px or
-  shorter than 500 px (`COMPACT_QUERY`), the closest a size can get to
-  UIKit's compact size class (a Max-size iPhone in landscape is its one
-  known miss);
+- layout behaviours key on a compact viewport, below the theme's `md`
+  width point (`spec:AST-012` FR9): `COMPACT_QUERY` spells the default
+  points for a style, and behaviour reads the active theme's definition, so
+  a theme that moves `md` moves compact with it;
 - a presentation that needs both, a sheet in place of a popover, asks for
   both (`COMPACT_TOUCH_QUERY`).
 
