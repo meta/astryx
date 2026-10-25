@@ -63,7 +63,7 @@
  *   in place, then jumps; any other move dips (fades out, jumps at the
  *   midpoint, fades back in). An opacity-only change fades. The fade runs
  *   `timing.reducedMotionCrossFadeMs`, capped at 200 ms, on
- *   `timing.curves.easeInOut`;
+ *   `timing.curves.move`;
  * - on any other pointer (DR3) it completes at once, opacity included;
  * - `reducedMotion: 'instant'` asks for DR3's jump on any pointer. Nothing
  *   keeps travel or a spring (DR4).
@@ -849,7 +849,7 @@ export function createAnimator(
     stops: ReadonlyArray<{at: number; value: number}>,
     jumps: ReadonlyArray<number> = [],
   ): Segment => {
-    const ease = cubicBezier(timing.curves.easeInOut);
+    const ease = cubicBezier(timing.curves.move);
     const duration = stops[stops.length - 1].at;
     const at = (t: number) => {
       for (let i = 0; i + 1 < stops.length; i++) {

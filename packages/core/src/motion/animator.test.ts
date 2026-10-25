@@ -151,7 +151,7 @@ function sampleAt(
 describe('animate: keyframes on the compositor', () => {
   it('bakes the spring into keyframes within a twentieth of a pixel of the curve', () => {
     const {animator} = setup();
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     const [animation] = live('translate');
     expect(animation).toBeDefined();
     expect(animation.options).toMatchObject({
@@ -159,7 +159,7 @@ describe('animate: keyframes on the compositor', () => {
       easing: 'linear',
     });
     expect(animation.startTime).toBe(1000);
-    const curve = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
     // The curve, then the end state held (END_HOLD_MS).
     const duration = Number(animation.options.duration) - END_HOLD_MS;
     expect(duration).toBeCloseTo(curve.settleTime(0.05) * 1000, 6);
@@ -177,7 +177,7 @@ describe('animate: keyframes on the compositor', () => {
 
   it('keeps the keyframe count modest (adaptive sampling)', () => {
     const {animator} = setup();
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     expect(live('translate')[0].keyframes.length).toBeLessThan(200);
   });
 
@@ -185,11 +185,11 @@ describe('animate: keyframes on the compositor', () => {
     const {animator, element} = setup();
     animator.animate(
       {x: 100, scale: 0.9, rotate: 10},
-      {spring: springs.snappy},
+      {spring: springs.quickChange},
     );
     expect(element.style.translate).toBe('100px 0px');
     await advance(100);
-    animator.animate({x: 0, scale: 1, rotate: 0}, {spring: springs.snappy});
+    animator.animate({x: 0, scale: 1, rotate: 0}, {spring: springs.quickChange});
     // While the motion back runs, the end is never written 0px 0px: none, or
     // nothing where the stylesheet agrees.
     expect(live('translate')).toHaveLength(1);
@@ -204,20 +204,20 @@ describe('animate: keyframes on the compositor', () => {
     expect(element.style.scale).toBe('');
     expect(element.style.rotate).toBe('');
     // The keyframes stay numeric, so the curve still interpolates.
-    animator.animate({x: 50}, {spring: springs.snappy});
+    animator.animate({x: 50}, {spring: springs.quickChange});
     expect(live('translate')[0].keyframes[0].translate).toBe('0px 0px');
   });
 
   it('clears opacity back at 1, and an identity set at rest, and keeps any other value', async () => {
     const {animator, element} = setup();
     animator.set({opacity: 0});
-    animator.animate({opacity: 1}, {spring: springs.snappy});
+    animator.animate({opacity: 1}, {spring: springs.quickChange});
     await advance(5000);
     expect(element.style.opacity).toBe('');
     animator.set({x: 12});
     animator.set({x: 0});
     expect(element.style.translate).toBe('');
-    animator.animate({opacity: 0.5, x: 20}, {spring: springs.snappy});
+    animator.animate({opacity: 0.5, x: 20}, {spring: springs.quickChange});
     await advance(5000);
     expect(element.style.opacity).toBe('0.5');
     expect(element.style.translate).toBe('20px 0px');
@@ -226,8 +226,8 @@ describe('animate: keyframes on the compositor', () => {
   it('keeps an identity inline where the stylesheet would move the element', async () => {
     const {animator, element} = setup();
     stylesheet.scale = '0.5';
-    animator.animate({scale: 0.9}, {spring: springs.snappy});
-    animator.animate({scale: 1}, {spring: springs.snappy});
+    animator.animate({scale: 0.9}, {spring: springs.quickChange});
+    animator.animate({scale: 1}, {spring: springs.quickChange});
     await advance(5000);
     expect(element.style.scale).toBe('none');
   });
@@ -236,7 +236,7 @@ describe('animate: keyframes on the compositor', () => {
     const {animator, element} = setup();
     animator.animate(
       {x: 120, y: -40, scale: 1.1, rotate: 12, opacity: 0.25},
-      {spring: springs.snappy},
+      {spring: springs.quickChange},
     );
     expect(element.style.translate).toBe('120px -40px');
     expect(element.style.scale).toBe('1.1 1.1');
@@ -252,7 +252,7 @@ describe('animate: keyframes on the compositor', () => {
 
   it('keeps the end state in effect until the main thread drops the finished animation', async () => {
     const {animator, element} = setup();
-    animator.animate({x: 120}, {spring: springs.snappy});
+    animator.animate({x: 120}, {spring: springs.quickChange});
     const [animation] = live('translate');
     expect(animation.options.fill).toBe('both');
     // The animation outlasts its curve by END_HOLD_MS; the main thread drops
@@ -269,7 +269,7 @@ describe('animate: keyframes on the compositor', () => {
 
   it('never retires an animation a sampler has paused', async () => {
     const {animator} = setup();
-    animator.animate({x: 120}, {spring: springs.snappy});
+    animator.animate({x: 120}, {spring: springs.quickChange});
     const [animation] = live('translate');
     const duration = Number(animation.options.duration) - END_HOLD_MS;
     animation.paused = true;
@@ -283,16 +283,16 @@ describe('animate: keyframes on the compositor', () => {
 
   it('puts everything one call starts on one clock', () => {
     const {animator} = setup();
-    animator.animate({x: 100, opacity: 0.5}, {spring: springs.smooth});
+    animator.animate({x: 100, opacity: 0.5}, {spring: springs.settle});
     const starts = recorded.map(a => a.startTime);
     expect(starts).toEqual([1000, 1000]);
-    animator.animate({rotate: 90}, {spring: springs.smooth}, {at: 1234.5});
+    animator.animate({rotate: 90}, {spring: springs.settle}, {at: 1234.5});
     expect(live('rotate')[0].startTime).toBe(1234.5);
   });
 
   it('expands scale onto both axes and reads it back', () => {
     const {animator} = setup();
-    animator.animate({scale: 0.5}, {spring: springs.smooth});
+    animator.animate({scale: 0.5}, {spring: springs.settle});
     clock += 5000;
     expect(animator.get('scale')).toBe(0.5);
     expect(animator.get('scaleY')).toBe(0.5);
@@ -300,7 +300,7 @@ describe('animate: keyframes on the compositor', () => {
 
   it('does nothing for a value already at its target and at rest', async () => {
     const {animator} = setup();
-    const handle = animator.animate({x: 0}, {spring: springs.smooth});
+    const handle = animator.animate({x: 0}, {spring: springs.settle});
     expect(live('translate')).toHaveLength(0);
     await expect(handle.finished).resolves.toBe(true);
   });
@@ -320,12 +320,12 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
 
   it('a retarget starts from the value and the velocity on screen', async () => {
     const {animator} = setup();
-    animator.animate({x: 300}, {spring: springs.bouncy, velocity: {x: 800}});
+    animator.animate({x: 300}, {spring: springs.emphasis, velocity: {x: 800}});
     const first = live('translate')[0];
     await advance(120);
     const value = animator.get('x');
     const velocity = animator.getVelocity('x');
-    animator.animate({x: -100}, {spring: springs.bouncy});
+    animator.animate({x: -100}, {spring: springs.emphasis});
     expect(first.cancelled).toBe(true);
     const second = live('translate')[0];
     expect(second.startTime).toBe(clock);
@@ -333,7 +333,7 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
     expect(animator.getVelocity('x', clock)).toBeCloseTo(velocity, 6);
     expect(sampleAt(second, 'translate', clock)[0]).toBeCloseTo(value, 2);
     // And it really goes to the new target with that start.
-    const curve = solveSpring(toSpring(springs.bouncy), {
+    const curve = solveSpring(toSpring(springs.emphasis), {
       from: value,
       to: -100,
       velocity,
@@ -343,8 +343,8 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
 
   it('velocity is continuous across a retarget (property sweep)', async () => {
     for (const spring of [
-      springs.smooth,
-      springs.snappy,
+      springs.settle,
+      springs.quickChange,
       springs.switchThumbMove,
       springs.navigationPush,
     ]) {
@@ -363,10 +363,10 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
 
   it('a value that keeps moving through a rebuild stays on its curve', async () => {
     const {animator} = setup();
-    animator.animate({x: 300, y: 200}, {spring: springs.smooth});
-    const yCurve = solveSpring(toSpring(springs.smooth), {from: 0, to: 200});
+    animator.animate({x: 300, y: 200}, {spring: springs.settle});
+    const yCurve = solveSpring(toSpring(springs.settle), {from: 0, to: 200});
     await advance(100);
-    animator.animate({x: 0}, {spring: springs.smooth});
+    animator.animate({x: 0}, {spring: springs.settle});
     const [animation] = live('translate');
     for (let t = clock; t < clock + 400; t += 7) {
       expect(sampleAt(animation, 'translate', t)[1]).toBeCloseTo(
@@ -382,7 +382,7 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
 
   it('stop() freezes at the presentation value', async () => {
     const {animator, element} = setup();
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     await advance(80);
     const value = animator.get('x');
     animator.stop();
@@ -395,7 +395,7 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
 
   it('a handle reads, retargets and stops its own properties', async () => {
     const {animator} = setup();
-    const handle = animator.animate({x: 100}, {spring: springs.smooth});
+    const handle = animator.animate({x: 100}, {spring: springs.settle});
     await advance(50);
     expect(handle.value('x')).toBe(animator.get('x'));
     expect(handle.velocity('x')).toBe(animator.getVelocity('x'));
@@ -418,7 +418,7 @@ describe('set: direct manipulation (M4)', () => {
 
   it('a drag on translate leaves a running scale alone', () => {
     const {animator} = setup();
-    animator.animate({scale: 0.95}, {spring: springs.smooth});
+    animator.animate({scale: 0.95}, {spring: springs.settle});
     const scaleAnimation = live('scale')[0];
     animator.set({x: 12});
     animator.set({x: 20});
@@ -430,7 +430,7 @@ describe('set: direct manipulation (M4)', () => {
 describe('finished', () => {
   it('resolves true when the curve ends untouched', async () => {
     const {animator} = setup();
-    const handle = animator.animate({x: 40}, {spring: springs.snappy});
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
     let result: boolean | undefined;
     void handle.finished.then(value => {
       result = value;
@@ -443,13 +443,13 @@ describe('finished', () => {
 
   it('resolves false as soon as a property is retargeted, set or stopped', async () => {
     const {animator} = setup();
-    const a = animator.animate({x: 40}, {spring: springs.snappy});
-    animator.animate({x: 80}, {spring: springs.snappy});
+    const a = animator.animate({x: 40}, {spring: springs.quickChange});
+    animator.animate({x: 80}, {spring: springs.quickChange});
     await expect(a.finished).resolves.toBe(false);
-    const b = animator.animate({y: 40}, {spring: springs.snappy});
+    const b = animator.animate({y: 40}, {spring: springs.quickChange});
     animator.set({y: 3});
     await expect(b.finished).resolves.toBe(false);
-    const c = animator.animate({rotate: 40}, {spring: springs.snappy});
+    const c = animator.animate({rotate: 40}, {spring: springs.quickChange});
     animator.stop(['rotate']);
     await expect(c.finished).resolves.toBe(false);
   });
@@ -458,7 +458,7 @@ describe('finished', () => {
     const {animator} = setup();
     const handle = animator.animate(
       {x: 40, opacity: 0},
-      {spring: springs.snappy},
+      {spring: springs.quickChange},
     );
     animator.dispose();
     await expect(handle.finished).resolves.toBe(false);
@@ -471,11 +471,11 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
   const reduced = () =>
     setup({prefersReducedMotion: () => true, isCoarsePointer: () => true});
   const fade = Math.min(timing.reducedMotionCrossFadeMs, 200);
-  const ease = cubicBezier(timing.curves.easeInOut);
+  const ease = cubicBezier(timing.curves.move);
 
   it('a move during a running fade keeps that fade\u2019s target', async () => {
     const {animator} = reduced();
-    animator.animate({opacity: 0}, {spring: springs.smooth});
+    animator.animate({opacity: 0}, {spring: springs.settle});
     await advance(fade / 2);
     expect(animator.get('opacity')).toBeGreaterThan(0.1);
     animator.animate({x: 100}, {spring: springs.navigationPush});
@@ -485,7 +485,7 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
 
     const entrance = reduced().animator;
     entrance.set({opacity: 0});
-    entrance.animate({opacity: 1}, {spring: springs.smooth});
+    entrance.animate({opacity: 1}, {spring: springs.settle});
     await advance(fade / 2);
     entrance.animate({x: 100}, {spring: springs.navigationPush});
     await advance(fade + 100);
@@ -556,7 +556,7 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     const {animator} = reduced();
     animator.animate(
       {x: 50, opacity: 0},
-      {spring: springs.smooth},
+      {spring: springs.settle},
       {reducedMotion: 'instant'},
     );
     expect(animator.get('x')).toBe(50);
@@ -567,7 +567,7 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
   it('an opacity-only change fades within 200 ms, with no spring', () => {
     const {animator} = reduced();
     animator.set({opacity: 0});
-    animator.animate({opacity: 1}, {spring: springs.smooth});
+    animator.animate({opacity: 1}, {spring: springs.settle});
     const [opacity] = live('opacity');
     expect(Number(opacity.options.duration)).toBeLessThanOrEqual(
       200 + END_HOLD_MS,
@@ -590,7 +590,7 @@ describe('Reduced Motion on a fine pointer (DR3): every change at once', () => {
   it('a move and an opacity change complete in the call, with nothing animated', () => {
     const {animator} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
-    animator.animate({opacity: 0}, {spring: springs.smooth});
+    animator.animate({opacity: 0}, {spring: springs.settle});
     expect(animator.get('x')).toBe(100);
     expect(animator.get('opacity')).toBe(0);
     expect(recorded).toHaveLength(0);
@@ -601,7 +601,7 @@ describe('Reduced Motion on a fine pointer (DR3): every change at once', () => {
       prefersReducedMotion: () => true,
       isCoarsePointer: () => true,
     }).animator;
-    coarse.animate({opacity: 0}, {spring: springs.smooth});
+    coarse.animate({opacity: 0}, {spring: springs.settle});
     await advance(60);
     expect(coarse.get('opacity')).toBeGreaterThan(0);
     coarse.animate(
@@ -668,7 +668,7 @@ describe('decay: momentum curves (a coast)', () => {
 
   it('a coast continues a running spring from its presentation value', () => {
     const {animator} = setup();
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     clock += 80;
     const from = animator.get('x');
     animator.decay(coast(animator, {x: 900}));
@@ -720,14 +720,14 @@ describe('attach', () => {
       now: () => clock,
       prefersReducedMotion: () => false,
     });
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     expect(recorded).toHaveLength(0);
     clock += 100;
     const element = document.createElement('div');
     animator.attach(element);
     const [animation] = live('translate');
     expect(animation.startTime).toBe(1100);
-    const curve = solveSpring(toSpring(springs.smooth), {from: 0, to: 300});
+    const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
     expect(sampleAt(animation, 'translate', 1100)[0]).toBeCloseTo(
       curve.value(0.1),
       1,
@@ -737,7 +737,7 @@ describe('attach', () => {
 
   it('detaching cancels the running animations', () => {
     const {animator} = setup();
-    animator.animate({x: 300}, {spring: springs.smooth});
+    animator.animate({x: 300}, {spring: springs.settle});
     animator.attach(null);
     expect(recorded.every(a => a.cancelled)).toBe(true);
     expect(animator.get('x', 1050)).toBeGreaterThan(0);
