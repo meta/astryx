@@ -106,7 +106,10 @@ const styles = stylex.create({
     transformStyle: 'preserve-3d',
     scrollbarWidth: 'none',
     outline: 'none',
-    touchAction: 'pan-y',
+    // Vertical pans scroll the wheel; a two-finger pinch stays the page's, so
+    // the page can still zoom over an open picker (WCAG 1.4.4), as it does
+    // over the menus and listboxes (`module:DropdownMenu/useMenuPress` FR4).
+    touchAction: 'pan-y pinch-zoom',
   },
   item: {
     display: 'flex',

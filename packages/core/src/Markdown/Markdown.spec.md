@@ -67,15 +67,17 @@ rendering, and native typed document-start frontmatter. They may separately opt 
 renderer for both inline and display expressions. The parser accepts matching
 explicit options. Plugins and math change nothing when absent; the default Code
 block path renders `diff` and `diff-<language>` fences as CodeBlock's diff layer
-(FR29) and wraps every fence's long lines (`spec:AST-061` FR5, DEC-9), and every
-other parsing, rendering, styling, and streaming behavior is the released one.
+(FR29), wraps every fence's long lines (`spec:AST-061` FR5, DEC-9), and lays
+out a fence with no header the way CodeBlock does (`component:CodeBlock` FR11),
+and every other parsing, rendering, styling, and streaming behavior is the
+released one.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below) and its long-line wrap (below)
-- Compatibility class: additive, opt-in public API, with two visible
-  default-path rendering changes (the FR29 diff layer and the fenced-code wrap,
-  below); existing parser nodes, DOM, styling, targets,
+- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), and its headerless layout (below)
+- Compatibility class: additive, opt-in public API, with three visible
+  default-path rendering changes (the FR29 diff layer, the fenced-code wrap, and
+  the headerless layout, below); existing parser nodes, DOM, styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, or passes the matching
   explicit parser option.
@@ -87,15 +89,20 @@ other parsing, rendering, styling, and streaming behavior is the released one.
   which rendered as plain text with a `diff` label and viewport name, its
   leading word being all Markdown read — as the layer over that language with
   a `<language> diff` label; the header, copy, disclosure, and viewport name
-  stay, and a supplied `code` renderer's contract is unchanged. The way back to
+  stay as for any other fence, and a supplied `code` renderer's contract is unchanged. The way back to
   plain text is a `text` fence or a custom `code` renderer. Every other fence
-  is unchanged apart from the wrap below.
+  is unchanged apart from the wrap and the headerless layout below.
 - Default-path wrap change (`spec:AST-061` FR5, DEC-9), visual and not breaking:
   the default Code block wraps long lines instead of scrolling them sideways, so
   a fence whose lines no longer overflow also no longer takes the conditional
   scroll-region tab stop. Text, line numbers, syntax colours, copy output, and a
   supplied `code` renderer's contract are unchanged. The way back to sideways
   scrolling is a custom `code` renderer.
+- Default-path headerless layout (`component:CodeBlock` FR11), visual and not
+  breaking: a fence with no language label shows Copy in its own column beside
+  the code, so long lines wrap before it. A fence that names a language other than
+  `plaintext` keeps its header at every line count. Text, copy output, syntax colours, the
+  viewport name, and a supplied `code` renderer's contract are unchanged.
 - Default-path layout change (FR26–FR28): a default table's columns may become
   wider than the released fixed buckets, never narrower; header labels wrap
   instead of truncating; a table that squashed its columns may now scroll.

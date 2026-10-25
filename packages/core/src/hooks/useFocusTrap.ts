@@ -103,6 +103,26 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * The document a trap lives in: its container's. An app that renders into a
+ * same-origin iframe or a Document Picture-in-Picture window through a portal
+ * puts the trap in that window's document, whose key presses and focus
+ * changes never reach this module's global `document`.
+ */
+function trapDocument(container: HTMLElement | null): Document {
+  return container?.ownerDocument ?? document;
+}
+
+/**
+ * `instanceof HTMLElement`, asked of the node's own window: an element of a
+ * second document is an instance of that window's `HTMLElement`, not of this
+ * one's.
+ */
+function isHTMLElement(node: Node | null): node is HTMLElement {
+  const view = node?.ownerDocument?.defaultView;
+  return view != null && node instanceof view.HTMLElement;
+}
+
+/**
  * Attempt to focus an element. Returns true if focus was successful.
  */
 function attemptFocus(element: HTMLElement): boolean {
@@ -111,7 +131,7 @@ function attemptFocus(element: HTMLElement): boolean {
   } catch {
     // Some elements may throw on focus
   }
-  return document.activeElement === element;
+  return element.ownerDocument.activeElement === element;
 }
 
 /**
@@ -176,7 +196,7 @@ export interface UseFocusTrapReturn<T extends HTMLElement = HTMLElement> {
  * Hook for trapping focus within a container element.
  *
  * Implements the WAI-ARIA dialog focus trap pattern:
- * - Listens to focus events on the document
+ * - Listens to focus events on the container's document
  * - Redirects focus back into the container if it escapes
  * - Handles both Tab and Shift+Tab navigation
  * - Restores focus to the element that was focused before activation when the
@@ -278,15 +298,16 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       return;
     }
 
-    const previouslyFocused = document.activeElement as HTMLElement | null;
     // Snapshot the container now; by cleanup it may be detached or unmounted.
     const container = containerRef.current;
+    const doc = trapDocument(container);
+    const previouslyFocused = doc.activeElement as HTMLElement | null;
 
     // Whether focus ever entered the trap container while it was active.
     // Initialized from the current active element in case focus was already
     // inside at activation (e.g. a programmatic focus before the effect ran).
     let hadFocusInside =
-      container != null && container.contains(document.activeElement);
+      container != null && container.contains(doc.activeElement);
 
     const markFocusInside = (event: FocusEvent) => {
       const target = event.target as Node | null;
@@ -294,20 +315,20 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
         hadFocusInside = true;
       }
     };
-    document.addEventListener('focusin', markFocusInside, true);
+    doc.addEventListener('focusin', markFocusInside, true);
 
     return () => {
-      document.removeEventListener('focusin', markFocusInside, true);
+      doc.removeEventListener('focusin', markFocusInside, true);
 
       if (!hadFocusInside) {
         return;
       }
 
-      const active = document.activeElement;
+      const active = doc.activeElement;
       const focusWasLost =
         active == null ||
-        active === document.body ||
-        active === document.documentElement ||
+        active === doc.body ||
+        active === doc.documentElement ||
         (container != null && container.contains(active));
 
       if (!focusWasLost) {
@@ -333,6 +354,8 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       return;
     }
 
+    const doc = trapDocument(containerRef.current);
+
     const handleFocus = (event: FocusEvent) => {
       const container = containerRef.current;
       if (!container) {
@@ -350,11 +373,11 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
 
         // If we're back at the same element (Shift+Tab from first element),
         // try focusing the last element instead
-        if (focusedFirst && lastFocusRef.current === document.activeElement) {
+        if (focusedFirst && lastFocusRef.current === doc.activeElement) {
           focusLastDescendant(container);
         } else if (
           !focusedFirst &&
-          lastFocusRef.current instanceof HTMLElement &&
+          isHTMLElement(lastFocusRef.current) &&
           container.contains(lastFocusRef.current)
         ) {
           // A modal surface may intentionally have no tabbable controls and
@@ -363,7 +386,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
           attemptFocus(lastFocusRef.current);
         }
 
-        lastFocusRef.current = document.activeElement;
+        lastFocusRef.current = doc.activeElement;
       }
       // If focus escaped via mouse click, don't redirect - let light dismiss handle it
 
@@ -372,10 +395,10 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
     };
 
     // Use capture phase to intercept focus before it settles
-    document.addEventListener('focus', handleFocus, true);
+    doc.addEventListener('focus', handleFocus, true);
 
     return () => {
-      document.removeEventListener('focus', handleFocus, true);
+      doc.removeEventListener('focus', handleFocus, true);
     };
   }, [isActive]);
 
@@ -393,6 +416,8 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       return;
     }
 
+    const doc = trapDocument(containerRef.current);
+
     const handleKeyDown = (event: KeyboardEvent) => {
       const container = containerRef.current;
       if (!container) {
@@ -405,8 +430,8 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
 
         const focusable = getFocusableElements(container);
         if (focusable.length === 0) {
-          const active = document.activeElement;
-          if (!(active instanceof HTMLElement) || !container.contains(active)) {
+          const active = doc.activeElement;
+          if (!isHTMLElement(active) || !container.contains(active)) {
             // A layer can be open while focus legitimately sits outside it —
             // a listbox popup anchored to its own input. Cancelling there
             // would take Tab away from the whole page.
@@ -424,7 +449,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
 
-        if (document.activeElement === container) {
+        if (doc.activeElement === container) {
           // Programmatic initial focus can sit on the trap container itself
           // (for example a dialog panel with no content controls). Move into
           // the tabbable cycle instead of letting Tab escape to the page.
@@ -439,13 +464,13 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
 
         if (event.shiftKey) {
           // Shift+Tab: if on first element, wrap to last
-          if (document.activeElement === first) {
+          if (doc.activeElement === first) {
             event.preventDefault();
             last.focus();
           }
         } else {
           // Tab: if on last element, wrap to first
-          if (document.activeElement === last) {
+          if (doc.activeElement === last) {
             event.preventDefault();
             first.focus();
           }
@@ -453,10 +478,10 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    doc.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      doc.removeEventListener('keydown', handleKeyDown);
     };
   }, [isActive, onEscape]);
 

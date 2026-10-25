@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^internal/a11y-spec/src/harness
 
 /**
  * @file chromium.chromium.spec.ts

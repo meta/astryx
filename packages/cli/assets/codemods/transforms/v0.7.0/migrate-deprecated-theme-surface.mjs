@@ -5,19 +5,34 @@
  *
  * Static keys directly inside a theme's `components` object move to their
  * canonical target. A theme is a `defineTheme()` call imported from Astryx, an
- * object typed as an Astryx theme (annotation, `as`, or `satisfies`), or a
- * direct theme object with a static `name` whose component entries are style
- * objects. CSS selectors move the same target classes, keep the owner scope of
- * the per-component clear-icon aliases, and replace target-qualified bare
- * prop/state classes with reflected `data-*` selectors using the final 0.6
- * runtime contract. A known bare class that cannot be classified for its target
- * gets a TODO. Dynamic theme keys, unqualified classes, declarations, comments,
+ * object typed as an Astryx theme (annotation, `as`, or `satisfies`), or the
+ * direct theme object a same-stem theme descriptor (`<stem>.doc.mjs`) declares:
+ * the top-level binding exported as `<stem>`, with a static `name` and
+ * component entries that are style objects. Shape alone is not proof: a
+ * look-alike object anywhere else, including another object in the same theme
+ * source, is left unchanged. CSS selectors move the same target classes, keep
+ * the owner scope of the per-component clear-icon aliases, and replace
+ * target-qualified bare prop/state classes with reflected `data-*` selectors
+ * using the final 0.6 runtime contract. A known bare class that cannot be
+ * classified for its target gets a TODO. Dynamic theme keys, unqualified classes, declarations, comments,
  * and strings containing CSS are left for manual review.
  */
 
+import * as fs from 'node:fs';
 import path from 'node:path';
 import postcss from 'postcss';
 import selectorParser from 'postcss-selector-parser';
+import {readThemeDescriptorValue} from '../../../../foundation/discovery/theme-discovery.mjs';
+import {
+  importedComponents,
+  resolveImportedComponent,
+} from '../../transform-prop.mjs';
+import {
+  isCodemodParseError,
+  markParseError,
+  parseCss,
+  processSelector,
+} from '../../parse.mjs';
 import {migrateAstryxThemeSelectors} from '../v0.6.0/migrate-astryx-theme-selectors-to-data-attrs.mjs';
 import {
   V06_THEME_SELECTOR_DYNAMIC_AXES,
@@ -195,7 +210,7 @@ function ownerScope(owner) {
 function unclassifiedBareClasses(selectorText) {
   /** @type {Set<string>} */
   const found = new Set();
-  selectorParser(selectors => {
+  processSelector(selectorText, selectors => {
     selectors.walk((/** @type {any} */ node) => {
       if (node.type !== 'selector') return;
       /** @type {any[][]} */
@@ -223,19 +238,23 @@ function unclassifiedBareClasses(selectorText) {
         }
       }
     });
-  }).processSync(selectorText, {lossless: true});
+  });
   return [...found].sort();
 }
 
-/** @param {string} selector */
+/** @param {string | import('postcss').Rule} selector selector text, or the rule that holds it */
 function finishSelectorText(selector) {
-  return selectorParser(selectors => {
+  return processSelector(selector, selectors => {
     selectors.each(finishSelectorMigration);
-  }).processSync(selector, {lossless: true});
+  });
 }
 
-/** @param {string} params */
-function finishScopeParams(params) {
+/**
+ * Migrate each parenthesized selector group of an `@scope` prelude.
+ * @param {string} params
+ * @param {(selector: string, start: number) => string} [finish] migrates one group; `start` is its offset in `params`
+ */
+function finishScopeParams(params, finish = finishSelectorText) {
   let result = '';
   let last = 0;
   let depth = 0;
@@ -272,7 +291,7 @@ function finishScopeParams(params) {
     if (char === ')' && depth > 0) {
       depth--;
       if (depth === 0 && groupStart >= 0) {
-        result += finishSelectorText(params.slice(groupStart, index));
+        result += finish(params.slice(groupStart, index), groupStart);
         result += ')';
         last = index + 1;
         groupStart = -1;
@@ -284,15 +303,39 @@ function finishScopeParams(params) {
 
 /** @param {string} source @param {string} from */
 function migrateCss(source, from) {
+  // Parse every selector of the stylesheet as written first, so one the
+  // selector parser rejects is reported at its line and column in the file,
+  // not in the migrated text below.
+  const original = parseCss(source, {from});
+  original.walkRules(rule => {
+    processSelector(rule, () => {});
+  });
+  original.walkAtRules('scope', atRule => {
+    const offset =
+      `@${atRule.name}`.length + (atRule.raws.afterName ?? '').length;
+    finishScopeParams(atRule.params, (selector, start) => {
+      try {
+        processSelector(selector, () => {});
+      } catch (err) {
+        if (!isCodemodParseError(err)) throw err;
+        throw markParseError(
+          atRule.error(/** @type {Error} */ (err).message, {
+            index: offset + start,
+          }),
+        );
+      }
+      return selector;
+    });
+  });
   const migrated = migrateAstryxThemeSelectors(source, from, SELECTOR_DATA);
-  const root = postcss.parse(migrated, {from});
+  const root = parseCss(migrated, {from});
   /** @type {Set<string>} */
   const existingComments = new Set();
   root.walkComments(comment => {
     existingComments.add(comment.text.trim());
   });
   root.walkRules(rule => {
-    rule.selector = finishSelectorText(rule.selector);
+    rule.selector = finishSelectorText(rule);
     const tokens = unclassifiedBareClasses(rule.selector);
     if (tokens.length === 0) return;
     const list = tokens.map(token => `.${token}`).join(', ');
@@ -338,15 +381,88 @@ const TS_WRAPPERS = new Set([
 ]);
 
 /**
- * Local names that refer to Astryx's `defineTheme`, its theme types, or an
- * Astryx namespace import.
- * @param {any} root @param {any} j
+ * The export name a same-stem theme descriptor beside this file declares
+ * (`brandTheme` for `brandTheme.ts` beside `brandTheme.doc.mjs`), or null. The
+ * descriptor is read statically, never executed; an unreadable or non-theme
+ * descriptor is not proof.
+ * @param {string} filePath
+ * @returns {string | null}
  */
-function astryxThemeBindings(root, j) {
+function describedThemeExportName(filePath) {
+  const stem = path.basename(filePath, path.extname(filePath));
+  const docPath = path.join(path.dirname(filePath), `${stem}.doc.mjs`);
+  if (!fs.existsSync(docPath)) return null;
+  try {
+    return readThemeDescriptorValue(docPath, `Theme descriptor ${docPath}`)
+      .type === 'theme'
+      ? stem
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Top-level local names this module exports under `exportName`: an exported
+ * declaration of that name, or a source-less `export {local as exportName}`.
+ * @param {any} root @param {any} j @param {string} exportName
+ */
+function localNamesExportedAs(root, j, exportName) {
+  /** @type {Set<string>} */
+  const locals = new Set();
+  root
+    .find(j.ExportNamedDeclaration)
+    .forEach((/** @type {any} */ exportPath) => {
+      const node = exportPath.node;
+      if (node.exportKind === 'type' || node.source) return;
+      for (const declarator of node.declaration?.declarations ?? []) {
+        if (declarator.id?.name === exportName) locals.add(exportName);
+      }
+      for (const specifier of node.specifiers ?? []) {
+        const exported = specifier.exported?.name ?? specifier.exported?.value;
+        const local = specifier.local?.name ?? specifier.local?.value;
+        if (
+          specifier.exportKind !== 'type' &&
+          exported === exportName &&
+          typeof local === 'string'
+        ) {
+          locals.add(local);
+        }
+      }
+    });
+  return locals;
+}
+
+/**
+ * Astryx's `defineTheme` imports (resolved at each call site, so a shadowing
+ * parameter or local never counts), its theme types, an Astryx namespace
+ * import, and the binding a theme descriptor declares.
+ * @param {any} root @param {any} j @param {string} filePath
+ */
+function astryxThemeBindings(root, j, filePath) {
+  /** @type {Set<string> | undefined} */
+  let describedLocals;
   const bindings = {
-    defineTheme: new Set(),
+    defineTheme: importedComponents(root, j, {
+      matchesImport: source => ASTRYX_MODULE.test(source),
+      components: new Map([['defineTheme', new Set()]]),
+    }),
     themeTypes: new Set(),
     namespaces: new Set(),
+    /**
+     * Top-level locals exported under the descriptor's name. Read lazily:
+     * only a direct theme-shaped object needs the descriptor.
+     * @returns {Set<string>}
+     */
+    describedThemeLocals() {
+      if (describedLocals == null) {
+        const exportName = describedThemeExportName(filePath);
+        describedLocals = exportName
+          ? localNamesExportedAs(root, j, exportName)
+          : new Set();
+      }
+      return describedLocals;
+    },
   };
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
     const source = importPath.node.source?.value;
@@ -358,7 +474,6 @@ function astryxThemeBindings(root, j) {
         bindings.namespaces.add(local);
       } else if (specifier.type === 'ImportSpecifier') {
         const imported = specifier.imported?.name ?? specifier.imported?.value;
-        if (imported === 'defineTheme') bindings.defineTheme.add(local);
         if (THEME_TYPE_NAMES.has(imported)) bindings.themeTypes.add(local);
       }
     }
@@ -379,18 +494,78 @@ function namesBinding(name, locals, namespaces, members) {
   );
 }
 
-/** @param {any} typeNode @param {ReturnType<typeof astryxThemeBindings>} bindings */
-function isAstryxThemeType(typeNode, bindings) {
+/** @param {any} typeNode @param {any} usePath @param {ReturnType<typeof astryxThemeBindings>} bindings */
+function isAstryxThemeType(typeNode, usePath, bindings) {
   const node = typeNode?.typeAnnotation ?? typeNode;
-  return (
-    node?.type === 'TSTypeReference' &&
-    namesBinding(
+  if (
+    node?.type !== 'TSTypeReference' ||
+    !namesBinding(
       node.typeName,
       bindings.themeTypes,
       bindings.namespaces,
       THEME_TYPE_NAMES,
     )
+  ) {
+    return false;
+  }
+  const root =
+    node.typeName.type === 'Identifier' ? node.typeName : node.typeName.left;
+  return isModuleTypeBinding(usePath, root.name);
+}
+
+/** @param {any} statement @param {string} name */
+function statementDeclares(statement, name) {
+  const node =
+    statement?.type === 'ExportNamedDeclaration' ||
+    statement?.type === 'ExportDefaultDeclaration'
+      ? statement.declaration
+      : statement;
+  if (node?.id?.type === 'Identifier' && node.id.name === name) return true;
+  return (node?.declarations ?? []).some(
+    (/** @type {any} */ declarator) =>
+      declarator.id?.type === 'Identifier' && declarator.id.name === name,
   );
+}
+
+/**
+ * True when a type-position `name` at `path` can only mean the module-scope
+ * import: no enclosing type parameter, parameter, or block-level declaration
+ * (type alias, interface, enum, class, namespace, function, or variable)
+ * reuses the name. Anything this cannot rule out counts as shadowed.
+ * @param {any} path @param {string} name
+ */
+function isModuleTypeBinding(path, name) {
+  const valueScope = path.scope?.lookup(name);
+  if (valueScope != null && valueScope.path.node.type !== 'Program') {
+    return false;
+  }
+  for (let current = path; current != null; current = current.parent) {
+    const node = current.node;
+    if (node.type === 'Program') return true;
+    const typeParameters = node.typeParameters?.params ?? [];
+    if (
+      typeParameters.some(
+        (/** @type {any} */ parameter) =>
+          (parameter.name?.name ?? parameter.name) === name,
+      )
+    ) {
+      return false;
+    }
+    const statements =
+      node.type === 'SwitchCase'
+        ? node.consequent
+        : node.type !== 'ClassBody' && Array.isArray(node.body)
+          ? node.body
+          : [];
+    if (
+      statements.some((/** @type {any} */ statement) =>
+        statementDeclares(statement, name),
+      )
+    ) {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**
@@ -427,15 +602,44 @@ function isDirectThemeObject(node) {
 }
 
 /**
+ * True when this object literal initializes the top-level binding that the
+ * file's theme descriptor declares, directly or through TypeScript wrappers.
+ * @param {any} objectPath @param {ReturnType<typeof astryxThemeBindings>} bindings
+ */
+function isDescribedThemeBinding(objectPath, bindings) {
+  let parent = objectPath.parent;
+  while (parent != null && TS_WRAPPERS.has(parent.node.type)) {
+    parent = parent.parent;
+  }
+  const declarator = parent?.node;
+  if (
+    declarator?.type !== 'VariableDeclarator' ||
+    declarator.id?.type !== 'Identifier'
+  ) {
+    return false;
+  }
+  const declaration = parent.parent;
+  const container = declaration?.parent?.node;
+  const topLevel =
+    container?.type === 'Program' ||
+    (container?.type === 'ExportNamedDeclaration' &&
+      declaration.parent.parent?.node.type === 'Program');
+  return topLevel && bindings.describedThemeLocals().has(declarator.id.name);
+}
+
+/**
  * True when this object literal is an Astryx theme: the argument of an
- * imported `defineTheme()`, typed as an Astryx theme, or a direct theme object.
+ * imported `defineTheme()`, typed as an Astryx theme, or the direct theme
+ * object a theme descriptor declares.
  * @param {any} objectPath @param {ReturnType<typeof astryxThemeBindings>} bindings
  */
 function isThemeRoot(objectPath, bindings) {
   let child = objectPath;
   let parent = objectPath.parent;
   while (parent != null && TS_WRAPPERS.has(parent.node.type)) {
-    if (isAstryxThemeType(parent.node.typeAnnotation, bindings)) return true;
+    if (isAstryxThemeType(parent.node.typeAnnotation, parent, bindings)) {
+      return true;
+    }
     child = parent;
     parent = parent.parent;
   }
@@ -443,22 +647,20 @@ function isThemeRoot(objectPath, bindings) {
   if (
     node?.type === 'CallExpression' &&
     node.arguments?.[0] === child.node &&
-    namesBinding(
-      node.callee,
-      bindings.defineTheme,
-      bindings.namespaces,
-      new Set(['defineTheme']),
-    )
+    resolveImportedComponent(node.callee, parent, bindings.defineTheme)
   ) {
     return true;
   }
   if (
     node?.type === 'VariableDeclarator' &&
-    isAstryxThemeType(node.id?.typeAnnotation, bindings)
+    isAstryxThemeType(node.id?.typeAnnotation, parent, bindings)
   ) {
     return true;
   }
-  return isDirectThemeObject(objectPath.node);
+  return (
+    isDirectThemeObject(objectPath.node) &&
+    isDescribedThemeBinding(objectPath, bindings)
+  );
 }
 
 /**
@@ -567,10 +769,10 @@ function addScopeTodo(property, oldKey, owner, j) {
   ];
 }
 
-/** @param {string} source @param {any} j */
-function migrateStaticThemeKeys(source, j) {
+/** @param {string} source @param {string} filePath @param {any} j */
+function migrateStaticThemeKeys(source, filePath, j) {
   const root = j(source);
-  const bindings = astryxThemeBindings(root, j);
+  const bindings = astryxThemeBindings(root, j, filePath);
   let changed = false;
 
   root.find(j.ObjectExpression).forEach((/** @type {any} */ objectPath) => {
@@ -620,5 +822,5 @@ export default function migrateDeprecatedThemeSurface(file, api) {
     const result = migrateCss(file.source, file.path);
     return result === file.source ? undefined : result;
   }
-  return migrateStaticThemeKeys(file.source, api.jscodeshift);
+  return migrateStaticThemeKeys(file.source, file.path, api.jscodeshift);
 }

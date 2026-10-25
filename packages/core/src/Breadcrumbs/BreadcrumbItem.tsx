@@ -68,6 +68,7 @@ import {
 import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Props
 // =============================================================================
@@ -519,6 +520,10 @@ function BreadcrumbMenuTrigger({
   const triggerId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isSupporting = variant === 'supporting';
+  // The menu's rows move focus with the last input
+  // (`architecture:interaction-modality` INV1); this menu has no press model
+  // to activate the tracking they read, so it activates it itself.
+  useInteractionModalityTracking();
 
   const popover = usePopover({
     hasLightDismiss: true,

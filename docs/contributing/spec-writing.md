@@ -5,9 +5,14 @@ someone deciding whether an implementation conforms, long after the pull
 requests that shaped it are closed. Every sentence in a record has to survive
 that reader.
 
-This guide applies to every knowledge record that states what the system does:
-`docs/specs/<id>/spec.md`, family, design, theme, and architecture records, and
-colocated `<Name>.spec.md` component and module contracts. An implementation
+This guide applies to every knowledge record that states what the system does,
+wherever it lives in the repository and in any package added later:
+`docs/specs/<id>/spec.md`, family, design, theme, and architecture records,
+package records under a package's `specs/` directory, and colocated
+`<Name>.spec.md` component and module contracts in Core, Lab, the flat
+component packages (Charts, RichText, Vega), and platform implementation
+packages. Every spec must be a valid knowledge record; one that is not fails
+the knowledge check (`architecture:knowledge-contracts` INV27). An implementation
 plan (`plan.md`) tracks work and is outside it. It projects
 `architecture:knowledge-contracts` (INV2 and INV10) and the templates under
 `docs/templates/knowledge/` into a pass an author runs and a reviewer checks. It

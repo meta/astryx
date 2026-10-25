@@ -2399,7 +2399,37 @@ describe('SideNav keyboard operation', () => {
 // Focus management (audit §6 V7)
 // =============================================================================
 
+/**
+ * Holds requestAnimationFrame callbacks until `flush`, so a test decides when
+ * a popover's auto-focus frame runs instead of racing a timer.
+ */
+function holdAnimationFrames() {
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    nextFrame += 1;
+    frames.set(nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+    frames.delete(frame);
+  });
+  return {
+    flush() {
+      act(() => {
+        const due = [...frames.values()];
+        frames.clear();
+        due.forEach(callback => callback(performance.now()));
+      });
+    },
+  };
+}
+
 describe('SideNav focus management', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('keeps focus on the toggle when a group collapses', async () => {
     const user = userEvent.setup();
     render(
@@ -2437,6 +2467,7 @@ describe('SideNav focus management', () => {
   });
 
   it('returns focus to the trigger when the collapsed submenu closes', async () => {
+    const frames = holdAnimationFrames();
     const user = userEvent.setup();
     renderCollapsed(
       <SideNavItem label="Settings" icon={StubIcon} data-testid="parent">
@@ -2447,10 +2478,33 @@ describe('SideNav focus management', () => {
     const trigger = screen.getByTestId('parent');
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // The submenu focuses its first link in the frame after it opens.
+    frames.flush();
+    expect(screen.getByText('General').closest('a')).toHaveFocus();
 
+    // Closing restores focus as part of the close itself.
     await user.keyboard('{Escape}');
-    // The layer restores focus asynchronously after it closes.
-    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps focus on the trigger when the submenu closes before its first frame', async () => {
+    const frames = holdAnimationFrames();
+    const user = userEvent.setup();
+    renderCollapsed(
+      <SideNavItem label="Settings" icon={StubIcon} data-testid="parent">
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+
+    const trigger = screen.getByTestId('parent');
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // The open's auto-focus frame, late on a busy runner, must not land
+    // focus in the closed submenu.
+    frames.flush();
+    expect(trigger).toHaveFocus();
   });
 });
 

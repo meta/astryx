@@ -82,6 +82,12 @@ import type {
   CommentUser,
 } from './types';
 
+// The page's shared live regions are not the component's error Banner.
+const errorBanner = () =>
+  screen
+    .queryAllByRole('alert')
+    .find(element => !element.hasAttribute('data-astryx-live-region'));
+
 const VIEWER: CommentUser = {id: 'avery', name: 'Avery Kim'};
 const OTHER: CommentUser = {id: 'maya', name: 'Maya Chen'};
 const AGENT: CommentUser = {
@@ -900,12 +906,12 @@ describe('Comments threads', () => {
       }),
     );
     await flush();
-    const banner = screen.getByRole('alert');
+    const banner = errorBanner()!;
     expect(banner.textContent).toContain("Your reaction couldn't be saved.");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();
     expect(onReact).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(errorBanner()).toBeUndefined();
   });
 
   it('copies a link to the comment', async () => {
@@ -999,7 +1005,7 @@ describe('Comments threads', () => {
         />
       </Sized>,
     );
-    const banner = screen.getByRole('alert');
+    const banner = errorBanner()!;
     expect(banner.textContent).toContain("Couldn't post this comment.");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();
@@ -1022,7 +1028,7 @@ describe('Comments threads', () => {
     );
     await click(screen.getByRole('button', {name: 'Load earlier comments'}));
     await flush();
-    const banner = screen.getByRole('alert');
+    const banner = errorBanner()!;
     expect(banner.textContent).toContain("Earlier comments couldn't load");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();

@@ -40,9 +40,6 @@
  * the row. The list keeps this level's own roving focus, typeahead and press
  * model, so nothing beside the row needs to know.
  *
- * Prior art: legacy internal XDS `XDSDropdownSubMenuItem` (APG menubar-
- * navigation submenu). This re-expresses the same contract on Astryx primitives.
- *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenuSubMenu.doc.mjs
  * - /packages/core/src/DropdownMenu/DropdownMenuSubMenu.test.tsx
@@ -347,7 +344,7 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
   isDisabled?: boolean;
   /**
    * Show a spinner in place of the caret, e.g. while a lazy submenu's children
-   * are loading. Ported from the legacy `hasSpinner` async-submenu affordance.
+   * are loading.
    * @default false
    */
   hasSpinner?: boolean;
@@ -364,7 +361,7 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
    * box; `adaptive` drills in when a finger opened the menu — a
    * `(pointer: coarse)` device, decided when the menu opened — and flies out
    * otherwise. Drill-in needs a `DropdownMenu` or `ContextMenu` root.
-   *  'adaptive'
+   * @default 'adaptive'
    */
   presentation?: DropdownMenuSubMenuPresentation;
   /**
@@ -386,7 +383,10 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
   footer?: ReactNode;
   /** Test id for the trigger row. */
   'data-testid'?: string;
-  /** Test id for the flyout menu. */
+  /**
+   * Test id for the sub-menu's own `role="menu"` element: the flyout, or the
+   * drilled-in list on a phone.
+   */
   menuDataTestId?: string;
   /**
    * Ref forwarded to the trigger row — the element carrying `role="menuitem"`
