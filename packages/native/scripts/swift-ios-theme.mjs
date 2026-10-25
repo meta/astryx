@@ -684,8 +684,22 @@ ${structs}
 `;
 }
 
+/**
+ * SwiftUI's own color for `RRGGBBAA` in a color space (`sRGB`), each 8-bit
+ * channel written as `0`, `1`, or the exact decimal of its step over 255
+ * (G7). A decimal literal, not `n / 255`, keeps Swift's type checker fast on
+ * a theme's hundreds of colors.
+ */
+function swiftColor(space, hex) {
+  const [r, g, b, a] = hex
+    .match(/../g)
+    .map(h => parseInt(h, 16))
+    .map(n => (n === 0 ? '0' : n === 255 ? '1' : String(n / 255)));
+  return `Color(.${space}, red: ${r}, green: ${g}, blue: ${b}, opacity: ${a})`;
+}
+
 function swiftValue(type, value) {
-  if (type === 'Color') return `Color(astryxRGBA: 0x${value.slice(1)})`;
+  if (type === 'Color') return swiftColor('sRGB', value.slice(1));
   if (type === '[String]')
     return `[${value.map(v => JSON.stringify(v)).join(', ')}]`;
   if (type === '[ShadowLayer]')

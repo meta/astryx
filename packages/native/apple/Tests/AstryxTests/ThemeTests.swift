@@ -29,14 +29,8 @@ import Testing
   #expect(style.color("color-missing") == .clear)
 }
 
-@Test func rgbaColorsRead() {
-  #expect(Color(astryxRGBA: 0x0064E0FF) == Color(.sRGB, red: 0, green: 100 / 255, blue: 224 / 255, opacity: 1))
-}
-
-@Test func hexColorsRead() {
-  #expect(Color(astryxHex: "#0064E0FF") == Color(.sRGB, red: 0, green: 100 / 255, blue: 224 / 255, opacity: 1))
-  #expect(Color(astryxHex: "#FFF") == Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 1))
-  #expect(Color(astryxHex: "not a color") == .clear)
+@Test func generatedColorsAreSwiftUISRGBColors() {
+  #expect(Theme.default.light.color.accent == Color(.sRGB, red: 0, green: 100 / 255, blue: 224 / 255, opacity: 1))
 }
 
 @Test func textScaleFollowsDynamicType() {
