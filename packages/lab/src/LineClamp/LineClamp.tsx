@@ -72,13 +72,25 @@ const ORIGINAL_STATE = new WeakMap<
 
 /** Remove a clipped descendant from the tab order, capturing its prior state once. */
 function hideFromTabOrder(el: HTMLElement) {
-  // Already hidden and still inert: writing again would only emit mutation
-  // records that wake the observer below for no change.
-  if (
-    el.hasAttribute('data-line-clamp-hidden') &&
-    el.getAttribute('tabindex') === '-1'
-  ) {
-    return;
+  if (el.hasAttribute('data-line-clamp-hidden')) {
+    const original = ORIGINAL_STATE.get(el);
+    const tabIndex = el.getAttribute('tabindex');
+    const ariaHidden = el.getAttribute('aria-hidden');
+    // Still inert: writing again would only emit mutation records that wake
+    // the observer below for no change.
+    if (tabIndex === '-1' && ariaHidden === 'true') {
+      return;
+    }
+    // The caller changed it while it was clipped. What it set is the state to
+    // restore later, not what was captured before.
+    if (original) {
+      if (tabIndex !== '-1') {
+        original.tabIndex = tabIndex;
+      }
+      if (ariaHidden !== 'true') {
+        original.ariaHidden = ariaHidden;
+      }
+    }
   }
   if (!ORIGINAL_STATE.has(el)) {
     ORIGINAL_STATE.set(el, {
@@ -125,7 +137,11 @@ function syncFocusableClipping(container: HTMLElement) {
     `${FOCUSABLE_SELECTOR}, [data-line-clamp-hidden]`,
   );
   for (const el of candidates) {
-    const isClipped = el.getBoundingClientRect().top >= containerBottom;
+    // Never take the element that holds focus out of the tab order: focus
+    // would be lost from under the reader.
+    const isFocused = el.contains(document.activeElement);
+    const isClipped =
+      !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
       hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
@@ -148,8 +164,9 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
    */
   maxLines: number;
   /**
-   * Show a tooltip with the full text content on hover when clamped. The
-   * root is not focusable, so it is not shown on keyboard focus.
+   * Show a tooltip with the full text content on hover or keyboard focus when
+   * clamped. A clamped root is focusable so the tooltip can be reached without a
+   * pointer.
    * - `true` (default): show tooltip at default position
    * - `false`: disable tooltip
    * - Position value: show tooltip at specific position
@@ -275,6 +292,10 @@ export function LineClamp({
           className,
           {...style, WebkitLineClamp: maxLines},
         )}
+        // A truncated clamp is a tab stop so keyboard users can reveal the
+        // full text through the tooltip, which opens on focus. A caller's own
+        // `tabIndex` wins.
+        tabIndex={tooltipEnabled ? 0 : undefined}
         {...props}>
         {children}
       </Component>

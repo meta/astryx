@@ -11,7 +11,13 @@
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {useState} from 'react';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import {LineClamp} from './LineClamp';
 
 // jsdom has no layout engine, so content never actually overflows and
@@ -242,6 +248,122 @@ describe('LineClamp', () => {
       await waitFor(() => {
         expect(late).toHaveAttribute('tabindex', '-1');
       });
+    });
+
+    it("keeps a caller's new tabIndex as the one to restore while clipped", () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const props = {maxLines: 2, 'data-testid': 'clamp', hasTooltip: false};
+      const {rerender} = render(
+        <LineClamp {...props}>
+          <a href="/more" tabIndex={3}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(
+        <LineClamp {...props}>
+          <a href="/more" tabIndex={3}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      expect(link).toHaveAttribute('tabindex', '-1');
+
+      // The caller changes its tabIndex while the link is clipped.
+      rerender(
+        <LineClamp {...props}>
+          <a href="/more" tabIndex={5}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(
+        <LineClamp {...props} maxLines={3}>
+          <a href="/more" tabIndex={5}>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      expect(link).toHaveAttribute('tabindex', '5');
+    });
+
+    it('never hides the element that holds focus', () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const {rerender} = render(
+        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      const link = screen.getByText('Read more');
+      link.focus();
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(
+        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      expect(link).toHaveFocus();
+      expect(link).not.toHaveAttribute('tabindex');
+    });
+  });
+
+  describe('keyboard access to the full text', () => {
+    function mockOverflow() {
+      vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(
+        100,
+      );
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(
+        20,
+      );
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('makes a truncated clamp a tab stop, and leaves a fitting one alone', async () => {
+      mockOverflow();
+      render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Long text
+        </LineClamp>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('clamp')).toHaveAttribute('tabindex', '0');
+      });
+      cleanup();
+      vi.restoreAllMocks();
+      render(
+        <LineClamp maxLines={2} data-testid="clamp">
+          Short
+        </LineClamp>,
+      );
+      expect(screen.getByTestId('clamp')).not.toHaveAttribute('tabindex');
+    });
+
+    it("lets a caller's tabIndex win and skips the stop when the tooltip is off", async () => {
+      mockOverflow();
+      render(
+        <>
+          <LineClamp maxLines={2} data-testid="own" tabIndex={-1}>
+            Long text
+          </LineClamp>
+          <LineClamp maxLines={2} data-testid="off" hasTooltip={false}>
+            Long text
+          </LineClamp>
+        </>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('own')).toHaveAttribute('tabindex', '-1');
+      });
+      expect(screen.getByTestId('off')).not.toHaveAttribute('tabindex');
     });
   });
 });
