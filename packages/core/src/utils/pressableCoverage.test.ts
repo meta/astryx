@@ -15,7 +15,10 @@
  * holds it equal to the marked set:
  *
  *  - A file paints a press when its StyleX carries an `':active` key, a
- *    `[data-astryx-press` arm, or composes `interactionOverlayStyles`.
+ *    `[data-astryx-press` arm, or composes `interactionOverlayStyles`, or
+ *    when its script follows the pressed state the controller writes
+ *    (`getAttribute(PRESSED_ATTRIBUTE)`: a compositor animation driven by
+ *    the press, as ContextMenu's growth).
  *  - A file is marked when it calls `usePressFeedback(`.
  *  - A file whose press arms are read off an ancestor scope marker
  *    (`stylex.when.ancestor(':active', someScope)`, the way an indicator
@@ -63,7 +66,8 @@ const source = new Map(
   files.map(file => [path.relative(SRC, file), fs.readFileSync(file, 'utf8')]),
 );
 
-const PRESS_ARM = /':active|'\[data-astryx-press=|interactionOverlayStyles\./;
+const PRESS_ARM =
+  /':active|'\[data-astryx-press=|interactionOverlayStyles\.|getAttribute\(PRESSED_ATTRIBUTE\)/;
 const ANCESTOR_ARM =
   /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*\)/g;
 

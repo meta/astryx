@@ -36,8 +36,9 @@
  * `@measure` task that will confirm or replace them. uikit.test.ts enforces
  * both.
  *
- * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md and
- * /packages/core/src/ContextMenu/contextMenuPressCurve.ts
+ * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md,
+ * /packages/core/src/ContextMenu/contextMenuPressCurve.ts and
+ * /packages/core/src/ContextMenu/contextMenuPress.ts
  */
 
 import {registerMotionTable} from '../roles';

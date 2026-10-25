@@ -48,6 +48,12 @@ export const docs = {
         'Movement past this distance on either axis cancels the press, treating it as a scroll or drag.',
       default: '10',
     },
+    {
+      name: 'options.stages',
+      type: 'ReadonlyArray<{delayMs: number; onStage: (point: {x: number; y: number}) => void}>',
+      description:
+        'Later stages of the same hold, in order: each fires once the finger has stayed delayMs from the start, still within moveCancelPx, after the long press itself.',
+    },
   ],
   returns: [
     {
@@ -95,6 +101,8 @@ export const docsDense = {
     'options.delayMs': 'hold duration before firing, ms.',
     'options.moveCancelPx':
       'movement past this (px, either axis) cancels as scroll / drag.',
+    'options.stages':
+      'later stages of the same hold: each fires at its delayMs from the start while the finger stays near it.',
   },
   returnDescriptions: {
     handlers:
