@@ -129,11 +129,12 @@ export const timing = {
    */
   implicitAnimationMs: 250,
   /**
-   * Reduce Motion with Prefer Cross-Fade Transitions: a navigation push or pop
-   * becomes a cross-fade of this length on `curves.easeInOut` (the new view
-   * fades in while the old one fades out, with no travel), in ms. Sheets,
-   * full-screen modals and alerts fade on their own presentation spring
-   * instead.
+   * The Reduced Motion cross-fade, in ms, on `curves.easeInOut`: under
+   * Reduce Motion an entrance, exit, presentation switch or state change
+   * becomes an opacity-only cross-fade of this length on a coarse pointer
+   * (design:reduced-motion DR2 caps it at 200 ms; UIKit's own navigation
+   * cross-fade, measured below, runs 0.5 s). Not a theme role: no theme
+   * lengthens it (DR4).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
    *   (the setting)
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
@@ -141,7 +142,7 @@ export const timing = {
    *   Cross-Fade Transitions on (opacity CABasicAnimation 0.5 s,
    *   (0.42, 0, 0.58, 1)), Oct 23 2026
    */
-  reducedMotionCrossFadeMs: 500,
+  reducedMotionCrossFadeMs: 200,
 } as const;
 
 /**
