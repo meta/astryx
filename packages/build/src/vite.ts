@@ -8,6 +8,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -391,44 +392,6 @@ function renderSplitLayers(
   ]
     .filter(Boolean)
     .join('\n\n');
-}
-
-/**
- * The StyleX-generated custom properties `css` reads that it never declares.
- *
- * StyleX names the variables it generates `--<prefix><hash>` (a theme
- * variable, or a constant waiting for its value). One that is read but never
- * declared is a value that compiled to a variable nothing sets, so browsers
- * drop the declaration or take its fallback: a constant whose defining module
- * never reached the build, or a plain export read from a `.stylex.ts` file as
- * if it were a token. The dynamic-style variables StyleX sets inline
- * (`--<prefix>-<property>`) and component variables with a dash after the
- * prefix are not generated names and are never reported.
- *
- * SYNC: scripts/build-css.mjs `undefinedStyleXVariables` is the same check
- * for the prebuilt package stylesheets.
- */
-export function undefinedGeneratedVariables(
-  css: string,
-  prefixes: readonly string[],
-): string[] {
-  const names = prefixes
-    .map(prefix => prefix.replace(/[^a-zA-Z0-9_-]/g, ''))
-    .filter(Boolean)
-    .join('|');
-  const declared = new Set(
-    [...css.matchAll(new RegExp(`(--(?:${names})[a-z0-9]+)\\s*:`, 'g'))].map(
-      match => match[1],
-    ),
-  );
-  const read = new Set(
-    [
-      ...css.matchAll(
-        new RegExp(`var\\(\\s*(--(?:${names})[a-z0-9]+)\\s*[,)]`, 'g'),
-      ),
-    ].map(match => match[1]),
-  );
-  return [...read].filter(name => !declared.has(name)).sort();
 }
 
 /** A `defineConsts` value as StyleX collects it: a rule with `constKey`/`constVal`. */
