@@ -8,7 +8,7 @@
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
  *   core: not exported from the package entry point
  *
- * THE table (law P1): every spring, duration, deceleration rate, rubber-band
+ * THE table (`spec:AST-094` FR1, FR2): every spring, duration, deceleration rate, rubber-band
  * constant, timing curve and gesture threshold a touch presentation uses
  * comes from here, with its source next to it. Components never carry their
  * own numbers.

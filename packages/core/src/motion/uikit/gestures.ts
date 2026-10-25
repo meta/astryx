@@ -18,8 +18,9 @@
  * that will confirm or replace them (MEASUREMENTS.md lists them all).
  * uikit.test.ts enforces both. Only the value and its unit ship: where a
  * number comes from stays in its JSDoc, out of the bundle. The press clocks
- * are the same entries as `scroll.delaysContentTouchesMs` and
- * `timing.press`, read from there. Safari on iOS runs UIKit's own
+ * are the same entries as `DELAYS_CONTENT_TOUCHES_MS` (`scroll.delaysContentTouchesMs`)
+ * and `press` (`timing.press`), imported by name so reading one threshold
+ * does not bundle the scroll and timing tables. Safari on iOS runs UIKit's own
  * recognizers for tap-to-click, long press, double tap and the start of a
  * page scroll, so many guesses can be settled by measuring Safari itself.
  *
@@ -37,8 +38,8 @@
  * SYNC: When modified, update packages/core/src/motion/uikit/gestures.test.ts.
  */
 
-import {scroll} from './scroll';
-import {timing} from './timing';
+import {DELAYS_CONTENT_TOUCHES_MS} from './scroll';
+import {press} from './timing';
 
 export type GestureConstantUnit =
   'px' | 'ms' | 'px/s' | 'rad' | 'ratio' | 'count';
@@ -204,14 +205,14 @@ export const UIKIT_GESTURES = {
      * @source measured: Settings and Contacts, iOS 26.2 simulator, HID touches
      *   filmed at 60 fps (utils/pressGesture.ts), Oct 6 2026
      */
-    contentTouchDelay: {value: scroll.delaysContentTouchesMs, unit: 'ms'},
+    contentTouchDelay: {value: DELAYS_CONTENT_TOUCHES_MS, unit: 'ms'},
     /**
      * A tap shorter than the delay shows the highlight at the lift for this
      * long.
      * @source measured: Settings and Contacts, iOS 26.2 simulator, HID touches
      *   filmed at 60 fps (utils/pressGesture.ts), Oct 6 2026
      */
-    quickTapFlash: {value: timing.press.flashMs, unit: 'ms'},
+    quickTapFlash: {value: press.flashMs, unit: 'ms'},
     /**
      * Travel at which a press is a scroll, not a press.
      * @source measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag
@@ -226,7 +227,7 @@ export const UIKIT_GESTURES = {
      * @source measured: Settings and Contacts, iOS 26.2 simulator, HID touches
      *   filmed at 60 fps (utils/pressGesture.ts), Oct 6 2026
      */
-    scrollBrake: {value: timing.press.scrollBrakeMs, unit: 'ms'},
+    scrollBrake: {value: press.scrollBrakeMs, unit: 'ms'},
     /**
      * How long after a finger was down a scroll can still be that finger's
      * momentum (the brake only counts scrolls a finger drove).
@@ -235,20 +236,6 @@ export const UIKIT_GESTURES = {
      * @measure M-G19
      */
     momentumMemory: {value: 3000, unit: 'ms'},
-  },
-  scroll: {
-    /**
-     * Travel past the point where a native scroll ran out of content before
-     * an opt-in `scrollHandoff` pan takes the rest of the gesture. UIKit
-     * itself never hands a drag over mid-gesture (a sheet over a scrolled
-     * list leaves the whole drag to the list), so this is not a parity value.
-     * @source GUESS — The BottomSheet value (useSheetGestures.ts): enough to
-     *   ignore a fling coming to rest on the last pixel. None for parity: UIKit
-     *   decides sheet versus scroll when the drag begins (a sheet over a
-     *   scrolled list leaves the whole drag to the list).
-     * @measure M-G13
-     */
-    contentEndHandoffSlop: {value: 4, unit: 'px'},
   },
   velocity: {
     /**
@@ -264,29 +251,6 @@ export const UIKIT_GESTURES = {
      *   pt/s
      */
     currentWeight: {value: 0.2, unit: 'ratio'},
-    /**
-     * For the least-squares alternative: samples older than this are ignored.
-     * @source GUESS — Android's VelocityTracker and Flutter's fit the last 100
-     *   ms (least squares, degree 2); UIKit itself uses currentWeight. Not a
-     *   parity value: UIKit uses the two-event filter.
-     * @measure M-G14
-     */
-    horizon: {value: 100, unit: 'ms'},
-    /**
-     * For the least-squares alternative: at most this many samples.
-     * @source GUESS — Android VelocityTracker and Flutter VelocityTracker keep
-     *   20. Not a parity value: UIKit uses the two-event filter.
-     * @measure M-G15
-     */
-    maxSamples: {value: 20, unit: 'count'},
-    /**
-     * For the least-squares alternative: a gap this long between samples
-     * separates two motions.
-     * @source GUESS — Android VelocityTracker and Flutter VelocityTracker use
-     *   40 ms. Not a parity value: UIKit uses the two-event filter.
-     * @measure M-G16
-     */
-    assumeStopped: {value: 40, unit: 'ms'},
   },
   click: {
     /**

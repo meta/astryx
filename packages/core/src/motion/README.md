@@ -4,7 +4,9 @@ Internal motion foundation for the touch presentations of core components. It
 starts with the UIKit constants table: every spring, duration, deceleration
 rate, rubber-band constant, curve and gesture threshold a touch presentation
 uses, each with its source. Nothing here is exported from the package entry
-point; components import it by path.
+point. Core's motion and gesture modules read it by path; components take
+touch motion from the theme's motion roles (`spec:AST-094` FR4), not from
+this table.
 
 ## Files
 

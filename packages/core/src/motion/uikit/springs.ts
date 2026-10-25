@@ -6,7 +6,7 @@
  * @output Exports `springs`, every UIKit / SwiftUI interaction spring the
  *   touch presentations use, each in the vocabulary of its source
  *   (SpringDescription: duration/bounce, response/dampingRatio or
- *   mass/stiffness/damping; `toSpring` normalizes)
+ *   mass/stiffness/damping; a reader normalizes them to one form)
  * @position The springs domain of the UIKit constants table (motion/uikit)
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
@@ -101,7 +101,7 @@ export const springs = {
    * UIKit's default spring, `UISpringTimingParameters()`: Apple documents
    * its damping ratio as 4.56, which is exactly 500 ÷ (2·√(3·1000)).
    * Overdamped on paper; Core Animation treats overdamping as critical
-   * unless told otherwise, which `toSpring` mirrors: in effect a critically
+   * unless told otherwise, so in effect it is a critically
    * damped spring with ω₀ = 18.26 rad/s (response 0.344 s) that settles in
    * 0.506 s. The keyboard does not use it (see `keyboard`).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uispringtimingparameters/init() (damping ratio 4.56)
@@ -263,7 +263,9 @@ export const springs = {
   contextMenuDismiss: MENU_CLOSE_SPRING,
   /**
    * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot.
+   * slower, no overshoot. A reference reading only: under reduced motion a
+   * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
+   * spring (`spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026

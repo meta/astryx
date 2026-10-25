@@ -3,7 +3,7 @@
 /**
  * @file uikit.test.ts
  * @input vitest, the UIKit constants table and its source text
- * @output Enforces law P2 on the table: every leaf has a source of an
+ * @output Enforces `spec:AST-094` FR2 on the table: every leaf has a source of an
  *   allowed kind, every guess and every WebKit value names its measurement
  *   task, every task is listed in motion/MEASUREMENTS.md, and no value ships
  *   its source; checks the plain values (ratios, rates, curves) and that the
@@ -59,8 +59,16 @@ interface Leaf {
 function leavesOf(file: string): Leaf[] {
   const text = fs.readFileSync(path.resolve(__dirname, file), 'utf8');
   const lines = text.split('\n');
-  const start = lines.findIndex(line => /^export const \w+ = \{$/.test(line));
-  expect(start).toBeGreaterThan(-1);
+  // Every exported table object: a domain may export a group of its own
+  // (the press clocks) so a reader takes that group alone.
+  const starts = lines.flatMap((line, index) =>
+    /^export const \w+ = \{$/.test(line) ? [index] : [],
+  );
+  expect(starts.length).toBeGreaterThan(0);
+  return starts.flatMap(start => leavesFrom(file, lines, start));
+}
+
+function leavesFrom(file: string, lines: string[], start: number): Leaf[] {
   const leaves: Leaf[] = [];
   let doc = '';
   let inDoc = false;
@@ -95,6 +103,12 @@ function leavesOf(file: string): Leaf[] {
     if (trimmed.startsWith('} as const')) {
       break;
     }
+    // A group exported on its own and read back by name (`press,`): its
+    // leaves are checked where it is declared.
+    if (/^\w+,$/.test(trimmed)) {
+      doc = '';
+      continue;
+    }
     const leaf = /^(\w+): .+,$/.exec(trimmed);
     expect(
       leaf,
@@ -114,7 +128,7 @@ const MEASUREMENTS = fs.readFileSync(
   'utf8',
 );
 
-describe('UIKit constants table: every value is sourced (law P2)', () => {
+describe('UIKit constants table: every value is sourced (AST-094 FR2)', () => {
   const leaves = TABLE_FILES.flatMap(leavesOf);
 
   it('finds the table entries', () => {
@@ -137,6 +151,20 @@ describe('UIKit constants table: every value is sourced (law P2)', () => {
         `${file} › ${key}: a source belongs in the JSDoc, not in the value`,
       ).toBe(false);
       expectSourced(key, doc);
+    });
+  }
+});
+
+describe('UIKit constants table: no source in a value', () => {
+  // Where a value comes from stays in its JSDoc, out of the bundle: no
+  // domain file writes a provenance key in code, at any depth.
+  for (const file of TABLE_FILES) {
+    it(file, () => {
+      const code = fs
+        .readFileSync(path.resolve(__dirname, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
+      expect(code).not.toMatch(/\b(source|guess|measure)\s*:/);
     });
   }
 });
