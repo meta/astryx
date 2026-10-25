@@ -83,12 +83,12 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
 import {useLongPress} from '../hooks/useLongPress';
+import {pressableProps} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {readPresentation, usePresentation} from '../utils/presentation';
 import {useCompactDefinition} from '../utils/touchPresentation';
-import {usePressFeedback} from '../hooks/usePressFeedback';
 import {ContextMenuTouchLayer} from './lazyContextMenuTouchLayer';
 import type {ContextMenuTouchHandle} from './ContextMenuTouchLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -124,10 +124,15 @@ const styles = stylex.create({
   // Trigger wrapper. `position: relative` establishes the containing block
   // for the absolutely positioned cursor anchor below, so the anchor point
   // tracks the trigger (and scrolls with it) instead of the page. The iOS
-  // callout and selection lock, so a long press opens our menu instead of the
-  // native UI, comes from the gesture host while its recognizer is attached.
+  // callout and text selection stay off, as they always have, so a long press
+  // or a right-click opens our menu instead of selecting the trigger's text
+  // (spec:AST-017 FR59); the gesture host adds its own lock while its
+  // recognizer is attached.
   trigger: {
     position: 'relative',
+    WebkitTouchCallout: 'none',
+    WebkitUserSelect: 'none',
+    userSelect: 'none',
   },
   // 1px anchor placed at the cursor point within the trigger. The menu is
   // anchored to this element, so it sits under the cursor yet is positioned
@@ -391,16 +396,17 @@ export function ContextMenu({
 
   // Whether a finger opened the menu that is up (touch invocation, below).
   const [isTouchOpen, setIsTouchOpen] = useState(false);
-  // The trigger is a pressable surface of core's one press machine
-  // (utils/pressFeedback.ts) under the touch model; the touch layer's press
-  // feedback follows that machine's pressed state.
-  const pressable = usePressFeedback();
   // The mounted touch layer (loaded on demand), for its press feedback and
   // whether it is timing a finger.
   const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
+  // Whether the touch layer has attached. Until it has (its module is still
+  // loading), a finger keeps today's 500 ms long press, so a hold that lands
+  // first still opens the menu.
+  const [isTouchLayerReady, setIsTouchLayerReady] = useState(false);
   const setTouchHandle = useCallback(
     (handle: ContextMenuTouchHandle | null) => {
       touchHandleRef.current = handle;
+      setIsTouchLayerReady(handle != null);
     },
     [],
   );
@@ -754,7 +760,7 @@ export function ContextMenu({
     onTouchEnd: handleLongPressTouchEnd,
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
-    disabled: isDisabled || touchModes,
+    disabled: isDisabled || (touchModes && isTouchLayerReady),
     onLongPress: useCallback(
       (point: {x: number; y: number}) => {
         const rect = getAnchorBaseRect();
@@ -930,7 +936,10 @@ export function ContextMenu({
       <TriggerElement
         ref={useMergedRefs(ref, triggerRef)}
         {...triggerProps}
-        {...(touchModes ? pressable : null)}
+        // Under the touch model the trigger is a pressable surface of core's
+        // one press machine (utils/pressFeedback.ts); the touch layer installs
+        // the machine and its press feedback follows the pressed state.
+        {...(touchModes ? pressableProps : null)}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
         onTouchMove={handleTriggerTouchMove}

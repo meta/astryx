@@ -12,7 +12,10 @@
  * The touch layer (the gesture foundation, the press recognizer and the press
  * feedback's animator) only runs under the touch model. Loading it on demand
  * keeps it out of pages whose context menus only open from a mouse or a
- * keyboard (architecture:component-style-authoring INV6).
+ * keyboard (architecture:component-style-authoring INV6). Under a coarse
+ * primary pointer, where the touch model applies, the load starts with this
+ * module, so the layer is usually ready before the first finger lands; until
+ * it attaches, ContextMenu keeps today's 500 ms long press.
  */
 
 import {
@@ -22,6 +25,7 @@ import {
   type ComponentProps,
   type ReactElement,
 } from 'react';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
 import type * as TouchLayerModule from './ContextMenuTouchLayer';
 
 let touchLayerModule: typeof TouchLayerModule | null = null;
@@ -36,6 +40,14 @@ export async function loadContextMenuTouchLayer(): Promise<
     return module;
   });
   return touchLayerLoad;
+}
+
+if (
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(TOUCH_QUERY).matches
+) {
+  void loadContextMenuTouchLayer();
 }
 
 const LazyContextMenuTouchLayer = lazy(async () =>
