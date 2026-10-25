@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatTokenizedText
 
 /**
  * @file ChatTokenizedText.a11y.chromium.spec.ts
