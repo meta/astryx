@@ -79,16 +79,12 @@ export function reducedMotionFade(
   options: {
     /** The change starts from the release of a touch drag (DR3). */
     touchRelease?: boolean;
-    prefersReducedMotion?: () => boolean;
-    isCoarsePointer?: () => boolean;
   } = {},
 ): ReducedMotionFade | null {
-  if (!(options.prefersReducedMotion ?? defaultPrefersReducedMotion)()) {
+  if (!defaultPrefersReducedMotion()) {
     return null;
   }
-  const fades =
-    options.touchRelease === true ||
-    (options.isCoarsePointer ?? defaultIsCoarsePointer)();
+  const fades = options.touchRelease === true || defaultIsCoarsePointer();
   if (!fades) {
     return {duration: 0, easing: 'linear'};
   }

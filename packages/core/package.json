@@ -61,16 +61,6 @@
       "types": "./dist/naming.d.ts",
       "default": "./dist/naming.js"
     },
-    "./motion/experimental": {
-      "source": "./src/motion/experimental.ts",
-      "types": "./dist/motion/experimental.d.ts",
-      "default": "./dist/motion/experimental.js"
-    },
-    "./gestures/experimental": {
-      "source": "./src/gestures/experimental.ts",
-      "types": "./dist/gestures/experimental.d.ts",
-      "default": "./dist/gestures/experimental.js"
-    },
     "./theme/tokens": {
       "source": "./src/theme/tokens.ts",
       "types": "./dist/theme/tokens.d.ts",
@@ -170,11 +160,6 @@
       "source": "./src/utils/interactionOverlay.stylex.ts",
       "types": "./dist/utils/interactionOverlay.stylex.d.ts",
       "default": "./dist/utils/interactionOverlay.stylex.js"
-    },
-    "./motion/reducedMotion.stylex": {
-      "source": "./src/motion/reducedMotion.stylex.ts",
-      "types": "./dist/motion/reducedMotion.stylex.d.ts",
-      "default": "./dist/motion/reducedMotion.stylex.js"
     },
     "./docs.mjs": "./docs.mjs",
     "./groups.doc.mjs": "./groups.doc.mjs",

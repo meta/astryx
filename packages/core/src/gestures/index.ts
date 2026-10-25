@@ -4,8 +4,8 @@
  * @file index.ts
  * @input The modules of packages/core/src/gestures
  * @output Re-exports the gesture system for core's own components
- * @position Core's own barrel. NOT re-exported from the package entry;
- *   experimental.ts is the experimental subpath's public surface.
+ * @position Core's own barrel. Not exported from the package; Lab imports it
+ *   through internal workspace imports.
  */
 
 export {GestureArena, browserClock} from './GestureArena';

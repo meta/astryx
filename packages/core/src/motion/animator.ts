@@ -115,8 +115,15 @@
  *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
- * the fade's length is not a theme role. Decays keep their motion: they
- * follow a finger's throw.
+ * the fade's length is not a theme role.
+ *
+ * Momentum under Reduce Motion: a decay only ever continues the velocity a
+ * finger handed it on release (UIScrollView's coast after a flick, with its
+ * bounce at an edge), so it keeps its motion, as a native scroll view's
+ * momentum does under Reduce Motion: the content keeps moving with the
+ * finger's own throw rather than playing a transition the component chose.
+ * A spring a component starts on release toward a target it picks (a detent,
+ * a page) is a transition, and cross-fades (DR2).
  *
  * Theme: a spring or curve from a motion table (`springs.sheetPresent`,
  * `scroll.bounce`, the Reduce Motion fade's duration and curve) plays the
@@ -252,14 +259,6 @@ export interface AnimatorOptions {
   initial?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
   now?: () => number;
-  /** The Reduced Motion preference; `prefers-reduced-motion` by default. */
-  prefersReducedMotion?: () => boolean;
-  /**
-   * Whether the primary pointer is coarse; `(pointer: coarse)` by default.
-   * Under Reduced Motion a coarse pointer cross-fades and any other completes
-   * at once.
-   */
-  isCoarsePointer?: () => boolean;
   /**
    * Runs a callback in the next animation frame; `requestAnimationFrame` by
    * default. A call from rest reads the start the browser gave it there.
@@ -721,9 +720,10 @@ export function createAnimator(
         }
       : null);
   const pseudoElement = options.pseudoElement;
-  const prefersReducedMotion =
-    options.prefersReducedMotion ?? defaultPrefersReducedMotion;
-  const isCoarsePointer = options.isCoarsePointer ?? defaultIsCoarsePointer;
+  // Reduced Motion reads the person's settings and nothing else: no option
+  // overrides them (design:reduced-motion DR4).
+  const prefersReducedMotion = defaultPrefersReducedMotion;
+  const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,
     ...expand(options.initial ?? {}),

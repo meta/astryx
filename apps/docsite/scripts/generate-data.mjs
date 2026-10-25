@@ -656,10 +656,6 @@ async function generateComponentRegistry() {
           const mod = await import(pathToFileURL(docFile).href);
           doc = mod.docs;
           if (!doc) continue;
-          // An experimental doc (spec:AST-017 FR27) gets no stable page or
-          // ShadCN item: docs use marked experimental routes, which this site
-          // does not have yet.
-          if (doc.stability === 'experimental') continue;
           recordDocExampleOrder(doc);
         } catch (err) {
           console.warn(

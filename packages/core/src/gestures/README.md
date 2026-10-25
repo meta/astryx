@@ -2,10 +2,8 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`. `@astryxdesign/core/gestures/experimental` exports the hooks,
-recognizers and helpers its file lists, outside the stable compatibility
-promise (`spec:AST-017` FR21); nothing here is exported from the package
-entry.
+`../gestures`, and Lab through internal workspace imports; nothing here is
+exported from the package.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each

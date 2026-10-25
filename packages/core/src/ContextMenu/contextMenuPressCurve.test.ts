@@ -14,7 +14,10 @@
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {solveSpring, toSpring} from '../motion/spring';
-import {contextMenu, registerContextMenuTable} from '../motion/uikit';
+import {
+  contextMenu,
+  registerContextMenuTable,
+} from '../motion/uikit/contextMenu';
 import {
   PRESS_FEEDBACK_START_MS,
   pressFeedbackCurve,

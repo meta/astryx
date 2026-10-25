@@ -36,7 +36,7 @@ import {
   type SpringRampCurve,
 } from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
-import {contextMenu} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 
 const {
   feedbackOnsetMs,

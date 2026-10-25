@@ -2,15 +2,18 @@
 
 /**
  * @file contextMenu.ts
- * @input Nothing; data only
+ * @input The motion role registry (registerContextMenuTable only)
  * @output Exports `contextMenu`: UIContextMenuInteraction's touch timeline
  *   (when the press feedback starts, when the long press commits, when the
  *   menu displays), how far the finger may drift, the press feedback's growth,
  *   spring and display latency, and the commit haptic's stand-in where only a
- *   vibration motor exists
+ *   vibration motor exists; and `registerContextMenuTable`, which makes its
+ *   visual values motion roles
  * @position The context-menu domain of the UIKit constants table
- *   (motion/uikit); its lift and dismissal springs are
- *   `springs.contextMenuLift` and `springs.contextMenuDismiss`
+ *   (motion/uikit), imported by ContextMenu's own modules and not re-exported
+ *   from the table's barrel, so only a page that animates a context menu
+ *   loads it; its lift and dismissal springs are `springs.contextMenuLift`
+ *   and `springs.contextMenuDismiss`
  *
  * A context menu is not a plain long press. On iOS 26.2 a finger resting on
  * the view starts a press feedback after 150 ms: a copy of the view grows
