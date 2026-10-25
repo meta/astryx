@@ -22,12 +22,13 @@
  *
  *   scroll(n) = s * pan(n) + (1 - s) * pan(n-1), s = `velocity.scrollReleaseWeight`.
  *
- * Only samples update it, with no timer: a resting contact that keeps
- * reporting brings it to 0 within two samples (three for a scroll view), and
- * a silent rest keeps the last motion's value, as UIKit's does. Times are the
+ * Samples update it: a resting contact that keeps reporting brings it to 0
+ * within two samples (three for a scroll view). Read at the lift, a contact
+ * still for longer than the stillness interval (`velocity.stillness`) reads
+ * 0 (FR2: a still finger never flicks), the one place it differs from iOS,
+ * whose blend keeps the last motion through a silent rest. Times are the
  * input events' own timestamps (FR4); thresholds stay with each component
- * (FR3). FR2's fixed window and stillness interval depart from UIKit, which
- * has neither: an open question on the spec.
+ * (FR3).
  *
  * SYNC: When modified, update VelocityTracker.test.ts.
  */
@@ -42,6 +43,7 @@ export interface VelocityTrackerOptions {
 
 const ZERO: Point = {x: 0, y: 0};
 const PAN_WEIGHT = UIKIT_GESTURES.velocity.currentWeight.value;
+const STILLNESS = UIKIT_GESTURES.velocity.stillness.value;
 const SCROLL_RELEASE_WEIGHT = UIKIT_GESTURES.velocity.scrollReleaseWeight.value;
 
 export class VelocityTracker {
@@ -104,8 +106,14 @@ export class VelocityTracker {
     return this.samples[this.samples.length - 1] ?? null;
   }
 
-  /** The velocity in px/s as a pan recognizer reports it: pan(n). */
-  velocity(): Point {
+  /**
+   * The velocity in px/s as a pan recognizer reports it: pan(n). `at`, the
+   * lift's event time, applies the stillness reset.
+   */
+  velocity(at?: number): Point {
+    if (this.isStill(at)) {
+      return ZERO;
+    }
     return panVelocity(this.samples, this.samples.length);
   }
 
@@ -114,7 +122,10 @@ export class VelocityTracker {
    * recognizer's last two values blended once more. With one interval so
    * far, the pan's value.
    */
-  scrollReleaseVelocity(): Point {
+  scrollReleaseVelocity(at?: number): Point {
+    if (this.isStill(at)) {
+      return ZERO;
+    }
     const end = this.samples.length;
     if (end < 3) {
       return panVelocity(this.samples, end);
@@ -124,6 +135,12 @@ export class VelocityTracker {
       panVelocity(this.samples, end - 1),
       SCROLL_RELEASE_WEIGHT,
     );
+  }
+
+  /** No sample for longer than the stillness interval before `at`. */
+  private isStill(at: number | undefined): boolean {
+    const newest = this.samples[this.samples.length - 1];
+    return at != null && newest != null && at - newest.time > STILLNESS;
   }
 }
 

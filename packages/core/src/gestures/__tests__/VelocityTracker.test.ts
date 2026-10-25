@@ -11,6 +11,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {VelocityTracker} from '../VelocityTracker';
 
 /** Feed `position(t)` sampled every `step` ms over [0, end]. */
@@ -167,12 +168,17 @@ describe('VelocityTracker', () => {
     expect(tracker.scrollReleaseVelocity().x).toBeCloseTo(1000, 6);
   });
 
-  it('keeps the last motion through a silent rest, as UIKit does', () => {
+  it('reads 0 at a lift after a still pause longer than the stillness interval, and keeps the motion for a shorter one', () => {
     const tracker = new VelocityTracker();
     trace(tracker, t => t * 2, 160);
-    // No event arrives while the finger rests: nothing changes the reading.
+    const still = UIKIT_GESTURES.velocity.stillness.value;
+    // No event arrives while the finger rests: the blend keeps the motion.
     expect(tracker.velocity().x).toBeCloseTo(2000, 6);
-    expect(tracker.scrollReleaseVelocity().x).toBeCloseTo(2000, 6);
+    expect(tracker.velocity(160 + still).x).toBeCloseTo(2000, 6);
+    expect(tracker.scrollReleaseVelocity(160 + still).x).toBeCloseTo(2000, 6);
+    // Past the interval, a still finger never flicks (spec:AST-100 FR2).
+    expect(tracker.velocity(160 + still + 1).x).toBe(0);
+    expect(tracker.scrollReleaseVelocity(160 + still + 1).x).toBe(0);
   });
 
   it('reaches 0 when a resting finger keeps reporting: two samples for a pan, three for a scroll view', () => {

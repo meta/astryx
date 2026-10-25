@@ -75,7 +75,7 @@ describe('PanGestureRecognizer', () => {
     expect(releaseVelocity.y).toBeCloseTo(0, 5);
   });
 
-  it('releases at 0 when a resting finger reports without moving, and keeps the speed through a silent rest', () => {
+  it('releases at 0 after a still pause or when a resting finger reports without moving, and at speed when it lifts moving', () => {
     const h = createHarness();
     const pan = new PanGestureRecognizer({name: 'pan'});
     let releaseVelocity = {x: -1, y: -1};
@@ -86,8 +86,14 @@ describe('PanGestureRecognizer', () => {
     });
     const finger = h.finger(1).down(0, 0, 0, {recognizers: [pan]});
     finger.drag(200, 0, 100, 10);
-    // A silent rest sends no events: the release keeps the speed, as UIKit's.
+    // Still for 100 ms before the lift, past the stillness interval: a
+    // still finger never flicks (spec:AST-100 FR2), where iOS would keep it.
     finger.up(200);
+    expect(releaseVelocity.x).toBe(0);
+    // Lifted while moving (within the interval): the drag's own speed.
+    const moving = h.finger(3).down(0, 0, 2000, {recognizers: [pan]});
+    moving.drag(200, 0, 100, 10);
+    moving.up(2120);
     expect(releaseVelocity.x).toBeCloseTo(2000, 6);
     expect(releaseVelocity.y).toBe(0);
     // A resting finger that reports without moving releases at 0.

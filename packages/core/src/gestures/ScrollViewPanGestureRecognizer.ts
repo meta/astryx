@@ -29,7 +29,10 @@ export type ScrollViewPanGestureRecognizerOptions = PanGestureRecognizerOptions;
 /** @experimental */
 export class ScrollViewPanGestureRecognizer extends PanGestureRecognizer {
   /** A scroll view's release: its pan's last two velocities, blended. */
-  protected override readVelocity(tracker: VelocityTracker): Point {
-    return tracker.scrollReleaseVelocity();
+  protected override readVelocity(
+    tracker: VelocityTracker,
+    at?: number,
+  ): Point {
+    return tracker.scrollReleaseVelocity(at);
   }
 }

@@ -40,7 +40,7 @@ describe('UIKIT_GESTURES', () => {
         expect('source' in constant).toBe(false);
       } else {
         expect(constant.source).toMatch(
-          /^(apple-docs https:\/\/developer\.apple\.com\/|wwdc \d{4}-\d+ |measured: )/,
+          /^(apple-docs https:\/\/developer\.apple\.com\/|wwdc \d{4}-\d+ |aosp frameworks\/|measured: )/,
         );
       }
     },

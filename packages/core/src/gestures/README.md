@@ -407,16 +407,17 @@ every gesture and every pointer (`spec:AST-100`), UIKit's own, measured:
   velocities blended once more, 0.25 times the newest plus 0.75 times the
   one before. It reproduces four recorded UIPickerView releases. Wheels,
   pickers, pagers and momentum carousels use it.
-- Neither has a timer. A finger at rest sends no events, so a release after
-  a silent pause reports the last moving value (a UIScrollView coasts after
-  it too); moves that report the same point bring a pan to 0 on the second
-  (a scroll view on the third). The lift updates nothing.
+- Moves that report the same point bring a pan to 0 on the second (a
+  scroll view on the third). A contact still for longer than the stillness
+  interval (`velocity.stillness`, 40 ms, Android's `ASSUME_POINTER_STOPPED_TIME`)
+  before lifting releases at 0: a still finger never flicks (`spec:AST-100`
+  FR2). That is the one place it differs from iOS, whose blend keeps the
+  last motion through a silent rest.
+  The lift itself adds no sample.
 - Times are the events' own. A finger the browser reports on both pointer
-  and touch events is sampled from its pointer events alone, so the two
-  copies of one move never both count.
-
-FR2's fixed window and stillness interval depart from UIKit, which has
-neither: proposed, pending owner review on the spec.
+  and touch events is sampled from its pointer events alone (from its touch
+  events once the browser cancels its pointer), so the two copies of one
+  move never both count.
 
 ## Haptics
 

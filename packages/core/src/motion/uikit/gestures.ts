@@ -342,6 +342,17 @@ export const UIKIT_GESTURES = {
       source:
         'measured: UIKit lab, iOS 26.2 simulator, HID swipes on a UIPickerView recorded by Oct 24 2026: scrollViewWillEndDragging velocity 933.4, 2114, 1016.2 and 543.6 px/s on 200 pt in 50, 100 and 200 ms and a 90 pt flick, reproduced to 0.03%; a UIScrollView coasts after a silent rest of up to 1 s as after none (Oct 24 2026)',
     },
+    /**
+     * A contact still for longer than this before lifting releases at 0
+     * (`spec:AST-100` FR2: a still finger never flicks). iOS has no such
+     * reset: its blend keeps the last motion through a silent rest.
+     */
+    stillness: {
+      value: 40,
+      unit: 'ms',
+      source:
+        'aosp frameworks/native/libs/input/VelocityTracker.cpp: ASSUME_POINTER_STOPPED_TIME is 40 ms; the AST-100 FR2 stillness reset (#8312) takes its value from Android, since iOS has no time cutoff',
+    },
     /** The tracker keeps at most this many samples (a bound on its buffer). */
     maxSamples: {
       value: 20,

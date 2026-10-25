@@ -41,6 +41,8 @@ export class PinchGestureRecognizer extends GestureRecognizer {
   private initialSpan = 0;
   private scaleValue = 1;
   private readonly tracker = new VelocityTracker();
+  /** The lift's event time, for the stillness reset. */
+  private liftTime: number | undefined;
   private lastTime = 0;
 
   constructor(options: PinchGestureRecognizerOptions = {}) {
@@ -68,7 +70,7 @@ export class PinchGestureRecognizer extends GestureRecognizer {
 
   /** Scale per second (UIKit's filter; measured for pans, assumed here). */
   get velocity(): number {
-    return this.tracker.velocity().x;
+    return this.tracker.velocity(this.liftTime).x;
   }
 
   /** The midpoint between the two fingers. */
@@ -126,11 +128,16 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     }
   }
 
-  protected override touchesEnded(): void {
+  protected override touchesEnded(
+    _touches: ReadonlyArray<GestureTouch>,
+    event: GestureEventContext,
+  ): void {
+    this.liftTime = event.time;
     this.setState(isActive(this.state) ? 'ended' : 'failed');
   }
 
   protected override reset(): void {
+    this.liftTime = undefined;
     this.initialSpan = 0;
     this.scaleValue = 1;
     this.tracker.reset();
