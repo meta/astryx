@@ -99,6 +99,9 @@ describe('motion roles', () => {
     expect(motionRoleIn(timing.press, 'flashMs')?.kind).toBe('duration');
     // The Reduced Motion fade is not a role: no theme lengthens it.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
+    // Nor is UIKit's menu spring under Reduce Motion: nothing springs under
+    // reduced motion (design:reduced-motion DR1).
+    expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
     expect(motionRoleIn(navigation, 'transitionMs')?.id).toBe(
       'navigation.transitionMs',
     );
