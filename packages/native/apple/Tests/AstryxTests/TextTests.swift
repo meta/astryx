@@ -36,12 +36,12 @@ import Testing
 @MainActor
 @Test func everyTypeReadsItsOwnTokens() {
   let font = Theme.default.light.font
-  #expect(font.style(.body) == TypeStyle(size: font.bodySize, weight: font.bodyWeight, families: font.familyBody))
-  #expect(font.style(.code)?.families == font.familyCode)
-  #expect(font.style(.code)?.size == font.codeSize)
-  #expect(font.style(.display1)?.size == font.display1Size)
-  #expect(font.style(.display2)?.families == font.familyHeading)
-  #expect(font.style(.display3)?.weight == font.display3Weight)
+  #expect(font.style(.body) == TypeStyle(font.body, families: font.family.body))
+  #expect(font.style(.code)?.families == font.family.code)
+  #expect(font.style(.code)?.size == font.code.size)
+  #expect(font.style(.display1)?.size == font.display1.size)
+  #expect(font.style(.display2)?.families == font.family.heading)
+  #expect(font.style(.display3)?.weight == font.display3.weight)
   #expect(font.style(.inherit) == nil)
 }
 
@@ -49,8 +49,8 @@ import Testing
 @Test func extraSmallIsSpelledAsCoreSpellsIt() {
   let font = Theme.default.light.font
   #expect(TextSize(rawValue: "xsm") == .xsm)
-  #expect(font.size(.xsm) == font.sizeXs)
-  #expect(font.size(.v4xl) == font.size4xl)
+  #expect(font.size.value(for: .xsm) == font.size.xs)
+  #expect(font.size.value(for: .v4xl) == font.size.s4xl)
 }
 
 @MainActor

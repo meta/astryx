@@ -503,6 +503,43 @@ src/Button/
 └── Button.test.tsx   # Tests live here
 ```
 
+### Where tests go, and how CI finds them
+
+CI collects tests by file name, never from a list of test files, so a new test
+needs no edit to `.github/workflows/`. Put the test where its kind is collected
+and CI picks it up:
+
+| Kind                                     | Put it                                                                                                             | Collected by                                                              | CI job                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Unit and integration (jsdom or Node)     | `*.test.ts(x)` / `*.test.mjs` beside the code, in a path the `ui` or `node` project of `vitest.config.ts` includes | the `ui` and `node` Vitest projects                                       | `test-ui`, `test-node` (sharded)                              |
+| Browser accessibility or engine behavior | `*.a11y.chromium.spec.ts` (Chromium) or `*.a11y.browser.spec.ts` (Chromium and WebKit) under `packages/*/src/`     | `pnpm test:a11y-contract`; pull requests run `pnpm test:a11y-contract:pr` | `pr-a11y`; every spec in the release check's `a11y-contracts` |
+| Visual regression                        | a Storybook story                                                                                                  | the visual plan                                                           | `pr-visual`                                                   |
+
+A browser spec runs on a pull request when the PR changes the spec, its
+component folder, or the component it is named after (`ChatSendButton.a11y.chromium.spec.ts`
+belongs to `core/ChatSendButton`). Routing lines in the spec's header comment
+change that, and the runner rejects any other value:
+
+```ts
+// @pr-a11y always                 every PR that changes components
+// @pr-a11y scope core/Selector ^apps/storybook/stories/ComboboxA11y
+//                                 also when one token matches: a component, or
+//                                 a regular expression over changed paths
+// @pr-a11y audit DateInput        only on a "[Component Audit] DateInput:" PR
+// @pr-a11y release-only           never on a PR; the release check runs it
+```
+
+`pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
+from your branch would run (component tokens need CI's `analysis.json`; without
+it the runner says so and leaves those specs out). A spec writes its receipts under
+`test-results/<name>/` or, for a component audit, a top-level
+`<name>-audit-evidence/` folder; CI uploads them, with the selection and the
+reports, in one `pr-a11y-evidence-<sha>` artifact. A component-audit pull
+request whose component has an audit spec also runs that component's own axe
+pass; an audit that must wait for an open dialog or menu, grades a different
+component set, or has no audit spec has an entry in
+`.github/a11y-audit-axe.json`.
+
 ### Accessibility audits
 
 PRs that touch components run an axe-core audit (the `pr-a11y` CI job) over
@@ -557,7 +594,8 @@ focus, or real activation is reported `unrun` there and proven in Chromium.
 pnpm storybook:build
 npx playwright install chromium
 
-pnpm test:a11y-contract      # the Chromium lane (also runs inside pr-a11y)
+pnpm test:a11y-contract      # the Chromium lane, every spec (the release check)
+pnpm test:a11y-contract:pr origin/main --dry-run   # what a PR from this branch runs (drop --dry-run to run it)
 ```
 
 Adopting the pattern in a new component means binding to the existing contract,

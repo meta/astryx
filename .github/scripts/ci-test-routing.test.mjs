@@ -71,7 +71,7 @@ const WORKFLOWS = {
     // other and so ride one lane of their own.
     lanes: ['test-ui', 'test-node', 'typecheck'],
     scopeConditional: false,
-    sharded: false,
+    sharded: true,
   },
 };
 
@@ -157,18 +157,6 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(suite['continue-on-error']).not.toBe(true);
       }
 
-      if (!sharded) {
-        // One conditional step preserves the existing scope gate for both
-        // runs. Exact foreground commands also reject backgrounding or
-        // ignored exits.
-        expect(suites).toHaveLength(1);
-        expect(suites[0].run.trim().split('\n')).toEqual([
-          'pnpm test:ui',
-          'pnpm test:ui:isolated',
-        ]);
-        return;
-      }
-
       // Sharded: every leg runs its share without FR23, and exactly one leg
       // runs FR23 in a later step on the same runner, after its share exited.
       expect(suites).toHaveLength(2);
@@ -178,12 +166,18 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
-      expect(isolated.if).toBe(`matrix.shard == 1 && ${share.if}`);
+      expect(isolated.if).toBe(
+        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+      );
     });
 
     if (sharded) {
       it('splits each Vitest lane across legs that together run every file', () => {
-        for (const lane of lanes) {
+        const vitestLanes = lanes.filter(lane =>
+          /--project \w+/.test(runLines(workflow.jobs[lane])),
+        );
+        expect(vitestLanes).toEqual(['test-ui', 'test-node']);
+        for (const lane of vitestLanes) {
           const job = workflow.jobs[lane];
           const legs = job.strategy?.matrix?.shard;
           expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(true);
@@ -293,74 +287,55 @@ describe.each(Object.entries(WORKFLOWS))(
   },
 );
 
-describe('ci.yml pr-a11y steps against an older PR head', () => {
+describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y'].steps;
-  /** The spec files each `pnpm exec playwright test` in a step names. */
-  const specsOf = step =>
-    (step.run ?? '')
-      .replace(/\\\n/g, ' ')
-      .split('\n')
-      .filter(line => /pnpm exec playwright test\b/.test(line))
-      .flatMap(line =>
-        line
-          .trim()
-          .split(/\s+/)
-          .filter(token => /\.spec\.(ts|tsx|js|mjs)$/.test(token)),
+  const run = steps.find(
+    step => step.name === 'Run browser accessibility specs',
+  );
+  const upload = steps.find(
+    step => step.name === 'Upload browser accessibility evidence',
+  );
+
+  // Specs are discovered, never listed: a step naming one spec file is the
+  // per-test workflow edit this lane exists to avoid.
+  it('names no spec file in any step', () => {
+    for (const step of steps) {
+      expect(step.run ?? '', step.name).not.toMatch(
+        /\.spec\.(ts|tsx|js|mjs)\b/,
       );
-  const playwright = steps.filter(step => specsOf(step).length > 0);
-
-  // The wrapper skips spec files a PR head lacks, so a step that named a file
-  // missing on main would pass silently everywhere. Main's steps must name
-  // files that exist; only an older head skips anything.
-  it('names only spec files that exist', () => {
-    expect(playwright.length).toBeGreaterThan(0);
-    for (const step of playwright) {
-      for (const spec of specsOf(step)) {
-        expect(
-          fs.existsSync(path.join(root, spec)),
-          `${step.name}: ${spec}`,
-        ).toBe(true);
-      }
     }
   });
 
-  // A step that uploads its evidence with `if-no-files-found: error` must not
-  // promise a run the wrapper then skips on an older head.
-  it('promises heading-links evidence only when its spec is in the head', () => {
-    const run = steps.find(
-      step => step.name === 'Run heading-links module browser evidence',
-    ).run;
-    const spec =
-      'packages/core/src/Markdown/plugins/headingLinks.a11y.chromium.spec.ts';
-    const promise = run.indexOf("echo 'should_run=true'");
-    expect(promise).toBeGreaterThan(-1);
-    expect(run.slice(0, promise)).toContain(`if [ -e ${spec} ]; then`);
-  });
-
-  it("sources the merge commit's absent-spec wrapper before every Playwright step", () => {
-    const index = steps.findIndex(
-      step => step.name === 'Skip contract specs the PR head predates',
-    );
-    expect(index).toBeGreaterThan(-1);
-    const wrapper = steps[index];
-    expect(wrapper.if).toBe("github.event_name == 'pull_request'");
+  it("runs the merge commit's runner against the PR head", () => {
+    expect(run.if).toBe('${{ !cancelled() }}');
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the wrapper.
-    expect(wrapper.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
-    expect(wrapper.env.BASE_SHA).toBeUndefined();
-    expect(wrapper.run).toContain(
-      'git show "$WORKFLOW_SHA:.github/scripts/skip-absent-specs.sh" > "$wrapper"',
+    // can lag main and predate the runner.
+    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    expect(run.env.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    expect(run.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(wrapper.run).toContain('echo "BASH_ENV=$wrapper" >> "$GITHUB_ENV"');
+    expect(run.run).toContain('node "$runner"');
     expect(
-      fs.existsSync(path.join(root, '.github/scripts/skip-absent-specs.sh')),
-    ).toBe(true);
-    for (const step of playwright) {
-      expect(steps.indexOf(step), step.name).toBeGreaterThan(index);
-      // BASH_ENV reaches bash steps only, and only calls through the function.
-      expect(step.shell ?? 'bash', step.name).toMatch(/^bash/);
-      expect(step.run, step.name).not.toMatch(/\b(exec|command) pnpm\b/);
+      JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
+    ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
+  });
+
+  it('uploads every spec receipt in one head-bound artifact', () => {
+    expect(upload.if).toBe('${{ !cancelled() }}');
+    expect(upload.with.name).toBe(
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+    );
+    for (const dir of [
+      'pr-a11y-evidence/',
+      'pr-a11y-output/',
+      'test-results/',
+      '*-audit-evidence/',
+    ]) {
+      expect(upload.with.path).toContain(dir);
     }
+    expect(steps.indexOf(upload)).toBeGreaterThan(steps.indexOf(run));
   });
 });
 
@@ -451,7 +426,10 @@ describe('ci.yml RTL package sharding', () => {
       expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
     }
     expect(shard['runs-on']).toBe('4-core-ubuntu');
-    expect(shard['timeout-minutes']).toBeLessThanOrEqual(30);
+    // Pull requests get the 15-minute PR budget; the full release roster, 30.
+    expect(shard['timeout-minutes']).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}",
+    );
     expect(shard['continue-on-error']).not.toBe(true);
     const scope = shard.steps.find(
       step => step.name === 'Resolve RTL shard scope',
@@ -666,13 +644,23 @@ describe('deploy.yml push gating', () => {
     }
   });
 
-  it('checks out main on every push-gate lane', () => {
-    // A lane that checks out the default ref would gate the wrong commit.
+  it('checks out one run-wide main commit on every push-gate lane and leg', () => {
+    // A lane that checks out the default ref would gate the wrong commit, and
+    // legs that each resolve `main` can straddle a merge and shard different
+    // file lists, so one job resolves the commit and every leg checks it out.
+    const resolve = workflow.jobs['main-commit'];
+    expect(resolve.outputs.sha).toBe('${{ steps.resolve.outputs.sha }}');
+    const script = resolve.steps[0].with.script;
+    expect(script).toContain('context.sha');
+    expect(script).toContain("branch: 'main'");
     for (const lane of ['test-ui', 'test-node', 'typecheck']) {
+      expect(workflow.jobs[lane].needs).toEqual(['main-commit']);
       const checkout = workflow.jobs[lane].steps.find(step =>
         step.uses?.startsWith('actions/checkout'),
       );
-      expect(checkout?.with?.ref, `${lane} does not pin main`).toBe('main');
+      expect(checkout?.with?.ref, `${lane} does not pin the run's commit`).toBe(
+        '${{ needs.main-commit.outputs.sha }}',
+      );
     }
   });
 });

@@ -17,7 +17,7 @@ import Testing
 @MainActor
 @Test func aFieldLabelUsesTheSecondaryTextColor() {
   var theme = Theme.default
-  theme.light.color.textSecondary = Color(astryxRGBA: 0xFF0000FF)
+  theme.light.color.textSecondary = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
   let pixels = Pixels(Astryx.TextInput(label: "Email", value: .constant("")).frame(width: 240), theme: theme)
   #expect(pixels.contains { $0[0] > 200 && $0[1] < 60 && $0[2] < 60 && $0[3] > 200 })
 }

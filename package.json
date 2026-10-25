@@ -29,6 +29,7 @@
     "test:build": "vitest run packages/build/src/packed-consumer.test.mjs --project node --maxWorkers=1 && pnpm -F @astryxdesign/build build && node .github/scripts/theme-layer-cascade.js && ASTRYX_STYLEX_BROWSER=1 vitest run scripts/stylex-module-resolution.browser.test.mjs --project node --maxWorkers=1",
     "test:theme-family": "pnpm -F @astryxdesign/core build && pnpm -F @astryxdesign/sandbox generate:theme-family && node .github/scripts/theme-family-cascade.js",
     "test:a11y-contract": "playwright test --config playwright.config.ts --project chromium",
+    "test:a11y-contract:pr": "node .github/scripts/a11y-pr-contracts.mjs",
     "test:docsite-browser": "playwright test --config apps/docsite/playwright.config.ts",
     "typecheck": "pnpm -r --no-bail --workspace-concurrency=1 --if-present --filter \"!@astryxdesign/docsite\" --filter \"!@astryxdesign/sandbox\" run typecheck",
     "check:package-boundaries": "node scripts/check-package-boundaries.js",

@@ -71,17 +71,17 @@ public struct Text: View {
     let type = props.type ?? .body
     if let style = font.style(type) {
       var style = style
-      if let size = props.size { style.size = font.size(size) }
-      if let weight = props.weight { style.weight = font.weight(named: weight.rawValue) }
+      if let size = props.size { style.size = font.size.value(for: size) }
+      if let weight = props.weight { style.weight = font.weight.value(named: weight.rawValue) }
       text = text.font(astryx.font(style))
     } else if let size = props.size {
       // `inherit` with a size: SwiftUI cannot change only the size of an
       // inherited font, so it draws the body family at normal weight (or the
       // given weight) at that size, a documented gap.
-      let weight = font.weight(named: props.weight?.rawValue ?? "normal")
-      text = text.font(astryx.font(TypeStyle(size: font.size(size), weight: weight, families: font.familyBody)))
+      let weight = font.weight.value(named: props.weight?.rawValue ?? "normal")
+      text = text.font(astryx.font(TypeStyle(size: font.size.value(for: size), weight: weight, families: font.family.body)))
     } else if let weight = props.weight {
-      text = text.fontWeight(astryx.fontWeight(font.weight(named: weight.rawValue)))
+      text = text.fontWeight(astryx.fontWeight(font.weight.value(named: weight.rawValue)))
     }
     if let color = astryx.tokens.color.text(named: (props.color ?? Self.defaultColor(type)).rawValue) {
       text = text.foregroundStyle(color)

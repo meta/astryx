@@ -68,7 +68,7 @@ struct LoginTemplateContent: View {
         Text("Product Inc.", size: .lg, weight: .bold)
       }
 
-      Card(padding: 8) {
+      Card(padding: .v8) {
         VStack(alignment: .leading, spacing: astryx.space(4)) {
           VStack(spacing: astryx.space(1)) {
             Heading("Sign in", level: .v2)

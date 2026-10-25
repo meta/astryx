@@ -8,48 +8,59 @@ struct TypeStyle: Equatable {
   var families: [String]
 }
 
+extension TypeStyle {
+  /// A theme type style drawn in a family stack.
+  init(_ tokens: TypeStyleTokens, families: [String]) {
+    self.init(size: tokens.size, weight: tokens.weight, families: families)
+  }
+}
+
 extension FontTokens {
   /// The style core's Text draws for a type, or nil for `inherit`. Display
   /// types draw in the heading family, as core's type scale sets them.
   func style(_ type: TextType) -> TypeStyle? {
     switch type {
-    case .body: TypeStyle(size: bodySize, weight: bodyWeight, families: familyBody)
-    case .large: TypeStyle(size: largeSize, weight: largeWeight, families: familyBody)
-    case .label: TypeStyle(size: labelSize, weight: labelWeight, families: familyBody)
-    case .supporting: TypeStyle(size: supportingSize, weight: supportingWeight, families: familyBody)
-    case .code: TypeStyle(size: codeSize, weight: codeWeight, families: familyCode)
-    case .display1: TypeStyle(size: display1Size, weight: display1Weight, families: familyHeading)
-    case .display2: TypeStyle(size: display2Size, weight: display2Weight, families: familyHeading)
-    case .display3: TypeStyle(size: display3Size, weight: display3Weight, families: familyHeading)
+    case .body: TypeStyle(body, families: family.body)
+    case .large: TypeStyle(large, families: family.body)
+    case .label: TypeStyle(label, families: family.body)
+    case .supporting: TypeStyle(supporting, families: family.body)
+    case .code: TypeStyle(code, families: family.code)
+    case .display1: TypeStyle(display1, families: family.heading)
+    case .display2: TypeStyle(display2, families: family.heading)
+    case .display3: TypeStyle(display3, families: family.heading)
     case .inherit: nil
     }
   }
+}
 
+extension FontSizeTokens {
   /// The font size core's Text draws for an explicit `size`. Core spells the
   /// extra-small size `xsm`; its token is `font-size-xs`.
-  func size(_ size: TextSize) -> CGFloat {
+  func value(for size: TextSize) -> CGFloat {
     switch size {
-    case .v4xs: size4xs
-    case .v3xs: size3xs
-    case .v2xs: size2xs
-    case .xsm: sizeXs
-    case .sm: sizeSm
-    case .base: sizeBase
-    case .lg: sizeLg
-    case .xl: sizeXl
-    case .v2xl: size2xl
-    case .v3xl: size3xl
-    case .v4xl: size4xl
+    case .v4xs: s4xs
+    case .v3xs: s3xs
+    case .v2xs: s2xs
+    case .xsm: xs
+    case .sm: sm
+    case .base: base
+    case .lg: lg
+    case .xl: xl
+    case .v2xl: s2xl
+    case .v3xl: s3xl
+    case .v4xl: s4xl
     }
   }
+}
 
+extension FontWeightTokens {
   /// The numeric weight behind one of core's weight names.
-  func weight(named name: String) -> CGFloat {
+  func value(named name: String) -> CGFloat {
     switch name {
-    case "medium": weightMedium
-    case "semibold": weightSemibold
-    case "bold": weightBold
-    default: weightNormal
+    case "medium": medium
+    case "semibold": semibold
+    case "bold": bold
+    default: normal
     }
   }
 }

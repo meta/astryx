@@ -16,6 +16,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The one commit every lane and leg of this run tests. A push validates the
+  # pushed commit; a dispatch, main's tip when it starts. Each leg resolving
+  # `main` itself could straddle a merge, shard different file lists, and skip
+  # a file in every leg.
+  main-commit:
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve the commit under test
+        id: resolve
+        uses: actions/github-script@v9
+        with:
+          script: |
+            let sha = context.sha;
+            if (context.eventName !== 'push') {
+              const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+              sha = data.commit.sha;
+            }
+            core.setOutput('sha', sha);
+
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
   sync-exports:
@@ -41,26 +64,40 @@ jobs:
   # typecheck needs the `pnpm build` it follows, so they stay together in
   # their own lane and take the build with them.
   #
-  # `ui` is the heavier project by ~4x here, so it takes the larger runner (see
-  # ci.yml's lane comment).
+  # Both Vitest lanes split into four legs, as in ci.yml: one job each ran
+  # test-ui in ~18 minutes and test-node in ~28, so main's gate took about half
+  # an hour while the PR gate took under fifteen. `test` joins the legs.
   test-ui:
+    needs: [main-commit]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: 4-core-ubuntu
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - uses: ./.github/actions/setup
 
-      # Match the PR gate: FR23 needs an idle test runner, not just a new process.
-      - name: Run UI tests and isolated Markdown benchmark
-        run: |
-          pnpm test:ui
-          pnpm test:ui:isolated
+      - name: Run this shard of the UI tests
+        run: pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      # Match the PR gate: FR23 needs an idle test runner, not just a new
+      # process, so one leg runs it after its own share has exited.
+      - name: Run the isolated Markdown benchmark
+        if: matrix.shard == 1
+        run: pnpm test:ui:isolated
 
   test-node:
+    needs: [main-commit]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: 4-core-ubuntu
@@ -69,11 +106,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - uses: ./.github/actions/setup
 
-      - run: pnpm test:node
+      - run: pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   # The typecheck mirroring the PR `build` job in ci.yml. ci.yml only runs
   # on pull_request/merge_group, so a typecheck error can land on main (its
@@ -81,13 +118,14 @@ jobs:
   # every open PR, which typechecks the PR merged with main (see #3197).
   # Running them here closes that gap and blocks a broken deploy.
   typecheck:
+    needs: [main-commit]
     runs-on: 2-core-ubuntu-arm
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - uses: ./.github/actions/setup
 

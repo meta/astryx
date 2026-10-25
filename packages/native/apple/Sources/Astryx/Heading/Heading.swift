@@ -68,7 +68,7 @@ public struct Heading: View {
   func styled(_ text: SwiftUI.Text) -> SwiftUI.Text {
     var style = typeStyle
     if let weight = props.weight {
-      style.weight = astryx.tokens.font.weight(named: weight.rawValue)
+      style.weight = astryx.tokens.font.weight.value(named: weight.rawValue)
     }
     var text = text.font(astryx.font(style))
     if let color = astryx.tokens.color.text(named: (props.color ?? .primary).rawValue) {
@@ -82,22 +82,22 @@ public struct Heading: View {
   /// theme's heading family.
   var typeStyle: TypeStyle {
     let font = astryx.tokens.font
-    let (size, weight): (CGFloat, CGFloat) =
+    let style: TypeStyleTokens =
       switch props.type {
-      case .display1: (font.display1Size, font.display1Weight)
-      case .display2: (font.display2Size, font.display2Weight)
-      case .display3: (font.display3Size, font.display3Weight)
+      case .display1: font.display1
+      case .display2: font.display2
+      case .display3: font.display3
       case nil:
         switch props.level {
-        case .v1: (font.heading1Size, font.heading1Weight)
-        case .v2: (font.heading2Size, font.heading2Weight)
-        case .v3: (font.heading3Size, font.heading3Weight)
-        case .v4: (font.heading4Size, font.heading4Weight)
-        case .v5: (font.heading5Size, font.heading5Weight)
-        case .v6: (font.heading6Size, font.heading6Weight)
+        case .v1: font.heading1
+        case .v2: font.heading2
+        case .v3: font.heading3
+        case .v4: font.heading4
+        case .v5: font.heading5
+        case .v6: font.heading6
         }
       }
-    return TypeStyle(size: size, weight: weight, families: font.familyHeading)
+    return TypeStyle(style, families: font.family.heading)
   }
 
   /// The traits assistive technology gets: a header.
