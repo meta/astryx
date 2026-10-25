@@ -6,7 +6,7 @@ import Testing
 
 @MainActor
 @Test func severalChildrenStackInOneCard() {
-  let card = AstryxCard(padding: 0) {
+  let card = Astryx.Card(padding: 0) {
     Color(astryxHex: "#FF0000FF").frame(width: 80, height: 40)
     Color(astryxHex: "#0000FFFF").frame(width: 80, height: 40)
   }

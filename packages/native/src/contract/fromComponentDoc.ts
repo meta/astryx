@@ -46,9 +46,10 @@ export interface ComponentDocLike {
 /**
  * Typed slots (AST-082 FR4) for documented free-form content. `text` is a
  * string in the core contract, as a badge's label or a heading's words;
- * `content` is child Astryx components, as a stack's or a card's children.
+ * `content` is child Astryx components, as a stack's or a card's children;
+ * `icon` is a shared icon name (FR17), as an icon's glyph.
  */
-export type SlotKind = 'text' | 'content';
+export type SlotKind = 'text' | 'content' | 'icon';
 
 /** What the native package adds to one core component. */
 export interface NativeAdditions {
@@ -120,6 +121,7 @@ function documentedProps(
 const SLOT_TYPES: Readonly<Record<SlotKind, PropType>> = {
   text: {kind: 'string'},
   content: {kind: 'content'},
+  icon: {kind: 'icon'},
 };
 
 export function fromComponentDoc(
