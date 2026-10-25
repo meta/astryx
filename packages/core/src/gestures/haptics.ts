@@ -42,9 +42,9 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+export {HAPTIC_SWITCH_ATTRIBUTE};
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {

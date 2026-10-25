@@ -559,6 +559,12 @@ way:
   and the event clock.
 - `__tests__/delegatedPress.test.ts`: delegated press tracking.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
+- `__tests__/importGraph.test.ts`: a gesture-only component's static
+  imports (`useGestureRecognizer`, the pan recognizers, the host) reach
+  neither the press tracker nor haptics, which live behind
+  `usePressTracker` and `attachTapHaptic` / `playHaptic`.
+- `__tests__/useFingerScroll.test.tsx`: a finger's scroll until its
+  `scrollend`, the page through the document, and the ref's node followed.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
   Chromium (CDP touches with timestamps) and WebKit (its own touch input).
   CI runs it in Chromium in the interaction lane

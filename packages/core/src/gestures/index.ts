@@ -84,10 +84,9 @@ export {deriveTouchAction, gestureHostStyle} from './touchAction';
 export type {GestureHostStyle} from './touchAction';
 export type * from './types';
 export {DEFAULT_ENVIRONMENT} from './types';
-export {useGestureRecognizer, usePressTracker} from './useGestureRecognizer';
-export type {
-  UseGestureRecognizerOptions,
-  UsePressTrackerOptions,
-} from './useGestureRecognizer';
+export {useGestureRecognizer} from './useGestureRecognizer';
+export type {UseGestureRecognizerOptions} from './useGestureRecognizer';
+export {usePressTracker} from './usePressTracker';
+export type {UsePressTrackerOptions} from './usePressTracker';
 export {VelocityTracker} from './VelocityTracker';
 export type {VelocityTrackerOptions} from './VelocityTracker';

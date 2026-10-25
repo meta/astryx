@@ -116,7 +116,7 @@ import {
   type GestureClock,
 } from './GestureArena';
 import type {GestureRecognizer} from './GestureRecognizer';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './haptics';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 import {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import {PanGestureRecognizer} from './PanGestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
