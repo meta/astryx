@@ -33,6 +33,12 @@ image (podman or docker; the repository is mounted at the same path):
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
+WebKit composites through Mesa's software GL there, which compiles each shader
+the first time a page draws it (450–700 ms for the first frame of a blurred or
+newly animated layer). The script keeps Mesa's shader cache on the host
+(`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
+only the first run on a machine pays for them.
+
 Evidence (storyboards, curve traces, busy-main-thread frames) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -47,7 +53,7 @@ committed: a pull request links or attaches it.
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, and a verdict.                                                                                        |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread Layout / Paint / UpdateLayoutTree / PrePaint counts, `countBetween` for a sub-window, long tasks. `installLongTaskLog` / `readLongTasks`.                                           |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `waitForRest`, `releaseAnimations`.                                                                           |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                            |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                     |
@@ -82,6 +88,16 @@ the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
 than `playState`, does not wait the hold out.
 
+**Waiting for an animation.** The page records every animation from the first
+call into `curves.ts` on it (and on every later document): a frame loop on the
+page's own `requestAnimationFrame`, the CSS animation and transition events,
+and `Element.animate` as it is called, pending animations included. So
+`waitForAnimation` also reports one that started after the last
+`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+set): a short entrance no longer races the first look on a cold page. When the
+action may be the page's first contact with the harness, take
+`watchAnimations(locator)` before it and read `watch.started()` after.
+
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
 while the thread is held), block the main thread 500–1000 ms, stop. Always
@@ -95,7 +111,16 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. The `verdict` tolerates what a
+plateaus within a pixel or two of rest. A judged part shorter than four frames
+fails: the animation under test was not moving during the block. With
+`during`, `blockMainThread` starts the loop from a task queued in the frame
+that saw the animation, after that frame's rendering update: WebKit hands a
+newly started animation to its compositor there, and a loop inside the rAF
+callback would freeze even a compositor animation. Call it before the release
+that starts a settle and await it after, so the page is already waiting when
+the settle begins. An animation counts once it is no longer pending and has
+run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
+created in the frame the page looks is not on the compositor yet. The `verdict` tolerates what a
 loaded machine does to a screencast and nothing a frozen animation does: a
 median frame interval of at most 20 ms, no stall longer than three screencast
 intervals (two dropped frames), and at least 90% of the window's whole frame
@@ -119,7 +144,12 @@ backstop, a cleanup render) would do so behind a held storyboard's back:
 photographing. The page can still cancel a held callback, a held frame callback
 gets the time it actually runs, and the harness's own frame waits are not held.
 An animation that repeats forever does not set a storyboard's default length;
-with nothing else to film, pass `times`.
+with nothing else to film, pass `times`. A touch filmstrip keeps the scripted
+event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
+`Date.now()` sees one event per photograph, about 100 ms apart, so a
+clock-timed release flings slower when filmed than when played: a storyboard
+cannot show such a gesture; record it in real time instead, with
+`startScreencast` and `castStoryboard`.
 
 ## Engine limits (measured with Playwright 1.61)
 
