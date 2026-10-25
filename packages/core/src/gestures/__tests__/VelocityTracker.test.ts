@@ -4,8 +4,9 @@
  * @file VelocityTracker.test.ts
  * @input Synthetic finger traces with known velocities
  * @output UIKit's filter against the velocities UIKit reported on recorded
- *   touch streams; steady motion, a hard acceleration, the stillness reset
- *   before a release (spec:AST-100 FR2), sparse samples
+ *   touch streams; steady motion, a hard acceleration, the release rules
+ *   (stillness, two moved samples), moved-only updates and the scroll-view
+ *   release blend (architecture:interaction-modality INV10, spec:AST-100 FR2)
  * @position Unit tests of packages/core/src/gestures/VelocityTracker.ts
  */
 
@@ -101,33 +102,61 @@ describe('VelocityTracker', () => {
     expect(tracker.velocity().x).toBeCloseTo(2000, 6);
   });
 
-  it('releases at 0 after the finger rested past the stillness interval (AST-100 FR2)', () => {
+  it('releases at 0 after a rest longer than the stillness interval (AST-100 FR2)', () => {
     const tracker = new VelocityTracker({stillness: 40});
     trace(tracker, t => t * 2, 160);
-    // Lifted right after the last move: the moving value.
     expect(tracker.velocity(168).x).toBeCloseTo(2000, 6);
-    // At the interval itself: still the moving value.
     expect(tracker.velocity(200).x).toBeCloseTo(2000, 6);
-    // Rested longer than the interval: no flick.
     expect(tracker.velocity(201)).toEqual({x: 0, y: 0});
+    expect(tracker.scrollVelocity(201)).toEqual({x: 0, y: 0});
   });
 
-  it('counts a sample at the same position as resting, not moving', () => {
-    const tracker = new VelocityTracker({stillness: 40});
-    trace(tracker, t => t * 2, 160);
-    // Events that report no movement (a still finger) do not restart it.
-    tracker.add(320, 0, 180);
-    tracker.add(320, 0, 220);
-    expect(tracker.velocity(230)).toEqual({x: 0, y: 0});
-    // A real move does.
-    tracker.add(330, 0, 228);
-    expect(tracker.velocity(236).x).not.toBe(0);
+  it('releases at 0 with fewer than two moved samples (AST-100)', () => {
+    const tracker = new VelocityTracker();
+    tracker.add(0, 0, 0);
+    tracker.add(10, 0, 8);
+    // One moved sample: the live value is that interval, the release is 0.
+    expect(tracker.velocity().x).toBeCloseTo(1250, 6);
+    expect(tracker.velocity(10)).toEqual({x: 0, y: 0});
+    expect(tracker.scrollVelocity(10)).toEqual({x: 0, y: 0});
+    tracker.add(20, 0, 16);
+    expect(tracker.velocity(18).x).toBeCloseTo(1250, 6);
+  });
+
+  it('updates only on moved samples (INV10)', () => {
+    const tracker = new VelocityTracker();
+    tracker.add(0, 0, 0);
+    tracker.add(10, 0, 10);
+    tracker.add(20, 0, 20);
+    const moving = tracker.velocity();
+    // An event at the same position is not motion: nothing changes, and the
+    // next move's interval runs from the last moved sample.
+    tracker.add(20, 0, 30);
+    expect(tracker.velocity()).toEqual(moving);
+    tracker.add(30, 0, 40);
+    // 10 px over the 20 ms since the last move: 500 px/s, after 1000 px/s.
+    expect(tracker.velocity().x).toBeCloseTo(0.2 * 500 + 0.8 * 1000, 6);
+  });
+
+  it('blends a scrolling surface\u2019s release from the last two pan values (INV10)', () => {
+    const tracker = new VelocityTracker();
+    tracker.add(0, 0, 0);
+    tracker.add(10, 0, 10);
+    tracker.add(20, 0, 20);
+    const previous = tracker.velocity().x;
+    tracker.add(40, 0, 30);
+    const newest = tracker.velocity().x;
+    expect(tracker.scrollVelocity(32).x).toBeCloseTo(
+      0.25 * newest + 0.75 * previous,
+      6,
+    );
   });
 
   it('reads a steady 1000 px/s exactly', () => {
     const tracker = new VelocityTracker();
     trace(tracker, t => t, 200);
     expect(tracker.velocity().x).toBeCloseTo(1000, 6);
+    expect(tracker.scrollVelocity(200).x).toBeCloseTo(1000, 6);
   });
 
   it('lags a hard acceleration by a frame, as UIKit does', () => {

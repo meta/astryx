@@ -141,9 +141,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** Translation since touch-down, before `setTranslation` offsets. */
   private raw: Point = ZERO;
   private offset: Point = ZERO;
-  /** The lift's event time, once the last finger lifted. */
-  /** The lift's event time once the pan ended: its release (AST-100 FR2). */
-  private releaseTime: number | undefined;
   private virtual: Point = ZERO;
   private isObserving = false;
   private anchor: Point | null = null;
@@ -202,32 +199,26 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * Velocity in px/s, UIKit's way. At the release it is 0 when the finger
-   * rested longer than the stillness interval before lifting
-   * (spec:AST-100 FR2); UIKit would report the last moving value.
+   * Velocity in px/s, UIKit's way, for a dragged surface. At the release it
+   * is 0 when the finger rested longer than the stillness interval before
+   * lifting, or moved fewer than twice (spec:AST-100 FR2).
    */
   velocity(): Point {
-    return this.locked(this.readVelocity(this.tracker, this.releaseTime));
+    return this.locked(this.tracker.velocity(this.releaseTime));
   }
 
   /**
-   * The release this kind of recognizer reports: a pan's. A scroll view's
-   * pan (ScrollViewPanGestureRecognizer) smooths it once more.
+   * A scrolling surface's release velocity in px/s (paging, a wheel): the
+   * scroll-view blend of the pan's last two values, with the same release
+   * rules (architecture:interaction-modality INV10).
    */
-  protected readVelocity(
-    tracker: VelocityTracker,
-    releaseTime: number | undefined,
-  ): Point {
-    return tracker.velocity(releaseTime);
+  scrollVelocity(): Point {
+    return this.locked(
+      this.tracker.scrollVelocity(
+        this.releaseTime ?? this.tracker.lastSample?.time ?? 0,
+      ),
+    );
   }
-
-  /** The tracker took a sample (a scroll view's pan keeps its own history). */
-  protected sampleAdded(tracker: VelocityTracker): void {
-    void tracker;
-  }
-
-  /** The tracker forgot every sample. */
-  protected samplesReset(): void {}
 
   /**
    * The browser keeps the axis a two-way pan does not use. A one-way pan,
@@ -287,9 +278,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
       this.offset = ZERO;
       this.virtual = this.origin;
       this.tracker.reset();
-      this.samplesReset();
       this.tracker.add(this.origin.x, this.origin.y, event.time);
-      this.sampleAdded(this.tracker);
     } else {
       this.rebase(new Set(touches.map(touch => touch.id)), 'added');
     }
@@ -324,9 +313,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     // UIKit reads neither the translation nor the velocity from the lift; the
     // lift's time only decides whether the finger was still (AST-100 FR2).
     const remaining = this.numberOfTouches - touches.length;
-    if (remaining === 0) {
-      this.releaseTime = event.time;
-    }
     if (isActive(this.state)) {
       if (remaining < this.minimumNumberOfTouches) {
         this.releaseTime = event.time;
@@ -361,7 +347,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   protected override reset(): void {
-    this.releaseTime = undefined;
     this.isClaimCommitted = false;
     this.lockedAxis = null;
     this.travelAtBegan = ZERO;
@@ -376,7 +361,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.virtual = ZERO;
     this.releaseTime = undefined;
     this.tracker.reset();
-    this.samplesReset();
   }
 
   /**
@@ -629,11 +613,8 @@ export class PanGestureRecognizer extends GestureRecognizer {
       x: current.x + this.adjust.x,
       y: current.y + this.adjust.y,
     };
-    // One sample per input event, at the event's own time (`spec:AST-100`
-    // FR4), for every pointer alike.
-    void touches;
+    // UIKit's filter runs once per event.
     this.tracker.add(virtual.x, virtual.y, time);
-    this.sampleAdded(this.tracker);
     this.virtual = virtual;
     this.raw = {x: virtual.x - this.origin.x, y: virtual.y - this.origin.y};
   }

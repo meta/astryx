@@ -322,8 +322,8 @@ export const UIKIT_GESTURES = {
      * instantaneous velocity plus the rest times the previous event's
      * (instantaneous velocity: position change over timestamp change between
      * consecutive events, the touch-down counting as the first). The lift
-     * does not update it, and a finger at rest sends no events, so a release
-     * after a pause reports the last moving value.
+     * does not update it. (A release after a rest longer than `stillness`
+     * reads 0 in Astryx: spec:AST-100 FR2.)
      */
     currentWeight: {
       value: 0.2,
@@ -331,22 +331,17 @@ export const UIKIT_GESTURES = {
       source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
     },
     /**
-     * A scroll view's release (the velocity it hands
-     * scrollViewWillEndDragging) is this times its pan recognizer's newest
-     * velocity(in:) plus the rest times the previous one.
+     * A scrolling surface's release (paging, a wheel) is this times the
+     * newest pan value plus the rest times the previous one
+     * (architecture:interaction-modality INV10).
      */
     scrollReleaseWeight: {
       value: 0.25,
       unit: 'ratio',
-      source:
-        'measured: UIKit lab, iOS 26.2 simulator, HID swipes on a UIPickerView recorded by Oct 24 2026: scrollViewWillEndDragging velocity 933.4, 2114, 1016.2 and 543.6 px/s on 200 pt in 50, 100 and 200 ms and a 90 pt flick, reproduced to 0.03%; a UIScrollView coasts after a silent rest of up to 1 s as after none (Oct 24 2026)',
-    },
-    /** Samples kept; the filter reads the newest three. */
-    maxSamples: {
-      value: 20,
-      unit: 'count',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
-      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
+      guess:
+        "architecture:interaction-modality INV10 states UIScrollView's release as 0.25 x the newest pan value + 0.75 x the previous one.",
+      measure:
+        'M-G14: Confirm against UIScrollView flings: back the release velocity out of the coast distance.',
     },
     /**
      * A contact that has not moved for longer than this before it lifts

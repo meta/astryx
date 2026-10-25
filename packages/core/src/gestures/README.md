@@ -79,12 +79,11 @@ Once a drag has claimed its finger, a second finger never breaks it.
 | -------------------------------- | ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `TapGestureRecognizer`           | `UITapGestureRecognizer`           | discrete   | `numberOfTapsRequired`, `numberOfTouchesRequired`; fails past 45 px of travel, on extra fingers, a hold over 1.5 s, a late or far next tap                                                            |
 | `LongPressGestureRecognizer`     | `UILongPressGestureRecognizer`     | continuous | `minimumPressDuration` 500 ms, `allowableMovement` 10 px (a distance, not per axis), `numberOfTapsRequired`; a zero duration begins on the touch itself (a selection tracker over a group of actions) |
-| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`, `scrollHandoff`; `translation()`, `totalTranslation()`, `velocity()`                                       |
+| `PanGestureRecognizer`           | `UIPanGestureRecognizer`           | continuous | min/max touches, `direction` (axis or one-way) with `axisRatio`, `lockAxis`, `scrollEdge`, `scrollHandoff`; `translation()`, `totalTranslation()`, `velocity()`, `scrollVelocity()`                   |
 | `SwipeGestureRecognizer`         | `UISwipeGestureRecognizer`         | discrete   | recognized during the motion; one or more directions, `numberOfTouchesRequired`; 50 px along, at most 50 px across, 500 ms                                                                            |
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                     |
 | `RotationGestureRecognizer`      | `UIRotationGestureRecognizer`      | continuous | `rotation` in radians, unwrapped, clockwise positive; `velocity` in rad/s                                                                                                                             |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges` including `leading` / `trailing` (resolved against the writing direction); fails as soon as the touch lands outside                                                                           |
-| `ScrollViewPanGestureRecognizer` | `UIScrollView`’s pan               | continuous | a pan whose `velocity()` is a scroll view's release (see Velocity)                                                                                                                                    |
 | `HoverGestureRecognizer`         | `UIHoverGestureRecognizer`         | continuous | a mouse or a hovering pen; silent for fingers                                                                                                                                                         |
 
 A recognizer created with `claimsTouches: false` is a watcher (a tab bar
@@ -401,27 +400,26 @@ timestamps and no real time.
 ## Velocity
 
 `VelocityTracker` reports px per second, UIKit's unit, and is the one
-release-velocity filter (spec:AST-100 FR1, FR2; no alternative estimators).
-It is `UIPanGestureRecognizer.velocity(in:)` itself, measured: each event's
-instantaneous velocity is the position change over the timestamp change since
-the previous event (the touch-down counts as the first), and the velocity is
-0.2 times the newest one plus 0.8 times the one before. It reproduces every
-value UIKit reported on six recorded touch streams, and like UIKit's it
-reacts a frame late to an acceleration and includes a hold before the first
-move. Feed it one sample per event.
+velocity tracker every continuous recognizer uses
+(`architecture:interaction-modality` INV10, `spec:AST-100` FR1, FR2; no
+alternative estimators). One filter, iOS's measured blend, updated on each
+moved sample (a sample at the newest position is not motion):
 
-One difference from UIKit: a finger that stayed still for longer than the
-stillness interval (`UIKIT_GESTURES.velocity.stillness`) before lifting
-releases at 0. UIKit's filter never decays, because a resting finger sends no
-events, so it flings after a rest. Pass the lift's event time to
-`velocity(releaseTime)` to read a release.
+- A pan's velocity is 0.2 times the newest interval's velocity plus 0.8 times
+  the previous interval's (an interval runs from one moved sample to the
+  next; the touch-down counts as the first). With one interval so far it is
+  that interval, as UIKit reports it. It reproduces every value UIKit
+  reported on six recorded touch streams, and like UIKit's it reacts a frame
+  late to an acceleration.
+- A scrolling surface's release (paging, a wheel) is 0.25 times the newest
+  pan value plus 0.75 times the previous one: a pan's `scrollVelocity()`.
+  Everything else reads `velocity()`.
 
-A scrolling surface (FR2: paging, a wheel picker) reads a scroll view's
-release instead: `ScrollViewPanGestureRecognizer` (or `ScrollViewRelease`
-over a tracker) blends the pan's last two velocities once more, 0.25 times the
-newest plus 0.75 times the one before, which is what a UIScrollView hands
-`scrollViewWillEndDragging`; it reproduces four recorded UIPickerView
-releases. The same stillness reset applies at its release.
+A release reads 0 when the finger stayed still for longer than the stillness
+interval (`UIKIT_GESTURES.velocity.stillness`) before lifting, the one
+difference from iOS, whose filter never decays and so flings after a rest;
+and 0 with fewer than two moved samples. The pan passes its lift's event time
+to the tracker.
 
 Times are the events' own. A finger the browser reports on both pointer and
 touch events is sampled from its pointer events alone (from its touch events
@@ -482,9 +480,9 @@ way:
 1. No window or document touch listeners: attach a recognizer with
    `useGestureRecognizer` and read `translation()` and `velocity()` per
    state. The host owns the document's listeners.
-2. Pick the kind: a drag that coasts like a scroll view (a wheel, a picker,
-   a pager, a carousel) uses `ScrollViewPanGestureRecognizer`; anything else
-   `PanGestureRecognizer`. A one-way drag sets `direction`. The host derives
+2. Pick the reading: a drag that coasts like a scroll view (a wheel, a
+   picker, a pager, a carousel) releases with the pan's `scrollVelocity()`;
+   anything else with `velocity()`. A one-way drag sets `direction`. The host derives
    `touch-action`, so delete a hand-written one.
 3. Native scrolling: a sheet over its own list uses `scrollEdge` and
    `scrollHandoff`, not `scrollTop` checks. A banner that must win against a
@@ -566,8 +564,6 @@ way:
   listeners in jsdom.
 - `__tests__/VelocityTracker.test.ts`: the filter against the velocities
   UIKit reported on recorded touch streams, and the stillness reset.
-- `__tests__/ScrollViewPanGestureRecognizer.test.ts`: a scroll view's
-  release against four UIPickerView releases, rests, and the event clock.
 - `__tests__/delegatedPress.test.ts`: delegated press tracking.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/importGraph.test.ts`: a gesture-only component's static

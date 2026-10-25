@@ -70,7 +70,6 @@ describe('the gestures module graph', () => {
   it.each([
     'useGestureRecognizer.ts',
     'PanGestureRecognizer.ts',
-    'ScrollViewPanGestureRecognizer.ts',
     'GestureHost.ts',
     'useFingerScroll.ts',
   ])('%s reaches neither the press tracker nor haptics', entry => {
