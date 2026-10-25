@@ -29,6 +29,10 @@ import {
   type PresentationDefault,
 } from './presentation';
 import {IOS_SUPPORTS_QUERY} from './touchPresentation';
+import {
+  compactDefinition,
+  DEFAULT_COMPACT_DEFINITION,
+} from '../theme/themeAdaptations';
 
 const device = {coarse: false, width: 1280, height: 800, iosWebKit: false};
 const listeners = new Set<() => void>();
@@ -211,18 +215,33 @@ describe('presentation: a caller choice wins over touch defaults', () => {
 
   it('answers at one moment as the hook does, and as the server would with no window', () => {
     setDevice(IPHONE);
-    expect(readPresentation(undefined, {whenOmitted: 'touch'})).toEqual(
-      resolve(undefined, 'touch'),
-    );
-    expect(readPresentation('popover', {whenOmitted: 'touch'})).toEqual(
-      resolve('popover', 'touch'),
-    );
-    expect(readPresentation('adaptive')).toEqual(resolve('adaptive'));
+    const compact = DEFAULT_COMPACT_DEFINITION;
     expect(
-      readPresentation(undefined, {whenOmitted: 'touch', view: null}),
+      readPresentation(undefined, {whenOmitted: 'touch', compact}),
+    ).toEqual(resolve(undefined, 'touch'));
+    expect(
+      readPresentation('popover', {whenOmitted: 'touch', compact}),
+    ).toEqual(resolve('popover', 'touch'));
+    expect(readPresentation('adaptive', {compact})).toEqual(
+      resolve('adaptive'),
+    );
+    expect(
+      readPresentation(undefined, {whenOmitted: 'touch', view: null, compact}),
     ).toEqual({
       surface: 'popover',
       touchModes: false,
     });
+  });
+
+  it('reads the compact definition it is given, so a theme that moves md moves the sheet (spec:AST-012 FR9)', () => {
+    setDevice({...IPHONE, width: 900, height: 1024});
+    expect(
+      readPresentation('adaptive', {compact: DEFAULT_COMPACT_DEFINITION})
+        .surface,
+    ).toBe('popover');
+    expect(
+      readPresentation('adaptive', {compact: compactDefinition({md: 1000})})
+        .surface,
+    ).toBe('bottom-sheet');
   });
 });

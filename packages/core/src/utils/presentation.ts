@@ -46,6 +46,7 @@
 
 import {useMemo} from 'react';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import type {CompactDefinition} from '../theme/themeAdaptations';
 import {
   readTouchPresentation,
   useTouchPresentation,
@@ -72,12 +73,18 @@ export interface PresentationOptions {
 
 export interface UsePresentationOptions extends PresentationOptions {
   /** The touch presentation to assume before hydration (useTouchPresentation's hint). */
-  readonly serverDefault?: Partial<Omit<TouchPresentation, 'isCompactTouch'>>;
+  readonly serverDefault?: Partial<TouchPresentation>;
 }
 
 export interface ReadPresentationOptions extends PresentationOptions {
   /** The window to read; the global one by default. */
   readonly view?: Window | null;
+  /**
+   * The active theme's compact definition (`useCompactDefinition()`, read
+   * while rendering), so a theme that moves `md` moves the sheet too
+   * (`spec:AST-012` FR9).
+   */
+  readonly compact: CompactDefinition;
 }
 
 /** The decision, from a presentation request and a touch presentation. */
@@ -89,7 +96,7 @@ export function resolvePresentation(
   const request = presentation ?? whenOmitted;
   const surface =
     request === 'bottom-sheet' ||
-    (request === 'adaptive' && touch.isCompactTouch)
+    (request === 'adaptive' && touch.isTouch && touch.isCompact)
       ? 'bottom-sheet'
       : 'popover';
   const touchModes = request !== 'popover' && touch.isTouch;
@@ -118,11 +125,13 @@ export function usePresentation(
  */
 export function readPresentation(
   presentation: AdaptivePresentation | undefined,
-  {whenOmitted = 'popover', view}: ReadPresentationOptions = {},
+  {whenOmitted = 'popover', view, compact}: ReadPresentationOptions,
 ): ResolvedPresentation {
+  const target =
+    view === undefined ? (typeof window === 'undefined' ? null : window) : view;
   return resolvePresentation(
     presentation,
-    readTouchPresentation(view),
+    readTouchPresentation(target, compact),
     whenOmitted,
   );
 }
