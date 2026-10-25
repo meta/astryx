@@ -77,11 +77,24 @@ for package in $packages; do
     if [ "$tests" = True ]; then
       results="$work/$(basename "$package")-ios.xcresult"
       rm -rf "$results"
-      xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$simulator" -resultBundlePath "$results" -quiet
-      # -quiet prints only failures, so report the counts, and fail if the
-      # scheme ran no tests at all.
-      xcrun xcresulttool get test-results summary --path "$results" --compact > "$work/summary.json"
-      python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("iOS Simulator: %s passed, %s failed, %s skipped" % (d["passedTests"], d["failedTests"], d["skippedTests"])); sys.exit(d["totalTestCount"] == 0)' "$work/summary.json"
+      status=0
+      xcodebuild test -scheme "$scheme" -destination "platform=iOS Simulator,id=$simulator" -resultBundlePath "$results" -quiet || status=$?
+      # -quiet names a failing test but not why it failed, so read the counts
+      # and each failure's message from the result bundle. Fail if a test
+      # failed or the scheme ran no tests at all.
+      if ! xcrun xcresulttool get test-results summary --path "$results" --compact > "$work/summary.json"; then
+        echo 'Could not read the iOS Simulator test results.'
+        exit "$(( status == 0 ? 1 : status ))"
+      fi
+      python3 - "$work/summary.json" "$status" <<'PY'
+import json, sys
+summary = json.load(open(sys.argv[1]))
+print("iOS Simulator: %s passed, %s failed, %s skipped" % (summary["passedTests"], summary["failedTests"], summary["skippedTests"]))
+for failure in summary.get("testFailures", []):
+    text = " ".join(failure.get("failureText", "").split())
+    print("::error title=%s::%s" % (failure.get("testName", "test"), text))
+sys.exit(1 if sys.argv[2] != "0" or summary["failedTests"] > 0 or summary["totalTestCount"] == 0 else 0)
+PY
     else
       xcodebuild build -scheme "$scheme" -destination 'generic/platform=iOS Simulator' -quiet
     fi

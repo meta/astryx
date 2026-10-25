@@ -762,6 +762,18 @@ one removal merged ahead of the decision to allow it.
   or merging undocumented elements to meet it is compatible (FR3); an element a
   current theme target or documented anatomy names stays. A component exceeds a
   budget only through an owner exception recorded with its element counts.
+  Under touch, a component renders no more elements than under a fine pointer,
+  except that a layer, a surface mounted only while open (a sheet, popover,
+  menu, context menu, dialog, toast, or lightbox), may render up to 5 more
+  elements while open, and fewer is preferred (DEC-29). Each added element is
+  an internal node with a job its component's record names; the allowance
+  adds no anatomy part and no theme target. Decoration, such as a pill, an
+  edge tint, a shadow, or a tint, SHOULD be drawn by a pseudo-element or an
+  existing element. While closed, a layer and its trigger render no more
+  elements than under a fine pointer. Repeated components, such as rows, list
+  items, and controls like Button, Switch, and CheckboxInput, keep the strict
+  budget, at rest and pressed. Anything beyond this needs an owner exception
+  with before and after counts.
 
 ### Platform support
 
@@ -914,7 +926,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop                         | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                                                                                                                                                                   |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                 | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                               |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                             | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                                                                                                                                                                         |
-| FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception                                                                                                                                                               | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking                                                                                                                                                                                                                                                        |
+| FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception; an open layer under touch with extra elements                                                                                                                | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking; an open layer more than 5 elements over its fine-pointer count, an added element that is themeable, a new anatomy part, or without a job in its record, or a closed layer, trigger, or repeated component above its fine-pointer count                |
 
 ## Decision log
 
@@ -1419,6 +1431,20 @@ ending. The call site still shows the status in the name the caller writes, as
 DEC-27 requires.
 
 Rejected: an `experimental_` name prefix.
+
+### DEC-29 — An open layer may render up to 5 more elements under touch
+
+**Reference:** `spec:AST-017/DEC-29`
+**Decider:** `cixzhang`, `2026-10-25`
+
+Pages render few layers at once, so an open layer can afford a small, fixed
+allowance that rows and controls, repeated across a page, cannot. The
+allowance covers internal elements with named jobs and never adds anatomy or
+theme targets, so themes and docs see the same parts on every pointer.
+Decoration belongs on pseudo-elements and existing elements, and each
+implementation tries to use fewer than the allowance.
+
+Rejected: strict parity for layers, with an owner exception for every sheet frame.
 
 ## Open questions
 
