@@ -46,7 +46,7 @@ committed: a pull request links or attaches it.
 
 | Module          | What it gives a spec                                                                                                                                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, and a verdict.                                                                                        |
@@ -73,7 +73,7 @@ the limits below. Read positions a frame after a move: Chromium delivers
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
 animations, ones the page paused and ones on a scroll or view timeline are left
-alone; held animations keep their offsets from the earliest start, and release
+alone; held animations keep their offsets from the first hold's earliest start, and release
 resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
@@ -147,7 +147,10 @@ event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
 `Date.now()` sees one event per photograph, about 100 ms apart, so a
 clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead, with
-`startScreencast` and `castStoryboard`.
+`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
+the page's surface right after it changes ("Unable to capture screenshot"); a
+storyboard takes that photograph again two frames later, up to three attempts
+in all, and lists each retake under `recaptures` in the trace.
 
 ## Engine limits (measured with Playwright 1.61)
 
