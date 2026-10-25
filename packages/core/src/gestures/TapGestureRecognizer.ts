@@ -43,6 +43,11 @@ const TAP = UIKIT_GESTURES.tap;
 
 /** @experimental */
 export class TapGestureRecognizer extends GestureRecognizer {
+  /** @internal The host's brand: a tap decides at the lift, so it never claims mid-move (recognizerInternals). */
+  protected get family(): 'tap' {
+    return 'tap';
+  }
+
   numberOfTapsRequired: number;
   numberOfTouchesRequired: number;
   allowableMovement: number;

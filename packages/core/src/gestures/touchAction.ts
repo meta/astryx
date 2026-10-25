@@ -26,7 +26,6 @@
  */
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
-import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 import {internals} from './recognizerInternals';
 
 /** The intersection of what each touch recognizer leaves the browser. */
@@ -102,7 +101,7 @@ export function gestureHostStyle(
   if (
     recognizers.some(
       recognizer =>
-        recognizer instanceof LongPressGestureRecognizer &&
+        internals(recognizer).family === 'longPress' &&
         internals(recognizer).acceptsTouchInput,
     )
   ) {

@@ -6,7 +6,8 @@
  * @output A gesture-only component's imports (useGestureRecognizer, the pan
  *   recognizers, the gesture host) reach neither the press tracker nor
  *   haptics, nor the hover recognizer, the page hold or the finger-scroll
- *   watch; each of those stays reachable from the entry that uses it
+ *   watch; each of those stays reachable from the entry that uses it; the
+ *   host and touch-action reach no recognizer class
  * @position Unit test of packages/core/src/gestures' module graph
  *
  * Static imports only: a type-only import is erased and costs nothing, and
@@ -109,6 +110,17 @@ describe('the gestures module graph', () => {
       'GestureRecognizer.ts',
     );
   });
+
+  it.each(['GestureHost.ts', 'touchAction.ts'])(
+    '%s reaches no recognizer class: each brands its family',
+    entry => {
+      const modules = reachable(entry);
+      expect(modules).not.toContain('TapGestureRecognizer.ts');
+      expect(modules).not.toContain('LongPressGestureRecognizer.ts');
+      expect(modules).not.toContain('PanGestureRecognizer.ts');
+      expect(modules).not.toContain('HoverGestureRecognizer.ts');
+    },
+  );
 
   it('reads type-only imports as free', () => {
     // GestureRecognizer imports GestureArena for its types alone.

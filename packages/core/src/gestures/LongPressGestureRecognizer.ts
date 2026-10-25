@@ -43,6 +43,11 @@ export interface LongPressGestureRecognizerOptions extends GestureRecognizerOpti
 
 /** @experimental */
 export class LongPressGestureRecognizer extends GestureRecognizer {
+  /** @internal The host's brand: a long press keeps the callout and selection off (recognizerInternals). */
+  protected get family(): 'longPress' {
+    return 'longPress';
+  }
+
   minimumPressDuration: number;
   allowableMovement: number;
   numberOfTapsRequired: number;

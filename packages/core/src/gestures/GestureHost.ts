@@ -117,8 +117,7 @@ import {
 import type {GestureRecognizer} from './GestureRecognizer';
 import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
-import {PanGestureRecognizer} from './PanGestureRecognizer';
-import {TapGestureRecognizer} from './TapGestureRecognizer';
+import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
 import {
   gestureHostStyle,
@@ -208,18 +207,28 @@ function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
   return (
     recognizer.claimsTouches &&
     internals(recognizer).acceptsTouchInput &&
-    !(recognizer instanceof TapGestureRecognizer)
+    internals(recognizer).family !== 'tap'
   );
 }
 
 /**
- * A hover recognizer, told apart by its marker rather than its class, so a
+ * A hover recognizer, told apart by its family rather than its class, so a
  * page without one never ships HoverGestureRecognizer.
  */
 function isHoverRecognizer(
   recognizer: GestureRecognizer,
 ): recognizer is HoverGestureRecognizer {
-  return (recognizer as {readonly isHover?: boolean}).isHover === true;
+  return internals(recognizer).family === 'hover';
+}
+
+/**
+ * A pan (or a pan subclass), told apart by its family rather than its class,
+ * so a page that constructs no pan never ships PanGestureRecognizer.
+ */
+function isPanRecognizer(
+  recognizer: GestureRecognizer,
+): recognizer is PanGestureRecognizer {
+  return internals(recognizer).family === 'pan';
 }
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
@@ -1103,7 +1112,7 @@ export class GestureHost {
     }
     for (const recognizer of this.arena.involvedRecognizers) {
       if (
-        recognizer instanceof PanGestureRecognizer &&
+        isPanRecognizer(recognizer) &&
         recognizer.claimsEarly() &&
         recognizer.trackedTouches.some(touch => ids.has(touch.id))
       ) {
@@ -1712,7 +1721,7 @@ export class GestureHost {
   private failUnclaimedLoneFingerPans(): void {
     for (const recognizer of [...this.arena.involvedRecognizers]) {
       if (
-        recognizer instanceof PanGestureRecognizer &&
+        isPanRecognizer(recognizer) &&
         recognizer.state === 'possible' &&
         // An early claim (claimDistance) is a claim too.
         !recognizer.claimsEarly() &&
