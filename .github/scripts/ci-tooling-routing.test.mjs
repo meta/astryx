@@ -72,7 +72,7 @@ describe('Node-tooling CI routing', () => {
 
   it('runs the Node project and required lint owners for tooling', () => {
     const nodeSuite = ci.jobs['test-node'].steps.find(candidate =>
-      candidate.run?.includes('--project node'),
+      /^pnpm test:node\b/.test(candidate.run ?? ''),
     );
     expect(nodeSuite.if).not.toContain('tooling_only');
     expect(
@@ -88,7 +88,7 @@ describe('Node-tooling CI routing', () => {
 
   it('skips UI/browser owners but keeps an explicit component N/A reporter', () => {
     const uiSuite = ci.jobs['test-ui'].steps.find(candidate =>
-      candidate.run?.includes('--project ui'),
+      /^pnpm test:ui\b/.test(candidate.run ?? ''),
     );
     expect(uiSuite.if).toContain(TOOLING_FALSE);
     expect(ci.jobs['check-components'].if).not.toContain(TOOLING_FALSE);
@@ -101,33 +101,36 @@ describe('Node-tooling CI routing', () => {
     expect(ci.jobs['test-build'].if).toBe(
       `github.event_name != 'workflow_dispatch' && ${BROAD_ONLY}`,
     );
-    expect(step(ci.jobs['test-build'], 'Build the Vite plugin').run).toBe(
-      'pnpm -F @astryxdesign/build build',
+    expect(step(ci.jobs['test-build'], 'Run Build package contracts').run).toBe(
+      'pnpm test:build',
     );
-    expect(
-      step(ci.jobs['test-build'], 'Run Build CSS-layer cascade guard').run,
-    ).toBe('node .github/scripts/theme-layer-cascade.js');
+    // The Build package's owner keeps its contracts, in order: the plugin is
+    // built before the cascade guard imports it.
+    const rootScripts = JSON.parse(
+      fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+    ).scripts;
+    const buildCommands = rootScripts['test:build'].split(' && ');
+    expect(buildCommands).toEqual([
+      'vitest run packages/build/src/packed-consumer.test.mjs --project node --maxWorkers=1',
+      'pnpm -F @astryxdesign/build build',
+      'node .github/scripts/theme-layer-cascade.js',
+      'ASTRYX_STYLEX_BROWSER=1 vitest run scripts/stylex-module-resolution.browser.test.mjs --project node --maxWorkers=1',
+    ]);
     expect(ci.jobs['fixture-contrast'].if).toContain(TOOLING_FALSE);
     // The merge-base size build is heavy build work and stays off the
     // Node-tooling, docsite, and spec lanes.
     expect(ci.jobs['size-base'].if).toContain(BROAD_ONLY);
+    expect(rootScripts['test:theme-family'].split(' && ')).toEqual([
+      'pnpm -F @astryxdesign/core build',
+      'pnpm -F @astryxdesign/sandbox generate:theme-family',
+      'node .github/scripts/theme-family-cascade.js',
+    ]);
     const familyCommands = new Map([
       [
         'Install Playwright for theme-family contract',
         'npx playwright install chromium',
       ],
-      [
-        'Build theme-family compiler dependencies',
-        'pnpm -F @astryxdesign/core build',
-      ],
-      [
-        'Generate the maintained theme-family fixture',
-        'pnpm -F @astryxdesign/sandbox generate:theme-family',
-      ],
-      [
-        'Run theme family cascade guard',
-        'node .github/scripts/theme-family-cascade.js',
-      ],
+      ['Run the theme-family contract', 'pnpm test:theme-family'],
     ]);
     for (const [name, command] of familyCommands) {
       const ownerStep = step(ci.jobs['test-node'], name);

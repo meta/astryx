@@ -16,6 +16,12 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels its superseded run; merge-queue entries
+# keep their own uncancelled groups.
+concurrency:
+  group: 'internal-registry-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.run_id }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-check:
     runs-on: 4-core-ubuntu

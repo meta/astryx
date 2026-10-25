@@ -33,9 +33,10 @@ public struct Icon: View {
 
   public var body: some View {
     if props.base.isHidden != true {
-      if let symbol = Icon.symbol(for: props.icon, themeIcons: astryx.icons) {
+      if let source = Icon.symbol(for: props.icon, themeIcons: astryx.icons) {
         let side = Icon.points(for: resolvedSize) * astryx.textScale
-        Image(systemName: symbol)
+        // An asset the app does not ship draws nothing (IconImage.image).
+        source.image?
           .resizable()
           .scaledToFit()
           .frame(width: side, height: side)
@@ -94,8 +95,8 @@ public struct Icon: View {
   /// The SF Symbol a name draws: the theme's mapping (which also registers a
   /// `<library>:<name>` name), else the platform default; `nil` for a name
   /// neither maps.
-  nonisolated static func symbol(for name: IconName, themeIcons: [String: String]) -> String? {
-    themeIcons[name.rawValue] ?? astryxDefaultIcons[name.rawValue]
+  nonisolated static func symbol(for name: IconName, themeIcons: [String: IconImage]) -> IconImage? {
+    themeIcons[name.rawValue] ?? astryxDefaultIcons[name.rawValue].map(IconImage.systemName)
   }
 }
 
