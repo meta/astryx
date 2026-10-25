@@ -367,9 +367,13 @@ A scroll lock may hold the page with `holdPageScroll(document, decide)` from
 does not call it). It lives in its own module, so a page without a scroll
 lock never ships it, and it imports nothing of the gesture host: it asks the
 document's host whether a recognizer owns a touch only if a host exists, and
-a document without one has no recognizer to own it. While any hold is
-active, and only where the primary pointer is coarse, there is a non-passive
-`touchmove` listener on the document. Once per one-finger touch that no
+a document without one has no recognizer to own it. A hold asks nothing as
+it starts (an overlay opens without reading the pointer): a passive
+`pointerdown` reads the primary pointer at its first touch or pen contact,
+and the hold follows it from then on. While any hold is active, and only
+where the primary pointer is coarse, there is a non-passive `touchmove`
+listener on the document; where the contact's `touchstart` came before its
+`pointerdown`, the finger is named at its first move. Once per one-finger touch that no
 recognizer owns, after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
