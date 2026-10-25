@@ -16,6 +16,11 @@
  * export (whether or not core's dist exists), and substitutes the constants:
  * a key that does not resolve, or resolves to a differently named constant,
  * leaves a placeholder and fails.
+ *
+ * It proves that the export resolves and that the names match, not that the
+ * lab stylesheet build emits the rule: that build still reports a
+ * cross-package constant as a variable nothing declares. Once it passes,
+ * this test should check the built stylesheet instead.
  */
 
 import {existsSync, readFileSync, statSync} from 'node:fs';
