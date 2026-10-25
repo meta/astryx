@@ -146,6 +146,7 @@ import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {resolveMotion} from './resolveMotion';
 import {scroll} from './uikit/scroll';
 import {timing} from './uikit/timing';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 /**
  * A value the animator can drive.
@@ -684,12 +685,12 @@ export function defaultPrefersReducedMotion(): boolean {
   );
 }
 
-/** Whether the primary pointer is coarse: `(pointer: coarse)`. */
+/** Whether the primary pointer is coarse (TOUCH_QUERY). */
 export function defaultIsCoarsePointer(): boolean {
   return (
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
-    window.matchMedia('(pointer: coarse)').matches
+    window.matchMedia(TOUCH_QUERY).matches
   );
 }
 
