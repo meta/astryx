@@ -258,12 +258,14 @@ warning, so two writers never fight over the paint. Pass another
   system. Taps claim only at the lift, and a recognizer that never claims
   (`claimsTouches` false, such as a pull that only watches the scroll) never
   owns a touch, so an element with only those, or only a press consumer,
-  gets no such listener (see the known limit below). A press tracker that
-  keeps its touch once the press is delivered (`keepsTouch`, UIKit's
-  `touchesShouldCancel(in:)` false for a tracking control) gets one: from
-  then on its finger's moves are cancelled, so the browser's pan never
-  takes a held control; a move before the press is delivered still
-  scrolls. The listener the host
+  gets no such listener (see the known limit below). A press tracker created
+  with `keepsTouch: true` (opt-in, for a continuous-tracking control such
+  as a held stepper; never plain buttons, links, cards or list cells) gets
+  one: once its press is delivered its finger's moves are cancelled, so the
+  browser's pan never takes the held control (UIKit's
+  `touchesShouldCancel(in:)` is false for a tracking control). A scroll that
+  starts on such a control waits on the main thread; a move before the
+  press is delivered still scrolls. The listener the host
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can
   claim while it moves.
