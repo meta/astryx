@@ -10,6 +10,8 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {PRESS_GESTURE_MEMORY_MS} from '../../utils/pressFeedback';
+import {PRESS_SLOP_PX} from '../../utils/pressGesture';
 import {
   HAPTIC_FEEDBACK_KINDS,
   HAPTIC_VIBRATION_PATTERNS,
@@ -52,6 +54,15 @@ describe('UIKIT_GESTURES', () => {
     expect(UIKIT_GESTURES.pinch.hysteresis.value).toBe(8);
     expect(UIKIT_GESTURES.control.trackingExpansion.value).toBe(70);
     expect(UIKIT_GESTURES.velocity.currentWeight.value).toBe(0.2);
+  });
+
+  it('holds the press entries to the press model, one value per use', () => {
+    // The touch press model (utils/pressGesture.ts, utils/pressFeedback.ts)
+    // and the table name the same clocks: they cannot drift apart.
+    expect(UIKIT_GESTURES.press.slop.value).toBe(PRESS_SLOP_PX);
+    expect(UIKIT_GESTURES.press.momentumMemory.value).toBe(
+      PRESS_GESTURE_MEMORY_MS,
+    );
   });
 
   it('keeps the pan decision within the distance WebKit claims a scroll at', () => {
