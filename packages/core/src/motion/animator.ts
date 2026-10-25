@@ -64,10 +64,11 @@
  *   midpoint, fades back in). An opacity-only change fades. The fade runs
  *   `timing.reducedMotionCrossFadeMs`, capped at 200 ms, on
  *   `timing.curves.easeInOut`;
- * - on any other pointer (DR3) it completes at once, opacity included;
- * - `reducedMotion: 'instant'` asks for DR3's jump on any pointer. Nothing
- *   keeps travel or a spring (DR4).
- * A fade the call does not name ends where it was heading. Decays keep their
+ * - on any other pointer (DR3) it completes at once; an opacity the call does
+ *   not name keeps what it was doing.
+ * No call changes this: nothing keeps travel or a spring, and nothing skips
+ * the touch cross-fade (DR4). On a coarse pointer, a fade the call does not
+ * name ends where it was heading. Decays keep their
  * motion: momentum that continues a throw is direct movement, as scrolling
  * keeps decelerating under iOS Reduce Motion (`design:reduced-motion` DR2,
  * DEC-2).
@@ -126,11 +127,6 @@ export interface AnimateOptions {
    * animations on one clock.
    */
   at?: number;
-  /**
-   * Reduced Motion substitution; see the file header. `'crossfade'` (the
-   * default) follows the pointer: a fade on a coarse one, a jump otherwise.
-   */
-  reducedMotion?: 'crossfade' | 'instant';
 }
 
 export interface AnimatorOptions {
@@ -970,9 +966,7 @@ export function createAnimator(
       lastSpring.set(owner, transition.spring);
       const properties = Object.keys(targets) as MotionProperty[];
       const reduce = prefersReducedMotion();
-      const instant =
-        reduce &&
-        (animateOptions.reducedMotion === 'instant' || !isCoarsePointer());
+      const instant = reduce && !isCoarsePointer();
       const travels = properties.some(
         p =>
           TRAVEL.includes(p) &&
@@ -1005,7 +999,9 @@ export function createAnimator(
           }
         }
         if (instant) {
-          next.opacity = null;
+          if (targets.opacity != null) {
+            next.opacity = null;
+          }
         } else if (entering || leaving) {
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},

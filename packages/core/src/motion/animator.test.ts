@@ -552,18 +552,6 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     );
   });
 
-  it("'instant' jumps, opacity included", () => {
-    const {animator} = reduced();
-    animator.animate(
-      {x: 50, opacity: 0},
-      {spring: springs.smooth},
-      {reducedMotion: 'instant'},
-    );
-    expect(animator.get('x')).toBe(50);
-    expect(animator.get('opacity')).toBe(0);
-    expect(recorded).toHaveLength(0);
-  });
-
   it('an opacity-only change fades within 200 ms, with no spring', () => {
     const {animator} = reduced();
     animator.set({opacity: 0});
@@ -596,21 +584,23 @@ describe('Reduced Motion on a fine pointer (DR3): every change at once', () => {
     expect(recorded).toHaveLength(0);
   });
 
-  it('a jump during a running fade ends that fade at its target', async () => {
-    const coarse = setup({
+  it('a move leaves an opacity it does not name to finish what it was doing', async () => {
+    let isCoarse = true;
+    const {animator} = setup({
       prefersReducedMotion: () => true,
-      isCoarsePointer: () => true,
-    }).animator;
-    coarse.animate({opacity: 0}, {spring: springs.smooth});
+      isCoarsePointer: () => isCoarse,
+    });
+    animator.animate({opacity: 0}, {spring: springs.smooth});
     await advance(60);
-    expect(coarse.get('opacity')).toBeGreaterThan(0);
-    coarse.animate(
-      {x: 100},
-      {spring: springs.navigationPush},
-      {reducedMotion: 'instant'},
-    );
-    expect(coarse.get('x')).toBe(100);
-    expect(coarse.get('opacity')).toBe(0);
+    const midFade = animator.get('opacity');
+    expect(midFade).toBeGreaterThan(0);
+    isCoarse = false;
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(animator.get('x')).toBe(100);
+    // The fade is neither overwritten nor restored: it runs to its target.
+    expect(animator.get('opacity')).toBeCloseTo(midFade, 6);
+    await advance(300);
+    expect(animator.get('opacity')).toBeCloseTo(0, 6);
   });
 });
 

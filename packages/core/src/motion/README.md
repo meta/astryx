@@ -68,9 +68,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
   DR2–DR4): on a coarse primary pointer every `animate` cross-fades within
   200 ms. An entrance lands and fades in, an exit fades out then moves, any
   other move dips (fade out, move, fade in), and an opacity change fades, over
-  `timing.reducedMotionCrossFadeMs` capped at 200 ms. On any other pointer, or
-  with `{reducedMotion: 'instant'}`, every change completes at once. Nothing
-  keeps travel or a spring. A `decay` keeps moving: momentum after a throw is
+  `timing.reducedMotionCrossFadeMs` capped at 200 ms. On any other pointer every
+  change completes at once. No call keeps travel or a spring or skips the
+  touch cross-fade. A `decay` keeps moving: momentum after a throw is
   direct movement.
 
 ### How it stays on the compositor
