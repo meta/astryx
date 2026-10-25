@@ -225,23 +225,35 @@ export async function seekAnimations(
 
 /**
  * Resumes (default) or finishes every held animation: only those
- * `holdAnimations` paused, so an animation the page paused stays paused.
+ * `holdAnimations` paused, so an animation the page paused stays paused. An
+ * animation that repeats forever has no end to finish at, so `finish`
+ * resumes it instead. The held set is cleared even if one throws.
  */
 export async function releaseAnimations(
   page: Page,
   {finish = false}: {finish?: boolean} = {},
 ): Promise<void> {
   await page.evaluate(shouldFinish => {
-    const held =
-      (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? [];
-    for (const animation of held) {
-      if (shouldFinish) {
-        animation.finish();
-      } else {
-        animation.play();
+    const w = window as unknown as {
+      __harnessHeld?: Animation[];
+      __harnessHeldOffsets?: number[];
+    };
+    const held = w.__harnessHeld ?? [];
+    try {
+      for (const animation of held) {
+        const end = Number(
+          animation.effect?.getComputedTiming().endTime ?? Infinity,
+        );
+        if (shouldFinish && Number.isFinite(end)) {
+          animation.finish();
+        } else {
+          animation.play();
+        }
       }
+    } finally {
+      w.__harnessHeld = [];
+      w.__harnessHeldOffsets = [];
     }
-    (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld = [];
   }, finish);
 }
 
@@ -249,10 +261,22 @@ export interface CurveSample {
   /** The requested time. */
   readonly t: number;
   /**
-   * The time the page presents: `t`, or just inside the end when the sample
-   * was taken at or past it (see `seekAnimations`). Oracles are read here.
+   * The time the sampled element presents: `t`, or just inside the end of
+   * its own animations when the sample was taken at or past it (see
+   * `seekAnimations`). Read from the element's own animations only (from
+   * every held one if none targets it).
    */
   readonly presentedAt: number;
+  /**
+   * The same per channel group, from the element's animations of those
+   * properties: a 300 ms move beside a 400 ms fade on one element is read
+   * just inside 300 ms for the transform and at the requested time for the
+   * opacity. `curveOf` reads oracles here.
+   */
+  readonly presentedAtFor: {
+    readonly transform: number;
+    readonly opacity: number;
+  };
   /**
    * The presented 2D transform: `translate` · `rotate` · `scale` ·
    * `transform`, composed in the order CSS applies them.
@@ -291,8 +315,22 @@ export async function sampleCurve(
           'sampleCurve: no held animations (call holdAnimations first)',
         );
       }
+      // The properties each held animation of this element animates.
+      const own = held.map(animation => {
+        const effect = animation.effect as KeyframeEffect | null;
+        if (effect?.target !== element) {return null;}
+        const properties = new Set<string>();
+        for (const keyframe of effect.getKeyframes()) {
+          for (const key of Object.keys(keyframe)) {properties.add(key);}
+        }
+        return properties;
+      });
+      const TRANSFORM = ['transform', 'translate', 'rotate', 'scale'];
       return ts.map(t => {
         let presented = -Infinity;
+        let presentedOwn = -Infinity;
+        let presentedTransform = -Infinity;
+        let presentedOpacity = -Infinity;
         held.forEach((animation, index) => {
           // Each at its own offset, just inside its end: see seekAnimations.
           const offset = w.__harnessHeldOffsets?.[index] ?? 0;
@@ -302,8 +340,19 @@ export async function sampleCurve(
           const local = Math.min(t - offset, end - inset);
           animation.currentTime = local;
           presented = Math.max(presented, local + offset);
+          const properties = own[index];
+          if (properties == null) {return;}
+          presentedOwn = Math.max(presentedOwn, local + offset);
+          if (TRANSFORM.some(p => properties.has(p))) {
+            presentedTransform = Math.max(presentedTransform, local + offset);
+          }
+          if (properties.has('opacity')) {
+            presentedOpacity = Math.max(presentedOpacity, local + offset);
+          }
         });
-        const presentedAt = Number.isFinite(presented) ? presented : t;
+        const or = (value: number, fallback: number) =>
+          Number.isFinite(value) ? value : fallback;
+        const presentedAt = or(presentedOwn, or(presented, t));
         const style = getComputedStyle(element);
         // translate · rotate · scale · transform, as CSS applies them (all
         // about the same transform origin, which `transform` excludes too).
@@ -343,6 +392,10 @@ export async function sampleCurve(
         return {
           t,
           presentedAt,
+          presentedAtFor: {
+            transform: or(presentedTransform, presentedAt),
+            opacity: or(presentedOpacity, presentedAt),
+          },
           matrix: `matrix(${a}, ${b}, ${c}, ${d}, ${e}, ${f})`,
           transform: style.transform,
           translate: style.translate,
@@ -357,6 +410,7 @@ export async function sampleCurve(
   return raw.map(r => ({
     t: r.t,
     presentedAt: r.presentedAt,
+    presentedAtFor: r.presentedAtFor,
     transform: parseTransform(r.matrix),
     opacity: Number(r.opacity),
     raw: {
@@ -378,7 +432,10 @@ export function curveOf(
   channel: Channel,
 ): TimedValue[] {
   return samples.map(s => ({
-    t: s.presentedAt,
+    t:
+      channel === 'opacity'
+        ? s.presentedAtFor.opacity
+        : s.presentedAtFor.transform,
     value: channel === 'opacity' ? s.opacity : s.transform[channel],
   }));
 }

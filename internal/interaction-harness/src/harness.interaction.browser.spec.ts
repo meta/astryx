@@ -401,6 +401,74 @@ test.describe('holding', () => {
       }),
     ).toEqual(['paused', 500]);
   });
+
+  test("a sample is labelled from its own element's animations, per channel", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // #box moves for 300 ms and fades for 400 ms; another element runs longer.
+    await page.evaluate(() => {
+      const box = document.getElementById('box');
+      box?.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      box?.animate([{opacity: 1}, {opacity: 0}], {
+        duration: 400,
+        easing: 'linear',
+      });
+      const other = document.createElement('div');
+      other.style.cssText =
+        'position:absolute;top:300px;width:40px;height:40px';
+      document.body.append(other);
+      other.animate([{opacity: 0}, {opacity: 1}], {duration: 600});
+    });
+    await holdAnimations(page);
+    const samples = await sampleCurve(page.locator('#box'), [0, 150, 300]);
+    // The move is read just inside its end, the fade where it is.
+    expect(samples.at(-1)?.presentedAtFor).toEqual({
+      transform: 299.5,
+      opacity: 300,
+    });
+    const move = compareCurve(curveOf(samples, 'translateX'), t => t, 0.05);
+    expect(move.maxError, JSON.stringify(move.worst)).toBeLessThanOrEqual(0.05);
+    const fade = compareCurve(
+      curveOf(samples, 'opacity'),
+      t => 1 - t / 400,
+      0.002,
+    );
+    expect(fade.maxError, JSON.stringify(fade.worst)).toBeLessThanOrEqual(
+      0.002,
+    );
+    await releaseAnimations(page);
+  });
+
+  test('finishing resumes an animation that repeats forever and still clears the held set', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const box = document.getElementById('box');
+      box?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+        duration: 800,
+        iterations: Infinity,
+      });
+      const fade = document.createElement('div');
+      fade.id = 'fade';
+      document.body.append(fade);
+      fade.animate([{opacity: 0}, {opacity: 1}], {duration: 300});
+    });
+    expect(await holdAnimations(page)).toHaveLength(2);
+    await releaseAnimations(page, {finish: true});
+    expect(
+      await page.evaluate(() => ({
+        spinner: document.getElementById('box')?.getAnimations()[0]?.playState,
+        fade: document.getElementById('fade')?.getAnimations().length,
+        held: (window as unknown as {__harnessHeld: Animation[]}).__harnessHeld
+          .length,
+      })),
+    ).toEqual({spinner: 'running', fade: 0, held: 0});
+  });
 });
 
 test.describe('animation state', () => {
@@ -598,6 +666,65 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     });
     expect(held.map(a => Number.isFinite(a.curveEndMs))).toEqual([false, true]);
     expect(storyboard.frames).toHaveLength(13); // t = 0 … 200 ms
+    await releaseAnimations(page);
+    await storyboard.write(testInfo);
+  });
+
+  test('a filmstrip runs from the earliest start to the latest end among the animations that end', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    // A spinner that started a second earlier, a 300 ms move, and a 240 ms
+    // move that starts 83 ms after it.
+    await page.evaluate(async () => {
+      const make = (id: string, top: number) => {
+        const el = document.createElement('div');
+        el.id = id;
+        el.style.cssText = `position:absolute;left:0;top:${top}px;width:40px;height:40px;background:#36c`;
+        document.body.append(el);
+        return el;
+      };
+      document
+        .getElementById('box')
+        ?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
+          duration: 800,
+          iterations: Infinity,
+        });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      make('first', 360).animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      await new Promise(resolve => setTimeout(resolve, 83));
+      make('second', 410).animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(240px)'}],
+        {duration: 240, easing: 'linear'},
+      );
+    });
+    const x = (id: string) =>
+      page
+        .locator(`#${id}`)
+        .evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m41);
+    const {storyboard, held} = await animationStoryboard(page, {
+      name: 'harness-self-test-offsets',
+      clip: {x: 0, y: 340, width: 402, height: 120},
+      columns: 6,
+      measure: async () => ({
+        first: await x('first'),
+        second: await x('second'),
+      }),
+    });
+    const second = held.find(a => a.target === 'div#second');
+    const first = held.find(a => a.target === 'div#first');
+    const lag = (second?.offsetMs ?? 0) - (first?.offsetMs ?? 0);
+    const firsts = storyboard.frames.map(f => Number(f.data.first));
+    const seconds = storyboard.frames.map(f => Number(f.data.second));
+    // The film starts with the first move at its start, the spinner aside...
+    expect(firsts[0]).toBeCloseTo(0, 1);
+    expect(firsts[6]).toBeCloseTo(100, 0);
+    // ...and ends with the second move at its end, not cut off.
+    expect(seconds.at(-1)).toBeGreaterThan(239);
+    expect(storyboard.frames.at(-1)?.t).toBeCloseTo(lag + 240, 0);
     await releaseAnimations(page);
     await storyboard.write(testInfo);
   });
