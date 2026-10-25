@@ -209,7 +209,7 @@ describe('GestureHost', () => {
     expect(end.defaultPrevented).toBe(false);
   });
 
-  it('keeps cancelling while a second finger moves with the claimed one', () => {
+  it('leaves a second finger no recognizer owns to the page while the claimed one is held (spec:AST-094 FR19)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({maximumNumberOfTouches: 1});
     detachers.push(host.attach(box, pan));
@@ -226,9 +226,21 @@ describe('GestureHost', () => {
       [moved, {...second, x: 260}],
       32,
     );
-    expect(pinchLike.defaultPrevented).toBe(true);
+    expect(pinchLike.defaultPrevented).toBe(false);
     expect(pan.state).toBe('began');
     expect(pan.numberOfTouches).toBe(1);
+    // The claimed finger's own moves stay cancelled.
+    const own = touch(
+      'touchmove',
+      box,
+      [{...moved, x: 60}],
+      [
+        {...moved, x: 60},
+        {...second, x: 260},
+      ],
+      48,
+    );
+    expect(own.defaultPrevented).toBe(true);
   });
 
   it('reads pointercancel on a finger as the browser taking it', () => {
@@ -321,6 +333,33 @@ describe('GestureHost', () => {
     expect(host.arena.getTouch(1)?.takenByBrowser).toBe(true);
   });
 
+  it("gives a finger's target a passive touchmove listener unless a recognizer on that touch can claim while it moves (spec:AST-094 FR19)", () => {
+    const {taps, pan} = mount(
+      '<div id="taps"><span id="tapChild">t</span></div><div id="pan"><span id="panChild">p</span></div>',
+    );
+    detachers.push(host.attach(taps, new TapGestureRecognizer({name: 'tap'})));
+    detachers.push(host.attach(pan, new PanGestureRecognizer({name: 'pan'})));
+    const moveListenerFlags = (element: Element) => {
+      const added = vi.spyOn(element, 'addEventListener');
+      return () =>
+        added.mock.calls
+          .filter(([type]) => type === 'touchmove')
+          .map(([, , options]) => (options as AddEventListenerOptions).passive);
+    };
+    const tapChild = taps.querySelector('#tapChild')!;
+    const panChild = pan.querySelector('#panChild')!;
+    const onTapChild = moveListenerFlags(tapChild);
+    const onPanChild = moveListenerFlags(panChild);
+    const tapFinger = {id: 1, x: 10, y: 10};
+    touch('touchstart', tapChild, [tapFinger], [tapFinger], 0);
+    const panFinger = {id: 2, x: 10, y: 10};
+    touch('touchstart', panChild, [panFinger], [tapFinger, panFinger], 0);
+    expect(onTapChild()).toEqual([true]);
+    expect(onPanChild()).toEqual([false]);
+    touch('touchend', tapChild, [tapFinger], [panFinger], 20);
+    touch('touchend', panChild, [panFinger], [], 20);
+  });
+
   it('gives the blocking touchmove listener only to elements whose recognizers claim while moving', () => {
     const {taps, pan, press, both, row} = mount(
       '<div id="taps"></div><div id="pan"></div><div id="press"></div><div id="both"></div><div id="row"></div>',
@@ -374,7 +413,7 @@ describe('GestureHost', () => {
     expect(onBoth.removed()).toBe(1);
   });
 
-  it("cancels a one-way pan's moves from its claim distance, before it begins, and keeps the touch through a reversal", () => {
+  it("leaves a one-way pan's touch to the page until the pan begins (spec:AST-094 FR19)", () => {
     const {card} = mount('<div id="card"></div>');
     const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
     detachers.push(host.attach(card, pan));
@@ -383,23 +422,11 @@ describe('GestureHost', () => {
     const at = (y: number, time: number) =>
       touch('touchmove', card, [{...finger, y}], [{...finger, y}], time);
     expect(at(97, 16).defaultPrevented).toBe(false);
-    expect(at(95, 32).defaultPrevented).toBe(true);
+    expect(at(95, 32).defaultPrevented).toBe(false);
     expect(pan.state).toBe('possible');
-    expect(pan.isClaimCommitted).toBe(true);
-    // Safari would give the page nothing now: the reversal is the pan's.
-    expect(at(104, 48).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(at(112, 64).defaultPrevented).toBe(true);
+    expect(at(88, 48).defaultPrevented).toBe(true);
     expect(pan.state).toBe('began');
-    touch('touchend', card, [{...finger, y: 112}], [], 80);
-    // A drag that starts the other way is the page's.
-    const down = {id: 2, x: 50, y: 100};
-    touch('touchstart', card, [down], [down], 100);
-    const downAt = (y: number, time: number) =>
-      touch('touchmove', card, [{...down, y}], [{...down, y}], time);
-    expect(downAt(106, 116).defaultPrevented).toBe(false);
-    expect(downAt(112, 132).defaultPrevented).toBe(false);
-    touch('touchend', card, [{...down, y: 112}], [], 148);
+    touch('touchend', card, [{...finger, y: 88}], [], 64);
   });
 
   it('leaves a scroll-edge pan to claim at its begin', () => {
