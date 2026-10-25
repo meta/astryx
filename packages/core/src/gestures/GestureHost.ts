@@ -535,7 +535,11 @@ export class GestureHost {
    */
   retain(): () => void {
     this.retainers += 1;
-    this.install();
+    // A watch is not an attach: no warning where the pointer is fine.
+    this.watchPointer();
+    if (this.isCoarse) {
+      this.install();
+    }
     let isRetained = true;
     return () => {
       if (!isRetained) {

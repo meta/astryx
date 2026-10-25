@@ -19,6 +19,7 @@
  * while something is watched.
  */
 
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import type {GestureHost} from './GestureHost';
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
@@ -72,13 +73,33 @@ function start(host: GestureHost, watch: Watch): () => void {
       }
     }
   };
-  doc.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  doc.addEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+  // Its listeners are on only while the primary pointer is coarse
+  // (`spec:AST-094` FR19, FR24): elsewhere no finger scrolls, as far as the
+  // touch presentation is concerned.
+  let isListening = false;
+  const listen = (on: boolean): void => {
+    if (on === isListening) {
+      return;
+    }
+    isListening = on;
+    if (on) {
+      doc.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
+      doc.addEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+    } else {
+      doc.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
+      doc.removeEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+      watch.fingerScrollers.clear();
+      watch.endedWhileDown.clear();
+    }
+  };
+  const view = doc.defaultView;
+  const stopWatchingPointer = watchCoarsePointer(view, listen);
+  listen(isCoarsePointer(view));
   const unsubscribe = host.onFingersChange(onFingers);
   const release = host.retain();
   return () => {
-    doc.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-    doc.removeEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
+    stopWatchingPointer();
+    listen(false);
     unsubscribe();
     release();
   };

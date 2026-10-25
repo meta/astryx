@@ -1980,6 +1980,56 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
   });
 
+  it('a page hold and a finger-scroll watch register nothing where it is fine, and follow it while they run', () => {
+    quietWarning();
+    const pointer = pointerQuery(false);
+    detachers.push(pointer.restore);
+    // On the document or the window, as each listens (jsdom's window carries
+    // its own listener methods).
+    const added = [
+      vi.spyOn(EventTarget.prototype, 'addEventListener'),
+      vi.spyOn(window, 'addEventListener'),
+    ];
+    const removed = [
+      vi.spyOn(EventTarget.prototype, 'removeEventListener'),
+      vi.spyOn(window, 'removeEventListener'),
+    ];
+    detachers.push(() => {
+      for (const spy of [...added, ...removed]) {
+        spy.mockRestore();
+      }
+    });
+    const {list} = mount('<div id="list"></div>');
+    detachers.push(
+      holdPageScroll(document, () => true),
+      watchFingerScrolls(host, list),
+    );
+    const types = (spies: typeof added) =>
+      spies
+        .flatMap(spy => spy.mock.calls.map(([type]) => String(type)))
+        .filter(type => /^(touch|pointer|scroll)/.test(type));
+    expect(types(added)).toEqual([]);
+    pointer.set(true);
+    expect(types(added)).toEqual(
+      expect.arrayContaining([
+        'touchstart',
+        'touchmove',
+        'scroll',
+        'scrollend',
+      ]),
+    );
+    pointer.set(false);
+    expect(types(removed)).toEqual(
+      expect.arrayContaining([
+        'touchstart',
+        'touchmove',
+        'scroll',
+        'scrollend',
+      ]),
+    );
+    expect(isFingerScroll(host, list)).toBe(false);
+  });
+
   it('warns once in development when something attaches where it is fine', () => {
     const warn = quietWarning();
     detachers.push(pointerQuery(false).restore);

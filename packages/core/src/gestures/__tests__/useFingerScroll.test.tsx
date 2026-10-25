@@ -12,8 +12,9 @@
 
 import {render} from '@testing-library/react';
 import {useRef} from 'react';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {useFingerScroll} from '../useFingerScroll';
+import {coarsePrimaryPointer} from './pointerQuery';
 
 function touch(type: string, target: Element, down: boolean): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
@@ -43,6 +44,16 @@ function Page() {
   read = useFingerScroll(document);
   return <p data-testid="row">row</p>;
 }
+
+// A phone: the finger-scroll watch listens only where the primary pointer is
+// coarse.
+let restorePointer: () => void;
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
+});
 
 afterEach(() => {
   read = () => false;

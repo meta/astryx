@@ -22,6 +22,7 @@
  * SYNC: When modified, update the gestures README ("Holding the page still").
  */
 
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
 /**
@@ -59,6 +60,9 @@ interface PageHolds {
   } | null;
   readonly onTouchStart: (event: TouchEvent) => void;
   readonly onTouchMove: (event: TouchEvent) => void;
+  /** Whether its listeners are on: while held, and the pointer is coarse. */
+  isListening: boolean;
+  stopWatchingPointer: (() => void) | null;
 }
 
 const holdsByDocument = new WeakMap<Document, PageHolds>();
@@ -71,6 +75,8 @@ function createHolds(doc: Document): PageHolds {
   const holds: PageHolds = {
     decisions: new Set(),
     touch: null,
+    isListening: false,
+    stopWatchingPointer: null,
     onTouchStart: event => {
       const fingers = fingersOf(event);
       const finger = fingers[0];
@@ -123,9 +129,29 @@ function createHolds(doc: Document): PageHolds {
 }
 
 /**
+ * Turn the holds' listeners on or off: on only while one is held and the
+ * primary pointer is coarse (`spec:AST-094` FR19, FR24).
+ */
+function listen(doc: Document, holds: PageHolds, on: boolean): void {
+  if (on === holds.isListening) {
+    return;
+  }
+  holds.isListening = on;
+  if (on) {
+    doc.addEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
+    doc.addEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+  } else {
+    doc.removeEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
+    doc.removeEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+    holds.touch = null;
+  }
+}
+
+/**
  * Hold the page of `doc` still under a finger until the returned release runs
  * (a scroll lock under a modal presentation): `holdPageScroll(document,
- * decide)`. Never creates a gesture host.
+ * decide)`. Never creates a gesture host. Where the primary pointer is fine
+ * it registers nothing, following the pointer while held.
  * Proposed; pending owner review.
  */
 export function holdPageScroll(
@@ -141,8 +167,11 @@ export function holdPageScroll(
   const hold = {decide};
   owned.decisions.add(hold);
   if (owned.decisions.size === 1) {
-    doc.addEventListener('touchstart', owned.onTouchStart, PASSIVE_CAPTURE);
-    doc.addEventListener('touchmove', owned.onTouchMove, ACTIVE_CAPTURE);
+    const view = doc.defaultView;
+    owned.stopWatchingPointer = watchCoarsePointer(view, isCoarse =>
+      listen(doc, owned, isCoarse),
+    );
+    listen(doc, owned, isCoarsePointer(view));
   }
   let isHeld = true;
   return () => {
@@ -152,13 +181,9 @@ export function holdPageScroll(
     isHeld = false;
     owned.decisions.delete(hold);
     if (owned.decisions.size === 0) {
-      doc.removeEventListener(
-        'touchstart',
-        owned.onTouchStart,
-        PASSIVE_CAPTURE,
-      );
-      doc.removeEventListener('touchmove', owned.onTouchMove, ACTIVE_CAPTURE);
-      owned.touch = null;
+      owned.stopWatchingPointer?.();
+      owned.stopWatchingPointer = null;
+      listen(doc, owned, false);
     }
   };
 }
