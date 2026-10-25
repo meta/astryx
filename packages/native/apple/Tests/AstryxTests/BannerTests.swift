@@ -23,7 +23,7 @@ import Testing
 @MainActor
 @Test func aBannerPaintsItsStatusGround() {
   var theme = Theme.default
-  theme.light.color.successMuted = Color(astryxRGBA: 0xFDE68AFF)
+  theme.light.color.successMuted = Color(.sRGB, red: 253 / 255, green: 230 / 255, blue: 138 / 255, opacity: 1)
   let banner = Astryx.Banner(status: .success, title: "Saved").frame(width: 240)
   let pixels = Pixels(banner, theme: theme)
   #expect(close(pixels.at(pixels.width - 6, pixels.height / 2), rgba("#FDE68AFF")))

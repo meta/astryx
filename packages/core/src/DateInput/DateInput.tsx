@@ -17,6 +17,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useCallback,
@@ -45,6 +46,7 @@ import {
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -1045,6 +1047,8 @@ PointerDateField.displayName = 'PointerDateField';
  * ```
  */
 export function DateInput(props: DateInputProps) {
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = props.isDisabled || inputGroupState.isDisabled;
   const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
   useDevWarning(
     'DateInput',
@@ -1062,11 +1066,11 @@ export function DateInput(props: DateInputProps) {
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} />;
+      return <NativeDateField {...rest} isDisabled={isDisabled} />;
     case 'sheet':
-      return <TouchDateField {...rest} />;
+      return <TouchDateField {...rest} isDisabled={isDisabled} />;
     case 'desktop':
-      return <PointerDateField {...rest} />;
+      return <PointerDateField {...rest} isDisabled={isDisabled} />;
   }
 }
 
