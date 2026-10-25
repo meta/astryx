@@ -5,7 +5,8 @@
  * @input Uses vitest, node:child_process and esbuild over the gestures
  *   sources
  * @output A production bundle of a page that constructs only a pan ships the
- *   gesture host and the pan, and none of the tap or long-press recognizers
+ *   gesture host and the pan, and none of the tap or long-press recognizers;
+ *   press tracking ships no recognizer
  * @position Unit test of packages/core/src/gestures' bundled size
  *
  * The host and touch-action tell recognizers apart by an internal family
@@ -86,6 +87,27 @@ describe('a gesture bundle', () => {
       }
     `);
     expect(modules).toContain('TapGestureRecognizer.ts');
+    expect(modules).not.toContain('PanGestureRecognizer.ts');
+    expect(modules).not.toContain('LongPressGestureRecognizer.ts');
+  });
+
+  it('ships press tracking without the tap recognizer, which it only reads', () => {
+    const modules = bundledModules(`
+      import {getGestureHost} from './GestureHost';
+      import {PressTracker} from './PressTracker';
+      export function mount(element: Element): () => void {
+        const tracker = new PressTracker({
+          getBounds: () => element.getBoundingClientRect(),
+          view: element,
+        });
+        return getGestureHost(element.ownerDocument).attachConsumer(
+          element,
+          tracker,
+        );
+      }
+    `);
+    expect(modules).toContain('PressTracker.ts');
+    expect(modules).not.toContain('TapGestureRecognizer.ts');
     expect(modules).not.toContain('PanGestureRecognizer.ts');
     expect(modules).not.toContain('LongPressGestureRecognizer.ts');
   });

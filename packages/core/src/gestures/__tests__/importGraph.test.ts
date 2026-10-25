@@ -111,7 +111,7 @@ describe('the gestures module graph', () => {
     );
   });
 
-  it.each(['GestureHost.ts', 'touchAction.ts'])(
+  it.each(['GestureHost.ts', 'touchAction.ts', 'PressTracker.ts'])(
     '%s reaches no recognizer class: each brands its family',
     entry => {
       const modules = reachable(entry);
