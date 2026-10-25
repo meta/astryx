@@ -25,8 +25,9 @@ import {VelocityTracker} from '../VelocityTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {gestureHosts} from '../hostRegistry';
-import {holdPageScroll} from '../pageHold';
+import {holdPageScroll, type PageScrollDecision} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
+import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 interface Contact {
@@ -1543,11 +1544,42 @@ describe('GestureHost', () => {
 
 describe('holdPageScroll', () => {
   const at = (id: number, x: number, y: number) => [{id, x, y}];
+  /** A contact's pointerdown, which reads the primary pointer for a hold. */
+  const contact = (pointerType = 'touch', x = 100, y = 300) =>
+    pointer('pointerdown', document.body, {pointerType, x, y, time: 0});
+  /** Hold the page, then touch it once, as a finger does. */
+  const hold = (decide: PageScrollDecision) => {
+    const release = holdPageScroll(document, decide);
+    contact();
+    return release;
+  };
+
+  it('asks nothing about the primary pointer as a hold starts, only at its first touch or pen contact', () => {
+    const ask = vi.spyOn(window, 'matchMedia');
+    detachers.push(() => ask.mockRestore());
+    detachers.push(holdPageScroll(document, () => true));
+    expect(ask).not.toHaveBeenCalled();
+    contact('mouse');
+    expect(ask).not.toHaveBeenCalled();
+    contact('touch');
+    expect(ask).toHaveBeenCalledWith(COARSE_POINTER_QUERY);
+  });
+
+  it('holds a touch whose pointerdown comes after its touchstart: the finger is named at its first move', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    detachers.push(holdPageScroll(document, () => true));
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
+    contact('touch', 100, 300);
+    expect(
+      touch('touchmove', scrim, at(1, 100, 250), at(1, 100, 250), 16)
+        .defaultPrevented,
+    ).toBe(true);
+  });
 
   it('cancels a one-finger pan the decision says would scroll the page, for the rest of its touch', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(holdPageScroll(document, decide));
+    detachers.push(hold(decide));
 
     touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
     const first = touch(
@@ -1574,7 +1606,7 @@ describe('holdPageScroll', () => {
   it('judges a pan once it clears the slop, so a first wobble does not fix its axis', () => {
     const {strip} = mount('<div id="strip"></div>');
     const decide = vi.fn((_origin: EventTarget | null, dx: number) => dx === 0);
-    detachers.push(holdPageScroll(document, decide));
+    detachers.push(hold(decide));
 
     touch('touchstart', strip, at(1, 100, 300), at(1, 100, 300), 0);
     const wobble = touch(
@@ -1600,7 +1632,7 @@ describe('holdPageScroll', () => {
 
   it('lets a pan through when the decision says something under the finger takes it', () => {
     const {list} = mount('<div id="list"></div>');
-    detachers.push(holdPageScroll(document, () => false));
+    detachers.push(hold(() => false));
 
     touch('touchstart', list, at(1, 100, 300), at(1, 100, 300), 0);
     expect(
@@ -1612,7 +1644,7 @@ describe('holdPageScroll', () => {
   it('never cancels a two-finger gesture, so pinch-zoom keeps working', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(holdPageScroll(document, decide));
+    detachers.push(hold(decide));
     const both = [
       {id: 1, x: 100, y: 300},
       {id: 2, x: 200, y: 300},
@@ -1634,7 +1666,7 @@ describe('holdPageScroll', () => {
     const inner = document.createElement('div');
     outer.attachShadow({mode: 'open'}).append(inner);
     const decide = vi.fn(() => false);
-    detachers.push(holdPageScroll(document, decide));
+    detachers.push(hold(decide));
 
     touch('touchstart', inner, at(1, 100, 300), at(1, 100, 300), 0);
     touch('touchmove', inner, at(1, 100, 250), at(1, 100, 250), 16);
@@ -1645,7 +1677,7 @@ describe('holdPageScroll', () => {
   it('holds the page of a document that has no gesture host, and creates none', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     gestureHosts.delete(document);
-    detachers.push(holdPageScroll(document, () => true));
+    detachers.push(hold(() => true));
 
     touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
     expect(
@@ -1662,7 +1694,7 @@ describe('holdPageScroll', () => {
     const pan = new PanGestureRecognizer({name: 'pan'});
     detachers.push(host.attach(box, pan));
     const decide = vi.fn(() => true);
-    detachers.push(holdPageScroll(document, decide));
+    detachers.push(hold(decide));
 
     touch('touchstart', box, at(1, 100, 300), at(1, 100, 300), 0);
     touch('touchmove', box, at(1, 100, 250), at(1, 100, 250), 16);
@@ -1673,7 +1705,7 @@ describe('holdPageScroll', () => {
 
   it('stacks holds and stops judging pans once the last one is released', () => {
     const {scrim} = mount('<div id="scrim"></div>');
-    const releaseFirst = holdPageScroll(document, () => true);
+    const releaseFirst = hold(() => true);
     const releaseSecond = holdPageScroll(document, () => true);
     const pan = (time: number) => {
       touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), time);
@@ -2136,7 +2168,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
   });
 
-  it('a page hold and a finger-scroll watch register nothing where it is fine, and follow it while they run', () => {
+  it('a page hold and a finger-scroll watch register no touch or scroll listener where it is fine, and follow it while they run', () => {
     quietWarning();
     const pointer = pointerQuery(false);
     detachers.push(pointer.restore);
@@ -2163,7 +2195,16 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     const types = (spies: typeof added) =>
       spies
         .flatMap(spy => spy.mock.calls.map(([type]) => type))
-        .filter(type => /^(touch|pointer|scroll)/.test(type));
+        .filter(type => /^(touch|scroll)/.test(type));
+    expect(types(added)).toEqual([]);
+    // The hold reads the pointer at its first touch contact: still fine.
+    document.body.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        composed: true,
+        pointerType: 'touch',
+      }),
+    );
     expect(types(added)).toEqual([]);
     pointer.set(true);
     expect(types(added)).toEqual(
