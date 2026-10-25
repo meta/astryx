@@ -23,6 +23,7 @@ import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {readFileSync} from 'node:fs';
 import {ContextMenu} from './ContextMenu';
+import {loadContextMenuTouchLayer} from './lazyContextMenuTouchLayer';
 import {ContextMenuGroup} from './index';
 import {
   ContextMenuItem,
@@ -44,6 +45,9 @@ import {contextMenu} from '../motion/uikit/contextMenu';
 // The touch sheet is loaded lazily; resolve its modules once up front, so
 // ContextMenu's own lazy sheet renders within the cases' waitFor.
 beforeAll(warmMenuBottomSheet, 20000);
+// The touch layer loads on demand; load it once so a touch test's first
+// render runs it at once.
+beforeAll(loadContextMenuTouchLayer, 20000);
 
 function NestedDismissibleLayer({onDismiss}: {onDismiss: () => void}) {
   const [isOpen, setIsOpen] = useState(true);
