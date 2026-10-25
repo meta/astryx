@@ -318,8 +318,18 @@ export class GestureHost {
   private readonly pendingPointers = new Map<number, PlacedContact>();
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
-  /** The last position fed per contact, so one channel's echo is dropped. */
+  /** The last sample fed per contact: a contact's time never runs back. */
   private readonly lastFed = new Map<number, TouchSample>();
+  /**
+   * Fingers whose samples come from their pointer events. A finger the
+   * browser reports on both channels is sampled from ONE: the pointer
+   * channel, where its pointerdown paired with its touchstart; touch events
+   * sample only a finger no pointer event reported (no Pointer Events). The
+   * other channel keeps its control duties (cancelling, claiming, the
+   * browser's takeover) but never feeds a sample, so the two copies of one
+   * move cannot both reach a velocity, however far apart they arrive.
+   */
+  private readonly pointerFed = new Set<number>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
   private lastTouch: {readonly target: Node; readonly time: number} | null =
@@ -1113,7 +1123,8 @@ export class GestureHost {
         this.arena.browserTookOver(taken, time);
       }
     }
-    this.feedMoves(inputs);
+    // A finger its pointer events sample is fed from there, never from here.
+    this.feedMoves(inputs.filter(input => !this.pointerFed.has(input.id)));
   };
 
   private readonly onHoldTouchStart = (event: TouchEvent): void => {
@@ -1433,6 +1444,7 @@ export class GestureHost {
       if (isSamePlace(pending, place)) {
         this.pendingPointers.delete(pointerId);
         this.fingerPointers.set(pointerId, id);
+        this.pointerFed.add(id);
         return;
       }
     }
@@ -1444,23 +1456,18 @@ export class GestureHost {
       if (isSamePlace(unpaired, place)) {
         this.unpairedTouches.delete(id);
         this.fingerPointers.set(pointerId, id);
+        this.pointerFed.add(id);
         return;
       }
     }
     this.pendingPointers.set(pointerId, place);
   }
 
-  /** Feed moves, dropping the echo of a move the other channel delivered. */
+  /** Feed moves from a contact's sampling channel, in time order. */
   private feedMoves(inputs: ReadonlyArray<TouchInput>): void {
     const fresh = inputs.filter(input => {
       const last = this.lastFed.get(input.id);
-      if (
-        last != null &&
-        (input.time < last.time ||
-          (input.time === last.time &&
-            input.x === last.x &&
-            input.y === last.y))
-      ) {
+      if (last != null && input.time < last.time) {
         return false;
       }
       this.lastFed.set(input.id, {x: input.x, y: input.y, time: input.time});
@@ -1475,6 +1482,7 @@ export class GestureHost {
   private forgetContact(id: number): void {
     this.unlockSelection(id);
     this.lastFed.delete(id);
+    this.pointerFed.delete(id);
     this.judgedUncancelable.delete(id);
     this.unpairedTouches.delete(id);
     for (const [pointerId, paired] of this.fingerPointers) {
@@ -1893,6 +1901,7 @@ export class GestureHost {
     this.pendingPointers.clear();
     this.unpairedTouches.clear();
     this.lastFed.clear();
+    this.pointerFed.clear();
     if (ids.length > 0) {
       this.arena.cancelled(ids, time);
     }
