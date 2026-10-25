@@ -40,6 +40,8 @@ export const MOTION_ROLE_KINDS: Readonly<Record<string, MotionRoleKind>> = {
   'springs.sheetPresent': 'spring',
   'springs.sheetReleaseFast': 'spring',
   'springs.stateChange': 'spring',
+  'springs.subMenuBack': 'spring',
+  'springs.subMenuOpen': 'spring',
   'springs.switchThumbMove': 'spring',
   'springs.switchThumbStretch': 'spring',
   'springs.timedChange': 'spring',

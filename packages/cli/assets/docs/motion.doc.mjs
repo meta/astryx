@@ -343,6 +343,18 @@ const calmTheme = defineTheme({
               '0.55s 0',
             ],
             [
+              'springs.subMenuBack',
+              '--motion-springs-sub-menu-back',
+              'spring',
+              '0.4s 0',
+            ],
+            [
+              'springs.subMenuOpen',
+              '--motion-springs-sub-menu-open',
+              'spring',
+              '0.4s 0.15',
+            ],
+            [
               'springs.switchThumbMove',
               '--motion-springs-switch-thumb-move',
               'spring',
