@@ -20,6 +20,8 @@ concurrency:
 jobs:
   smoke-test:
     runs-on: 2-core-ubuntu-arm
+    # PR CI's budget is 15 minutes (see ci.yml).
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:

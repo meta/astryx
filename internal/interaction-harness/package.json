@@ -1,0 +1,21 @@
+{
+  "name": "@astryxdesign/interaction-harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal: Playwright helpers for touch interaction proofs (real touch input). Never published.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scripts": "./src/scripts.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@astryxdesign/a11y-spec": "workspace:*",
+    "@playwright/test": "^1.61.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

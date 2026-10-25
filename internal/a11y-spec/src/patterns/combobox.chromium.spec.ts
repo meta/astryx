@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Selector ^(internal/a11y-spec/src/patterns/combobox|apps/storybook/stories/ComboboxA11y)
 
 /** Real-browser positive and mutation proof for the Combobox contract. */
 

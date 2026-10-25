@@ -15,6 +15,7 @@ const requiredSuccess = [
   ['test-node', process.env.TEST_NODE_RESULT],
   ['registry-contract', process.env.REGISTRY_CONTRACT_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
+  ['pr-interaction', process.env.PR_INTERACTION_RESULT],
 ];
 
 function fail(message) {
