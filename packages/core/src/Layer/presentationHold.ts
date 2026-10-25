@@ -7,8 +7,9 @@
  * @input A layer's root element, what ends the hold (a promise, or an
  *   animator handle's `finished`), and its scope; the gesture host's touch
  *   gates
- * @output holdPresentation, usePresentationHold and isInHeldLayer: input
- *   held away from a layer while its presentation runs
+ * @output holdPresentation, usePresentationHold, isInHeldLayer and
+ *   isPresentationShield: input held away from a layer while its
+ *   presentation runs
  * @position The Layer module's one presentation hold, for every component
  *   whose layer presents or dismisses under a finger
  *
@@ -39,7 +40,13 @@
  *
  * The shield sets its own `pointer-events` and `visibility`, so a layer root
  * that takes no hits itself (its content or a backdrop child opts back in)
- * is held all the same.
+ * is held all the same. A hit test that must see past held input (a press
+ * the finger that opened the layer continues, captured before the hold
+ * began) skips shields and nothing else: the first element of
+ * `elementsFromPoint` for which `isPresentationShield` is false, so an
+ * overlay really above the layer still wins. The shield is a manual
+ * popover, so its `toggle` events reach a document listener that logs
+ * every popover's: such a log keeps to its own popovers.
  *
  * One hold per layer: holds on a held layer stack, and the layer comes back
  * when the last one ends (when what ends it settles, resolved or rejected;
@@ -82,6 +89,15 @@ interface HeldLayer {
 
 const held = new WeakMap<Element, HeldLayer>();
 const gatedDocuments = new WeakSet<Document>();
+const liveShields = new WeakSet<Node>();
+
+/**
+ * Whether `node` is the shield of a live hold. A hit test that must see past
+ * held input takes the first element of `elementsFromPoint` that is not one.
+ */
+export function isPresentationShield(node: Node | null): boolean {
+  return node != null && liveShields.has(node);
+}
 
 /**
  * Whether `target` is inside a held layer, walking the flat tree as the
@@ -161,6 +177,7 @@ function addShield(layer: Element): HTMLElement {
     shield.addEventListener(type, swallow, {capture: true, passive: false});
   }
   layer.append(shield);
+  liveShields.add(shield);
   if (typeof shield.showPopover === 'function') {
     try {
       shield.showPopover();
@@ -217,7 +234,10 @@ export function holdPresentation(
       }
     }
     if (current.viewport === 0 && current.layer === 0) {
-      current.shield?.remove();
+      if (current.shield != null) {
+        liveShields.delete(current.shield);
+        current.shield.remove();
+      }
       held.delete(layer);
     }
   };

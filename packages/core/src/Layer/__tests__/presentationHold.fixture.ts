@@ -9,7 +9,8 @@
  *   popover (`#pop`) and a full-viewport layer (`#lift`) whose content and
  *   tint take the hits while a test may make its root take none, plus
  *   `window.__hold`: open a layer, hold and
- *   release it, read what an element at a point is, and a log of every
+ *   release it, read what an element at a point is and what lies past a
+ *   hold's shield there, and a log of every
  *   click, tap recognition and popover toggle
  * @position Browser fixture of presentationHold.interaction.browser.spec.ts;
  *   test-only
@@ -19,6 +20,7 @@ import {getGestureHost} from '../../gestures/GestureHost';
 import {TapGestureRecognizer} from '../../gestures/TapGestureRecognizer';
 import {
   holdPresentation,
+  isPresentationShield,
   type PresentationHoldScope,
 } from '../presentationHold';
 
@@ -38,6 +40,7 @@ declare global {
       hold: (id: LayerId, scope: PresentationHoldScope) => void;
       release: () => void;
       hitAt: (x: number, y: number) => string;
+      hitPast: (x: number, y: number) => string;
     };
   }
 }
@@ -118,15 +121,22 @@ window.__hold = {
     release = null;
   },
   hitAt(x, y) {
-    const hit = document.elementFromPoint(x, y);
-    if (hit == null) {
-      return 'nothing';
-    }
-    if (hit.id !== '') {
-      return hit.id;
-    }
-    return hit.matches('[popover="manual"]')
-      ? `shield:${hit.parentElement?.id ?? ''}`
-      : hit.tagName.toLowerCase();
+    return describe(document.elementFromPoint(x, y));
+  },
+  hitPast(x, y) {
+    return describe(
+      document.elementsFromPoint(x, y).find(el => !isPresentationShield(el)) ??
+        null,
+    );
   },
 };
+
+function describe(hit: Element | null): string {
+  if (hit == null) {
+    return 'nothing';
+  }
+  if (isPresentationShield(hit)) {
+    return `shield:${hit.parentElement?.id ?? ''}`;
+  }
+  return hit.id !== '' ? hit.id : hit.tagName.toLowerCase();
+}

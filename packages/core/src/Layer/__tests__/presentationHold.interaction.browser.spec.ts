@@ -13,7 +13,9 @@
  *   same; keys still act while a presentation holds; a dismissal's
  *   hold makes the content inert and moves focus out of it, so no key acts
  *   on it either (a focused button that turns inert still takes Enter and
- *   Space in both engines); each release gives input back; a one-finger
+ *   Space in both engines); each release gives input back; a hit test
+ *   that skips shields (isPresentationShield) finds what lies beneath, and
+ *   a layer above the held one still wins; a one-finger
  *   pan on the shield scrolls nothing while a pinch on it still zooms the
  *   page (spec:AST-094 FR10, FR18, FR35; Chromium, which pinch-zooms from
  *   injected touches)
@@ -42,6 +44,7 @@ interface HoldApi {
   hold: (id: LayerId, scope: Scope) => void;
   release: () => void;
   hitAt: (x: number, y: number) => string;
+  hitPast: (x: number, y: number) => string;
 }
 
 let bundle = '';
@@ -94,6 +97,11 @@ const release = async (page: Page) =>
 const hitAt = async (page: Page, point: Point) =>
   page.evaluate(
     at => (window as unknown as HoldWindow).__hold.hitAt(at.x, at.y),
+    point,
+  );
+const hitPast = async (page: Page, point: Point) =>
+  page.evaluate(
+    at => (window as unknown as HoldWindow).__hold.hitPast(at.x, at.y),
     point,
   );
 const readLog = async (page: Page) =>
@@ -210,6 +218,35 @@ test('a light-dismissing popover stays open when a hold takes a tap outside it; 
   await expect
     .poll(async () => (await readLog(page)).toggles)
     .toEqual(['pop:open', 'pop:closed']);
+});
+
+test('a hit test that skips shields sees past a hold: under a held modal dialog’s shield, its own action', async ({
+  page,
+}) => {
+  await load(page);
+  await open(page, 'dialog');
+  const action = await centre(page, 'action');
+  await hold(page, 'dialog', 'viewport');
+  // The opening finger's press resolves its row past the shield.
+  expect(await hitAt(page, action)).toBe('shield:dialog');
+  expect(await hitPast(page, action)).toBe('action');
+  await release(page);
+  expect(await hitAt(page, action)).toBe('action');
+});
+
+test('a layer opened above a held one is what that hit test finds, and past the shield the held layer’s content', async ({
+  page,
+}) => {
+  await load(page);
+  await open(page, 'lift');
+  const liftAction = await centre(page, 'liftAction');
+  await hold(page, 'lift', 'viewport');
+  expect(await hitAt(page, liftAction)).toBe('shield:lift');
+  expect(await hitPast(page, liftAction)).toBe('liftAction');
+  await open(page, 'pop');
+  const popAction = await centre(page, 'popAction');
+  expect(await hitAt(page, popAction)).toBe('popAction');
+  expect(await hitPast(page, popAction)).toBe('popAction');
 });
 
 // A full-viewport layer whose root takes no hits itself and lets its tint

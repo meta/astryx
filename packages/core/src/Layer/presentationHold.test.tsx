@@ -7,6 +7,7 @@ import {GestureHost} from '../gestures/GestureHost';
 import {
   holdPresentation,
   isInHeldLayer,
+  isPresentationShield,
   usePresentationHold,
 } from './presentationHold';
 
@@ -114,6 +115,24 @@ describe('holdPresentation', () => {
     expect(already.hasAttribute('inert')).toBe(true);
     expect(shield.isConnected).toBe(false);
     expect(isInHeldLayer(child)).toBe(false);
+  });
+
+  it('names a live hold’s shield, and only it, so a hit test can skip it', () => {
+    const {layer, child} = mountLayer();
+    const popover = document.createElement('div');
+    popover.setAttribute('popover', 'manual');
+    document.body.append(popover);
+    const release = holdPresentation(layer, {
+      until: new Promise(() => {}),
+      scope: 'viewport',
+    });
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(isPresentationShield(shield)).toBe(true);
+    for (const other of [layer, child, popover, null]) {
+      expect(isPresentationShield(other)).toBe(false);
+    }
+    release();
+    expect(isPresentationShield(shield)).toBe(false);
   });
 
   it('sees slotted content as held: the flat tree, a slotted node to its slot', () => {
