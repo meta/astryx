@@ -30,7 +30,7 @@ import {
   motionRoleVariable,
   type MotionCurvePoints,
   type MotionRoleKind,
-} from '../motion/roles';
+} from '../motion/roleValue';
 import {MOTION_ROLE_KINDS} from '../motion/roleKinds.generated';
 import type {SpringDescription} from '../motion/spring';
 import type {MotionScaleConfig} from './expandMotionScale';

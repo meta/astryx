@@ -24,6 +24,9 @@ import {
 } from './roles';
 import {dampingRatioOf, naturalFrequency, toSpring} from './spring';
 import {navigation, scroll, springs, timing} from './uikit';
+import {registerSharedTables} from './uikit/registerTables';
+
+registerSharedTables();
 
 describe('motion roles', () => {
   it('names a role by its table path, and its CSS variable in kebab case', () => {
