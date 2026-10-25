@@ -610,3 +610,75 @@ describe('arena: a held view', () => {
     expect(consumer.events).toEqual(['began:1', 'ended:1']);
   });
 });
+
+describe('arena: review fixes', () => {
+  it('runs a cancel from code at the last event time, not wall time', () => {
+    const h = createHarness();
+    const other = new Scripted('other');
+    h.finger(9)
+      .down(500, 500, 0, {recognizers: [other]})
+      .up(10);
+    const press = new Scripted('press', {
+      began: (self, event) => self.recognizeAt(event.time + 500),
+      moved: (self, event) => {
+        const touch = event.allTouches[0];
+        if (touch != null && Math.abs(touch.x - touch.startX) > 10) {
+          self.fail();
+        }
+      },
+    });
+    h.finger(1).down(0, 0, 1000, {recognizers: [press]});
+    // Wall time is 1800; a 40 px move stamped 1300 is still queued.
+    h.clock.time = 1800;
+    other.cancel();
+    h.arena.moved([{id: 1, x: 40, y: 0, time: 1300}]);
+    expect(h.log).toContain('press:failed@1300');
+    expect(h.log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    h.finger(1).up(1900, 40, 0);
+  });
+
+  it('keeps two recognizers exclusive when only one delegate allows both', () => {
+    const h = createHarness();
+    const a = new Scripted('a', onMove, {
+      shouldRecognizeSimultaneously: () => true,
+    });
+    const b = new Scripted('b', onMove);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [a, b]})
+      .move(5, 0, 16);
+    expect(h.log).toContain('a:began@16');
+    expect(b.state).toBe('failed');
+    h.finger(1).up(32);
+  });
+
+  it("gives the click with the touch when the view's hold ends on the lift", () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    const r = new Scripted('r', {}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 0, {recognizers: [r], consumer});
+    expect(consumer.events).toEqual([]);
+    const click = h.finger(1).up(40);
+    expect(click).toBe('allow');
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+    expect(h.deferredClicks).toEqual([]);
+  });
+
+  it("keeps a recognized discrete gesture's claim when a partner is cancelled", () => {
+    const h = createHarness();
+    const swipe = new Scripted(
+      'swipe',
+      {moved: r => (r.state === 'possible' ? r.recognize() : undefined)},
+      {discrete: true},
+    );
+    const pan = new Scripted('pan', onMove);
+    swipe.recognizeSimultaneouslyWith(pan);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [swipe, pan]})
+      .move(5, 0, 16);
+    expect(swipe.state).toBe('ended');
+    expect(h.arena.isClaimed(1)).toBe(true);
+    pan.cancel();
+    expect(h.arena.isClaimed(1)).toBe(true);
+    h.finger(1).up(32);
+  });
+});

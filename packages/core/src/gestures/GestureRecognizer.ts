@@ -294,12 +294,16 @@ export abstract class GestureRecognizer {
     );
   }
 
-  /** @internal Whether this and `other` may be active together. */
+  /**
+   * @internal Whether this and `other` may be active together: both allow it
+   * (`recognizeSimultaneouslyWith` sets both sides; each delegate answers for
+   * its own recognizer), so one delegate alone keeps them exclusive (FR15).
+   */
   allowsSimultaneous(other: GestureRecognizer): boolean {
     return (
       this.simultaneousWith.has(other) ||
-      this.options.shouldRecognizeSimultaneously?.(this, other) === true ||
-      other.options.shouldRecognizeSimultaneously?.(other, this) === true
+      (this.options.shouldRecognizeSimultaneously?.(this, other) === true &&
+        other.options.shouldRecognizeSimultaneously?.(other, this) === true)
     );
   }
 

@@ -418,7 +418,12 @@ export class GestureArena {
 
   /** Cancel an active recognizer, or fail a possible one. */
   stop(recognizer: GestureRecognizer): void {
-    this.run(this.now(), () => {
+    // A cancel from code between events happens at the last event's time:
+    // wall time would run deadlines ahead of input still queued (FR16).
+    const time =
+      this.currentTime ??
+      (Number.isFinite(this.latestTime) ? this.latestTime : this.clock.now());
+    this.run(time, () => {
       if (isActive(recognizer.state)) {
         this.apply(recognizer, 'cancelled');
       } else if (recognizer.state === 'possible' && recognizer.isInvolved()) {
@@ -537,11 +542,15 @@ export class GestureArena {
       if (record == null || !record.isClaimed) {
         continue;
       }
+      // A recognized discrete gesture (`ended`, a swipe) still owns its
+      // touches until they lift.
       const isOwned = this.active.some(
         other =>
           other !== recognizer &&
           other.claimsTouches &&
-          (isActive(other.state) || other.pending != null) &&
+          (isActive(other.state) ||
+            other.state === 'ended' ||
+            other.pending != null) &&
           other.trackedTouches.some(tracked => tracked.id === touch.id),
       );
       if (!isOwned) {
@@ -649,6 +658,14 @@ export class GestureArena {
         record.consumer?.touchEnded(record.touch);
         return 'allow';
       case 'held':
+        if (!this.beginDelayers(record)) {
+          // The recognizer that held the view finished on this lift: the
+          // view gets the whole touch now and the click goes with it, not a
+          // `defer` for a click already released.
+          record.view = 'delivered';
+          record.consumer?.touchBegan(record.touch);
+          return this.resolveEnd(record);
+        }
         record.deferredClick = true;
         return 'defer';
       case 'none':
@@ -704,6 +721,7 @@ export class GestureArena {
       recognizer =>
         recognizer.delaysTouchesBegan &&
         recognizer.state === 'possible' &&
+        recognizer.isInvolved() &&
         recognizer.seenTouchIds.has(record.touch.id),
     );
   }
