@@ -351,11 +351,12 @@ gone and every touch scrolls as without the system.
 
 ### Multiple fingers
 
-A second finger landing anywhere (often on a plain row no recognizer is on)
-gives up a pan limited to one finger, even one already moving, so the two
-fingers zoom the page (WCAG 1.4.4) instead of the row sliding until the
-browser cancels it. A second finger that lands before any recognizer has
-claimed fails the one-finger recognizers too.
+A drag a recognizer has claimed keeps its finger: a second finger never
+cancels or redirects it (`spec:AST-094` FR10), as in UIKit, where a pan
+ignores touches beyond its maximum. Before any claim, a second finger landing
+anywhere (often on a plain row no recognizer is on) fails a pan limited to
+one finger, so the two fingers zoom the page (WCAG 1.4.4) instead of the pan
+claiming them midway.
 
 ## Time
 
