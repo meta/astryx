@@ -77,7 +77,11 @@ describe('the CSS side of the policy', () => {
     );
   });
 
-  it('no component spells a Reduce Motion pointer key itself', () => {
+  it('every key that splits Reduce Motion by pointer is one of the two constants, spelled exactly', () => {
+    const allowed = new Set<string>([
+      reducedMotionKeys.fade,
+      reducedMotionKeys.instant,
+    ]);
     const root = resolve(__dirname, '..');
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -91,13 +95,23 @@ describe('the CSS side of the policy', () => {
           /\.tsx?$/.test(entry.name) &&
           !/\.(test|spec|stories)\.tsx?$/.test(entry.name)
         ) {
-          if (/[/\\]motion[/\\]reducedMotion(\.stylex)?\.ts$/.test(path)) {
-            continue;
-          }
           for (const match of readFileSync(path, 'utf8').matchAll(
             /'(@media[^']*prefers-reduced-motion: reduce[^']*pointer[^']*)'/g,
           )) {
-            offenders.push(`${path.slice(root.length)}: ${match[1]}`);
+            if (!allowed.has(match[1])) {
+              offenders.push(`${path.slice(root.length)}: ${match[1]}`);
+            }
+          }
+          // A constant as a computed key lands in a later priority layer.
+          if (
+            !/[/\\]motion[/\\]reducedMotion\.ts$/.test(path) &&
+            /\[reducedMotionKeys\.(fade|instant)\]/.test(
+              readFileSync(path, 'utf8'),
+            )
+          ) {
+            offenders.push(
+              `${path.slice(root.length)}: a computed reducedMotionKeys key`,
+            );
           }
         }
       }

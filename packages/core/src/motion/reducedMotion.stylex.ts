@@ -4,8 +4,8 @@
  * @file reducedMotion.stylex.ts
  * @input StyleX constant definitions
  * @output reducedMotionFadeConsts (the Reduced Motion cross-fade's duration
- *   and easing) and reducedMotionKeys (its two media keys) for StyleX
- *   transitions
+ *   and easing) for StyleX transitions, and reducedMotionKeys (its two media
+ *   keys, which a transition spells literally)
  * @position The CSS side of the Reduced Motion policy (reducedMotion.ts):
  *   values a transition takes under its two Reduce Motion media keys
  *
@@ -27,10 +27,12 @@ export const reducedMotionFadeConsts = stylex.defineConsts({
 });
 
 /**
- * The two Reduce Motion media keys, spelled once: a StyleX transition uses
- * them as computed keys at property level (`[reducedMotionKeys.fade]: …`;
- * a key inside `when.ancestor` does not compile). Under Reduce Motion a
- * coarse primary pointer fades (DR2) and any other completes at once (DR3).
+ * The two Reduce Motion media keys, spelled once: under Reduce Motion a coarse
+ * primary pointer fades (DR2) and any other completes at once (DR3). A
+ * component spells the key literally rather than as a computed key: StyleX
+ * puts a constant key in a later priority layer than the literal media key,
+ * where it would outrank the element's state styles. reducedMotion.test.ts
+ * holds every literal in core to these, exactly.
  */
 export const reducedMotionKeys = stylex.defineConsts({
   fade: '@media (prefers-reduced-motion: reduce) and (pointer: coarse)',
