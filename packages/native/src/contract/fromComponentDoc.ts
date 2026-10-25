@@ -46,9 +46,10 @@ export interface ComponentDocLike {
 /**
  * Typed slots (AST-082 FR4) for documented free-form content. `text` is a
  * string in the core contract, as a badge's label or a heading's words;
- * `content` is child Astryx components, as a stack's or a card's children.
+ * `content` is child Astryx components, as a stack's or a card's children;
+ * `icon` is a shared icon name (FR17), as an icon's glyph.
  */
-export type SlotKind = 'text' | 'content';
+export type SlotKind = 'text' | 'content' | 'icon';
 
 /** What the native package adds to one core component. */
 export interface NativeAdditions {
@@ -83,6 +84,16 @@ export interface NativeAdditions {
   readonly typeNames?: Readonly<Record<string, string>>;
   readonly platforms?: Readonly<Partial<Record<NativePlatform, PropMap>>>;
   /**
+   * Props whose web type is wider than a portable kind, with the closed set of
+   * values every platform supports, each mapped to the one web value it means
+   * (AST-082 FR4), such as Button `width`: `content` is the web's `'auto'`
+   * and `fill` its `'100%'`. The first value is the default. The prop's other
+   * web values stay in the web contract.
+   */
+  readonly projections?: Readonly<
+    Record<string, Readonly<Record<string, string>>>
+  >;
+  /**
    * Portable-typed props that still belong to the web contract, with the
    * reason, such as a web presentation heuristic a native platform replaces.
    */
@@ -110,6 +121,7 @@ function documentedProps(
 const SLOT_TYPES: Readonly<Record<SlotKind, PropType>> = {
   text: {kind: 'string'},
   content: {kind: 'content'},
+  icon: {kind: 'icon'},
 };
 
 export function fromComponentDoc(
@@ -118,6 +130,7 @@ export function fromComponentDoc(
 ): ComponentContract {
   const core: Record<string, PropSpec> = {};
   const webOnly: WebOnlyProp[] = [];
+  const projections: Record<string, Readonly<Record<string, string>>> = {};
   const types = additions.types ?? {};
   const describe = (prop: DocProp) =>
     typeof prop.description === 'string' ? {doc: prop.description} : {};
@@ -142,6 +155,22 @@ export function fromComponentDoc(
     }
     if (prop.name.startsWith('html') || prop.name.startsWith('aria-')) {
       webOnly.push({name: prop.name, reason: 'HTML attribute'});
+      continue;
+    }
+    const projection = additions.projections?.[prop.name];
+    if (projection) {
+      const mapping = Object.entries(projection)
+        .map(
+          ([value, web]) =>
+            `\`${value}\` is the web's \`${JSON.stringify(web)}\``,
+        )
+        .join(', ');
+      core[prop.name] = {
+        type: {kind: 'enum', values: Object.keys(projection)},
+        optional: prop.required !== true,
+        doc: `${typeof prop.description === 'string' ? `${prop.description} ` : ''}Native values: ${mapping}.`,
+      };
+      projections[prop.name] = projection;
       continue;
     }
     const slot = additions.slots?.[prop.name];
@@ -221,6 +250,7 @@ export function fromComponentDoc(
     core,
     platforms: additions.platforms ?? {},
     webOnly,
+    projections,
     sameMeaning: Object.keys(additions.sameMeaning ?? {}).filter(
       name => name in core,
     ),

@@ -446,6 +446,26 @@ function trustedAnalysis({analysisPath, metadataPath, identity, core}) {
   }
 }
 
+/**
+ * Base measurements come from the same CI run's merge-base build. They are
+ * used only when they name the exact head this comment reports.
+ */
+function trustedBaseStats({baseStatsPath, identity, core}) {
+  try {
+    if (!fs.existsSync(baseStatsPath)) return false;
+    const stats = readJSON(baseStatsPath);
+    if (
+      !FULL_SHA.test(String(stats.headSha)) ||
+      stats.headSha !== identity.headSha
+    )
+      refuse('base stats head does not match');
+    return true;
+  } catch (error) {
+    core.warning(`Ignoring untrusted or stale base stats: ${error.message}`);
+    return false;
+  }
+}
+
 async function allComments(github, owner, repo, prNumber) {
   return github.paginate(github.rest.issues.listComments, {
     owner,
@@ -462,6 +482,7 @@ export async function reconcilePrComment({
   expectedIdentity,
   analysisPath = 'pr-analysis/analysis.json',
   metadataPath = 'pr-analysis/pr-meta.json',
+  baseStatsPath = 'pr-size-base/size-base.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
@@ -549,6 +570,9 @@ export async function reconcilePrComment({
       generator,
       '--analysis',
       analysisPath,
+      ...(trustedBaseStats({baseStatsPath, identity, core})
+        ? ['--base-stats', baseStatsPath]
+        : []),
       '--a11y',
       resolvedA11yPath,
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),

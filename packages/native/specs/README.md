@@ -1,14 +1,21 @@
 # Native component specs
 
-One short spec per native component, per language. The rules live in
+One short spec per native component, per language, kept in the component's own
+folder beside its implementation, the way core keeps `TabList.spec.md` next to
+`TabList.tsx`. The rules live in
 [AST-093 (Native component guidelines)](../../../docs/specs/AST-093-native-component-guidelines/spec.md),
 which applies [AST-082 (Native-first surfaces)](../../../docs/specs/AST-082-native-first-surfaces/spec.md).
 
 ```text
-packages/native/specs/
-├── TEMPLATE.md      # copy this for a new spec
-└── swift/           # Swift: iOS and macOS
-    └── <Name>.md    # named as the core component, e.g. Button.md
+packages/native/
+├── specs/
+│   ├── TEMPLATE.md            # copy this for a new component spec
+│   └── swift/                 # rules shared by every Swift component
+│       └── library/           # rules every Swift component or build step shares
+└── apple/Sources/Astryx/
+    └── <Name>/                # one folder per component, named as core's
+        ├── <Name>.swift       # declares <Name> in the Astryx module
+        └── <Name>.spec.md     # the component's spec, e.g. Button.spec.md
 ```
 
 Swift comes first. Kotlin and other languages get their own directory when
@@ -32,7 +39,8 @@ the same everywhere. A native spec never renames or changes it.
 
 ## Adding a spec
 
-1. Copy `TEMPLATE.md` to `<language>/<Name>.md`.
+1. Copy `TEMPLATE.md` to the component's folder as `<Name>.spec.md`, for
+   Swift `apple/Sources/Astryx/<Name>/<Name>.spec.md`.
 2. Fill every section. Write "None" rather than deleting one.
 3. Open a pull request that changes only files under `packages/native/`. A spec
    can land on its own or with the component it describes.

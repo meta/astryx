@@ -733,6 +733,62 @@ describe('useLayer', () => {
     });
   });
 
+  describe('the invoker source', () => {
+    /**
+     * Mirror the Popover API's option conversion: `source` must be an HTML
+     * element, from any document, and any other element throws before the
+     * popover shows.
+     */
+    function installSourceCheckingShowPopover(
+      view: Window & typeof globalThis,
+    ) {
+      const showSpy = vi.fn(function (
+        this: HTMLElement,
+        options?: ShowPopoverOptions,
+      ) {
+        const source: Element | undefined = options?.source;
+        const sourceView = source?.ownerDocument.defaultView;
+        if (
+          source != null &&
+          !(sourceView != null && source instanceof sourceView.HTMLElement)
+        ) {
+          throw new TypeError(
+            "Failed to execute 'showPopover' on 'HTMLElement': Failed to read the 'source' property from 'ShowPopoverOptions': Failed to convert value to 'HTMLElement'.",
+          );
+        }
+        this.dataset.open = 'true';
+      });
+      view.HTMLElement.prototype.showPopover = showSpy;
+      return showSpy;
+    }
+
+    it('keeps an HTML trigger in another document as the source', () => {
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      try {
+        const frameWindow = frame.contentWindow as Window & typeof globalThis;
+        const showSpy = installSourceCheckingShowPopover(frameWindow);
+        const container = frameWindow.document.body.appendChild(
+          frameWindow.document.createElement('div'),
+        );
+        const {unmount} = render(<ContextLayerHarness />, {container});
+        const trigger = container.querySelector('button') as HTMLElement;
+        // An element of the frame's window, not of the test's.
+        expect(trigger).not.toBeInstanceOf(HTMLElement);
+
+        fireEvent.click(trigger);
+
+        // Compared by identity: a deep comparison does not walk a node from
+        // another window.
+        expect(showSpy).toHaveBeenCalledOnce();
+        expect(showSpy.mock.calls[0]?.[0]?.source).toBe(trigger);
+        unmount();
+      } finally {
+        frame.remove();
+      }
+    });
+  });
+
   describe('show() while another popover is mid show/hide', () => {
     /**
      * Mirror the Popover API's re-entrancy rule: hiding a popover hands focus

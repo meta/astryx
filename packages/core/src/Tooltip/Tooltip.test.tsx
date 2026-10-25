@@ -365,7 +365,11 @@ describe('Tooltip', () => {
       __resetInteractionModalityForTest();
     });
 
-    /** A tap: the pointer sequence a finger produces before hover is faked. */
+    /**
+     * A tap, in the order a browser dispatches it: the finger's pointer events,
+     * then the hover it synthesizes, then the `click` that says the touch was a
+     * tap and not the start of a scroll.
+     */
     const tap = (element: HTMLElement) => {
       // A finger's arrival fires pointerenter too, and that is the path a pen
       // must not take — cover it here rather than starting at pointerdown.
@@ -374,6 +378,14 @@ describe('Tooltip', () => {
       fireEvent.pointerUp(element, {pointerType: 'touch'});
       // Touch synthesizes hover after the press; the tooltip must not act on it.
       fireEvent.mouseEnter(element);
+      fireEvent.click(element);
+    };
+
+    /** A tap outside: what a finger landing and lifting elsewhere dispatches. */
+    const tapOutside = (element: HTMLElement) => {
+      fireEvent.pointerDown(element, {pointerType: 'touch'});
+      fireEvent.pointerUp(element, {pointerType: 'touch'});
+      fireEvent.click(element);
     };
 
     it('opens on a tap when the trigger performs no action', async () => {
@@ -479,9 +491,141 @@ describe('Tooltip', () => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
 
-      fireEvent.pointerDown(screen.getByRole('button', {name: 'Elsewhere'}), {
-        pointerType: 'touch',
+      tapOutside(screen.getByRole('button', {name: 'Elsewhere'}));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+
+    it('opens when the finger lifts, not when it lands', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      // The finger is still down: it may be starting a scroll.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('never opens for a touch that turns into a scroll', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      // The browser takes the touch for the page scroll: no tap follows.
+      fireEvent.pointerCancel(trigger, {pointerType: 'touch'});
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('never opens for a press the browser did not count as a tap', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      // A long press: the finger lifts, but the browser fires no click
+      // (it selected text or showed its own menu instead).
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('does not take a later keyboard click for the tap of an earlier press', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="What this metric means"
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <button type="button">Info</button>
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByRole('button', {name: 'Info'});
+      // A press that never became a tap ...
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      // ... then Enter on the focused button, which fires its own click.
+      fireEvent.keyDown(trigger, {key: 'Enter'});
+      fireEvent.click(trigger);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(true);
+    });
+
+    it('closes on a tap outside when the finger lifts, not when it lands', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+            Abbreviation
+          </Tooltip>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+
+      tap(screen.getByText('Abbreviation'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('closes when a scroll starts outside', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+            Abbreviation
+          </Tooltip>
+          <p>Page content</p>
+        </>,
+      );
+
+      tap(screen.getByText('Abbreviation'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const page = screen.getByText('Page content');
+      fireEvent.pointerDown(page, {pointerType: 'touch'});
+      fireEvent.pointerCancel(page, {pointerType: 'touch'});
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -543,6 +687,7 @@ describe('Tooltip', () => {
       fireEvent.pointerEnter(trigger, {pointerType: 'pen', buttons: 0});
       fireEvent.pointerDown(trigger, {pointerType: 'pen'});
       fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger);
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);

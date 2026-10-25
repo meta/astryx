@@ -881,6 +881,51 @@ describe('field menu grouping', () => {
   });
 });
 
+describe('field menu highlight under a resting pointer', () => {
+  it('keeps the first field highlighted when the menu opens under the pointer', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+
+    // Open the field menu from the keyboard; the option that lands under a
+    // resting pointer receives mouseenter but no mousemove.
+    await user.tab();
+    const status = await screen.findByRole('option', {
+      name: 'Status',
+      hidden: true,
+    });
+    const title = screen.getByRole('option', {name: 'Title', hidden: true});
+    expect(input.getAttribute('aria-activedescendant')).toBe(title.id);
+
+    fireEvent.mouseEnter(status);
+    expect(input.getAttribute('aria-activedescendant')).toBe(title.id);
+
+    // Enter acts on the highlighted first field, not the one under the
+    // pointer.
+    await user.keyboard('{Enter}');
+    expect(
+      await screen.findByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', {name: 'Field', hidden: true}),
+    ).toHaveTextContent('Title');
+  });
+
+  it('moves the highlight when the pointer moves over a field', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+
+    await user.tab();
+    const status = await screen.findByRole('option', {
+      name: 'Status',
+      hidden: true,
+    });
+    fireEvent.mouseMove(status);
+    expect(input.getAttribute('aria-activedescendant')).toBe(status.id);
+  });
+});
+
 describe('field menu after the search source changes', () => {
   it('opens the new field menu on the first click after a config change', async () => {
     const user = userEvent.setup();

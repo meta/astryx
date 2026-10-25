@@ -138,6 +138,13 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
+      # The full pass, type-aware rules over packages/core/src included, needs
+      # about 1.9 GB of heap on main. Node's default limit on this 8 GB runner
+      # is about 2 GB, so a pull request that adds a few percent of source can
+      # run it out of memory. 4 GB keeps the pass under half the runner's RAM
+      # (3.3 GB peak RSS measured) and spends less time in GC.
       - name: Run ESLint
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
         run: pnpm lint

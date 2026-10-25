@@ -393,6 +393,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
+      - name: Download base size stats from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-size-base
+          path: pr-size-base
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
       - name: Download a11y artifact from the CI run
         if: steps.identity.outputs.valid == 'true'
         uses: actions/download-artifact@v8

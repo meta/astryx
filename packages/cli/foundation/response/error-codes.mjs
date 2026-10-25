@@ -172,7 +172,7 @@ export const ERROR_CODES = Object.freeze({
   ERR_UNKNOWN_FEATURE: 'ERR_UNKNOWN_FEATURE',
   /** A `--codemod` value did not match any registered codemod (upgrade). */
   ERR_UNKNOWN_CODEMOD: 'ERR_UNKNOWN_CODEMOD',
-  /** One or more codemods failed during an upgrade run. */
+  /** One or more codemods, or a post-codemod hook, failed during an upgrade run. */
   ERR_CODEMOD_FAILED: 'ERR_CODEMOD_FAILED',
   /** A required codemod change remains blocked by a protected consumer file. */
   ERR_CODEMOD_PROTECTED: 'ERR_CODEMOD_PROTECTED',

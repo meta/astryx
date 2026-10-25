@@ -415,5 +415,14 @@
       "packages/core/src/DropdownMenu/DropdownMenuRadioGroup.tsx": "sha256:3be897ab21dcc6a37fb7ab8a1b6d48254e406c544d95a3b939dfc6593ea99cf1",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
     }
+  },
+  {
+    "component": "core/DropdownMenuRadioItem",
+    "reason": "DropdownMenuRadioItem renders one menuitemradio row through Item: a decorative radio marker, an optional icon, the label and description, and end content in logical inline order. Its only inline placement is the coarse-pointer move of the marker to the row's inline end through flex order and marginInlineStart auto, which mirrors with direction. It draws no directional glyph or contextual separator and uses no physical property, horizontal scroll or drag, side-placed overlay, or horizontal keyboard behavior; DropdownMenu owns placement and navigation. Exact-head frames render RTL, including coarse-pointer RTL, and assert the marker's inline-start and inline-end placement without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuRadioItem.stories.tsx": "sha256:cfe1bd90a8fc189f0f3a94992dee2a148b7256433775c511099b57690c01a614",
+      "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
   }
 ]

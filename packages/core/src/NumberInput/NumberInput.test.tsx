@@ -13,6 +13,8 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, useState} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import {registerIcons, resetIcons} from '../Icon';
@@ -21,6 +23,21 @@ import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+
+// jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
+const RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -149,7 +166,7 @@ describe('NumberInput', () => {
     expect(screen.getByRole('spinbutton')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled attribute when isDisabled is true', () => {
+  it('exposes aria-disabled, not native disabled, when isDisabled is true (spec:AST-085)', () => {
     render(
       <NumberInput
         label="Quantity"
@@ -158,7 +175,76 @@ describe('NumberInput', () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByRole('spinbutton')).toBeDisabled();
+    expect(screen.getByRole('spinbutton')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('keeps a disabled input in the tab order and rings it (spec:AST-085 FR1, FR6)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <NumberInput label="First" value={1} onChange={() => {}} />
+        <NumberInput label="Second" value={2} onChange={() => {}} isDisabled />
+      </>,
+    );
+    await user.tab();
+    await user.tab();
+    const input = screen.getByRole('spinbutton', {name: 'Second'});
+    expect(input).toHaveFocus();
+    expect(input.parentElement).toHaveClass(RING);
+  });
+
+  it('runs no caller handler, steps nothing and submits no form while disabled (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const handlers = {
+      onChange: vi.fn(),
+      onEnter: vi.fn(),
+      onKeyDown: vi.fn(),
+      onPaste: vi.fn(),
+    };
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <NumberInput
+          label="Quantity"
+          value={5}
+          isDisabled
+          hasNumberSteppers
+          {...handlers}
+        />
+      </form>,
+    );
+    await user.click(screen.getByRole('spinbutton'));
+    await user.keyboard('{ArrowUp}{ArrowDown}{Enter}');
+    await user.paste('9');
+    await user.click(screen.getByRole('button', {name: 'Increment Quantity'}));
+    for (const handler of [...Object.values(handlers), onSubmit]) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+  });
+
+  it('commits nothing when a field disabled mid-entry loses focus (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const field = (isDisabled: boolean) => (
+      <NumberInput
+        label="Quantity"
+        value={5}
+        onChange={onChange}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(field(false));
+    const input = screen.getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '8');
+    onChange.mockClear();
+    rerender(field(true));
+    await user.tab();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('5');
   });
 
   it('does not fire onChange when disabled', async () => {
@@ -1424,10 +1510,10 @@ describe('NumberInput', () => {
       const increment = screen.getByRole('button', {
         name: 'Increment Quantity',
       });
-      expect(increment).toBeDisabled();
+      expect(increment).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(increment);
       expect(handleChange).not.toHaveBeenCalled();
@@ -1446,7 +1532,10 @@ describe('NumberInput', () => {
           />
         </form>,
       );
-      expect(screen.getByRole('spinbutton')).toBeDisabled();
+      expect(screen.getByRole('spinbutton')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
@@ -1478,6 +1567,24 @@ describe('NumberInput', () => {
       expect(
         screen.getByRole('button', {name: 'Clear Qty'}),
       ).toBeInTheDocument();
+    });
+
+    it('focuses the field inside the tap that clears it, without scrolling', () => {
+      // iOS Safari brings up its keyboard only for a focus made while
+      // handling the touch.
+      const onChange = vi.fn();
+      const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+      render(
+        <NumberInput label="Qty" value={5} onChange={onChange} hasClear />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.click(screen.getByRole('button', {name: 'Clear Qty'}), {
+        detail: 1,
+      });
+      expect(onChange).toHaveBeenCalledWith(null);
+      expect(document.activeElement).toBe(input);
+      expect(focusSpy).toHaveBeenLastCalledWith({preventScroll: true});
+      focusSpy.mockRestore();
     });
 
     it('does not show clear button when value is null', () => {
@@ -1693,7 +1800,7 @@ describe('NumberInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable when disabled without a reason', () => {
       render(
         <NumberInput
           label="Quantity"
@@ -1703,8 +1810,8 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      expect(input).toBeDisabled();
-      expect(input).not.toHaveAttribute('aria-disabled');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -2006,14 +2113,14 @@ describe('NumberInput stepping', () => {
 
     const input = screen.getByRole('spinbutton');
     const increment = screen.getByRole('button', {name: 'Increment Amount'});
-    expect(increment).toBeEnabled();
+    expect(increment).not.toHaveAttribute('aria-disabled');
 
     fireEvent.click(increment);
 
     expect(input).toHaveValue('99.99');
     expect(input).toHaveAttribute('aria-valuenow', '99.99');
     expect(input).not.toHaveAttribute('aria-invalid');
-    expect(increment).toBeDisabled();
+    expect(increment).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('allows wheel stepping by default and consumes the focused gesture', () => {
@@ -2259,10 +2366,33 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('commits nothing from a click on the stepper at the reached boundary (spec:AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <NumberInput
+          label="Quantity"
+          value={5}
+          onChange={onChange}
+          min={0}
+          max={10}
+          hasNumberSteppers
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      await user.clear(input);
+      await user.type(input, '10');
+      onChange.mockClear();
+      await user.click(
+        screen.getByRole('button', {name: 'Increment Quantity'}),
+      );
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('disables both steppers with the input', () => {
@@ -2277,10 +2407,10 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
