@@ -296,20 +296,26 @@ timestamps and no real time.
 ## Velocity
 
 `VelocityTracker` reports px per second, UIKit's unit, and is the one
-release-velocity filter (spec:AST-100 FR1, FR2; no alternative estimators).
-It is `UIPanGestureRecognizer.velocity(in:)` itself, measured: each event's
-instantaneous velocity is the position change over the timestamp change since
-the previous event (the touch-down counts as the first), and the velocity is
-0.2 times the newest one plus 0.8 times the one before. It reproduces every
-value UIKit reported on six recorded touch streams, and like UIKit's it
-reacts a frame late to an acceleration and includes a hold before the first
-move. Feed it one sample per event.
+velocity tracker every continuous recognizer uses
+(`architecture:interaction-modality` INV10, `spec:AST-100` FR1, FR2; no
+alternative estimators). One filter, iOS's measured blend, updated on each
+moved sample (a sample at the newest position is not motion):
 
-One difference from UIKit: a finger that stayed still for longer than the
-stillness interval (`UIKIT_GESTURES.velocity.stillness`) before lifting
-releases at 0. UIKit's filter never decays, because a resting finger sends no
-events, so it flings after a rest. Pass the lift's event time to
-`velocity(releaseTime)` to read a release.
+- A pan's velocity is 0.2 times the newest interval's velocity plus 0.8 times
+  the previous interval's (an interval runs from one moved sample to the
+  next; the touch-down counts as the first). With one interval so far it is
+  that interval, as UIKit reports it. It reproduces every value UIKit
+  reported on six recorded touch streams, and like UIKit's it reacts a frame
+  late to an acceleration.
+- A scrolling surface's release (paging, a wheel) is 0.25 times the newest
+  pan value plus 0.75 times the previous one: a pan's `scrollVelocity()`.
+  Everything else reads `velocity()`.
+
+A release reads 0 when the finger stayed still for longer than the stillness
+interval (`UIKIT_GESTURES.velocity.stillness`) before lifting, the one
+difference from iOS, whose filter never decays and so flings after a rest;
+and 0 with fewer than two moved samples. The pan passes its lift's event time
+to the tracker.
 
 ## Haptics
 
