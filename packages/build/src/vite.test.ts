@@ -302,6 +302,25 @@ describe('undefinedGeneratedVariables', () => {
     ).toEqual([]);
   });
 
+  it('counts a declaration in any other stylesheet the build emits', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{padding:var(--xlarge)}',
+        ['astryx', 'x'],
+        [':root{--xlarge:24px}'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports only hash-shaped names: four to seven characters after the prefix', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{margin:var(--xl)}.b{gap:var(--xs1)}.c{inset:var(--x1abc2de)}.d{top:var(--x1abc2def)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--x1abc2de']);
+  });
+
   it('checks only the prefixes it is given', () => {
     expect(
       undefinedGeneratedVariables('.a{color:var(--x1abc2)}', ['astryx']),

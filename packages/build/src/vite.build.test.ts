@@ -74,6 +74,7 @@ async function buildFixture(
     libraryPattern = 'packages/core/',
     zeroConfig = false,
     undefinedVariables,
+    stylexOverrides,
     warnings = [],
   }: {
     /** Which source paths land in the library layer. */
@@ -81,6 +82,8 @@ async function buildFixture(
     /** Use `astryxStylex({...})` instead of the legacy `{stylexOptions}` form. */
     zeroConfig?: boolean;
     undefinedVariables?: 'warn' | 'error';
+    /** Zero-config form only: `stylexOverrides`. */
+    stylexOverrides?: Record<string, unknown>;
     /** Receives every warning the build logs. */
     warnings?: string[];
   } = {},
@@ -114,7 +117,13 @@ async function buildFixture(
       plugins: [
         react(),
         ...(zeroConfig
-          ? astryxStylex({dev: false, rootDir: REPO_ROOT, libraryPattern})
+          ? astryxStylex({
+              dev: false,
+              rootDir: REPO_ROOT,
+              libraryPattern,
+              undefinedVariables,
+              stylexOverrides,
+            })
           : astryxStylex({
               stylexOptions: {
                 dev: false,
@@ -373,7 +382,9 @@ describe('a production build separates Astryx and product styles by layer', () =
 // left as `var(--x…){…}` and failed the build ("Invalid empty selector"); a
 // value shipped as a custom property nothing defines. And a constant defined
 // on one side of the layer split and read on the other was substituted only
-// within its own side.
+// within its own side, and one an Astryx package defines (compiled with the
+// library class-name prefix) never matched an app file's placeholder (written
+// with the product prefix).
 describe('a production build resolves defineConsts imported across files', () => {
   /** A constant reference StyleX left unsubstituted. */
   const PLACEHOLDER = /var\(--(?:astryx|x)[a-z0-9]{4,}\)/;
@@ -410,6 +421,10 @@ describe('a production build resolves defineConsts imported across files', () =>
           );
         });
 
+        it('substitutes a constant an Astryx package defines under the library prefix', () => {
+          expect(built.css).toMatch(/padding-bottom:\s*17px/);
+        });
+
         it('leaves no constant placeholder behind', () => {
           expect(built.css).not.toMatch(PLACEHOLDER);
         });
@@ -437,6 +452,29 @@ describe('a production build checks the custom properties its stylesheet reads',
         undefinedVariables: 'error',
       }),
     ).rejects.toThrow(MESSAGE);
+  }, 180_000);
+
+  it('checks the product prefix a zero-config build sets in stylexOverrides', async () => {
+    const warnings: string[] = [];
+    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
+      zeroConfig: true,
+      stylexOverrides: {classNamePrefix: 'app'},
+      warnings,
+    });
+    rmSync(built.outDir, {recursive: true, force: true});
+    expect(warnings.join('\n')).toMatch(
+      /reads 1 generated custom property that nothing declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
+    );
+  }, 180_000);
+
+  it("never reports an app's own custom properties, declared in its own CSS", async () => {
+    const warnings: string[] = [];
+    const built = await buildFixture('stylex-app-vars', ['index.html'], {
+      undefinedVariables: 'error',
+      warnings,
+    });
+    rmSync(built.outDir, {recursive: true, force: true});
+    expect(warnings.join('\n')).not.toMatch(/nothing declares/);
   }, 180_000);
 });
 
