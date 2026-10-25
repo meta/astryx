@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/accordion|packages/core/src/Collapsible/|apps/storybook/stories/CollapsibleGroupA11y)
 
 /**
  * @file accordion.chromium.spec.ts

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit DropdownMenuGroup
 
 /**
  * @file DropdownMenuGroupAudit.a11y.chromium.spec.ts
