@@ -777,18 +777,22 @@ describe('additive: a retarget adds to the curve on screen', () => {
 });
 
 describe('start: when a call\u2019s animations start', () => {
-  it('presented: shows the value at rest, and creates the animations two frames later', async () => {
+  it('presented: leaves the element at rest, and creates the animations two frames later', async () => {
     const {animator, element} = setup();
     animator.set({x: 20});
+    // The set's own promotion ends first.
+    await vi.advanceTimersByTimeAsync(PROMOTION_LINGER_MS + 1);
+    expect(element.style.willChange).toBe('');
     const handle = animator.animate(
       {x: 100},
       {spring: springs.smooth},
       {start: 'presented'},
     );
-    // Promoted and at rest: the next frame commits the layer where it is.
+    // At rest, with no layer yet: the next frame commits it where it is.
+    // (A layer at rest for two frames left a stale paint in WebKit on iOS.)
     expect(live('translate')).toHaveLength(0);
     expect(element.style.translate).toBe('20px 0px');
-    expect(element.style.willChange).toContain('translate');
+    expect(element.style.willChange).toBe('');
     expect(animator.get('x')).toBe(20);
     clock = 1016;
     await commitFrame(1016);
@@ -797,6 +801,7 @@ describe('start: when a call\u2019s animations start', () => {
     clock = 1033;
     await commitFrame(1033);
     expect(live('translate')).toHaveLength(1);
+    expect(element.style.willChange).toContain('translate');
     clock = 1050;
     await commitFrame(1050);
     await expect(handle.started).resolves.toBe(1050);

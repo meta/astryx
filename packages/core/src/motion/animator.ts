@@ -67,7 +67,7 @@
  * frame. `options.start` changes that per call: `'commit'` dates a retarget
  * by the browser's commit as well, and `'presented'` creates the call's
  * animations two frames later, once its element at rest has been presented
- * (a new layer, or a UI process that applies commits late).
+ * (a UI process that applies commits late).
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -243,10 +243,9 @@ export interface AnimateOptions {
    * - `'commit'`: a call that continues motion also starts when the browser
    *   commits it, dated by the browser rather than by the main thread, as a
    *   call from rest is.
-   * - `'presented'`: the call promotes its element and shows its current
-   *   value at once, and creates its animations two frames later, once the
-   *   frame that carries the element at rest has been presented; they then
-   *   start at their commit. A new layer's first presentation or a busy UI
+   * - `'presented'`: the call leaves its element at rest and creates its
+   *   animations two frames later, once the frame that carries the element at
+   *   rest has been presented; they then start at their commit. A busy UI
    *   process delays the motion instead of skipping into it, for two frames
    *   more before an idle start. Any other change to the animator before then
    *   creates the animations first, in call order.
@@ -1421,11 +1420,10 @@ export function createAnimator(
       }
     }
     if (presented && group != null && requestFrame != null) {
-      // Promoted and at rest now; the animations come two frames later.
-      for (const channel of new Set(changed.map(p => CHANNEL_OF[p]))) {
-        promote(channel);
-        writeInline(channel, p => valueAt(p, time));
-      }
+      // At rest until then: the animations, and the layer they promote, come
+      // two frames later. Promoting now, a layer at rest for two frames, left
+      // a stale paint of the element's rest in WebKit on iOS 26.2 (a title in
+      // a scroller inside a clipped card) after the motion ended.
       deferredCalls.push({group, changed});
       if (!deferredWait) {
         deferredWait = true;
