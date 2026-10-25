@@ -173,6 +173,12 @@ export class PanGestureRecognizer extends GestureRecognizer {
   translation(): Point {
     const base = this.isHandoff ? this.handoffTravel() : this.raw;
     const value = {x: base.x + this.offset.x, y: base.y + this.offset.y};
+    const direction = DIRECTION_VECTORS[this.direction];
+    if (this.isHandoff && direction != null && dot(value, direction) < 0) {
+      // Past the content's end the surface never goes behind its start: it
+      // sits at zero while the content scrolls again.
+      return ZERO;
+    }
     return this.locked(value);
   }
 
@@ -256,9 +262,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
       return false;
     }
     if (
-      isActive(this.state) &&
+      (isActive(this.state) || this.isClaimCommitted) &&
       this.numberOfTouches >= this.maximumNumberOfTouches
     ) {
+      // A moving pan, or one whose touch the host already took from the
+      // browser, keeps its fingers: an extra one never fails it.
       return false;
     }
     return super.acceptsTouch(touch);
@@ -451,10 +459,15 @@ export class PanGestureRecognizer extends GestureRecognizer {
     if (verdict === 'wait') {
       return;
     }
-    if (this.scrollEdge && this.nativeCanScroll(moved.x, moved.y)) {
+    if (
+      this.scrollEdge &&
+      !this.isClaimCommitted &&
+      this.nativeCanScroll(moved.x, moved.y)
+    ) {
       // The content under the finger still scrolls this way: it is a
       // scroll. A handoff pan waits for the browser to take it and watches;
-      // any other pan leaves it alone.
+      // any other pan leaves it alone. A pan that committed to its touch
+      // keeps it.
       if (!this.scrollHandoff) {
         this.setState('failed');
       }
@@ -524,6 +537,9 @@ export class PanGestureRecognizer extends GestureRecognizer {
               y: this.virtual.y + direction.y * left,
             };
       if (this.isHandoff) {
+        // The content has the finger back and the surface sits at zero; it
+        // follows the finger from zero once the content runs out again.
+        this.offset = ZERO;
         this.setState('changed');
       }
       return;
