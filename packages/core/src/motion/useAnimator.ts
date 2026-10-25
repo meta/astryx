@@ -38,6 +38,9 @@ export interface UseAnimatorResult {
  *
  * @example
  * ```
+ * // Once, at module scope, so the springs follow the theme's roles:
+ * registerSpringsTable();
+ *
  * const {ref, animator} = useAnimator();
  * // `spring` is the theme's motion role for this move (spec:AST-094 FR4),
  * // never a UIKit table entry played from a component.
