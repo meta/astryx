@@ -9,8 +9,11 @@
  *   arrive as distinct pointers; the screencast shows a compositor animation
  *   advancing through a blocked main thread while a rAF animation freezes;
  *   the trace counts zero Layout for a transform animation and one per frame
- *   for a `top` animation; the long-task log records the page's own long
- *   task but not a DevTools evaluate, which the trace counts; sampled curves
+ *   for a `top` animation, and none from the harness's own animation recorder
+ *   while an anchored element's composited animation runs (a page that asks
+ *   for a frame every frame lays it out in each); the long-task log records
+ *   the page's own long task but not a DevTools evaluate, which the trace
+ *   counts; sampled curves
  *   match the oracles, individual transform properties included; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, holds each where it
@@ -19,7 +22,10 @@
  *   animation-state waits report a running transition and its end, and judge
  *   rest by presented values even while an animation holds its end, and a
  *   watch taken on first contact ignores an animation already running and
- *   keeps the start of one the page cancels when it ends; storyboards write a
+ *   keeps the start of one the page cancels when it ends, and the recorder
+ *   reads only at CSS starts while a rendering trace runs and catches up
+ *   after it;
+ *   storyboards write a
  *   sheet and a trace that follows the curve, an endless animation does not
  *   set their length, and a photograph Chromium returns empty is taken again
  *   two frames later; a touch filmstrip keeps scripted event times while a
@@ -78,6 +84,16 @@ import {
   watchAnimations,
   withFinger,
 } from './index';
+
+// An element positioned against an anchor: a composited animation of it lays
+// out in every main-thread frame, so it shows any per-frame main-thread work.
+const ANCHORED = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+  body { margin: 0; }
+  #anchor { position: absolute; top: 100px; left: 20px; width: 80px; height: 40px; anchor-name: --a; }
+  #pop { position: fixed; position-anchor: --a; top: anchor(bottom); left: anchor(left); width: 160px; height: 120px; background: #c33; }
+</style>
+<button id=anchor>open</button><div id=pop></div>`;
 
 const FIXTURE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
 <style>
@@ -512,6 +528,105 @@ test.describe('frame evidence', () => {
     expect(transform.Paint ?? 0).toBe(0);
     // ~24 frames in 400 ms: one layout per frame.
     expect(top.Layout ?? 0).toBeGreaterThan(18);
+  });
+
+  test("the trace counts no Layout from the harness's own animation recorder, which stands down while it runs", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    // The recorder runs, as in any spec that waited for an animation first.
+    await waitForRest(pop);
+    const watch = await watchAnimations(pop);
+    const middle = async (askEveryFrame: boolean) => {
+      let started = 0;
+      const trace = await traceRendering(page, async () => {
+        started = await pop.evaluate((el, every) => {
+          const w = window as unknown as {stop?: boolean};
+          w.stop = false;
+          if (every) {
+            const ask = () => {
+              if (!w.stop) {
+                requestAnimationFrame(ask);
+              }
+            };
+            requestAnimationFrame(ask);
+          }
+          el.animate(
+            [
+              {transform: 'translateY(0px)', opacity: 1},
+              {transform: 'translateY(100px)', opacity: 0.5},
+            ],
+            {duration: 600},
+          );
+          return performance.timeOrigin + performance.now();
+        }, askEveryFrame);
+        await page.waitForTimeout(700);
+        await page.evaluate(() => {
+          (window as unknown as {stop?: boolean}).stop = true;
+        });
+      });
+      // The steady middle: starting and ending it may lay out once each.
+      return countBetween(trace, started + 100, started + 500);
+    };
+    expect((await middle(false)).Layout ?? 0).toBe(0);
+    // Control: a page that asks for a frame every frame lays it out in each.
+    expect((await middle(true)).Layout ?? 0).toBeGreaterThan(18);
+    // Nothing the traces ran went unrecorded.
+    const started = await watch.started();
+    expect(started.map(a => a.durationMs)).toEqual([600, 600]);
+  });
+
+  test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    await page.addStyleTag({
+      content:
+        '@keyframes harness-fade { from { opacity: 1 } to { opacity: 0.6 } }',
+    });
+    const pop = page.locator('#pop');
+    // The recorder runs, and a watch is taken before the trace.
+    await waitForRest(pop);
+    const watch = await watchAnimations(pop);
+    let started = 0;
+    const trace = await traceRendering(page, async () => {
+      started = await pop.evaluate(el => {
+        const pop = el as HTMLElement;
+        pop.style.transition = 'transform 400ms linear';
+        void pop.offsetWidth;
+        pop.style.transform = 'translateY(100px)';
+        pop.style.animation = 'harness-fade 400ms linear';
+        return performance.timeOrigin + performance.now();
+      });
+      await page.waitForTimeout(600);
+    });
+    // Its reads at the two starts fall before the steady middle.
+    expect(countBetween(trace, started + 100, started + 300).Layout ?? 0).toBe(
+      0,
+    );
+    const ended = await watch.started({timeout: 1_000});
+    expect(ended.map(a => a.kind).sort()).toEqual([
+      'CSSAnimation',
+      'CSSTransition',
+    ]);
+    expect(ended.every(a => a.finishedAt != null)).toBe(true);
   });
 
   test("the long-task log records the page's own long task but not a DevTools evaluate, which the trace counts", async ({
@@ -1026,6 +1141,91 @@ test.describe('animation state', () => {
     );
     const started = await watch.started();
     expect(started.map(a => a.durationMs)).toEqual([300]);
+  });
+
+  test('while a rendering trace runs the recorder reads only at CSS starts, and catches up after it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    // Counts the recorder's reads of the page's animations (each one flushes
+    // style): the whole document's, and one element's. Then flags a trace, as
+    // traceRendering does.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __reads: number;
+        __elementReads: number;
+        __harnessRenderingTrace?: boolean;
+      };
+      w.__reads = 0;
+      w.__elementReads = 0;
+      const read = document.getAnimations.bind(document);
+      document.getAnimations = () => {
+        w.__reads += 1;
+        return read();
+      };
+      const readElement = Element.prototype.getAnimations;
+      Element.prototype.getAnimations = function (
+        this: Element,
+        ...args: Parameters<Element['getAnimations']>
+      ) {
+        w.__elementReads += 1;
+        return readElement.apply(this, args);
+      };
+      w.__harnessRenderingTrace = true;
+    });
+    // During the trace: a CSS transition and a CSS animation that both end
+    // inside it, and a script animation still running after it.
+    await page.addStyleTag({
+      content:
+        '@keyframes harness-fade { from { opacity: 1 } to { opacity: 0.6 } }',
+    });
+    await box.evaluate(el => {
+      const box = el as HTMLElement;
+      box.style.transition = 'transform 120ms linear';
+      void box.offsetWidth;
+      box.style.transform = 'translateX(100px)';
+      box.style.animation = 'harness-fade 120ms linear';
+      box.animate([{scale: '1'}, {scale: '0.9'}], {duration: 600});
+    });
+    await page.waitForTimeout(300);
+    const reads = () =>
+      page.evaluate(() => (window as unknown as {__reads: number}).__reads);
+    // No frame loop: no document-wide read. One element read per CSS start
+    // event (transitionrun, transitionstart, animationstart), not per frame.
+    expect(await reads()).toBe(0);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {__elementReads: number}).__elementReads,
+      ),
+    ).toBeLessThanOrEqual(3);
+    // The trace ends: traceRendering clears the flag and resumes the recorder,
+    // which reads again, every frame.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __harnessRenderingTrace?: boolean;
+        __harnessAnimations: {resume: () => void};
+      };
+      w.__harnessRenderingTrace = false;
+      w.__harnessAnimations.resume();
+    });
+    await frames(page, 3);
+    expect(await reads()).toBeGreaterThan(2);
+    // All three are reported, the two CSS ones that ended inside the trace
+    // with the time they finished.
+    await waitForRest(box);
+    const started = await watch.started();
+    expect(started.map(a => a.kind).sort()).toEqual([
+      'Animation',
+      'CSSAnimation',
+      'CSSTransition',
+    ]);
+    expect(
+      started
+        .filter(a => a.kind !== 'Animation')
+        .map(a => a.finishedAt != null),
+    ).toEqual([true, true]);
   });
 
   test('a watch reports only what started after it', async ({page}) => {

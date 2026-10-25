@@ -235,9 +235,21 @@ describe('useGestureRecognizer', () => {
   });
 });
 
-function Button({onEvent}: {onEvent: (event: ControlEvent) => void}) {
+function Button({
+  onEvent,
+  cancelTravel,
+  isBraking,
+}: {
+  onEvent: (event: ControlEvent) => void;
+  cancelTravel?: number;
+  isBraking?: () => boolean;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
-  usePressTracker(ref, {onControlEvent: event => onEvent(event)});
+  usePressTracker(ref, {
+    onControlEvent: event => onEvent(event),
+    cancelTravel,
+    isBraking,
+  });
   return (
     <button data-testid="button" ref={ref} type="button">
       Go
@@ -364,6 +376,17 @@ describe('usePressTracker', () => {
     touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
     expect(isBraking).toHaveBeenCalled();
     expect(events).not.toContain('touchDown');
+  });
+
+  it("uses the caller's scroll brake", () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId} = render(
+      <Button onEvent={event => events.push(event)} isBraking={() => true} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
+    expect(events).toEqual([]);
   });
 });
 

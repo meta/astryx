@@ -116,9 +116,35 @@ export async function traceRendering(
       n => performance.timeOrigin + performance.mark(n).startTime,
       name,
     );
-  const fromEpoch = await mark(`${tag}:start`);
-  await body();
-  const toEpoch = await mark(`${tag}:end`);
+  // The harness's animation recorder (curves.ts) runs a callback every frame,
+  // which makes each frame a main-thread one where Blink restyles every running
+  // animation's target (and lays out an anchored one), and it reads the page's
+  // animations, which flushes style: exactly what this counts. It stands down
+  // while this flag is set, a recorder the body itself starts included, and
+  // resumes once the trace ends.
+  const standDown = (on: boolean) =>
+    page.evaluate(value => {
+      const w = window as unknown as {
+        __harnessRenderingTrace?: boolean;
+        __harnessAnimations?: {resume?: () => void};
+      };
+      w.__harnessRenderingTrace = value;
+      if (!value) {
+        w.__harnessAnimations?.resume?.();
+      }
+    }, on);
+  await standDown(true);
+  let fromEpoch: number;
+  let toEpoch: number;
+  try {
+    fromEpoch = await mark(`${tag}:start`);
+    await body();
+    toEpoch = await mark(`${tag}:end`);
+  } finally {
+    // Its catch-up read lands after the end mark, outside the counted window.
+    // A failure here would hide the body's own error, which is the one to see.
+    await standDown(false).catch(() => {});
+  }
   await cdp.send('Tracing.end');
   await complete;
   await cdp.detach().catch(() => {});

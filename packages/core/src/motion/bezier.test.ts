@@ -13,10 +13,10 @@ import {cubicBezier, type BezierPoints} from './bezier';
 import {timing} from './uikit/timing';
 
 const CURVES: BezierPoints[] = [
-  timing.curves.caDefault,
-  timing.curves.easeInOut,
-  timing.curves.easeIn,
-  timing.curves.easeOut,
+  timing.curves.viewChange,
+  timing.curves.move,
+  timing.curves.exit,
+  timing.curves.entrance,
   [0.24, 1, 0.4, 1],
   [0.3, 0, 0.6, 0.6],
 ];
@@ -43,7 +43,7 @@ describe('cubicBezier', () => {
   });
 
   it('ease-in-out is symmetric about its midpoint', () => {
-    const ease = cubicBezier(timing.curves.easeInOut);
+    const ease = cubicBezier(timing.curves.move);
     expect(ease(0.5)).toBeCloseTo(0.5, 9);
     for (let x = 0; x <= 0.5; x += 0.05) {
       expect(ease(x) + ease(1 - x)).toBeCloseTo(1, 6);

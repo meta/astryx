@@ -15,16 +15,9 @@
  * SYNC: When modified, update /packages/core/src/motion/bezier.test.ts
  */
 
-/**
- * A cubic bézier timing curve's two control points, `[x1, y1, x2, y2]`.
- * @experimental
- */
 export type BezierPoints = readonly [number, number, number, number];
 
-/**
- * The timing function for `points`: maps time progress to eased progress.
- * @experimental
- */
+/** The timing function for `points`: maps time progress to eased progress. */
 export function cubicBezier([x1, y1, x2, y2]: BezierPoints): (
   x: number,
 ) => number {

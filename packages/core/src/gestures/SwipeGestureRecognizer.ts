@@ -24,10 +24,8 @@ import {
 } from './GestureRecognizer';
 import type {GestureEventContext, GestureTouch, Point} from './types';
 
-/** @experimental */
 export type SwipeDirection = 'left' | 'right' | 'up' | 'down';
 
-/** @experimental */
 export interface SwipeGestureRecognizerOptions extends GestureRecognizerOptions<SwipeGestureRecognizer> {
   /** @default ['right'] */
   direction?: SwipeDirection | ReadonlyArray<SwipeDirection>;
@@ -40,7 +38,6 @@ export interface SwipeGestureRecognizerOptions extends GestureRecognizerOptions<
 
 const SWIPE = UIKIT_GESTURES.swipe;
 
-/** @experimental */
 export class SwipeGestureRecognizer extends GestureRecognizer {
   directions: ReadonlyArray<SwipeDirection>;
   numberOfTouchesRequired: number;

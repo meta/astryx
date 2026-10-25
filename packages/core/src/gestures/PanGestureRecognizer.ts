@@ -29,14 +29,10 @@
  *   scroll for that movement — the finger landed at the edge and pulls away
  *   from it. The browser has not committed yet, so beginning claims the
  *   touch and the browser never scrolls.
- * - `scrollHandoff` (with a one-way direction; NOT UIKit, whose sheet leaves
- *   a drag that began as a scroll to the scroll view for its whole length):
- *   when the browser took the touch to scroll, keep watching it. Once the content runs out in the
- *   pan's direction, the travel beyond that point becomes the pan, after
- *   `contentEndHandoffSlop`; if the finger comes back, the translation
- *   clamps at zero while the content scrolls again, and a later pull past the
- *   end resumes the pan. The browser's events are no longer cancelable then,
- *   and nothing needs cancelling: the scroller is clamped at its end.
+ *
+ * Who gets the drag is decided once, when it begins: a drag that began as
+ * the browser's scroll stays the browser's to the lift and rubber-bands at
+ * the content's edge, as a UIKit scroll view keeps it (`spec:AST-094` FR14).
  */
 
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
@@ -51,11 +47,9 @@ import {
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
-/** @experimental */
 export type PanDirection =
   'any' | 'horizontal' | 'vertical' | 'left' | 'right' | 'up' | 'down';
 
-/** @experimental */
 export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<PanGestureRecognizer> {
   /** @default 1 */
   minimumNumberOfTouches?: number;
@@ -79,8 +73,6 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   lockAxis?: boolean;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
-  /** Take over a native scroll at its edge (one-way directions only). */
-  scrollHandoff?: boolean;
   /**
    * Travel (px) from which, while it is still possible, the pan claims its
    * touch: the host cancels the touch's moves, so the
@@ -110,7 +102,6 @@ const DIRECTION_VECTORS: Partial<Record<PanDirection, Point>> = {
   down: {x: 0, y: 1},
 };
 
-/** @experimental */
 export class PanGestureRecognizer extends GestureRecognizer {
   /** @internal The host's brand: a pan claims early and follows the one-finger rule (recognizerInternals). */
   protected get family(): 'pan' {
@@ -124,7 +115,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   axisRatio: number;
   lockAxis: boolean;
   scrollEdge: boolean;
-  scrollHandoff: boolean;
   /** See the option; `undefined` means the default for this pan's setup. */
   claimDistance: number | 'early' | null;
   /** Whether a move was cancelled for this pan's early claim: the touch is its own. */
@@ -133,8 +123,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   lockedAxis: 'x' | 'y' | null = null;
   /** The movement the begin threshold took (excluded from `translation()`). */
   travelAtBegan: Point = ZERO;
-  /** Whether this pan is driving the rest of a gesture the browser was scrolling. */
-  isHandoff = false;
 
   private readonly tracker: VelocityTracker;
   /** The lift's event time once the pan ended: its release (AST-100 FR2). */
@@ -146,10 +134,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** Translation since touch-down, before `setTranslation` offsets. */
   private raw: Point = ZERO;
   private offset: Point = ZERO;
-  private virtual: Point = ZERO;
-  private isObserving = false;
-  private anchor: Point | null = null;
-  private predictedAnchor: Point | null = null;
 
   constructor(options: PanGestureRecognizerOptions = {}) {
     super(options);
@@ -161,7 +145,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
-    this.scrollHandoff = options.scrollHandoff ?? false;
     this.claimDistance = options.claimDistance ?? null;
     this.tracker = new VelocityTracker();
   }
@@ -171,15 +154,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * movement since touch-down while it is still possible.
    */
   translation(): Point {
-    const base = this.isHandoff ? this.handoffTravel() : this.raw;
-    const value = {x: base.x + this.offset.x, y: base.y + this.offset.y};
-    const direction = DIRECTION_VECTORS[this.direction];
-    if (this.isHandoff && direction != null && dot(value, direction) < 0) {
-      // Past the content's end the surface never goes behind its start: it
-      // sits at zero while the content scrolls again.
-      return ZERO;
-    }
-    return this.locked(value);
+    return this.locked({
+      x: this.raw.x + this.offset.x,
+      y: this.raw.y + this.offset.y,
+    });
   }
 
   /**
@@ -194,13 +172,12 @@ export class PanGestureRecognizer extends GestureRecognizer {
 
   /** UIKit's `setTranslation(_:in:)`: make the current translation read `value`. */
   setTranslation(value: Point): void {
-    const base = this.isHandoff ? this.handoffTravel() : this.raw;
-    this.offset = {x: value.x - base.x, y: value.y - base.y};
+    this.offset = {x: value.x - this.raw.x, y: value.y - this.raw.y};
   }
 
   /** Movement since the fingers landed, threshold included, client px. */
   totalTranslation(): Point {
-    return this.isHandoff ? this.handoffTravel() : this.raw;
+    return this.raw;
   }
 
   /**
@@ -234,11 +211,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * browser decides to scroll. Pinch-zoom stays the browser's.
    */
   override get nativeTouchBehavior(): NativeTouchBehavior {
-    if (
-      this.scrollEdge ||
-      this.scrollHandoff ||
-      DIRECTION_VECTORS[this.direction] != null
-    ) {
+    if (this.scrollEdge || DIRECTION_VECTORS[this.direction] != null) {
       return ALL_NATIVE_TOUCH;
     }
     const horizontal =
@@ -258,9 +231,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   protected override acceptsTouch(touch: GestureTouch): boolean {
-    if (this.isObserving) {
-      return false;
-    }
     if (
       (isActive(this.state) || this.isClaimCommitted) &&
       this.numberOfTouches >= this.maximumNumberOfTouches
@@ -281,7 +251,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
       this.adjust = ZERO;
       this.raw = ZERO;
       this.offset = ZERO;
-      this.virtual = this.origin;
       this.tracker.reset();
       this.tracker.add(this.origin.x, this.origin.y, event.time);
     } else {
@@ -300,10 +269,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     event: GestureEventContext,
   ): void {
     this.track(event.time);
-    if (this.isObserving) {
-      this.observeNativeScroll();
-      return;
-    }
     if (this.state === 'possible') {
       this.tryBegin();
     } else if (isActive(this.state)) {
@@ -334,36 +299,14 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.rebase(new Set(touches.map(touch => touch.id)), 'removed');
   }
 
-  protected override touchesTakenByBrowser(
-    touches: ReadonlyArray<GestureTouch>,
-    event: GestureEventContext,
-  ): boolean {
-    if (
-      this.scrollHandoff &&
-      DIRECTION_VECTORS[this.direction] != null &&
-      this.state === 'possible' &&
-      this.pending == null
-    ) {
-      this.isObserving = true;
-      this.anchor = null;
-      return true;
-    }
-    return super.touchesTakenByBrowser(touches, event);
-  }
-
   protected override reset(): void {
     this.isClaimCommitted = false;
     this.lockedAxis = null;
     this.travelAtBegan = ZERO;
-    this.isHandoff = false;
-    this.isObserving = false;
-    this.anchor = null;
-    this.predictedAnchor = null;
     this.origin = ZERO;
     this.adjust = ZERO;
     this.raw = ZERO;
     this.offset = ZERO;
-    this.virtual = ZERO;
     this.releaseTime = undefined;
     this.tracker.reset();
   }
@@ -375,7 +318,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * otherwise scroll it first.
    */
   claimsEarly(): boolean {
-    if (this.state !== 'possible' || this.pending != null || this.isObserving) {
+    if (this.state !== 'possible' || this.pending != null) {
       return false;
     }
     if (this.isClaimCommitted) {
@@ -469,13 +412,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
       !this.isClaimCommitted &&
       this.nativeCanScroll(moved.x, moved.y)
     ) {
-      // The content under the finger still scrolls this way: it is a
-      // scroll (unless the host already took the touch from the browser for
-      // the pan's early claim). A handoff pan waits for the browser to take
-      // it and watches; any other pan leaves it alone.
-      if (!this.scrollHandoff) {
-        this.setState('failed');
-      }
+      // The content under the finger still scrolls this way: it is a scroll,
+      // the browser's to the lift (FR14). A pan that committed to its touch
+      // keeps it.
+      this.setState('failed');
       return;
     }
     if (this.lockAxis && this.direction === 'any') {
@@ -494,20 +434,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * case is not modelled.
    */
   private startFromHere(): void {
-    if (this.isHandoff) {
-      // The same rule past the content's end: leave out at most the slop
-      // and keep the overshoot, so the surface's travel does not depend on
-      // which moves the browser delivered (Chromium coalesces them while it
-      // scrolls).
-      const base = this.handoffTravel();
-      const slop = UIKIT_GESTURES.scroll.contentEndHandoffSlop.value;
-      const along = Math.hypot(base.x, base.y);
-      const kept = along > 0 ? Math.min(along, slop) / along : 0;
-      const swallowed = {x: base.x * kept, y: base.y * kept};
-      this.travelAtBegan = swallowed;
-      this.offset = {x: -swallowed.x, y: -swallowed.y};
-      return;
-    }
     const limit = this.hysteresis;
     const swallowed = {
       x: Math.sign(this.raw.x) * Math.min(Math.abs(this.raw.x), limit),
@@ -515,92 +441,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     };
     this.travelAtBegan = swallowed;
     this.offset = {x: -swallowed.x, y: -swallowed.y};
-  }
-
-  /** After the browser took the touch: take over once the content runs out. */
-  private observeNativeScroll(): void {
-    const direction = DIRECTION_VECTORS[this.direction];
-    if (direction == null) {
-      return;
-    }
-    // While the pan drives the surface past the edge, the scroller is
-    // clamped at its end: nothing can scroll, so skip the scroll read.
-    const isPastEdge =
-      this.isHandoff && dot(this.handoffTravel(), direction) > 0;
-    if (!isPastEdge && this.nativeCanScroll(direction.x, direction.y)) {
-      // The content still scrolls this way: it has the finger, and the
-      // surface sits at zero until the content runs out again. Native touch
-      // scrolling tracks the finger one to one, so the content will run out
-      // after exactly the distance it has left.
-      const left = this.nativeDistanceToEdge(direction.x, direction.y);
-      this.anchor = null;
-      this.predictedAnchor =
-        left == null
-          ? null
-          : {
-              x: this.virtual.x + direction.x * left,
-              y: this.virtual.y + direction.y * left,
-            };
-      if (this.isHandoff) {
-        // The content has the finger back and the surface sits at zero; it
-        // follows the finger from zero once the content runs out again.
-        this.offset = ZERO;
-        this.setState('changed');
-      }
-      return;
-    }
-    // Where the content ran out: predicted from the distance it had left
-    // when it last could scroll, else the first position seen at the edge.
-    if (this.anchor == null) {
-      const predicted = this.predictedAnchor;
-      this.anchor =
-        predicted != null &&
-        dot(
-          {x: predicted.x - this.virtual.x, y: predicted.y - this.virtual.y},
-          direction,
-        ) <= 0
-          ? predicted
-          : this.virtual;
-      this.predictedAnchor = null;
-    }
-    if (this.isHandoff) {
-      this.setState('changed');
-      return;
-    }
-    if (
-      dot(this.handoffTravel(), direction) >=
-      UIKIT_GESTURES.scroll.contentEndHandoffSlop.value
-    ) {
-      this.isHandoff = true;
-      this.startFromHere();
-      this.setState('began');
-    }
-  }
-
-  /** Travel past the content's end, along the pan's direction, never negative. */
-  private handoffTravel(): Point {
-    const direction = DIRECTION_VECTORS[this.direction];
-    if (direction == null || this.anchor == null) {
-      return ZERO;
-    }
-    const along = Math.max(
-      0,
-      dot(
-        {x: this.virtual.x - this.anchor.x, y: this.virtual.y - this.anchor.y},
-        direction,
-      ),
-    );
-    return {x: direction.x * along, y: direction.y * along};
-  }
-
-  private nativeDistanceToEdge(dx: number, dy: number): number | null {
-    for (const touch of this.touches.values()) {
-      const left = touch.scroll?.distanceToEdge?.(dx, dy);
-      if (left != null) {
-        return left;
-      }
-    }
-    return null;
   }
 
   private nativeCanScroll(dx: number, dy: number): boolean {
@@ -620,7 +460,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     };
     // UIKit's filter runs once per event.
     this.tracker.add(virtual.x, virtual.y, time);
-    this.virtual = virtual;
     this.raw = {x: virtual.x - this.origin.x, y: virtual.y - this.origin.y};
   }
 
@@ -647,8 +486,4 @@ export class PanGestureRecognizer extends GestureRecognizer {
     }
     return value;
   }
-}
-
-function dot(a: Point, b: Point): number {
-  return a.x * b.x + a.y * b.y;
 }
