@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file MultiSelector.disabledFocus.a11y.chromium.spec.ts
