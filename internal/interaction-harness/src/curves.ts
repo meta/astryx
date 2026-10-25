@@ -486,10 +486,12 @@ export async function sampleCurve(
           'sampleCurve: no held animations (call holdAnimations first)',
         );
       }
-      // The properties each held animation of this element animates.
+      // The properties each held animation of this element animates. A
+      // `::before` or `::after` animation is not the element's own: its
+      // clock would label the element's samples with another box's time.
       const own = held.map(animation => {
         const effect = animation.effect as KeyframeEffect | null;
-        if (effect?.target !== element) {
+        if (effect?.target !== element || effect.pseudoElement != null) {
           return null;
         }
         const properties = new Set<string>();
@@ -533,17 +535,46 @@ export async function sampleCurve(
         const style = getComputedStyle(element);
         // translate · rotate · scale · transform, as CSS applies them (all
         // about the same transform origin, which `transform` excludes too).
-        const box = element as HTMLElement;
-        const length = (value: string, size: number) =>
-          value.endsWith('%')
-            ? (parseFloat(value) / 100) * size
-            : parseFloat(value) || 0;
+        // A percentage resolves against the border box, unrounded
+        // (`offsetWidth` rounds it); anything else it cannot resolve (a
+        // `calc()`) is an error, not a guess.
+        const px = (value: string) => parseFloat(value) || 0;
+        const borderBox =
+          style.boxSizing === 'border-box'
+            ? {width: px(style.width), height: px(style.height)}
+            : {
+                width:
+                  px(style.width) +
+                  px(style.paddingLeft) +
+                  px(style.paddingRight) +
+                  px(style.borderLeftWidth) +
+                  px(style.borderRightWidth),
+                height:
+                  px(style.height) +
+                  px(style.paddingTop) +
+                  px(style.paddingBottom) +
+                  px(style.borderTopWidth) +
+                  px(style.borderBottomWidth),
+              };
+        const length = (value: string, size: number) => {
+          const match = /^(-?[\d.]+(?:e-?\d+)?)(px|%)$/.exec(value);
+          if (match == null) {
+            throw new Error(
+              `sampleCurve: cannot resolve translate ${JSON.stringify(style.translate)}`,
+            );
+          }
+          const amount = Number(match[1]);
+          return match[2] === '%' ? (amount / 100) * size : amount;
+        };
         const matrix = new DOMMatrix();
         if (style.translate !== 'none') {
-          const [x = '0px', y = '0px'] = style.translate.split(' ');
+          // "x", "x y" or "x y z"; a calc() holds spaces, so split at the
+          // top level only.
+          const parts = style.translate.match(/(?:calc\([^)]*\)|\S)+/g) ?? [];
+          const [x = '0px', y = '0px'] = parts;
           matrix.translateSelf(
-            length(x, box.offsetWidth ?? 0),
-            length(y, box.offsetHeight ?? 0),
+            length(x, borderBox.width),
+            length(y, borderBox.height),
           );
         }
         if (style.rotate !== 'none') {
@@ -638,7 +669,8 @@ export interface ActiveAnimation {
 
 /**
  * Waits until an animation is running on `locator`'s element (or inside it)
- * and has presented `minProgressMs` of its curve, and returns its active
+ * and has presented `minProgressMs` of its curve (after any delay), and
+ * returns its active
  * interval on the page clock. Use it before blocking the main thread: an
  * animation that has not started yet cannot start while the thread is blocked.
  *
@@ -732,8 +764,12 @@ export async function waitForAnimation(
             ? element.getAnimations({subtree: true})
             : recorded.filter(e => e.finishedAt == null).map(e => e.animation)
         ).filter(a => a.playState === 'running' && a.startTime != null);
+        // Progress along the curve: a transition's delay presents nothing.
         const progressed = running.filter(
-          a => Number(a.currentTime ?? 0) >= minProgress,
+          a =>
+            Number(a.currentTime ?? 0) -
+              Number(a.effect?.getComputedTiming().delay ?? 0) >=
+            minProgress,
         );
         if (progressed.length > 0) {
           return progressed.map(a => describe(a, null, null));
