@@ -13,11 +13,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import stylex from '@stylexjs/unplugin';
-import {
-  astryxStylex,
-  LIGHTNINGCSS_TARGETS,
-  undefinedGeneratedVariables,
-} from './vite';
+import {astryxStylex, LIGHTNINGCSS_TARGETS} from './vite';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -303,6 +300,25 @@ describe('undefinedGeneratedVariables', () => {
         ['astryx', 'x'],
       ),
     ).toEqual([]);
+  });
+
+  it('counts a declaration in any other stylesheet the build emits', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{padding:var(--xlarge)}',
+        ['astryx', 'x'],
+        [':root{--xlarge:24px}'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports only hash-shaped names: four to seven characters after the prefix', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{margin:var(--xl)}.b{gap:var(--xs1)}.c{inset:var(--x1abc2de)}.d{top:var(--x1abc2def)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--x1abc2de']);
   });
 
   it('checks only the prefixes it is given', () => {

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/grid|internal/a11y-spec/src/harness|packages/core/src/Calendar/|packages/core/src/hooks/useGridFocus|apps/storybook/stories/CalendarGridA11y)
 
 /**
  * @file Calendar.a11y.chromium.spec.ts

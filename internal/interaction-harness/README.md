@@ -8,8 +8,6 @@ unpublished.** Specs live next to their component as
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
-The exemplar to copy is
-[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
 every positive check has a negative control beside it (a rAF animation that
@@ -21,7 +19,7 @@ freezes, a `top` animation that lays out every frame).
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction BottomSheetDetent   # one spec, both engines
+pnpm test:interaction <spec file>         # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -33,6 +31,12 @@ image (podman or docker; the repository is mounted at the same path):
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
+WebKit composites through Mesa's software GL there, which compiles each shader
+the first time a page draws it (450–700 ms for the first frame of a blurred or
+newly animated layer). The script keeps Mesa's shader cache on the host
+(`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
+only the first run on a machine pays for them.
+
 Evidence (storyboards, curve traces, busy-main-thread frames) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
@@ -42,12 +46,12 @@ committed: a pull request links or attaches it.
 
 | Module          | What it gives a spec                                                                                                                                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                               |
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, and a verdict.                                                                                        |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread Layout / Paint / UpdateLayoutTree / PrePaint counts, `countBetween` for a sub-window, long tasks. `installLongTaskLog` / `readLongTasks`.                                           |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `waitForRest`, `releaseAnimations`.                                                                           |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                            |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                     |
@@ -58,25 +62,39 @@ committed: a pull request links or attaches it.
 **Real touch.** Untrusted DOM events are not input: they start no native
 scroll, claim no gesture, and read `isTrusted: false`. Chromium input goes
 through CDP `Input.dispatchTouchEvent` with an explicit timestamp per event: the
-page's `event.timeStamp` is the scripted time to the microsecond, whatever the
+page's `event.timeStamp` is the scripted time to 0.1 ms, whatever the
 dispatch latency, and the events go through the compositor's gesture detection
 (native scrolling, flings with velocity from those timestamps, `touch-action`,
 `pointercancel`). WebKit input goes through the engine's own input command; see
 the limits below. Read positions a frame after a move: Chromium delivers
 `pointermove` aligned to animation frames.
 
-**Curve sampling.** Pause every animation (CSS transitions and animations are
-Web Animations too), seek to a time, read `getComputedStyle`: the presented
-value at that exact time, independent of frame timing. Compare it with an
+**Curve sampling.** Pause every running animation (CSS transitions and
+animations are Web Animations too), seek to a time, read `getComputedStyle`:
+the presented value at that exact time, independent of frame timing. Finished
+animations, ones the page paused and ones on a scroll or view timeline are left
+alone; held animations keep their offsets from the first hold's earliest start, and release
+resumes only them. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond
-inside it, the last frame it presents. An animation whose keyframes end in a run of
+inside it, the last frame it presents, and the sample says so (`presentedAt`,
+where oracles are read). An animation whose keyframes end in a run of
 identical values (an end value held so a later interruption can read it)
 ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
 the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
 than `playState`, does not wait the hold out.
+
+**Waiting for an animation.** The page records every animation from the first
+call into `curves.ts` on it (and on every later document): a frame loop on the
+page's own `requestAnimationFrame`, the CSS animation and transition events,
+and `Element.animate` as it is called, pending animations included. So
+`waitForAnimation` also reports one that started after the last
+`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+set): a short entrance no longer races the first look on a cold page. When the
+action may be the page's first contact with the harness, take
+`watchAnimations(locator)` before it and read `watch.started()` after.
 
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
@@ -91,7 +109,16 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. The `verdict` tolerates what a
+plateaus within a pixel or two of rest. A judged part shorter than four frames
+fails: the animation under test was not moving during the block. With
+`during`, `blockMainThread` starts the loop from a task queued in the frame
+that saw the animation, after that frame's rendering update: WebKit hands a
+newly started animation to its compositor there, and a loop inside the rAF
+callback would freeze even a compositor animation. Call it before the release
+that starts a settle and await it after, so the page is already waiting when
+the settle begins. An animation counts once it is no longer pending and has
+run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
+created in the frame the page looks is not on the compositor yet. The `verdict` tolerates what a
 loaded machine does to a screencast and nothing a frozen animation does: a
 median frame interval of at most 20 ms, no stall longer than three screencast
 intervals (two dropped frames), and at least 90% of the window's whole frame
@@ -104,7 +131,12 @@ block into a filmstrip.
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame.
+Layout or Paint there; a layout-property animation does one per frame. The
+harness's own animation recorder stands down while the trace runs, since its
+frame loop would make every frame a main-thread one, restyling each running
+animation's target and laying out an anchored one: it reads only the element a
+CSS animation or transition event names, once, when that animation starts, and
+catches up afterwards.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -112,7 +144,18 @@ carries each frame's measurements and the spec asserts on it; the sheet is
 evidence. A component that finishes an animation from a timer (a transitionend
 backstop, a cleanup render) would do so behind a held storyboard's back:
 `installTimerGate` before the animation starts and `freezeTimers` while
-photographing.
+photographing. The page can still cancel a held callback, a held frame callback
+gets the time it actually runs, and the harness's own frame waits are not held.
+An animation that repeats forever does not set a storyboard's default length;
+with nothing else to film, pass `times`. A touch filmstrip keeps the scripted
+event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
+`Date.now()` sees one event per photograph, about 100 ms apart, so a
+clock-timed release flings slower when filmed than when played: a storyboard
+cannot show such a gesture; record it in real time instead, with
+`startScreencast` and `castStoryboard`. Chromium can return an empty copy of
+the page's surface right after it changes ("Unable to capture screenshot"); a
+storyboard takes that photograph again two frames later, up to three attempts
+in all, and lists each retake under `recaptures` in the trace.
 
 ## Engine limits (measured with Playwright 1.61)
 

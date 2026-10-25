@@ -95,28 +95,43 @@ a measured, sourced difference exists.
   rest point by projecting its velocity the way its UIKit counterpart does:
   with a deceleration rate, or with a measured projection time.
 - **FR4 — Touch motion is themeable.** Every spring, duration and curve a
-  touch presentation plays MUST be one of the theme motion roles below, each
-  named for its use (`architecture:theme-tokens` INV3). The role's default value is
+  touch presentation plays MUST be a theme motion role named for its use
+  (`architecture:theme-tokens` INV3). The roles this record names are listed below with their defaults and
+  sources; further roles a component's own record measures join through the
+  generated motion role table (DEC-5). The role's default value is
   its measured value (FR1, FR2), and a theme MAY override it through `motion`, at its root or
   in an adaptation rule. A component MUST read touch motion through these roles
   and MUST NOT play a literal. A theme value MUST reach the motion at its
-  start, without changing how the motion runs (FR5, FR6). Gesture thresholds, the timings that decide who gets a touch (the
+  start, without changing how the motion runs (FR5, FR6). Motion that
+  must stay in step with the on-screen keyboard is not a theme role: it rides
+  the keyboard's own motion (`spec:AST-099` FR8,
+  `architecture:react-component-runtime` INV11). Gesture thresholds, the timings that decide who gets a touch (the
   content-touch delay, the scroll brake, momentum memory) and haptics are not
   motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). This adds touch motion roles to the motion
   configuration of `architecture:theme-authoring-contract` and to
-  `architecture:theme-tokens` beside the existing duration and easing tokens, whose rules are unchanged. It
-  amends `spec:AST-057` for touch presentations: Item's swipe springs and
-  durations become theme motion roles instead of constants in source. It departs from the draft `design:motion` DR3
+  `architecture:theme-tokens` beside the existing duration and easing tokens, whose rules are unchanged. It departs from the draft `design:motion` DR3
   wherever the native motion settles with an overshoot or stretches with a
-  rubber band. The motion and gesture machinery behind these roles is internal:
-  it publishes no public API and no module-level `/experimental` subpath
-  (`spec:AST-017` FR21).
+  rubber band.
 
-  | Kind     | Roles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-  | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-  | Spring   | `springs.sheetPresent`, `springs.sheetDismiss`, `springs.sheetDismissSwipe`, `springs.sheetDetent`, `springs.sheetReleaseFast`, `springs.actionSheetPresent`, `springs.actionSheetDismiss`, `springs.alertPresent`, `springs.alertDismiss`, `springs.popoverPresent`, `springs.popoverDismiss`, `springs.contextMenuLift`, `springs.contextMenuDismiss`, `springs.menuOpen`, `springs.menuClose`, `springs.subMenuOpen`, `springs.subMenuBack`, `springs.rowSwipeOpen`, `springs.rowSwipeReturn`, `springs.rowSwipeCommit`, `springs.banner`, `springs.keyboard`, `springs.navigationPush`, `springs.navigationPop`, `springs.navigationInteractivePopFinish`, `springs.navigationBarElements`, `springs.segmentedThumb`, `springs.switchThumbMove`, `springs.switchThumbStretch`, `springs.fingerTracking`, `springs.emphasis`, `springs.settle`, `springs.quickChange`, `springs.viewChange`, `springs.timedChange`, `springs.stateChange`, `springs.directChange`, `scroll.paging.snap` |
-  | Duration | `timing.press.highlightInMs`, `timing.press.highlightOutMs`, `timing.press.buttonReleaseMs`, `timing.press.flashMs`, `timing.stateChangeMs`, `timing.keyboardNotificationMs`, `timing.navigationBarHideShowMs`, `navigation.transitionMs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-  | Curve    | `timing.curves.viewChange`, `timing.curves.exit`, `timing.curves.entrance`, `timing.curves.move`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+  | Role                       | Default                             | Source                                                                                         |
+  | -------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+  | `springs.fingerTracking`   | response 0.15 s, damping ratio 0.86 | Apple: SwiftUI `interactiveSpring()`                                                           |
+  | `springs.emphasis`         | duration 0.5 s, bounce 0.3          | Apple: SwiftUI `.bouncy`                                                                       |
+  | `springs.settle`           | duration 0.5 s, bounce 0            | Apple: SwiftUI `.smooth`                                                                       |
+  | `springs.quickChange`      | duration 0.5 s, bounce 0.15         | Apple: SwiftUI `.snappy`                                                                       |
+  | `springs.viewChange`       | mass 3, stiffness 1000, damping 500 | measured: UIKit `UISpringTimingParameters()`, iOS 26.2 simulator, 2026-10-23                   |
+  | `springs.timedChange`      | duration 0.5 s, bounce 0            | Apple: UIKit `UIView.animate(springDuration:bounce:)`                                          |
+  | `springs.stateChange`      | response 0.55 s, damping ratio 1    | Apple: SwiftUI `Animation.default`                                                             |
+  | `springs.directChange`     | response 0.5 s, damping ratio 0.825 | Apple: SwiftUI `.spring(response:dampingFraction:)`                                            |
+  | `springs.menuOpen`         | damping ratio 0.8, response 0.32 s  | measured: UIMenu opening, iOS 26.2 simulator, 2026-10-23                                       |
+  | `springs.menuClose`        | damping ratio 0.85, response 0.35 s | measured: UIMenu closing, iOS 26.2 simulator, 2026-10-23                                       |
+  | `springs.subMenuOpen`      | damping ratio 0.85, response 0.4 s  | measured: UIKit's own spring for UIMenu's sub-menu opening, iOS 26.2 simulator, 2026-10-24     |
+  | `springs.subMenuBack`      | damping ratio 1, response 0.4 s     | measured: UIKit's own spring for UIMenu's sub-menu header back, iOS 26.2 simulator, 2026-10-24 |
+  | `timing.stateChangeMs`     | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                |
+  | `timing.curves.viewChange` | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                     |
+  | `timing.curves.exit`       | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                      |
+  | `timing.curves.entrance`   | cubic-bezier(0, 0, 0.58, 1)         | measured: UIKit's ease-out, iOS 26.2 simulator, 2026-10-23                                     |
+  | `timing.curves.move`       | cubic-bezier(0.42, 0, 0.58, 1)      | measured: UIKit's ease-in-out, iOS 26.2 simulator, 2026-10-23                                  |
 
 ### Motion
 
@@ -159,8 +174,9 @@ a measured, sourced difference exists.
   open menu.
 - **FR11 — Two press profiles.** Press feedback MUST follow one of two native
   profiles. A control (UIControl) highlights on touch-down outside scroll
-  views, keeps tracking within its expanded bounds (70 pt), turns its highlight
-  off and on as the finger drags out and back, and activates on a lift inside.
+  views and activates by the browser's click on a lift inside. On the web a
+  control's press ends when the browser takes the touch (FR20), and its
+  activation stays the browser's click.
   A cell (a table or collection cell) highlights 150 ms after touch-down inside
   a scroll view, drops the highlight when the scroll wins, and activates on a
   lift inside it with no scroll. A control is inside a scroll view when it sits in a scrollable container,
@@ -170,8 +186,9 @@ a measured, sourced difference exists.
   control profile; the 150 ms delay applies only inside scroll views. A control whose own record keeps its press through a drag
   keeps it: Slider's overlay stays on the dragged thumb (`design:user-states`
   DR4). On every touch platform this amends
-  `design:user-states` DR1 (the pressed overlay during a hold) and DR3 (the
-  selected SegmentedControl item's held surface) for touch presentations, the press treatment of `family:buttons`, and the last sentence of
+  `design:user-states` DR1 (the pressed overlay during a hold) and DR3 (a held, selected SegmentedControl item keeps its raised selected
+  surface; only its press timing follows the control profile) for touch
+  presentations, the press treatment of `family:buttons`, and the last sentence of
   `module:DropdownMenu/useMenuPress` FR6 (menu rows paint `:active` only under
   `(hover: hover)`): under a finger, menu rows take the cell profile. FR6's
   rule that at most one row of a menu is lit still holds, so a finger that
@@ -187,6 +204,8 @@ a measured, sourced difference exists.
   governed by `spec:AST-012` FR9 and `architecture:public-component-api`
   INV17. A presentation asks for exactly the conditions its own record names
   (the date and time sheet asks for the pointer only, `spec:AST-043` FR1).
+  A style keyed on the literal touch media query conforms, since the server
+  and hydrating markup are identical (DEC-6).
 - **FR14 — Nested scrolling follows the native rule.** Who gets a drag that
   starts inside a scroll area MUST be decided once, when the drag begins. If
   the area sits at its edge and the drag moves toward that edge, the
@@ -206,19 +225,28 @@ a measured, sourced difference exists.
   report and never the moment reported.
 - **FR17 — Native readings.** A recognizer's thresholds MUST follow UIKit's
   measured values (FR1, FR2). A pan begins at 10 pt of travel on either axis,
-  and its translation excludes that travel. Release velocity is governed by
-  `spec:AST-100`.
+  and its translation excludes that travel. Release velocity is governed by `spec:AST-100`.
 - **FR18 — `touch-action` leaves the browser the rest.** An element with touch
   recognizers MUST get a `touch-action` that leaves the browser exactly what
   its recognizers do not use: the other axis for an axis-limited pan or swipe,
   `manipulation` for taps and long presses, everything for a one-way pan or a
   pan that shares its axis with native scrolling. `pinch-zoom` MUST stay
   unless a pinch or rotation recognizer is attached.
-- **FR19 — Claims are made in time and only by an owner.** Recognizers attach
-  only under a coarse pointer; on a fine pointer no recognizer attaches and no
-  touch listener is registered (FR24). A recognizer that begins MUST claim its
-  touches by cancelling `touchmove` through a non-passive listener on its
-  element. A `touchmove` of a touch no recognizer owns MUST NOT be cancelled. A
+- **FR19 — Claims are made in time and only by an owner.** Recognizers attach only where the primary pointer
+  is coarse (FR13, DEC-6). Where the primary pointer is fine, no recognizer
+  attaches and no touch listener is registered (FR24), so a finger on a
+  touchscreen whose primary pointer is fine gets the browser's defaults for
+  this record's behaviors (`spec:AST-017` FR59, DEC-25). This rule governs
+  this record's behaviors only; `spec:AST-057` keeps its per-event pointer
+  read for the row swipe, as its record states. A recognizer that begins MUST claim its touches by cancelling
+  `touchmove` through a non-passive listener on its element; a watcher,
+  which never claims, is exempt (DEC-7). A `touchmove` of a touch no recognizer owns MUST NOT be cancelled, with
+  two exceptions. While a scroll lock under a modal presentation holds the
+  page, it MAY cancel the moves of a one-finger touch that no recognizer owns
+  when that pan would scroll the page; a second finger is never cancelled
+  (FR10), and the page keeps pinch-zoom. Once its press is delivered, a
+  control that keeps its press through a drag (FR11) owns its touch and MAY
+  cancel that finger's moves. A
   recognizer that competes with native scrolling MUST decide within 10 px of
   travel, before the browser commits to the scroll. Only an element with a
   recognizer that must claim mid-gesture registers that blocking listener; an
@@ -232,7 +260,10 @@ a measured, sourced difference exists.
 - **FR20 — The browser can take a touch.** `pointercancel`, an uncancelable
   `touchmove`, or a native scroll under the touch MUST count as the browser
   taking the touch: possible recognizers that share it fail, active ones are
-  cancelled, and the view's press is cancelled without a release.
+  cancelled, and the view's press is cancelled without a release. A recognizer that never claims (a watcher) registers only passive
+  listeners (`architecture:react-component-runtime` INV3, INV5), and a
+  watcher is not cancelled when the browser takes the touch: it follows the
+  scroll to the lift (DEC-7).
 - **FR21 — Clicks follow the gesture.** When a gesture takes a touch, its
   `touchend` MUST be cancelled, and no click or compatibility mouse event
   reaches the page. A click held for a recognizer that may still recognize (a
@@ -246,10 +277,15 @@ a measured, sourced difference exists.
 
 ### Menus and popovers under a finger
 
-FR26–FR30 and FR34 apply to a menu that carries the press model of
-`module:DropdownMenu/useMenuPress` (DropdownMenu, ContextMenu and their
-sub-menus) when a finger or pen drives it; FR31–FR33 and FR35 apply to anchored
-menus and to Popover under a finger. A mouse keeps today's behavior.
+FR26–FR28 and FR30 apply to every surface that carries the press model of
+`module:DropdownMenu/useMenuPress` (DropdownMenu, ContextMenu, their sub-menus,
+and Selector's listbox, whose options count as rows) when a finger or pen
+drives it and the primary pointer is coarse (FR19); where the primary pointer
+is fine, a finger in a menu keeps today's behavior (`spec:AST-017` FR59,
+DEC-25), and menus make no per-gesture pointer read; FR29 applies to DropdownMenu's trigger under the same
+condition; FR34 applies to menus;
+FR31 and FR35 apply to anchored menus and to Popover under a finger; FR32 and
+FR33 apply to menus only. A mouse keeps today's behavior.
 
 - **FR26 — The lift decides.** A menu row MUST act when the finger lifts over
   it, never because the press began on it; a press that never left its row is
@@ -264,8 +300,10 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
   a menu and lifts outside it MUST act on nothing and leave the menu open. A
   cancelled touch, a second finger, or the window losing focus ends the
   gesture: nothing acts and the lit row clears.
-- **FR29 — Opening on press, and the opening finger's handoff.** Under a
-  finger, a menu's trigger in a fixed bar MUST open its menu as the finger
+- **FR29 — DropdownMenu opens on press, with the opening finger's
+  handoff.** This rule covers DropdownMenu's trigger only; ContextMenu,
+  sub-menu rows and Selector keep their own opening. Under a finger, a
+  DropdownMenu trigger in a fixed bar MUST open its menu as the finger
   presses. A trigger inside a scroll view (FR11) MUST open it once the 150 ms
   content-touch delay has passed with no scroll, or at the lift of a tap that
   ends sooner; a scroll that starts first takes the touch and nothing opens. Before the open, the finger may move no
@@ -290,21 +328,26 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
   follows the sheet instead.
-- **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu, or a Popover whose outside
-  dismissal is on, MUST close as a touch outside it begins to pan, and at the
-  lift of a tap or hold outside it. A Popover whose caller turned outside
-  dismissal off stays open. A pinch stays available over it: its surface
+- **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
+  begins to pan, and at the lift of a tap or hold outside it. A Popover's
+  dismissal is unchanged. A pinch stays available over it: its surface
   never takes `touch-action: none`, so the page keeps zooming (FR10, FR18;
-  WCAG 2.2 SC 1.4.4). Listening for that outside touch costs nothing once it
-  ends (FR24).
+  WCAG 2.2 SC 1.4.4). Listening for that outside touch costs nothing once it ends (FR24). A menu
+  whose caller passes `presentation="popover"` keeps its released outside
+  dismissal (FR25).
 - **FR33 — A ContextMenu under a finger.** With a finger or pen, the long
   press that opens a ContextMenu MUST NOT close it at the lift, and a press
-  outside it follows FR32. On every touch device, a ContextMenu that a held
+  outside it follows FR32. After a held
+  finger opens it, nothing is lit and a lift acts on nothing until that finger
+  has travelled the handoff distance (FR2) from the first position the open
+  menu sees; from then on FR26–FR28 apply. On every touch device, a ContextMenu that a held
   finger opens on a block trigger MUST lift the trigger above the page and
   show the menu beside it, with no row lit. A tap outside closes the menu and
   reaches nothing beneath it, and closing returns the trigger to its place.
-  Under reduced motion FR8 applies. An inline trigger keeps today's menu, and
-  a menu presented as a bottom sheet follows the sheet.
+  Under reduced motion FR8 applies. An inline trigger keeps today's menu, a menu presented as a
+  bottom sheet follows the sheet, and `presentation="popover"` keeps the
+  released menu without the lift (`architecture:public-component-api`
+  INV16).
 - **FR34 — A sub-menu drills in under a finger.** Under a finger on a
   compact touch screen, an `adaptive` sub-menu row MUST drill in: the
   sub-menu's rows and a leading "Back to <parent>" row replace the menu's rows
@@ -326,8 +369,9 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
   reaches the use's commit point, the action commits; otherwise the surface
   springs back. The decision MUST NOT change while the surface settles. The
   same rule backs dismissing a BottomSheet, a Toast or a Lightbox, popping a
-  NavigationStack, completing a row swipe, and dismissing the keyboard; each
-  use's commit point and projection are measured values (FR1, FR2).
+  NavigationStack, and dismissing the keyboard; each use's commit point and
+  projection are measured values (FR1, FR2). A row swipe keeps
+  `spec:AST-057`'s own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far.
 - **FR38 — The settle continues the finger.** The commit or the spring-back
@@ -350,17 +394,25 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
 
 ### Resources and compatibility
 
-- **FR24 — Touch work costs nothing where it is not used.** Under a fine
-  pointer, and while a touch presentation is disabled, no touch-only listener,
-  observer or timer is active. The number of `document`- or `window`-level
+- **FR24 — Touch work costs nothing where it is not used.** Where the
+  primary pointer is fine (FR19), and while a touch presentation is
+  disabled, no touch-only listener, observer or timer is active, except the
+  released `module:DropdownMenu/useMenuPress` behavior a finger keeps there
+  (its FR9). The number of `document`- or `window`-level
   touch listeners MUST NOT grow with the number of component instances, a
   repeated row or cell adds no touch observer of its own, and nothing
   touch-related remains after the last instance unmounts
   (`architecture:react-component-runtime` INV5, INV7).
 - **FR25 — A moved default keeps a way back.** Where a touch presentation
-  moves a released default, such as Selector's `adaptive` presentation policy,
-  the way back and its release note are governed by
+  moves a released default, the way back and its release note are governed by
   `architecture:public-component-api` INV16 and `spec:AST-017` DEC-23 and FR3.
+  This record moves four: Selector's `adaptive` presentation policy;
+  DropdownMenu's omitted `presentation`, released as `'popover'`, which
+  `presentation="popover"` keeps (FR29); ContextMenu's omitted
+  `presentation`, released as `'popover'`, which `presentation="popover"`
+  keeps without the lift (FR33); and `module:DropdownMenu/useMenuPress`'s
+  released 500 ms `longPressDelayMs`, which a caller keeps by passing it
+  (FR29).
   This replaces `component:Selector` DEC-1's width-and-pointer query with the
   FR13 rule for `adaptive`.
 
@@ -395,20 +447,23 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
 - Each overlay member's own record (Dialog, BottomSheet, Drawer, Popover, the
   menus): its touch exit and its Reduce Motion cross-fade (FR7, FR8), since
   members own their animation (`family:overlay-dismissal` AV6).
-- `spec:AST-057`: Item's swipe springs and durations become theme motion roles
-  (FR4); its record points here.
 - `design:reduced-motion` owns the reduced-motion rule FR8 applies.
 - `component:Selector` DEC-1: `adaptive` resolves through the FR13 touch rule
   (a coarse pointer and the `spec:AST-012` FR9 compact definition) instead of
   its own width-and-pointer query, with `presentation` as the way back (FR25).
+- `component:DropdownMenu` and `component:ContextMenu`: an omitted
+  `presentation`, released as `'popover'`, follows FR29 and FR33 under a
+  finger; `presentation="popover"` keeps the released behavior (FR25).
+- `module:DropdownMenu/useMenuPress`: the released 500 ms `longPressDelayMs`
+  default gives way to FR29's timing; a caller that passes it keeps it (FR25).
 - `module:DropdownMenu/useMenuPress`: its finger rules (FR1–FR3, FR6, FR7
   and FR9 under a finger) are stated here (FR26–FR30); FR6's last sentence
   gives way to the cell press profile (FR11); its mouse rules (FR8 and the
   mouse halves of FR1–FR3) and its non-gesture rules stay in the module.
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
   under a finger they follow FR26–FR35 as each applies.
-- BottomSheet, Toast, Lightbox, NavigationStack, row swipes and keyboard
-  dismissal: a drag that commits follows FR36–FR40.
+- BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
+  drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
 - `design:user-states` DR1 and DR3, `spec:AST-025` FR14 and `spec:AST-013` FR3
   each carry an amendment for touch presentations (FR11, FR14, Platform
@@ -427,19 +482,19 @@ menus and to Popover under a finger. A mouse keeps today's behavior.
 | FR4             | Theme unit tests and a browser test of a themed spring                                                                         | no theme (table defaults); a theme writing a spring, a duration and a curve, at its root and in an adaptation                                                                                                             | a role that ignores the theme, a literal played in place of a role, or a default that differs from the table fails                                                                                                                                                  |
 | FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame  | Chromium phone emulation; WebKit                                                                                                                                                                                          | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                              |
 | FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                     | catch at peak velocity; retarget with a new spring                                                                                                                                                                        | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                     |
-| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                             | a missing exit, any travel, scale or spring under Reduce Motion, or an opacity fade over 200 ms fails                                                                                                                                                               |
+| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                             | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                      |
 | FR9, FR10       | Recognizer unit tests on synthetic streams and browser tests with real touch input                                             | drag, second finger, pinch, page zoom, main-thread block                                                                                                                                                                  | a second finger that breaks a drag, or a blocked page pinch, fails                                                                                                                                                                                                  |
-| FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                       | inside and outside a scroll view; drag out and back; a menu row under a finger                                                                                                                                            | the wrong profile's timing fails                                                                                                                                                                                                                                    |
+| FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                       | inside and outside a scroll view; a drag the browser takes; a lift inside; a menu row under a finger                                                                                                                      | the wrong profile's timing, a press that survives the browser taking the touch, or a control activated other than by the browser's click fails                                                                                                                      |
 | FR13            | Resolver unit tests and a server-render test                                                                                   | coarse and fine pointer; narrow, wide and short; server render; hydrating render                                                                                                                                          | a component that answers the conditions differently, or a touch presentation in the server or hydrating render, fails                                                                                                                                               |
 | FR14            | Browser tests of a sheet over a scrolled list                                                                                  | scrolled and at its top                                                                                                                                                                                                   | a midway handoff fails                                                                                                                                                                                                                                              |
 | FR15–FR17       | Recognizer unit tests on synthetic streams with explicit timestamps                                                            | exclusive, simultaneous, require-to-fail, nested; a blocked main thread; a pan at 10 pt per axis                                                                                                                          | a wrong winner, a late deadline, or a translation that keeps the hysteresis fails                                                                                                                                                                                   |
-| FR18–FR22       | Browser tests with real touch input                                                                                            | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation                                                                                                               | a ghost click, a blocked scroll or zoom, or a cancelled unowned touchmove fails                                                                                                                                                                                     |
+| FR18–FR22       | Browser tests with real touch input                                                                                            | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation, a modal scroll lock, a control that keeps its press through a drag                                           | a ghost click, a blocked scroll or zoom, or a cancelled unowned touchmove outside FR19's two exceptions fails                                                                                                                                                       |
 | FR23            | Haptics tests on the recorded moments                                                                                          | tap, drag, lift                                                                                                                                                                                                           | a haptic outside a native moment fails                                                                                                                                                                                                                              |
-| FR24            | Resource tests counting listeners, observers and timers                                                                        | fine pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                | a touch listener on a fine pointer, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                 |
+| FR24            | Resource tests counting listeners, observers and timers                                                                        | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                        | a touch listener on a fine pointer, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                 |
 | FR25            | Component tests of each moved default and its `presentation` value                                                             | default; `presentation` set to the released surface                                                                                                                                                                       | a moved default that `presentation` does not restore, or a public threshold, fails                                                                                                                                                                                  |
 | FR26–FR28, FR30 | Menu press tests on synthetic touch streams and a real-Chromium touch test                                                     | a slide from one row to another; a lift outside; a cancel; a second finger; edge autoscroll                                                                                                                               | an act on the press-start row, two acts for one gesture, a lift outside that closes, or a lit row after a cancel fails                                                                                                                                              |
 | FR29            | Trigger tests with explicit timestamps                                                                                         | a press in a fixed bar; a press in scrolling content held 149 and 150 ms; a quick tap in scrolling content; a scroll before 150 ms; a drift of 12 and 14 pt; moves before and after the handoff; `presentation="popover"` | a fixed-bar press that waits, a held finger's scroll-view open before 150 ms or after a scroll, a quick tap that does not open at its lift, an open past the drift allowance, a lift that acts before the handoff, or a `popover` trigger that opens on press fails |
-| FR31–FR33       | Browser tests and storyboards under a finger                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                    | a surface that does not grow from and shrink into its trigger, a pan outside that leaves it open, a blocked pinch, a tap outside that reaches the page, or a changed mouse path fails                                                                               |
+| FR31–FR33       | Browser tests and storyboards under a finger                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                    | a surface that does not grow from and shrink into its trigger, a pan outside that leaves a menu open, a Popover whose dismissal changed, a blocked pinch, a tap outside that reaches the page, or a changed mouse path fails                                        |
 | FR34, FR35      | Browser tests and storyboards under a finger                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse                                                                                | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a blocked pinch, or a changed mouse path fails                                                 |
 | FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                     | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                      | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity, or an action with no keyboard or mouse path fails                                                                                     |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari and Android Chrome devices          | per component                                                                                                                                                                                                             | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                     |
@@ -495,6 +550,35 @@ finger presses; inside a scroll view the menu waits out the content-touch
 delay so a scroll can still claim the touch (FR29). A caller's `presentation`
 choice keeps today's open on a tap (`architecture:public-component-api`
 INV16).
+
+### DEC-5 — FR4 cites the generated motion role table
+
+**Reference:** `spec:AST-094/DEC-5`
+**Decider:** `cixzhang`, `2026-10-25`
+
+FR4 lists the roles this record names, and cites the generated motion role
+table, built from every registered table, for the roles a component's own
+record measures, so a new component table cannot drift from the record.
+
+### DEC-6 — CSS keyed on the touch media query counts as after hydration
+
+**Reference:** `spec:AST-094/DEC-6`
+**Decider:** `cixzhang`, `2026-10-25`
+
+FR13's "only after hydration" governs a presentation decided in script. A
+style keyed on the literal touch media query conforms: the server and
+hydrating markup are identical, and the browser applies the style at first
+paint.
+
+### DEC-7 — A watcher recognizer is passive and follows the scroll
+
+**Reference:** `spec:AST-094/DEC-7`
+**Decider:** `cixzhang`, `2026-10-25`
+
+A recognizer that never claims registers only passive listeners (FR20), so
+watching a touch never delays the browser's scroll, and it is not cancelled
+when the browser takes the touch: it follows the scroll to the lift, so a bar
+that reacts to scrolling keeps hearing it.
 
 ## Open questions
 

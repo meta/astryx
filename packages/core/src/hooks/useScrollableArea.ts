@@ -200,6 +200,7 @@ export function useScrollableArea({
     useState<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const [mapping, setMapping] = useState<LogicalAxisMapping>(INITIAL_MAPPING);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
+  const measureRef = useRef<(() => void) | null>(null);
 
   const viewportRef = useCallback((node: HTMLElement | null) => {
     setViewport(current => (current === node ? current : node));
@@ -218,8 +219,10 @@ export function useScrollableArea({
     let frame: number | null = null;
     let isActive = true;
 
-    const measure = () => {
-      frame = null;
+    // Measures now; `measure` is the frame callback that also clears the
+    // pending frame. The same-commit remeasure below calls this one, so a frame
+    // already scheduled stays the only pending one.
+    const measureNow = () => {
       const computedStyle = getComputedStyle(viewport);
       const nextMapping = getLogicalAxisMapping(
         computedStyle.writingMode,
@@ -256,18 +259,24 @@ export function useScrollableArea({
       const nextState = {inline, block};
       stateRef.current = nextState;
       registerScrollOwner(viewport, nextState);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- measured DOM geometry controls whether the viewport becomes a CSS scroll container
+      // Measured DOM geometry decides whether the viewport becomes a CSS
+      // scroll container.
       setOverflow(current =>
         overflowEqual(current, nextOverflow) ? current : nextOverflow,
       );
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- measured DOM state is the hook's output
+      // The measured DOM state is the hook's output.
       setMeasured(current =>
         statesEqual(current, nextState) ? current : nextState,
       );
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- writing-mode changes remap behavior-owned physical CSS
+      // A writing-mode change remaps the behavior-owned physical CSS.
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
       );
+    };
+
+    const measure = () => {
+      frame = null;
+      measureNow();
     };
 
     const scheduleMeasure = () => {
@@ -278,6 +287,7 @@ export function useScrollableArea({
     };
 
     registerScrollOwner(viewport, stateRef.current);
+    measureRef.current = measureNow;
     measure();
     const stopObservingViewport = observeResize(viewport, scheduleMeasure);
     const stopObservingContent = observeResize(content, scheduleMeasure);
@@ -323,6 +333,7 @@ export function useScrollableArea({
 
     return () => {
       isActive = false;
+      measureRef.current = null;
       unregisterScrollOwner(viewport);
       stopObservingViewport();
       stopObservingContent();
@@ -341,6 +352,29 @@ export function useScrollableArea({
       }
     };
   }, [axis, content, viewport]);
+
+  // The first measure reads the viewport before this hook has let an
+  // overflowing axis scroll (it is `clip` until then), so it finds overflow
+  // but no scrollable axis yet. Measure again in the same commit once an axis
+  // has just gained overflow (or the axis mapping changed), so the viewport is
+  // a tab stop from the first frame it scrolls, not an animation frame later
+  // (`spec:AST-025` FR12). Only on a gain: content that fits only once a
+  // scrollbar takes space would otherwise flip overflow back and forth inside
+  // one commit; a loss waits for the next frame, as before.
+  const previousOverflowRef = useRef<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
+  const previousMappingRef = useRef<LogicalAxisMapping>(INITIAL_MAPPING);
+  useIsomorphicLayoutEffect(() => {
+    const previous = previousOverflowRef.current;
+    const hasGainedOverflow =
+      (overflow.inline && !previous.inline) ||
+      (overflow.block && !previous.block);
+    const hasRemapped = mapping !== previousMappingRef.current;
+    previousOverflowRef.current = overflow;
+    previousMappingRef.current = mapping;
+    if (hasGainedOverflow || hasRemapped) {
+      measureRef.current?.();
+    }
+  }, [overflow, mapping]);
 
   const state = useMemo<ScrollableAreaState>(
     () => ({

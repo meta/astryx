@@ -93,26 +93,51 @@ export async function frames(page: Page, count = 2): Promise<void> {
   await page.evaluate(
     n =>
       new Promise<void>(resolve => {
+        // The page's real frames, even while a timer gate holds its callbacks.
+        const frame =
+          (
+            window as unknown as {
+              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+            }
+          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
         let left = n;
-        const tick = () =>
-          --left <= 0 ? resolve() : requestAnimationFrame(tick);
-        requestAnimationFrame(tick);
+        const tick = () => (--left <= 0 ? resolve() : frame(tick));
+        frame(tick);
       }),
     count,
   );
 }
 
+// A held callback is queued under its timer or frame id, so the page's own
+// clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
+// frame callback gets the time it actually runs at. `frame` stays the real
+// requestAnimationFrame, for the harness's own waits.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
-  const gate = {frozen: false, queue: []};
-  window.__harnessTimerGate = gate;
   const realTimeout = window.setTimeout.bind(window);
+  const realClearTimeout = window.clearTimeout.bind(window);
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
-  const hold = run => (gate.frozen ? gate.queue.push(run) : run());
-  window.setTimeout = (fn, ms, ...args) => realTimeout(() => hold(() => (typeof fn === 'function' ? fn(...args) : 0)), ms);
+  const realCancelFrame = window.cancelAnimationFrame.bind(window);
+  const gate = {frozen: false, queue: [], frame: realFrame};
+  window.__harnessTimerGate = gate;
+  const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
+  window.setTimeout = (fn, ms, ...args) => {
+    const id = realTimeout(() => {
+      const run = () => (typeof fn === 'function' ? fn(...args) : 0);
+      if (gate.frozen) gate.queue.push({key: 't' + id, run}); else run();
+    }, ms);
+    return id;
+  };
+  window.clearTimeout = id => { realClearTimeout(id); drop('t' + id); };
   window.setInterval = (fn, ms, ...args) => realInterval(() => { if (!gate.frozen && typeof fn === 'function') fn(...args); }, ms);
-  window.requestAnimationFrame = fn => realFrame(time => hold(() => fn(gate.frozen ? performance.now() : time)));
+  window.requestAnimationFrame = fn => {
+    const id = realFrame(time => {
+      if (gate.frozen) gate.queue.push({key: 'f' + id, run: () => fn(performance.now())}); else fn(time);
+    });
+    return id;
+  };
+  window.cancelAnimationFrame = id => { realCancelFrame(id); drop('f' + id); };
 })()`;
 
 /**
@@ -129,7 +154,8 @@ export async function installTimerGate(page: Page): Promise<void> {
  * Holds every gated timer and frame callback until `thawTimers`, so a
  * component cannot finish an animation behind a held storyboard's back (a
  * transitionend backstop timer, a cleanup render). Callbacks that come due
- * meanwhile run, in order, on thaw; intervals skip their frozen ticks.
+ * meanwhile run, in order, on thaw, unless the page cancels them first
+ * (clearTimeout, cancelAnimationFrame); intervals skip their frozen ticks.
  */
 export async function freezeTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -149,15 +175,19 @@ export async function thawTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
     const gate = (
       window as unknown as {
-        __harnessTimerGate?: {frozen: boolean; queue: (() => void)[]};
+        __harnessTimerGate?: {
+          frozen: boolean;
+          queue: {key: string; run: () => void}[];
+        };
       }
     ).__harnessTimerGate;
     if (gate == null) {
       return;
     }
     gate.frozen = false;
-    for (const run of gate.queue.splice(0)) {
-      run();
+    // One at a time from the live queue: a callback may cancel a later one.
+    while (gate.queue.length > 0) {
+      gate.queue.shift()?.run();
     }
   });
 }

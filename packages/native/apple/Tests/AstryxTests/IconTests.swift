@@ -16,9 +16,9 @@ import AppKit
 @Test func everyBuiltInNameDrawsASymbolThePlatformHas() {
   #expect(IconName.builtIn.count == astryxDefaultIcons.count)
   for name in IconName.builtIn {
-    let symbol = Icon.symbol(for: name, themeIcons: [:])
-    #expect(symbol != nil, "no symbol for \(name.rawValue)")
-    if let symbol {
+    let image = Icon.symbol(for: name, themeIcons: [:])
+    #expect(image != nil, "no symbol for \(name.rawValue)")
+    if case .systemName(let symbol) = image {
       #if canImport(UIKit)
       #expect(UIImage(systemName: symbol) != nil, "\(symbol) is not an SF Symbol here")
       #elseif canImport(AppKit)
@@ -34,6 +34,52 @@ import AppKit
   #expect(Icon.symbol(for: "acme:rocket", themeIcons: ["acme:rocket": "airplane"]) == "airplane")
   // An unregistered name maps to nothing; the view then draws nothing.
   #expect(Icon.symbol(for: "acme:rocket", themeIcons: [:]) == nil)
+}
+
+// AST-082 FR17 and Swift slots S2: a theme maps a name to an SF Symbol or to
+// an image the app ships; a string literal is an SF Symbol name.
+
+@Test func aThemeMapsANameToAnAppAsset() {
+  let icons: [String: IconImage] = ["close": .assetName("brand.close"), "search": "sparkle.magnifyingglass"]
+  #expect(Icon.symbol(for: .close, themeIcons: icons) == .assetName("brand.close"))
+  #expect(Icon.symbol(for: .search, themeIcons: icons) == .systemName("sparkle.magnifyingglass"))
+  let theme = Theme(light: Theme.default.light, dark: Theme.default.dark, icons: icons)
+  #expect(AstryxStyle(tokens: theme.light, icons: theme.icons).icon("close") == .assetName("brand.close"))
+}
+
+@Test func aStringLiteralIsAnSFSymbolName() {
+  let image: IconImage = "xmark"
+  #expect(image == .systemName("xmark"))
+  #expect(IconImage.systemName("xmark").image != nil)
+}
+
+@Test func aShippedAssetIsFoundAndAMissingOneIsNot() {
+  // The test bundle stands in for the app's main bundle. IconImage.image stops
+  // a development build for a missing asset, so a missing asset is checked
+  // through the lookup it relies on instead of by drawing.
+  #expect(astryxAppShipsAsset("astryx-test-icon", in: .module))
+  #expect(IconImage.assetName("astryx-test-icon").image(in: .module) != nil)
+  #expect(astryxAppShipsAsset("astryx.test.no-such-asset", in: .module) == false)
+}
+
+@Test func aMissingAssetDrawsNothingAndIsReported() {
+  // As a release build sees it: the report does not stop the run, and the
+  // image is nil, so the icon draws nothing. A development build's report is
+  // assertionFailure, which stops it with the asset's name.
+  var reported: [String] = []
+  let image = IconImage.assetName("astryx.test.no-such-asset").image(in: .module) { reported.append($0) }
+  #expect(image == nil)
+  #expect(reported == ["astryx.test.no-such-asset"])
+}
+
+@MainActor
+@Test func anAssetIconTakesTheTextRelativeSizeASymbolGets() {
+  let asset = IconImage.assetName("astryx-test-icon")
+  let small = Pixels(asset.sized(14, in: .module).fixedSize())
+  let large = Pixels(asset.sized(28, in: .module).fixedSize())
+  #expect(small.width > 0)
+  #expect(large.width == small.width * 2)
+  #expect(large.height == large.width)
 }
 
 @Test func iconNamesAreStringsOnTheWire() throws {
