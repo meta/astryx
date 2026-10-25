@@ -382,6 +382,36 @@ describe('GestureHost', () => {
     expect(released).toBeCloseTo(625, 6);
   });
 
+  it.each([35, 45])(
+    'honours an explicit claim distance on an axis pan: a %i° drag in a vertical scroller is cancelled from the claim',
+    degrees => {
+      const {box} = mount('<div id="box"></div>');
+      // A pager that takes drags up to a little past 45° (axisRatio below
+      // 1), as UIKit gives a drag with |dx| ≥ |dy| to the pager.
+      const pager = new PanGestureRecognizer({
+        name: 'pager',
+        direction: 'horizontal',
+        axisRatio: 0.9,
+        claimDistance: 5,
+      });
+      detachers.push(host.attach(box, pager));
+      const start = {id: 1, x: 100, y: 100};
+      touch('touchstart', box, [start], [start], 0);
+      // 4 px steps along the drag's angle.
+      const radians = (degrees * Math.PI) / 180;
+      const at = (step: number) => ({
+        ...start,
+        x: 100 + 4 * Math.cos(radians) * step,
+        y: 100 + 4 * Math.sin(radians) * step,
+      });
+      const first = touch('touchmove', box, [at(1)], [at(1)], 16);
+      const second = touch('touchmove', box, [at(2)], [at(2)], 32);
+      // The second move puts the finger past 5 px: from it on, the pager's.
+      expect(first.defaultPrevented).toBe(false);
+      expect(second.defaultPrevented).toBe(true);
+    },
+  );
+
   it('samples a finger from its touch events once the browser cancels its pointer', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({
