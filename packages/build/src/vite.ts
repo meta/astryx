@@ -44,8 +44,9 @@ export interface AstryxVitePluginLegacyOptions {
 
   /**
    * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that nothing declares, a declaration every
-   * browser drops: `'warn'` reports the variable and the rule that reads it;
+   * property (`--<prefix><hash>`) that no stylesheet in the build declares,
+   * which browsers drop unless the app sets it at runtime: `'warn'` reports
+   * the variable and the rule that reads it;
    * `'error'` fails the build.
    *
    * @default 'warn'
@@ -111,8 +112,9 @@ export interface AstryxVitePluginOptions {
 
   /**
    * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that nothing declares, a declaration every
-   * browser drops: `'warn'` reports the variable and the rule that reads it;
+   * property (`--<prefix><hash>`) that no stylesheet in the build declares,
+   * which browsers drop unless the app sets it at runtime: `'warn'` reports
+   * the variable and the rule that reads it;
    * `'error'` fails the build.
    *
    * @default 'warn'
@@ -542,16 +544,18 @@ function buildLayerSplitPlugin(
           'astryx-build-layer-split: the StyleX stylesheet reads ' +
             `${undeclared.length} generated custom ` +
             `propert${undeclared.length === 1 ? 'y' : 'ies'} ` +
-            'that nothing declares, so those declarations would be dropped ' +
-            'in every browser:\n' +
+            'that no stylesheet in the build declares:\n' +
             undeclared
               .map(
                 name =>
                   `  ${name}, read by: ${rulesReading(split, name).join(' ') || '(rule not found)'}`,
               )
               .join('\n') +
-            '\nA `.stylex.ts` export read in a style must be a ' +
-            '`defineVars`/`defineConsts` value whose module reaches the build.',
+            '\nWith no declaration, browsers drop the declarations that read ' +
+            'it. A `.stylex.ts` export read in a style must be a ' +
+            '`defineVars`/`defineConsts` value whose module reaches the build; ' +
+            'a property the app sets at runtime (an inline style) needs a name ' +
+            'outside the StyleX class-name prefixes.',
         );
       }
 

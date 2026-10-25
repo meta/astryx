@@ -4,8 +4,9 @@
  * @file busy.test.ts
  * @input Synthetic tracked frames (no browser)
  * @output The busy-main-thread verdict's limits: dropped frames a loaded
- *   machine produces pass, a frozen animation fails every criterion, and
- *   out-of-order frames are judged in presentation order.
+ *   machine produces pass, a frozen animation fails every criterion, a window
+ *   with nothing moving to judge fails, and out-of-order frames are judged in
+ *   presentation order.
  * @position Unit test of ./busy and ./frames' ordering; the browser proof
  *   with a real compositor animation and a rAF control is in
  *   harness.interaction.browser.spec.ts.
@@ -93,6 +94,31 @@ describe('busyWindowProof verdict', () => {
     expect(proof.verdict.failures.join('\n')).toMatch(/expected frames moved/);
   });
 
+  it('fails a window in which the animation under test was not moving', () => {
+    // Settled before the block: the judgment ends where it starts.
+    const settled = moving().map(f =>
+      f.t < 950
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(950)}} as TrackedFrame),
+    );
+    const before = busyWindowProof(settled, BLOCK, {settledWithin: 2});
+    expect(before.verdict.pass).toBe(false);
+    expect(before.verdict.failures.join('\n')).toMatch(
+      /judged = -?\d+ frames < 4: the animation under test was not moving/,
+    );
+    // Settled 40 ms into the block: two frames, too few to judge.
+    const early = moving().map(f =>
+      f.t < 1040
+        ? f
+        : ({...f, box: {...f.box!, y: 3 * at(1040)}} as TrackedFrame),
+    );
+    expect(
+      busyWindowProof(early, BLOCK, {settledWithin: 2}).verdict.failures.join(
+        '\n',
+      ),
+    ).toMatch(/frames < 4: the animation under test was not moving/);
+  });
+
   it('fails a half-rate animation (median interval above display rate)', () => {
     const odd = moving().filter((_, i) => i % 2 === 1);
     expect(busyWindowProof(odd, BLOCK).verdict.failures.join('\n')).toMatch(
@@ -127,6 +153,35 @@ describe('busyWindowProof settledWithin', () => {
       marginMs: 0,
     });
     expect(strict.longestStallFrames).toBeGreaterThanOrEqual(3);
+  });
+
+  it('takes the end value from settledAt over a stale last frame', () => {
+    // The tail reaches y = 24, then the last frame shows a stale 100 (WebKit
+    // presents the last committed position once an accelerated animation
+    // ends while the main thread is still blocked).
+    const ys = [
+      120, 100, 82, 67, 55, 46, 39, 34, 30, 28, 27, 26, 25, 24, 24, 24, 100,
+    ];
+    const frames = ys.map(
+      (y, i) =>
+        ({
+          t: 1000 + i * FRAME,
+          box: {x: 0, y, width: 10, height: 10},
+        }) as TrackedFrame,
+    );
+    const window = {from: 1000, to: 1000 + ys.length * FRAME};
+    const stale = busyWindowProof(frames, window, {
+      settledWithin: 2,
+      marginMs: 0,
+    });
+    expect(stale.verdict.pass).toBe(false);
+    const fromPage = busyWindowProof(frames, window, {
+      settledWithin: 2,
+      settledAt: 24,
+      marginMs: 0,
+    });
+    expect(fromPage.verdict.failures).toEqual([]);
+    expect(fromPage.judged.to).toBe(frames[11].t);
   });
 });
 

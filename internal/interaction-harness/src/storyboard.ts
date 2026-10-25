@@ -26,6 +26,7 @@ import {holdAnimations, seekAnimations, type HeldAnimation} from './curves';
 import {timeline} from './math';
 import {writeEvidence} from './output';
 import type {TouchScript} from './scripts';
+import {frames} from './story';
 import type {TouchDriver} from './touch';
 
 export interface ClipBox {
@@ -229,8 +230,11 @@ async function composeSheet(
 
 export interface AnimationStoryboardOptions extends StoryboardOptions {
   /**
-   * Frame times, ms (default every 16.7 ms to the end of the longest held
-   * animation's curve; a held end value is not filmed).
+   * Frame times, ms from the film's start: the earliest start among the held
+   * animations that end (an animation that repeats forever, such as a
+   * spinner that started earlier, neither starts nor ends the film). Default:
+   * every 16.7 ms to the latest curve end among them, and that end itself,
+   * each animation at its own offset (a held end value is not filmed).
    */
   readonly times?: readonly number[];
   /** Restrict to animations inside this element. */
@@ -251,13 +255,38 @@ export async function animationStoryboard(
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
-  const longest = Math.max(...held.map(a => a.curveEndMs));
-  const times = options.times ?? timeline(longest);
+  // An animation that repeats forever (a spinner, a pulsing skeleton) has no
+  // end to film to: the film runs over the animations that end, from the
+  // earliest of their starts to the latest of their curve ends. Seeks are on
+  // the held timeline (from the earliest held start), so both carry offsets.
+  const ending = held.filter(a => Number.isFinite(a.curveEndMs));
+  if (options.times == null && ending.length === 0) {
+    throw new Error(
+      `storyboard ${options.name}: every held animation repeats forever ` +
+        `(${held.map(a => a.name ?? a.kind).join(', ')}); pass \`times\``,
+    );
+  }
+  const origin = ending.length ? Math.min(...ending.map(a => a.offsetMs)) : 0;
+  const length =
+    Math.max(...ending.map(a => a.offsetMs + a.curveEndMs)) - origin;
+  // The 16.7 ms grid, plus the end itself when the grid misses it: the last
+  // frame is the one the page presents at the end.
+  const grid = options.times == null ? timeline(length) : [];
+  if (options.times == null && length - (grid.at(-1) ?? 0) > 1e-3) {
+    grid.push(+length.toFixed(3));
+  }
+  const times = options.times ?? grid;
   const storyboard = new Storyboard(page, options);
   for (const t of times) {
-    await seekAnimations(page, t);
+    // Labelled with the time the page presents (just inside an end), from
+    // the film's start.
+    const presentedAt = (await seekAnimations(page, origin + t)) - origin;
     const data = (await options.measure?.()) ?? {};
-    await storyboard.capture(`t=${+t.toFixed(1)} ms`, t, data);
+    await storyboard.capture(
+      `t=${+presentedAt.toFixed(1)} ms`,
+      presentedAt,
+      data,
+    );
   }
   return {storyboard, held};
 }
@@ -268,9 +297,17 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
 
 /**
  * Plays a touch script without wall-clock pacing and photographs the page
- * after every event. In Chromium the page still sees the scripted timestamps,
- * so velocity-dependent behavior is unchanged; in WebKit the page sees the
- * real (slower) dispatch times.
+ * after every event. In Chromium each event's `timeStamp` is still its
+ * scripted time, so velocity read from event timestamps is unchanged; in
+ * WebKit it is the real (slower) dispatch time.
+ *
+ * A handler that reads the clock instead (`performance.now()`, `Date.now()`)
+ * sees the filmstrip's pacing in both engines: two frames, `measure` and a
+ * photograph per event, about 100 ms between moves instead of the script's
+ * 16.7. Its release velocity is that much lower, so a flick that dismisses
+ * when played can settle back when filmed: a storyboard cannot show such a
+ * gesture; record it in real time instead (`startScreencast`,
+ * `castStoryboard`).
  */
 export async function touchStoryboard(
   page: Page,
@@ -284,12 +321,7 @@ export async function touchStoryboard(
     realtime: false,
     onEvent: async step => {
       // Let the page run its handlers and present the frame before the photo.
-      await page.evaluate(
-        () =>
-          new Promise<void>(resolve =>
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-          ),
-      );
+      await frames(page, 2);
       const data = (await options.measure?.()) ?? {};
       const where = step.changed
         .map(f => `${Math.round(f.x)},${Math.round(f.y)}`)
