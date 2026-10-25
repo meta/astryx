@@ -200,10 +200,11 @@ export interface AttachOptions {
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
   /**
-   * The recognizer reads each event's pointer itself, as `spec:AST-057`'s row
-   * swipe does, so it attaches even where the primary pointer is fine: the
-   * host installs what it needs there, styles its element and raises no
-   * warning. Every other recognizer stays inactive there. @default false
+   * The recognizer, or the press tracker, reads each event's pointer itself,
+   * as `spec:AST-057`'s row swipe does and a stepper held with a mouse does,
+   * so it attaches even where the primary pointer is fine: the host installs
+   * what it needs there, styles its element and raises no warning. Everything
+   * else stays inactive there. @default false
    */
   perEventPointer?: boolean;
 }
@@ -388,6 +389,8 @@ export class GestureHost {
   private hasWarnedFinePointer = false;
   /** Recognizers attached with `perEventPointer`: active on any pointer. */
   private readonly perEventRecognizers = new Set<GestureRecognizer>();
+  /** Press consumers attached with `perEventPointer`: active on any pointer. */
+  private readonly perEventConsumers = new Set<TouchConsumer>();
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -462,15 +465,25 @@ export class GestureHost {
   }
 
   /** Attach the view-level touch consumer of an element (a pressable control). */
-  attachConsumer(element: Element, consumer: TouchConsumer): () => void {
+  attachConsumer(
+    element: Element,
+    consumer: TouchConsumer,
+    options: Pick<AttachOptions, 'perEventPointer'> = {},
+  ): () => void {
     const registration = this.registrationFor(element);
     registration.consumer = consumer;
-    if (!this.isCoarse) {
+    if (options.perEventPointer === true) {
+      this.perEventConsumers.add(consumer);
+    } else if (!this.isCoarse) {
       this.warnFinePointer();
     }
     this.install();
     this.refresh(element, registration);
     return () => {
+      if (this.perEventConsumers.delete(consumer) && !this.needsInput()) {
+        // The last consumer that needed input where the pointer is fine.
+        this.uninstall();
+      }
       if (registration.consumer === consumer) {
         registration.consumer = null;
       }
@@ -682,9 +695,18 @@ export class GestureHost {
     return this.isCoarse || this.perEventRecognizers.has(recognizer);
   }
 
+  /** Whether a press consumer takes input now (FR19; its per-event opt-in). */
+  private isConsumerActive(consumer: TouchConsumer): boolean {
+    return this.isCoarse || this.perEventConsumers.has(consumer);
+  }
+
   /** Whether anything attached takes input now. */
   private needsInput(): boolean {
-    return this.isCoarse || this.perEventRecognizers.size > 0;
+    return (
+      this.isCoarse ||
+      this.perEventRecognizers.size > 0 ||
+      this.perEventConsumers.size > 0
+    );
   }
 
   private refresh(element: Element, registration: Registration): void {
@@ -698,7 +720,8 @@ export class GestureHost {
         recognizer =>
           this.isActive(recognizer) && claimsWhileMoving(recognizer),
       ) ||
-      (this.isCoarse && registration.consumer?.keepsTouch != null);
+      (registration.consumer?.keepsTouch != null &&
+        this.isConsumerActive(registration.consumer));
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -818,8 +841,8 @@ export class GestureHost {
         'Astryx: a gesture recognizer or press tracker was attached where ' +
           'the primary pointer is fine. It stays inactive until the pointer ' +
           'is coarse (spec:AST-094 FR19), so attach touch work only under a ' +
-          'touch presentation, or pass perEventPointer for a recognizer that ' +
-          "reads each event's pointer itself (spec:AST-057).",
+          'touch presentation, or pass perEventPointer for a recognizer or ' +
+          "press tracker that reads each event's pointer itself (spec:AST-057).",
       );
     }
   }
@@ -944,13 +967,21 @@ export class GestureHost {
           hovers.push(...registration.hovers);
         }
       }
-      if (hasConsumerOwner || pointerType == null || !this.isCoarse) {
+      if (hasConsumerOwner || pointerType == null) {
         continue;
       }
-      if (registration?.consumer != null) {
+      // Where the primary pointer is fine, only a perEventPointer consumer
+      // takes part (FR19); an inactive one is as if absent.
+      if (
+        registration?.consumer != null &&
+        this.isConsumerActive(registration.consumer)
+      ) {
         consumer = registration.consumer;
         consumerElement = node;
         hasConsumerOwner = true;
+        continue;
+      }
+      if (!this.isCoarse) {
         continue;
       }
       for (const type of this.delegated) {

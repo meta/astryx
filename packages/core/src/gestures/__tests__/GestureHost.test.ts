@@ -19,6 +19,7 @@ import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {PressTracker} from '../PressTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {ManualClock, RecordingConsumer} from './harness';
@@ -1734,6 +1735,59 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(taps).toEqual([]);
     expect(consumer.events).toEqual([]);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a press tracker that reads each event's pointer take a mouse hold where the pointer is fine, beside one that stays inactive", () => {
+    const warn = quietWarning();
+    detachers.push(pointerQuery(false).restore);
+    const {stepper, other} = mount(
+      '<div id="stepper"></div><div id="other"></div>',
+    );
+    const bounds = {left: 0, top: 0, right: 100, bottom: 100};
+    const tracker = (events: string[]) =>
+      new PressTracker({
+        getBounds: () => bounds,
+        onControlEvent: event => events.push(event),
+      });
+    const held: string[] = [];
+    const inactive: string[] = [];
+    // NumberInput's stepper repeats under a held mouse as under a finger.
+    detachers.push(
+      host.attachConsumer(stepper, tracker(held), {perEventPointer: true}),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    detachers.push(host.attachConsumer(other, tracker(inactive)));
+    expect(warn).toHaveBeenCalledTimes(1);
+    pointer('pointerdown', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      time: 600,
+    });
+    expect(held).toEqual(['touchDown', 'touchUpInside']);
+    pointer('pointerdown', other, {
+      id: 2,
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 700,
+    });
+    pointer('pointerup', other, {
+      id: 2,
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      time: 800,
+    });
+    expect(inactive).toEqual([]);
   });
 
   it('keeps it working when the pointer turns fine, as the rest comes down', () => {
