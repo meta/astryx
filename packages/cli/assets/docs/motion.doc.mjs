@@ -162,7 +162,7 @@ const calmTheme = defineTheme({
     // Any spring vocabulary: {duration, bounce}, {response, dampingRatio}
     // or {mass, stiffness, damping}.
     springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}},
-    durations: {'timing.reducedMotionCrossFadeMs': 300},
+    durations: {'navigation.transitionMs': 300},
   },
   adaptations: {
     rules: [
@@ -438,12 +438,6 @@ const calmTheme = defineTheme({
               '--motion-timing-press-highlight-out-ms',
               'duration',
               '200ms',
-            ],
-            [
-              'timing.reducedMotionCrossFadeMs',
-              '--motion-timing-reduced-motion-cross-fade-ms',
-              'duration',
-              '500ms',
             ],
             // motion-roles:end
           ],

@@ -30,7 +30,7 @@ describe('motion roles in a theme', () => {
             'springs.sheetPresent': {duration: 0.6, bounce: 0.1},
             'springs.alertPresent': {response: 0.5, dampingRatio: 0.85},
           },
-          durations: {'timing.reducedMotionCrossFadeMs': 300},
+          durations: {'navigation.transitionMs': 300},
           curves: {'timing.curves.easeInOut': [0.4, 0, 0.2, 1]},
         },
         'motion',
@@ -38,7 +38,7 @@ describe('motion roles in a theme', () => {
     ).toEqual({
       '--motion-springs-sheet-present': '0.6s 0.1',
       '--motion-springs-alert-present': '0.5s 0.15',
-      '--motion-timing-reduced-motion-cross-fade-ms': '300ms',
+      '--motion-navigation-transition-ms': '300ms',
       '--motion-timing-curves-ease-in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
     });
   });
@@ -124,7 +124,7 @@ describe('motion roles in adaptation rules', () => {
         {
           when: {motion: 'reduce'},
           value: {
-            motion: {durations: {'timing.reducedMotionCrossFadeMs': 250}},
+            motion: {durations: {'navigation.transitionMs': 250}},
           },
         },
       ]),

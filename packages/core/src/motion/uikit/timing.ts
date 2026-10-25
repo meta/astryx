@@ -152,7 +152,9 @@ export const timing = {
  */
 export function registerTimingTable(): void {
   registerMotionTable('timing', timing, {
-    // Arbitration: who gets the touch, not how anything moves.
-    exclude: ['press.scrollBrakeMs'],
+    // Arbitration: who gets the touch, not how anything moves; and the
+    // Reduced Motion fade, which no theme may lengthen
+    // (design:reduced-motion DR4).
+    exclude: ['press.scrollBrakeMs', 'reducedMotionCrossFadeMs'],
   });
 }

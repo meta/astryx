@@ -97,9 +97,8 @@ describe('motion roles', () => {
     expect(motionRoleOf(scroll.bounce)?.kind).toBe('spring');
     expect(motionRoleOf(timing.curves.easeInOut)?.kind).toBe('curve');
     expect(motionRoleIn(timing.press, 'flashMs')?.kind).toBe('duration');
-    expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')?.id).toBe(
-      'timing.reducedMotionCrossFadeMs',
-    );
+    // The Reduced Motion fade is not a role: no theme lengthens it.
+    expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'transitionMs')?.id).toBe(
       'navigation.transitionMs',
     );
