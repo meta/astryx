@@ -34,6 +34,7 @@ const TABLE_FILES = fs
     file =>
       file.endsWith('.ts') &&
       file !== 'index.ts' &&
+      file !== 'registerTables.ts' &&
       !file.endsWith('.test.ts') &&
       !TYPED_TABLE_FILES.includes(file),
   )

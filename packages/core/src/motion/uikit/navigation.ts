@@ -24,8 +24,6 @@
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
 
-import {registerMotionTable} from '../roles';
-
 /**
  * UINavigationController's push, pop and interactive-pop values.
  * @experimental
@@ -79,5 +77,4 @@ export const navigation = {
 } as const;
 
 // Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts).
-registerMotionTable('navigation', navigation);
+// (motion/roles.ts); registerTables.ts registers them.

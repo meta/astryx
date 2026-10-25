@@ -24,8 +24,6 @@
  *   there and must agree; uikit/uikit.test.ts checks it)
  */
 
-import {registerMotionTable} from '../roles';
-
 /**
  * UIKit's press clocks, named curves and fixed durations.
  * @experimental
@@ -151,9 +149,4 @@ export const timing = {
 } as const;
 
 // Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts).
-registerMotionTable('timing', timing, {
-  // Arbitration: who gets the touch, not how anything moves; and the Reduced
-  // Motion fade, which no theme may lengthen (design:reduced-motion DR4).
-  exclude: ['press.scrollBrakeMs', 'reducedMotionCrossFadeMs'],
-});
+// (motion/roles.ts); registerTables.ts registers them.
