@@ -46,7 +46,7 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   pressGestureStep,
 } from './pressGesture';
-import {lockSelection} from '../gestures/selectionLock';
+import {lockSelection, locksSelectionFor} from '../gestures/selectionLock';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -302,8 +302,14 @@ function onPointerDown(event: PointerEvent): void {
     pointerId: event.pointerId,
     timer: null,
     // A held finger never starts text selection on the surface (UIKit's
-    // controls and cells never do), on any coarse pointer.
-    unlock: lockSelection([element], event.target),
+    // controls and cells never do). A pen locks only on a touch device, so a
+    // desktop pen tablet keeps selection as a mouse does.
+    unlock: locksSelectionFor(
+      event.pointerType,
+      element.ownerDocument.defaultView,
+    )
+      ? lockSelection([element], event.target)
+      : null,
   };
   apply(
     pressGestureStep(live.gesture, {

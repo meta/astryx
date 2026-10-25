@@ -164,6 +164,35 @@ describe('the press reaches the surface the finger landed on', () => {
     spy.mockRestore();
   });
 
+  it('keeps selection under a mouse and under a pen where the primary pointer is fine, as on main (spec:AST-017 FR59)', () => {
+    const row = rows[2];
+    press(row, 'pointerdown', 10, 10, 'mouse');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'mouse');
+    // A desktop pen tablet: a fine primary pointer.
+    press(row, 'pointerdown', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    // On a touch device a pen locks, as a finger does.
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      ...matchMedia(query),
+      matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+    });
+    try {
+      press(row, 'pointerdown', 10, 10, 'pen');
+      vi.advanceTimersByTime(600);
+      expect(row.style.getPropertyValue('user-select')).toBe('none');
+      press(row, 'pointerup', 10, 10, 'pen');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
   it('paints the row after the delay, not before', () => {
     const label = rows[1].firstElementChild;
     if (label == null) {

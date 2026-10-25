@@ -840,7 +840,7 @@ describe('GestureHost', () => {
     touch('touchend', off, [one], [], 400);
   });
 
-  it('keeps selection for a mouse and for a pan that does not ask, and locks a pan that asks and a pen', () => {
+  it("keeps selection for a mouse, a desktop pen and a pan that does not ask, and locks a pan that asks and a touch device's pen", () => {
     const {row, sheet, slider} = mount(
       '<div id="row"></div><div id="sheet"></div><div id="slider"></div>',
     );
@@ -864,15 +864,35 @@ describe('GestureHost', () => {
     });
     expect(row.style.getPropertyValue('user-select')).toBe('');
     pointer('pointerup', row, {pointerType: 'mouse', ...at, time: 50});
+    // A pen where the primary pointer is fine (a desktop pen tablet) keeps
+    // selection exactly as a mouse does (spec:AST-017 FR59).
     pointer('pointerdown', row, {
       pointerType: 'pen',
       ...at,
       buttons: 1,
       time: 100,
     });
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
-    pointer('pointerup', row, {pointerType: 'pen', ...at, time: 150});
     expect(row.style.getPropertyValue('user-select')).toBe('');
+    pointer('pointerup', row, {pointerType: 'pen', ...at, time: 150});
+    // A pen on a touch device (an iPad's pencil) locks.
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      ...matchMedia(query),
+      matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+    });
+    try {
+      pointer('pointerdown', row, {
+        pointerType: 'pen',
+        ...at,
+        buttons: 1,
+        time: 160,
+      });
+      expect(row.style.getPropertyValue('user-select')).toBe('none');
+      pointer('pointerup', row, {pointerType: 'pen', ...at, time: 170});
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+    } finally {
+      window.matchMedia = matchMedia;
+    }
 
     const finger = {id: 1, ...at};
     touch('touchstart', sheet, [finger], [finger], 200);

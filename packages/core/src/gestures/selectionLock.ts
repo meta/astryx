@@ -4,7 +4,8 @@
  * @file selectionLock.ts
  * @input The elements a held touch contact presses, and the touch's target
  * @output Exports lockSelection: text selection and the touch callout off,
- *   inline and refcounted, until the returned release runs
+ *   inline and refcounted, until the returned release runs; and
+ *   locksSelectionFor: which contacts take it
  * @position Shared by the gesture host (press consumers, and recognizers
  *   that set `preventsTextSelection`) and the document press controller
  *   (utils/pressFeedback.ts), so every press on a coarse pointer gets it
@@ -43,6 +44,26 @@ const TEXT_ENTRY_TYPES = new Set([
   'password',
   'number',
 ]);
+
+/**
+ * Whether a contact of this pointer kind takes the lock. A finger always
+ * does. A pen does only where the primary pointer is coarse (an iPad's
+ * pencil): a pen on a desktop tablet is a fine pointer, and keeps selection
+ * exactly as a mouse does (`spec:AST-017` FR59). A mouse never does.
+ */
+export function locksSelectionFor(
+  pointerType: string,
+  view: Window | null | undefined,
+): boolean {
+  if (pointerType === 'touch') {
+    return true;
+  }
+  return (
+    pointerType === 'pen' &&
+    typeof view?.matchMedia === 'function' &&
+    view.matchMedia('(pointer: coarse)').matches
+  );
+}
 
 /** Locked elements, how many contacts hold each, and what to restore. */
 const locks = new WeakMap<

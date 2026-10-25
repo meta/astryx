@@ -100,7 +100,7 @@ import type {
   TouchInput,
   TouchSample,
 } from './types';
-import {lockSelection} from './selectionLock';
+import {lockSelection, locksSelectionFor} from './selectionLock';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -1023,7 +1023,7 @@ export class GestureHost {
     }
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
-    if (event.pointerType !== 'mouse') {
+    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
       this.lockSelection(id, recognizers, consumerElement, event.target);
     }
     this.arena.began([
