@@ -7,7 +7,10 @@
  * `test` join requires pr-interaction, and a failing proof fails `test` (FR7).
  * A Linux job decides whether the change touches the harness, a component,
  * Storybook, or the proofs' own setup; only then does pr-interaction take a
- * 4-core runner, and otherwise it passes on Linux without work.
+ * 4-core runner, and otherwise it passes on Linux without work. The proofs run
+ * on the pull request's head: a head cut before they existed (no
+ * playwright.interaction.config.ts) passes with a notice, and a pull request
+ * that deletes the config still runs them, and fails.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -29,11 +32,26 @@ const step = (job, name) =>
 const decide = () => step(scope, 'Decide whether the interaction proofs apply');
 const applies = "needs.interaction-scope.outputs.applies == 'true'";
 
+const HEAD_SHA = 'fedcba9876543210fedcba9876543210fedcba98';
+const CONFIG_PATTERN = '^playwright\\.interaction\\.config\\.ts$';
+
 // Runs a step's script as Actions runs it (bash -eo pipefail) with a stub
-// `git` first on PATH: `fetch` exits FETCH, and `show` prints a helper that
-// exits HELPER (or fails when HELPER is 'missing'). Returns the exit status
-// and the outputs the script wrote.
-function runStep(script, {env = {}, fetch = 0, helper = 0} = {}) {
+// `git` first on PATH: fetching the base exits FETCH and fetching the head
+// FETCH_HEAD; `show` prints a helper that answers HELPER, or TOUCHES for the
+// config pattern (or fails when HELPER is 'missing'); `cat-file` finds the
+// config in the head when HEAD_HAS_CONFIG. Returns the exit status and the
+// outputs the script wrote.
+function runStep(
+  script,
+  {
+    env = {},
+    fetch = 0,
+    fetchHead = 0,
+    helper = 0,
+    touches = 1,
+    headHasConfig = true,
+  } = {},
+) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-interaction-'));
   try {
     const bin = path.join(dir, 'bin');
@@ -43,10 +61,11 @@ function runStep(script, {env = {}, fetch = 0, helper = 0} = {}) {
       [
         '#!/usr/bin/env bash',
         'case "$1" in',
-        `  fetch) exit ${fetch} ;;`,
+        `  fetch) case "$*" in *${HEAD_SHA}*) exit ${fetchHead} ;; *) exit ${fetch} ;; esac ;;`,
         helper === 'missing'
           ? '  show) exit 128 ;;'
-          : `  show) echo 'exit ${helper}' ;;`,
+          : `  show) printf '%s\\n' 'if [ "$2" = "${CONFIG_PATTERN}" ]; then exit ${touches}; fi' 'exit ${helper}' ;;`,
+        `  cat-file) exit ${headHasConfig ? 0 : 1} ;;`,
         '  *) exit 3 ;;',
         'esac',
         '',
@@ -67,6 +86,7 @@ function runStep(script, {env = {}, fetch = 0, helper = 0} = {}) {
           DOCSITE_ONLY: 'false',
           TOOLING_ONLY: 'false',
           BASE_SHA: '0123456789abcdef0123456789abcdef01234567',
+          HEAD_SHA,
           ...env,
         },
       },
@@ -159,6 +179,50 @@ describe('interaction proof routing', () => {
     }
   });
 
+  it('passes a head cut before the proofs existed, and still fails one that deletes their config', () => {
+    const decided = options => runStep(decide().run, options);
+    for (const [label, options, expected] of [
+      ['the head has the config', {headHasConfig: true}, 'true'],
+      [
+        'the branch predates the proofs (no config, not changed by the PR)',
+        {headHasConfig: false, touches: 1},
+        'false',
+      ],
+      [
+        'the pull request deletes the config',
+        {headHasConfig: false, touches: 0},
+        'true',
+      ],
+      [
+        'whether the PR changes the config is unknown',
+        {headHasConfig: false, touches: 2},
+        'true',
+      ],
+      [
+        'the head cannot be fetched',
+        {headHasConfig: false, touches: 1, fetchHead: 1},
+        'true',
+      ],
+      [
+        'no head SHA',
+        {headHasConfig: false, touches: 1, env: {HEAD_SHA: ''}},
+        'true',
+      ],
+      [
+        'the scope itself is unknown',
+        {headHasConfig: false, touches: 1, helper: 2},
+        'true',
+      ],
+    ]) {
+      const {status, output} = decided(options);
+      expect(status, label).toBe(0);
+      expect(output, label).toBe(`applies=${expected}\n`);
+    }
+    expect(decide().run).toContain(
+      '::notice title=Interaction proofs predate this branch::',
+    );
+  });
+
   it('fails each guard step when it runs', () => {
     for (const [job, name] of [
       [scope, 'Require successful scope classification'],
@@ -200,6 +264,7 @@ describe('interaction proof routing', () => {
 
   it('passes without work on docsite-only, tooling-only and merge-group runs', () => {
     expect(decide().env).toMatchObject({
+      HEAD_SHA: '${{ github.event.pull_request.head.sha }}',
       EVENT_NAME: '${{ github.event_name }}',
       DOCSITE_ONLY: '${{ needs.check-scope.outputs.docsite_only }}',
       TOOLING_ONLY: '${{ needs.check-scope.outputs.tooling_only }}',
