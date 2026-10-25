@@ -26,9 +26,10 @@ import {
   pressConsts,
 } from './interactionOverlay.stylex';
 import {
-  installPressFeedback,
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
+  installPressFeedback,
+  subscribePressPaint,
 } from './pressFeedback';
 import {
   PRESS_FADE_MS,
@@ -589,15 +590,27 @@ describe('what the list pays for it', () => {
     ];
     try {
       release = installPressFeedback();
-      const types = added.flatMap(spy =>
-        spy.mock.calls.map(([type]) => String(type)),
-      );
+      // A finger lands, as on a touchscreen laptop: still none.
+      press(rows[0], 'pointerdown', 10, 10);
+      press(rows[0], 'pointerup', 10, 10);
+      const types = added.flatMap(spy => spy.mock.calls.map(([type]) => type));
       expect(types.filter(type => type.startsWith('touch'))).toEqual([]);
       expect(types).toContain('pointerdown');
     } finally {
       for (const spy of added) {
         spy.mockRestore();
       }
+    }
+  });
+
+  it('asks no media query when it installs: a page no one touches never reads the pointer', () => {
+    release();
+    const matchMedia = vi.spyOn(window, 'matchMedia');
+    try {
+      release = installPressFeedback();
+      expect(matchMedia).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
     }
   });
 
@@ -620,6 +633,85 @@ describe('what the list pays for it', () => {
     expect(pressedRow()).toBe(1);
     window.dispatchEvent(new Event('touchcancel'));
     expect(pressedRow()).toBe(1);
+  });
+
+  it("reports each change of a surface's paint to its subscribers: on, fading, none", () => {
+    const paints: string[] = [];
+    const stop = subscribePressPaint(rows[0], paint => paints.push(paint));
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(rows[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FADE_MS + 50);
+    expect(paints).toEqual(['on', 'fading', 'none']);
+    stop();
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(paints).toHaveLength(3);
+    press(rows[0], 'pointercancel', 10, 10);
+  });
+
+  it('follows 200 subscribed surfaces with no observer and no listener per surface', () => {
+    const observers = vi.fn();
+    vi.stubGlobal('MutationObserver', observers);
+    const added = [
+      vi.spyOn(window, 'addEventListener'),
+      vi.spyOn(document, 'addEventListener'),
+    ];
+    const surfaces = Array.from({length: 200}, () => pressable('button'));
+    const perSurface = surfaces.map(surface =>
+      vi.spyOn(surface, 'addEventListener'),
+    );
+    const stops: (() => void)[] = [];
+    try {
+      for (const surface of surfaces) {
+        stops.push(subscribePressPaint(surface, () => {}));
+      }
+      expect(observers).not.toHaveBeenCalled();
+      for (const spy of [...added, ...perSurface]) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+    } finally {
+      for (const stop of stops) {
+        stop();
+      }
+      for (const spy of [...added, ...perSurface]) {
+        spy.mockRestore();
+      }
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps reporting to a surface's other subscribers when one throws", () => {
+    const paints: string[] = [];
+    const errors: unknown[] = [];
+    const queued = vi
+      .spyOn(globalThis, 'queueMicrotask')
+      .mockImplementation(callback => {
+        try {
+          callback();
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+    const stops = [
+      subscribePressPaint(rows[1], () => {
+        throw new Error('a broken subscriber');
+      }),
+      subscribePressPaint(rows[1], paint => paints.push(paint)),
+    ];
+    try {
+      press(rows[1], 'pointerdown', 10, 100);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      expect(paints).toEqual(['on']);
+      expect(errors).toHaveLength(1);
+      expect(pressedRow()).toBe(1);
+    } finally {
+      for (const stop of stops) {
+        stop();
+      }
+      queued.mockRestore();
+      press(rows[1], 'pointercancel', 10, 100);
+    }
   });
 
   it('installs once, however many times it is called, and stays while any holder remains', () => {
