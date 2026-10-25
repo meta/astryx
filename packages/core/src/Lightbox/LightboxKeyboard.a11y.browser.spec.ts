@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file LightboxKeyboard.a11y.browser.spec.ts

@@ -66,8 +66,62 @@ describe('touch scripts', () => {
       {x: 0, y: 0},
       {velocity: {x: 1000, y: 0}, durationMs: 100, hz: 100, profile: p => p},
     );
-    // Linear ramp: distance = v * T / 2.
-    expect(script.at(-2)!.fingers[0].x).toBeCloseTo(50, 6);
+    // Linear ramp: the first nine 10 ms moves integrate it by the midpoint rule
+    // (40.5 px) and the last runs at the full 1,000 px/s (10 px).
+    expect(script.at(-2)!.fingers[0].x).toBeCloseTo(50.5, 6);
+  });
+
+  it.each([
+    ['linear', (p: number) => p],
+    ['quadratic', (p: number) => p * p],
+  ])(
+    'a %s-profile flick still lifts at the scripted velocity',
+    (_, profile) => {
+      const script = flick(
+        {x: 0, y: 0},
+        {velocity: {x: 0, y: 1500}, durationMs: 80, hz: 120, profile},
+      );
+      const [before, last] = script.slice(-3, -1);
+      const lastMove =
+        ((last.fingers[0].y - before.fingers[0].y) / (last.t - before.t)) *
+        1000;
+      expect(lastMove).toBeCloseTo(1500, 6);
+      expect(releaseVelocity(script).y).toBeCloseTo(1500, 6);
+    },
+  );
+
+  it('release velocity ignores frames merged in for another finger', () => {
+    // A 10 Hz drag with a tap from 120 to 220 ms: merge inserts frames where
+    // the dragging finger did not move, and the page sees no move there.
+    const slow = drag({x: 0, y: 0}, {x: 0, y: 90}, {durationMs: 300, hz: 10});
+    const tapping = withFinger(tap({x: 50, y: 50}, {holdMs: 100}), 1, 120);
+    expect(releaseVelocity(merge(slow, tapping)).y).toBeCloseTo(
+      releaseVelocity(slow).y,
+      6,
+    );
+    // A 60 Hz drag whose second finger lifts 5 ms before the drag's last move.
+    const fast = drag({x: 0, y: 0}, {x: 0, y: 300}, {durationMs: 300, hz: 60});
+    const lastMove = fast.at(-2)!.t;
+    const lifting = withFinger(
+      tap({x: 50, y: 50}, {holdMs: lastMove - 5 - 100}),
+      1,
+      100,
+    );
+    expect(releaseVelocity(merge(fast, lifting)).y).toBeCloseTo(
+      releaseVelocity(fast).y,
+      6,
+    );
+  });
+
+  it('release velocity is the last move, not a window mean', () => {
+    // 500 px/s for 100 ms, then 2,000 px/s for one 10 ms move; path() lifts a
+    // quarter frame later.
+    const script = path(
+      p => ({x: 0, y: p <= 10 / 11 ? 55 * p : 50 + 20 * (p * 11 - 10)}),
+      {durationMs: 110, hz: 100},
+    );
+    expect(script.at(-1)!.fingers).toEqual([]);
+    expect(releaseVelocity(script).y).toBeCloseTo(2000, 6);
   });
 
   it('pinch and rotate keep two fingers about the centre', () => {

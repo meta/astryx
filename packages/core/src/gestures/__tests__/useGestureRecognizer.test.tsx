@@ -112,10 +112,14 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 2, x: 30, y: 0}, 32, true);
   });
 
-  it('cancels a gesture in flight when it is disabled', () => {
+  it('cancels a gesture in flight when it is disabled, without calling the listener from the effect', () => {
     const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
     const {getByTestId, rerender} = render(
-      <Draggable onPan={r => states.push(r.state)} />,
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => (pan = r)}
+      />,
     );
     const surface = getByTestId('surface');
     touch('touchstart', surface, {id: 3, x: 0, y: 0}, 0);
@@ -125,8 +129,57 @@ describe('useGestureRecognizer', () => {
         <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
       );
     });
-    expect(states).toEqual(['began', 'cancelled']);
+    expect(pan!.state).toBe('cancelled');
+    expect(states).toEqual(['began']);
     touch('touchend', surface, {id: 3, x: 30, y: 0}, 32, true);
+    expect(states).toEqual(['began']);
+  });
+
+  it('follows the element when the node behind the ref is replaced', () => {
+    const onPan = vi.fn();
+    function Swappable({tag}: {tag: 'div' | 'section'}) {
+      const ref = useRef<HTMLElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        onPan,
+      );
+      const Tag = tag;
+      return <Tag data-testid="surface" ref={ref as never} />;
+    }
+    const {getByTestId, rerender} = render(<Swappable tag="div" />);
+    const first = getByTestId('surface');
+    rerender(<Swappable tag="section" />);
+    const second = getByTestId('surface');
+    expect(second).not.toBe(first);
+    touch('touchstart', first, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 6, x: 30, y: 0}, 16);
+    touch('touchend', first, {id: 6, x: 30, y: 0}, 32, true);
+    expect(onPan).not.toHaveBeenCalled();
+    touch('touchstart', second, {id: 7, x: 0, y: 0}, 100);
+    touch('touchmove', second, {id: 7, x: 30, y: 0}, 116);
+    expect(onPan).toHaveBeenCalled();
+    touch('touchend', second, {id: 7, x: 30, y: 0}, 132, true);
+  });
+
+  it('reports cancelled to a handler that disables the recognizer itself, from that handler', () => {
+    const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
+    const {getByTestId} = render(
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          pan = r;
+        }}
+      />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
+    // A handler (here, the test) turns it off: UIKit's .cancelled, at once.
+    (pan as PanGestureRecognizer | null)?.setEnabled(false);
+    expect(states).toEqual(['began', 'cancelled']);
+    touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
   });
 
   it('detaches on unmount', () => {
@@ -142,9 +195,21 @@ describe('useGestureRecognizer', () => {
   });
 });
 
-function Button({onEvent}: {onEvent: (event: ControlEvent) => void}) {
+function Button({
+  onEvent,
+  cancelTravel,
+  isBraking,
+}: {
+  onEvent: (event: ControlEvent) => void;
+  cancelTravel?: number;
+  isBraking?: () => boolean;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
-  usePressTracker(ref, {onControlEvent: event => onEvent(event)});
+  usePressTracker(ref, {
+    onControlEvent: event => onEvent(event),
+    cancelTravel,
+    isBraking,
+  });
   return (
     <button data-testid="button" ref={ref} type="button">
       Go
@@ -162,5 +227,63 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 5, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 5, x: 1, y: 1}, 50, true);
     expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+
+  it('ends a held press on unmount without calling back from the effect', () => {
+    const highlights: boolean[] = [];
+    const events: ControlEvent[] = [];
+    function HeldButton() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+      });
+      return (
+        <button data-testid="held" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId, unmount} = render(<HeldButton />);
+    touch('touchstart', getByTestId('held'), {id: 9, x: 1, y: 1}, 0);
+    const seenHighlights = [...highlights];
+    const seenEvents = [...events];
+    unmount();
+    expect(highlights).toEqual(seenHighlights);
+    expect(events).toEqual(seenEvents);
+  });
+
+  it('passes isBraking through to the tracker', () => {
+    const events: ControlEvent[] = [];
+    const isBraking = vi.fn(() => true);
+    function BrakingButton() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        isBraking,
+      });
+      return (
+        <button data-testid="braking" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId} = render(<BrakingButton />);
+    const button = getByTestId('braking');
+    touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
+    expect(isBraking).toHaveBeenCalled();
+    expect(events).not.toContain('touchDown');
+  });
+
+  it("uses the caller's scroll brake", () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId} = render(
+      <Button onEvent={event => events.push(event)} isBraking={() => true} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
+    expect(events).toEqual([]);
   });
 });

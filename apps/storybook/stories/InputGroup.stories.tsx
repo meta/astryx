@@ -328,6 +328,29 @@ export const ActionButtonCombinations: Story = {
   },
 };
 
+export const Disabled: Story = {
+  render: args => {
+    const [value, setValue] = useState('example');
+    return (
+      <InputGroup {...args}>
+        <TextInput
+          label="URL"
+          value={value}
+          onChange={setValue}
+          htmlName="website"
+          disabledMessage="Website editing is unavailable"
+        />
+        <Button label="Clear" onClick={() => setValue('')} />
+      </InputGroup>
+    );
+  },
+  args: {
+    label: 'Website',
+    description: 'The input and action inherit the group disabled state.',
+    isDisabled: true,
+  },
+};
+
 export const WithMultiSelector: Story = {
   render: args => {
     const [value, setValue] = useState<string[]>([]);

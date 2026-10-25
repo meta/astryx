@@ -623,6 +623,9 @@ export function Dialog({
     onDismiss: () => {
       onOpenChange(false);
     },
+    // The dialog's document is this layer's: rendered into an iframe or a
+    // Picture-in-Picture window, it ranks with the layers opened inside it.
+    getContainer: () => dialogRef.current,
   });
 
   // Dev-time guardrail: an open modal should always have an accessible name.

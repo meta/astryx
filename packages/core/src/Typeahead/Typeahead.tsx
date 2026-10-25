@@ -19,6 +19,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useId,
   useRef,
@@ -55,6 +56,7 @@ import {Spinner} from '../Spinner';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
   composeEventHandlers,
   getInputARIA,
@@ -396,7 +398,7 @@ export function Typeahead<T extends SearchableItem>({
   maxMenuItems,
   minQueryLength,
   emptySearchText,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   disabledMessage,
   hasClear = true,
   hasAutoFocus,
@@ -429,6 +431,8 @@ export function Typeahead<T extends SearchableItem>({
   const descriptionId = useId();
   const statusMessageId = useId();
   const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

@@ -8,6 +8,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,16 +41,6 @@ export interface AstryxVitePluginLegacyOptions {
     library?: string;
     product?: string;
   };
-
-  /**
-   * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that nothing declares, a declaration every
-   * browser drops: `'warn'` reports the variable and the rule that reads it;
-   * `'error'` fails the build.
-   *
-   * @default 'warn'
-   */
-  undefinedVariables?: 'warn' | 'error';
 }
 
 export interface AstryxVitePluginOptions {
@@ -107,16 +98,6 @@ export interface AstryxVitePluginOptions {
    * Extra StyleX options to merge.
    */
   stylexOverrides?: Record<string, unknown>;
-
-  /**
-   * What the build does when its StyleX stylesheet reads a generated custom
-   * property (`--<prefix><hash>`) that nothing declares, a declaration every
-   * browser drops: `'warn'` reports the variable and the rule that reads it;
-   * `'error'` fails the build.
-   *
-   * @default 'warn'
-   */
-  undefinedVariables?: 'warn' | 'error';
 }
 
 /**
@@ -152,11 +133,16 @@ export function astryxStylex(
     lightningcssTargets = LIGHTNINGCSS_TARGETS,
     stylexPrefix = 'astryx',
     stylexOverrides = {},
-    undefinedVariables = 'warn',
   } = opts;
 
   const libraryLayer = layers.library ?? 'astryx-base';
   const productLayer = layers.product ?? 'product';
+  // Library files compile with `stylexPrefix`, product files with StyleX's
+  // `classNamePrefix` (the babel wrapper routes them).
+  const classNamePrefixes = [
+    stylexPrefix,
+    (stylexOverrides as {classNamePrefix?: string}).classNamePrefix ?? 'x',
+  ];
 
   const overrideLightningcssOptions = (
     stylexOverrides as {lightningcssOptions?: Record<string, unknown>}
@@ -305,6 +291,7 @@ export function astryxStylex(
                 libraryPattern,
                 libraryLayer,
                 productLayer,
+                classNamePrefixes,
               }),
             );
           },
@@ -323,8 +310,7 @@ export function astryxStylex(
       libraryLayer,
       productLayer,
       lightningcssOptions: stylexOptions.lightningcssOptions,
-      classNamePrefixes: [stylexPrefix, 'x'],
-      undefinedVariables,
+      classNamePrefixes,
     }),
   ];
 }
@@ -353,6 +339,8 @@ function renderSplitLayers(
     libraryPattern: string;
     libraryLayer: string;
     productLayer: string;
+    /** The StyleX class-name prefixes in play: library, then product. */
+    classNamePrefixes: readonly string[];
   },
 ): string {
   if (!rulesById || rulesById.size === 0) return '';
@@ -363,9 +351,10 @@ function renderSplitLayers(
   // placeholder, `var(--<prefix><hash>)`, and `processStylexRules` substitutes
   // the value from the defining file's rules, but only among the rules it is
   // given. The defining file and the reading one can sit on opposite sides of
-  // the split, so every layer gets every constant. Constant rules emit no CSS
-  // of their own, so repeating them adds nothing to the output.
-  const constantRules: unknown[] = [];
+  // the split, so every layer gets every constant, under every class-name
+  // prefix (see constantRulesForEveryPrefix). Constant rules emit no CSS of
+  // their own, so repeating them adds nothing to the output.
+  const collectedConstants: unknown[] = [];
 
   for (const [filePath, rules] of rulesById.entries()) {
     const own = filePath.includes(options.libraryPattern)
@@ -373,13 +362,17 @@ function renderSplitLayers(
       : productRules;
     for (const rule of rules) {
       if (isConstantRule(rule)) {
-        constantRules.push(rule);
+        collectedConstants.push(rule);
       } else {
         own.push(rule);
       }
     }
   }
 
+  const constantRules = constantRulesForEveryPrefix(
+    collectedConstants,
+    options.classNamePrefixes,
+  );
   const render = (rules: unknown[], layer: string) =>
     rules.length
       ? `@layer ${layer} {\n${stylexBabelPlugin.processStylexRules([...constantRules, ...rules] as never, {useLayers: true})}\n}`
@@ -394,41 +387,45 @@ function renderSplitLayers(
 }
 
 /**
- * The StyleX-generated custom properties `css` reads that it never declares.
+ * Each `defineConsts` rule once under every class-name prefix in play.
  *
- * StyleX names the variables it generates `--<prefix><hash>` (a theme
- * variable, or a constant waiting for its value). One that is read but never
- * declared is a value that compiled to a variable nothing sets, so browsers
- * drop the declaration or take its fallback: a constant whose defining module
- * never reached the build, or a plain export read from a `.stylex.ts` file as
- * if it were a token. The dynamic-style variables StyleX sets inline
- * (`--<prefix>-<property>`) and component variables with a dash after the
- * prefix are not generated names and are never reported.
- *
- * SYNC: scripts/build-css.mjs `undefinedStyleXVariables` is the same check
- * for the prebuilt package stylesheets.
+ * StyleX keys a constant by its defining file's prefix, `<prefix><hash>` (or
+ * `<name>-<prefix><hash>` with debug class names), where the hash depends on
+ * the export and key alone, and a file that reads it writes the placeholder
+ * with its own prefix. An Astryx package compiles with the library prefix and
+ * an app with the product one, so an app reading a package's constant writes
+ * `var(--x<hash>)` while the package's rule is keyed `astryx<hash>`; the
+ * copies make every prefix's placeholder resolve. A key StyleX took verbatim
+ * (`'--name'`) carries no prefix and is kept as it is.
  */
-export function undefinedGeneratedVariables(
-  css: string,
+function constantRulesForEveryPrefix(
+  rules: readonly unknown[],
   prefixes: readonly string[],
-): string[] {
-  const names = prefixes
-    .map(prefix => prefix.replace(/[^a-zA-Z0-9_-]/g, ''))
+): unknown[] {
+  const ordered = [...new Set(prefixes)]
     .filter(Boolean)
-    .join('|');
-  const declared = new Set(
-    [...css.matchAll(new RegExp(`(--(?:${names})[a-z0-9]+)\\s*:`, 'g'))].map(
-      match => match[1],
-    ),
-  );
-  const read = new Set(
-    [
-      ...css.matchAll(
-        new RegExp(`var\\(\\s*(--(?:${names})[a-z0-9]+)\\s*[,)]`, 'g'),
-      ),
-    ].map(match => match[1]),
-  );
-  return [...read].filter(name => !declared.has(name)).sort();
+    .sort((a, b) => b.length - a.length);
+  const out: unknown[] = [];
+  const keys = new Set<string>();
+  const add = (rule: unknown[], key: string) => {
+    if (keys.has(key)) return;
+    keys.add(key);
+    const [, body, ...rest] = rule;
+    out.push([key, {...(body as object), constKey: key}, ...rest]);
+  };
+  for (const rule of rules as unknown[][]) {
+    const key = String((rule[1] as {constKey: unknown}).constKey);
+    add(rule, key);
+    for (const prefix of ordered) {
+      const match = new RegExp(`^(|.*-)${prefix}([0-9a-z]+)$`).exec(key);
+      if (match == null) continue;
+      for (const other of ordered) {
+        add(rule, `${match[1]}${other}${match[2]}`);
+      }
+      break;
+    }
+  }
+  return out;
 }
 
 /** A `defineConsts` value as StyleX collects it: a rule with `constKey`/`constVal`. */
@@ -470,8 +467,6 @@ function buildLayerSplitPlugin(
     lightningcssOptions?: unknown;
     /** The StyleX class-name prefixes in play: library, then product. */
     classNamePrefixes: readonly string[];
-    /** Warn about, or fail on, generated variables nothing declares. */
-    undefinedVariables: 'warn' | 'error';
   },
 ): Plugin {
   const stylex = basePlugin as {
@@ -487,7 +482,7 @@ function buildLayerSplitPlugin(
     configResolved(config) {
       base = config.base ?? '/';
     },
-    writeBundle(outputOptions) {
+    writeBundle(outputOptions, bundle) {
       const rulesById = stylex.__stylexGetSharedStore?.().rulesById;
       if (!rulesById || rulesById.size === 0) return;
 
@@ -499,28 +494,39 @@ function buildLayerSplitPlugin(
         options.lightningcssOptions,
       );
 
+      // An app's own stylesheets declare its own custom properties.
+      const emittedCss = Object.values(bundle)
+        .filter(
+          (output): output is Extract<typeof output, {type: 'asset'}> =>
+            output.type === 'asset' && output.fileName.endsWith('.css'),
+        )
+        .map(asset =>
+          typeof asset.source === 'string'
+            ? asset.source
+            : Buffer.from(asset.source).toString('utf8'),
+        );
       const undeclared = undefinedGeneratedVariables(
         split,
         options.classNamePrefixes,
+        emittedCss,
       );
       if (undeclared.length > 0) {
-        const report = (
-          options.undefinedVariables === 'error' ? this.error : this.warn
-        ).bind(this);
-        report(
+        this.warn(
           'astryx-build-layer-split: the StyleX stylesheet reads ' +
             `${undeclared.length} generated custom ` +
             `propert${undeclared.length === 1 ? 'y' : 'ies'} ` +
-            'that nothing declares, so those declarations would be dropped ' +
-            'in every browser:\n' +
+            'that no stylesheet in the build declares:\n' +
             undeclared
               .map(
                 name =>
                   `  ${name}, read by: ${rulesReading(split, name).join(' ') || '(rule not found)'}`,
               )
               .join('\n') +
-            '\nA `.stylex.ts` export read in a style must be a ' +
-            '`defineVars`/`defineConsts` value whose module reaches the build.',
+            '\nWith no declaration, browsers drop the declarations that read ' +
+            'it. A `.stylex.ts` export read in a style must be a ' +
+            '`defineVars`/`defineConsts` value whose module reaches the build; ' +
+            'a property the app sets at runtime (an inline style) needs a name ' +
+            'outside the StyleX class-name prefixes.',
         );
       }
 
@@ -694,7 +700,6 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
     libraryPattern = LIBRARY_PATTERN,
     stylexPrefix = 'astryx',
     layers = {},
-    undefinedVariables = 'warn',
   } = options;
 
   const libraryLayer = layers.library ?? 'astryx-base';
@@ -719,6 +724,11 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
       ...legacyLightningcssOptions,
     },
   };
+  const classNamePrefixes = [
+    stylexPrefix,
+    (validatedStylexOptions as {classNamePrefix?: string}).classNamePrefix ??
+      'x',
+  ];
   const astryxBabelPlugin = path.resolve(__dirname, 'babel.js');
   const existingPlugins = validatedStylexOptions.babelConfig?.plugins ?? [];
 
@@ -785,6 +795,7 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
                 libraryPattern,
                 libraryLayer,
                 productLayer,
+                classNamePrefixes,
               }),
             );
           },
@@ -804,12 +815,7 @@ function astryxStylexLegacy(options: AstryxVitePluginLegacyOptions): Plugin[] {
       lightningcssOptions: (
         validatedStylexOptions as {lightningcssOptions?: unknown}
       ).lightningcssOptions,
-      classNamePrefixes: [
-        stylexPrefix,
-        (validatedStylexOptions as {classNamePrefix?: string})
-          .classNamePrefix ?? 'x',
-      ],
-      undefinedVariables,
+      classNamePrefixes,
     }),
   ];
 }
