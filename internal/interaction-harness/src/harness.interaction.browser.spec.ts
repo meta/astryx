@@ -731,7 +731,7 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(files['sheet.png']).toMatch(/sheet\.png$/);
   });
 
-  test('a capture Chromium returns empty is taken again a frame later', async ({
+  test('a capture Chromium returns empty is taken again two frames later', async ({
     page,
   }) => {
     await fixture(page);

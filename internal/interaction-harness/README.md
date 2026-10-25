@@ -101,7 +101,7 @@ clock-timed release flings slower when filmed than when played: a storyboard
 cannot show such a gesture; record it in real time instead. Chromium can return
 an empty copy of the page's surface right after it changes ("Unable to capture
 screenshot"); a storyboard takes that photograph again two frames later, up to
-three times, and lists each retake under `recaptures` in the trace.
+three attempts in all, and lists each retake under `recaptures` in the trace.
 
 ## Engine limits (measured with Playwright 1.61)
 

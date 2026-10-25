@@ -61,14 +61,14 @@ export interface StoryboardOptions {
  * empty, and Chromium answers "Unable to capture screenshot" once its own five
  * retries, issued without waiting for a new frame, have all found no surface.
  * A capture that fails that way is taken again after the page has presented
- * two more frames, at most this many times in all.
+ * two more frames, at most this many attempts in all.
  */
 const CAPTURE_ATTEMPTS = 3;
 const EMPTY_SURFACE_COPY = /Unable to capture screenshot/;
 
 export class Storyboard {
   readonly frames: StoryboardFrame[] = [];
-  /** Captures Chromium returned empty and that were taken again a frame later. */
+  /** Captures Chromium returned empty and that were taken again two frames later. */
   readonly recaptures: {label: string; error: string}[] = [];
   private clipBox: ClipBox | undefined;
 
