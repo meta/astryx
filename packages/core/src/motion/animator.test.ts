@@ -687,6 +687,37 @@ describe('review fixes', () => {
     );
   });
 
+  it('an earlier {at} on a channel whose other axis waits joins that call, so the screen and get() share its clock', async () => {
+    const {animator} = setup();
+    clock = 1020;
+    animator.animate({x: 100}, {spring: springs.smooth});
+    // An event timestamp 20 ms before the waiting call's time.
+    animator.animate({y: 50}, {spring: springs.smooth}, {at: 1000});
+    clock = 1300;
+    await commitFrame(1300);
+    const y = animator.get('y', 1316);
+    expect(sampleAt(live('translate')[0], 'translate', 1316)[1]).toBeCloseTo(
+      y,
+      1,
+    );
+  });
+
+  it('a call adopted by a later same-task call starts at the commit, after the work between them', async () => {
+    const {animator} = setup();
+    const first = animator.animate({x: 100}, {spring: springs.smooth});
+    // 300 ms of work in the same task, then another axis from rest.
+    clock = 1300;
+    animator.animate({y: 50}, {spring: springs.smooth});
+    clock = 1310;
+    await commitFrame(1310);
+    await expect(first.started).resolves.toBe(1310);
+    expect(animator.get('x', 1310)).toBeCloseTo(0, 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1310)[0]).toBeCloseTo(
+      0,
+      1,
+    );
+  });
+
   it('under Reduced Motion on a fine pointer, a move leaves a running fade alone', async () => {
     const {animator} = setup({
       reduced: true,
