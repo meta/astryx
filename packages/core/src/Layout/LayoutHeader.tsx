@@ -20,6 +20,7 @@ import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {layoutHeaderMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
@@ -173,6 +174,7 @@ export function LayoutHeader({
       {...mergeProps(
         themeProps('layout-header'),
         stylex.props(
+          layoutHeaderMarker,
           styles.header,
           dynamicStyles.sizing(height ?? null),
 

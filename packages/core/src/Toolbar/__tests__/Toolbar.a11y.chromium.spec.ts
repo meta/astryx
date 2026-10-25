@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/toolbar\.|packages/core/src/Toolbar/|apps/storybook/stories/ToolbarA11y)
 
 /**
  * @file Toolbar.a11y.chromium.spec.ts

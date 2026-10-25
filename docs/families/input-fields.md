@@ -98,7 +98,8 @@ another implementation helper.
   owns the group label and supporting text.
 - `FormLayout` owns outer arrangement, spacing, direction, and form-level
   optionality. It does not redefine a member's internal control geometry.
-- `InputGroup` owns the fixed row height, connected outer surface, edge alignment,
+- `InputGroup` owns the row height (fixed today; it grows with a set text size
+  under `spec:AST-102` FR4, and the fixed height is a gap), connected outer surface, edge alignment,
   and group-level focus presentation for admitted children. Admission follows the
   capability contract in FR3, not a permanent component allowlist; input-family
   membership alone does not imply support.
@@ -117,20 +118,20 @@ another implementation helper.
 
 ## Canonical concepts
 
-| Concept           | Values or states                                               | Default semantics                                                                                                                    | Stability                                            |
-| ----------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| field shell       | standalone Field or supported InputGroup path                  | One label/status owner surrounds the control                                                                                         | shipped pattern                                      |
-| field size        | `sm`, `md`, `lg` where supported                               | Same-size single-line controls align without one state changing the row                                                              | approved family rule                                 |
-| inline size       | intrinsic, explicit `Field.width`, or containing layout        | A member keeps its available inline size across value and busy-state changes                                                         | approved rule; Selector exception below              |
-| end controls      | absent, clear, busy, status, disclosure, or component content  | Every rendered control has non-overlapping space; absent controls leave no unexplained reserve                                       | approved family rule                                 |
-| grouped row       | standalone or admitted InputGroup child                        | InputGroup owns fixed height, connected edges, and group focus; the child owns its grouped adaptation                                | approved capability contract; shipped adoption below |
-| disabled reason   | absent or component-supported `disabledMessage`                | The reason remains keyboard- and assistive-technology-reachable while mutation stays blocked                                         | approved family rule where exposed                   |
-| input busy        | explicit `isLoading` or pending `changeAction` where exposed   | The field value is resolving or being saved                                                                                          | approved by DEC-2 and AST-001                        |
-| focus-zoom floor  | iOS or non-iOS text entry                                      | iOS text-entry controls floor rendered text at 16 CSS px to prevent focus zoom; other platforms retain theme sizing                  | approved family rule                                 |
-| source busy       | component-owned async search or option loading                 | Supporting data work is separate from input `isLoading`                                                                              | component/system-spec owned                          |
-| Transition Action | absent or component-supported `changeAction`                   | Callback first, optimistic value next, Action in a transition, one busy presentation                                                 | approved family rule where exposed                   |
-| status placement  | `attached`, `detached`, or `tooltip` at the input-family layer | Attached is the default where the member supports safe overlap; detached and tooltip remain available to every input                 | approved family rule                                 |
-| prop targets      | base props, `container*`, `control*`                           | Base props reach the primary semantic control; `container*` reaches Field; `control*` reaches the control box; no root styling input | approved by DEC-7                                    |
+| Concept           | Values or states                                               | Default semantics                                                                                                                                         | Stability                                            |
+| ----------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| field shell       | standalone Field or supported InputGroup path                  | One label/status owner surrounds the control                                                                                                              | shipped pattern                                      |
+| field size        | `sm`, `md`, `lg` where supported                               | Same-size single-line controls align without one state changing the row                                                                                   | approved family rule                                 |
+| inline size       | intrinsic, explicit `Field.width`, or containing layout        | A member keeps its available inline size across value and busy-state changes                                                                              | approved rule; Selector exception below              |
+| end controls      | absent, clear, busy, status, disclosure, or component content  | Every rendered control has non-overlapping space; absent controls leave no unexplained reserve                                                            | approved family rule                                 |
+| grouped row       | standalone or admitted InputGroup child                        | InputGroup owns row height (grows with a set text size under `spec:AST-102` FR4), connected edges, and group focus; the child owns its grouped adaptation | approved capability contract; shipped adoption below |
+| disabled reason   | absent or component-supported `disabledMessage`                | The reason remains keyboard- and assistive-technology-reachable while mutation stays blocked                                                              | approved family rule where exposed                   |
+| input busy        | explicit `isLoading` or pending `changeAction` where exposed   | The field value is resolving or being saved                                                                                                               | approved by DEC-2 and AST-001                        |
+| focus-zoom floor  | iOS or non-iOS text entry                                      | iOS text-entry controls floor rendered text at 16 CSS px to prevent focus zoom; other platforms retain theme sizing                                       | approved family rule                                 |
+| source busy       | component-owned async search or option loading                 | Supporting data work is separate from input `isLoading`                                                                                                   | component/system-spec owned                          |
+| Transition Action | absent or component-supported `changeAction`                   | Callback first, optimistic value next, Action in a transition, one busy presentation                                                                      | approved family rule where exposed                   |
+| status placement  | `attached`, `detached`, or `tooltip` at the input-family layer | Attached is the default where the member supports safe overlap; detached and tooltip remain available to every input                                      | approved family rule                                 |
+| prop targets      | base props, `container*`, `control*`                           | Base props reach the primary semantic control; `container*` reaches Field; `control*` reaches the control box; no root styling input                      | approved by DEC-7                                    |
 
 ## Cross-component invariants
 
@@ -179,7 +180,8 @@ another implementation helper.
   FR2, and FR3 where grouped.
 - **FR8 — Status placement follows member capability.** Every input MUST offer
   `detached` and `tooltip`. A member supports `attached` only when its direct
-  control is opaque, bordered, fixed-height, and its owning root reliably
+  control is opaque, bordered, fixed-height (a height set by its resolved size,
+  which grows with a set text size under `spec:AST-102` FR4), and its owning root reliably
   reflects the resolved size used for overlap. Where supported, `attached` is
   the default. Wrapped, custom, tall, or translucent surfaces normally use
   `detached` or a component-owned placement. Direct FieldStatus continues to
@@ -449,7 +451,9 @@ Every input offers detached and tooltip status placement. A member offers
 attached only when its direct control is opaque, bordered, fixed-height, and its
 owning root reliably reflects the resolved size used for overlap. Attached is the
 default whenever it is supported. Wrapped, custom, tall, or translucent surfaces
-normally use detached or retain component-owned placement.
+normally use detached or retain component-owned placement. A fixed height is
+one set by the resolved size, which grows with a set text size under
+`spec:AST-102` FR4.
 
 Direct FieldStatus remains limited to attached and detached presentation. Tooltip
 is an input-family composition that Field consumes before rendering FieldStatus.

@@ -17,8 +17,8 @@ private let secondTheme: Theme = {
     tokens.color.accent = Color(astryxRGBA: 0xC2410CFF)
     tokens.color.backgroundCard = Color(astryxRGBA: 0xFDE68AFF)
     tokens.color.textPrimary = Color(astryxRGBA: 0xFF0000FF)
-    tokens.font.labelSize = 28
-    tokens.font.bodySize = 30
+    tokens.font.label.size = 28
+    tokens.font.body.size = 30
     tokens.radius.container = 0
     tokens.radius.element = 0
     return tokens

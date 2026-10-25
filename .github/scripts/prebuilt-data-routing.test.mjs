@@ -17,11 +17,12 @@ describe('prebuilt data-variable browser routing', () => {
     const install = steps.findIndex(
       step => step.run === 'npx playwright install chromium',
     );
-    const guard = steps.findIndex(
-      step => step.run === 'node .github/scripts/theme-layer-cascade.js',
-    );
+    const guard = steps.findIndex(step => step.run === 'pnpm test:build');
     expect(install).toBeGreaterThanOrEqual(0);
     expect(guard).toBeGreaterThan(install);
+    expect(JSON.parse(read('package.json')).scripts['test:build']).toContain(
+      'node .github/scripts/theme-layer-cascade.js',
+    );
     const source = read('.github/scripts/theme-layer-cascade.js');
     expect(source).toContain('scripts/build-css.data-tokens.browser.test.mjs');
     expect(source).toContain("ASTRYX_PREBUILT_DATA_BROWSER: '1'");

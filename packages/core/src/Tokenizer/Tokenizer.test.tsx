@@ -1296,14 +1296,48 @@ describe('Tokenizer', () => {
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
-    it('blocks input while focusable-disabled', async () => {
+    it('blocks typing, Backspace, and supplied token removal while disabled', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-      renderTokenizer({onChange});
-      const input = screen.getByRole('combobox');
-      input.focus();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={onChange}
+          isDisabled
+          disabledMessage="Editing is unavailable"
+          renderToken={(item, onRemove) => (
+            <button type="button" onClick={onRemove}>
+              Remove {item.label}
+            </button>
+          )}
+        />,
+      );
+      await user.tab();
       await user.keyboard('Ali');
-      expect((input as HTMLInputElement).value).toBe('');
+      expect(screen.getByRole('combobox')).toHaveValue('');
+      await user.keyboard('{Backspace}');
+      await user.click(screen.getByRole('button', {name: 'Remove Alice'}));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(politeRegion()).toBeNull();
+    });
+
+    it('does not commit an open result after becoming disabled', async () => {
+      const onChange = vi.fn();
+      const props = {
+        label: 'Members',
+        searchSource: userSource,
+        value: [],
+        onChange,
+        hasEntriesOnFocus: true,
+        disabledMessage: 'Editing is unavailable',
+      };
+      const {rerender} = render(<Tokenizer {...props} />);
+      fireEvent.focus(screen.getByRole('combobox'));
+      const result = await screen.findByText('Alice');
+      rerender(<Tokenizer {...props} isDisabled />);
+      fireEvent.click(result);
       expect(onChange).not.toHaveBeenCalled();
     });
 
@@ -1478,13 +1512,15 @@ describe('Tokenizer', () => {
             searchSource={userSource}
             value={[users[0]]}
             onChange={() => {}}
+            isRequired
             isDisabled
           />
         </form>,
       );
-      expect([
-        ...new FormData(container.querySelector('form')!).keys(),
-      ]).toEqual([]);
+      const form = container.querySelector('form')!;
+      expect([...new FormData(form).keys()]).toEqual([]);
+      expect(form.querySelector('input[type="hidden"]')).toBeNull();
+      expect(form.checkValidity()).toBe(true);
     });
   });
 });
