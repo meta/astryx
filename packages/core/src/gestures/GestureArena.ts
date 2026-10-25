@@ -158,6 +158,19 @@ export class GestureArena {
     return this.records.get(id)?.isClaimed === true;
   }
 
+  /**
+   * @internal Give these touches back to the browser (the host's second
+   * finger rule: a pinch is the browser's).
+   */
+  releaseClaims(ids: ReadonlyArray<number>): void {
+    for (const id of ids) {
+      const record = this.records.get(id);
+      if (record != null) {
+        record.isClaimed = false;
+      }
+    }
+  }
+
   /** The live touch with this id. */
   getTouch(id: number): GestureTouch | undefined {
     return this.records.get(id)?.touch;

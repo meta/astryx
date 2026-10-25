@@ -344,10 +344,11 @@ gone and every touch scrolls as without the system.
 
 ### Multiple fingers
 
-A second finger never breaks a one-finger pan that is already moving: the
-pan ignores it, and the claim keeps the browser from zooming with it. A
-second finger that lands before any recognizer has claimed fails the
-one-finger recognizers, so the two fingers zoom the page.
+A second finger landing anywhere (often on a plain row no recognizer is on)
+gives up a pan limited to one finger, even one already moving, so the two
+fingers zoom the page (WCAG 1.4.4) instead of the row sliding until the
+browser cancels it. A second finger that lands before any recognizer has
+claimed fails the one-finger recognizers too.
 
 ## Time
 

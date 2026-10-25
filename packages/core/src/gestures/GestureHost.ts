@@ -315,6 +315,8 @@ export class GestureHost {
     readonly y: number;
     verdict: boolean | null;
   } | null = null;
+  /** Predicates that hold a touch's target away from every participant. */
+  private readonly touchGates = new Set<(target: Node) => boolean>();
   /** Scrollers someone watches (watchFingerScrolls), and how many watchers. */
   private readonly scrollWatchers = new Map<Node, number>();
   /**
@@ -737,6 +739,12 @@ export class GestureHost {
     const hovers: HoverGestureRecognizer[] = [];
     let consumer: TouchConsumer | null = null;
     let consumerElement: Element | null = null;
+    if (
+      target instanceof Node &&
+      [...this.touchGates].some(gate => gate(target))
+    ) {
+      return {recognizers, consumer, consumerElement, hovers};
+    }
     let hasConsumerOwner = pointerType == null;
     for (
       let node: Node | null = target instanceof Node ? target : null;
@@ -821,6 +829,18 @@ export class GestureHost {
    * listener is installed. A recognizer that claims only a lone finger reads
    * it in `shouldBegin` (a second finger is the browser's pinch).
    */
+  /**
+   * Hold touches away from every participant while `gate(target)` answers
+   * true (a presentation running in a layer: its content takes no touch
+   * until it settles). Returns the release.
+   */
+  addTouchGate(gate: (target: Node) => boolean): () => void {
+    this.touchGates.add(gate);
+    return () => {
+      this.touchGates.delete(gate);
+    };
+  }
+
   fingersDown(): number {
     return this.fingerTargets.length;
   }
@@ -839,7 +859,9 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
-    this.noteFingersDown(event);
+    if (this.fingerTargets.length > 1) {
+      this.stopLoneFingerPans();
+    }
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
     const stale: number[] = [];
@@ -1062,7 +1084,6 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
-    this.noteFingersDown(event);
     this.dropFingersNotDown(event);
     const time = eventTime(event);
     const inputs: TouchInput[] = [];
@@ -1094,7 +1115,6 @@ export class GestureHost {
     if (!this.takeEvent(event)) {
       return;
     }
-    this.noteFingersDown(event);
     const listed = touchesOf(event.changedTouches);
     // A cancel that names no finger is the system taking them all.
     const identifiers =
@@ -1653,6 +1673,27 @@ export class GestureHost {
       if (!this.isFingerDownIn(scroller)) {
         this.endedWhileDown.delete(scroller);
         this.fingerScrollers.delete(scroller);
+      }
+    }
+  }
+
+  /**
+   * A second finger landed somewhere (wherever: often on a plain row): a
+   * pan that takes one finger only gives the touch up, so the two fingers
+   * stay the browser's pinch (WCAG 1.4.4) instead of sliding the row until
+   * the browser cancels it.
+   */
+  private stopLoneFingerPans(): void {
+    for (const recognizer of [...this.arena.involvedRecognizers]) {
+      if (
+        recognizer instanceof PanGestureRecognizer &&
+        recognizer.maximumNumberOfTouches === 1 &&
+        recognizer.trackedTouches.length > 0 &&
+        recognizer.trackedTouches.every(touch => touch.pointerType === 'touch')
+      ) {
+        const ids = recognizer.trackedTouches.map(touch => touch.id);
+        recognizer.cancel();
+        this.arena.releaseClaims(ids);
       }
     }
   }

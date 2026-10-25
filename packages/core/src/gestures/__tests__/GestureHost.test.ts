@@ -211,7 +211,7 @@ describe('GestureHost', () => {
     expect(end.defaultPrevented).toBe(false);
   });
 
-  it('keeps cancelling while a second finger moves with the claimed one', () => {
+  it('gives a claimed one-finger pan up when a second finger lands, so the pinch is the browser’s', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({maximumNumberOfTouches: 1});
     detachers.push(host.attach(box, pan));
@@ -228,9 +228,8 @@ describe('GestureHost', () => {
       [moved, {...second, x: 260}],
       32,
     );
-    expect(pinchLike.defaultPrevented).toBe(true);
-    expect(pan.state).toBe('began');
-    expect(pan.numberOfTouches).toBe(1);
+    expect(pinchLike.defaultPrevented).toBe(false);
+    expect(pan.state).not.toBe('began');
   });
 
   it('reads pointercancel on a finger as the browser taking it', () => {
@@ -1273,6 +1272,42 @@ describe('holdPageScroll', () => {
     releaseSecond();
     releaseSecond();
     expect(pan(100)).toBe(false);
+  });
+});
+
+describe('touch gates and a second finger', () => {
+  it('holds a gated target away from every participant until the gate is released', () => {
+    const {layer, button} = mount(
+      '<div id="layer"><div id="button"></div></div>',
+    );
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    detachers.push(host.attach(button, tap));
+    const release = host.addTouchGate(target => layer.contains(target));
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', button, [finger], [finger], 0);
+    expect(tap.numberOfTouches).toBe(0);
+    touch('touchend', button, [finger], [], 40);
+    release();
+    touch('touchstart', button, [finger], [finger], 100);
+    expect(tap.numberOfTouches).toBe(1);
+    touch('touchend', button, [finger], [], 140);
+  });
+
+  it('gives a one-finger pan up when a second finger lands anywhere, so the browser can pinch', () => {
+    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
+    const swipe = new PanGestureRecognizer({
+      name: 'swipe',
+      direction: 'horizontal',
+      maximumNumberOfTouches: 1,
+    });
+    detachers.push(host.attach(row, swipe));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [first], [first], 0);
+    touch('touchmove', row, [{...first, x: 40}], [{...first, x: 40}], 16);
+    expect(swipe.state).toBe('began');
+    const second = {id: 2, x: 200, y: 300};
+    touch('touchstart', text, [second], [{...first, x: 40}, second], 32);
+    expect(['cancelled', 'failed', 'possible']).toContain(swipe.state);
   });
 });
 
