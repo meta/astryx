@@ -14,7 +14,7 @@ packages/native/
 │       └── library/           # rules every Swift component or build step shares
 └── apple/Sources/Astryx/
     └── <Name>/                # one folder per component, named as core's
-        ├── Astryx<Name>.swift
+        ├── <Name>.swift       # declares <Name> in the Astryx module
         └── <Name>.spec.md     # the component's spec, e.g. Button.spec.md
 ```
 

@@ -1229,6 +1229,24 @@ jobs:
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
         run: pnpm -F @astryxdesign/core typecheck
 
+      # The other component packages' own sources and tests, like core's: their
+      # typecheck:docs steps above cover only their .doc.mjs files.
+      - name: Typecheck lab (including tests)
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/lab typecheck
+
+      - name: Typecheck charts (including tests)
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/charts typecheck
+
+      - name: Typecheck rich text (including tests)
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/richtext typecheck
+
+      - name: Typecheck Vega (including tests)
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/vega typecheck
+
       # The accessibility spec-test contracts are consumed as TypeScript source
       # by Vitest and Playwright, and neither runner typechecks. This is the
       # only gate over them.
@@ -1779,6 +1797,17 @@ jobs:
             --project chromium \
             --output token-remove-target-output
 
+      # On a phone narrower than the drawer, the drawer must still leave a
+      # strip of the page to tap to close it (it is capped at 85vw). Viewport
+      # units, the backdrop's hit testing and a real tap only exist in a real
+      # engine.
+      - name: Run MobileNav width contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/MobileNav/__tests__/MobileNavWidth.a11y.chromium.spec.ts \
+            --project chromium \
+            --output mobile-nav-width-output
+
       # On a phone-width screen AppShell shows TopNav's compact bar. A long
       # heading must give way so the menu toggle stays inside the bar and the
       # drawer's close button stays inside the drawer; only a real engine lays
@@ -2273,6 +2302,16 @@ jobs:
           path: tooltip-contract/
           retention-days: 30
           if-no-files-found: warn
+
+      # Under Reduce Motion a layer that opens under a finger fades in, while
+      # under a mouse it still appears at once. Reduce Motion and a coarse
+      # pointer are media queries, which only a real engine resolves.
+      - name: Run layer reduced-motion entrance contract
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/Layer/__tests__/LayerReducedMotion.a11y.chromium.spec.ts \
+            --project chromium \
+            --output layer-reduced-motion-output
 
       # The accordion contract's header role and name, the page Tab step between
       # headers, the absence of arrow-key focus movement, and the single-expansion
@@ -3881,6 +3920,14 @@ jobs:
 
       - name: Run Build CSS-layer cascade guard
         run: node .github/scripts/theme-layer-cascade.js
+
+      # A compile-time ancestor selector on another workspace package's marker
+      # (lab's rule on core's indicatorScope) matches in a real browser: see
+      # scripts/stylex-module-resolution.cjs.
+      - name: Run cross-package StyleX marker browser check
+        env:
+          ASTRYX_STYLEX_BROWSER: '1'
+        run: pnpm vitest run scripts/stylex-module-resolution.browser.test.mjs --project node --maxWorkers=1
 
   # Guest token boundaries cross portals and the host light/dark cascade. This
   # requires a production browser render; source and jsdom checks cannot prove

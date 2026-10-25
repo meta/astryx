@@ -42,6 +42,13 @@ test.use({
   deviceScaleFactor: 3,
 });
 
+// The story's bottom-sheet TimeInput has no value, so its Minute wheel opens on
+// the current minute, and the minute list ends at 59: a run near the end of an
+// hour has no rows left to scroll. A fixed clock opens it on :30.
+test.beforeEach(async ({page}) => {
+  await page.clock.setFixedTime(new Date(2026, 0, 1, 10, 30));
+});
+
 const sleep = async (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
@@ -149,10 +156,15 @@ test('one finger dragged up a wheel still scrolls it and leaves the page at scal
     type: 'touchEnd',
     touchPoints: [],
   });
-  await sleep(600);
-
-  expect(await wheel.evaluate(el => el.scrollTop)).toBeGreaterThan(
-    scrollTopBefore + 60,
-  );
+  // From :30 the drag has rows to go. The column snaps to its rows: this asks
+  // that one finger scrolled it by at least one row, and left the page at
+  // scale 1.
+  const row = await wheel
+    .locator('[role="option"]')
+    .first()
+    .evaluate(el => el.getBoundingClientRect().height);
+  await expect
+    .poll(async () => wheel.evaluate(el => el.scrollTop), {timeout: 5000})
+    .toBeGreaterThanOrEqual(scrollTopBefore + row);
   expect(await pageScale(page)).toBe(1);
 });

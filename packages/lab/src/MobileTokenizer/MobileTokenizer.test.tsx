@@ -56,7 +56,14 @@ function Harness({
   );
 }
 
-function CreateHarness({spy}: {spy: ReturnType<typeof vi.fn>}) {
+function CreateHarness({
+  spy,
+}: {
+  spy: (
+    items: SearchableItem[],
+    change: MobileTokenizerChange<SearchableItem>,
+  ) => void;
+}) {
   const [value, setValue] = useState<SearchableItem[]>([]);
   return (
     <MobileTokenizer

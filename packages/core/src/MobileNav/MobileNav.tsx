@@ -10,7 +10,8 @@
  *
  * Full-height slide-out drawer overlay for mobile navigation.
  * The mobile counterpart to SideNav — accepts the same children
- * (SideNavSection, SideNavItem, or any ReactNode).
+ * (SideNavSection, SideNavItem, or any ReactNode). The drawer is never wider
+ * than 85% of the viewport, so a strip of the page stays beside it to tap.
  *
  * Uses the native `<dialog>` element with `showModal()` for top-layer rendering.
  * This eliminates z-index stacking issues — the drawer renders above everything
@@ -250,9 +251,12 @@ const styles = stylex.create({
 });
 
 const dynamicStyles = stylex.create({
+  // The requested width, never more than 85 % of the viewport: on a narrow
+  // phone a strip of the page stays visible beside the drawer, as a target
+  // for the tap that closes it.
   width: (w: number) => ({
-    width: '100vw',
-    maxWidth: `${w}px`,
+    width: `${w}px`,
+    maxWidth: '85vw',
   }),
 });
 

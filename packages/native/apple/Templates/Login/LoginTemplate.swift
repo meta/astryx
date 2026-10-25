@@ -1,7 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import Astryx
-import SwiftUI
 
 /// The `login` template's state and rules, kept apart from the drawing so
 /// they can be tested without a screen.
@@ -66,36 +65,36 @@ struct LoginTemplateContent: View {
           .font(.system(size: astryx.fontSize("font-size-2xl", 24)))
           .foregroundStyle(astryx.color("color-icon-primary"))
           .accessibilityHidden(true)
-        AstryxText("Product Inc.", size: .lg, weight: .bold)
+        Text("Product Inc.", size: .lg, weight: .bold)
       }
 
-      AstryxCard(padding: 8) {
+      Card(padding: 8) {
         VStack(alignment: .leading, spacing: astryx.space(4)) {
           VStack(spacing: astryx.space(1)) {
-            AstryxHeading("Sign in", level: 2)
-            AstryxText("Enter your credentials to continue", color: .secondary, size: .sm)
+            Heading("Sign in", level: 2)
+            Text("Enter your credentials to continue", color: .secondary, size: .sm)
           }
           .frame(maxWidth: .infinity)
 
           if let error = form.error {
-            AstryxBanner(status: .error, title: error)
+            Banner(status: .error, title: error)
           }
 
-          AstryxTextInput(
+          TextInput(
             label: "Email",
             value: $form.email,
             type: .email,
             size: .lg,
             placeholder: "you@example.com"
           )
-          AstryxTextInput(
+          TextInput(
             label: "Password",
             value: $form.password,
             type: .password,
             size: .lg,
             placeholder: "Enter your password"
           )
-          AstryxButton(
+          Button(
             label: "Sign in",
             variant: .primary,
             size: .lg,

@@ -126,6 +126,20 @@ jobs:
       - name: Typecheck core (including tests)
         run: pnpm -F @astryxdesign/core typecheck
 
+      # The other component packages' own sources and tests, like core's: their
+      # typecheck:docs gates above cover only their .doc.mjs files.
+      - name: Typecheck lab (including tests)
+        run: pnpm -F @astryxdesign/lab typecheck
+
+      - name: Typecheck charts (including tests)
+        run: pnpm -F @astryxdesign/charts typecheck
+
+      - name: Typecheck rich text (including tests)
+        run: pnpm -F @astryxdesign/richtext typecheck
+
+      - name: Typecheck Vega (including tests)
+        run: pnpm -F @astryxdesign/vega typecheck
+
       # The accessibility spec-test contracts are consumed as TypeScript source
       # by Vitest and Playwright, and neither runner typechecks. This is the
       # only gate over them.
