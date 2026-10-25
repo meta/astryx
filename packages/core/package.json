@@ -171,6 +171,11 @@
       "types": "./dist/utils/interactionOverlay.stylex.d.ts",
       "default": "./dist/utils/interactionOverlay.stylex.js"
     },
+    "./motion/reducedMotion.stylex": {
+      "source": "./src/motion/reducedMotion.stylex.ts",
+      "types": "./dist/motion/reducedMotion.stylex.d.ts",
+      "default": "./dist/motion/reducedMotion.stylex.js"
+    },
     "./docs.mjs": "./docs.mjs",
     "./groups.doc.mjs": "./groups.doc.mjs",
     "./locales/*.json": "./locales/*.json",
