@@ -112,10 +112,16 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 2, x: 30, y: 0}, 32, true);
   });
 
-  it('cancels a gesture in flight when it is disabled', () => {
+  it('ends a gesture in flight when it is disabled, without calling the listener from that commit', () => {
     const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
     const {getByTestId, rerender} = render(
-      <Draggable onPan={r => states.push(r.state)} />,
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          pan = r;
+        }}
+      />,
     );
     const surface = getByTestId('surface');
     touch('touchstart', surface, {id: 3, x: 0, y: 0}, 0);
@@ -125,8 +131,33 @@ describe('useGestureRecognizer', () => {
         <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
       );
     });
+    // The handler that turned it off owns the end: no callback from an Effect
+    // (architecture:react-component-runtime INV2).
+    expect(states).toEqual(['began']);
+    expect((pan as PanGestureRecognizer | null)?.state).not.toBe('changed');
+    touch('touchmove', surface, {id: 3, x: 60, y: 0}, 32);
+    expect(states).toEqual(['began']);
+    touch('touchend', surface, {id: 3, x: 60, y: 0}, 48, true);
+  });
+
+  it('reports cancelled to a handler that disables the recognizer itself, from that handler', () => {
+    const states: string[] = [];
+    let pan: PanGestureRecognizer | null = null;
+    const {getByTestId} = render(
+      <Draggable
+        onPan={r => states.push(r.state)}
+        onRecognizer={r => {
+          pan = r;
+        }}
+      />,
+    );
+    const surface = getByTestId('surface');
+    touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
+    // A handler (here, the test) turns it off: UIKit's .cancelled, at once.
+    (pan as PanGestureRecognizer | null)?.setEnabled(false);
     expect(states).toEqual(['began', 'cancelled']);
-    touch('touchend', surface, {id: 3, x: 30, y: 0}, 32, true);
+    touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
   });
 
   it('detaches on unmount', () => {

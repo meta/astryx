@@ -30,7 +30,12 @@ import {PressTracker, type PressTrackerOptions} from './PressTracker';
 
 /** @experimental */
 export interface UseGestureRecognizerOptions {
-  /** Live toggle; turning it off mid-gesture cancels the gesture. @default true */
+  /**
+   * Live toggle. Turning it off mid-gesture ends the gesture without calling
+   * the listener: the handler that turned it off owns that end. A handler
+   * that wants UIKit's `.cancelled` calls `recognizer.setEnabled(false)`
+   * itself, which reports it at once. @default true
+   */
   isEnabled?: boolean;
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
@@ -64,14 +69,16 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   });
   const {isEnabled = true, manageStyle = true} = options;
   const isUnmountedRef = useIsUnmountedRef();
+  // True while the isEnabled sync below runs: the listener stays quiet.
+  const isSyncingRef = useRef(false);
 
   // Synchronizes the consumer's listener with the recognizer (an external
-  // object): it runs inside input events, never during a render, and goes
-  // quiet once the component unmounts.
+  // object): it runs inside input events, never during a render or an
+  // Effect, and goes quiet once the component unmounts.
   useEffect(
     () =>
       recognizer.addListener(current => {
-        if (!isUnmountedRef.current) {
+        if (!isUnmountedRef.current && !isSyncingRef.current) {
           onGestureRef.current?.(current);
         }
       }),
@@ -90,11 +97,19 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer, manageStyle],
   );
 
-  // Synchronizes the recognizer's `isEnabled` (UIKit's setter): turning it
-  // off mid-gesture cancels the gesture, and the recognizer reports that
-  // cancellation to its listener as UIKit sends `.cancelled`.
+  // Synchronizes the recognizer's `isEnabled` (UIKit's setter) with the
+  // prop. Turning it off mid-gesture ends the gesture, but this Effect calls
+  // no consumer callback (architecture:react-component-runtime INV2): the
+  // handler that turned it off owns the end, or calls
+  // `recognizer.setEnabled(false)` itself to hear `cancelled` from that
+  // handler, and then this has nothing left to do.
   useIsomorphicLayoutEffect(() => {
-    recognizer.setEnabled(isEnabled);
+    isSyncingRef.current = true;
+    try {
+      recognizer.setEnabled(isEnabled);
+    } finally {
+      isSyncingRef.current = false;
+    }
   }, [recognizer, isEnabled]);
 
   return recognizer;

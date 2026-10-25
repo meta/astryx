@@ -46,8 +46,10 @@ function Sheet() {
   is set before the browser can see a finger. It follows the element behind
   the ref: a node rendered after mount, or swapped behind the same ref (a
   trigger rendered `as` another element), is attached at that commit.
-- `isEnabled: false` mid-gesture cancels it, and the listener hears
-  `cancelled`, as UIKit sends `.cancelled` when `isEnabled` turns off. After
+- `isEnabled: false` mid-gesture ends the gesture without calling the
+  listener, since the handler that turned it off owns that end (no consumer
+  callback from an Effect). A handler that wants UIKit's `.cancelled` calls
+  `recognizer.setEnabled(false)` itself, which reports it at once. After
   unmount the listener hears nothing, not even the cancellation of a
   gesture the unmount ended.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
