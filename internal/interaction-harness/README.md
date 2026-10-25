@@ -112,7 +112,9 @@ that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
 callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
-the settle begins. The `verdict` tolerates what a
+the settle begins. An animation counts once it is no longer pending and has
+run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
+created in the frame the page looks is not on the compositor yet. The `verdict` tolerates what a
 loaded machine does to a screencast and nothing a frozen animation does: a
 median frame interval of at most 20 ms, no stall longer than three screencast
 intervals (two dropped frames), and at least 90% of the window's whole frame

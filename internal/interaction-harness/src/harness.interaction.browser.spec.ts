@@ -342,6 +342,52 @@ test.describe('frame evidence', () => {
     expect(proof.monotonic).toBe(true);
   });
 
+  test('a block never starts on an animation that is not on the compositor yet', async ({
+    page,
+  }, testInfo) => {
+    // An animation created in the frame the helper looks is still pending (not
+    // committed to the compositor). A block that started on it then froze it
+    // in Chromium: no presented frame moved.
+    await fixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    await box.evaluate(el => {
+      el.style.willChange = 'transform';
+    });
+    const cast = await startScreencast(page);
+    // A rAF loop registered before the helper's tick runs ahead of it in every
+    // frame; on its 12th frame it creates the animation, and the helper's tick
+    // looks in that same frame.
+    await box.evaluate(el => {
+      let n = 0;
+      const loop = () => {
+        n += 1;
+        if (n === 12) {
+          el.animate(
+            [{transform: 'translateX(0px)'}, {transform: 'translateX(280px)'}],
+            {duration: 1600, easing: 'linear'},
+          );
+          return;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    });
+    const window = await blockMainThread(page, 700, {
+      during: box,
+      minProgressMs: 0,
+    });
+    await waitForRest(box);
+    const tracked = await trackMarker(page, await cast.stop());
+    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    testInfo.annotations.push({
+      type: 'busy-main-thread pending animation',
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.monotonic).toBe(true);
+  });
+
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({
     page,
     browserName,

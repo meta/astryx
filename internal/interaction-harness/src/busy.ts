@@ -45,7 +45,16 @@ export interface BusyWindow {
  * await it after: the page is already waiting when the animation begins. Any
  * animation inside `during` counts, so pick an element that runs nothing
  * else meanwhile.
+ *
+ * An animation counts once it is no longer pending and has run at least one
+ * frame (`minProgressMs` below 16 ms is raised to 16). One created in the
+ * frame the page looks is still pending, not yet on the compositor
+ * (Chromium), and in WebKit its start time resolves before its layer is
+ * flushed: a block that started on it froze it.
  */
+/** One display frame, ms: the least progress `blockMainThread` waits for. */
+const ONE_FRAME_MS = 16;
+
 export async function blockMainThread(
   page: Page,
   ms: number,
@@ -55,6 +64,7 @@ export async function blockMainThread(
     timeout = 5_000,
   }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
 ): Promise<BusyWindow> {
+  const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
       const from = performance.timeOrigin + performance.now();
@@ -76,6 +86,7 @@ export async function blockMainThread(
             .some(
               a =>
                 a.playState === 'running' &&
+                !a.pending &&
                 Number(a.currentTime ?? 0) >= minProgress,
             );
           if (running) {
@@ -98,7 +109,7 @@ export async function blockMainThread(
         };
         requestAnimationFrame(tick);
       }),
-    {duration: ms, minProgress: minProgressMs, wait: timeout},
+    {duration: ms, minProgress, wait: timeout},
   );
 }
 
