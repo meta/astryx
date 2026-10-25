@@ -246,6 +246,7 @@ warning, so two writers never fight over the paint. Pass another
   | free pan                                           | `pinch-zoom`        |
   | pinch or rotation                                  | `pan-x pan-y`       |
   | pinch or rotation together with a free pan         | `none`              |
+  | a watcher (`claimsTouches: false`), any direction  | left as is (`auto`) |
 
   A one-way pan leaves the browser its own axis too: a toast dragged away
   from its edge scrolls the page. It claims its direction by cancelling
