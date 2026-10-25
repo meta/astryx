@@ -10,12 +10,8 @@
  *   and its end, and judge rest by presented values even while an animation
  *   holds its end; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
- *   document-timeline animations, each at its own offset, and releases only
- *   them; storyboards write a sheet and a trace that follows the curve, and an
- *   endless animation does not set their length; the timer gate holds a
- *   component timer until the filmstrip is done, drops callbacks the page
- *   cancels, stamps held frames with the time they run, and leaves the
- *   harness its own frames.
+ *   document-timeline animations, each at its own offset, adds a second hold
+ *   to the held set, and releases only them.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -436,6 +432,43 @@ test.describe('holding', () => {
       0.002,
     );
     await releaseAnimations(page);
+  });
+
+  test('a second hold adds to the held set, and releasing resumes both', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      document
+        .getElementById('box')
+        ?.animate(
+          [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+          {duration: 300, easing: 'linear', fill: 'forwards'},
+        );
+      const other = document.createElement('div');
+      other.id = 'other';
+      document.body.append(other);
+      other.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 300,
+        fill: 'forwards',
+      });
+    });
+    const box = page.locator('#box');
+    expect(await holdAnimations(page, box)).toHaveLength(1);
+    expect(await holdAnimations(page, page.locator('#other'))).toHaveLength(1);
+    await releaseAnimations(page);
+    // The first hold was released too: the move runs to its end, and rest is
+    // its end, not the frame it was held on.
+    await waitForRest(box);
+    expect(await box.evaluate(el => getComputedStyle(el).transform)).toBe(
+      'matrix(1, 0, 0, 1, 300, 0)',
+    );
+    expect(
+      await page.evaluate(
+        () =>
+          document.getAnimations().filter(a => a.playState === 'paused').length,
+      ),
+    ).toBe(0);
   });
 
   test('finishing resumes an animation that repeats forever and still clears the held set', async ({

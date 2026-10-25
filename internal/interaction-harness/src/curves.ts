@@ -16,8 +16,6 @@
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
  *   is applied at its current time and `getComputedStyle` reads it.
- *
- * SYNC: Keep ./storyboard.ts using these for its animation filmstrips.
  */
 
 import type {Locator, Page} from '@playwright/test';
@@ -190,7 +188,8 @@ export interface HeldAnimation {
  * animations the page paused, and animations on a scroll or view timeline are
  * left as they are. Later `seekAnimations` calls move exactly the held set,
  * each by its offset from the earliest start, and `releaseAnimations` resumes
- * only it.
+ * only it. A second call adds to the held set: what the first held stays held
+ * until the release, and offsets count from the earliest start of all of it.
  */
 export async function holdAnimations(
   page: Page,
@@ -228,18 +227,20 @@ export async function holdAnimations(
         ? Number(animation.startTime)
         : now - Number(animation.currentTime ?? 0),
     );
-    const earliest = Math.min(...starts);
-    const offsets = starts.map(start => start - earliest);
     const held = all.map(animation => {
       animation.pause();
       return animation;
     });
+    // A later hold adds to the held set: what an earlier one held stays held
+    // (it is paused, so it is not taken again above) until released.
     const w = window as unknown as {
-      __harnessHeld: Animation[];
-      __harnessHeldOffsets: number[];
+      __harnessHeld?: Animation[];
+      __harnessHeldStarts?: number[];
     };
-    w.__harnessHeld = held;
-    w.__harnessHeldOffsets = offsets;
+    w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
+    w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
+    const earliest = Math.min(...w.__harnessHeldStarts);
+    const offsets = starts.map(start => start - earliest);
     return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
       const timing = effect?.getComputedTiming();
@@ -288,11 +289,13 @@ export async function seekAnimations(
     ({t, inset}) => {
       const w = window as unknown as {
         __harnessHeld?: Animation[];
-        __harnessHeldOffsets?: number[];
+        __harnessHeldStarts?: number[];
       };
+      const starts = w.__harnessHeldStarts ?? [];
+      const earliest = Math.min(...starts);
       let presented = -Infinity;
       (w.__harnessHeld ?? []).forEach((animation, index) => {
-        const offset = w.__harnessHeldOffsets?.[index] ?? 0;
+        const offset = (starts[index] ?? earliest) - earliest;
         const end = Number(
           animation.effect?.getComputedTiming().endTime ?? Infinity,
         );
@@ -319,7 +322,7 @@ export async function releaseAnimations(
   await page.evaluate(shouldFinish => {
     const w = window as unknown as {
       __harnessHeld?: Animation[];
-      __harnessHeldOffsets?: number[];
+      __harnessHeldStarts?: number[];
     };
     const held = w.__harnessHeld ?? [];
     try {
@@ -335,7 +338,7 @@ export async function releaseAnimations(
       }
     } finally {
       w.__harnessHeld = [];
-      w.__harnessHeldOffsets = [];
+      w.__harnessHeldStarts = [];
     }
   }, finish);
 }
@@ -390,9 +393,11 @@ export async function sampleCurve(
     (element, {ts, inset}) => {
       const w = window as unknown as {
         __harnessHeld?: Animation[];
-        __harnessHeldOffsets?: number[];
+        __harnessHeldStarts?: number[];
       };
       const held = w.__harnessHeld ?? [];
+      const starts = w.__harnessHeldStarts ?? [];
+      const earliest = Math.min(...starts);
       if (held.length === 0) {
         throw new Error(
           'sampleCurve: no held animations (call holdAnimations first)',
@@ -420,7 +425,7 @@ export async function sampleCurve(
         let presentedOpacity = -Infinity;
         held.forEach((animation, index) => {
           // Each at its own offset, just inside its end: see seekAnimations.
-          const offset = w.__harnessHeldOffsets?.[index] ?? 0;
+          const offset = (starts[index] ?? earliest) - earliest;
           const end = Number(
             animation.effect?.getComputedTiming().endTime ?? Infinity,
           );
