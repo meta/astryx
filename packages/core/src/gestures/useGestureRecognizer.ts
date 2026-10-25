@@ -126,8 +126,13 @@ export function usePressTracker(
     optionsRef.current = options;
   });
   const isUnmountedRef = useIsUnmountedRef();
-  const {trackingExpansion, highlightDelay, cancelTravel, quickTapFlash} =
-    options;
+  const {
+    trackingExpansion,
+    highlightDelay,
+    cancelTravel,
+    quickTapFlash,
+    keepsTouch,
+  } = options;
   // A profile change after mount takes effect from the next touch: the
   // tracker is rebuilt with the new values.
   const tracker = useMemo(
@@ -151,6 +156,7 @@ export function usePressTracker(
         highlightDelay,
         cancelTravel,
         quickTapFlash,
+        keepsTouch,
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
@@ -176,6 +182,7 @@ export function usePressTracker(
       highlightDelay,
       cancelTravel,
       quickTapFlash,
+      keepsTouch,
     ],
   );
 
