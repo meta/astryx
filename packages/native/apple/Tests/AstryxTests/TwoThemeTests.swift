@@ -14,9 +14,9 @@ import Testing
 private let secondTheme: Theme = {
   func restyle(_ base: Tokens) -> Tokens {
     var tokens = base
-    tokens.color.accent = Color(astryxRGBA: 0xC2410CFF)
-    tokens.color.backgroundCard = Color(astryxRGBA: 0xFDE68AFF)
-    tokens.color.textPrimary = Color(astryxRGBA: 0xFF0000FF)
+    tokens.color.accent = Color(.sRGB, red: 194 / 255, green: 65 / 255, blue: 12 / 255, opacity: 1)
+    tokens.color.backgroundCard = Color(.sRGB, red: 253 / 255, green: 230 / 255, blue: 138 / 255, opacity: 1)
+    tokens.color.textPrimary = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
     tokens.font.label.size = 28
     tokens.font.body.size = 30
     tokens.radius.container = 0

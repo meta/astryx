@@ -44,7 +44,7 @@ import Testing
 
   var theme = Theme.default
   theme.light.font.heading2.size = 48
-  theme.light.color.textPrimary = Color(astryxRGBA: 0xFF0000FF)
+  theme.light.color.textPrimary = Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
   let themed = Pixels(Astryx.Heading("Settings", level: .v2).fixedSize(), theme: theme)
   #expect(themed.width > large.width)
   #expect(themed.contains { $0[0] > 200 && $0[1] < 60 && $0[2] < 60 && $0[3] > 200 })

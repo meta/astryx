@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, describe, expect, it} from 'vitest';
 import transform, {meta} from '../validate-data-token-ownership.mjs';
+import {codemodOutcome} from '../../../outcome.mjs';
 import {upgrade} from '../../../../../api/upgrade/upgrade.mjs';
 
 const SLOW = 30_000;
@@ -76,10 +77,20 @@ describe('validate-data-token-ownership', () => {
     expect(meta.fileExtensions).toEqual(['.css']);
   });
 
-  it('fails on stale generated theme CSS with root data defaults', () => {
+  it('reports stale generated theme CSS with root data defaults as a regeneration', () => {
     expect(() => transform({source: STALE_THEME, path: 'theme.css'})).toThrow(
       /Rebuild it with `astryx theme build`/,
     );
+    let thrown;
+    try {
+      transform({source: STALE_THEME, path: 'theme.css'});
+    } catch (err) {
+      thrown = err;
+    }
+    expect(codemodOutcome(thrown)).toMatchObject({
+      kind: 'regenerate',
+      commands: ['astryx theme build'],
+    });
   });
 
   it('passes raw data-token uses with or without a fallback', () => {
@@ -136,11 +147,20 @@ describe('validate-data-token-ownership', () => {
   );
 
   it(
-    'fails `astryx upgrade --apply` on stale generated theme CSS',
+    'leaves `astryx upgrade --apply` incomplete on stale generated theme CSS, naming the rebuild',
     async () => {
       const root = project({...PREBUILT, 'src/theme.css': STALE_THEME});
-      await expect(runUpgrade(root)).rejects.toMatchObject({
-        code: 'ERR_CODEMOD_FAILED',
+      const res = await runUpgrade(root);
+      expect(res.data).toMatchObject({
+        complete: false,
+        errorCode: 'ERR_CODEMOD_PROTECTED',
+        errors: [],
+        regenerate: [
+          expect.objectContaining({
+            file: 'src/theme.css',
+            commands: ['astryx theme build'],
+          }),
+        ],
       });
     },
     SLOW,
