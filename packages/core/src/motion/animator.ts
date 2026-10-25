@@ -126,8 +126,15 @@
  *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
  * No call option and no theme value lengthens the fade or keeps travel (DR4):
- * the fade's length is not a theme role. Decays keep their motion: they
- * follow a finger's throw.
+ * the fade's length is not a theme role.
+ *
+ * Momentum under Reduce Motion: a decay only ever continues the velocity a
+ * finger handed it on release (UIScrollView's coast after a flick, with its
+ * bounce at an edge), so it keeps its motion, as a native scroll view's
+ * momentum does under Reduce Motion: the content keeps moving with the
+ * finger's own throw rather than playing a transition the component chose.
+ * A spring a component starts on release toward a target it picks (a detent,
+ * a page) is a transition, and cross-fades (DR2).
  *
  * Theme: a spring or curve from a motion table (`springs.sheetPresent`,
  * `scroll.bounce`, the Reduce Motion fade's duration and curve) plays the

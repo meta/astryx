@@ -388,6 +388,17 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
   );
   await page.goto('http://motion.test/');
   const result = await page.evaluate(async () => {
+    // A theme retunes only a registered table's roles: register it as a
+    // touch module would, and fail loudly if the role is not there.
+    Motion.registerSpringsTable();
+    if (
+      Motion.motionRoleOf(Motion.springs.sheetPresent)?.id !==
+      'springs.sheetPresent'
+    ) {
+      throw new Error(
+        'springs.sheetPresent is not a registered role: call registerSpringsTable() first',
+      );
+    }
     const curves = {
       plain: Motion.solveSpring(Motion.toSpring(Motion.springs.sheetPresent), {
         from: 300,
