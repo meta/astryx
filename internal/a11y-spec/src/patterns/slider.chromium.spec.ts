@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/slider|internal/a11y-spec/src/harness|packages/core/src/Slider/|apps/storybook/stories/SliderA11y)
 
 /**
  * @file slider.chromium.spec.ts

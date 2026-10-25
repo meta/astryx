@@ -751,15 +751,11 @@ describe('full release scope without PR metadata or maintenance writes', () => {
       );
       expect(step('a11y-contracts', name).with['delete-merged']).toBe(true);
     }
-    // An older PR head can lack a spec added on main; the exact main or
-    // release head a release check runs on has every one.
-    const wrapper = step('pr-a11y', 'Skip contract specs the PR head predates');
-    expect(runs(wrapper, {event: 'pull_request', operation: ''})).toBe(true);
-    expect(runs(wrapper)).toBe(false);
     for (const name of [
       'Run modal close visibility guard',
       'Run theme var reachability guard',
       'Run story play guard',
+      'Run browser accessibility specs',
     ]) {
       expect(
         runs(step('pr-a11y', name), {event: 'pull_request', operation: ''}),

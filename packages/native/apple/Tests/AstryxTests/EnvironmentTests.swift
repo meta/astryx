@@ -31,8 +31,8 @@ import Testing
 }
 
 @Test func theDefaultThemeCarriesCoresFontFamilies() {
-  #expect(Theme.default.light.font.familyBody.first == "-apple-system")
-  #expect(Theme.default.light.font.familyHeading.isEmpty == false)
+  #expect(Theme.default.light.font.family.body.first == "-apple-system")
+  #expect(Theme.default.light.font.family.heading.isEmpty == false)
 }
 
 // Theme environment spec, E1: with Bold Text on, a custom face from the

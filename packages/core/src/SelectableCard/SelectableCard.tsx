@@ -334,17 +334,17 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
  * the accessible role, label, and checked state. The card surface
  * is a plain <div> — no role or tabIndex on the container.
  *
- * @compositionHint Use for multi-select or single-select card groups.
- * Manage selection state externally — use a Set for multi-select
- * or a single value for radio-style selection.
+ * @compositionHint Use for multi-select card groups, managing selection
+ * state externally in a Set. Not for single-select: each card is a
+ * checkbox, so assistive technology announces a multi-select group.
  * For navigation/action cards, use ClickableCard instead.
  *
  * @example
  * ```
  * <SelectableCard
  *   label="Option A"
- *   isSelected={selected === 'a'}
- *   onChange={() => setSelected('a')}>
+ *   isSelected={selected.has('a')}
+ *   onChange={isSelected => toggle('a', isSelected)}>
  *   <Text type="body" weight="bold">Option A</Text>
  * </SelectableCard>
  * ```
