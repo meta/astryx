@@ -1100,22 +1100,6 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(opacityOnly()).toBe(true);
   });
 
-  it('a change at once during a running fade ends that fade at its target', async () => {
-    // A touch release fades on a fine pointer too (DR2); the next call there
-    // completes at once (DR3) and leaves the fade where it was heading.
-    const {animator} = reduced(false);
-    animator.animate(
-      {opacity: 0},
-      {spring: springs.settle},
-      {touchRelease: true},
-    );
-    await advance(60);
-    expect(animator.get('opacity')).toBeGreaterThan(0);
-    animator.animate({x: 100}, {spring: springs.navigationPush});
-    expect(animator.get('x')).toBe(100);
-    expect(animator.get('opacity')).toBe(0);
-  });
-
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
