@@ -93,11 +93,101 @@ export async function frames(page: Page, count = 2): Promise<void> {
   await page.evaluate(
     n =>
       new Promise<void>(resolve => {
+        // The page's real frames, even while a timer gate holds its callbacks.
+        const frame =
+          (
+            window as unknown as {
+              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+            }
+          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
         let left = n;
-        const tick = () =>
-          --left <= 0 ? resolve() : requestAnimationFrame(tick);
-        requestAnimationFrame(tick);
+        const tick = () => (--left <= 0 ? resolve() : frame(tick));
+        frame(tick);
       }),
     count,
   );
+}
+
+// A held callback is queued under its timer or frame id, so the page's own
+// clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
+// frame callback gets the time it actually runs at. `frame` stays the real
+// requestAnimationFrame, for the harness's own waits.
+const TIMER_GATE = `(() => {
+  if (window.__harnessTimerGate) return;
+  const realTimeout = window.setTimeout.bind(window);
+  const realClearTimeout = window.clearTimeout.bind(window);
+  const realInterval = window.setInterval.bind(window);
+  const realFrame = window.requestAnimationFrame.bind(window);
+  const realCancelFrame = window.cancelAnimationFrame.bind(window);
+  const gate = {frozen: false, queue: [], frame: realFrame};
+  window.__harnessTimerGate = gate;
+  const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
+  window.setTimeout = (fn, ms, ...args) => {
+    const id = realTimeout(() => {
+      const run = () => (typeof fn === 'function' ? fn(...args) : 0);
+      if (gate.frozen) gate.queue.push({key: 't' + id, run}); else run();
+    }, ms);
+    return id;
+  };
+  window.clearTimeout = id => { realClearTimeout(id); drop('t' + id); };
+  window.setInterval = (fn, ms, ...args) => realInterval(() => { if (!gate.frozen && typeof fn === 'function') fn(...args); }, ms);
+  window.requestAnimationFrame = fn => {
+    const id = realFrame(time => {
+      if (gate.frozen) gate.queue.push({key: 'f' + id, run: () => fn(performance.now())}); else fn(time);
+    });
+    return id;
+  };
+  window.cancelAnimationFrame = id => { realCancelFrame(id); drop('f' + id); };
+})()`;
+
+/**
+ * Installs a gate on the page's setTimeout / setInterval /
+ * requestAnimationFrame. Install it BEFORE the animation under test starts:
+ * only callbacks scheduled through the gate can be held. Event timestamps,
+ * Date, performance.now and the Web Animations timeline are untouched.
+ */
+export async function installTimerGate(page: Page): Promise<void> {
+  await page.evaluate(TIMER_GATE);
+}
+
+/**
+ * Holds every gated timer and frame callback until `thawTimers`, so a
+ * component cannot finish an animation behind a held storyboard's back (a
+ * transitionend backstop timer, a cleanup render). Callbacks that come due
+ * meanwhile run, in order, on thaw, unless the page cancels them first
+ * (clearTimeout, cancelAnimationFrame); intervals skip their frozen ticks.
+ */
+export async function freezeTimers(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const gate = (window as unknown as {__harnessTimerGate?: {frozen: boolean}})
+      .__harnessTimerGate;
+    if (gate == null) {
+      throw new Error(
+        'freezeTimers: call installTimerGate before the animation starts',
+      );
+    }
+    gate.frozen = true;
+  });
+}
+
+/** Releases the gate: held callbacks run now, in the order they came due. */
+export async function thawTimers(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const gate = (
+      window as unknown as {
+        __harnessTimerGate?: {
+          frozen: boolean;
+          queue: {key: string; run: () => void}[];
+        };
+      }
+    ).__harnessTimerGate;
+    if (gate == null) {
+      return;
+    }
+    gate.frozen = false;
+    // One at a time from the live queue: a callback may cancel a later one.
+    while (gate.queue.length > 0) {
+      gate.queue.shift()?.run();
+    }
+  });
 }

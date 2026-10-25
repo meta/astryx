@@ -1,7 +1,7 @@
 # @astryxdesign/interaction-harness
 
 Playwright instruments for touch interaction and animation proofs: real touch
-input and curve sampling. **Internal and unpublished.** Specs live
+input, curve sampling and storyboards. **Internal and unpublished.** Specs live
 next to their component as `*.interaction.browser.spec.ts` and run under
 [`playwright.interaction.config.ts`](../../playwright.interaction.config.ts) on
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
@@ -18,6 +18,7 @@ pnpm storybook:build                      # component specs read stories from th
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
 pnpm test:interaction <spec file>         # one spec, both engines
+pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
 On Linux distributions whose system libraries are older than Playwright's
@@ -28,15 +29,22 @@ image (podman or docker; the repository is mounted at the same path):
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
+Evidence (storyboards, curve traces) is written to
+`test-results/interaction-evidence/` (override with
+`ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
+committed: a pull request links or attaches it.
+
 ## Instruments
 
-| Module       | What it gives a spec                                                                                                                                                                                                          |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts.ts` | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
-| `touch.ts`   | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
-| `curves.ts`  | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
-| `math.ts`    | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
-| `story.ts`   | `phone`, `withStorybook`, `openStory`, `frames`.                                                                                                                                                                              |
+| Module          | What it gives a spec                                                                                                                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact release velocity, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
+| `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
+| `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
+| `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                       |
+| `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                     |
+| `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                       |
 
 ## The proofs
 
@@ -62,8 +70,8 @@ budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 inside it, the last frame it presents, and the sample says so (`presentedAt`,
 where oracles are read). An animation whose keyframes end in a run of
 identical values (an end value held so a later interruption can read it)
-ends where that run starts: `curveEndMs` and `waitForAnimation`'s interval
-stop there, and `waitForRest`, which judges the
+ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
+the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
 than `playState`, does not wait the hold out.
 
@@ -77,6 +85,17 @@ set): a short entrance no longer races the first look on a cold page. When the
 action may be the page's first contact with the harness, take
 `watchAnimations(locator)` before it and read `watch.started()` after.
 
+**Storyboards.** Deterministic: frames come from seeking held animations or
+from stepping scripted input, never from wall-clock capture. The JSON trace
+carries each frame's measurements and the spec asserts on it; the sheet is
+evidence. A component that finishes an animation from a timer (a transitionend
+backstop, a cleanup render) would do so behind a held storyboard's back:
+`installTimerGate` before the animation starts and `freezeTimers` while
+photographing. The page can still cancel a held callback, a held frame callback
+gets the time it actually runs, and the harness's own frame waits are not held.
+An animation that repeats forever does not set a storyboard's default length;
+with nothing else to film, pass `times`.
+
 ## Engine limits (measured with Playwright 1.61)
 
 |                                                        | Chromium 149 | WebKit 26.5 (Linux build)                                                                             |
@@ -87,7 +106,7 @@ action may be the page's first contact with the harness, take
 | Native scroll, fling, pinch-zoom from injected touches | yes          | no                                                                                                    |
 | Lifting one finger while others stay down              | yes          | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP` |
 | Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                          |
-| Curve sampling, input log                              | yes          | yes                                                                                                   |
+| Curve sampling, storyboards, input log                 | yes          | yes                                                                                                   |
 
 What WebKit cannot show here — native scroll hand-off, flings, a finger
 lifting while another stays down, and anything iOS-only — needs Mobile Safari
