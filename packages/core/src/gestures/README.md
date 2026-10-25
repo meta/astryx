@@ -61,8 +61,9 @@ function Sheet() {
 - `useFingerScroll(scroller)` (proposed; pending owner review) returns a
   reader, `true` while the scroller's scroll is a finger's: from a scroll
   while a finger that landed inside it is down, until its `scrollend` (the
-  momentum is still the finger's). Pass a ref, or the document for the
-  page. No timers. Outside React, `watchFingerScrolls(host, scroller)` and
+  momentum is still the finger's), or, where the browser fires none (mobile
+  Safari before 26), until its scroll events go quiet. Pass a ref, or the
+  document for the page. Outside React, `watchFingerScrolls(host, scroller)` and
   `isFingerScroll(host, scroller)` from `fingerScroll.ts` do the same; that
   module adds passive scroll listeners only while something is watched.
 
