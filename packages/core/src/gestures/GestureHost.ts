@@ -1602,6 +1602,10 @@ export class GestureHost {
       this.fingerPointers.delete(event.pointerId);
       this.pendingPointers.delete(event.pointerId);
       if (id != null) {
+        // The pointer channel ends here while the finger keeps moving (the
+        // browser scrolls with it): its touch events, now the only channel,
+        // sample it, as a scroll handoff needs.
+        this.pointerFed.delete(id);
         this.arena.browserTookOver([id], eventTime(event));
       }
       return;

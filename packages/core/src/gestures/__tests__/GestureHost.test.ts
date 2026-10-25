@@ -382,6 +382,46 @@ describe('GestureHost', () => {
     expect(released).toBeCloseTo(625, 6);
   });
 
+  it('samples a finger from its touch events once the browser cancels its pointer', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({
+      name: 'pan',
+      scrollHandoff: true,
+      direction: 'down',
+    });
+    detachers.push(host.attach(box, pan));
+    pointer('pointerdown', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    const finger = {id: 0, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    pointer('pointermove', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 14,
+      buttons: 1,
+      time: 16,
+    });
+    expect(host.arena.getTouch(1)?.y).toBe(14);
+    // The browser takes the touch to scroll: the pointer channel ends, the
+    // finger keeps moving, and only touch events report it now.
+    pointer('pointercancel', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 14,
+      time: 20,
+    });
+    touch('touchmove', box, [{...finger, y: 60}], [{...finger, y: 60}], 32);
+    expect(host.arena.getTouch(1)?.y).toBe(60);
+  });
+
   it('keeps every report of a 120 Hz finger', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({name: 'pan'});
