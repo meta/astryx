@@ -305,8 +305,8 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
  * sees the filmstrip's pacing in both engines: two frames, `measure` and a
  * photograph per event, about 100 ms between moves instead of the script's
  * 16.7. Its release velocity is that much lower, so a flick that dismisses
- * when played can settle back when filmed: film such a gesture from a
- * screencast (`startScreencast`, `castStoryboard`) instead.
+ * when played can settle back when filmed: a storyboard cannot show such a
+ * gesture; record it in real time instead.
  */
 export async function touchStoryboard(
   page: Page,
