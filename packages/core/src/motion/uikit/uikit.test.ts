@@ -5,9 +5,9 @@
  * @input vitest, the UIKit constants table and its source text
  * @output Enforces law P2 on the table: every leaf has a source of an
  *   allowed kind, every guess and every WebKit value names its measurement
- *   task, every task is listed in motion/MEASUREMENTS.md; checks the plain
- *   values (ratios, rates, curves) and that the press clocks agree with the
- *   touch press model they were measured for
+ *   task, every task is listed in motion/MEASUREMENTS.md, and no value ships
+ *   its source; checks the plain values (ratios, rates, curves) and that the
+ *   press clocks agree with the touch press model they were measured for
  * @position Testing; validates motion/uikit/*.ts without a browser
  */
 
@@ -21,13 +21,11 @@ import {
   PRESS_SCROLL_BRAKE_MS,
 } from '../../utils/pressGesture';
 import {scroll, springs, timing} from '.';
-import {HAPTIC_VIBRATION_PATTERNS, UIKIT_GESTURES} from './gestures';
 
-// Domain files whose entries are typed constants ({value, unit, source} or
-// {value, unit, guess, measure}); the same rules are checked on the values.
-const TYPED_TABLE_FILES = ['gestures.ts'];
-// Every other domain file carries its sources as JSDoc tags: a new one is
-// enforced the moment it lands.
+// Modules in this folder that hold no table of their own (none yet).
+const NON_TABLE_FILES: string[] = [];
+// Every domain file carries its sources as JSDoc tags: a new one is enforced
+// the moment it lands.
 const TABLE_FILES = fs
   .readdirSync(__dirname)
   .filter(
@@ -35,9 +33,12 @@ const TABLE_FILES = fs
       file.endsWith('.ts') &&
       file !== 'index.ts' &&
       !file.endsWith('.test.ts') &&
-      !TYPED_TABLE_FILES.includes(file),
+      !NON_TABLE_FILES.includes(file),
   )
   .sort();
+// Where a number comes from is documentation: a value that carried it would
+// ship it in every bundle that reads the value.
+const PROVENANCE_KEYS = new Set(['source', 'guess', 'measure']);
 /** A measurement names its subject, the iOS version it ran on and its date. */
 const MEASURED =
   /^@source measured: .*iOS \d.*(\b20\d\d-\d\d-\d\d\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d\d\b)/;
@@ -119,6 +120,7 @@ describe('UIKit constants table: every value is sourced (law P2)', () => {
   it('finds the table entries', () => {
     expect(TABLE_FILES).toEqual(
       expect.arrayContaining([
+        'gestures.ts',
         'navigation.ts',
         'scroll.ts',
         'springs.ts',
@@ -130,94 +132,66 @@ describe('UIKit constants table: every value is sourced (law P2)', () => {
 
   for (const {file, key, doc} of leaves) {
     it(`${file} › ${key}`, () => {
-      // Collapse each tag's continuation lines onto it.
-      const tags = doc
-        .split(/\n(?=@)/)
-        .map(tag => tag.replace(/\s*\n\s*/g, ' ').trim())
-        .filter(tag => tag.startsWith('@'));
-      const sources = tags.filter(tag => tag.startsWith('@source '));
-      expect(sources.length, `${key} has no @source`).toBeGreaterThan(0);
-      for (const source of sources) {
-        expect(source, `${key}: unknown source kind`).toMatch(SOURCE_KINDS);
-        if (source.startsWith('@source measured: ')) {
-          expect(source, `${key}: a measurement needs its date`).toMatch(
-            MEASURED,
-          );
-        }
-      }
-      const needsMeasurement = sources.some(source =>
-        /^@source (GUESS|webkit)/.test(source),
-      );
-      const measures = tags.filter(tag => tag.startsWith('@measure '));
-      if (needsMeasurement) {
-        expect(
-          measures.length,
-          `${key} is unconfirmed but names no @measure task`,
-        ).toBeGreaterThan(0);
-      }
-      for (const measure of measures) {
-        const id = /^@measure (M-[A-Z0-9]+)$/.exec(measure)?.[1];
-        expect(id, `${key}: malformed ${measure}`).toBeDefined();
-        expect(MEASUREMENTS, `${id} is not in motion/MEASUREMENTS.md`).toMatch(
-          new RegExp(`^\\| ${id} +\\|`, 'm'),
-        );
-      }
+      expect(
+        PROVENANCE_KEYS.has(key),
+        `${file} › ${key}: a source belongs in the JSDoc, not in the value`,
+      ).toBe(false);
+      expectSourced(key, doc);
     });
   }
 });
 
-describe('UIKit constants table: typed domains follow the same rules', () => {
-  const constants: [
-    string,
-    {source?: string; guess?: string; measure?: string},
-  ][] = [
-    ...Object.entries(UIKIT_GESTURES).flatMap(([group, values]) =>
-      Object.entries(values).map(
-        ([name, constant]) =>
-          [`gestures.${group}.${name}`, constant] as [
-            string,
-            {source?: string; guess?: string; measure?: string},
-          ],
-      ),
-    ),
-    ...Object.entries(HAPTIC_VIBRATION_PATTERNS).map(
-      ([kind, constant]) =>
-        [`haptics.${kind}`, constant] as [
-          string,
-          {source?: string; guess?: string; measure?: string},
-        ],
-    ),
-  ];
-
-  it('finds the gesture constants', () => {
-    expect(constants.length).toBeGreaterThan(20);
-  });
-
-  it.each(constants)('%s', (name, constant) => {
-    if (constant.source != null) {
-      expect(`@source ${constant.source}`, name).toMatch(SOURCE_KINDS);
-      if (constant.source.startsWith('measured: ')) {
-        expect(
-          `@source ${constant.source}`,
-          `${name}: a measurement needs its date`,
-        ).toMatch(MEASURED);
-      }
-    } else {
-      expect(
-        constant.guess,
-        `${name} has neither a source nor a guess`,
-      ).toBeTruthy();
-      const id = /^(M-[A-Z0-9]+): /.exec(constant.measure ?? '')?.[1];
-      expect(
-        id,
-        `${name}: measure must start with its MEASUREMENTS.md ID`,
-      ).toBeDefined();
-      expect(MEASUREMENTS, `${id} is not in motion/MEASUREMENTS.md`).toMatch(
-        new RegExp(`^\\| ${id} +\\|`, 'm'),
-      );
-    }
+describe('UIKit constants table: blocks sourced as a whole', () => {
+  it('gestures.ts › HAPTIC_VIBRATION_PATTERNS', () => {
+    // Every pattern rests on the same guess, stated once above the object.
+    const text = fs.readFileSync(
+      path.resolve(__dirname, 'gestures.ts'),
+      'utf8',
+    );
+    const end = text.indexOf('export const HAPTIC_VIBRATION_PATTERNS');
+    expect(end).toBeGreaterThan(-1);
+    const block = text.slice(text.lastIndexOf('/**', end), end);
+    const doc = block
+      .split('\n')
+      .map(line => line.trim().replace(/^\/?\*+\/?\s?/, ''))
+      .join('\n');
+    expectSourced('HAPTIC_VIBRATION_PATTERNS', doc);
   });
 });
+
+/** The JSDoc rules every sourced value follows. */
+function expectSourced(key: string, doc: string) {
+  // Collapse each tag's continuation lines onto it.
+  const tags = doc
+    .split(/\n(?=@)/)
+    .map(tag => tag.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(tag => tag.startsWith('@'));
+  const sources = tags.filter(tag => tag.startsWith('@source '));
+  expect(sources.length, `${key} has no @source`).toBeGreaterThan(0);
+  for (const source of sources) {
+    expect(source, `${key}: unknown source kind`).toMatch(SOURCE_KINDS);
+    if (source.startsWith('@source measured: ')) {
+      expect(source, `${key}: a measurement needs its date`).toMatch(MEASURED);
+    }
+  }
+  const needsMeasurement = sources.some(source =>
+    /^@source (GUESS|webkit)/.test(source),
+  );
+  const measures = tags.filter(tag => tag.startsWith('@measure '));
+  if (needsMeasurement) {
+    expect(
+      measures.length,
+      `${key} is unconfirmed but names no @measure task`,
+    ).toBeGreaterThan(0);
+  }
+  for (const measure of measures) {
+    const id = /^@measure (M-[A-Z0-9]+)$/.exec(measure)?.[1];
+    expect(id, `${key}: malformed ${measure}`).toBeDefined();
+    expect(MEASUREMENTS, `${id} is not in motion/MEASUREMENTS.md`).toMatch(
+      new RegExp(`^\\| ${id} +\\|`, 'm'),
+    );
+  }
+}
 
 describe('UIKit constants table: values', () => {
   it('UIKit\u2019s default spring has the documented damping ratio 4.56 before clamping', () => {

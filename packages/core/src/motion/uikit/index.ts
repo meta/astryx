@@ -20,13 +20,10 @@
 export {
   HAPTIC_FEEDBACK_KINDS,
   HAPTIC_VIBRATION_PATTERNS,
-  isGuess,
   UIKIT_GESTURES,
   type GestureConstant,
   type GestureConstantUnit,
-  type GuessedGestureConstant,
   type HapticFeedbackKind,
-  type SourcedGestureConstant,
 } from './gestures';
 export {navigation} from './navigation';
 export {scroll} from './scroll';
