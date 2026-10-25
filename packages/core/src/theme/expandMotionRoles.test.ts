@@ -106,6 +106,60 @@ describe('motion roles in a theme', () => {
   });
 });
 
+describe('a theme written to spec:AST-094 FR4', () => {
+  // FR4's role table: every role the record names, at its own default.
+  const FR4_ROLES = {
+    springs: {
+      'springs.fingerTracking': {response: 0.15, dampingRatio: 0.86},
+      'springs.emphasis': {duration: 0.5, bounce: 0.3},
+      'springs.settle': {duration: 0.5, bounce: 0},
+      'springs.quickChange': {duration: 0.5, bounce: 0.15},
+      'springs.viewChange': {mass: 3, stiffness: 1000, damping: 500},
+      'springs.timedChange': {duration: 0.5, bounce: 0},
+      'springs.stateChange': {response: 0.55, dampingRatio: 1},
+      'springs.directChange': {response: 0.5, dampingRatio: 0.825},
+      'springs.menuOpen': {response: 0.32, dampingRatio: 0.8},
+      'springs.menuClose': {response: 0.35, dampingRatio: 0.85},
+      'springs.subMenuOpen': {response: 0.4, dampingRatio: 0.85},
+      'springs.subMenuBack': {response: 0.4, dampingRatio: 1},
+    },
+    durations: {'timing.stateChangeMs': 250},
+    curves: {
+      'timing.curves.viewChange': [0.25, 0.1, 0.25, 1],
+      'timing.curves.exit': [0.42, 0, 1, 1],
+      'timing.curves.entrance': [0, 0, 0.58, 1],
+      'timing.curves.move': [0.42, 0, 0.58, 1],
+    },
+  } as const;
+
+  it('compiles every role the record names, one variable each', () => {
+    const theme = defineTheme({name: 'fr4', motion: FR4_ROLES});
+    const motionTokens = Object.keys(theme.tokens).filter(name =>
+      name.startsWith('--motion-'),
+    );
+    expect(motionTokens).toHaveLength(17);
+    expect(theme.tokens['--motion-springs-sub-menu-back']).toBe('0.4s 0');
+    expect(theme.tokens['--motion-timing-curves-move']).toBe(
+      'cubic-bezier(0.42, 0, 0.58, 1)',
+    );
+  });
+
+  it('refuses keyboard motion, which follows the keyboard', () => {
+    expect(() =>
+      expandMotionRoles(
+        {springs: {'springs.keyboard': {response: 0.5, dampingRatio: 1}}},
+        'm',
+      ),
+    ).toThrow(/"springs\.keyboard" is not a motion role/);
+    expect(() =>
+      expandMotionRoles(
+        {durations: {'timing.keyboardNotificationMs': 400}},
+        'm',
+      ),
+    ).toThrow(/"timing\.keyboardNotificationMs" is not a motion role/);
+  });
+});
+
 describe('motion roles in adaptation rules', () => {
   function adaptive(
     rules: NonNullable<NonNullable<DefineThemeInput['adaptations']>['rules']>,

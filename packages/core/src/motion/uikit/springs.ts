@@ -251,6 +251,19 @@ export const springs = {
    */
   menuClose: {...MENU_CLOSE_SPRING},
   /**
+   * A sub-menu drilling in: the parent's rows recede and the menu's box
+   * grows to fit the sub-menu (spec:AST-094 FR34).
+   * @source measured: UIKit's own spring for UIMenu's sub-menu opening,
+   *   iOS 26.2 simulator, 2026-10-24 (spec:AST-094 FR4's role table)
+   */
+  subMenuOpen: {response: 0.4, dampingRatio: 0.85},
+  /**
+   * A sub-menu's header going back to its parent menu (spec:AST-094 FR34).
+   * @source measured: UIKit's own spring for UIMenu's sub-menu header back,
+   *   iOS 26.2 simulator, 2026-10-24 (spec:AST-094 FR4's role table)
+   */
+  subMenuBack: {response: 0.4, dampingRatio: 1},
+  /**
    * Context menu (UIContextMenuInteraction): the preview lifting once the
    * long press commits.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
