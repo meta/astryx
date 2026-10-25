@@ -42,14 +42,16 @@
  * current value with the current velocity (M3). A gesture's release velocity
  * can be handed in explicitly instead.
  *
- * End state without a flicker frame: the element's inline style always holds
- * the values the animations END on, and the keyframes hold that end state for
- * a while after the curve ends (END_HOLD_MS). The main thread drops a finished
- * animation as soon as it runs after the curve's end; the inline style already
- * shows the same values, so nothing moves. The hold matters when the curve
- * ends during a main-thread block: WebKit's compositor ends an animation by
- * falling back to the value its main thread last committed, which is
- * mid-flight.
+ * No frame shows a value the element is not at. While a curve runs, the
+ * element's inline style holds the value the curve starts from (the value on
+ * screen when it was built), so a frame painted before the compositor has the
+ * curve (WebKit can receive a new curve a few updates late) shows the element
+ * where it is, never where it is going. The keyframes hold the end state for a
+ * while after the curve ends (END_HOLD_MS); the main thread retires a finished
+ * animation as soon as it runs after the curve's end, writing the end values
+ * inline in the same task that cancels it, so nothing moves. The hold matters
+ * when the curve ends during a main-thread block: WebKit's compositor ends an
+ * animation by falling back to the value its main thread last committed.
  *
  * Start time: a call that starts from rest (nothing on its channels moving,
  * no `options.at`) gets no start time, so the browser starts it when it
@@ -509,11 +511,24 @@ const MAX_KEYFRAMES = 1200;
 /**
  * The keyframes hold the end state this long after a curve ends. An engine
  * whose compositor ends an animation while the main thread is blocked falls
- * back to the value its main thread last committed, mid-flight (WebKit); the
- * hold keeps the end state on screen through such a block. The main thread
- * drops the animation as soon as it runs after the curve's end.
+ * back to the value its main thread last committed, the curve's start
+ * (WebKit); the hold keeps the end state on screen through any such block. It
+ * only stretches the last keyframe. The main thread retires the animation as
+ * soon as it runs after the curve's end.
+ *
+ * Why a tail inside the curve's own animation, with a bound (measured Oct 24
+ * 2026; do not replace it without these proofs):
+ * - WebKit's compositor ignores `fill`: an animation that ends during a
+ *   main-thread block falls back to the last committed inline value, the
+ *   curve's start here. The browser proof "a spring that ends inside the
+ *   block keeps showing its end state" catches it.
+ * - A separate static animation of the end state under the curve would hold
+ *   it without a bound, but two animations on one property push Chromium to
+ *   run the curve on the main thread: the 1 s block proof moved in 0 of 57
+ *   frames, the start-before-a-block proof failed, and seeking the curve
+ *   broke.
  */
-export const END_HOLD_MS = 5000;
+export const END_HOLD_MS = 60_000;
 
 /** How often a paused animation is looked at again for retiring, ms. */
 const RETIRE_RECHECK_MS = 100;
@@ -834,12 +849,15 @@ export function createAnimator(
     }
     touched.add(channel);
     const text = inlineText(channel, value);
+    // An unchanged value is not written: a style write invalidates the
+    // element, and WebKit can repaint sticky content stale when that lands in
+    // the frame a scroll commits.
+    if (target.style.getPropertyValue(channel) !== text) {
+      target.style.setProperty(channel, text);
+    }
     if (text === IDENTITY_TEXT[channel]) {
       // Identity leaves the element when nothing else would move it.
-      target.style.setProperty(channel, text);
       releaseIdentity(channel);
-    } else {
-      target.style.setProperty(channel, text);
     }
   };
 
@@ -917,9 +935,10 @@ export function createAnimator(
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
-    // An element's inline style holds the end state, so its old animation can
-    // go first. A pseudo-element has none: its old animation keeps holding the
-    // value until the new one exists (same task, no frame in between).
+    // An element's inline style takes the value on screen below, so its old
+    // animation can go first. A pseudo-element has none: its old animation
+    // keeps holding the value until the new one exists (same task, no frame in
+    // between).
     if (pseudoElement == null) {
       previous?.cancel();
     }
@@ -932,8 +951,18 @@ export function createAnimator(
         segments.delete(property);
       }
     }
-    writeInline(channel, finalValue);
     const moving = properties.filter(p => segments.has(p));
+    if (
+      moving.length === 0 ||
+      target == null ||
+      typeof target.animate !== 'function'
+    ) {
+      writeInline(channel, finalValue);
+    } else {
+      // The value on screen as the curve starts: what a frame painted before
+      // the compositor has the curve shows. The end is written at retire.
+      writeInline(channel, p => valueAt(p, time));
+    }
     if (target == null || typeof target.animate !== 'function') {
       previous?.cancel();
       return;
@@ -1045,8 +1074,8 @@ export function createAnimator(
       duration: span,
       // The last keyframes hold the end state (END_HOLD_MS); filling both
       // ways also keeps it where an engine honors the fill on its compositor.
-      // The main thread drops the animation once it runs after the end; the
-      // inline style already holds the same values, so that changes no pixel.
+      // The main thread retires the animation once it runs after the end,
+      // writing the end inline in that task, so that changes no pixel.
       fill: 'both',
       easing: 'linear',
       ...(pseudoElement != null ? {pseudoElement} : {}),
@@ -1070,9 +1099,16 @@ export function createAnimator(
 
   /**
    * Once the main thread runs after the curve's end, the animation leaves the
-   * running state: an element's inline style already shows the end values; a
-   * pseudo-element's end value moves to a static holding animation, created
-   * before the long one goes.
+   * running state: an element's end values are written inline in the task
+   * that cancels it; a pseudo-element's end value moves to a static holding
+   * animation, created before the long one goes.
+   *
+   * Why a timer at the curve's end: no browser event reports that an
+   * animation's time has reached a point inside its effect, and its
+   * `finished` comes only after the END_HOLD_MS tail, which would keep the
+   * element promoted and the animation alive for a minute. The timer is set
+   * on the curve's own clock and re-armed while a sampler pauses or seeks the
+   * animation, so it never retires a held one.
    */
   const scheduleRetire = (
     channel: Channel,
@@ -1101,6 +1137,9 @@ export function createAnimator(
       running.delete(channel);
       if (pseudoElement != null) {
         hold(channel, now());
+      } else {
+        // The end goes inline in the task that cancels the animation.
+        writeInline(channel, finalValue);
       }
       animation.cancel();
       releaseIdentity(channel);

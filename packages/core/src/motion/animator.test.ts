@@ -251,15 +251,13 @@ describe('animate: keyframes on the compositor', () => {
       {x: 100, scale: 0.9, rotate: 10},
       {spring: springs.snappy},
     );
-    expect(element.style.translate).toBe('100px 0px');
+    // While the curve runs, the inline value is where it starts.
+    expect(['', 'none']).toContain(element.style.translate);
     await advance(100);
     animator.animate({x: 0, scale: 1, rotate: 0}, {spring: springs.snappy});
-    // While the motion back runs, the end is never written 0px 0px: none, or
-    // nothing where the stylesheet agrees.
+    // While the motion back runs, the inline value is where it starts.
     expect(live('translate')).toHaveLength(1);
-    for (const channel of ['translate', 'scale', 'rotate'] as const) {
-      expect(['', 'none']).toContain(element.style[channel]);
-    }
+    expect(parse(element.style.translate)[0]).toBeCloseTo(animator.get('x'), 2);
     await advance(5000);
     // At rest the identity leaves the element: translate 0px 0px would make
     // the element a fixed child's containing block, and scale 1 stops a
@@ -296,21 +294,28 @@ describe('animate: keyframes on the compositor', () => {
     expect(element.style.scale).toBe('none');
   });
 
-  it('writes the end values inline up front, so the last frame needs no main thread', () => {
+  it('holds the value on screen inline while a curve runs, and the end once it retires', async () => {
     const {animator, element} = setup();
+    animator.set({x: 10, opacity: 0.5});
     animator.animate(
       {x: 120, y: -40, scale: 1.1, rotate: 12, opacity: 0.25},
       {spring: springs.snappy},
     );
+    // A frame painted before the compositor has the curve shows where the
+    // element is, never where it is going.
+    expect(element.style.translate).toBe('10px 0px');
+    expect(element.style.opacity).toBe('0.5');
+    const animations = ['translate', 'scale', 'rotate', 'opacity'].map(
+      channel => live(channel)[0],
+    );
+    await commitFrame(clock);
+    await advance(5000);
     expect(element.style.translate).toBe('120px -40px');
     expect(element.style.scale).toBe('1.1 1.1');
     expect(element.style.rotate).toBe('12deg');
     expect(element.style.opacity).toBe('0.25');
-    for (const channel of ['translate', 'scale', 'rotate', 'opacity']) {
-      const [animation] = live(channel);
-      expect(animation.keyframes[animation.keyframes.length - 1][channel]).toBe(
-        (element.style as unknown as Record<string, string>)[channel],
-      );
+    for (const animation of animations) {
+      expect(animation.cancelled).toBe(true);
     }
   });
 
@@ -1345,6 +1350,8 @@ describe('play: any closed-form curve', () => {
     const end = press.value(0.266);
     expect(animator.get('scale', 1266)).toBeCloseTo(end, 12);
     expect(animator.getVelocity('scale', 1266)).toBe(0);
+    // Retired, the end is inline.
+    await advance(400);
     for (const axis of parse(element.style.scale)) {
       expect(axis).toBeCloseTo(end, 4);
     }
@@ -1547,7 +1554,8 @@ describe('attach', () => {
       curve.value(0.1),
       1,
     );
-    expect(element.style.translate).toBe('300px 0px');
+    // The value on screen, not the end.
+    expect(parse(element.style.translate)[0]).toBeCloseTo(curve.value(0.1), 2);
   });
 
   it('detaching cancels the running animations', async () => {

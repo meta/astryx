@@ -12,7 +12,8 @@
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
- *   the curve and holds its end state; a theme that retunes a table spring
+ *   the curve and holds its end state; a frame painted before the compositor
+ *   has a curve shows the element where it is; a theme that retunes a table spring
  *   changes the curve the engine plays
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
@@ -189,11 +190,61 @@ test('a spring that ends inside the block keeps showing its end state', async ({
   const landed = xs.findIndex(x => x >= TRAVEL - 1);
   expect(landed).toBeGreaterThanOrEqual(0);
   // WebKit's compositor falls back to the main thread's last committed value
-  // when an animation ends during a block; the animator's end-state hold
-  // keeps the end on screen until script runs again.
+  // when an animation ends during a block; the static hold of the end state
+  // under the curve keeps the end on screen until script runs again.
   for (const x of xs.slice(landed)) {
     expect(x).toBeGreaterThanOrEqual(TRAVEL - 1);
   }
+});
+
+test('a frame painted before the compositor has the curve shows the element where it is', async ({
+  page,
+}) => {
+  await open(page);
+  // What a frame shows without the curve is the element's own style: drop the
+  // curves right after they are created and read it. A present from rest,
+  // then a retarget mid-flight.
+  const result = await page.evaluate(
+    async ({travel}) => {
+      const fresh = () => {
+        const element = document.createElement('div');
+        element.style.cssText =
+          'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
+        document.body.append(element);
+        return {element, animator: Motion.createAnimator(element)};
+      };
+      const x = (element: HTMLElement) =>
+        Number.parseFloat(getComputedStyle(element).translate.split(' ')[0]) ||
+        0;
+      const present = fresh();
+      present.animator.animate({x: travel}, {spring: Motion.springs.smooth});
+      for (const animation of present.element.getAnimations()) {
+        animation.cancel();
+      }
+      const presentX = x(present.element);
+
+      const retarget = fresh();
+      await retarget.animator.animate(
+        {x: travel},
+        {spring: Motion.springs.smooth},
+      ).started;
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const onScreen = retarget.animator.get('x');
+      retarget.animator.animate({x: 0}, {spring: Motion.springs.smooth});
+      for (const animation of retarget.element.getAnimations()) {
+        animation.cancel();
+      }
+      return {presentX, onScreen, retargetX: x(retarget.element)};
+    },
+    {travel: TRAVEL},
+  );
+  test.info().annotations.push({
+    type: 'without the curve',
+    description: JSON.stringify(result),
+  });
+  expect(result.presentX).toBeCloseTo(0, 1);
+  expect(result.onScreen).toBeGreaterThan(20);
+  expect(Math.abs(result.retargetX - result.onScreen)).toBeLessThan(1);
 });
 
 test('a spring started right before a block plays in full after it', async ({
