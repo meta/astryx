@@ -44,6 +44,14 @@ function Sheet() {
   attaches nothing new, and a gesture never causes a React render.
 - The recognizer attaches in a layout effect, so the element's `touch-action`
   is set before the browser can see a finger.
+- The `isEnabled` option follows the prop. Turning it off mid-gesture ends
+  the gesture without calling the listener, since the handler that turned
+  it off owns that end (no consumer callback from an Effect). A handler that
+  wants UIKit's `.cancelled` calls `recognizer.setEnabled(false)` itself,
+  which reports it at once.
+- `usePressTracker` rebuilds its tracker when `trackingExpansion`,
+  `highlightDelay`, `cancelTravel` or `quickTapFlash` change, from the next
+  touch, and reads its callbacks (`isBraking` included) on every touch.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
   (see below).
 

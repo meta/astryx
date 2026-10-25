@@ -20,14 +20,19 @@
  * SYNC: When modified, update useGestureRecognizer.test.tsx and README.md.
  */
 
-import {useEffect, useRef, useState, type RefObject} from 'react';
+import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
 
 export interface UseGestureRecognizerOptions {
-  /** Live toggle; turning it off mid-gesture cancels the gesture. @default true */
+  /**
+   * Live toggle. Turning it off mid-gesture ends the gesture without calling
+   * the listener: the handler that turned it off owns that end. A handler
+   * that wants UIKit's `.cancelled` calls `recognizer.setEnabled(false)`
+   * itself, which reports it at once. @default true
+   */
   isEnabled?: boolean;
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
@@ -59,15 +64,24 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     onGestureRef.current = onGesture;
   });
   const {isEnabled = true, manageStyle = true} = options;
+  // True while the isEnabled sync below runs: the listener stays quiet.
+  const isSyncingRef = useRef(false);
 
+  // Synchronizes the consumer's listener with the recognizer, an external
+  // object driven by the document's input events: the listener runs inside
+  // those events, never in a render or an Effect.
   useEffect(
     () =>
       recognizer.addListener(current => {
-        onGestureRef.current?.(current);
+        if (!isSyncingRef.current) {
+          onGestureRef.current?.(current);
+        }
       }),
     [recognizer],
   );
 
+  // Synchronizes the document's gesture host (an external system) with the
+  // element behind `ref`.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     if (element == null) {
@@ -78,8 +92,18 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     });
   }, [ref, recognizer, manageStyle]);
 
+  // Synchronizes the recognizer's `isEnabled` with the prop. Turning it off
+  // mid-gesture ends the gesture, but this Effect calls no consumer callback
+  // (architecture:react-component-runtime INV2): the handler that turned it
+  // off owns the end, or calls `recognizer.setEnabled(false)` itself to hear
+  // `cancelled` from that handler, and then this has nothing left to do.
   useIsomorphicLayoutEffect(() => {
-    recognizer.setEnabled(isEnabled);
+    isSyncingRef.current = true;
+    try {
+      recognizer.setEnabled(isEnabled);
+    } finally {
+      isSyncingRef.current = false;
+    }
   }, [recognizer, isEnabled]);
 
   return recognizer;
@@ -102,7 +126,12 @@ export function usePressTracker(
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
-  const [tracker] = useState(
+  const {trackingExpansion, highlightDelay, cancelTravel, quickTapFlash} =
+    options;
+  // The tracker reads these four when it is built: a change rebuilds it, and
+  // the new values apply from the next touch. The callbacks, the brake
+  // included, are read through the ref on every touch.
+  const tracker = useMemo(
     () =>
       new PressTracker({
         getBounds: () => ref.current?.getBoundingClientRect() ?? null,
@@ -113,17 +142,21 @@ export function usePressTracker(
           optionsRef.current.onControlEvent?.(event, touch),
         onHighlightChange: isHighlighted =>
           optionsRef.current.onHighlightChange?.(isHighlighted),
-        trackingExpansion: options.trackingExpansion,
-        highlightDelay: options.highlightDelay,
-        cancelTravel: options.cancelTravel,
-        quickTapFlash: options.quickTapFlash,
+        trackingExpansion,
+        highlightDelay,
+        cancelTravel,
+        quickTapFlash,
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
         isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
+        isBraking: touch => optionsRef.current.isBraking?.(touch) === true,
       }),
+    [ref, trackingExpansion, highlightDelay, cancelTravel, quickTapFlash],
   );
 
+  // Synchronizes the document's gesture host (an external system) with the
+  // element behind `ref`; a tracker replaced by an option change is disposed.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     if (element == null) {
