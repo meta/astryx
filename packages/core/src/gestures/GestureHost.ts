@@ -407,6 +407,7 @@ export class GestureHost {
     const registration = this.registrationFor(element);
     registration.consumer = consumer;
     this.install();
+    this.refresh(element, registration);
     return () => {
       if (registration.consumer === consumer) {
         registration.consumer = null;
@@ -584,7 +585,9 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    const needsListener = registration.recognizers.some(claimsWhileMoving);
+    const needsListener =
+      registration.recognizers.some(claimsWhileMoving) ||
+      registration.consumer?.keepsTouch != null;
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -893,7 +896,7 @@ export class GestureHost {
       this.watchTarget(
         touch.identifier,
         target,
-        recognizers.some(claimsWhileMoving),
+        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
       );
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target});
@@ -1039,7 +1042,11 @@ export class GestureHost {
     ];
     for (const touch of fingers) {
       const id = this.touchIds.get(touch.identifier);
-      if (id != null && this.arena.isClaimed(id)) {
+      if (
+        id != null &&
+        (this.arena.isClaimed(id) ||
+          this.arena.consumerOf(id)?.keepsTouch?.() === true)
+      ) {
         event.preventDefault();
         return;
       }

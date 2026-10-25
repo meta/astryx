@@ -156,6 +156,7 @@ function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
 /** @experimental */
 export class PressTracker implements TouchConsumer {
   isHighlighted = false;
+  private isKept = false;
   isTracking = false;
   isTouchInside = false;
   trackingExpansion: number;
@@ -239,6 +240,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     const inside = this.contains(touch);
     const wasPending = this.highlightTimer != null;
     this.clearHighlightTimer();
@@ -266,6 +268,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     this.clearHighlightTimer();
     this.emit('touchCancel', touch);
     this.setHighlighted(false);
@@ -312,7 +315,16 @@ export class PressTracker implements TouchConsumer {
       return;
     }
     this.isHighlighted = value;
+    if (value) {
+      // Delivered: the control keeps this touch until it ends.
+      this.isKept = true;
+    }
     this.options.onHighlightChange?.(value);
+  }
+
+  /** The press was delivered: the browser's pan must not take this touch. */
+  keepsTouch(): boolean {
+    return this.isKept;
   }
 
   private clearHighlightTimer(): void {
