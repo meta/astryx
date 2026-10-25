@@ -5,8 +5,8 @@
  * @input Uses vitest and node:fs over the gestures sources
  * @output A gesture-only component's imports (useGestureRecognizer, the pan
  *   recognizers, the gesture host) reach neither the press tracker nor
- *   haptics; usePressTracker reaches the press tracker, and the haptics
- *   module stays reachable from its own entry
+ *   haptics, nor the hover recognizer, the page hold or the finger-scroll
+ *   watch; each of those stays reachable from the entry that uses it
  * @position Unit test of packages/core/src/gestures' module graph
  *
  * Static imports only: a type-only import is erased and costs nothing, and
@@ -86,6 +86,29 @@ describe('the gestures module graph', () => {
     expect(reachable('haptics.ts')).toContain('hapticSwitch.ts');
     // The host shares only the switch's attribute with haptics.
     expect(reachable('GestureHost.ts')).toContain('hapticSwitch.ts');
+  });
+
+  it.each([
+    'useGestureRecognizer.ts',
+    'PanGestureRecognizer.ts',
+    'GestureHost.ts',
+  ])(
+    '%s reaches neither the hover recognizer, the page hold nor the finger-scroll watch',
+    entry => {
+      const modules = reachable(entry);
+      expect(modules).not.toContain('HoverGestureRecognizer.ts');
+      expect(modules).not.toContain('pageHold.ts');
+      expect(modules).not.toContain('fingerScroll.ts');
+    },
+  );
+
+  it('reaches the finger-scroll watch from useFingerScroll, and the page hold from its own entry', () => {
+    expect(reachable('useFingerScroll.ts')).toContain('fingerScroll.ts');
+    // The page hold takes the host it holds for: it imports none of it.
+    expect(reachable('pageHold.ts')).not.toContain('GestureHost.ts');
+    expect(reachable('HoverGestureRecognizer.ts')).toContain(
+      'GestureRecognizer.ts',
+    );
   });
 
   it('reads type-only imports as free', () => {

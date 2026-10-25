@@ -62,7 +62,9 @@ function Sheet() {
   reader, `true` while the scroller's scroll is a finger's: from a scroll
   while a finger that landed inside it is down, until its `scrollend` (the
   momentum is still the finger's). Pass a ref, or the document for the
-  page. No timers.
+  page. No timers. Outside React, `watchFingerScrolls(host, scroller)` and
+  `isFingerScroll(host, scroller)` from `fingerScroll.ts` do the same; that
+  module adds passive scroll listeners only while something is watched.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
 the same and returns a detach function. `getGestureHost(document).fingersDown()`
@@ -364,10 +366,11 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 ### Holding the page still
 
-A scroll lock (`useScrollLock`) holds the page through the host:
-`getGestureHost(document).holdPageScroll(decide)` returns the release. While
-any hold is active, the host listens to the document with a non-passive
-`touchmove`. Once per one-finger touch that no recognizer owns, after the
+A scroll lock (`useScrollLock`) holds the page with
+`holdPageScroll(getGestureHost(document), decide)` from `pageHold.ts`, which
+returns the release. It lives in its own module, so a page without a scroll
+lock never ships it. While any hold is active, there is a non-passive
+`touchmove` listener on the document. Once per one-finger touch that no recognizer owns, after the
 finger clears a 5 px slop (under WebKit's 10–11 px scroll claim), it asks
 `decide(origin, dx, dy)` whether that pan would scroll the page, `origin`
 being the innermost node under the finger (the composed path's first node),

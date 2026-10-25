@@ -16,6 +16,9 @@ export type {
   GestureClock,
 } from './GestureArena';
 export {GestureHost, getGestureHost} from './GestureHost';
+export {isFingerScroll, watchFingerScrolls} from './fingerScroll';
+export {holdPageScroll} from './pageHold';
+export type {PageScrollDecision} from './pageHold';
 export type {
   AttachOptions,
   DelegatedConsumerType,

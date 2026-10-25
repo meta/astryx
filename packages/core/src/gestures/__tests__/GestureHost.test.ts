@@ -15,6 +15,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
@@ -22,6 +23,7 @@ import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {VelocityTracker} from '../VelocityTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
+import {holdPageScroll} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
@@ -967,79 +969,79 @@ describe('GestureHost', () => {
   describe('finger scrolls', () => {
     it('reads a scroll while a finger that landed inside is down as the finger’s, until the scroller’s scrollend', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
-      detachers.push(host.watchFingerScrolls(list));
+      detachers.push(watchFingerScrolls(host, list));
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', row, [finger], [finger], 0);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(true);
+      expect(isFingerScroll(host, list)).toBe(true);
       // The lift starts the momentum: still the finger's scroll.
       touch('touchend', row, [finger], [], 120);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(true);
+      expect(isFingerScroll(host, list)).toBe(true);
       list.dispatchEvent(new Event('scrollend'));
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
     });
 
     it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
-      detachers.push(host.watchFingerScrolls(list));
+      detachers.push(watchFingerScrolls(host, list));
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
       // A tap whose click scrolls the list (a scrollTo after the lift).
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', row, [finger], [finger], 0);
       touch('touchend', row, [finger], [], 80);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
     });
 
     it('reads the page’s own scroll on the document', () => {
       const {row} = mount('<div id="row"></div>');
-      detachers.push(host.watchFingerScrolls(document));
+      detachers.push(watchFingerScrolls(host, document));
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', row, [finger], [finger], 0);
       document.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(document)).toBe(true);
+      expect(isFingerScroll(host, document)).toBe(true);
       touch('touchend', row, [finger], [], 120);
       document.dispatchEvent(new Event('scrollend'));
-      expect(host.isFingerScroll(document)).toBe(false);
+      expect(isFingerScroll(host, document)).toBe(false);
     });
 
     it('does not count a finger down outside the scroller', () => {
       const {list, other} = mount(
         '<div id="list"><div id="row"></div></div><div id="other"></div>',
       );
-      detachers.push(host.watchFingerScrolls(list));
+      detachers.push(watchFingerScrolls(host, list));
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', other, [finger], [finger], 0);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
     });
 
     it('keeps a scroll that ends while the finger still rests the finger’s until the lift', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
-      detachers.push(host.watchFingerScrolls(list));
+      detachers.push(watchFingerScrolls(host, list));
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', row, [finger], [finger], 0);
       list.dispatchEvent(new Event('scroll'));
       list.dispatchEvent(new Event('scrollend'));
-      expect(host.isFingerScroll(list)).toBe(true);
+      expect(isFingerScroll(host, list)).toBe(true);
       // Lifting without moving the list again ends it.
       touch('touchend', row, [finger], [], 300);
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
     });
 
     it('forgets a scroller once nobody watches it', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
-      const stop = host.watchFingerScrolls(list);
+      const stop = watchFingerScrolls(host, list);
       const finger = {id: 1, x: 10, y: 10};
       touch('touchstart', row, [finger], [finger], 0);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(true);
+      expect(isFingerScroll(host, list)).toBe(true);
       stop();
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
       list.dispatchEvent(new Event('scroll'));
-      expect(host.isFingerScroll(list)).toBe(false);
+      expect(isFingerScroll(host, list)).toBe(false);
     });
   });
 
@@ -1441,7 +1443,7 @@ describe('holdPageScroll', () => {
   it('cancels a one-finger pan the decision says would scroll the page, for the rest of its touch', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(host.holdPageScroll(decide));
+    detachers.push(holdPageScroll(host, decide));
 
     touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
     const first = touch(
@@ -1468,7 +1470,7 @@ describe('holdPageScroll', () => {
   it('judges a pan once it clears the slop, so a first wobble does not fix its axis', () => {
     const {strip} = mount('<div id="strip"></div>');
     const decide = vi.fn((_origin: EventTarget | null, dx: number) => dx === 0);
-    detachers.push(host.holdPageScroll(decide));
+    detachers.push(holdPageScroll(host, decide));
 
     touch('touchstart', strip, at(1, 100, 300), at(1, 100, 300), 0);
     const wobble = touch(
@@ -1494,7 +1496,7 @@ describe('holdPageScroll', () => {
 
   it('lets a pan through when the decision says something under the finger takes it', () => {
     const {list} = mount('<div id="list"></div>');
-    detachers.push(host.holdPageScroll(() => false));
+    detachers.push(holdPageScroll(host, () => false));
 
     touch('touchstart', list, at(1, 100, 300), at(1, 100, 300), 0);
     expect(
@@ -1506,7 +1508,7 @@ describe('holdPageScroll', () => {
   it('never cancels a two-finger gesture, so pinch-zoom keeps working', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     const decide = vi.fn(() => true);
-    detachers.push(host.holdPageScroll(decide));
+    detachers.push(holdPageScroll(host, decide));
     const both = [
       {id: 1, x: 100, y: 300},
       {id: 2, x: 200, y: 300},
@@ -1528,7 +1530,7 @@ describe('holdPageScroll', () => {
     const inner = document.createElement('div');
     outer.attachShadow({mode: 'open'}).append(inner);
     const decide = vi.fn(() => false);
-    detachers.push(host.holdPageScroll(decide));
+    detachers.push(holdPageScroll(host, decide));
 
     touch('touchstart', inner, at(1, 100, 300), at(1, 100, 300), 0);
     touch('touchmove', inner, at(1, 100, 250), at(1, 100, 250), 16);
@@ -1538,8 +1540,8 @@ describe('holdPageScroll', () => {
 
   it('stacks holds and stops judging pans once the last one is released', () => {
     const {scrim} = mount('<div id="scrim"></div>');
-    const releaseFirst = host.holdPageScroll(() => true);
-    const releaseSecond = host.holdPageScroll(() => true);
+    const releaseFirst = holdPageScroll(host, () => true);
+    const releaseSecond = holdPageScroll(host, () => true);
     const pan = (time: number) => {
       touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), time);
       return touch(

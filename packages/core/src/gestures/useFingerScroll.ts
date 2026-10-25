@@ -8,8 +8,8 @@
  *   the document's gesture host
  * @output useFingerScroll: whether the scroller's current scroll is a
  *   finger's, read at any moment
- * @position Gesture hook of packages/core/src/gestures, over the host's
- *   finger-scroll watch
+ * @position Gesture hook of packages/core/src/gestures, over the
+ *   finger-scroll watch (fingerScroll.ts)
  *
  * A scroll is a finger's from a scroll event while a finger that landed
  * inside the scroller is down, until the scroller's `scrollend` (the lift
@@ -25,6 +25,7 @@
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
 import {getGestureHost} from './GestureHost';
 
 function isDocument(value: unknown): value is Document {
@@ -55,9 +56,10 @@ export function useFingerScroll(
         ? null
         : {
             node,
-            detach: getGestureHost(
-              isDocument(node) ? node : node.ownerDocument,
-            ).watchFingerScrolls(node),
+            detach: watchFingerScrolls(
+              getGestureHost(isDocument(node) ? node : node.ownerDocument),
+              node,
+            ),
           };
   });
   useIsomorphicLayoutEffect(
@@ -73,6 +75,6 @@ export function useFingerScroll(
       return false;
     }
     const doc = isDocument(node) ? node : node.ownerDocument;
-    return doc != null && getGestureHost(doc).isFingerScroll(node);
+    return doc != null && isFingerScroll(getGestureHost(doc), node);
   }, []);
 }

@@ -1,0 +1,158 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file pageHold.ts
+ * @input A gesture host (its document, and which touches a recognizer owns)
+ *   and a scroll lock's decision
+ * @output Exports holdPageScroll and PageScrollDecision
+ * @position Scroll-lock support of packages/core/src/gestures, in its own
+ *   module so a page without a scroll lock never ships it
+ *
+ * While a hold is held, a one-finger pan that `decide` says would scroll the
+ * page, and that no recognizer owns, is cancelled for the rest of its touch;
+ * a second finger (pinch-zoom) never is. Holds stack per host. Only
+ * while one is held is there a non-passive `touchmove` listener, so a scroll
+ * lock costs nothing once it is released, and a touch scrolls as without
+ * the system.
+ */
+
+import type {GestureHost} from './GestureHost';
+
+/**
+ * Decides, once per one-finger touch, whether its pan would scroll the page:
+ * `origin` is the innermost node under the finger (the composed path's first
+ * node, so a scroller inside a shadow root is seen), `dx` and `dy` the touch's
+ * movement once it clears a small slop. True cancels the touch's moves for as
+ * long as it lasts.
+ */
+export type PageScrollDecision = (
+  origin: EventTarget | null,
+  dx: number,
+  dy: number,
+) => boolean;
+
+/**
+ * How far a finger travels before a page-scroll hold judges its pan, in CSS
+ * px: enough that a swipe's first sample (a 2 px by 2 px wobble) does not fix
+ * the wrong axis, and still under WebKit's 10–11 px scroll claim, so the
+ * verdict comes before the browser commits to a scroll.
+ */
+const PAGE_HOLD_SLOP = 5;
+
+const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const ACTIVE_CAPTURE = {capture: true, passive: false} as const;
+
+interface PageHolds {
+  readonly decisions: Set<{readonly decide: PageScrollDecision}>;
+  /** The one finger of the gesture the holds are judging. */
+  touch: {
+    readonly id: number;
+    readonly x: number;
+    readonly y: number;
+    verdict: boolean | null;
+  } | null;
+  readonly onTouchStart: (event: TouchEvent) => void;
+  readonly onTouchMove: (event: TouchEvent) => void;
+}
+
+const holdsByHost = new WeakMap<GestureHost, PageHolds>();
+
+function fingersOf(event: TouchEvent): Touch[] {
+  return event.touches == null ? [] : Array.from(event.touches);
+}
+
+function createHolds(host: GestureHost): PageHolds {
+  const holds: PageHolds = {
+    decisions: new Set(),
+    touch: null,
+    onTouchStart: event => {
+      const fingers = fingersOf(event);
+      const finger = fingers[0];
+      holds.touch =
+        fingers.length === 1 && finger != null
+          ? {
+              id: finger.identifier,
+              x: finger.clientX,
+              y: finger.clientY,
+              verdict: null,
+            }
+          : null;
+    },
+    onTouchMove: event => {
+      const current = holds.touch;
+      const fingers = fingersOf(event);
+      const finger = fingers[0];
+      // A second finger is a pinch: zooming the page stays available.
+      if (
+        fingers.length !== 1 ||
+        finger == null ||
+        current == null ||
+        finger.identifier !== current.id
+      ) {
+        return;
+      }
+      // A recognizer that owns the touch decides about its moves itself.
+      if (host.isTouchClaimed(current.id)) {
+        return;
+      }
+      if (current.verdict == null) {
+        const dx = finger.clientX - current.x;
+        const dy = finger.clientY - current.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < PAGE_HOLD_SLOP) {
+          return;
+        }
+        // The browser picks the scroller once per gesture; so do the holds.
+        const origin = event.composedPath()[0] ?? event.target;
+        current.verdict = [...holds.decisions].some(hold =>
+          hold.decide(origin, dx, dy),
+        );
+      }
+      if (current.verdict && event.cancelable) {
+        event.preventDefault();
+      }
+    },
+  };
+  return holds;
+}
+
+/**
+ * Hold the page of `host`'s document still under a finger until the
+ * returned release runs (a scroll lock under a modal presentation):
+ * `holdPageScroll(getGestureHost(document), decide)`.
+ * Proposed; pending owner review.
+ */
+export function holdPageScroll(
+  host: GestureHost,
+  decide: PageScrollDecision,
+): () => void {
+  const doc = host.document;
+  let holds = holdsByHost.get(host);
+  if (holds == null) {
+    holds = createHolds(host);
+    holdsByHost.set(host, holds);
+  }
+  const owned = holds;
+  const hold = {decide};
+  owned.decisions.add(hold);
+  if (owned.decisions.size === 1) {
+    doc.addEventListener('touchstart', owned.onTouchStart, PASSIVE_CAPTURE);
+    doc.addEventListener('touchmove', owned.onTouchMove, ACTIVE_CAPTURE);
+  }
+  let isHeld = true;
+  return () => {
+    if (!isHeld) {
+      return;
+    }
+    isHeld = false;
+    owned.decisions.delete(hold);
+    if (owned.decisions.size === 0) {
+      doc.removeEventListener(
+        'touchstart',
+        owned.onTouchStart,
+        PASSIVE_CAPTURE,
+      );
+      doc.removeEventListener('touchmove', owned.onTouchMove, ACTIVE_CAPTURE);
+      owned.touch = null;
+    }
+  };
+}
