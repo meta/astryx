@@ -263,14 +263,14 @@ test.describe('touch input', () => {
 });
 
 test.describe('frame evidence', () => {
-  test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes', async ({
+  test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
     await fixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
 
-    const run = async (driver: 'compositor' | 'raf') => {
+    const run = async (driver: 'compositor' | 'raf', everyNthFrame = 1) => {
       await box.evaluate((el, how) => {
         el.getAnimations().forEach(a => a.cancel());
         el.style.transform = 'none';
@@ -291,7 +291,7 @@ test.describe('frame evidence', () => {
           requestAnimationFrame(step);
         }
       }, driver);
-      const cast = await startScreencast(page);
+      const cast = await startScreencast(page, {everyNthFrame});
       await page.waitForTimeout(200);
       const window = await blockMainThread(page, 700);
       await page.waitForTimeout(200);
@@ -320,6 +320,16 @@ test.describe('frame evidence', () => {
     expect(raf.verdict.pass).toBe(false);
     expect(raf.verdict.failures.join('\n')).toMatch(/longest stall/);
     expect(raf.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+
+    // The verdict judges the frames the screencast delivered, not its rate:
+    // at one frame in six (a loaded machine's ~100 ms), the compositor
+    // animation still passes and the rAF one still fails.
+    const slow = await run('compositor', 6);
+    expect(slow.cadenceMs, slow.summary).toBeGreaterThan(60);
+    expect(slow.verdict.failures, slow.summary).toEqual([]);
+    const slowRaf = await run('raf', 6);
+    expect(slowRaf.verdict.pass, slowRaf.summary).toBe(false);
+    expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
   });
 
   test('a block that starts during a just-started transition still lets the compositor advance it', async ({
