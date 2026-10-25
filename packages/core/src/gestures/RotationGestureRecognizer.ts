@@ -38,7 +38,6 @@ export class RotationGestureRecognizer extends GestureRecognizer {
   private readonly tracker = new VelocityTracker();
   /** The lift's event time, for the stillness reset. */
   private liftTime: number | undefined;
-  private lastTime = 0;
 
   constructor(options: RotationGestureRecognizerOptions = {}) {
     super(options);
@@ -52,12 +51,12 @@ export class RotationGestureRecognizer extends GestureRecognizer {
   }
 
   set rotation(value: number) {
+    const delta = value - this.rotationValue;
     this.initialAngle = this.lastAngle - value;
     this.rotationValue = value;
-    // The velocity continues from the re-based value, without a jump (as
-    // the pinch's scale setter does).
-    this.tracker.reset();
-    this.tracker.add(value, 0, this.lastTime);
+    // The velocity continues from the re-based value, without a jump: the
+    // samples shift with it (as the pinch's scale setter scales them).
+    this.tracker.offsetBy(delta, 0);
   }
 
   /** Radians per second. */
@@ -89,7 +88,6 @@ export class RotationGestureRecognizer extends GestureRecognizer {
       this.rotationValue = 0;
       this.tracker.reset();
       this.tracker.add(0, 0, event.time);
-      this.lastTime = event.time;
     }
   }
 
@@ -104,7 +102,6 @@ export class RotationGestureRecognizer extends GestureRecognizer {
     this.lastAngle = unwrapAngle(angleBetween(a, b), this.lastAngle);
     this.rotationValue = this.lastAngle - this.initialAngle;
     this.tracker.add(this.rotationValue, 0, event.time);
-    this.lastTime = event.time;
     if (this.state === 'possible') {
       if (Math.abs(this.rotationValue) >= this.hysteresis) {
         this.setState('began');

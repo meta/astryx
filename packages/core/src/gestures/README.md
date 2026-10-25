@@ -365,9 +365,9 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 ### Holding the page still
 
-A scroll lock (`useScrollLock`) holds the page with
-`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
-release. It lives in its own module, so a page without a scroll lock never
+A scroll lock may hold the page with `holdPageScroll(document, decide)`
+from `pageHold.ts`, which returns the release (none does yet:
+`useScrollLock` does not call it). It lives in its own module, so a page without a scroll lock never
 ships it, and it imports nothing of the gesture host: it asks the document's
 host whether a recognizer owns a touch only if a host exists, and a document
 without one has no recognizer to own it. While any hold is active, there is a non-passive
@@ -456,10 +456,9 @@ in `../utils/touchPresentation.ts`:
 - touch behaviours (this system, the press model, UIKit springs and
   timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`); the gesture
   host itself installs nothing while it is fine (What the browser is told);
-- layout behaviours key on a compact viewport, narrower than 744 px or
-  shorter than 500 px (`COMPACT_QUERY`), the closest a size can get to
-  UIKit's compact size class (a Max-size iPhone in landscape is its one
-  known miss);
+- layout behaviours key on the theme's compact definition (`COMPACT_QUERY`):
+  narrower than the `md` breakpoint (768 px by default) or shorter than
+  500 px (`spec:AST-012` FR9), not mapped to platform size classes;
 - a presentation that needs both, a sheet in place of a popover, asks for
   both (`COMPACT_TOUCH_QUERY`).
 

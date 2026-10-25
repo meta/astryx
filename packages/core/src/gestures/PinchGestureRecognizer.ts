@@ -43,7 +43,6 @@ export class PinchGestureRecognizer extends GestureRecognizer {
   private readonly tracker = new VelocityTracker();
   /** The lift's event time, for the stillness reset. */
   private liftTime: number | undefined;
-  private lastTime = 0;
 
   constructor(options: PinchGestureRecognizerOptions = {}) {
     super(options);
@@ -60,11 +59,12 @@ export class PinchGestureRecognizer extends GestureRecognizer {
   set scale(value: number) {
     const span = this.span();
     if (span > 0 && value > 0) {
+      const factor = this.scaleValue > 0 ? value / this.scaleValue : 1;
       this.initialSpan = span / value;
       this.scaleValue = value;
-      // The velocity continues from the re-based value, without a jump.
-      this.tracker.reset();
-      this.tracker.add(value, 0, this.lastTime);
+      // The velocity continues from the re-based value, without a jump: the
+      // samples scale with it, keeping the release.
+      this.tracker.scaleBy(factor);
     }
   }
 
@@ -91,7 +91,6 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     _touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void {
-    this.lastTime = event.time;
     if (this.numberOfTouches === 2) {
       this.initialSpan = this.span();
       this.scaleValue = 1;
@@ -107,7 +106,6 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     if (this.numberOfTouches < 2 || this.initialSpan <= 0) {
       return;
     }
-    this.lastTime = event.time;
     const span = this.span();
     if (this.state === 'possible') {
       if (Math.abs(span - this.initialSpan) >= this.hysteresis) {
