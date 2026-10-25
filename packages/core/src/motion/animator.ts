@@ -83,7 +83,7 @@
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {timing} from './uikit/timing';
+import {reducedMotionCrossFade} from './uikit/timing';
 
 /** A value the animator can drive. */
 export type MotionProperty =
@@ -849,7 +849,7 @@ export function createAnimator(
     stops: ReadonlyArray<{at: number; value: number}>,
     jumps: ReadonlyArray<number> = [],
   ): Segment => {
-    const ease = cubicBezier(timing.curves.move);
+    const ease = cubicBezier(reducedMotionCrossFade.curve);
     const duration = stops[stops.length - 1].at;
     const at = (t: number) => {
       for (let i = 0; i + 1 < stops.length; i++) {
@@ -984,7 +984,7 @@ export function createAnimator(
 
       if (reduce) {
         const fade = Math.min(
-          timing.reducedMotionCrossFadeMs,
+          reducedMotionCrossFade.durationMs,
           REDUCED_MOTION_MAX_FADE_MS,
         );
         const opacityNow = valueAt('opacity', time);
