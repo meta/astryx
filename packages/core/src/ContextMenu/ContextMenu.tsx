@@ -4,9 +4,8 @@
 /**
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, the shared menu-presentation resolver, the gesture
- *   foundation (ContextMenuPressRecognizer), the touch presentation
- *   (useTouchPresentation) and the UIKit constants table
+ *   useListFocus, the presentation resolver (usePresentation), the gesture
+ *   foundation (ContextMenuPressRecognizer) and the UIKit constants table
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -83,9 +82,10 @@ import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useScrollLock} from '../hooks/useScrollLock';
-import {useTouchPresentation} from '../utils/touchPresentation';
+import {readPresentation, usePresentation} from '../utils/presentation';
+import {useCompactDefinition} from '../utils/touchPresentation';
 import {playHaptic, useGestureRecognizer} from '../gestures';
-import {contextMenu} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 import {
   ContextMenuPressRecognizer,
   useContextMenuPressFeedback,
@@ -112,10 +112,7 @@ import type {
 } from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {
-  useAdaptivePresentation,
-  type AdaptivePresentation,
-} from '../hooks/useAdaptivePresentation';
+import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 
 const LazyMenuBottomSheet = lazy(async () =>
   import('../DropdownMenu/MenuBottomSheet').then(module => ({
@@ -272,11 +269,13 @@ interface ContextMenuBaseProps extends BaseProps {
   onOpenChange?: (isOpen: boolean) => void;
   /**
    * Presentation policy for the menu.
-   * - `popover`: open beside the pointer position.
+   * - omitted: the menu at the pointer; under a finger, a held finger opens it
+   *   on iOS's timeline (the touch model).
+   * - `popover`: the menu at the pointer on every device, as before; a held
+   *   finger is the browser's own.
    * - `bottom-sheet`: open as an action sheet.
    * - `adaptive`: use a BottomSheet on compact coarse-pointer viewports and
    *   the cursor-positioned popover elsewhere.
-   * @default 'popover'
    */
   presentation?: AdaptivePresentation;
   'data-testid'?: string;
@@ -330,7 +329,7 @@ export function ContextMenu({
   label: labelFromProps,
   isDisabled = false,
   onOpenChange,
-  presentation = 'popover',
+  presentation,
   triggerAs = 'div',
   ref,
   className,
@@ -344,8 +343,14 @@ export function ContextMenu({
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
-  const resolvedPresentation = useAdaptivePresentation(presentation);
-  const usesBottomSheet = resolvedPresentation === 'bottom-sheet';
+  // The surface, and whether the touch model applies: under a finger unless
+  // the caller pins `presentation="popover"` (public-component-api INV16).
+  const {surface, touchModes} = usePresentation(presentation, {
+    whenOmitted: 'touch',
+  });
+  // The theme's compact definition, for the one-time read at the open.
+  const compact = useCompactDefinition();
+  const usesBottomSheet = surface === 'bottom-sheet';
   // Separate content props (union discriminant) from DOM pass-through attrs.
   // The union means exactly one of items/menuContent exists in rest; destructure
   // both so triggerProps contains only DOM-safe attributes.
@@ -721,9 +726,8 @@ export function ContextMenu({
   // the lift. A lift before the commit, a second finger, a scroll, or a drift
   // past the tolerance before the menu shows gets no menu.
   // The touch model is the coarse primary pointer's, on every touch device;
-  // a fine pointer leaves the recognizer off (the server's answer until
-  // hydrated).
-  const {isTouch} = useTouchPresentation();
+  // a fine pointer, or `presentation="popover"`, leaves the recognizer off
+  // (the server's answer until hydrated).
   // The gesture hook follows the element behind the ref, so a `triggerAs`
   // swap moves the recognizer to the new node.
   const pressRecognizer = useGestureRecognizer(
@@ -738,7 +742,12 @@ export function ContextMenu({
         pressFeedbackRef.current.hold();
         const local = toTriggerLocal(recognizer.press ?? recognizer.location());
         hasPressOpenedRef.current = true;
-        setIsTouchOpen(true);
+        // Read once, at the open: the render value can be a frame behind a
+        // pointer change (a trackpad docking).
+        setIsTouchOpen(
+          readPresentation(presentation, {whenOmitted: 'touch', compact})
+            .touchModes,
+        );
         openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
       };
       switch (recognizer.state) {
@@ -765,7 +774,7 @@ export function ContextMenu({
           break;
       }
     },
-    {isEnabled: !isDisabled && isTouch},
+    {isEnabled: !isDisabled && touchModes},
   );
   // The page stays put while a menu a finger opened is up, as it does under
   // UIKit's context menu. A sheet locks the page itself.
@@ -905,7 +914,7 @@ export function ContextMenu({
       <TriggerElement
         ref={useMergedRefs(ref, triggerRef)}
         {...triggerProps}
-        {...pressFeedback.pressable}
+        {...(touchModes ? pressFeedback.pressable : null)}
         onContextMenu={handleTriggerContextMenu}
         data-testid={testId}
         {...stylex.props(

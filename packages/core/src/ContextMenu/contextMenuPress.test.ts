@@ -15,7 +15,7 @@
 
 import {describe, expect, it, vi} from 'vitest';
 import {createHarness} from '../gestures/__tests__/harness';
-import {contextMenu} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 import {ContextMenuPressRecognizer} from './contextMenuPress';
 
 const COMMIT = contextMenu.press.commitMs;

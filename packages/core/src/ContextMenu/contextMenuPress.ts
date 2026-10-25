@@ -47,7 +47,7 @@ import {
   type LongPressGestureRecognizerOptions,
 } from '../gestures';
 import {createLongPressDetector} from '../hooks/useLongPress';
-import {contextMenu} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 
 const {commitMs, menuDisplayMs, allowableMovement} = contextMenu.press;
 

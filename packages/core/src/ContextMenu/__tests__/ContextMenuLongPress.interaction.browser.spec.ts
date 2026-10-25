@@ -55,7 +55,7 @@ import {
   animationStoryboard,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
-import {contextMenu} from '../../motion/uikit';
+import {contextMenu} from '../../motion/uikit/contextMenu';
 import {
   PRESS_FEEDBACK_START_MS,
   pressFeedbackCurve,

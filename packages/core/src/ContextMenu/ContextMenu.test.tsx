@@ -37,7 +37,9 @@ import {Divider} from '../Divider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
-import {contextMenu, HAPTIC_VIBRATION_PATTERNS} from '../motion/uikit';
+import {COMPACT_QUERY, TOUCH_QUERY} from '../utils/touchPresentation';
+import {HAPTIC_VIBRATION_PATTERNS} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 
 // The touch sheet is loaded lazily; resolve its modules once up front, so
 // ContextMenu's own lazy sheet renders within the cases' waitFor.
@@ -319,7 +321,11 @@ describe('ContextMenu', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
+        // A compact touch screen: a coarse primary pointer, a narrow viewport.
+        matches:
+          query === COMPACT_TOUCH_PRESENTATION_QUERY ||
+          query === TOUCH_QUERY ||
+          query === COMPACT_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -636,6 +642,7 @@ describe.each([
     function renderMenu(
       props: {
         isDisabled?: boolean;
+        presentation?: 'popover';
         triggerAs?: 'div' | 'span';
         onTouchStart?: (event: React.TouchEvent) => void;
         onTouchEnd?: (event: React.TouchEvent) => void;
@@ -894,6 +901,19 @@ describe.each([
     it('makes the trigger a pressable surface of core’s one press machine, which starts and ends its growth', () => {
       const trigger = renderMenu();
       expect(trigger).toHaveAttribute('data-astryx-pressable');
+    });
+
+    it('keeps today’s menu with presentation="popover": a held finger is the browser’s, and its contextmenu opens the menu at the finger', () => {
+      const trigger = renderMenu({presentation: 'popover'});
+      expect(trigger).not.toHaveAttribute('data-astryx-pressable');
+      const press = finger(trigger);
+      press.down();
+      advance(1000);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      const lift = press.up();
+      expect(lift.defaultPrevented).toBe(false);
+      fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
     });
 
     it('opens nothing on touch when disabled', () => {

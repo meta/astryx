@@ -48,12 +48,11 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {PRESSED_ATTRIBUTE, type pressableProps} from '../utils/pressFeedback';
 import {createAnimator, type Animator} from '../motion/animator';
 import {resolveMotion} from '../motion/resolveMotion';
+import {registerSpringsTable, springs} from '../motion/uikit';
 import {
   contextMenu,
   registerContextMenuTable,
-  registerSpringsTable,
-  springs,
-} from '../motion/uikit';
+} from '../motion/uikit/contextMenu';
 import {pressFeedbackCurve, pressFeedbackMotion} from './contextMenuPressCurve';
 
 const {feedbackSpring} = contextMenu.press;
