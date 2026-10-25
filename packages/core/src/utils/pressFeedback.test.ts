@@ -106,6 +106,64 @@ describe('the press reaches the surface the finger landed on', () => {
     press(input, 'pointerup', 10, 10, 'mouse');
   });
 
+  it("keeps a link's native long-press menu: no callout lock on a link or under one", () => {
+    // jsdom drops -webkit-touch-callout, so the lock's writes are recorded.
+    const written = new Map<Element, string[]>();
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    const owners = new WeakMap<CSSStyleDeclaration, Element>();
+    const spy = vi
+      .spyOn(CSSStyleDeclaration.prototype, 'setProperty')
+      .mockImplementation(function (
+        this: CSSStyleDeclaration,
+        name: string,
+        value: string | null,
+        priority?: string,
+      ) {
+        const owner = owners.get(this);
+        if (owner != null && value === 'none') {
+          written.set(owner, [...(written.get(owner) ?? []), name]);
+        }
+        setProperty.call(this, name, value, priority);
+      });
+    const track = (element: HTMLElement) => {
+      owners.set(element.style, element);
+      return element;
+    };
+    const link = track(pressable('a'));
+    link.setAttribute('href', '/next');
+    const text = document.createElement('span');
+    text.textContent = 'Next';
+    link.appendChild(text);
+    document.body.appendChild(link);
+    press(text, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    press(text, 'pointerup', 10, 10);
+    // iOS shows a link's menu and preview on a long press: no callout lock.
+    expect(written.get(link)).toEqual(['-webkit-user-select', 'user-select']);
+    // A link inside a pressable row keeps its menu too.
+    const row = track(pressable());
+    const inner = document.createElement('a');
+    inner.setAttribute('href', '/more');
+    inner.textContent = 'More';
+    row.appendChild(inner);
+    document.body.appendChild(row);
+    press(inner, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    press(inner, 'pointerup', 10, 10);
+    expect(written.get(row)).toEqual(['-webkit-user-select', 'user-select']);
+    // A plain row still loses the callout.
+    const plain = track(rows[0]);
+    press(plain, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    press(plain, 'pointerup', 10, 10);
+    expect(written.get(plain)).toEqual([
+      '-webkit-touch-callout',
+      '-webkit-user-select',
+      'user-select',
+    ]);
+    spy.mockRestore();
+  });
+
   it('paints the row after the delay, not before', () => {
     const label = rows[1].firstElementChild;
     if (label == null) {

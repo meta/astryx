@@ -14,7 +14,9 @@
  * (`-webkit-user-select: text`), out of reach of an ancestor's lock: a
  * checkbox, a radio or a switch's input under the finger inside a locked
  * element is locked too (iOS 26.2: its hold otherwise opens the loupe). A
- * text field keeps its selection: a held finger places its caret.
+ * text field keeps its selection: a held finger places its caret. A link
+ * keeps the touch callout: on a link, or under one, a held finger opens the
+ * link's native menu and preview, as in Safari.
  *
  * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts.
  */
@@ -27,6 +29,9 @@ const SELECTION_LOCK = [
   '-webkit-user-select',
   'user-select',
 ] as const;
+
+/** The same lock where a link's native menu must stay: no callout lock. */
+const LINK_SELECTION_LOCK = ['-webkit-user-select', 'user-select'] as const;
 
 /** Inputs whose text a held finger edits: it places the caret there. */
 const TEXT_ENTRY_TYPES = new Set([
@@ -64,6 +69,11 @@ export function lockSelection(
   ) {
     set.add(target);
   }
+  // A held finger on a link, or under one, opens its native menu.
+  const names =
+    [...set].some(isLink) || isUnderLink(target)
+      ? LINK_SELECTION_LOCK
+      : SELECTION_LOCK;
   const locked: Element[] = [];
   for (const element of set) {
     const style = styleOf(element);
@@ -78,13 +88,13 @@ export function lockSelection(
     }
     locks.set(element, {
       count: 1,
-      saved: SELECTION_LOCK.map(name => ({
+      saved: names.map(name => ({
         name,
         value: style.getPropertyValue(name),
         priority: style.getPropertyPriority(name),
       })),
     });
-    for (const name of SELECTION_LOCK) {
+    for (const name of names) {
       style.setProperty(name, 'none');
     }
   }
@@ -122,6 +132,29 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
     node.localName === 'input' &&
     !TEXT_ENTRY_TYPES.has((node as HTMLInputElement).type)
   );
+}
+
+/** A link a held finger opens the native menu of. */
+function isLink(node: unknown): boolean {
+  return (
+    node instanceof Element &&
+    (node.localName === 'a' || node.localName === 'area') &&
+    node.hasAttribute('href')
+  );
+}
+
+/** Whether `target` is a link or inside one, across shadow roots. */
+function isUnderLink(target: EventTarget | null): boolean {
+  for (
+    let current: Node | null = target instanceof Node ? target : null;
+    current != null;
+    current = parentAcrossShadow(current)
+  ) {
+    if (isLink(current)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Whether `node` is `ancestor` or inside it, across shadow roots. */
