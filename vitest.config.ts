@@ -21,6 +21,7 @@
 import path from 'node:path';
 import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import stylexResolution from './scripts/stylex-module-resolution.cjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
@@ -44,10 +45,8 @@ export default defineConfig({
                 ],
                 '@astryxdesign/core': [path.join(rootDir, 'packages/core/src')],
               },
-              unstable_moduleResolution: {
-                type: 'commonJS',
-                rootDir: rootDir,
-              },
+              unstable_moduleResolution:
+                stylexResolution.stylexModuleResolution,
             },
           ],
         ],

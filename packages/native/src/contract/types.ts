@@ -23,6 +23,8 @@ export type PropType =
   | {kind: 'fn'; args: readonly PropType[]}
   /** Child Astryx components: the typed content slot (AST-082 FR4). */
   | {kind: 'content'}
+  /** A shared icon name: the typed icon slot (AST-082 FR4, FR17). */
+  | {kind: 'icon'}
   | {kind: 'named'; name: string};
 
 export interface PropSpec {
