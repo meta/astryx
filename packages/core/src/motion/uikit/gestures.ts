@@ -78,7 +78,7 @@ const APPLE = 'https://developer.apple.com/documentation/uikit';
  * recognizer state log), iPhone 17 Pro simulator, iOS 26.2, Oct 2026.
  */
 const UIKIT_LAB =
-  'measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed with HID touches';
+  'measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed with HID touches, 2026-10-23';
 
 /**
  * The repository's own measurement of the touch press model, recorded in
@@ -86,7 +86,7 @@ const UIKIT_LAB =
  * simulator running iOS 26.2, driven with real HID touches, filmed at 60 fps.
  */
 const PRESS_MEASUREMENT =
-  'measured: Settings and Contacts, iOS 26.2 simulator, HID touches filmed at 60 fps (utils/pressGesture.ts)';
+  'measured: Settings and Contacts, iOS 26.2 simulator, HID touches filmed at 60 fps (utils/pressGesture.ts), 2026-10-06';
 
 /**
  * Safari page scroll is a UIScrollView: the distance at which it claims a
@@ -94,7 +94,7 @@ const PRESS_MEASUREMENT =
  * can still cancel the scroll.
  */
 const SAFARI_SCROLL_CLAIM =
-  'measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag on a scrollable page (1 pt steps): last cancelable touchmove at 10 px, pointercancel and the first uncancelable touchmove at 11 px';
+  'measured: Mobile Safari 26.2, iOS 26.2 simulator, slow HID drag on a scrollable page (1 pt steps), 2026-10-23: last cancelable touchmove at 10 px, pointercancel and the first uncancelable touchmove at 11 px';
 
 export const UIKIT_GESTURES = {
   tap: {
@@ -287,38 +287,16 @@ export const UIKIT_GESTURES = {
      * instantaneous velocity plus the rest times the previous event's
      * (instantaneous velocity: position change over timestamp change between
      * consecutive events, the touch-down counting as the first). The lift
-     * does not update it, and a finger at rest sends no events, so a release
-     * after a pause reports the last moving value.
+     * does not update it, and a finger at rest sends no events, so in UIKit
+     * a release after a pause reports the last moving value; the one release
+     * filter adds a stillness reset to 0 there (`spec:AST-100` FR2, DEC-1).
+     * This blend is the only velocity estimate (`architecture:interaction-modality`
+     * INV10): no alternative filter has values here.
      */
     currentWeight: {
       value: 0.2,
       unit: 'ratio',
       source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
-    },
-    /** For the least-squares alternative: samples older than this are ignored. */
-    horizon: {
-      value: 100,
-      unit: 'ms',
-      guess:
-        "Android's VelocityTracker and Flutter's fit the last 100 ms (least squares, degree 2); UIKit itself uses currentWeight.",
-      measure: 'M-G14: Not a parity value: UIKit uses the two-event filter.',
-    },
-    /** For the least-squares alternative: at most this many samples. */
-    maxSamples: {
-      value: 20,
-      unit: 'count',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
-      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
-    },
-    /**
-     * For the least-squares alternative: a gap this long between samples
-     * separates two motions.
-     */
-    assumeStopped: {
-      value: 40,
-      unit: 'ms',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker use 40 ms.',
-      measure: 'M-G16: Not a parity value: UIKit uses the two-event filter.',
     },
   },
   click: {

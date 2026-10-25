@@ -552,3 +552,61 @@ describe("arena: a touch that begins off an active recognizer's hit path", () =>
     expect(recorder.elsewhere).toEqual([]);
   });
 });
+
+describe('arena: resolution order across fingers', () => {
+  it('lets the inner recognizer win a tie even when another finger brought the outer one first', () => {
+    const h = createHarness();
+    const inner = new Scripted('inner', onMove);
+    const outer = new Scripted('outer', onMove);
+    // Finger 1 lands on the outer view only; finger 2 on the inner view,
+    // inside it. Both recognize on the same move event.
+    h.arena.began([
+      {
+        id: 1,
+        x: 0,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [outer],
+        consumer: null,
+      },
+      {
+        id: 2,
+        x: 50,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [inner, outer],
+        consumer: null,
+      },
+    ]);
+    h.arena.moved([
+      {id: 1, x: 10, y: 0, time: 16},
+      {id: 2, x: 60, y: 0, time: 16},
+    ]);
+    expect(inner.state).toBe('began');
+    expect(outer.state).toBe('failed');
+    h.arena.ended([
+      {id: 1, x: 10, y: 0, time: 32},
+      {id: 2, x: 60, y: 0, time: 32},
+    ]);
+  });
+});
+
+describe('arena: a held view', () => {
+  it('is released in the same settle as the recognizer that held it finishes', () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    // Delays the view's touch, then lifts without deciding: it finishes as
+    // `possible` with nothing left to track.
+    const r = new Scripted('r', {ended: () => {}}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 0, {recognizers: [r], consumer});
+    expect(consumer.events).toEqual([]);
+    h.finger(1).up(40);
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+  });
+});

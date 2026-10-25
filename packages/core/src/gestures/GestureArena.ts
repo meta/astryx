@@ -200,14 +200,25 @@ export class GestureArena {
           takenByBrowser: false,
         };
         const participants: GestureRecognizer[] = [];
-        for (const recognizer of input.recognizers) {
+        for (const [depth, recognizer] of input.recognizers.entries()) {
           if (!recognizer.wantsTouch(touch)) {
             continue;
           }
           participants.push(recognizer);
           recognizer.arena = this;
           if (!this.active.includes(recognizer)) {
-            this.active.push(recognizer);
+            // Resolution follows `active`, so a recognizer joins ahead of any
+            // that sits further out on this touch's path: when two recognize
+            // on the same event the innermost wins (FR15), whichever finger
+            // brought the outer one in first.
+            const outer = this.active.findIndex(
+              other => input.recognizers.indexOf(other) > depth,
+            );
+            if (outer === -1) {
+              this.active.push(recognizer);
+            } else {
+              this.active.splice(outer, 0, recognizer);
+            }
           }
           const list = newTouches.get(recognizer) ?? [];
           list.push(touch);
@@ -827,6 +838,7 @@ export class GestureArena {
   private settle(): void {
     this.reviewPending();
     this.reviewHeld();
+    let didReset = false;
     for (const recognizer of [...this.active]) {
       const isFinished =
         (isTerminal(recognizer.state) && recognizer.numberOfTouches === 0) ||
@@ -837,9 +849,15 @@ export class GestureArena {
       this.active = this.active.filter(other => other !== recognizer);
       const from = recognizer.state;
       recognizer.resetToPossible();
+      didReset = true;
       if (from !== 'possible') {
         this.options.onTransition?.(recognizer, from, 'possible');
       }
+    }
+    if (didReset) {
+      // A recognizer that finished above may have been the one holding a
+      // touch from its view; release it now, not at the next input.
+      this.reviewHeld();
     }
     for (const [id, record] of this.records) {
       if (
