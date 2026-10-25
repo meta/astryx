@@ -69,10 +69,13 @@ shows with the system's own look and delay, never on keyboard focus or a tap.
   300-point width. The bubble draws in the view's own layer, so a scroll view
   or another clipping container around the view cuts it off, where core's top
   layer is never clipped.
-  On its first show, before the window's safe area and the bubble's own size are known, the bubble opens above the view, or below it when even the gap does not fit under the `space.s4` floor, with no slide, and moves into place on the next frame.
+  The bubble hangs from the view's top or bottom edge, so it sits `space.s1` clear of the view from its first frame. On that first show, before the window's safe area and the bubble's own size are known, it opens above the view, or below it when even the gap does not fit under the `space.s4` floor, with no slide, and flips or slides into place on the next frame.
 - **INV2 — Pointer.** A pointer resting on the view shows the bubble after
   core's 200 ms. It stays while the pointer is on the view or on the bubble,
   hides 100 ms after the pointer leaves both, and a press hides it.
+  A pointer that leaves the view or the bubble hides it after the bridge even
+  when keyboard focus opened it, as core's `mouseleave` does, until focus
+  leaves and returns.
 - **INV3 — Keyboard focus.** Where focus reaches the tooltip, focus the
   keyboard brings shows the bubble at once, as core's `focusin` does, and it
   hides 100 ms after focus leaves. Whether the keyboard brought focus is
@@ -122,8 +125,8 @@ tooltip tests prove it stays current.
 
 | Invariant  | Evidence                                                                                                                                                                                                                                        | Failure signal                                                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1       | `TooltipPresenterTests.swift`: above unless no room; slides inside the window; long words wrap within 300 points                                                                                                                                | a bubble below with room above, or one line past 300 points                                                                               |
-| INV2       | `TooltipPresenterTests.swift`: delay and bridge; the pointer on the view or the bubble keeps it up                                                                                                                                              | a bubble that hides while hovered or shows at once on a pointer                                                                           |
+| INV1       | `TooltipPresenterTests.swift`: above unless no room; slides inside the window; long words wrap within 300 points; a render puts the bubble 4 points above or below a view, never on it                                                          | a bubble below with room above, or one line past 300 points                                                                               |
+| INV2       | `TooltipPresenterTests.swift`: delay and bridge; the pointer on the view or the bubble keeps it up; the rule that a pointer leaving lets a keyboard-opened bubble hide, as logic only, since the hover path needs an app-hosted test            | a bubble that hides while hovered or shows at once on a pointer                                                                           |
 | INV3       | `TooltipPresenterTests.swift`: focus shows at once for `control` and `tabStop`, never for `none`; only keyboard focus opens or holds it                                                                                                         | a delayed focus bubble, one on a view focus does not reach, or one a click's focus opens or holds                                         |
 | INV5       | `TooltipPresenterTests.swift`: `auto` resolves as core's; only a direct touch on a tap trigger opens it; a tap elsewhere closes it, a tap on the view toggles it, a scroll or pinch on the view closes it, and a gesture on the bubble does not | a bubble from a pointer click, under VoiceOver, or on a control under `auto`; one a gesture elsewhere or a scroll on the view leaves open |
 | INV6       | `TooltipPresenterTests.swift`: blank words and a disabled view show nothing                                                                                                                                                                     | a tooltip on a disabled view                                                                                                              |
