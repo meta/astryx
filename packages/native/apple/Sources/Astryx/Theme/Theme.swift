@@ -16,14 +16,16 @@ import AppKit
 public struct Theme: Equatable, Sendable {
   public var light: Tokens
   public var dark: Tokens
-  /// SF Symbols that replace the defaults for shared icon names, such as
-  /// `["success": "checkmark.seal.fill"]` (AST-082 FR17).
-  public var icons: [String: String]
+  /// Images that replace the defaults for shared icon names, or register a
+  /// `<library>:<name>` name (AST-082 FR17): an SF Symbol, such as
+  /// `["success": "checkmark.seal.fill"]`, or an app asset, such as
+  /// `["close": .assetName("brand.close")]`.
+  public var icons: [String: IconImage]
   /// Native visual intent from `defineNativeTheme`. Reserved: empty until a
   /// component reads it.
   public var native: NativeIntent
 
-  public init(light: Tokens, dark: Tokens, icons: [String: String] = [:], native: NativeIntent = .init()) {
+  public init(light: Tokens, dark: Tokens, icons: [String: IconImage] = [:], native: NativeIntent = .init()) {
     self.light = light
     self.dark = dark
     self.icons = icons
@@ -48,12 +50,12 @@ public struct AstryxStyle: Sendable {
   /// How much Dynamic Type grows text at the person's setting (1 at Large).
   public let textScale: CGFloat
   /// The theme's replacements for shared icon names.
-  public let icons: [String: String]
+  public let icons: [String: IconImage]
   /// Whether the person turned on Bold Text (`legibilityWeight == .bold`).
   public let isBoldText: Bool
 
   public init(
-    tokens: Tokens, textScale: CGFloat = 1, icons: [String: String] = [:], isBoldText: Bool = false
+    tokens: Tokens, textScale: CGFloat = 1, icons: [String: IconImage] = [:], isBoldText: Bool = false
   ) {
     self.tokens = tokens
     self.textScale = textScale
@@ -101,11 +103,12 @@ public struct AstryxStyle: Sendable {
     )
   }
 
-  /// The SF Symbol for a shared icon name (AST-082 FR17): the theme's
-  /// replacement, else the default. An unknown name stops a development
-  /// build with a message that names it, and draws nothing in a release build.
-  public func icon(_ name: String) -> String? {
-    if let symbol = icons[name] ?? astryxDefaultIcons[name] { return symbol }
+  /// The image for a shared icon name (AST-082 FR17): the theme's
+  /// replacement, else the default SF Symbol. An unknown name stops a
+  /// development build with a message that names it, and draws nothing in a
+  /// release build.
+  public func icon(_ name: String) -> IconImage? {
+    if let image = icons[name] ?? astryxDefaultIcons[name].map(IconImage.systemName) { return image }
     assertionFailure("Astryx has no icon named \"\(name)\"")
     return nil
   }

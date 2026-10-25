@@ -10,6 +10,12 @@ on:
 
 permissions: {}
 
+# A new push to a pull request cancels its superseded run; each push to main
+# keeps its own uncancelled group.
+concurrency:
+  group: 'lint-${{ github.event.pull_request.number || github.run_id }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     runs-on: 2-core-ubuntu-arm

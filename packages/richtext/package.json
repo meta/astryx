@@ -61,7 +61,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": ">=0.10.0",

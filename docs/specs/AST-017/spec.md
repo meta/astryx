@@ -104,7 +104,9 @@ affects_consumer_docs: [release-process, templates]
       "DEC-16",
       "DEC-22",
       "FR59",
-      "DEC-25"
+      "DEC-25",
+      "FR60",
+      "DEC-26"
     ]
   }
 }
@@ -741,6 +743,14 @@ one removal merged ahead of the decision to allow it.
   cross-device consistency change: it needs its own owner decision under the
   governing design or component record. Otherwise fine-pointer behavior and
   appearance stay as they were.
+- **FR60 — Components are built from minimal DOM, and reducing it is compatible.**
+  A component renders one element per role, themable part, or named wrapper,
+  expresses states through attributes and styles, renders content once, and
+  mounts one presentation per open layer, under the two budgets and the
+  exception path `architecture:component-style-authoring` INV7 states. Removing
+  or merging undocumented elements to meet it is compatible (FR3); an element a
+  current theme target or documented anatomy names stays. A component exceeds a
+  budget only through an owner exception recorded with its element counts.
 
 ### Platform support
 
@@ -891,6 +901,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR53      | Changeset classification review against the governing component record's accessibility evidence                                                                                                                                                                                                                                                                 | a fix that replaces documented keyboard or focus behavior to meet an adopted APG pattern's required parts; a fix that changes a role, state, or accessible name to meet WCAG 2.2 A/AA; a fix that adds an optional prop               | An accessibility fix is held for a minor, given a coexistence path, or classified `[breaking]`; or a change that needs an app-layer code edit, or that removes, renames, or narrows public surface, ships as an accessibility `[fix]`                                                                                     |
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                       | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                 |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                   | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                           |
+| FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception                                                                                                                                                     | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking                                                                                                          |
 
 ## Decision log
 
@@ -1348,6 +1359,21 @@ problems. A new desktop look or feel is a design choice of its own and gets its 
 owner decision.
 
 Rejected: letting touch work change fine-pointer behavior freely, and forbidding every fine-pointer change, which would block real desktop fixes.
+
+### DEC-26 — Components are built from minimal DOM
+
+**Reference:** `spec:AST-017/DEC-26`
+**Decider:** `cixzhang`, `2026-10-24`
+
+Correct construction, not a running change budget, is what keeps components
+light: one element per role, themable part, or named wrapper, states through
+attributes and styles, content rendered once, and one presentation per open
+layer. Two budgets make that checkable, one for surface components at rest and
+one for open layers, and an owner-recorded exception path covers the cases that
+genuinely need more. Because undocumented markup is not a released contract,
+reducing DOM to meet the rule is compatible.
+
+Rejected: a budget that only limits how many elements a change may add, which says nothing about what a correct component looks like.
 
 ## Open questions
 

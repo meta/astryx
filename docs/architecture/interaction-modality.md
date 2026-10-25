@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-10
+approved_at: 2026-10-24
 owners: [cixzhang]
 applies_to:
   [
@@ -25,7 +25,7 @@ verified_by:
     packages/core/src/Selector/Selector.test.tsx,
     packages/core/src/Slider/Slider.test.tsx,
   ]
-deciding_specs: []
+deciding_specs: [spec:AST-100/DEC-1]
 ---
 
 # Interaction modality architecture
@@ -46,8 +46,9 @@ deciding_specs: []
 Astryx components behave predictably when people move between keyboard, pointer,
 touch, pen, and programmatic focus. Essential actions remain perceivable and
 reachable while their controlled state or task context is presented, and newer user
-intent remains authoritative over stale work. This record defines those shared
-interaction invariants, the shared modality state, the boundary between modality and
+intent remains authoritative over stale work, and every Core and Lab gesture of one kind, dragged or scrolling, reads the
+same release velocity. This record defines those shared interaction invariants, the
+one gesture velocity source, the shared modality state, the boundary between modality and
 component focus ownership, and the evidence required when any of them changes.
 
 It does not define focus-ring appearance, hover paint, press treatment, or new
@@ -146,6 +147,19 @@ work.
   correction already settled by current component, family, design, theme, or
   objective accessibility authority; that correction uses rendered-pixel evidence
   and its direct owner rather than being recast as interaction reachability.
+- **INV10 — Gesture velocity has one owner.** In `@astryxdesign/core`, one
+  internal velocity tracker owns a gesture's pointer samples and reports
+  velocity, and its one release filter is the only lift velocity a Core
+  component reads (`spec:AST-100`). The filter is iOS's measured blend: a
+  pan's velocity is 0.2 times the newest interval's velocity plus 0.8 times
+  the previous interval's, updated on each moved sample, and a scrolling
+  surface's release is 0.25 times the newest pan value plus 0.75 times the
+  previous one; a contact
+  still for longer than the stillness interval before lifting reads 0. It is not exported. No Core component keeps its own sample
+  buffer, velocity math, or alternative release filter; a component's flick
+  threshold compares the tracker's release velocity. Lab cannot import the
+  tracker; a Lab gesture keeps one local tracker with the same blend and
+  stillness interval, so it reports the same velocity for the same motion.
 
 ## Allowed variation
 
@@ -209,28 +223,32 @@ is asked to carry a new decision.
   behavior, essential-action availability, accepted intent, supersession, pending
   lifetimes, and focus-paint ownership.
 - `architecture:react-component-runtime` owns shared lifecycle and resource
-  mechanisms. This record owns only the cross-cutting modality-path and
-  no-stale-interaction-outcome requirements.
+  mechanisms. This record owns only the cross-cutting modality-path,
+  no-stale-interaction-outcome, and gesture-velocity-source requirements.
+- The Core velocity tracker and its release filter (INV10) — the one source of
+  gesture velocity for Core components; not exported.
 
 ## Deciding specs
 
-No separate specification changes this record. The last-input rule was approved as
+`spec:AST-100/DEC-1` decides one release velocity per kind of surface (INV10).
+Otherwise no separate specification changes this record. The last-input rule was approved as
 a system architecture decision by `cixzhang` on 2026-08-30. Essential-action
 reachability, newer-intent precedence, and the evidence/scope guard were approved by
 `cixzhang` on 2026-09-10.
 
 ## Verification
 
-| Invariant  | Evidence                                                                                                                     | Failure signal                                                                                                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                  | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                      |
-| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases                                                  | No indicator, two indicators, or replacement content can opt out                                                                                                             |
-| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable                                                               | Hover-only behavior, sticky touch hover, or unreachable action                                                                                                               |
-| INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                  | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                        |
-| INV6       | Public API review and representative source inspection                                                                       | A component adds caller-controlled modality without a separate API decision                                                                                                  |
-| INV7       | Rendered-browser affected-state checks across geometry, clipping, scrolling, hit testing, built-in and custom-renderer paths | At an offered interaction point one modality loses every essential path, or evidence substitutes class equality for reachability/perceptibility                              |
-| INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                 | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                     |
-| INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory            | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority |
+| Invariant  | Evidence                                                                                                                                                      | Failure signal                                                                                                                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                   | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                           |
+| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases                                                                                   | No indicator, two indicators, or replacement content can opt out                                                                                                                                                  |
+| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable                                                                                                | Hover-only behavior, sticky touch hover, or unreachable action                                                                                                                                                    |
+| INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                   | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                             |
+| INV6       | Public API review and representative source inspection                                                                                                        | A component adds caller-controlled modality without a separate API decision                                                                                                                                       |
+| INV7       | Rendered-browser affected-state checks across geometry, clipping, scrolling, hit testing, built-in and custom-renderer paths                                  | At an offered interaction point one modality loses every essential path, or evidence substitutes class equality for reachability/perceptibility                                                                   |
+| INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                                                  | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                                                          |
+| INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory                                             | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority                                      |
+| INV10      | Source boundary check over Core, a Lab-to-Core comparison on one recorded stream, and release-filter unit tests over recorded iOS pan and scroll-view streams | A Core component with its own sample buffer, velocity math, or release filter; a Lab tracker reporting a different velocity for the same stream; an export of the tracker; a non-zero release after a still pause |
 
 Real-browser evidence is required when the behavior depends on
 `:focus-visible`, pointer capability, touch or pen synthesis, rendered focus
