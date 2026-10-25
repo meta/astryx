@@ -15,7 +15,7 @@
  *   pnpm storybook:build
  *   pnpm exec playwright install chromium webkit
  *   pnpm test:interaction --project chromium
- *   pnpm test:interaction BottomSheetDetent.interaction.browser.spec.ts
+ *   pnpm test:interaction harness.interaction.browser.spec.ts
  *
  * A spec that needs Chromium-only evidence (CDP tracing, scripted touch
  * timestamps) skips itself in WebKit with the reason; see the harness README.

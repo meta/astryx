@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/tree-view|internal/a11y-spec/src/harness|packages/core/src/TreeList/|packages/core/src/hooks/useTreeFocus|apps/storybook/stories/TreeListTreeViewA11y)
 
 /**
  * @file TreeList.a11y.chromium.spec.ts

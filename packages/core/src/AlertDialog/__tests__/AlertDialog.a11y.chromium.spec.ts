@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/alert-dialog|internal/a11y-spec/src/harness|packages/core/src/AlertDialog/|packages/core/src/Dialog/|apps/storybook/stories/AlertDialogA11y)
 
 /**
  * @file AlertDialog.a11y.chromium.spec.ts
