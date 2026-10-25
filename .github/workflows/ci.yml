@@ -889,9 +889,10 @@ jobs:
           ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES: '1'
         run: node internal/shadcn-registry/verify-full-catalog.mjs
 
-  # Historical required check name. The Vitest lanes, Build test owner, and
-  # public registry contract always report or explicitly skip, so this join
-  # projects their combined result without creating another surface lane.
+  # Historical required check name. The Vitest lanes, Build test owner,
+  # public registry contract, native Swift and interaction proofs always report
+  # or explicitly skip, so this join projects their combined result without
+  # creating another surface lane.
   test:
     needs:
       [
@@ -901,6 +902,7 @@ jobs:
         test-build,
         registry-contract,
         test-native-swift,
+        pr-interaction,
       ]
     if: ${{ github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.check-scope.outputs.spec_only != 'true' }}
     runs-on: ubuntu-slim
@@ -920,6 +922,7 @@ jobs:
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
           REGISTRY_CONTRACT_RESULT: ${{ needs.registry-contract.result }}
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
+          PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build storybook + typecheck + analyze components (parallel with test and
@@ -1698,6 +1701,163 @@ jobs:
           retention-days: 30
           delete-merged: true
 
+  # Touch interaction and animation proofs: the harness in
+  # internal/interaction-harness and every *.interaction.browser.spec.ts.
+  # Real touch input, composited frames, rendering traces and presented
+  # animation values only exist in a real engine, and the specs read stories
+  # from this PR's own Storybook build. The harness's self-test runs with them,
+  # so a change to an instrument is proven by its own checks before a component
+  # spec relies on it. Chromium only on these runners; see the harness README
+  # for running WebKit.
+  #
+  # The proofs are coverage inside the shared surface (AST-030 FR11), so `test`
+  # joins pr-interaction. A Linux job first decides whether the change touches
+  # the harness, a component, Storybook, or the proofs' own setup; only then
+  # does pr-interaction take a 4-core runner, and otherwise it passes on Linux
+  # without work. Like pr-a11y, the proofs run on pull requests; a merge group
+  # passes without them.
+  interaction-scope:
+    needs: [check-scope]
+    if: ${{ github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.check-scope.outputs.spec_only != 'true' }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Require successful scope classification
+        if: needs.check-scope.result != 'success'
+        run: |
+          echo "Change scope could not be classified; refusing to skip required work."
+          exit 1
+
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request' && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+
+      # The helper comes from the base, since an older head lacks it. Exit 1
+      # means out of scope; 0 in scope; 2 unknown, so the proofs run.
+      # pr-interaction runs the proofs on the PR head. A head cut before they
+      # existed has no playwright.interaction.config.ts and passes with a
+      # notice; a PR that deletes the config (its diff changes it) still runs
+      # them, and fails. Anything undecided runs them.
+      - name: Decide whether the interaction proofs apply
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DOCSITE_ONLY: ${{ needs.check-scope.outputs.docsite_only }}
+          TOOLING_ONLY: ${{ needs.check-scope.outputs.tooling_only }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$DOCSITE_ONLY" = true ] || [ "$TOOLING_ONLY" = true ]; then
+            echo 'Specialized lane; no interaction proofs.'
+            echo 'applies=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo 'Not a pull request; the proofs ran on the pull request itself.'
+            echo 'applies=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          scope=2
+          helper="$(mktemp)"
+          if [ -n "$BASE_SHA" ] \
+            && git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA" \
+            && git show "$BASE_SHA:.github/scripts/pr-scope-touches.sh" > "$helper"; then
+            scope=0
+            bash "$helper" "$BASE_SHA" '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)' || scope=$?
+          fi
+          if [ "$scope" = 1 ]; then
+            echo 'No harness, component, Storybook or proof-setup change; skipping the interaction proofs.'
+            echo 'applies=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$scope" = 0 ] && [ -n "$HEAD_SHA" ] \
+            && git fetch --quiet --no-tags --depth=1 origin "$HEAD_SHA" \
+            && ! git cat-file -e "$HEAD_SHA:playwright.interaction.config.ts" 2>/dev/null; then
+            touches=0
+            bash "$helper" "$BASE_SHA" '^playwright\.interaction\.config\.ts$' || touches=$?
+            if [ "$touches" = 1 ]; then
+              echo "::notice title=Interaction proofs predate this branch::This pull request's head has no playwright.interaction.config.ts; merge main to run the interaction proofs."
+              echo 'applies=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'applies=true' >> "$GITHUB_OUTPUT"
+
+  pr-interaction:
+    needs: [check-scope, interaction-scope, build-storybook]
+    if: ${{ github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.check-scope.outputs.spec_only != 'true' }}
+    # Frame evidence measures timing: four cores, one Playwright worker.
+    runs-on: ${{ needs.interaction-scope.outputs.applies == 'true' && '4-core-ubuntu' || 'ubuntu-slim' }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Require a decided interaction scope
+        if: needs.interaction-scope.result != 'success'
+        run: |
+          echo "Interaction scope could not be decided; refusing to skip required work."
+          exit 1
+
+      - name: Require this pull request's Storybook build
+        if: needs.interaction-scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The proofs read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Skip the proofs outside their scope
+        if: needs.interaction-scope.outputs.applies != 'true'
+        run: echo "No interaction proofs for this change."
+
+      - name: Checkout
+        if: needs.interaction-scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify evidence checkout
+        if: needs.interaction-scope.outputs.applies == 'true'
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        if: needs.interaction-scope.outputs.applies == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: needs.interaction-scope.outputs.applies == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: needs.interaction-scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      - name: Run interaction proofs
+        if: needs.interaction-scope.outputs.applies == 'true'
+        run: |
+          pnpm exec playwright test \
+            --config playwright.interaction.config.ts \
+            --project chromium \
+            --output interaction-proof-output
+
+      # Storyboards (PNG contact sheets) and curve traces, for review.
+      - name: Upload interaction evidence
+        if: always() && needs.interaction-scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-evidence
+          path: test-results/interaction-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
@@ -2393,6 +2553,8 @@ jobs:
         build-sandbox,
         build,
         pr-a11y,
+        interaction-scope,
+        pr-interaction,
         test-build,
         fixture-contrast,
         visual-scout,
