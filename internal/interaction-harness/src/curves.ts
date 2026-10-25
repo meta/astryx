@@ -6,8 +6,8 @@
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
  * @output `holdAnimations` (pause every running animation and describe it),
- *   `seekAnimations` (move them to t ms, each keeping its offset from the
- *   earliest), `sampleCurve` (the presented
+ *   `seekAnimations` (move them to t ms from the held origin, each keeping
+ *   its offset), `sampleCurve` (the presented
  *   transform/opacity at each t, with the individual `translate`, `rotate` and
  *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
  *   picks one channel out of the samples for ./math's `compareCurve`, and the
@@ -425,7 +425,7 @@ export interface CurveSample {
 
 /**
  * The presented transform and opacity of `locator` at each time (ms from the
- * held animations' start). Hold the animations first. An animation of the
+ * held origin, as for `seekAnimations`). Hold the animations first. An animation of the
  * individual `translate`, `rotate` or `scale` properties is included: they
  * are composed with `transform` into one matrix.
  */
