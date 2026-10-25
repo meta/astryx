@@ -74,21 +74,27 @@ describe('PanGestureRecognizer', () => {
     expect(releaseVelocity.y).toBeCloseTo(0, 5);
   });
 
-  it('keeps the last moving velocity through a rest before the lift, as UIKit does', () => {
-    const h = createHarness();
-    const pan = new PanGestureRecognizer({name: 'pan'});
-    let releaseVelocity = {x: -1, y: -1};
-    pan.addListener(r => {
-      if (r.state === 'ended') {
-        releaseVelocity = r.velocity();
-      }
-    });
-    const finger = h.finger(1).down(0, 0, 0, {recognizers: [pan]});
-    finger.drag(200, 0, 100, 10);
-    // A still finger sends no events; the lift updates nothing.
-    finger.up(200);
-    expect(releaseVelocity.x).toBeCloseTo(2000, 6);
-    expect(releaseVelocity.y).toBe(0);
+  it('releases at 0 after a rest longer than the stillness interval (AST-100 FR2)', () => {
+    const stillness = UIKIT_GESTURES.velocity.stillness.value;
+    const release = (liftAt: number) => {
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({name: 'pan'});
+      let releaseVelocity = {x: -1, y: -1};
+      pan.addListener(r => {
+        if (r.state === 'ended') {
+          releaseVelocity = r.velocity();
+        }
+      });
+      const finger = h.finger(1).down(0, 0, 0, {recognizers: [pan]});
+      finger.drag(200, 0, 100, 10);
+      // A still finger sends no events until it lifts.
+      finger.up(liftAt);
+      return releaseVelocity;
+    };
+    // Lifted within the interval: the moving value, as UIKit reports it.
+    expect(release(100 + stillness).x).toBeCloseTo(2000, 6);
+    // Rested longer: no flick, where UIKit would still fling.
+    expect(release(100 + stillness + 60)).toEqual({x: 0, y: 0});
   });
 
   it('fails a drag against its direction', () => {

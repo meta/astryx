@@ -4,15 +4,13 @@
  * @file VelocityTracker.test.ts
  * @input Synthetic finger traces with known velocities
  * @output UIKit's filter against the velocities UIKit reported on recorded
- *   touch streams; each strategy against the true velocity: steady motion, a
- *   hard acceleration, a pause before the lift, noise, sparse samples
+ *   touch streams; steady motion, a hard acceleration, the stillness reset
+ *   before a release (spec:AST-100 FR2), sparse samples
  * @position Unit tests of packages/core/src/gestures/VelocityTracker.ts
  */
 
 import {describe, expect, it} from 'vitest';
-import {VelocityTracker, type VelocityStrategy} from '../VelocityTracker';
-
-const STRATEGIES: VelocityStrategy[] = ['uikit', 'lsq2', 'iosFling', 'window'];
+import {VelocityTracker} from '../VelocityTracker';
 
 /** Feed `position(t)` sampled every `step` ms over [0, end]. */
 function trace(
@@ -81,7 +79,7 @@ describe('VelocityTracker', () => {
   it.each(Object.entries(UIKIT_STREAMS))(
     'uikit reproduces every velocity UIKit reported on the %s stream',
     (_, {samples, velocities}) => {
-      const tracker = new VelocityTracker({strategy: 'uikit'});
+      const tracker = new VelocityTracker();
       const errors: number[] = [];
       samples.forEach(([time, y], index) => {
         tracker.add(0, y, time);
@@ -96,63 +94,49 @@ describe('VelocityTracker', () => {
     },
   );
 
-  it('uikit reports the last moving value after a rest, as UIKit does', () => {
+  it('keeps the last moving value through a rest while the finger is down', () => {
     const tracker = new VelocityTracker();
     trace(tracker, t => t * 2, 160);
     // No event arrives while the finger rests: nothing changes the estimate.
     expect(tracker.velocity().x).toBeCloseTo(2000, 6);
   });
 
-  it.each(STRATEGIES)('%s reads a steady 1000 px/s exactly', strategy => {
-    const tracker = new VelocityTracker({strategy});
+  it('releases at 0 after the finger rested past the stillness interval (AST-100 FR2)', () => {
+    const tracker = new VelocityTracker({stillness: 40});
+    trace(tracker, t => t * 2, 160);
+    // Lifted right after the last move: the moving value.
+    expect(tracker.velocity(168).x).toBeCloseTo(2000, 6);
+    // At the interval itself: still the moving value.
+    expect(tracker.velocity(200).x).toBeCloseTo(2000, 6);
+    // Rested longer than the interval: no flick.
+    expect(tracker.velocity(201)).toEqual({x: 0, y: 0});
+  });
+
+  it('counts a sample at the same position as resting, not moving', () => {
+    const tracker = new VelocityTracker({stillness: 40});
+    trace(tracker, t => t * 2, 160);
+    // Events that report no movement (a still finger) do not restart it.
+    tracker.add(320, 0, 180);
+    tracker.add(320, 0, 220);
+    expect(tracker.velocity(230)).toEqual({x: 0, y: 0});
+    // A real move does.
+    tracker.add(330, 0, 228);
+    expect(tracker.velocity(236).x).not.toBe(0);
+  });
+
+  it('reads a steady 1000 px/s exactly', () => {
+    const tracker = new VelocityTracker();
     trace(tracker, t => t, 200);
     expect(tracker.velocity().x).toBeCloseTo(1000, 6);
   });
 
-  it('lsq2 follows a hard acceleration where the averages lag', () => {
-    // x = 0.02 t^2 (px, ms): the true velocity at t = 200 is 0.04 * 200 =
-    // 8 px/ms = 8000 px/s.
-    const position = (t: number) => 0.02 * t * t;
-    const lsq = new VelocityTracker({strategy: 'lsq2'});
-    const window = new VelocityTracker({strategy: 'window'});
-    const ios = new VelocityTracker({strategy: 'iosFling'});
-    const uikit = new VelocityTracker({strategy: 'uikit'});
-    trace(lsq, position, 200);
-    trace(window, position, 200);
-    trace(ios, position, 200);
-    trace(uikit, position, 200);
-    expect(lsq.velocity().x).toBeCloseTo(8000, 3);
-    // The two-point average over the window (samples 104..200 ms) reads
-    // the middle of it: 0.02 * (104 + 200) px/ms.
-    expect(window.velocity().x).toBeCloseTo(6080, 3);
-    // The iOS weighting leans on older pairs.
-    expect(ios.velocity().x).toBeLessThan(lsq.velocity().x);
-    // UIKit's filter is 0.8 on the previous interval (its middle, 188 ms:
-    // 7520 px/s) and 0.2 on the newest (196 ms: 7840 px/s).
-    expect(uikit.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
-  });
-
-  it('lsq2 ignores motion before a rest inside the horizon', () => {
-    const tracker = new VelocityTracker({strategy: 'lsq2'});
-    tracker.add(0, 0, 0);
-    tracker.add(50, 0, 16);
-    // A 50 ms rest, then slow motion: only the slow motion counts.
-    tracker.add(50, 0, 66);
-    tracker.add(51, 0, 74);
-    tracker.add(52, 0, 82);
-    expect(tracker.velocity().x).toBeCloseTo(125, 3);
-  });
-
-  it('keeps lsq2 close to the truth under sample noise', () => {
-    const tracker = new VelocityTracker({strategy: 'lsq2'});
-    const noise = [
-      0.6, -0.4, 0.2, -0.7, 0.5, -0.1, 0.3, -0.5, 0.4, -0.3, 0.1, -0.6, 0.7,
-    ];
-    noise.forEach((jitter, index) => {
-      const t = index * 8;
-      tracker.add(t * 1.5 + jitter, 0, t);
-    });
-    expect(Math.abs(tracker.velocity().x - 1500)).toBeLessThan(150);
+  it('lags a hard acceleration by a frame, as UIKit does', () => {
+    // x = 0.02 t^2 (px, ms). UIKit's filter is 0.8 on the previous interval
+    // (its middle, 188 ms: 7520 px/s) and 0.2 on the newest (196 ms:
+    // 7840 px/s).
+    const tracker = new VelocityTracker();
+    trace(tracker, t => 0.02 * t * t, 200);
+    expect(tracker.velocity().x).toBeCloseTo(0.8 * 7520 + 0.2 * 7840, 3);
   });
 
   it('handles one and two samples, and repeated timestamps', () => {
