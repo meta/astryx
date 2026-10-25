@@ -1589,7 +1589,15 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
       announceSearch(t('@astryx.multiSelector.resultCount', {count}));
     },
-    [announceSearch, isLoading, selectableItems, getCreateQuery, t],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      announceSearch,
+      isLoading,
+      selectableItems,
+      getCreateQuery,
+      t,
+    ]
   );
 
   // The panel's empty message is role="presentation" — role="listbox" permits
