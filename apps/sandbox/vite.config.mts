@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import stylexResolution from '../../scripts/stylex-module-resolution.cjs';
 import {categories} from './src/app/sandboxPages';
 import {
   discoverRoutes,
@@ -188,7 +189,7 @@ export default defineConfig({
             ),
           ],
         },
-        unstable_moduleResolution: {type: 'commonJS', rootDir: appDir},
+        unstable_moduleResolution: stylexResolution.stylexModuleResolution,
       },
       stylexPrefix: 'x',
     }),

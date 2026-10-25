@@ -12,20 +12,23 @@ rests on evidence.
 
 ## What is here today
 
-| Part           | Path                              | What it does                                                                                                                                                                                                                                 |
-| -------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Contracts      | `src/contract/`                   | Reads a core component's documentation and splits its props into a portable **core contract** and a **web-only** part, with a reason for each web-only prop. Checks prop names against Swift and Kotlin keywords and platform toolkit names. |
-| Platform types | `@astryxdesign/native/components` | TypeScript props per platform, chosen by type-resolution condition: `ios`, `android`, `macos`, `windows`, or `shared` for the core contract only.                                                                                            |
-| Swift binding  | `apple/`                          | A Swift package with props generated from the same contracts. iOS and macOS props sit behind `#if os(...)`.                                                                                                                                  |
-| Native theme   | `defineNativeTheme`               | Durable theme intent (`material: 'opaque' \| 'translucent'`) plus platform entries scoped by OS version, such as Liquid Glass from iOS 26. Never sets tokens.                                                                                |
-| Icons          | `NATIVE_ICON_DEFAULTS`            | Astryx's built-in icon names mapped to SF Symbols on Apple platforms and Material Symbols on Android.                                                                                                                                        |
-| Wire           | `AstryxNode`, `AstryxAction`      | Each component as JSON a TypeScript core sends a native host (arm C), and the action a host sends back when a view calls a callback. Swift decodes `<Name>Node` and turns it into `<Name>Props` with `viewProps(send:)`.                     |
-| Logic core     | `@astryxdesign/native/logic`      | `createLogicCore` holds a screen's state, builds its node tree, and reduces actions; `connectBridge` carries it to a native host as JSON. ECMAScript built-ins only, so it runs in Hermes. Shaped after EJ Campbell's astryx-swift spike.    |
-| Logic host     | `AstryxLogicHost` (Swift)         | Runs a logic core bundle in JavaScriptCore, decodes each tree into `AstryxNode`, and sends views' actions back. A Hermes host speaks the same bridge.                                                                                        |
+| Part           | Path                              | What it does                                                                                                                                                                                                                                                                                                 |
+| -------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Contracts      | `src/contract/`                   | Reads a core component's documentation and splits its props into a portable **core contract** and a **web-only** part, with a reason for each web-only prop. Checks prop names against Swift and Kotlin keywords and platform toolkit names.                                                                 |
+| Platform types | `@astryxdesign/native/components` | TypeScript props per platform, chosen by type-resolution condition: `ios`, `android`, `macos`, `windows`, or `shared` for the core contract only.                                                                                                                                                            |
+| Swift binding  | `apple/`                          | A Swift package with two products: `AstryxNative`, props generated from the same contracts (iOS and macOS props sit behind `#if os(...)`) plus the logic host, and `Astryx`, SwiftUI views drawn with core's tokens. Clone-only page templates sit in `apple/Templates/`. See [its README](apple/README.md). |
+| Native theme   | `defineNativeTheme`               | Durable theme intent (`material: 'opaque' \| 'translucent'`) plus platform entries scoped by OS version, such as Liquid Glass from iOS 26. Never sets tokens.                                                                                                                                                |
+| Icons          | `NATIVE_ICON_DEFAULTS`            | Astryx's built-in icon names mapped to SF Symbols on Apple platforms and Material Symbols on Android.                                                                                                                                                                                                        |
+| Wire           | `AstryxNode`, `AstryxAction`      | Each component as JSON a TypeScript core sends a native host (arm C), and the action a host sends back when a view calls a callback. Swift decodes `<Name>Node` and turns it into `<Name>Props` with `viewProps(send:)`.                                                                                     |
+| Logic core     | `@astryxdesign/native/logic`      | `createLogicCore` holds a screen's state, builds its node tree, and reduces actions; `connectBridge` carries it to a native host as JSON. ECMAScript built-ins only, so it runs in Hermes. Shaped after EJ Campbell's astryx-swift spike.                                                                    |
+| Logic host     | `AstryxLogicHost` (Swift)         | Runs a logic core bundle in JavaScriptCore, decodes each tree into `AstryxNode`, and sends views' actions back. A Hermes host speaks the same bridge.                                                                                                                                                        |
 
 Contracts cover Badge, Button, Card, Divider, Heading, HStack, ProgressBar,
-Selector, Switch, Text, TextInput, and VStack. React Native and Android
-bindings are not built yet; see [the experiment matrix](#experiment-matrix).
+Selector, Switch, Text, TextInput, and VStack. The `Astryx` Swift product draws
+Text, Heading, Button, TextInput, Card, and Banner, and `apple/Templates/` the
+`login` template, in SwiftUI.
+React Native and Android bindings are not built yet; see
+[the experiment matrix](#experiment-matrix).
 
 ```ts
 // tsconfig.json for an iOS app: "customConditions": ["ios"]
@@ -129,6 +132,7 @@ pnpm -F @astryxdesign/native typecheck        # source and tests
 pnpm -F @astryxdesign/native build            # dist/, including platform types
 pnpm -F @astryxdesign/native typecheck:types  # every platform's types, after build
 pnpm -F @astryxdesign/native generate:apple   # regenerate apple/Sources/.../Generated
+pnpm -F @astryxdesign/native generate:swift-ios # regenerate the Astryx product's typed tokens, every published theme, and strings
 pnpm vitest run --project node packages/native
 ```
 
@@ -145,8 +149,23 @@ files are ignored on `main`.
 Boundaries, checked by `pnpm check:package-boundaries`:
 
 - `@astryxdesign/core` never imports this package.
-- This package's source never imports core. It reads core's documentation
-  files as data at build time.
+- No file in this package, in any folder, imports core, apart from the
+  build-time reads AST-082 FR16 lists until core's portable entry ships: the
+  theme generator in `scripts/` may import `@astryxdesign/core/theme` and
+  `@astryxdesign/core/theme/tokens`; `scripts/swift-ios-strings.mjs` may
+  read core's locale catalogs (`@astryxdesign/core/locales/*.json`); and
+  `scripts/core-docs.mjs` reads core's component documentation and built-in
+  icon names as data.
+- The check reads source text in every folder except `node_modules`, `dist`,
+  `.build`, and `.swiftpm`. It flags any other module specifier that names
+  core (`import`, `require`, `require.resolve`, `import.meta.resolve`, or a
+  relative path into `packages/core`). It also flags a path to core's package,
+  written as adjacent string segments (`'@astryxdesign', 'core'`,
+  `'node_modules', '@astryxdesign/core'`, `'packages', 'core'`) or inside one
+  string (`node_modules/@astryxdesign/core`, `packages/core`). In
+  `scripts/core-docs.mjs` it allows exactly one such path, the `CORE_ROOT`
+  definition, and only the listed reads under `CORE_ROOT`. It does not follow
+  paths computed in other ways.
 
 ## Experiment matrix
 

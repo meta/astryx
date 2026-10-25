@@ -28,7 +28,7 @@ function Harness(props: {
   );
 }
 
-const trigger = () => screen.getByRole('button', {name: 'View options'});
+const trigger = () => screen.getByRole('combobox', {name: 'View options'});
 
 describe('ComplexSelector disabled (spec:AST-085)', () => {
   it('FR1: renders no native disabled and keeps its tab stop', async () => {

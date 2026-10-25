@@ -98,6 +98,7 @@
     "postinstall": "node scripts/postinstall.mjs",
     "test": "cd ../.. && vitest run packages/cli",
     "test:watch": "cd ../.. && vitest packages/cli",
+    "typecheck": "pnpm typecheck:template-docs && pnpm typecheck:strict",
     "typecheck:template-docs": "tsc --project tsconfig.template-docs.json",
     "typecheck:json-api": "tsc --project tsconfig.json-api.json",
     "typecheck:strict": "tsc --project tsconfig.strict.json",

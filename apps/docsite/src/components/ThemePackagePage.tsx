@@ -28,7 +28,6 @@ import {themeObjects} from '../generated/themeRegistry';
 import {templates} from '../generated/templateRegistry';
 import {trackCopy, trackOpenPlayground, trackToggle} from '../lib/analytics';
 import {useThemeMode} from '../app/providers';
-import commandBlockStyles from './ThemeCommandBlock.module.css';
 import {ThemeHeading} from './ThemeHeading';
 import {
   ThemeExplorerActions,
@@ -134,14 +133,12 @@ const styles = stylex.create({
     width: '100%',
   },
   // The command snippet in the popover — CodeBlock with container="section"
-  // (no border/radius of its own), so paint the muted inset here. The extra
-  // inline-end padding keeps wrapping text clear of the absolutely-positioned
-  // copy button (see ThemeCommandBlock.module.css).
+  // (no border/radius of its own), so paint the muted inset here. CodeBlock
+  // keeps its headerless copy button in a column beside the code.
   commandBlock: {
     width: '100%',
     borderRadius: 'var(--radius-element)',
     backgroundColor: 'var(--color-background-muted)',
-    paddingInlineEnd: 'var(--spacing-5)',
   },
   // Themed theme-row card. The SelectableCard wrapper itself
   // stays variant="transparent" + padding=0 so it doesn't paint a
@@ -394,7 +391,6 @@ function ThemeActions({selectedPkgName, customizeHref}: ThemeActionsProps) {
               isWrapped
               hasLanguageLabel={false}
               xstyle={styles.commandBlock}
-              className={commandBlockStyles.commandBlock}
               onCopy={() => {
                 trackCopy({
                   page: 'themes',

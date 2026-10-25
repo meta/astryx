@@ -755,6 +755,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
       'Run modal close visibility guard',
       'Run theme var reachability guard',
       'Run story play guard',
+      'Run browser accessibility specs',
     ]) {
       expect(
         runs(step('pr-a11y', name), {event: 'pull_request', operation: ''}),

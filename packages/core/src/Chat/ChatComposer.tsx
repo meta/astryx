@@ -26,7 +26,6 @@
 import React, {
   useState,
   useCallback,
-  useEffect,
   useRef,
   useMemo,
   type ReactNode,
@@ -54,7 +53,7 @@ import type {ChatComposerInputControl} from './ChatContext';
 import {ChatSendButton} from './ChatSendButton';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
   getInteractionModality,
@@ -458,30 +457,25 @@ export function ChatComposer(props: ChatComposerProps) {
   );
 
   // The status bar mounts together with its message, and a live region born
-  // holding its text is not reliably announced, so the message goes through
-  // the shared channel instead: errors assertively, warnings politely
-  // (spec:AST-086 FR2, FR5). The ref keeps a rerender or a StrictMode effect
-  // replay from repeating it; clearing the status re-arms it, so the same
-  // message shown again is a new occasion (FR6).
-  const announce = useAnnounce();
-  const statusType = status?.type;
-  const statusMessage = status?.message;
-  const announcedStatusRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!statusMessage) {
-      announcedStatusRef.current = null;
-      return;
-    }
-    const occasion = `${statusType}\u0000${statusMessage}`;
-    if (announcedStatusRef.current === occasion) {
-      return;
-    }
-    announcedStatusRef.current = occasion;
-    announce(statusMessage, statusType === 'error' ? 'assertive' : 'polite');
-  }, [announce, statusType, statusMessage]);
+  // holding its text is not reliably announced, so the shared own-content
+  // module announces what the bar renders: errors assertively, warnings
+  // politely, once per occasion, silent for a status already shown when the
+  // page loads (spec:AST-086 FR2, FR5, FR6, FR11; react-component-runtime
+  // INV10). Changing the status type is a new occasion; clearing it re-arms.
+  const statusRef = useRef<HTMLDivElement>(null);
+  useAnnounceRenderedText(
+    statusRef,
+    Boolean(status?.message),
+    status?.type ?? '',
+    {
+      skipFirstRender: true,
+      politeness: status?.type === 'error' ? 'assertive' : 'polite',
+    },
+  );
 
   const statusEl = status ? (
     <div
+      ref={statusRef}
       {...stylex.props(
         styles.statusBar,
         statusPosition === 'top' ? styles.statusTop : styles.statusBottom,
