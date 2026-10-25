@@ -411,6 +411,9 @@ export class GestureHost {
       if (registration.consumer === consumer) {
         registration.consumer = null;
       }
+      // A keepsTouch consumer's blocking touchmove goes with it, even while
+      // the element keeps its recognizers.
+      this.refresh(element, registration);
       this.cleanup(element, registration);
     };
   }

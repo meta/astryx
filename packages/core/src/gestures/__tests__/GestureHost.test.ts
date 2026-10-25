@@ -1419,6 +1419,48 @@ describe('a delivered press keeps its touch', () => {
   });
 });
 
+describe('detaching a keepsTouch press tracker', () => {
+  it('removes its blocking touchmove listener while the element keeps its recognizers', () => {
+    const {row} = mount('<div id="row"></div>');
+    const active = new Set<EventListenerOrEventListenerObject>();
+    const add = row.addEventListener.bind(row);
+    const remove = row.removeEventListener.bind(row);
+    vi.spyOn(row, 'addEventListener').mockImplementation(
+      (type, listener, options) => {
+        if (
+          type === 'touchmove' &&
+          listener != null &&
+          typeof options === 'object' &&
+          options.passive === false
+        ) {
+          active.add(listener);
+        }
+        add(type, listener, options);
+      },
+    );
+    vi.spyOn(row, 'removeEventListener').mockImplementation(
+      (type, listener, options) => {
+        if (type === 'touchmove' && listener != null) {
+          active.delete(listener);
+        }
+        remove(type, listener, options);
+      },
+    );
+    // A tap decides at the lift: on its own it needs no blocking listener.
+    detachers.push(host.attach(row, new TapGestureRecognizer({name: 'tap'})));
+    expect(active.size).toBe(0);
+    class Keeper extends RecordingConsumer {
+      keepsTouch(): boolean {
+        return true;
+      }
+    }
+    const detach = host.attachConsumer(row, new Keeper());
+    expect(active.size).toBe(1);
+    detach();
+    expect(active.size).toBe(0);
+  });
+});
+
 describe('GestureHost.fingersDown', () => {
   it('counts every finger on the screen, one on a plain element too', () => {
     const {handle, row} = mount(
