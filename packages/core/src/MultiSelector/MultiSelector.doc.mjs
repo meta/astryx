@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file MultiSelector.doc.mjs
+ * @input Describes the public MultiSelector props and anatomy
+ * @output Consumer documentation, including disabled selection boundaries
+ * @position Component documentation consumed by the CLI and docsite
+ */
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
 const anatomy = [
   {
@@ -285,7 +292,8 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disables the selector.',
+          description:
+            'Disables selection while keeping the trigger focusable. An already-open panel cannot change values through options, select-all, or creation; neither onChange nor changeAction runs. Caller-rendered action controls keep their own disabled state.',
         },
         {
           name: 'isReadOnly',
@@ -546,7 +554,8 @@ export const docsZh = {
         emptySearchText: '搜索查询未匹配到任何选项时，下拉面板中显示的内容。',
         hasCreate:
           '配合 hasSearch：当输入的文本与任何选项标签都不匹配时，在列表首行提供“创建 "<query>"”行；选中后通过 onChange 以 {type: "create", query} 描述符报告，调用方需在同一次更新中添加该选项。',
-        isDisabled: '禁用选择器。',
+        isDisabled:
+          '禁用选择但保留触发器焦点；已打开面板的选项、全选和创建操作不会调用 onChange 或 changeAction。调用方渲染的操作控件自行管理禁用状态。',
         isReadOnly:
           '将选择器设为只读：保留当前值、焦点顺序和表单提交，但移除选择面板、清除操作和展开指示器。与 isDisabled 不同，只读控件不会变暗；两者同时设置时 isDisabled 优先。',
         htmlName:
@@ -706,7 +715,8 @@ export const docsDense = {
         emptySearchText: 'panel content when the query matches nothing',
         hasCreate:
           'with hasSearch: first row is Create "<query>" when no option label matches; reported through onChange with a {type: "create", query} descriptor; caller adds the option',
-        isDisabled: 'disables selector',
+        isDisabled:
+          'blocks selection + creation callbacks/Actions even in an open panel; trigger stays focusable; caller actions own their disabled state',
         isReadOnly:
           'read-only: preserves values, focus + form submission; removes menu, clear + disclosure',
         htmlName: 'HTML name attr; one hidden input per selected value.',

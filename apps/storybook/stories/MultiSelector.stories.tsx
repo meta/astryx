@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file MultiSelector.stories.tsx
+ * @input Uses Storybook and the public MultiSelector API
+ * @output Interactive examples, including disabling an already-open selector
+ * @position Core component stories and browser interaction examples
+ */
+
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {useState} from 'react';
@@ -333,8 +340,7 @@ export const DisabledItems: Story = {
 // Disabled with an explanation tooltip. Hover or keyboard-focus the trigger to
 // see why it's disabled — the reason is announced to assistive tech via
 // aria-describedby, and the trigger stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled MultiSelector in
-// Tooltip: disabled controls swallow the pointer events a Tooltip wrapper needs.
+// blocked). Use disabledMessage so the reason is attached to the trigger itself.
 export const DisabledWithMessage: Story = {
   render: () => {
     const [value, setValue] = useState<string[]>([]);
@@ -351,6 +357,44 @@ export const DisabledWithMessage: Story = {
     );
   },
   decorators: [Story => <Story />],
+};
+
+// The parent changes policy after opening, without removing the panel or its
+// focus owner. The existing options cannot commit until selection is enabled.
+export const DisabledWhileOpen: Story = {
+  render: () => {
+    const [value, setValue] = useState<string[]>(['Apple']);
+    const [isDisabled, setIsDisabled] = useState(false);
+    return (
+      <>
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={value}
+          onChange={setValue}
+          isDisabled={isDisabled}
+          onOpenChange={isOpen => {
+            if (isOpen) {
+              setIsDisabled(true);
+            }
+          }}
+          description="Opening the panel disables selection; the current value stays unchanged."
+        />
+        <output data-testid="selected-fruit">{value.join(', ')}</output>
+      </>
+    );
+  },
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const page = within(canvasElement.ownerDocument.body);
+    const trigger = canvas.getByRole('combobox', {name: 'Fruit'});
+    await userEvent.click(trigger);
+    await expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(await page.findByRole('option', {name: 'Banana'}));
+    await expect(canvas.getByTestId('selected-fruit')).toHaveTextContent(
+      /^Apple$/,
+    );
+  },
 };
 
 // Ghost variant for toolbar composition

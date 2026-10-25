@@ -5,7 +5,8 @@
 /**
  * @file MultiSelector.tsx
  * @input Uses React, StyleX, usePopover, useTooltip, CheckboxInput, Field, Badge, Icon, InputGroupContext
- * @output Exports MultiSelector with input, secondary, and ghost trigger variants
+ * @output Exports MultiSelector with input, secondary, and ghost trigger variants;
+ *   disabled value commits are blocked even while the panel remains open
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -1215,11 +1216,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useMultiCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip listeners attach to the existing trigger container.
+  // The trigger stays focusable via aria-disabled. Trigger guards and the value
+  // commit guards below block activation, including from an already-open panel.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1622,10 +1621,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     announce: announceSearch,
   });
 
-  // Handle toggle
+  // Guard every value commit: an already-open panel can still deliver pointer
+  // or create-Enter events after disablement. Keep the surface and focus owner.
   // Clear all selected values. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValues = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onChange([]);
     announceSelection([]);
     if (changeAction) {
@@ -1635,6 +1638,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     onChange,
     changeAction,
     startTransition,
@@ -1663,6 +1667,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   const handleToggle = useCallback(
     (itemValue: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(itemValue)
         ? optimisticValue.filter(v => v !== itemValue)
         : [...optimisticValue, itemValue];
@@ -1677,6 +1684,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1711,6 +1719,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       : false;
 
   const handleSelectAll = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     let newValue: string[];
     if (allEnabledSelected) {
       // Deselect all enabled items, keep disabled items that are selected
@@ -1736,6 +1747,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     allEnabledSelected,
     enabledItems,
     optimisticValue,
@@ -1752,6 +1764,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the option the caller adds is visible.
   const commitCreate = useCallback(
     (query: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(query)
         ? optimisticValue
         : [...optimisticValue, query];
@@ -1766,6 +1781,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
