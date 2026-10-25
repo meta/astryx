@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file CodeBlockCopyClearance.a11y.chromium.spec.ts

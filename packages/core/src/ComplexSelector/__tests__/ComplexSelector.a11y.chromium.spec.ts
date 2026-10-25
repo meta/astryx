@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ComplexSelector
 
 /**
  * @file ComplexSelector.a11y.chromium.spec.ts
