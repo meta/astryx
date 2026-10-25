@@ -660,10 +660,13 @@ describe('ListInput', () => {
     expect(animate).not.toHaveBeenCalled();
     expect(screen.queryByDisplayValue('Ada')).not.toBeInTheDocument();
     expect(screen.getByRole('button', {name: 'Add guest'})).toHaveFocus();
+    // The removal and the empty state that appears join in one frame (FR9).
     await waitFor(() => {
       expect(
         Array.from(document.querySelectorAll('[aria-live="polite"]')).some(
-          node => node.textContent === 'Removed guest 1.',
+          node =>
+            node.textContent ===
+            'Removed guest 1. No guests yet Add a guest to get started.',
         ),
       ).toBe(true);
     });

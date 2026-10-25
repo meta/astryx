@@ -27,6 +27,8 @@ let package = Package(
       name: "Astryx",
       dependencies: ["AstryxNative"],
       path: "Sources/Astryx",
+      // Each component's spec lives beside its view (AST-093 FR1).
+      exclude: ["Icon/Icon.spec.md"],
       resources: [.process("Resources")]
     ),
     .testTarget(name: "AstryxNativeTests", dependencies: ["AstryxNative"], path: "Tests/AstryxNativeTests"),
