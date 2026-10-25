@@ -27,7 +27,14 @@ import {useAttachment, useIsUnmountedRef} from './useAttachment';
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
   'getBounds' | 'view'
->;
+> & {
+  /**
+   * The control reads each event's pointer itself (a stepper held with a
+   * mouse repeats as under a finger), so its tracker attaches even where the
+   * primary pointer is fine, with no warning. @default false
+   */
+  perEventPointer?: boolean;
+};
 
 /**
  * Track presses on the element behind `ref` with UIControl semantics. The
@@ -54,6 +61,7 @@ export function usePressTracker(
     cancelTravel,
     quickTapFlash,
     keepsTouch,
+    perEventPointer = false,
   } = options;
   // A profile change after mount takes effect from the next touch: the
   // tracker is rebuilt with the new values.
@@ -115,13 +123,19 @@ export function usePressTracker(
 
   // Synchronizes the document's gesture host with the element behind `ref`
   // (see useGestureRecognizer); a tracker replaced by an option change is
-  // disposed, which un-highlights a control it was holding.
+  // disposed, which un-highlights a control it was holding, and a changed
+  // perEventPointer re-attaches it.
+  const attachment = useMemo(
+    () => ({tracker, perEventPointer}),
+    [tracker, perEventPointer],
+  );
   useAttachment(
     ref,
     element => {
       const detach = getGestureHost(element.ownerDocument).attachConsumer(
         element,
-        tracker,
+        attachment.tracker,
+        {perEventPointer: attachment.perEventPointer},
       );
       return () => {
         isReleasingRef.current = true;
@@ -133,7 +147,7 @@ export function usePressTracker(
         }
       };
     },
-    tracker,
+    attachment,
   );
 
   return tracker;
