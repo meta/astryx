@@ -24,6 +24,7 @@
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
 
+import {registerMotionTable} from '../roles';
 export const navigation = {
   /**
    * The push and pop springs start moving at this many travels per second
@@ -72,5 +73,12 @@ export const navigation = {
   interactivePopFinishThreshold: 0.5,
 } as const;
 
-// Each spring, duration and curve above is a motion role a theme may retune
-// (motion/roles.ts); registerTables.ts registers them.
+/**
+ * Makes each spring, duration and curve above a motion role a theme may
+ * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * animates with this table calls it once (it is idempotent), so a page that
+ * never does ships no registry.
+ */
+export function registerNavigationTable(): void {
+  registerMotionTable('navigation', navigation);
+}
