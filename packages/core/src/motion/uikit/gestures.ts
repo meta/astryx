@@ -186,7 +186,7 @@ export const UIKIT_GESTURES = {
       value: 5,
       unit: 'px',
       source:
-        'measured: Mobile Safari 26.2, iOS 26.2 simulator, HID drags: cancelling every touchmove from 8 px keeps a scrollable page still; a one-way upward pan over a scrollable page that cancels from 4–5 px keeps the page still and its card follows the finger exactly',
+        'measured: Mobile Safari 26.2, iOS 26.2 simulator, HID drags: cancelling every touchmove from 8 px keeps a scrollable page still; a one-way upward pan over a scrollable page that cancels from 4–5 px keeps the page still and its card follows the finger exactly, Oct 24 2026',
     },
   },
   swipe: {
@@ -329,7 +329,7 @@ export const UIKIT_GESTURES = {
     currentWeight: {
       value: 0.2,
       unit: 'ratio',
-      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s; a 1000 pt/s stroke then same-point moved samples reads 1000, 800, 0 at .ended`,
+      source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s; synthetic touches, Oct 24 2026: a 1000 pt/s stroke then same-point moved samples reads 1000, 800, 0 at .ended`,
     },
     /**
      * A scroll view's release (the velocity it hands
@@ -339,7 +339,8 @@ export const UIKIT_GESTURES = {
     scrollReleaseWeight: {
       value: 0.25,
       unit: 'ratio',
-      source: `${UIKIT_LAB}: UIPickerView's scrollViewWillEndDragging velocity on four HID swipes (200 pt in 50, 100 and 200 ms; a 90 pt flick): 933.4, 2114, 1016.2 and 543.6 px/s, reproduced to 0.03%; a scroll view coasts after a silent rest of up to 1 s as after none`,
+      source:
+        'measured: UIKit lab, iOS 26.2 simulator, HID swipes on a UIPickerView recorded by Oct 24 2026: scrollViewWillEndDragging velocity 933.4, 2114, 1016.2 and 543.6 px/s on 200 pt in 50, 100 and 200 ms and a 90 pt flick, reproduced to 0.03%; a UIScrollView coasts after a silent rest of up to 1 s as after none (Oct 24 2026)',
     },
     /** The tracker keeps at most this many samples (a bound on its buffer). */
     maxSamples: {
