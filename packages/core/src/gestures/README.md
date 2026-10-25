@@ -67,8 +67,9 @@ function Sheet() {
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
 the same and returns a detach function. `getGestureHost(document).fingersDown()`
 is how many fingers are on the screen (the last touch event's `touches`,
-wherever they landed): a recognizer that claims only a lone finger checks it
-in `shouldBegin`, so two fingers stay the browser's pinch.
+wherever they landed): a recognizer that must not begin under a second
+finger checks it in `shouldBegin`, so two fingers stay the browser's pinch.
+Once a drag has claimed its finger, a second finger never breaks it.
 
 ## Recognizers
 
@@ -484,8 +485,9 @@ way:
    (`claimsTouches: false`) and `useFingerScroll`.
 5. A scroll lock holds the page with `holdPageScroll`; no `preventDefault`
    of its own.
-6. A drag limited to one finger checks `fingersDown()`; a second finger
-   already gives such a pan up.
+6. A drag limited to one finger sets `maximumNumberOfTouches: 1`. Before
+   it claims, a second finger fails it; once claimed, it keeps its finger
+   (`spec:AST-094` FR10). Delete a local pinch yield.
 7. The release hands `velocity()` (px/s, event time) to the animator.
    Delete local estimators, sample buffers and time windows; a flick, fling
    or commit threshold stays in the component, compared against it.
