@@ -1042,6 +1042,64 @@ describe('ContextMenu under a fine pointer: the touch model costs nothing', () =
   });
 });
 
+describe('ContextMenu: the primary pointer alone picks a finger’s rules (spec:AST-094 FR13, FR33)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+        'Date',
+      ],
+    });
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('opens for the same held finger at 735 ms where the primary pointer is coarse, and at 500 ms where it is fine', () => {
+    const shows = () =>
+      vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+    const renderTrigger = () => {
+      const view = render(
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+          <div>Hold me</div>
+        </ContextMenu>,
+      );
+      return {trigger: screen.getByTestId('ctx'), unmount: view.unmount};
+    };
+    // Coarse: the touch model's timeline, no menu at 500 ms.
+    stubPointer(true);
+    const coarse = renderTrigger();
+    let press = finger(coarse.trigger);
+    press.down();
+    advance(600);
+    expect(shows()).toBe(0);
+    advance(contextMenu.press.menuDisplayMs - 600);
+    expect(shows()).toBe(1);
+    press.up();
+    coarse.unmount();
+    vi.mocked(HTMLElement.prototype.showPopover).mockClear();
+    // Fine: today's long press, the same finger opens at 500 ms.
+    stubPointer(false);
+    const fine = renderTrigger();
+    press = finger(fine.trigger);
+    press.down();
+    advance(499);
+    expect(shows()).toBe(0);
+    advance(1);
+    expect(shows()).toBe(1);
+    press.up();
+  });
+});
+
 describe('ContextMenu items', () => {
   it('renders items with labels', () => {
     render(
