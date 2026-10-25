@@ -4,7 +4,8 @@
 
 /**
  * @file touchPresentation.ts
- * @input Uses the SSR-safe useMediaQuery hook and window.matchMedia
+ * @input Uses the SSR-safe useMediaQuery hook, window.matchMedia, and
+ *   TOUCH_QUERY from touchQueries.ts (which loads without React or the theme)
  * @output The one definition of when a component presents itself the touch
  *   way: TOUCH_QUERY, COMPACT_QUERY, COMPACT_TOUCH_QUERY, the iOS style gate
  *   (IOS_SUPPORTS_QUERY and its StyleX keys); the hook useTouchPresentation;
@@ -65,9 +66,11 @@ import {
   type CompactDefinition,
 } from '../theme/themeAdaptations';
 import {useThemeDefinition} from '../theme/useTheme';
+import {TOUCH_QUERY} from './touchQueries';
 
-/** The primary pointer is coarse: touch behaviours. */
-export const TOUCH_QUERY = '(pointer: coarse)';
+// The primary pointer is coarse: touch behaviours. Defined in touchQueries.ts,
+// which loads without React or the theme.
+export {TOUCH_QUERY};
 
 /**
  * The viewport is compact at the default width points: layout behaviours

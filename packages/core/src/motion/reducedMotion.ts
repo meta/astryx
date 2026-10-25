@@ -47,7 +47,7 @@
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {resolveMotion} from './resolveMotion';
 import {registerTimingTable, timing} from './uikit/timing';
-import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {TOUCH_QUERY} from '../utils/touchQueries';
 
 /** Reduce Motion on a coarse primary pointer: an opacity-only cross-fade. */
 export const REDUCED_MOTION_FADE_QUERY = `(prefers-reduced-motion: reduce) and ${TOUCH_QUERY}`;

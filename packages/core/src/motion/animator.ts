@@ -153,7 +153,7 @@ import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {resolveMotion} from './resolveMotion';
 import {registerScrollTable, scroll} from './uikit/scroll';
 import {registerTimingTable, timing} from './uikit/timing';
-import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {TOUCH_QUERY} from '../utils/touchQueries';
 
 /**
  * A value the animator can drive.
