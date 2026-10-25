@@ -7,7 +7,8 @@
  * @input Uses React, Button, Icon, and the i18n translator
  * @output Exports the public InputClearButton and an internal popup-aware variant.
  *   Both show the localized generic "Clear" tooltip and keep the caller's
- *   contextual label as the accessible name.
+ *   contextual label as the accessible name. The private variant also transports
+ *   popup availability and descriptions without changing the public props.
  * @position Shared primitive. Every input that renders a clear affordance —
  *   TextInput, NumberInput, TimeInput, DateInput, DateTimeInput,
  *   DateRangeInput, Selector, MultiSelector, Typeahead, Tokenizer, FileInput —
@@ -81,14 +82,15 @@ export interface InputClearButtonProps {
 }
 
 interface InternalInputClearButtonProps extends InputClearButtonProps {
-  onPointerDown: React.PointerEventHandler<HTMLElement>;
-  onClickCapture: React.MouseEventHandler<HTMLElement>;
+  onPointerDown?: React.PointerEventHandler<HTMLElement>;
+  onClickCapture?: React.MouseEventHandler<HTMLElement>;
+  isDisabled?: boolean;
+  'aria-describedby'?: string;
 }
 
-type InputClearButtonRenderProps = InputClearButtonProps &
-  Partial<
-    Pick<InternalInputClearButtonProps, 'onPointerDown' | 'onClickCapture'>
-  > & {tooltip: string};
+type InputClearButtonRenderProps = InternalInputClearButtonProps & {
+  tooltip: string;
+};
 
 function renderInputClearButton({
   label,
@@ -96,6 +98,8 @@ function renderInputClearButton({
   onClick,
   onPointerDown,
   onClickCapture,
+  isDisabled,
+  'aria-describedby': ariaDescribedBy,
   xstyle,
   iconClassName,
 }: InputClearButtonRenderProps): ReactNode {
@@ -111,6 +115,10 @@ function renderInputClearButton({
       // contextual label stays the accessible name, which still contains
       // the visible word (WCAG 2.5.3, label in name).
       tooltip={tooltip}
+      // This real tooltip keeps the disabled Button focusable; the popup's
+      // reason is composed with it, not substituted for the Clear tooltip.
+      isDisabled={isDisabled}
+      aria-describedby={ariaDescribedBy}
       className={buttonTargetClassName}
       icon={
         <Icon

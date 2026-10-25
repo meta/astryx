@@ -261,7 +261,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Keeps the trigger focusable but blocks value changes, onChange, and changeAction, including selection from a popup opened before the selector became disabled. Disabled values are excluded from form submission.',
+        'Keeps the trigger focusable but blocks value changes, onChange, and changeAction, including selection from a popup opened before the selector became disabled. An open popup retains its search input, search clear button, or listbox focus owner and exposes disabled state there; search typing, paste, and clearing are blocked until re-enabled. Disabled values are excluded from form submission.',
       default: 'false',
     },
     {
@@ -281,7 +281,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. Use this instead of wrapping a disabled Selector in Tooltip.',
+        'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. If the popup is already open, the reason also describes its search input, search clear button, or focused listbox alongside the existing descriptions. Use this instead of wrapping a disabled Selector in Tooltip.',
     },
     {
       name: 'isLabelHidden',

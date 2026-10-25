@@ -4,9 +4,9 @@
 
 /**
  * @file PanelSearchInput.tsx
- * @input Uses React, StyleX, Icon, InputClearButton, theme tokens
+ * @input Uses React, StyleX, Icon, the private InputClearButton transport, theme tokens
  * @output Exports PanelSearchInput — the search row that sits at the top of a
- *   dropdown panel
+ *   dropdown panel, with opt-in focus-preserving disabled search and clear guards
  * @position Shared internal primitive; used by Selector and MultiSelector
  *
  * A dropdown panel is already a bordered, elevated surface. Nesting a bordered
@@ -42,9 +42,15 @@
 import {useCallback, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
+<<<<<<< HEAD
 import {Icon} from '../Icon/Icon';
 import {InputClearButton} from './InputClearButton';
 import {mergeProps} from '../utils/mergeProps';
+=======
+import {Icon} from '../Icon';
+import {InternalInputClearButton} from './InputClearButton';
+import {mergeProps} from '../utils';
+>>>>>>> 220bedf4db (fix(Selector): preserve disabled popup owner semantics)
 import {
   getInteractionModality,
   useInteractionModalityTracking,
@@ -160,7 +166,10 @@ export interface PanelSearchInputProps extends Omit<
   /** The current query. */
   value: string;
 
-  /** Called with the next query on every keystroke and on clear. */
+  /** Keep the input and clear focusable while rejecting query changes. */
+  isDisabled?: boolean;
+
+  /** Called with the next query on every enabled keystroke and on clear. */
   onValueChange: (value: string) => void;
 
   /** Key handler for the input itself. */
@@ -203,6 +212,7 @@ export function PanelSearchInput({
   clearLabel,
   placeholder,
   value,
+  isDisabled = false,
   onValueChange,
   onKeyDown,
   onFocus,
@@ -240,6 +250,9 @@ export function PanelSearchInput({
 
   const handleClear = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
+      if (isDisabled) {
+        return;
+      }
       onValueChange('');
       // Clearing puts the caret back where the user was typing, matching
       // TextInput's built-in clear, and it does so inside the tap: iOS raises
@@ -256,7 +269,7 @@ export function PanelSearchInput({
         );
       }
     },
-    [onValueChange, ref],
+    [isDisabled, onValueChange, ref],
   );
 
   return (
@@ -277,15 +290,26 @@ export function PanelSearchInput({
           aria-label={label}
           placeholder={placeholder}
           value={value}
-          onChange={e => onValueChange(e.target.value)}
+          readOnly={isDisabled}
+          onChange={e => {
+            if (!isDisabled) {
+              onValueChange(e.target.value);
+            }
+          }}
           onKeyDown={onKeyDown}
           onFocus={handleFocus}
           onBlur={handleBlur}
           {...stylex.props(styles.input)}
           {...props}
+          aria-disabled={isDisabled || props['aria-disabled'] || undefined}
         />
         {value !== '' && (
-          <InputClearButton label={clearLabel} onClick={handleClear} />
+          <InternalInputClearButton
+            label={clearLabel}
+            onClick={handleClear}
+            isDisabled={isDisabled}
+            aria-describedby={props['aria-describedby']}
+          />
         )}
       </div>
     </div>
