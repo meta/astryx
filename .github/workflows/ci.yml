@@ -1720,6 +1720,7 @@ jobs:
     needs: [check-scope]
     if: ${{ github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.check-scope.outputs.spec_only != 'true' }}
     runs-on: ubuntu-slim
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -1790,6 +1791,7 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.check-scope.outputs.spec_only != 'true' }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ${{ needs.interaction-scope.outputs.applies == 'true' && '4-core-ubuntu' || 'ubuntu-slim' }}
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -2551,6 +2553,8 @@ jobs:
         build-sandbox,
         build,
         pr-a11y,
+        interaction-scope,
+        pr-interaction,
         test-build,
         fixture-contrast,
         visual-scout,
