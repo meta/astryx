@@ -112,8 +112,10 @@ beforeEach(() => {
   window.scrollTo = vi.fn();
   vi.stubGlobal(
     'requestAnimationFrame',
+    // Next microtask, not synchronously: a real frame never runs before
+    // requestAnimationFrame returns, and callers may rely on its id.
     vi.fn((cb: FrameRequestCallback) => {
-      cb(0);
+      queueMicrotask(() => cb(0));
       return 1;
     }),
   );
@@ -309,7 +311,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     const title = await screen.findByRole('heading', {
       name: 'No results found',
     });
-    const emptyState = title.closest('[role="status"]');
+    const emptyState = title.closest('.astryx-empty-state');
     expect(emptyState).toHaveTextContent('Try a different search.');
     expect(emptyState?.querySelector('.astryx-icon')).toHaveAttribute(
       'data-size',

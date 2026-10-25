@@ -59,15 +59,25 @@
 
 import {useMemo} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
-import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {
+  DEFAULT_COMPACT_DEFINITION,
+  compactDefinition,
+  type CompactDefinition,
+} from '../theme/themeAdaptations';
+import {useThemeDefinition} from '../theme/useTheme';
 
 /** The primary pointer is coarse: touch behaviours. */
 export const TOUCH_QUERY = '(pointer: coarse)';
 
-/** The viewport is compact: layout behaviours (`spec:AST-012` FR9). */
+/**
+ * The viewport is compact at the default width points: layout behaviours
+ * (`spec:AST-012` FR9). A StyleX media key, which cannot read the theme,
+ * spells this; behaviour reads the active theme's definition
+ * (useCompactDefinition), so a theme that moves `md` moves compact with it.
+ */
 export const COMPACT_QUERY = DEFAULT_COMPACT_DEFINITION.query;
 
-/** Both: presentations such as a sheet in place of a popover. */
+/** Both, at the default width points: a sheet in place of a popover. */
 export const COMPACT_TOUCH_QUERY =
   DEFAULT_COMPACT_DEFINITION.coarsePointerQuery;
 
@@ -87,51 +97,57 @@ export const IOS_TOUCH_STYLE_KEYS = [
   `@supports ${IOS_SUPPORTS_QUERY}`,
 ] as const;
 
-/**
- * Whether a component presents itself the touch way, and where.
- * @experimental
- */
 export interface TouchPresentation {
   /** The primary pointer is coarse (a finger). */
   readonly isTouch: boolean;
   /** The viewport is compact. */
   readonly isCompact: boolean;
-  /** Both. */
-  readonly isCompactTouch: boolean;
+}
+
+/**
+ * The active theme's compact definition (`spec:AST-012` FR9): width below the
+ * theme's effective `md` point, or height below 500.
+ */
+export function useCompactDefinition(): CompactDefinition {
+  const points = useThemeDefinition()?.__adaptations?.widthBreakpoints;
+  return useMemo(
+    () =>
+      points == null ? DEFAULT_COMPACT_DEFINITION : compactDefinition(points),
+    [points],
+  );
 }
 
 /**
  * The touch presentation now. SSR-safe: hooks render the server default and
  * update after hydration.
- * @experimental
  */
 export function useTouchPresentation(
-  serverDefault: Partial<Omit<TouchPresentation, 'isCompactTouch'>> = {},
+  serverDefault: Partial<TouchPresentation> = {},
 ): TouchPresentation {
+  const compact = useCompactDefinition();
   const isTouch = useMediaQuery(TOUCH_QUERY, serverDefault.isTouch ?? false);
   const isCompact = useMediaQuery(
-    COMPACT_QUERY,
+    compact.query,
     serverDefault.isCompact ?? false,
   );
-  return useMemo(
-    () => ({isTouch, isCompact, isCompactTouch: isTouch && isCompact}),
-    [isTouch, isCompact],
-  );
+  return useMemo(() => ({isTouch, isCompact}), [isTouch, isCompact]);
 }
 
 /**
  * The touch presentation at this moment, for a decision taken once (a menu
- * deciding how it presents as it opens). Not touch and not compact where
- * there is no window.
- * @experimental
+ * deciding how it presents as it opens). `compact` is the active theme's
+ * definition (`useCompactDefinition()`, read while rendering), required so a
+ * theme that moves `md` is never ignored (spec:AST-012 FR9). Not touch and
+ * not compact where there is no window.
  */
 export function readTouchPresentation(
-  view: Window | null = typeof window === 'undefined' ? null : window,
+  view: Window | null,
+  compact: CompactDefinition,
 ): TouchPresentation {
   if (view == null || typeof view.matchMedia !== 'function') {
-    return {isTouch: false, isCompact: false, isCompactTouch: false};
+    return {isTouch: false, isCompact: false};
   }
   const isTouch = view.matchMedia(TOUCH_QUERY).matches;
-  const isCompact = view.matchMedia(COMPACT_QUERY).matches;
-  return {isTouch, isCompact, isCompactTouch: isTouch && isCompact};
+  const isCompact = view.matchMedia(compact.query).matches;
+  return {isTouch, isCompact};
 }
