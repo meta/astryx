@@ -24,7 +24,6 @@ import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
 import {useAttachment, useIsUnmountedRef} from './useAttachment';
 
-/** @experimental */
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
   'getBounds' | 'view'
@@ -33,7 +32,6 @@ export type UsePressTrackerOptions = Omit<
 /**
  * Track presses on the element behind `ref` with UIControl semantics. The
  * callbacks are read through a ref, like a recognizer's listener.
- * @experimental
  */
 export function usePressTracker(
   ref: RefObject<Element | null>,

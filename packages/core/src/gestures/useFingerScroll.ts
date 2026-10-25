@@ -37,7 +37,6 @@ function isDocument(value: unknown): value is Document {
  * the document for the page's own scroll. Returns a reader, stable across
  * renders: `true` while the scroller's scroll is a finger's.
  * Proposed; pending owner review.
- * @experimental
  */
 export function useFingerScroll(
   scroller: RefObject<Element | null> | Document,
