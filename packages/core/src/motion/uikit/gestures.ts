@@ -308,20 +308,26 @@ export const UIKIT_GESTURES = {
      * instantaneous velocity plus the rest times the previous event's
      * (instantaneous velocity: position change over timestamp change between
      * consecutive events, the touch-down counting as the first). The lift
-     * does not update it, and a finger at rest sends no events, so a release
-     * after a pause reports the last moving value.
+     * does not update it. (A release after a rest longer than `stillness`
+     * reads 0 in Astryx: spec:AST-100 FR2.)
      */
     currentWeight: {
       value: 0.2,
       unit: 'ratio',
       source: `${UIKIT_LAB}: fitted to all 69 velocity(in:) values of six HID streams (constant, accelerating, pauses before the lift) to 0.0 pt/s`,
     },
-    /** Samples kept; the filter reads the newest three. */
-    maxSamples: {
-      value: 20,
-      unit: 'count',
-      guess: 'Android VelocityTracker and Flutter VelocityTracker keep 20.',
-      measure: 'M-G15: Not a parity value: UIKit uses the two-event filter.',
+    /**
+     * A scrolling surface's release (paging, a wheel) is this times the
+     * newest pan value plus the rest times the previous one
+     * (architecture:interaction-modality INV10).
+     */
+    scrollReleaseWeight: {
+      value: 0.25,
+      unit: 'ratio',
+      guess:
+        "architecture:interaction-modality INV10 states UIScrollView's release as 0.25 x the newest pan value + 0.75 x the previous one.",
+      measure:
+        'M-G14: Confirm against UIScrollView flings: back the release velocity out of the coast distance.',
     },
     /**
      * A contact that has not moved for longer than this before it lifts
