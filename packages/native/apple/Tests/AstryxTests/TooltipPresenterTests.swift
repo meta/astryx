@@ -158,3 +158,13 @@ import Testing
   #expect(P.slide(viewMinX: 760, viewWidth: 40, bubbleWidth: 100, windowWidth: 800, margin: 60, trailing: 16) == -46)
 }
 
+@Test func aClickedViewsBubbleHidesWhenThePointerLeaves() {
+  typealias P = TooltipPresenter
+  // Hovered: up, whatever brought focus.
+  #expect(P.showsBubble(hasText: true, isHovering: true, isHoveringBubble: false, isFocused: true, focusIsKeyboard: false, focus: .tabStop))
+  // The pointer leaves a view a click focused: down.
+  #expect(!P.showsBubble(hasText: true, isHovering: false, isHoveringBubble: false, isFocused: true, focusIsKeyboard: false, focus: .tabStop))
+  // Keyboard focus holds it.
+  #expect(P.showsBubble(hasText: true, isHovering: false, isHoveringBubble: false, isFocused: true, focusIsKeyboard: true, focus: .tabStop))
+}
+
