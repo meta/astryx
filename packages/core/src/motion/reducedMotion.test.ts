@@ -13,7 +13,7 @@
 
 import {readdirSync, readFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
   REDUCED_MOTION_FADE_QUERY,
   REDUCED_MOTION_INSTANT_QUERY,
@@ -25,19 +25,31 @@ import {
 } from './reducedMotion.stylex';
 import {timing} from './uikit/timing';
 
-const on = () => true;
-const off = () => false;
+/** The person's settings, through `matchMedia`: no option overrides them. */
+function settings(reduced: boolean, coarse: boolean) {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query.includes('prefers-reduced-motion')
+      ? reduced
+      : query.includes('pointer: coarse')
+        ? coarse
+        : false,
+    media: query,
+  }));
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('reducedMotionFade', () => {
   it('is null when motion is not reduced', () => {
-    expect(reducedMotionFade(null, {prefersReducedMotion: off})).toBeNull();
+    settings(false, true);
+    expect(reducedMotionFade(null)).toBeNull();
   });
 
   it('fades 200 ms at most on easeInOut on a coarse pointer', () => {
-    const fade = reducedMotionFade(null, {
-      prefersReducedMotion: on,
-      isCoarsePointer: on,
-    });
+    settings(true, true);
+    const fade = reducedMotionFade(null);
     expect(fade).toEqual({
       duration: timing.reducedMotionCrossFadeMs,
       easing: 'cubic-bezier(0.42, 0, 0.58, 1)',
@@ -47,16 +59,11 @@ describe('reducedMotionFade', () => {
   });
 
   it('completes at once on any other pointer, unless a touch release started it', () => {
-    expect(
-      reducedMotionFade(null, {prefersReducedMotion: on, isCoarsePointer: off}),
-    ).toEqual({duration: 0, easing: 'linear'});
-    expect(
-      reducedMotionFade(null, {
-        prefersReducedMotion: on,
-        isCoarsePointer: off,
-        touchRelease: true,
-      })?.duration,
-    ).toBe(timing.reducedMotionCrossFadeMs);
+    settings(true, false);
+    expect(reducedMotionFade(null)).toEqual({duration: 0, easing: 'linear'});
+    expect(reducedMotionFade(null, {touchRelease: true})?.duration).toBe(
+      timing.reducedMotionCrossFadeMs,
+    );
   });
 });
 
