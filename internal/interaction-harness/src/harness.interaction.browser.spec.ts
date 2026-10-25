@@ -26,6 +26,8 @@
  *   instruments; this file is why it may.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
 import {
   animationStoryboard,
@@ -386,6 +388,38 @@ test.describe('frame evidence', () => {
     });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.monotonic).toBe(true);
+  });
+
+  test('in the WebKit container, compiled shaders outlive the run', async ({
+    page,
+  }, testInfo) => {
+    // The official Playwright image keeps its browsers here.
+    test.skip(
+      testInfo.project.name !== 'webkit' ||
+        process.env.PLAYWRIGHT_BROWSERS_PATH !== '/ms-playwright',
+      'runs inside webkit-container.mjs',
+    );
+    // A cache inside the container dies with it: every run then compiled each
+    // shader again, 450–700 ms in the first frame of a blurred layer.
+    const dir = process.env.MESA_SHADER_CACHE_DIR;
+    expect(dir, 'MESA_SHADER_CACHE_DIR names the host-kept cache').toBeTruthy();
+    // Written on the host by the script before the container starts.
+    expect(
+      fs.readFileSync(path.join(dir ?? '', 'ASTRYX-SHADER-CACHE'), 'utf8'),
+    ).toContain('playwright');
+    // Mesa writes what it compiles there once a page draws a blurred layer.
+    await page.setContent(
+      '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
+    );
+    await page.evaluate(
+      () =>
+        document
+          .getElementById('glass')
+          ?.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200}).finished,
+    );
+    expect(
+      fs.readdirSync(dir ?? '').filter(name => name !== 'ASTRYX-SHADER-CACHE'),
+    ).not.toEqual([]);
   });
 
   test('rect sampling reads one rect per animation frame while the main thread is free', async ({

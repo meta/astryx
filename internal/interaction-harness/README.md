@@ -33,6 +33,12 @@ image (podman or docker; the repository is mounted at the same path):
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
+WebKit composites through Mesa's software GL there, which compiles each shader
+the first time a page draws it (450–700 ms for the first frame of a blurred or
+newly animated layer). The script keeps Mesa's shader cache on the host
+(`~/.cache/astryx-webkit-shaders/<image>`, or `ASTRYX_WEBKIT_SHADER_CACHE`), so
+only the first run on a machine pays for them.
+
 Evidence (storyboards, curve traces, busy-main-thread frames) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
