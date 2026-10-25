@@ -304,6 +304,8 @@ function touchesOf(list: TouchList | null | undefined): Touch[] {
 
 export class GestureHost {
   readonly arena: GestureArena;
+  /** @internal The arena's clock, for timers of the host's modules (fingerScroll.ts). */
+  readonly clock: GestureClock;
   private readonly doc: Document;
   private readonly registry = new Map<Element, Registration>();
   private readonly delegated = new Set<DelegatedConsumerType>();
@@ -410,8 +412,9 @@ export class GestureHost {
       isRtl: view =>
         view instanceof Element && isRtlElement(view as HTMLElement),
     };
+    this.clock = options.clock ?? browserClock;
     this.arena = new GestureArena({
-      clock: options.clock ?? browserClock,
+      clock: this.clock,
       environment,
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
