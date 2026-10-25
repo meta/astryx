@@ -5,9 +5,9 @@
  * @input Uses @playwright/test
  * @output Touch interaction and animation proofs on a phone-sized touch
  *   screen, in Chromium and WebKit.
- * @position Run with `pnpm test:interaction`; filmstrips only with
- *   `pnpm storyboards`. Separate from `pnpm test` (no browser needed there) and
- *   from playwright.config.ts (accessibility contracts on desktop profiles).
+ * @position Run with `pnpm test:interaction`. Separate from `pnpm test` (no
+ *   browser needed there) and from playwright.config.ts (accessibility
+ *   contracts on desktop profiles).
  *
  * Specs are named `*.interaction.browser.spec.ts` and read stories from a
  * built Storybook, like the accessibility specs:

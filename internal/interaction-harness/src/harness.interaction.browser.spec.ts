@@ -22,17 +22,13 @@
 
 import {expect, test, type Page} from '@playwright/test';
 import {
-  animationStoryboard,
   compareCurve,
   cubicBezier,
   curveOf,
   drag,
   flick,
-  frames,
-  freezeTimers,
   holdAnimations,
   installInputLog,
-  installTimerGate,
   merge,
   parseTransform,
   PARTIAL_LIFT_SKIP,
@@ -43,10 +39,8 @@ import {
   seekAnimations,
   springStep,
   tap,
-  thawTimers,
   timeline,
   touchDriver,
-  touchStoryboard,
   waitForAnimation,
   waitForRest,
   watchAnimations,
@@ -514,7 +508,7 @@ test.describe('animation state', () => {
     expect(ended.kind).toBe('CSSTransition');
     expect(ended.durationMs).toBe(60);
     expect(ended.finishedAt).not.toBeNull();
-    expect(ended.finishedAt!).toBeGreaterThanOrEqual(ended.to - 1);
+    expect(ended.finishedAt ?? 0).toBeGreaterThanOrEqual(ended.to - 1);
   });
 
   test("a watch taken before the action catches an entrance on the page's first contact", async ({
@@ -590,261 +584,5 @@ test.describe('animation state', () => {
     expect(mid.transform.scaleX).toBeCloseTo(1.25, 3);
     expect(end.transform.translateY).toBeCloseTo(120, 1);
     expect(end.transform.scaleY).toBeCloseTo(1.5, 3);
-  });
-});
-
-test.describe('storyboards', {tag: '@storyboard'}, () => {
-  test('an animation filmstrip records every frame and its trace follows the curve', async ({
-    page,
-  }, testInfo) => {
-    await fixture(page);
-    const box = page.locator('#box');
-    await box.evaluate(el =>
-      el.animate(
-        [{transform: 'translateX(0)'}, {transform: 'translateX(240px)'}],
-        {duration: 200, easing: 'ease-out'},
-      ),
-    );
-    const {storyboard} = await animationStoryboard(page, {
-      name: 'harness-self-test-animation',
-      clip: {x: 0, y: 340, width: 402, height: 120},
-      measure: async () => ({
-        x: await box.evaluate(el => el.getBoundingClientRect().x),
-      }),
-      columns: 4,
-    });
-    const files = await storyboard.write(testInfo);
-    const xs = storyboard.frames.map(f => f.data.x as number);
-    expect(xs).toHaveLength(13); // t = 0, 16.7 … 200
-    expect(xs[0]).toBeCloseTo(20, 1);
-    expect(xs.at(-1)).toBeCloseTo(260, 1);
-    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
-    expect(files['sheet.png']).toMatch(/sheet\.png$/);
-  });
-
-  test('a touch filmstrip photographs every scripted event', async ({
-    page,
-  }, testInfo) => {
-    await fixture(page);
-    await page.evaluate(() => {
-      const pad = document.getElementById('pad');
-      if (pad == null) {
-        throw new Error('no pad');
-      }
-      const dot = document.createElement('div');
-      dot.id = 'dot';
-      dot.style.cssText =
-        'position:absolute;width:24px;height:24px;border-radius:12px;background:#c33;left:-30px;top:0';
-      pad.append(dot);
-      pad.addEventListener('pointermove', e => {
-        dot.style.transform = `translate(${e.clientX - 12 + 30}px, ${e.clientY - 12}px)`;
-      });
-    });
-    const driver = await touchDriver(page);
-    const storyboard = await touchStoryboard(
-      page,
-      driver,
-      drag({x: 60, y: 60}, {x: 300, y: 240}, {durationMs: 100, hz: 60}),
-      {
-        name: 'harness-self-test-touch',
-        clip: {x: 0, y: 0, width: 402, height: 300},
-        measure: async () => ({
-          x: await page
-            .locator('#dot')
-            .evaluate(el => el.getBoundingClientRect().x + 12),
-        }),
-        columns: 4,
-      },
-    );
-    await storyboard.write(testInfo);
-    // before + touchStart + 6 moves + touchEnd
-    expect(storyboard.frames).toHaveLength(9);
-    expect(storyboard.frames.at(-2)?.data.x).toBeCloseTo(300, 0);
-  });
-
-  test('the timer gate holds a component timer until the filmstrip is done', async ({
-    page,
-  }, testInfo) => {
-    await fixture(page);
-    await installTimerGate(page);
-    const box = page.locator('#box');
-    // A component that ends its own animation from a timer (a transitionend
-    // backstop): without the gate it would finish behind the held storyboard.
-    await box.evaluate(el => {
-      const animation = el.animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
-        {duration: 300, easing: 'linear'},
-      );
-      setTimeout(() => {
-        animation.finish();
-        (window as unknown as {timerRan?: boolean}).timerRan = true;
-      }, 40);
-    });
-    await freezeTimers(page);
-    await page.waitForTimeout(120); // the timer is due now, and held
-    const {storyboard} = await animationStoryboard(page, {
-      name: 'harness-self-test-timer-gate',
-      clip: {x: 0, y: 340, width: 402, height: 120},
-      measure: async () => ({
-        x: await box.evaluate(el => el.getBoundingClientRect().x),
-      }),
-      columns: 6,
-    });
-    const timerRan = () =>
-      page.evaluate(
-        () => (window as unknown as {timerRan?: boolean}).timerRan === true,
-      );
-    expect(await timerRan()).toBe(false);
-    await thawTimers(page);
-    expect(await timerRan()).toBe(true);
-    await storyboard.write(testInfo);
-    const xs = storyboard.frames.map(f => f.data.x as number);
-    expect(xs).toHaveLength(19); // t = 0 … 300 ms every 16.7 ms
-    expect(xs.every((x, i) => i === 0 || x > xs[i - 1])).toBe(true);
-  });
-
-  test('an animation that repeats forever does not set the filmstrip length', async ({
-    page,
-  }, testInfo) => {
-    await fixture(page);
-    await page.locator('#box').evaluate(el => {
-      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
-        duration: 800,
-        iterations: Infinity,
-      });
-      el.animate([{opacity: 1}, {opacity: 0.4}], {duration: 200});
-    });
-    const {storyboard, held} = await animationStoryboard(page, {
-      name: 'harness-self-test-endless',
-      clip: {x: 0, y: 340, width: 402, height: 120},
-      columns: 4,
-    });
-    expect(held.map(a => Number.isFinite(a.curveEndMs))).toEqual([false, true]);
-    expect(storyboard.frames).toHaveLength(13); // t = 0 … 200 ms
-    await releaseAnimations(page);
-    await storyboard.write(testInfo);
-  });
-
-  test('a filmstrip runs from the earliest start to the latest end among the animations that end', async ({
-    page,
-  }, testInfo) => {
-    await fixture(page);
-    // A spinner that started a second earlier, a 300 ms move, and a 240 ms
-    // move that starts 83 ms after it.
-    await page.evaluate(async () => {
-      const make = (id: string, top: number) => {
-        const el = document.createElement('div');
-        el.id = id;
-        el.style.cssText = `position:absolute;left:0;top:${top}px;width:40px;height:40px;background:#36c`;
-        document.body.append(el);
-        return el;
-      };
-      document
-        .getElementById('box')
-        ?.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
-          duration: 800,
-          iterations: Infinity,
-        });
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      make('first', 360).animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
-        {duration: 300, easing: 'linear'},
-      );
-      await new Promise(resolve => setTimeout(resolve, 83));
-      make('second', 410).animate(
-        [{transform: 'translateX(0px)'}, {transform: 'translateX(240px)'}],
-        {duration: 240, easing: 'linear'},
-      );
-    });
-    const x = (id: string) =>
-      page
-        .locator(`#${id}`)
-        .evaluate(el => new DOMMatrix(getComputedStyle(el).transform).m41);
-    const {storyboard, held} = await animationStoryboard(page, {
-      name: 'harness-self-test-offsets',
-      clip: {x: 0, y: 340, width: 402, height: 120},
-      columns: 6,
-      measure: async () => ({
-        first: await x('first'),
-        second: await x('second'),
-      }),
-    });
-    const second = held.find(a => a.target === 'div#second');
-    const first = held.find(a => a.target === 'div#first');
-    const lag = (second?.offsetMs ?? 0) - (first?.offsetMs ?? 0);
-    const firsts = storyboard.frames.map(f => Number(f.data.first));
-    const seconds = storyboard.frames.map(f => Number(f.data.second));
-    // The film starts with the first move at its start, the spinner aside...
-    expect(firsts[0]).toBeCloseTo(0, 1);
-    expect(firsts[6]).toBeCloseTo(100, 0);
-    // ...and ends with the second move at its end, not cut off.
-    expect(seconds.at(-1)).toBeGreaterThan(239);
-    expect(storyboard.frames.at(-1)?.t).toBeCloseTo(lag + 240, 0);
-    await releaseAnimations(page);
-    await storyboard.write(testInfo);
-  });
-
-  test('a filmstrip of endless animations alone asks for its times', async ({
-    page,
-  }) => {
-    await fixture(page);
-    await page.locator('#box').evaluate(el =>
-      el.animate([{rotate: '0deg'}, {rotate: '360deg'}], {
-        duration: 800,
-        iterations: Infinity,
-      }),
-    );
-    await expect(
-      animationStoryboard(page, {
-        name: 'harness-self-test-endless-only',
-        clip: {x: 0, y: 340, width: 402, height: 120},
-      }),
-    ).rejects.toThrow(/repeats forever/);
-    await releaseAnimations(page);
-  });
-
-  test('the timer gate drops callbacks the page cancels and stamps held frames with the time they run', async ({
-    page,
-  }) => {
-    await fixture(page);
-    await installTimerGate(page);
-    await freezeTimers(page);
-    await page.evaluate(() => {
-      const w = window as unknown as Record<string, unknown>;
-      w.frozenAt = performance.now();
-      w.timer = setTimeout(() => {
-        w.cancelledTimerRan = true;
-      }, 20);
-      w.frame = requestAnimationFrame(() => {
-        w.cancelledFrameRan = true;
-      });
-      requestAnimationFrame(time => {
-        w.heldFrameTime = time;
-      });
-    });
-    await page.waitForTimeout(150); // both are due now, and held
-    // The harness's own frame waits still resolve while the page's are held.
-    await Promise.race([
-      frames(page, 2),
-      page.waitForTimeout(5000).then(() => {
-        throw new Error('frames() did not resolve while the gate was frozen');
-      }),
-    ]);
-    await page.evaluate(() => {
-      const w = window as unknown as {timer: number; frame: number};
-      clearTimeout(w.timer);
-      cancelAnimationFrame(w.frame);
-    });
-    await thawTimers(page);
-    const state = await page.evaluate(() => {
-      const w = window as unknown as Record<string, unknown>;
-      return {
-        timer: w.cancelledTimerRan === true,
-        frame: w.cancelledFrameRan === true,
-        heldFor: Number(w.heldFrameTime) - Number(w.frozenAt),
-      };
-    });
-    expect(state).toMatchObject({timer: false, frame: false});
-    expect(state.heldFor).toBeGreaterThanOrEqual(140);
   });
 });

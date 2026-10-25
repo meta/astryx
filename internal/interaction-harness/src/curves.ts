@@ -753,13 +753,7 @@ export async function waitForRest(
             backdrop,
           ].join(' | ');
         };
-        // The page's real frames, even while a timer gate holds its callbacks.
-        const frame =
-          (
-            window as unknown as {
-              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
-            }
-          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
+        const frame = requestAnimationFrame;
         let last = read();
         let still = 0;
         const tick = () => {
