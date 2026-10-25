@@ -1898,6 +1898,23 @@ export function createAnimator(
       retireTimers.clear();
       target = next;
       if (target == null) {
+        // Detached (its component unmounted, or the ref moved): the waits
+        // callers hold end now rather than at the curves' end
+        // (architecture:react-component-runtime INV5). The curves stay, so
+        // a later attach plays them on.
+        const owners = new Set<HandleState>();
+        for (const segment of segments.values()) {
+          owners.add(segment.owner);
+        }
+        for (const landing of landings) {
+          owners.add(landing.owner);
+        }
+        for (const owner of owners) {
+          settle(owner, false);
+        }
+        for (const wait of [...restWaits]) {
+          wait.settle();
+        }
         return;
       }
       const time = now();
