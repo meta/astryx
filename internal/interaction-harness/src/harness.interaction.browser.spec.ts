@@ -11,7 +11,7 @@
  *   holds its end; individual transform properties are sampled; a sample at
  *   an end reports the time it was read at; holding takes only running
  *   document-timeline animations, each at its own offset, adds a second hold
- *   to the held set, and releases only them.
+ *   to the held set, drops one the page cancels, and releases only them.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -469,6 +469,46 @@ test.describe('holding', () => {
           document.getAnimations().filter(a => a.playState === 'paused').length,
       ),
     ).toBe(0);
+  });
+
+  test('a held transition the page retargets is dropped, not revived', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.transition = 'transform 300ms linear';
+      el.getBoundingClientRect();
+      el.style.transform = 'translateX(300px)';
+    });
+    await waitForAnimation(box);
+    expect(await holdAnimations(page, box)).toHaveLength(1);
+    // The page sends the box back: the held transition is cancelled, and a
+    // new one runs from where the box is.
+    await box.evaluate(el => {
+      const w = window as unknown as {__cancelled: Animation};
+      w.__cancelled = el.getAnimations()[0];
+      el.style.transform = 'none';
+    });
+    const state = () =>
+      page.evaluate(() => {
+        const w = window as unknown as {
+          __cancelled: Animation;
+          __harnessHeld: Animation[];
+        };
+        return {
+          cancelled: w.__cancelled.playState,
+          held: w.__harnessHeld.length,
+        };
+      });
+    await seekAnimations(page, 150);
+    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    await releaseAnimations(page);
+    await waitForRest(box);
+    expect(await state()).toEqual({cancelled: 'idle', held: 0});
+    expect(await box.evaluate(el => getComputedStyle(el).transform)).toBe(
+      'none',
+    );
   });
 
   test('finishing resumes an animation that repeats forever and still clears the held set', async ({
