@@ -115,13 +115,6 @@ export interface ThemeAdaptationCondition {
   contrast?: 'more' | 'less' | 'no-preference';
   /** User reduced-motion preference. */
   motion?: 'reduce' | 'no-preference';
-  /**
-   * The platform's web engine: `ios` is the WebKit of iPhone and iPad (every browser
-   * there), detected with `@supports (-webkit-touch-callout: none)`; `other`
-   * is everything else. Pair `ios` with `pointer: 'coarse'` for a touch
-   * profile, such as touch motion tuned per platform.
-   */
-  platform?: 'ios' | 'other';
 }
 
 /** Typography overrides inside an adaptation rule. */
@@ -196,8 +189,6 @@ export interface ResolvedThemeAdaptationRule {
   when: ThemeAdaptationCondition;
   /** CSS media-query prelude without the `@media` keyword. */
   query: string;
-  /** CSS @supports prelude without the keyword, for a platform condition. */
-  supports?: string;
   /** Concrete portable token writes produced by this rule. */
   tokens: Record<string, string>;
   /** Concrete theme-local token writes produced by this rule. */
@@ -259,7 +250,6 @@ const CONDITION_AXES = [
   'pointer',
   'contrast',
   'motion',
-  'platform',
 ] as const satisfies ReadonlyArray<keyof ThemeAdaptationCondition>;
 type UnhandledConditionAxis = Exclude<
   keyof ThemeAdaptationCondition,
@@ -392,13 +382,6 @@ function normalizeCondition(
     condition.motion !== 'no-preference'
   ) {
     throw new Error(`${path}.motion must be 'reduce' or 'no-preference'.`);
-  }
-  if (
-    condition.platform !== undefined &&
-    condition.platform !== 'ios' &&
-    condition.platform !== 'other'
-  ) {
-    throw new Error(`${path}.platform must be 'ios' or 'other'.`);
   }
 
   return condition;
@@ -709,26 +692,9 @@ function mediaQueryForCondition(
   }
 
   if (parts.length === 0) {
-    if (condition.platform !== undefined) {
-      // The platform condition alone is an @supports block (supportsForCondition).
-      return 'all';
-    }
     throw new Error(`${path} must contain at least one concrete condition.`);
   }
   return parts.join(' and ');
-}
-
-/** The WebKit of iPhone and iPad: the one engine with the touch-callout property. */
-const IOS_SUPPORTS = '(-webkit-touch-callout: none)';
-
-/** The @supports prelude (without the keyword) for a platform condition. */
-function supportsForCondition(
-  condition: ThemeAdaptationCondition,
-): string | undefined {
-  if (condition.platform === undefined) {
-    return undefined;
-  }
-  return condition.platform === 'ios' ? IOS_SUPPORTS : `not ${IOS_SUPPORTS}`;
 }
 
 type PointerEnvironment =
@@ -736,32 +702,27 @@ type PointerEnvironment =
 type ContrastEnvironment =
   NonNullable<ThemeAdaptationCondition['contrast']> | 'custom';
 type MotionEnvironment = NonNullable<ThemeAdaptationCondition['motion']>;
-type PlatformEnvironment = NonNullable<ThemeAdaptationCondition['platform']>;
 
 interface AdaptationEnvironment {
   width: number;
   pointer: PointerEnvironment;
   contrast: ContrastEnvironment;
   motion: MotionEnvironment;
-  platform: PlatformEnvironment;
 }
 
 const ENVIRONMENT_VALUES = {
   pointer: ['coarse', 'fine', 'none'],
   contrast: ['more', 'less', 'no-preference', 'custom'],
   motion: ['reduce', 'no-preference'],
-  platform: ['ios', 'other'],
 } as const satisfies {
   pointer: ReadonlyArray<PointerEnvironment>;
   contrast: ReadonlyArray<ContrastEnvironment>;
   motion: ReadonlyArray<MotionEnvironment>;
-  platform: ReadonlyArray<PlatformEnvironment>;
 };
 type EnvironmentTypes = {
   pointer: PointerEnvironment;
   contrast: ContrastEnvironment;
   motion: MotionEnvironment;
-  platform: PlatformEnvironment;
 };
 const COMPLETE_ENVIRONMENT_VALUES: {
   [Axis in keyof EnvironmentTypes]: Exclude<
@@ -804,12 +765,6 @@ function conditionMatchesEnvironment(
   ) {
     return false;
   }
-  if (
-    condition.platform !== undefined &&
-    condition.platform !== environment.platform
-  ) {
-    return false;
-  }
   return true;
 }
 
@@ -849,15 +804,8 @@ function assertNoReachableTokenCycles(
   for (const width of widthEnvironments) {
     for (const pointer of COMPLETE_ENVIRONMENT_VALUES.pointer) {
       for (const contrast of COMPLETE_ENVIRONMENT_VALUES.contrast) {
-        for (const environment of COMPLETE_ENVIRONMENT_VALUES.motion.flatMap(
-          motion =>
-            COMPLETE_ENVIRONMENT_VALUES.platform.map(platform => ({
-              width,
-              pointer,
-              contrast,
-              motion,
-              platform,
-            })),
+        for (const environment of COMPLETE_ENVIRONMENT_VALUES.motion.map(
+          motion => ({width, pointer, contrast, motion}),
         )) {
           const matchingRuleIndexes = tokenRuleIndexes.filter(index =>
             conditionMatchesEnvironment(rules[index].when, points, environment),
@@ -1095,9 +1043,6 @@ export function resolveThemeAdaptationRules(
         rule.when,
         adaptations.widthBreakpoints,
       ),
-      ...(supportsForCondition(rule.when) !== undefined
-        ? {supports: supportsForCondition(rule.when)}
-        : {}),
       tokens: resolved.tokens,
       localTokens,
       components: input.typography?.scale
