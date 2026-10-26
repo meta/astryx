@@ -98,10 +98,10 @@
  *   release on any pointer (`touchRelease`), it becomes (DR2) an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
  *   on `timing.curves.move`:
- *   - entering (opacity rises in the same call, or `crossfadeAs:
+ *   - entering (opacity rises from 0 in the same call, or `crossfadeAs:
  *     'entrance'`): lands in its new place at once and fades in;
- *   - leaving (opacity falls, or `crossfadeAs: 'exit'`): fades out in place,
- *     then lands;
+ *   - leaving (opacity falls to 0, or `crossfadeAs: 'exit'`): fades out in
+ *     place, then lands;
  *   - an opacity change alone: fades to its value;
  *   - otherwise: dips (fades out, lands, fades back in);
  *   travel lands with a plain style write while the element is transparent,
