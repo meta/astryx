@@ -1482,6 +1482,24 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(fade?.keyframes[0].opacity).toBe('0');
   });
 
+  it('presented: a call that moves and fades in from transparent lands its travel', async () => {
+    // A control part at its rest offset, transparent, presented in one task
+    // with its own animator (SearchField's close button).
+    const {animator, element} = reduced();
+    animator.set({x: 44, opacity: 0});
+    animator.animate(
+      {x: 0, opacity: 1},
+      {spring: springs.settle},
+      {start: 'presented'},
+    );
+    await commitFrame(clock);
+    await commitFrame(clock);
+    await advance(fade + 16);
+    expect(animator.get('x')).toBe(0);
+    expect(parse(element.style.translate)[0] || 0).toBe(0);
+    expect(animator.get('opacity', clock)).toBeCloseTo(1, 9);
+  });
+
   it('fades for 200 ms at most', () => {
     expect(fade).toBeGreaterThan(0);
     expect(fade).toBeLessThanOrEqual(200);

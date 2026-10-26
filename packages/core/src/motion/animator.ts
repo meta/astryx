@@ -1656,12 +1656,13 @@ export function createAnimator(
     calls: {group: StartGroup; changed: MotionProperty[]}[],
   ) => {
     for (const {group, changed} of calls) {
-      // Only the properties whose curve is still this call's: one a later
-      // presented call took over, or whose channel holds a curve of a call
-      // still waiting, starts with that call, after its own two frames.
+      // Not a channel that holds the curve of a later call still waiting: a
+      // later presented call that took a property over starts that channel
+      // with its own two frames. Every other property starts here, whatever
+      // its segment's group: a value Reduce Motion writes at once, or lands
+      // under a dip, has no curve of this call's.
       const own = changed.filter(
         property =>
-          segments.get(property)?.group === group &&
           !CHANNELS[CHANNEL_OF[property]].some(other => {
             const waiting = segments.get(other)?.group;
             return (
