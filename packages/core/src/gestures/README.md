@@ -239,6 +239,14 @@ warning, so two writers never fight over the paint. Pass another
   such a press tracker paints a finger's press and does nothing else: it
   reports no control event, keeps nothing from the browser, which still
   pans, and takes no mouse or pen press.
+  Even where it is coarse, the host listens only while something enabled
+  could take a touch: a disabled recognizer or consumer registers nothing
+  (FR24), and after a consumer's `isEnabled()` changes, `host.update(element)`
+  re-syncs. So a component that activates through a recognizer (a tap that
+  pages, a press that opens) also activates from the browser's own `click`
+  where the pointer is fine, and a mouse, a trackpad and the keyboard keep
+  working; its tests declare a phone's pointer for the touch path
+  (`coarsePrimaryPointer()` in `__tests__/pointerQuery.ts`).
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
