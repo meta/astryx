@@ -307,8 +307,9 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       .filter(entry => entry.type === 'touchmove' && entry.passive === false)
       .map(entry => entry.id),
   );
-  // Pans (the cards' too), a long press, a pinch and the sheet's pan can take
-  // a moving touch; a tap-only element and a press consumer never wait.
+  // Pans (the cards' and the switch's drag too), a long press, a pinch and
+  // the sheet's pan can take a moving touch; a tap-only element and a press
+  // consumer never wait.
   expect(new Set(blocking)).toEqual(
     new Set([
       'hpan',
@@ -316,6 +317,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'pinchable',
       'sheetBody',
       'slider',
+      'switchRow',
       'card',
       'cardLate',
     ]),
@@ -488,7 +490,7 @@ test('a held finger on a checkbox inside an element whose hold does something tu
   expect(native).toEqual([native[0], native[0], native[0]]);
 });
 
-test('a scroll the page makes under a still finger keeps the touch and its tap; a drag that scrolls the feed takes it', async ({
+test('a scroll the page makes under a still finger keeps the touch and its tap', async ({
   page,
   browserName,
 }) => {
@@ -512,8 +514,18 @@ test('a scroll the page makes under a still finger keeps the touch and its tap; 
   });
   await driver.play([{t: 0, down: []}]);
   expect(states(await log(page), 'feedTap')).toEqual(['ended', 'possible']);
+});
 
-  // A drag that scrolls the feed natively is the browser's: no tap.
+test('a drag that scrolls the feed natively is the browser’s: no tap', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await open(page, browserName);
+  await page.locator('#feed').scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     const feed = document.getElementById('feed');
     if (feed != null) {
