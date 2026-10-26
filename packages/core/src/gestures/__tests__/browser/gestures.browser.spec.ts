@@ -910,6 +910,25 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   );
 });
 
+test('a finger the window blur cancelled lifts on nothing: its lift gets no click, and a later tap there keeps its own (spec:AST-094 FR28)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const at = await center(page, 'hbutton');
+  await clearLog(page);
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  // A headless page keeps its focus, so the blur is dispatched to the window.
+  await page.evaluate(() => window.dispatchEvent(new FocusEvent('blur')));
+  await driver.play([{t: 0, down: []}]);
+  await page.waitForTimeout(100);
+  const clicks = async () =>
+    (await log(page)).filter(entry => entry.name === 'click:hbutton');
+  expect(await clicks()).toEqual([]);
+  await driver.tap(at);
+  expect(await clicks()).toHaveLength(1);
+});
+
 test('scroll edge: at the top the pull is the sheet’s at once', async ({
   page,
   browserName,
