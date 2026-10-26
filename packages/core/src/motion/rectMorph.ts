@@ -428,7 +428,7 @@ function defaultNow(): number {
  */
 export function createRectMorph(
   element: HTMLElement,
-  options: Pick<AnimatorOptions, 'now'> = {},
+  options: Pick<AnimatorOptions, 'now' | 'requestFrame'> = {},
 ): RectMorph {
   const now = options.now ?? defaultNow;
   const animator = createAnimator(element, options);
