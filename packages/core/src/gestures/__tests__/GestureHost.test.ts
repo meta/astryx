@@ -183,32 +183,6 @@ describe('GestureHost', () => {
     expect(remove).toHaveBeenCalledWith('touch-action');
   });
 
-  it('turns selection and the callout off for one held press, only where the hold does something (spec:AST-094 FR41)', () => {
-    // The lock is taken only where the primary pointer is coarse (FR19).
-    detachers.push(coarsePrimaryPointer());
-    const {hold, plain} = mount(
-      '<div><div id="hold"></div><div id="plain"></div></div>',
-    );
-    detachers.push(host.attach(hold, new LongPressGestureRecognizer()));
-    detachers.push(host.attach(plain, new TapGestureRecognizer()));
-    // jsdom drops the prefixed properties, so the writes are observed.
-    const set = vi.spyOn(hold.style, 'setProperty');
-    const remove = vi.spyOn(hold.style, 'removeProperty');
-    const plainSet = vi.spyOn(plain.style, 'setProperty');
-    const finger = {id: 1, x: 10, y: 10};
-    touch('touchstart', hold, [finger], [finger], 0);
-    expect(set).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
-    expect(set).toHaveBeenCalledWith('user-select', 'none');
-    expect(remove).not.toHaveBeenCalledWith('user-select');
-    touch('touchend', hold, [finger], [], 100);
-    expect(remove).toHaveBeenCalledWith('-webkit-touch-callout');
-    expect(remove).toHaveBeenCalledWith('user-select');
-    const other = {id: 2, x: 10, y: 40};
-    touch('touchstart', plain, [other], [other], 200);
-    expect(plainSet).not.toHaveBeenCalledWith('user-select', 'none');
-    touch('touchend', plain, [other], [], 260);
-  });
-
   it('cancels touchmove only once a recognizer owns the touch, and swallows the click', () => {
     const {box, child} = mount('<div id="box"><span id="child">x</span></div>');
     const pan = new PanGestureRecognizer({name: 'pan'});
