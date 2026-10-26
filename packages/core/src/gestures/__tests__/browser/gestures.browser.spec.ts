@@ -650,6 +650,34 @@ test("the host's touch-action applies from the attach itself, an author rule out
   });
 });
 
+test("an author rule in any cascade layer outranks the host's touch-action (spec:AST-094 FR18, DEC-8)", async ({
+  page,
+  browserName,
+}) => {
+  await openBare(page, browserName);
+  const actions = await page.evaluate(() => {
+    const {host, PanGestureRecognizer} = window.__api;
+    // The layer order a package stylesheet declares (spec:AST-080 FR3), and
+    // author rules in Astryx's base layer and in the product's layer.
+    const author = document.createElement('style');
+    author.textContent = `@layer reset, astryx-base, astryx-theme, product;
+      @layer astryx-base { #base { touch-action: none; } }
+      @layer product { #product { touch-action: pan-x; } }`;
+    document.head.append(author);
+    document.body.innerHTML =
+      '<div id="base" style="height: 60px"></div><div id="product" style="height: 60px"></div>';
+    const base = document.getElementById('base') as HTMLElement;
+    const product = document.getElementById('product') as HTMLElement;
+    host.attach(base, new PanGestureRecognizer({direction: 'horizontal'}));
+    host.attach(product, new PanGestureRecognizer({direction: 'horizontal'}));
+    return {
+      base: getComputedStyle(base).touchAction,
+      product: getComputedStyle(product).touchAction,
+    };
+  });
+  expect(actions).toEqual({base: 'none', product: 'pan-x'});
+});
+
 test('a subtree that mounts with a recognizer is styled once: the host adds no second recalc of it (spec:AST-094 FR18)', async ({
   page,
   browserName,
