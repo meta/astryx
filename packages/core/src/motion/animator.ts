@@ -320,12 +320,14 @@ export interface Animator {
    * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
    * past an edge) is a transition and plays through the Reduce Motion
    * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
-   * is a transition too: play it with `play` or `animate`. Only a surface
-   * that coasts imports the coast math and the scroll table.
+   * is a transition too: play it with `play` or `animate`. Pass
+   * `touchRelease` when a touch drag's release starts it, so a spring back
+   * cross-fades on any pointer (DR2). Only a surface that coasts imports the
+   * coast math and the scroll table.
    */
   decay(
     curves: Partial<Record<'x' | 'y', MotionCurve>>,
-    options?: Pick<AnimateOptions, 'at'>,
+    options?: Pick<AnimateOptions, 'at' | 'touchRelease'>,
   ): MotionHandle;
   /**
    * Moves properties by the given amounts at once, as when a layout shift
@@ -2028,6 +2030,14 @@ export function createAnimator(
       }
     }
     if (!namesOpacity) {
+      // A dip left with nothing to land (a move taken back) fades straight
+      // back in from where it is, rather than finishing its dip.
+      for (const landing of [...landings]) {
+        if (landing.values.size === 0 && landing.fadeIn != null) {
+          endLanding(landing);
+          land(landing);
+        }
+      }
       return;
     }
     for (const landing of [...landings]) {
@@ -2062,10 +2072,17 @@ export function createAnimator(
   /** Reduce Motion calls that named their own opacity. */
   const namedOpacity = new WeakSet<HandleState>();
 
+  /**
+   * Where opacity was heading before a call took the waiting landings over:
+   * an entrance by role that catches an exit fades back to what the exit
+   * would have restored.
+   */
+  let headingBeforeTakeOver: number | null = null;
+
   /** What the Reduce Motion planner reads of this animator. */
   const planView: ReducedMotionView = {
     valueAt,
-    opacityHeading: () => opacityHeading(),
+    opacityHeading: () => headingBeforeTakeOver ?? opacityHeading(),
     ownOpacity: () => ownOpacity(),
     writesOwnOpacity: () => writesOwnOpacity(),
     get borrowedOpacity() {
@@ -2094,18 +2111,19 @@ export function createAnimator(
     fade: boolean,
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
-    takeOverLandings(properties, targets.opacity != null);
+    const heading = opacityHeading();
+    // An entrance or an exit by role drives the opacity as a named one does.
+    takeOverLandings(properties, targets.opacity != null || role != null);
     if (targets.opacity != null) {
       namedOpacity.add(owner);
     }
-    const plan = planReducedMotion(
-      planView,
-      time,
-      targets,
-      properties,
-      fade,
-      role,
-    );
+    headingBeforeTakeOver = heading;
+    let plan: ReturnType<typeof planReducedMotion>;
+    try {
+      plan = planReducedMotion(planView, time, targets, properties, fade, role);
+    } finally {
+      headingBeforeTakeOver = null;
+    }
     const next: Partial<Record<MotionProperty, Segment | null>> = {};
     for (const property of plan.atOnce) {
       next[property] = null;
@@ -2459,7 +2477,10 @@ export function createAnimator(
       }
       const transitioned =
         Object.keys(transitions).length > 0
-          ? animator.animate(transitions, REDUCED_TRANSITION, {at: time})
+          ? animator.animate(transitions, REDUCED_TRANSITION, {
+              at: time,
+              touchRelease: decayOptions.touchRelease,
+            })
           : null;
       const {owner, finished} = newOwner();
       // Momentum moves the translate axes only (DR2's throw exception).

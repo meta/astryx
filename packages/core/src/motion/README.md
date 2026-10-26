@@ -114,7 +114,8 @@ await handle.finished; // true if it ran to the end, false if interrupted
   continues a throw is direct movement (DR2, DEC-2). A curve marked
   `isTransition` (a coast's spring back from past an edge), like a spring a
   component starts on release toward a target it picks, plays through the
-  Reduce Motion policy: a cross-fade on a coarse pointer, at once elsewhere.
+  Reduce Motion policy: a cross-fade on a coarse pointer or after a touch
+  release (`decay(curves, {touchRelease: true})`), at once elsewhere.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
