@@ -777,6 +777,56 @@ test.describe('frame evidence', () => {
     expect(trace.window.to - (started as number)).toBeGreaterThanOrEqual(590);
   });
 
+  test('a waitForRest awaited inside a traced body waits for a run going backward to its end, and no longer', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    // How long a traced waitForRest holds after a 600 ms move starts.
+    const traced = async (reverse: boolean, endDelay = 0) => {
+      let started = 0;
+      const trace = await traceRendering(page, async () => {
+        started = await pop.evaluate(
+          (el, {reverse, endDelay}) => {
+            const run = el.animate(
+              [
+                {transform: 'translateY(0px)'},
+                {transform: 'translateY(100px)'},
+              ],
+              {duration: 600, endDelay},
+            );
+            if (reverse) {
+              // Its current time falls from its end time to 0.
+              run.reverse();
+            }
+            return performance.timeOrigin + performance.now();
+          },
+          {reverse, endDelay},
+        );
+        await waitForRest(pop);
+      });
+      await waitForRest(pop);
+      return trace.window.to - started;
+    };
+    // Reversed with a 200 ms end delay: the move plays from 200 to 800 ms.
+    expect(await traced(true, 200)).toBeGreaterThanOrEqual(790);
+    // A reversed run is waited for as long as the same run forward, not
+    // twice as long.
+    const forward = await traced(false);
+    const backward = await traced(true);
+    expect(backward).toBeGreaterThanOrEqual(590);
+    expect(backward).toBeLessThan(forward * 1.5);
+  });
+
   test('a waitForRest awaited inside a traced body runs on the real timers, so a frozen timer gate cannot hold it', async ({
     page,
     browserName,

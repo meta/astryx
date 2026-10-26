@@ -951,7 +951,8 @@ export async function watchAnimations(
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
- * scheduled ends of the curves on the element instead, reading no style, so
+ * scheduled ends of the curves on the element instead (a run going backward,
+ * until it finishes), reading no style, so
  * motion that no animation drives (a script writing styles) is not seen until
  * the trace ends. Finding no animation, it looks again `frames` times a frame
  * apart before settling, so one the action starts a few frames later is
@@ -1027,9 +1028,12 @@ export async function waitForRest(
             ) {
               wait = Math.max(wait, 16);
             } else if (a.playState === 'running') {
-              const left =
-                (curveEnd(a) - Number(a.currentTime ?? 0)) /
-                Math.abs(a.playbackRate || 1);
+              // The curve's time left through the playback rate: forward, to
+              // its (held) end; backward (`reverse()`), to local time 0,
+              // where it finishes, as the untraced path waits it out.
+              const rate = a.playbackRate || 1;
+              const at = Number(a.currentTime ?? 0);
+              const left = rate > 0 ? (curveEnd(a) - at) / rate : at / -rate;
               wait = Math.max(wait, left);
             }
           }
