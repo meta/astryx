@@ -4,8 +4,8 @@
  * @file resolveMotion.ts
  * @input An element and a motion role: a spring or curve of a registered
  *   motion table, or a table group and the key of one of its values
- * @output resolveMotion: the role's value under the element's theme, or the
- *   table's value when no theme sets it
+ * @output resolveMotion: the role's value set on the element's scope, or the
+ *   table's value when none is set
  * @position Motion foundation; the animator resolves every spring and curve
  *   it is handed with it, and components resolve the durations they time
  *   with it
@@ -14,12 +14,13 @@
  * with a table calls its register<Name>Table() first, and a leaf of a table
  * nothing registered plays its own value. Nothing here imports a table.
  *
- * A theme sets a role by writing its CSS variable (motion/roles.ts) on its
- * scope, the nearest `[data-astryx-theme]` element (or the root element). The
+ * A role's value is set by writing its CSS variable (motion/roles.ts) on a
+ * scope, the nearest `[data-astryx-theme]` element (or the root element);
+ * nothing public writes one while touch motion stays internal. The
  * value is read from that scope's computed style when a motion starts: a style
  * read, never a layout, and at most once per scope and role per task (the
- * motions one task starts share it), or again within the task when a theme
- * attribute changes. Nothing is listened to or observed. An empty or malformed
+ * motions one task starts share it), or again within the task when the
+ * scope's theme attribute changes. Nothing is listened to or observed. An empty or malformed
  * value means the table's value.
  * Nothing runs on import or on the server, and a detached element reads the
  * table's value.
@@ -106,14 +107,14 @@ function resolveRole<T>(
 }
 
 /**
- * A motion role's value under `element`'s theme: the value a theme set with
- * `defineTheme({motion})`, or the table's value when none did. Hand it a
+ * A motion role's value under `element`'s scope: the value its CSS variable
+ * carries there, or the table's value when none is set. Hand it a
  * spring or curve of a motion table, or a table group and a key (the way to
  * name a duration, which is a bare number):
  *
  * @example
  * ```
- * const spring = resolveMotion(sheet, springs.sheetPresent);
+ * const spring = resolveMotion(sheet, springs.settle);
  * const fadeMs = resolveMotion(row, timing.press, 'highlightOutMs');
  * ```
  *

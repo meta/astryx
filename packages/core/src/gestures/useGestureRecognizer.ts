@@ -78,15 +78,8 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer],
   );
 
-  useAttachment(
-    ref,
-    element =>
-      getGestureHost(element.ownerDocument).attach(element, recognizer, {
-        manageStyle,
-      }),
-    manageStyle,
-  );
-
+  // The isEnabled sync runs first, under the guard, so disabling cancels a
+  // gesture in flight before its attachment goes.
   useIsomorphicLayoutEffect(() => {
     isSyncingRef.current = true;
     try {
@@ -95,6 +88,20 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
       isSyncingRef.current = false;
     }
   }, [recognizer, isEnabled]);
+
+  // A disabled gesture is not attached at all: no listener and no
+  // `touch-action` of its own on the element (spec:AST-094 FR24). A replaced
+  // node is released and the new one attached.
+  useAttachment(
+    ref,
+    element =>
+      isEnabled
+        ? getGestureHost(element.ownerDocument).attach(element, recognizer, {
+            manageStyle,
+          })
+        : () => {},
+    `${manageStyle}:${isEnabled}`,
+  );
 
   return recognizer;
 }
@@ -147,7 +154,16 @@ export function usePressTracker(
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
         isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
-        isBraking: touch => optionsRef.current.isBraking?.(touch) ?? false,
+        // A touch that brakes a scroll the finger set moving presses nothing
+        // (GestureHost.isScrollBraking), unless the caller decides.
+        isBraking: touch => {
+          const element = ref.current;
+          return (
+            optionsRef.current.isBraking?.(touch) ??
+            (element != null &&
+              getGestureHost(element.ownerDocument).isScrollBraking(element))
+          );
+        },
       }),
   );
 

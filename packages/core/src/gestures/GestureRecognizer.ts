@@ -24,7 +24,7 @@
  * event, so a listener that writes a transform writes it in the same frame
  * as the input, with no React render in between.
  *
- * SYNC: When modified, update GestureArena.ts and README.md.
+ * SYNC: When modified, update GestureArena.ts.
  */
 
 import type {GestureArena} from './GestureArena';
@@ -570,12 +570,19 @@ export abstract class GestureRecognizer {
     }
   }
 
+  /** @internal The host's hook: listeners follow whether anything is enabled. */
+  onEnabledChange: (() => void) | null = null;
+
   /**
    * UIKit's `isEnabled` setter: turning a recognizer off mid-gesture cancels
    * the gesture (an active one) or fails it (a possible one).
    */
   setEnabled(value: boolean): void {
+    const changed = this.isEnabled !== value;
     this.isEnabled = value;
+    if (changed) {
+      this.onEnabledChange?.();
+    }
     if (!value && (this.state !== 'possible' || this.isInvolved())) {
       this.cancel();
     }
