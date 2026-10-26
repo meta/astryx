@@ -914,15 +914,18 @@ export async function waitForAnimation(
             ? element.getAnimations({subtree: true})
             : recorded.filter(e => e.finishedAt == null).map(e => e.animation)
         ).filter(a => a.playState === 'running' && a.startTime != null);
-        // Progress along the curve, on the timeline: a transition's delay
-        // presents nothing, a run going backward (`reverse()`) progresses from
-        // its end, and a faster rate presents more curve per ms.
+        // Progress along the curve, on the timeline: a delay presents nothing
+        // (going backward, the end delay plays first), a run going backward
+        // (`reverse()`) progresses from its end, and a faster rate presents
+        // more curve per ms.
         const progressed = running.filter(a => {
           const timing = a.effect?.getComputedTiming();
           const time = Number(a.currentTime ?? 0);
           const local =
             a.playbackRate < 0
-              ? Number(timing?.endTime ?? 0) - time
+              ? Number(timing?.endTime ?? 0) -
+                Number(timing?.endDelay ?? 0) -
+                time
               : time - Number(timing?.delay ?? 0);
           return local / Math.abs(a.playbackRate || 1) >= minProgress;
         });
@@ -933,17 +936,25 @@ export async function waitForAnimation(
           return [];
         }
         // Finished: by its finish event, or by its state when the event has not
-        // been delivered yet (then at its scheduled end).
-        const finishedAt = (e: (typeof recorded)[number]) =>
-          e.finishedAt ??
-          (e.animation.playState === 'finished' && e.animation.startTime != null
-            ? Number(e.animation.startTime) +
-              Number(
-                (
-                  e.animation.effect as KeyframeEffect | null
-                )?.getComputedTiming().endTime ?? 0,
-              )
-            : null);
+        // been delivered yet (then at its scheduled end, through the rate's
+        // speed; a run going backward ends at its startTime, where its current
+        // time reaches 0).
+        const finishedAt = (e: (typeof recorded)[number]) => {
+          if (e.finishedAt != null) {
+            return e.finishedAt;
+          }
+          const a = e.animation;
+          if (a.playState !== 'finished' || a.startTime == null) {
+            return null;
+          }
+          const end = Number(
+            (a.effect as KeyframeEffect | null)?.getComputedTiming().endTime ??
+              0,
+          );
+          return a.playbackRate < 0
+            ? Number(a.startTime)
+            : Number(a.startTime) + end / Math.abs(a.playbackRate || 1);
+        };
         return recorded
           .filter(e => finishedAt(e) != null)
           .map(e => describe(e.animation, finishedAt(e), e.startedAt));
