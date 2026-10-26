@@ -7,7 +7,8 @@
  *   finger record
  * @output Exports watchFingerScrolls and isFingerScroll
  * @position Finger-scroll watch of packages/core/src/gestures (useFingerScroll
- *   reads it), in its own module so a page that never asks never ships it
+ *   reads it), in its own module so a page that never asks never ships it;
+ *   internal to the touch module, not in the gestures barrel
  *
  * A watched scroller's scroll is a finger's from a scroll event while a
  * finger that landed inside it is down, until the scroller's own `scrollend`

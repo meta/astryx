@@ -58,8 +58,9 @@ function Sheet() {
   rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
   `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
   calls neither `onHighlightChange` nor `onControlEvent`.
-- `useFingerScroll(scroller)` (proposed; pending owner review) returns a
-  reader, `true` while the scroller's scroll is a finger's: from a scroll
+- `useFingerScroll(scroller)`, an internal piece of the touch module with
+  no public API (not in the gestures barrel; a scroll-driven component
+  imports its module, so it ships only where used), returns a reader, `true` while the scroller's scroll is a finger's: from a scroll
   while a finger that landed inside it is down, until its `scrollend` (the
   momentum is still the finger's), or, where the browser fires none (mobile
   Safari before 26), until its scroll events go quiet. Pass a ref, or the
@@ -235,13 +236,16 @@ warning, so two writers never fight over the paint. Pass another
   installs it and styles every element; turning fine cancels every touch in
   flight and removes it all. A development warning names the first attach
   under a fine pointer: attach touch work under a touch presentation. The
-  one carve-out is a recognizer or press tracker that reads each event's
-  pointer itself, as `spec:AST-057`'s row swipe does, or a stepper whose
-  held press repeats the same under a mouse: attached with
+  carve-out is what reads each event's pointer itself, attached with
   `perEventPointer: true` (an option of `attach`, `attachConsumer`,
-  `useGestureRecognizer` and `usePressTracker`), it gets the host's
+  `useGestureRecognizer` and `usePressTracker`): it gets the host's
   listeners, its deliveries and its own element's style on any pointer,
-  with no warning, while everything else beside it stays inactive.
+  with no warning, while everything else beside it stays inactive. A
+  recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
+  gets press feedback only, the exception `spec:AST-094` FR19 names in
+  cixzhang's amendment: a finger's press is delivered and painted (a
+  touchscreen laptop, an iPad with a trackpad), but it never keeps its
+  touch from the browser, which still pans.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
