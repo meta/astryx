@@ -304,7 +304,7 @@ export class GestureArena {
       const context = this.context();
       for (const recognizer of [...this.active]) {
         if (recognizer.numberOfTouches > 0) {
-          recognizer.deliverBeganElsewhere([touch], context);
+          internals(recognizer).deliverBeganElsewhere([touch], context);
         }
       }
     });
