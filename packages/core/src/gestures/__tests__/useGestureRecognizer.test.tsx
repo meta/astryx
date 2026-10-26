@@ -456,10 +456,17 @@ describe('usePressTracker', () => {
       <Button onEvent={() => {}} selectionLock={lockSelection} />,
     );
     const button = getByTestId('button');
+    // Where iOS WebKit does not run, the lock refuses a selection by
+    // cancelling selectstart (jsdom has no touch callout).
+    const refuses = () => {
+      const event = new Event('selectstart', {bubbles: true, cancelable: true});
+      button.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
     touch('touchstart', button, {id: 3, x: 1, y: 1}, 0);
-    expect(button.style.getPropertyValue('user-select')).toBe('none');
+    expect(refuses()).toBe(true);
     touch('touchend', button, {id: 3, x: 1, y: 1}, 50, true);
-    expect(button.style.getPropertyValue('user-select')).toBe('');
+    expect(refuses()).toBe(false);
   });
 
   it('takes an option changed after mount from the next touch', () => {
