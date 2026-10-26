@@ -460,9 +460,11 @@ in `../utils/touchPresentation.ts`:
 - touch behaviours (this system, the press model, UIKit springs and
   timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`); the gesture
   host itself installs nothing while it is fine (What the browser is told);
-- layout behaviours key on the theme's compact definition (`COMPACT_QUERY`):
-  narrower than the `md` breakpoint (768 px by default) or shorter than
-  500 px (`spec:AST-012` FR9), not mapped to platform size classes;
+- layout behaviours key on a compact viewport, narrower than the theme's
+  `md` width point or shorter than 500 px (`COMPACT_QUERY`; behaviour reads
+  the active theme's points), the closest a size can get to
+  UIKit's compact size class (a Max-size iPhone in landscape is its one
+  known miss);
 - a presentation that needs both, a sheet in place of a popover, asks for
   both (`COMPACT_TOUCH_QUERY`).
 

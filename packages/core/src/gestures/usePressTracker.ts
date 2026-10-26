@@ -10,15 +10,17 @@
  *   own module so a component that only recognizes gestures never imports
  *   the press tracker
  *
- * The callbacks are read through a ref, like a recognizer's listener. A
- * profile change after mount takes effect from the next touch. After unmount
- * the tracker calls nothing back.
+ * The callbacks and the profile are read through refs: one tracker serves
+ * the component's life, so a profile change applies from the tracker's next
+ * read and never ends a press in progress. After unmount the tracker calls
+ * nothing back.
  *
  * SYNC: When modified, update useGestureRecognizer.test.tsx and README.md.
  */
 
-import {useMemo, useRef, type RefObject} from 'react';
+import {useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
@@ -54,32 +56,29 @@ export function usePressTracker(
   // True while an Effect releases the tracker, so the press it ends reaches
   // no caller callback.
   const isReleasingRef = useRef(false);
+  // The ref is read through a ref too: a caller may pass a new ref object
+  // on a render, and the one tracker must follow it.
+  const refRef = useRef(ref);
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
+    refRef.current = ref;
   });
   const isUnmountedRef = useIsUnmountedRef();
-  const {
-    trackingExpansion,
-    highlightDelay,
-    cancelTravel,
-    quickTapFlash,
-    keepsTouch,
-    selectionLock,
-    perEventPointer = false,
-  } = options;
-  // A profile change after mount takes effect from the next touch: the
-  // tracker is rebuilt with the new values.
-  const tracker = useMemo(
+  const {perEventPointer = false} = options;
+  // One tracker for the component's life, reading its profile through the
+  // options ref: a profile change never rebuilds it, so a press in progress
+  // survives it (the change applies from the tracker's next read).
+  const [tracker] = useState(
     () =>
       new PressTracker({
         getBounds: () => {
-          const element = ref.current;
+          const element = refRef.current.current;
           return element == null
             ? null
             : getGestureHost(element.ownerDocument).presentedRect(element);
         },
         get view() {
-          return ref.current;
+          return refRef.current.current;
         },
         onControlEvent: (event, touch) => {
           if (!isReleasingRef.current && !isUnmountedRef.current) {
@@ -91,12 +90,20 @@ export function usePressTracker(
             optionsRef.current.onHighlightChange?.(isHighlighted);
           }
         },
-        trackingExpansion,
-        highlightDelay,
-        cancelTravel,
-        quickTapFlash,
-        keepsTouch,
-        selectionLock,
+        trackingExpansion: options.trackingExpansion,
+        get highlightDelay() {
+          return optionsRef.current.highlightDelay;
+        },
+        get cancelTravel() {
+          return optionsRef.current.cancelTravel;
+        },
+        get quickTapFlash() {
+          return optionsRef.current.quickTapFlash;
+        },
+        keepsTouch: options.keepsTouch,
+        get selectionLock() {
+          return optionsRef.current.selectionLock;
+        },
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
@@ -108,29 +115,23 @@ export function usePressTracker(
           if (own != null) {
             return own(touch);
           }
-          const element = ref.current;
+          const element = refRef.current.current;
           return (
             element != null &&
             getGestureHost(element.ownerDocument).isScrollBraking(element)
           );
         },
       }),
-    [
-      ref,
-      isUnmountedRef,
-      trackingExpansion,
-      highlightDelay,
-      cancelTravel,
-      quickTapFlash,
-      keepsTouch,
-      selectionLock,
-    ],
   );
+  const {trackingExpansion} = options;
+  useIsomorphicLayoutEffect(() => {
+    tracker.trackingExpansion =
+      trackingExpansion ?? UIKIT_GESTURES.control.trackingExpansion.value;
+  }, [tracker, trackingExpansion]);
 
-  // Synchronizes the document's gesture host with the element behind `ref`
-  // (see useGestureRecognizer); a tracker replaced by an option change is
-  // disposed, which un-highlights a control it was holding, and a changed
-  // perEventPointer re-attaches it.
+  // Releasing the element (a replaced node, unmount) disposes the press,
+  // which un-highlights a control it was holding; a changed perEventPointer
+  // re-attaches it.
   const attachment = useMemo(
     () => ({tracker, perEventPointer}),
     [tracker, perEventPointer],
