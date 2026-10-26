@@ -516,7 +516,9 @@ export class GestureArena {
       }
     }
     this.claim(recognizer);
-    if (recognizer.cancelsTouchesInView) {
+    // A watcher takes nothing from the view either: the press and the click
+    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers).
+    if (recognizer.claimsTouches && recognizer.cancelsTouchesInView) {
       this.cancelViewTouchesOf(recognizer);
     }
   }

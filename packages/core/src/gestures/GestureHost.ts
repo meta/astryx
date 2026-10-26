@@ -1272,6 +1272,16 @@ export class GestureHost {
 
   private readonly onHoldTouchStart = (event: TouchEvent): void => {
     const fingers = touchesOf(event.touches);
+    const current = this.pageHoldTouch;
+    if (
+      current != null &&
+      fingers.some(finger => finger.identifier === current.id)
+    ) {
+      // A second finger joins the held one: nothing is cancelled while two
+      // are down (a pinch), and the first keeps its verdict for the rest of
+      // its touch once it is alone again.
+      return;
+    }
     const finger = fingers[0];
     this.pageHoldTouch =
       fingers.length === 1 && finger != null
