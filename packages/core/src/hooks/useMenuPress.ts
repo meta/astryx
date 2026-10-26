@@ -55,9 +55,11 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {
   IDLE_MENU_PRESS,
   menuPressStep,
@@ -99,11 +101,18 @@ export const MENU_PRESS_STRAY_CLICK_MS = CLICK_GUARD_WINDOW_MS;
 export const MENU_PRESS_LONG_PRESS_MS = LONG_PRESS_DURATION_MS;
 /**
  * How far a finger held on a DropdownMenu trigger may move before the open,
- * in CSS px: `spec:AST-094` FR29's drift allowance (FR2's table: unmeasured,
- * a 12 pt move still opened). ContextMenu keeps the long press's own
- * allowable movement.
+ * in CSS px, where the primary pointer is coarse: `spec:AST-094` FR29's
+ * drift allowance (FR2's table: unmeasured, a 12 pt move still opened).
+ * Where it is fine, and on ContextMenu, the long press's own allowable
+ * movement stays.
  */
 export const MENU_PRESS_TRIGGER_DRIFT_PX = 13;
+
+const viewOrNull = () => (typeof window === 'undefined' ? null : window);
+const subscribeCoarsePointer = (onChange: () => void) =>
+  watchCoarsePointer(viewOrNull(), onChange);
+const readCoarsePointer = () => isCoarsePointer(viewOrNull());
+const readServerCoarsePointer = () => false;
 /** Distance from a scrolling menu's edge within which a resting pointer scrolls. */
 export const MENU_PRESS_AUTOSCROLL_ZONE_PX = 24;
 const AUTOSCROLL_STEP_PX = 6;
@@ -731,10 +740,19 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // onto its trigger, driven here from the pointer stream this model already
   // observes. Its touch handlers go unused; the hold duration, the movement
   // tolerance and the timer are what matter, and they now have one home.
+  // FR29's drift allowance is a finger's where the primary pointer is
+  // coarse; where it is fine, the shared tolerance stays (useMenuPress FR9).
+  const isPrimaryPointerCoarse = useSyncExternalStore(
+    subscribeCoarsePointer,
+    readCoarsePointer,
+    readServerCoarsePointer,
+  );
   longPressApiRef.current = useLongPress({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
-    moveCancelPx: MENU_PRESS_TRIGGER_DRIFT_PX,
+    moveCancelPx: isPrimaryPointerCoarse
+      ? MENU_PRESS_TRIGGER_DRIFT_PX
+      : undefined,
   });
 
   // --- Handlers ------------------------------------------------------------
