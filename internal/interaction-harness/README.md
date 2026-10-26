@@ -155,7 +155,9 @@ steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and
 stopped after the block, records when the compositor presented each frame
-(`Display::FrameDisplayed`); pass it as `presented`. A gap between two moved
+(`Display::FrameDisplayed`); pass it as `presented`. The record is
+browser-wide (its frames carry no page identity), so it throws when another
+page is open as it starts or stops. A gap between two moved
 frames with nothing delivered inside it is then measured between the
 compositor's own frames: the frames it presented there count as presented
 (`recorderSkipped`, in the summary), and a gap it did not present through is

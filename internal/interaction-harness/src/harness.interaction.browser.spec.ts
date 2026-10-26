@@ -545,6 +545,34 @@ test.describe('frame evidence', () => {
     expect(top.Layout ?? 0).toBeGreaterThan(18);
   });
 
+  test('the compositor record refuses another open page, whose frames it could not tell apart', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the compositor record is a Chromium trace (README: engine limits)',
+    );
+    await fixture(page);
+    // Another page animating: its presented frames would be credited to
+    // this one, so the record refuses to start.
+    const other = await page.context().newPage();
+    await other.setContent(
+      '<style>@keyframes spin{to{transform:rotate(360deg)}}</style><div style="width:50px;height:50px;background:red;animation:spin 1s linear infinite"></div>',
+    );
+    await expect(startCompositorTrace(page)).rejects.toThrow(
+      /another page is open as the trace starts/,
+    );
+    await other.close();
+    // A page opened mid-trace: stop() refuses too.
+    const record = await startCompositorTrace(page);
+    const late = await page.context().newPage();
+    await expect(record.stop()).rejects.toThrow(
+      /another page is open as the trace stops/,
+    );
+    await late.close();
+  });
+
   test('the long-task log fails closed when it never ran on the document', async ({
     page,
   }) => {
