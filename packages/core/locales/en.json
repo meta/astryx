@@ -599,6 +599,58 @@
     "defaultMessage": "{count, number} {count, plural, one {other} other {others}}",
     "description": "Overflow element for the chat typing status when three or more people type: the first name is shown and the rest collapse into this phrase, which is then joined to the name by Intl.ListFormat. Renders as the last list item, e.g. \"Ana and 2 others\"."
   },
+  "@astryx.list.reorderHandle": {
+    "defaultMessage": "Reorder {label}",
+    "description": "Accessible label on the handle at the end of a List row that drags the row to a new place or moves it with the arrow keys. `{label}` is the row's text (e.g. \"Reorder Inbox\")."
+  },
+  "@astryx.list.reorderHandleVerb": {
+    "defaultMessage": "Reorder",
+    "description": "The handle's own accessible label at the end of a List row named through the row's label element: read first, then the row's label (e.g. \"Reorder\" then \"Inbox\"), so a label of any shape completes it. The verb alone, without the row's label."
+  },
+  "@astryx.list.reorderHandleAt": {
+    "defaultMessage": "Reorder item {position, number}",
+    "description": "Accessible label on a List row's reorder handle when the row has no text label to name it after. `{position}` is the row's 1-based place in the list (e.g. \"Reorder item 3\")."
+  },
+  "@astryx.list.reorderHint": {
+    "defaultMessage": "Drag to move this item, or press Space or Enter, then the arrow keys to move it one place at a time. Press Escape when you are done.",
+    "description": "Description read after the label of every reorder handle in a List: how to move a row by dragging, or in reorder mode, which the handle's Space or Enter turns on and Escape ends."
+  },
+  "@astryx.list.reorderPlace": {
+    "defaultMessage": "{label}, position {position, number} of {total, number}, after {previous}, before {next}",
+    "description": "Screen-reader announcement after each move of a List row in reorder mode. `{label}` is the row's text, `{position}` its new 1-based place, `{total}` the number of rows, and `{previous}` and `{next}` the texts of the rows now before and after it (e.g. \"Milk, position 3 of 5, after Eggs, before Bread\")."
+  },
+  "@astryx.list.reorderPlaceTop": {
+    "defaultMessage": "{label}, position {position, number} of {total, number}, at the top, before {next}",
+    "description": "Screen-reader announcement after a List row in reorder mode moves to the first place. `{label}` is the row's text, `{position}` its 1-based place, `{total}` the number of rows, and `{next}` the text of the row now after it (e.g. \"Milk, position 1 of 5, at the top, before Eggs\")."
+  },
+  "@astryx.list.reorderPlaceEnd": {
+    "defaultMessage": "{label}, position {position, number} of {total, number}, after {previous}, at the end",
+    "description": "Screen-reader announcement after a List row in reorder mode moves to the last place. `{label}` is the row's text, `{position}` its 1-based place, `{total}` the number of rows, and `{previous}` the text of the row now before it (e.g. \"Milk, position 5 of 5, after Bread, at the end\")."
+  },
+  "@astryx.list.reorderRefused": {
+    "defaultMessage": "Can't move past {label}",
+    "description": "Screen-reader announcement when an arrow key in reorder mode would move a List row past a row that keeps its place. `{label}` is that row's text (e.g. \"Can't move past Pinned\")."
+  },
+  "@astryx.list.reorderItemAt": {
+    "defaultMessage": "Item {position, number}",
+    "description": "What reorder announcements call a List row that shows no text, such as an icon-only row. `{position}` is its 1-based place (e.g. \"after Item 2\")."
+  },
+  "@astryx.list.reorderModeDone": {
+    "defaultMessage": "Done, {label} at position {position, number} of {total, number}",
+    "description": "Screen-reader announcement when a List row's reorder mode ends (Escape, the handle again, or Done), keeping its moves. `{label}` is the row's text, `{position}` its 1-based place, `{total}` the number of rows (e.g. \"Done, Milk at position 3 of 5\")."
+  },
+  "@astryx.list.reorderPickedUp": {
+    "defaultMessage": "Picked up, position {position, number} of {total, number}.",
+    "description": "Screen-reader announcement when a row of a List is picked up to be reordered, from its handle's keys or by a drag. `{position}` is the row's 1-based place, `{total}` the number of rows."
+  },
+  "@astryx.list.reorderDropped": {
+    "defaultMessage": "Dropped, position {position, number} of {total, number}",
+    "description": "Screen-reader announcement when a row being reordered in a List is dropped. `{position}` is its new 1-based place, `{total}` the number of rows."
+  },
+  "@astryx.list.reorderCancelled": {
+    "defaultMessage": "Reorder cancelled, back to position {position, number} of {total, number}",
+    "description": "Screen-reader announcement when a reorder in a List is cancelled and the row returns to where it was. `{position}` is that 1-based place, `{total}` the number of rows."
+  },
   "@astryx.listInput.emptyTitle": {
     "defaultMessage": "No {itemName}s yet",
     "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\"); the source appends a literal \"s\" to pluralize it, which only works for regular English plurals. If your language cannot pluralize an interpolated noun this way, rephrase around `{itemName}` instead (e.g. \"No {itemName} added yet\")."
