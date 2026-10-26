@@ -21,6 +21,7 @@
  */
 
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {lockSelection} from './selectionLock';
 import {travel} from './geometry';
 import {
   GestureRecognizer,
@@ -54,7 +55,9 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
   beganAt: number | null = null;
 
   constructor(options: LongPressGestureRecognizerOptions = {}) {
-    super(options);
+    // A long press's hold does something (a menu, a hold-repeat): it locks
+    // selection for its press (spec:AST-094 FR41).
+    super({...options, selectionLock: options.selectionLock ?? lockSelection});
     this.minimumPressDuration =
       options.minimumPressDuration ??
       UIKIT_GESTURES.longPress.minimumPressDuration.value;
