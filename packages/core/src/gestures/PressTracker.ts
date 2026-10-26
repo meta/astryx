@@ -28,11 +28,11 @@
  * Two profiles (PRESS_PROFILES) cover what UIKit does:
  *
  * - `control` (a button, a switch): as above.
- * - `cell` (a table or collection row, always inside a scroll view in
- *   UIKit): the highlight always waits the content-touch delay, travel past
- *   the pan hysteresis cancels the press for good (the scroll view took the
- *   touch), and a quicker tap highlights at the lift straight into the
- *   release, with no flash.
+ * - `cell` (a table or collection row): the highlight waits the
+ *   content-touch delay inside a scroll view and comes on at once outside one
+ *   (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press
+ *   for good (the scroll view took the touch), and a quicker tap highlights
+ *   at the lift straight into the release, with no flash.
  *
  * And UIControl's iOS 6 rule: a single-finger single tap recognizer on an
  * ANCESTOR does not beat the control's own action for a touch on it (the
@@ -97,7 +97,7 @@ export interface PressTrackerOptions {
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
-   * control), always (a cell), or never. @default 'inScrollers'
+   * control or a cell), always, or never. @default 'inScrollers'
    */
   highlightDelay?: PressHighlightDelay;
   /**
@@ -143,7 +143,10 @@ export const PRESS_PROFILES = {
   control: {
     highlightDelay: 'inScrollers',
     quickTapFlash: PRESS.quickTapFlash.value,
-    releaseMs: timing.press.buttonReleaseMs,
+    // The shared press styles release every surface on the deselect clock
+    // until a control runs its own release (UIButton's 250 ms), so a
+    // painter's `fading` never outlasts the fade it shows.
+    releaseMs: timing.press.highlightOutMs,
   },
   /**
    * A table or collection cell: inside a scroll view it highlights after the
@@ -190,7 +193,8 @@ export class PressTracker implements TouchConsumer {
 
   constructor(options: PressTrackerOptions) {
     if (options.keepsTouch === true) {
-      this.keepsTouch = () => this.isKept;
+      // Only the tracked touch whose press was delivered is kept.
+      this.keepsTouch = touchId => this.isKept && this.touchId === touchId;
     }
     this.options = options;
     this.trackingExpansion =
@@ -345,14 +349,15 @@ export class PressTracker implements TouchConsumer {
   }
 
   private setHighlighted(value: boolean): void {
+    if (value && this.touchId != null) {
+      // Delivered: the control keeps this touch until it ends (also when a
+      // quick tap's flash is still showing as the press arrives).
+      this.isKept = true;
+    }
     if (this.isHighlighted === value) {
       return;
     }
     this.isHighlighted = value;
-    if (value) {
-      // Delivered: the control keeps this touch until it ends.
-      this.isKept = true;
-    }
     this.options.onHighlightChange?.(value);
   }
 
@@ -363,7 +368,7 @@ export class PressTracker implements TouchConsumer {
    * undefined and keeps passive listeners, so a scroll starting on it never
    * waits on the main thread.
    */
-  readonly keepsTouch?: () => boolean;
+  readonly keepsTouch?: (touchId: number) => boolean;
 
   /** The selection lock of a control whose hold acts (FR41); see the option. */
   get selectionLock(): SelectionLock | undefined {
@@ -385,6 +390,8 @@ export class PressTracker implements TouchConsumer {
   }
 
   private finish(): void {
+    // A highlight shown at the lift (a quick tap's flash) keeps nothing.
+    this.isKept = false;
     this.touchId = null;
     this.isTracking = false;
     this.isTouchInside = false;
