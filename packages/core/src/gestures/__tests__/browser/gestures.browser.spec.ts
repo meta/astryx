@@ -260,6 +260,19 @@ async function footprint(page: Page, id: string) {
   }, id);
 }
 
+/**
+ * Whether a selection starting on an element now is refused: where iOS
+ * WebKit does not run, the selection lock cancels `selectstart` and writes
+ * no style (`spec:AST-094` FR41).
+ */
+async function refusesSelection(page: Page, id: string): Promise<boolean> {
+  return page.evaluate(target => {
+    const event = new Event('selectstart', {bubbles: true, cancelable: true});
+    (document.getElementById(target) ?? document.body).dispatchEvent(event);
+    return event.defaultPrevented;
+  }, id);
+}
+
 async function center(page: Page, id: string): Promise<Point> {
   const box = await page.locator(`#${id}`).boundingBox();
   if (box == null) {
@@ -468,41 +481,28 @@ test('a held finger turns text selection off only where the hold does something 
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  const selection = async (id: string) =>
-    page.evaluate(target => {
-      const style = getComputedStyle(
-        document.getElementById(target) ?? document.body,
-      );
-      return (
-        style.getPropertyValue('-webkit-user-select') ||
-        style.getPropertyValue('user-select')
-      );
-    }, id);
-  const held: Record<string, string[]> = {};
+  const held: Record<string, boolean[]> = {};
   for (const id of ['passive', 'slider', 'hpan']) {
     await page.locator(`#${id}`).scrollIntoViewIfNeeded();
     const at = await center(page, id);
-    const before = await selection(id);
+    const before = await refusesSelection(page, id);
     await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
-    const during = await selection(id);
+    const during = await refusesSelection(page, id);
     await driver.play([{t: 0, down: []}]);
-    held[id] = [before, during, await selection(id)];
+    held[id] = [before, during, await refusesSelection(page, id)];
   }
-  // The engine's own value otherwise: Chromium computes `auto`, WebKit `text`.
-  const free = held.hpan[0];
-  expect(free).not.toBe('none');
   // A control whose hold does nothing keeps the browser's long-press
   // selection.
-  expect(held.passive).toEqual([free, free, free]);
-  expect(held.slider).toEqual([free, 'none', free]);
-  expect(held.hpan).toEqual([free, free, free]);
+  expect(held.passive).toEqual([false, false, false]);
+  expect(held.slider).toEqual([false, true, false]);
+  expect(held.hpan).toEqual([false, false, false]);
 
   const at = await center(page, 'passive');
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  const withMouse = await selection('passive');
+  const withMouse = await refusesSelection(page, 'passive');
   await page.mouse.up();
-  expect(withMouse).toBe(free);
+  expect(withMouse).toBe(false);
 });
 
 test('a held finger on a checkbox inside an element whose hold does something turns its selection off too, as WebKit makes every input selectable; inside a press-tracked row it stays native (spec:AST-094 FR41)', async ({
@@ -511,28 +511,16 @@ test('a held finger on a checkbox inside an element whose hold does something tu
 }) => {
   const driver = await open(page, browserName);
   const heldSelection = async (id: string) => {
-    const selection = async () =>
-      page.evaluate(target => {
-        const style = getComputedStyle(
-          document.getElementById(target) ?? document.body,
-        );
-        return (
-          style.getPropertyValue('-webkit-user-select') ||
-          style.getPropertyValue('user-select')
-        );
-      }, id);
     await page.locator(`#${id}`).scrollIntoViewIfNeeded();
     const at = await center(page, id);
-    const before = await selection();
+    const before = await refusesSelection(page, id);
     await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
-    const during = await selection();
+    const during = await refusesSelection(page, id);
     await driver.play([{t: 0, down: []}]);
-    return [before, during, await selection()];
+    return [before, during, await refusesSelection(page, id)];
   };
-  const locked = await heldSelection('switchInput');
-  expect(locked).toEqual([locked[0], 'none', locked[0]]);
-  const native = await heldSelection('check');
-  expect(native).toEqual([native[0], native[0], native[0]]);
+  expect(await heldSelection('switchInput')).toEqual([false, true, false]);
+  expect(await heldSelection('check')).toEqual([false, false, false]);
 });
 
 test('a scroll the page makes under a still finger keeps the touch and its tap', async ({
@@ -779,28 +767,17 @@ test('a zero-delay hold that brings its own lock turns selection off only for a 
       }),
     );
   });
-  const selection = async () =>
-    page.evaluate(() => {
-      const style = getComputedStyle(
-        document.getElementById('bar') ?? document.body,
-      );
-      return (
-        style.getPropertyValue('-webkit-user-select') ||
-        style.getPropertyValue('user-select')
-      );
-    });
-  const free = await selection();
-  expect(free).not.toBe('none');
-  const held: Record<string, string[]> = {};
+  expect(await refusesSelection(page, 'lens')).toBe(false);
+  const held: Record<string, boolean[]> = {};
   for (const id of ['search', 'lens']) {
     const at = await center(page, id);
     await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
-    const during = await selection();
+    const during = await refusesSelection(page, 'lens');
     await driver.play([{t: 0, down: []}]);
-    held[id] = [during, await selection()];
+    held[id] = [during, await refusesSelection(page, 'lens')];
   }
-  expect(held.search).toEqual([free, free]);
-  expect(held.lens).toEqual(['none', free]);
+  expect(held.search).toEqual([false, false]);
+  expect(held.lens).toEqual([true, false]);
 });
 
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
