@@ -227,8 +227,10 @@ warning, so two writers never fight over the paint. Pass another
   flight and removes it all. A development warning names the first attach
   under a fine pointer: attach touch work under a touch presentation. The
   one carve-out is a recognizer or press tracker that reads each event's
-  pointer itself, as `spec:AST-057`'s row swipe does, or a stepper whose
-  held press repeats the same under a mouse: attached with
+  pointer itself, as `spec:AST-057`'s row swipe does, a press tracker that
+  paints press feedback (an FR19 exception for press feedback only, pending
+  in `spec:AST-094`'s amendment), or a stepper whose held press repeats the
+  same under a mouse: attached with
   `perEventPointer: true` (an option of `attach`, `attachConsumer`,
   `useGestureRecognizer` and `usePressTracker`), it gets the host's
   listeners, its deliveries and its own element's style on any pointer,

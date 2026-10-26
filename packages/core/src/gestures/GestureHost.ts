@@ -696,7 +696,10 @@ export class GestureHost {
     return this.isCoarse || this.perEventRecognizers.has(recognizer);
   }
 
-  /** Whether a press consumer takes input now (FR19; its per-event opt-in). */
+  /**
+   * Whether a press consumer takes input now (FR19; its per-event opt-in,
+   * an FR19 exception for press feedback pending in AST-094's amendment).
+   */
   private isConsumerActive(consumer: TouchConsumer): boolean {
     return this.isCoarse || this.perEventConsumers.has(consumer);
   }
