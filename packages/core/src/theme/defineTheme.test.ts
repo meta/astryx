@@ -3,7 +3,12 @@
 import {describe, it, expect, vi} from 'vitest';
 import type {IconRegistry} from '../Icon/globalIconRegistry';
 import type {DefinedTheme} from './defineTheme';
-import {defineTheme, generateThemeCSS, isDefinedTheme} from './defineTheme';
+import {
+  defineTheme,
+  generateThemeCSS,
+  generateThemeRules,
+  isDefinedTheme,
+} from './defineTheme';
 import {resolveThemeToken} from './tokens';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
@@ -16,17 +21,296 @@ describe('defineTheme', () => {
     expect(theme.name).toBe('test');
   });
 
-  it('stores only specified token overrides', () => {
+  it('stores only authored token overrides while CSS scopes derived role defaults', () => {
     const theme = defineTheme({
       name: 'custom',
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-text-blue': '#CC0000',
       },
     });
-    // Override should be present
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
-    // Defaults should NOT be in tokens
+    expect(theme.tokens['--color-text-blue']).toBe('#CC0000');
+    expect(theme.tokens['--color-text-info']).toBeUndefined();
+    expect(generateThemeTestCSS(theme)).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+    // Unrelated defaults remain owned by StyleX rather than copied into every
+    // theme scope.
     expect(theme.tokens['--color-background-surface']).toBeUndefined();
+  });
+
+  it('keeps an explicit semantic role above its scoped default', () => {
+    const theme = defineTheme({
+      name: 'custom-info',
+      tokens: {
+        '--color-text-blue': '#FF0000',
+        '--color-text-info': '#0066CC',
+      },
+    });
+
+    expect(theme.tokens['--color-text-info']).toBe('#0066CC');
+  });
+
+  it('does not generate a status alias that would create a token cycle', () => {
+    const theme = defineTheme({
+      name: 'parent-role-reference',
+      tokens: {'--color-text-blue': 'var(--color-text-info)'},
+    });
+    const css = generateThemeRules(theme).join('\n');
+
+    expect(css).toContain('--color-text-blue: var(--color-text-info);');
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('checks the complete generated alias graph for cycles', () => {
+    const theme = defineTheme({
+      name: 'generated-role-cycle',
+      tokens: {
+        '--color-text-blue': 'var(--color-text-success)',
+        '--color-text-green': 'var(--color-text-info)',
+      },
+    });
+    const css = generateThemeRules(theme).join('\n');
+
+    // The first alias is safe; the second would close a loop through it.
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    expect(css).not.toContain('--color-text-success: var(--color-text-green);');
+  });
+
+  it('includes theme-local references in generated alias cycle checks', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--local-info-loop)'},
+      localTokens: {'--local-info-loop': 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([null, 16, false])(
+    'stringifies a legacy non-string status source without throwing (%s)',
+    value => {
+      const theme = defineTheme({
+        name: `legacy-status-source-${String(value)}`,
+        tokens: {'--color-text-blue': value as never},
+      });
+
+      expect(() => generateThemeRules(theme)).not.toThrow();
+      expect(generateThemeRules(theme).join('\n')).toContain(
+        `--color-text-blue: ${String(value)};`,
+      );
+    },
+  );
+
+  it('preserves JavaScript string coercion for legacy object token values', () => {
+    const value = {toString: () => '#123456'};
+    const theme = defineTheme({
+      name: 'legacy-object-status-source',
+      tokens: {'--color-text-blue': value as never},
+    });
+
+    expect(generateThemeRules(theme).join('\n')).toContain(
+      '--color-text-blue: #123456;',
+    );
+  });
+
+  it.each([
+    ['uppercase VAR()', 'VAR(--color-text-info)', undefined],
+    ['mixed-case var()', 'vAr(--color-text-info)', undefined],
+    ['escaped identifier', 'var(--\\63 olor-text-info)', undefined],
+    ['escaped function name', 'v\\61r(--color-text-info)', undefined],
+    ['escaped leading hyphens', 'var(\\2d\\2d color-text-info)', undefined],
+    [
+      'comment-separated identifier',
+      'var(/*ok*/ --color-text-info)',
+      undefined,
+    ],
+    [
+      'non-ASCII local token',
+      'var(--品牌)',
+      {'--品牌': 'var(--color-text-info)'},
+    ],
+  ])(
+    'recognizes %s while checking generated alias cycles',
+    (_, accent, localTokens) => {
+      const css = generateThemeRules({
+        tokens: {'--color-text-blue': accent},
+        localTokens,
+      }).join('\n');
+
+      expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it('canonicalizes escaped declaration keys while checking cycles', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--\\62 rand)'},
+      localTokens: {'--\\62 rand': 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('ignores var() text inside CSS comments', () => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': '#123456 /* var(--color-text-info) */'},
+    }).join('\n');
+
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([
+    ['escaped space', '--x\\ y'],
+    ['escaped backslash', '--x\\\\y'],
+  ])('canonicalizes an %s declaration key exactly once', (_, localToken) => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': `var(${localToken})`},
+      localTokens: {[localToken]: 'var(--color-text-info)'},
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each([
+    ['CRLF-preprocessed escape', 'v\\61\r\nr(--color-text-info)', undefined],
+    ['surrogate escape', 'var(--\\d800)', {'--�': 'var(--color-text-info)'}],
+    ['NUL replacement', 'var(--\0)', {'--�': 'var(--color-text-info)'}],
+  ])('uses browser preprocessing for %s', (_, accent, localTokens) => {
+    const css = generateThemeRules({
+      tokens: {'--color-text-blue': accent},
+      localTokens,
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it.each(['var (--color-text-info)', 'var/**/(--color-text-info)'])(
+    'does not treat non-function text as a reference: %s',
+    accent => {
+      const css = generateThemeRules({
+        tokens: {'--color-text-blue': accent},
+      }).join('\n');
+      expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it.each([
+    'var(--color-text-red, #var(--color-text-info))',
+    '1var(--color-text-info)',
+    '@var(--color-text-info)',
+  ])(
+    'does not create references inside non-function CSS tokens: %s',
+    accent => {
+      const css = generateThemeRules({
+        tokens: {
+          '--color-text-blue': accent,
+          '--color-text-red': '#123456',
+        },
+      }).join('\n');
+
+      expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    },
+  );
+
+  it('does not let unquoted URL contents hide a following var() reference', () => {
+    const css = generateThemeRules({
+      tokens: {
+        '--color-text-blue': 'url(/*) var(--color-text-info) /* */',
+      },
+    }).join('\n');
+
+    expect(css).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('ignores pre-existing unrelated legacy cycles', () => {
+    const css = generateThemeRules({
+      tokens: {
+        '--color-text-blue': '#123456',
+        '--color-background-body': 'var(--color-background-surface)',
+        '--color-background-surface': 'var(--color-background-body)',
+      },
+    }).join('\n');
+
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('handles long runs of adjacent comments without recursion', () => {
+    const comments = '/**/'.repeat(10_000);
+    expect(() =>
+      generateThemeRules({
+        tokens: {'--color-text-blue': `#123456 ${comments}`},
+      }),
+    ).not.toThrow();
+  });
+
+  it('handles a very wide reference list without argument spreading', () => {
+    const references = 'var(--wide-target) '.repeat(200_000);
+    expect(() =>
+      generateThemeRules({
+        tokens: {'--color-text-blue': references},
+        localTokens: {'--wide-target': '#123456'},
+      }),
+    ).not.toThrow();
+  });
+
+  it('checks a reconverging token graph in linear time', () => {
+    const localTokens: Record<string, string> = {};
+    for (let layer = 0; layer < 26; layer++) {
+      const next = layer + 1;
+      const value =
+        layer === 25
+          ? '#ffffff'
+          : `var(--layer-${next}-a, var(--layer-${next}-b))`;
+      localTokens[`--layer-${layer}-a`] = value;
+      localTokens[`--layer-${layer}-b`] = value;
+    }
+    const started = performance.now();
+    generateThemeRules({
+      tokens: {'--color-text-blue': 'var(--layer-0-a)'},
+      localTokens,
+    });
+
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('emits every source-derived status role without counting it as authored', () => {
+    const theme = defineTheme({
+      name: 'custom-status-sources',
+      tokens: {
+        '--color-text-blue': '#200001',
+        '--color-text-green': '#200002',
+        '--color-text-yellow': '#200003',
+        '--color-text-red': '#200004',
+      },
+    });
+    const css = generateThemeTestCSS(theme);
+
+    expect(theme.tokens['--color-text-info']).toBeUndefined();
+    for (const declaration of [
+      '--color-text-info: var(--color-text-blue);',
+      '--color-text-success: var(--color-text-green);',
+      '--color-text-warning: var(--color-text-yellow);',
+      '--color-text-error: var(--color-text-red);',
+      '--color-on-info-muted: var(--color-text-blue);',
+      '--color-on-success-muted: var(--color-text-green);',
+      '--color-on-warning-muted: var(--color-text-yellow);',
+      '--color-on-error-muted: var(--color-text-red);',
+    ]) {
+      expect(css).toContain(declaration);
+    }
+    for (const role of ['icon', 'border']) {
+      expect(css).toContain(`--color-${role}-info: var(--color-text-info);`);
+    }
+  });
+
+  it('derives the content on a status fill the theme sets (INV17)', () => {
+    const theme = defineTheme({
+      name: 'bright-error',
+      tokens: {'--color-error': '#FF0000'},
+    });
+    const css = generateThemeTestCSS(theme);
+    expect(css).toContain('--color-error: #FF0000;');
+    expect(css).toMatch(
+      /--color-on-error: light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)/,
+    );
   });
 
   it('converts [light, dark] tuples to light-dark()', () => {
@@ -464,10 +748,10 @@ describe('typography.scale', () => {
       name: 'combo',
       typography: {scale: {base: 16, ratio: 1.25}},
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-accent': '#CC0000',
       },
     });
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
+    expect(theme.tokens['--color-accent']).toBe('#CC0000');
     expect(theme.tokens['--text-heading-4-size']).toBe('var(--font-size-base)');
     expect(theme.tokens['--font-size-base']).toBe('1rem');
   });
@@ -604,10 +888,10 @@ describe('radius', () => {
       typography: {scale: {base: 16, ratio: 1.25}},
       radius: {base: 4, multiplier: 1},
       tokens: {
-        '--color-accent': '#FF0000',
+        '--color-accent': '#CC0000',
       },
     });
-    expect(theme.tokens['--color-accent']).toBe('#FF0000');
+    expect(theme.tokens['--color-accent']).toBe('#CC0000');
     expect(theme.tokens['--text-heading-4-size']).toBe('var(--font-size-base)');
     expect(theme.tokens['--radius-element']).toBe('8px');
   });

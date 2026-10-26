@@ -60,6 +60,62 @@ describe('stone touch + narrow type pin', () => {
   });
 });
 
+describe('stone input status roles', () => {
+  it('keeps soft per-input status rims and glyphs on the border and icon roles', () => {
+    const inputs = [
+      'text-input',
+      'text-area',
+      'number-input',
+      'date-input',
+      'time-input',
+      'selector',
+      'multi-selector',
+      'typeahead',
+      'tokenizer',
+    ];
+
+    const {green, red, yellow} = stoneModePalettes;
+    for (const input of inputs) {
+      const component = stoneTheme.components![input];
+      expect(component['status:success']).toMatchObject({
+        '--color-border-success': `light-dark(${green.light[55]}, ${green.dark[70]})`,
+        '--color-icon-success': `light-dark(${green.light[55]}, ${green.dark[70]})`,
+      });
+      expect(component['status:warning']).toMatchObject({
+        '--color-border-warning': `light-dark(${yellow.light[55]}, ${yellow.dark[70]})`,
+        '--color-icon-warning': `light-dark(${yellow.light[55]}, ${yellow.dark[70]})`,
+      });
+      expect(component['status:error']).toMatchObject({
+        '--color-border-error': `light-dark(${red.light[60]}, ${red.dark[70]})`,
+        '--color-icon-error': `light-dark(${red.light[60]}, ${red.dark[70]})`,
+      });
+    }
+  });
+});
+
+describe('stone strong status contrast', () => {
+  it('pairs strong status fills with contrasting light and dark ink', () => {
+    for (const token of [
+      '--color-on-success',
+      '--color-on-warning',
+      '--color-on-error',
+    ] as const) {
+      expect(stoneTheme.tokens[token]).toBe(
+        `light-dark(${stoneModePalettes.neutral.light[100]}, ${stoneModePalettes.neutral.dark[10]})`,
+      );
+    }
+  });
+
+  it('uses dark ink for marks on Stone’s pale progress fills', () => {
+    const mark = stoneTheme.components!['progress-bar-mark'];
+    for (const variant of ['accent', 'success', 'warning', 'error']) {
+      expect(mark[`placement:fill+variant:${variant}`]).toMatchObject({
+        backgroundColor: 'var(--color-on-light)',
+      });
+    }
+  });
+});
+
 describe('stone secondary ComplexSelector', () => {
   it('keeps the hover fill off a disabled trigger in either form', () => {
     expect(generateThemeCSS(stoneTheme).component).toMatch(
@@ -147,10 +203,12 @@ describe('stone palette mapping', () => {
     }
 
     expect(stoneTheme.components?.['text-input']?.['status:success']).toEqual({
-      '--color-success': `light-dark(${green.light[55]}, ${green.dark[70]})`,
+      '--color-border-success': `light-dark(${green.light[55]}, ${green.dark[70]})`,
+      '--color-icon-success': `light-dark(${green.light[55]}, ${green.dark[70]})`,
     });
     expect(stoneTheme.components?.['text-input']?.['status:warning']).toEqual({
-      '--color-warning': `light-dark(${yellow.light[55]}, ${yellow.dark[70]})`,
+      '--color-border-warning': `light-dark(${yellow.light[55]}, ${yellow.dark[70]})`,
+      '--color-icon-warning': `light-dark(${yellow.light[55]}, ${yellow.dark[70]})`,
     });
   });
 });

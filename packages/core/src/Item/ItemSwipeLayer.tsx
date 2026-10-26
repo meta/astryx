@@ -175,6 +175,15 @@ const swipeVariantStyles = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    // Forced colors replace the fill with Canvas; a border keeps the
+    // destructive fill's shape visible (architecture:theme-tokens INV11). A
+    // border, not an outline, leaves the shared focus ring intact.
+    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
+    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
   },
 });
 
