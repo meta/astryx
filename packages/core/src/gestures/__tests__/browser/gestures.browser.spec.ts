@@ -318,6 +318,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'switchRow',
       'card',
       'cardLate',
+      'switchRow',
     ]),
   );
 });
