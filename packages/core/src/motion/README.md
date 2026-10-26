@@ -61,18 +61,22 @@ motion docs.
 ```
 import {createAnimator} from '../motion/animator';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
+import {resolveMotion} from '../motion/resolveMotion';
 import {registerSpringsTable, springs} from '../motion/uikit';
 
 // Once, so the springs follow the theme's roles:
 registerSpringsTable();
 
 const animator = createAnimator(sheet);
+// The animator plays a table spring's motion role, which a theme may retune
+// (spec:AST-094 FR4); math on a spring reads the role with resolveMotion.
+const spring = springs.sheetDetent;
 
 // A drag writes one style per frame and never renders:
 animator.set({y: offset});
 
 // The finger lifts: spring to the detent with the release velocity (px/s).
-const handle = animator.animate({y: detent}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+const handle = animator.animate({y: detent}, {spring, velocity: {y: 1200}});
 
 // A finger lands mid-flight: where is the sheet right now, how fast?
 const y = animator.get('y', event.timeStamp);
@@ -84,7 +88,7 @@ animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, ma
 
 // Any closed-form curve, here a press that keeps deepening: the target
 // scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
+const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.contextMenuLift)), {
   from: 1,
   target: 1,
   slope: -0.16,
@@ -174,8 +178,9 @@ Animation keyframe animations.
 the model behind SwiftUI's `Spring`, `CASpringAnimation` and
 `UISpringTimingParameters`. A spring description stays in its source's
 vocabulary (mass, stiffness and damping; duration and bounce; response and
-damping ratio) and `toSpring` normalizes it, clamping overdamping to critical
-as Core Animation does for every spring UIKit attaches. The tests hold it to an
+damping ratio) and `toSpring` normalizes it. A mass, stiffness and damping
+description that does not allow overdamping is clamped to critical, as Core
+Animation does for every spring UIKit attaches. The tests hold it to an
 independent fourth-order Runge-Kutta integration over a sweep of damping
 ratios, responses and release velocities; to a port of WebKit's own spring
 solver; to the WWDC23 "Animate with springs" conversion equations; and to

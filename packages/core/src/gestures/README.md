@@ -239,25 +239,10 @@ component can call the hook.
   is owned. A touch nobody owns scrolls exactly as it would without the
   system. Taps claim only at the lift, so an element with only taps, or only
   a press consumer, gets no such listener (see the known limit below).
-- **Early claim.** A one-way pan over content the browser could scroll (an
-  overlay such as a toast or a banner) cancels its touch's moves once the
-  finger has gone 5 px its way (`claimDistance`), before WebKit claims a
-  slow drag at 10–11 px; it still begins at 10 px with UIKit's translation.
-  Safari gives the page no scroll for a touch once one of its moves was
-  cancelled, so from then on the touch is the pan's: a reversal no longer
-  fails it, and it begins whichever way the finger goes. That is UIKit's
-  outcome too, where a drag that starts on an overlay never reaches the
-  content behind it. A `scrollEdge` pan (a sheet over its own content)
-  claims at its begin instead, as UIKit gives a reversed drag to the
-  content.
-  Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
-  pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
-  (the last cancelable `touchmove` at 10 px), and cancelling every
-  `touchmove` from 8 px keeps the page still for the whole gesture. Under
-  `pan-y` it scrolls only drags steeper than about 2:1 to 3:1, once the
-  vertical travel reaches about 10 px. A pan that competes with native
-  scrolling therefore decides at 10 px or less (the toast's swipe decides at
-  8).
+- **Claim at the begin.** A pan claims its touch only as it begins, at
+  UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
+  a scroll at 10–11 px; a drag the browser took first stays the browser's
+  (FR14).
 - **The browser's claim.** `pointercancel` on a finger, or a scroll above
   the touch, means the browser took the finger; so does its first `touchmove`
   that can no longer be cancelled, when the browser could pan along the
@@ -361,10 +346,10 @@ in `../utils/touchPresentation.ts`:
 
 - touch behaviours (this system, the press model, UIKit springs and
   timings) key on a coarse PRIMARY pointer (`TOUCH_QUERY`);
-- layout behaviours key on a compact viewport, narrower than 744 px or
-  shorter than 500 px (`COMPACT_QUERY`), the closest a size can get to
-  UIKit's compact size class (a Max-size iPhone in landscape is its one
-  known miss);
+- layout behaviours key on a compact viewport, below the theme's `md`
+  width point (`spec:AST-012` FR9): `COMPACT_QUERY` spells the default
+  points for a style, and behaviour reads the active theme's definition, so
+  a theme that moves `md` moves compact with it;
 - a presentation that needs both, a sheet in place of a popover, asks for
   both (`COMPACT_TOUCH_QUERY`).
 
@@ -396,10 +381,6 @@ tokens under a mouse.
   reveal inside the row would never wait, but it tracks with scroll physics
   rather than UIKit's measured tracking spring; it is a possible opt-in, not
   the default.
-- **A jitter on an overlay keeps the touch.** A finger that moves 5 px or
-  more in a one-way overlay's direction and then drags the other way moves
-  the overlay, not the page behind it, for that touch (UIKit's outcome, and
-  Safari would not scroll the page after a cancelled move anyway).
 - **Follow-up:** Chromium keeps 3:1 to 1.5:1 drags as swipes even with a
   passive listener (its `touch-action` filter drops a `pan-y` scroll that
   starts sideways), so a passive listener there would cost no parity. It
