@@ -1868,6 +1868,16 @@ describe('attach', () => {
     expect(element.style.translate).toBe('300px 0px');
   });
 
+  it('unmounting settles a pending atRest() wait and leaves no poll timer', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const rest = animator.atRest();
+    animator.attach(null);
+    // Resolves without any timer running (none is advanced here).
+    await rest;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('unmounting settles every handle as interrupted and leaves no timer', async () => {
     const {animator} = setup();
     const handle = animator.animate({x: 300}, {spring: springs.settle});

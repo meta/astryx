@@ -2074,6 +2074,11 @@ export function createAnimator(
         for (const property of PROPERTIES) {
           interrupt(property, time);
         }
+        // Nothing is left to wait for: every atRest() wait settles and its
+        // poll timer goes with it (INV5).
+        for (const wait of [...restWaits]) {
+          wait.settle();
+        }
       }
       for (const animation of running.values()) {
         animation.cancel();
