@@ -2106,8 +2106,14 @@ export function createAnimator(
                 ? IDENTITY.opacity
                 : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
           }
-          if (landing.fadeIn?.isBorrowed === true) {
+          if (
+            landing.fadeIn?.isBorrowed === true ||
+            landing.restoreIsBorrowed === true
+          ) {
+            // The stylesheet owns its opacity again: the fade's end value
+            // written inline goes with it.
             borrowedOpacity = null;
+            target?.style.removeProperty('opacity');
           }
           for (const owner of [landing.owner, ...landing.carried]) {
             carriedOwners.delete(owner);
