@@ -169,10 +169,14 @@ export interface AttachOptions {
   manageStyle?: boolean;
   /**
    * The recognizer, or the press tracker, reads each event's pointer itself,
-   * as `spec:AST-057`'s row swipe does and a stepper held with a mouse does,
    * so it attaches even where the primary pointer is fine: the host installs
-   * what it needs there, styles its element and raises no warning. Everything
-   * else stays inactive there. @default false
+   * what it needs there, styles its element and raises no warning. A
+   * recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
+   * gets press feedback only, the exception `spec:AST-094` FR19 names in
+   * cixzhang's amendment: a finger's press is delivered and painted (a
+   * touchscreen laptop, an iPad with a trackpad), but it never keeps its
+   * touch from the browser, which still pans. Everything else stays inactive
+   * there. @default false
    */
   perEventPointer?: boolean;
 }
@@ -631,8 +635,9 @@ export class GestureHost {
         recognizer =>
           this.isActive(recognizer) && claimsWhileMoving(recognizer),
       ) ||
-      (registration.consumer?.keepsTouch != null &&
-        this.isConsumerActive(registration.consumer));
+      // A kept press holds its touch only where the pointer is coarse; a
+      // per-event tracker elsewhere gives press feedback only (FR19).
+      (registration.consumer?.keepsTouch != null && this.isCoarse);
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -1018,7 +1023,8 @@ export class GestureHost {
       this.watchTarget(
         touch.identifier,
         target,
-        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
+        recognizers.some(claimsWhileMoving) ||
+          (this.isCoarse && consumer?.keepsTouch != null),
       );
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target});
@@ -1119,7 +1125,7 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          this.arena.consumerOf(id)?.keepsTouch?.() === true)
+          (this.isCoarse && this.arena.consumerOf(id)?.keepsTouch?.() === true))
       ) {
         event.preventDefault();
         return;
