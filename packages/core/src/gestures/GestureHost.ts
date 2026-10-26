@@ -618,6 +618,8 @@ export class GestureHost {
       registration.hovers.length > 0 ||
       registration.consumer != null
     ) {
+      // What stays may take nothing (only disabled recognizers): FR24.
+      this.syncListeners();
       return;
     }
     if (registration.touchMoveListener != null) {
