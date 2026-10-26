@@ -169,7 +169,7 @@ export function planReducedMotion(
   // A move still waiting to land (an earlier dip's) lands at this call's
   // invisible moment, never while the element shows.
   const pending = view.hasPendingLanding;
-  // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
+  // Not a role: nothing lengthens it (design:reduced-motion DR4).
   const ms = reducedMotionCrossFade.durationMs;
   const landsLater = (
     at: number,
