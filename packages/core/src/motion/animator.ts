@@ -122,8 +122,8 @@
  * transition. A curve marked `isTransition` (coast()'s spring back from past
  * an edge), like a spring a component starts on release toward a target it
  * picks (a detent, a page), is a transition: it plays through the Reduce
- * Motion policy above, a cross-fade on a coarse pointer and at once
- * elsewhere (DR2, DR3).
+ * Motion policy above, a cross-fade on a coarse pointer or after a touch
+ * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
