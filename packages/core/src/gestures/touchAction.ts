@@ -3,8 +3,9 @@
 /**
  * @file touchAction.ts
  * @input The recognizers attached to one element
- * @output Exports deriveTouchAction (the element's `touch-action`) and
- *   gestureHostStyle (every inline style a host sets for its recognizers)
+ * @output Exports deriveTouchAction (the element's `touch-action`),
+ *   gestureHostStyle (the inline style a host sets for its recognizers) and
+ *   holdSelectionStyle (the selection and callout lock for one held press)
  * @position Browser negotiation of packages/core/src/gestures, pure so a
  *   server render can emit the same style the client would set
  *
@@ -92,9 +93,10 @@ export interface GestureHostStyle {
 }
 
 /**
- * Every style a host sets for these recognizers: the `touch-action`, and for
- * a long press, no iOS callout and no text selection under the held finger
- * (a long-pressed row in UIKit selects no text).
+ * The style a host sets for these recognizers while they are attached: the
+ * `touch-action`. Text selection is not locked here: a mouse, a keyboard and
+ * assistive technology keep selecting as they do today (spec:AST-017 FR59,
+ * spec:AST-094 FR41).
  */
 export function gestureHostStyle(
   recognizers: ReadonlyArray<GestureRecognizer>,
@@ -103,17 +105,6 @@ export function gestureHostStyle(
   const touchAction = deriveTouchAction(recognizers);
   if (touchAction != null) {
     style.touchAction = touchAction;
-  }
-  if (
-    recognizers.some(
-      recognizer =>
-        recognizer instanceof LongPressGestureRecognizer &&
-        internals(recognizer).acceptsTouchInput,
-    )
-  ) {
-    style.WebkitTouchCallout = 'none';
-    style.WebkitUserSelect = 'none';
-    style.userSelect = 'none';
   }
   return style;
 }
@@ -182,4 +173,24 @@ export function intersectTouchAction(derived: string, caller: string): string {
     parts.push('pinch-zoom');
   }
   return parts.length === 0 ? 'none' : parts.join(' ');
+}
+
+/**
+ * The lock a host applies for one press only, from touch-down to the lift or
+ * a cancel, on an element whose hold does something (a long press): no iOS
+ * callout and no text-selection start under the held finger, as a
+ * long-pressed row in UIKit selects no text (spec:AST-094 FR41). Null where
+ * the hold does nothing, so a long press there selects natively.
+ */
+export function holdSelectionStyle(
+  recognizers: ReadonlyArray<GestureRecognizer>,
+): GestureHostStyle | null {
+  const holds = recognizers.some(
+    recognizer =>
+      recognizer instanceof LongPressGestureRecognizer &&
+      internals(recognizer).acceptsTouchInput,
+  );
+  return holds
+    ? {WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'}
+    : null;
 }

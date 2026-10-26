@@ -166,7 +166,7 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
-  it('sets touch-action and the long-press styles on attach, and restores them on detach', () => {
+  it('sets touch-action on attach and restores it on detach; the long-press styles wait for a held press', () => {
     const {box} = mount('<div id="box" style="color: red"></div>');
     const set = vi.spyOn(box.style, 'setProperty');
     const remove = vi.spyOn(box.style, 'removeProperty');
@@ -176,12 +176,36 @@ describe('GestureHost', () => {
     );
     const detachPress = host.attach(box, new LongPressGestureRecognizer());
     expect(set).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
-    expect(set).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
-    expect(set).toHaveBeenCalledWith('user-select', 'none');
+    expect(set).not.toHaveBeenCalledWith('-webkit-touch-callout', 'none');
     detachPress();
-    expect(remove).toHaveBeenCalledWith('-webkit-touch-callout');
     detachPan();
     expect(remove).toHaveBeenCalledWith('touch-action');
+  });
+
+  it('turns selection and the callout off for one held press, only where the hold does something (spec:AST-094 FR41)', () => {
+    // The lock is taken only where the primary pointer is coarse (FR19).
+    detachers.push(coarsePrimaryPointer());
+    const {hold, plain} = mount(
+      '<div><div id="hold"></div><div id="plain"></div></div>',
+    );
+    detachers.push(host.attach(hold, new LongPressGestureRecognizer()));
+    detachers.push(host.attach(plain, new TapGestureRecognizer()));
+    // jsdom drops the prefixed properties, so the writes are observed.
+    const set = vi.spyOn(hold.style, 'setProperty');
+    const remove = vi.spyOn(hold.style, 'removeProperty');
+    const plainSet = vi.spyOn(plain.style, 'setProperty');
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', hold, [finger], [finger], 0);
+    expect(set).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
+    expect(set).toHaveBeenCalledWith('user-select', 'none');
+    expect(remove).not.toHaveBeenCalledWith('user-select');
+    touch('touchend', hold, [finger], [], 100);
+    expect(remove).toHaveBeenCalledWith('-webkit-touch-callout');
+    expect(remove).toHaveBeenCalledWith('user-select');
+    const other = {id: 2, x: 10, y: 40};
+    touch('touchstart', plain, [other], [other], 200);
+    expect(plainSet).not.toHaveBeenCalledWith('user-select', 'none');
+    touch('touchend', plain, [other], [], 260);
   });
 
   it('cancels touchmove only once a recognizer owns the touch, and swallows the click', () => {
@@ -244,6 +268,42 @@ describe('GestureHost', () => {
     expect(pan.state).toBe('changed');
     expect(pan.translation().x).toBe(before + 30);
     expect(drag.defaultPrevented).toBe(true);
+  });
+
+  it('leaves a second finger no recognizer owns to the page while the claimed one is held (spec:AST-094 FR19)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({maximumNumberOfTouches: 1});
+    detachers.push(host.attach(box, pan));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [first], [first], 0);
+    const moved = {...first, x: 40};
+    touch('touchmove', box, [moved], [moved], 16);
+    expect(pan.state).toBe('began');
+    const before = pan.translation().x;
+    const second = {id: 2, x: 200, y: 200};
+    touch('touchstart', box, [second], [moved, second], 20);
+    const pinchLike = touch(
+      'touchmove',
+      box,
+      [{...second, x: 260}],
+      [moved, {...second, x: 260}],
+      32,
+    );
+    expect(pinchLike.defaultPrevented).toBe(false);
+    expect(pan.state).toBe('began');
+    expect(pan.numberOfTouches).toBe(1);
+    // The claimed finger's own moves stay cancelled.
+    const own = touch(
+      'touchmove',
+      box,
+      [{...moved, x: 60}],
+      [
+        {...moved, x: 60},
+        {...second, x: 260},
+      ],
+      48,
+    );
+    expect(own.defaultPrevented).toBe(true);
   });
 
   it('reads pointercancel on a finger as the browser taking it', () => {
@@ -336,6 +396,33 @@ describe('GestureHost', () => {
     expect(host.arena.getTouch(1)?.takenByBrowser).toBe(true);
   });
 
+  it("gives a finger's target a passive touchmove listener unless a recognizer on that touch can claim while it moves (spec:AST-094 FR19)", () => {
+    const {taps, pan} = mount(
+      '<div id="taps"><span id="tapChild">t</span></div><div id="pan"><span id="panChild">p</span></div>',
+    );
+    detachers.push(host.attach(taps, new TapGestureRecognizer({name: 'tap'})));
+    detachers.push(host.attach(pan, new PanGestureRecognizer({name: 'pan'})));
+    const moveListenerFlags = (element: Element) => {
+      const added = vi.spyOn(element, 'addEventListener');
+      return () =>
+        added.mock.calls
+          .filter(([type]) => type === 'touchmove')
+          .map(([, , options]) => (options as AddEventListenerOptions).passive);
+    };
+    const tapChild = taps.querySelector('#tapChild')!;
+    const panChild = pan.querySelector('#panChild')!;
+    const onTapChild = moveListenerFlags(tapChild);
+    const onPanChild = moveListenerFlags(panChild);
+    const tapFinger = {id: 1, x: 10, y: 10};
+    touch('touchstart', tapChild, [tapFinger], [tapFinger], 0);
+    const panFinger = {id: 2, x: 10, y: 10};
+    touch('touchstart', panChild, [panFinger], [tapFinger, panFinger], 0);
+    expect(onTapChild()).toEqual([true]);
+    expect(onPanChild()).toEqual([false]);
+    touch('touchend', tapChild, [tapFinger], [panFinger], 20);
+    touch('touchend', panChild, [panFinger], [], 20);
+  });
+
   it('gives the blocking touchmove listener only to elements whose recognizers claim while moving', () => {
     const {taps, pan, press, both, row} = mount(
       '<div id="taps"></div><div id="pan"></div><div id="press"></div><div id="both"></div><div id="row"></div>',
@@ -389,7 +476,7 @@ describe('GestureHost', () => {
     expect(onBoth.removed()).toBe(1);
   });
 
-  it("cancels a one-way pan's moves from its claim distance, before it begins, and keeps the touch through a reversal", () => {
+  it("leaves a one-way pan's touch to the page until the pan begins (spec:AST-094 FR19)", () => {
     const {card} = mount('<div id="card"></div>');
     const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
     detachers.push(host.attach(card, pan));
@@ -398,23 +485,11 @@ describe('GestureHost', () => {
     const at = (y: number, time: number) =>
       touch('touchmove', card, [{...finger, y}], [{...finger, y}], time);
     expect(at(97, 16).defaultPrevented).toBe(false);
-    expect(at(95, 32).defaultPrevented).toBe(true);
+    expect(at(95, 32).defaultPrevented).toBe(false);
     expect(pan.state).toBe('possible');
-    expect(pan.isClaimCommitted).toBe(true);
-    // Safari would give the page nothing now: the reversal is the pan's.
-    expect(at(104, 48).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(at(112, 64).defaultPrevented).toBe(true);
+    expect(at(88, 48).defaultPrevented).toBe(true);
     expect(pan.state).toBe('began');
-    touch('touchend', card, [{...finger, y: 112}], [], 80);
-    // A drag that starts the other way is the page's.
-    const down = {id: 2, x: 50, y: 100};
-    touch('touchstart', card, [down], [down], 100);
-    const downAt = (y: number, time: number) =>
-      touch('touchmove', card, [{...down, y}], [{...down, y}], time);
-    expect(downAt(106, 116).defaultPrevented).toBe(false);
-    expect(downAt(112, 132).defaultPrevented).toBe(false);
-    touch('touchend', card, [{...down, y: 112}], [], 148);
+    touch('touchend', card, [{...finger, y: 88}], [], 64);
   });
 
   it('leaves a scroll-edge pan to claim at its begin', () => {
@@ -1613,40 +1688,6 @@ describe('touch gates and a second finger', () => {
     expect(swipe.state).toBe('changed');
     expect(drag.defaultPrevented).toBe(true);
   });
-
-  it('keeps a claim a still-possible pan committed early when a second finger lands', () => {
-    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
-    // A one-way pan committing its claim at 5 px, before it begins.
-    const banner = new PanGestureRecognizer({
-      name: 'banner',
-      direction: 'up',
-      maximumNumberOfTouches: 1,
-      claimDistance: 5,
-    });
-    detachers.push(host.attach(row, banner));
-    const first = {id: 1, x: 100, y: 100};
-    touch('touchstart', row, [first], [first], 0);
-    const claimed = touch(
-      'touchmove',
-      row,
-      [{...first, y: 94}],
-      [{...first, y: 94}],
-      16,
-    );
-    expect(claimed.defaultPrevented).toBe(true);
-    expect(banner.state).toBe('possible');
-    const second = {id: 2, x: 200, y: 300};
-    touch('touchstart', text, [second], [{...first, y: 94}, second], 32);
-    // The claim stands: its moves are still not the browser's.
-    const next = touch(
-      'touchmove',
-      row,
-      [{...first, y: 88}],
-      [{...first, y: 88}, second],
-      48,
-    );
-    expect(next.defaultPrevented).toBe(true);
-  });
 });
 
 describe('a delivered press keeps its touch', () => {
@@ -1829,6 +1870,8 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     const pointer = pointerQuery(false);
     detachers.push(pointer.restore);
     const {box} = mount('<div id="box"></div>');
+    // jsdom drops touch-action, so the writes are observed.
+    const set = vi.spyOn(box.style, 'setProperty');
     const pan = new PanGestureRecognizer({name: 'pan'});
     const states: string[] = [];
     pan.addTransitionListener((_current, _from, to) => states.push(to));
@@ -1836,10 +1879,10 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       host.attach(box, pan),
       host.attach(box, new LongPressGestureRecognizer({name: 'press'})),
     );
-    expect(box.style.getPropertyValue('user-select')).toBe('');
+    expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
     // A tablet undocks its mouse.
     pointer.set(true);
-    expect(box.style.getPropertyValue('user-select')).toBe('none');
+    expect(set).toHaveBeenCalledWith('touch-action', expect.any(String));
     const finger = {id: 1, x: 5, y: 5};
     const moved = {id: 1, x: 40, y: 5};
     touch('touchstart', box, [finger], [finger], 0);
@@ -2005,6 +2048,8 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     detachers.push(pointer.restore);
     const {box, row} = mount('<div id="box"></div><div id="row"></div>');
     const removed = vi.spyOn(box.style, 'removeProperty');
+    const rowSet = vi.spyOn(row.style, 'setProperty');
+    const rowRemoved = vi.spyOn(row.style, 'removeProperty');
     const swipe = new PanGestureRecognizer({
       name: 'swipe',
       direction: 'horizontal',
@@ -2015,9 +2060,9 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       host.attach(box, swipe, {perEventPointer: true}),
       host.attach(row, new LongPressGestureRecognizer({name: 'press'})),
     );
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    expect(rowSet).toHaveBeenCalledWith('touch-action', 'manipulation');
     pointer.set(false);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(rowRemoved).toHaveBeenCalledWith('touch-action');
     // The swipe's own touch-action stays.
     expect(removed).not.toHaveBeenCalledWith('touch-action');
     const finger = {id: 3, x: 5, y: 5};
