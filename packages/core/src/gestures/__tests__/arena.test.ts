@@ -774,3 +774,51 @@ describe('arena: round-five review fixes', () => {
     h.finger(1).up(600);
   });
 });
+
+describe('arena: a waiting recognition that fails on its re-attempt', () => {
+  it('gives its claim back when shouldBegin refuses once the requirement fails (FR19)', () => {
+    const h = createHarness();
+    let mayBegin = true;
+    const blocker = new Scripted('q', {
+      moved: (r, event) => (event.time >= 32 ? r.fail() : undefined),
+    });
+    const waiter = new Scripted('r', onMove, {shouldBegin: () => mayBegin});
+    waiter.requireToFail(blocker);
+    const finger = h
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [waiter, blocker]})
+      .move(20, 0, 16);
+    // r waits for q and holds the touch meanwhile.
+    expect(h.arena.isClaimed(1)).toBe(true);
+    mayBegin = false;
+    finger.move(40, 0, 32);
+    expect(h.log).toContain('q:failed@32');
+    expect(waiter.state).toBe('failed');
+    expect(h.arena.isClaimed(1)).toBe(false);
+    finger.up(48);
+  });
+});
+
+describe('arena: a deadline inside a re-entrant entry', () => {
+  it('settles with the outermost call, so a listener feeding input mid-delivery orphans nothing', () => {
+    const h = createHarness();
+    const timed = new Scripted('timed', {
+      began: (r, event) => r.recognizeAt(event.time + 180),
+    });
+    h.finger(9).down(500, 500, 0, {recognizers: [timed]});
+    const consumer = new RecordingConsumer();
+    // A listener that feeds input while the touch-down is being delivered:
+    // the nested entry runs `timed`'s deadline (180).
+    const first = new Scripted('first', {
+      began: () => {
+        h.arena.moved([{id: 9, x: 500, y: 500, time: 200}]);
+      },
+    });
+    const holder = new Scripted('holder', {}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 150, {recognizers: [first, holder], consumer});
+    expect(h.log).toContain('timed:began@180');
+    expect(h.finger(1).up(250)).toBe('allow');
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+    h.finger(9).up(300);
+  });
+});
