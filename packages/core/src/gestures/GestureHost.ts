@@ -13,8 +13,7 @@
  *
  * - Fingers begin and end with Touch Events: they are the only cancelable
  *   channel (a pointer event's preventDefault cannot stop a scroll or a
- *   click), they keep arriving after the browser takes a pan (which a scroll
- *   handoff needs), and every event lists all the fingers at once. A
+ *   click), and every event lists all the fingers at once. A
  *   finger's movement comes from BOTH its `touchmove`s and its
  *   `pointermove`s (paired at touchstart by target and position), the echo
  *   of one in the other dropped: Chromium sends no `touchmove` until a
@@ -57,11 +56,6 @@
  * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
  *   press never also opens the browser's menu.
  *
- * DELEGATED CONSUMERS. A consumer type registered with an attribute (a
- * pressable row) is found at touch-down by walking up from the touch target,
- * and an instance is created for that one touch: a list of a thousand rows
- * costs nothing until a finger lands on one.
- *
  * SSR-safe: nothing touches `window` or `document` until something attaches.
  *
  * SYNC: When modified, update GestureHost.test.ts and README.md.
@@ -90,6 +84,7 @@ import type {
   GestureEnvironment,
   GestureTouch,
   PointerKind,
+  TouchBeganInput,
   TouchConsumer,
   TouchInput,
   TouchSample,
@@ -250,12 +245,17 @@ export class GestureHost {
   /** The elements each held contact turned selection off on. */
   private readonly heldSelectionBy = new Map<number, HTMLElement[]>();
   private readonly isPrimaryPointerCoarse: () => boolean;
+  private readonly coarseQuery: MediaQueryList | null;
+  private isWatchingPointer = false;
+  private readonly onPointerKindChange = (): void => this.refreshAll();
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
   private lastTouch: {readonly target: Node; readonly time: number} | null =
     null;
   /** The last scroll a finger drove, and when. */
+  /** Scrollers a recognizer is scrolling itself this frame (ownScroll). */
+  private readonly ownedScrolls = new Set<Node>();
   private lastScroll: {readonly scroller: Node; readonly time: number} | null =
     null;
   private nextId = 1;
@@ -290,9 +290,7 @@ export class GestureHost {
         : null;
     this.isPrimaryPointerCoarse =
       options.isPrimaryPointerCoarse ?? (() => coarseQuery?.matches ?? false);
-    // The primary pointer can change (a tablet's keyboard attached or
-    // removed): styles and listeners follow it.
-    coarseQuery?.addEventListener?.('change', () => this.refreshAll());
+    this.coarseQuery = coarseQuery;
   }
 
   /** Re-derive every element's styles and the host's listeners. */
@@ -496,10 +494,25 @@ export class GestureHost {
 
   /**
    * Listen only while something could take a touch: the primary pointer is
-   * coarse and an enabled recognizer or an enabled consumer is attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
+   * coarse and an enabled recognizer or an enabled consumer is attached
+   * (`spec:AST-094` FR19, FR24). Otherwise no document listener is
    * registered, so a desktop page pays nothing.
    */
   private syncListeners(): void {
+    // The primary pointer can change (a tablet's keyboard attached or
+    // removed): while anything is attached, styles and listeners follow it.
+    // Nothing touch-related stays once the last attachment goes (FR24).
+    const hasAttachments = this.registry.size > 0;
+    if (hasAttachments && !this.isWatchingPointer) {
+      this.coarseQuery?.addEventListener?.('change', this.onPointerKindChange);
+      this.isWatchingPointer = true;
+    } else if (!hasAttachments && this.isWatchingPointer) {
+      this.coarseQuery?.removeEventListener?.(
+        'change',
+        this.onPointerKindChange,
+      );
+      this.isWatchingPointer = false;
+    }
     if (this.shouldListen()) {
       this.install();
     } else if (this.isInstalled) {
@@ -646,6 +659,7 @@ export class GestureHost {
     }
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
+    const untracked: TouchBeganInput[] = [];
     const stale: number[] = [];
     for (const touch of touchesOf(event.changedTouches)) {
       if ((touch as StylusTouch).touchType === 'stylus') {
@@ -660,6 +674,17 @@ export class GestureHost {
       const target = touch.target instanceof Node ? touch.target : event.target;
       const {recognizers, consumer} = this.participantsAt(target, 'touch');
       if (recognizers.length === 0 && consumer == null) {
+        // Nothing here takes part: the touch stays the page's, but a
+        // recognizer tracking another finger hears it began (a second
+        // finger beside an open menu ends its press, spec:AST-094 FR28).
+        untracked.push({
+          id: this.nextId++,
+          x: touch.clientX,
+          y: touch.clientY,
+          time,
+          pointerType: 'touch',
+          target,
+        });
         continue;
       }
       const id = this.nextId++;
@@ -688,6 +713,9 @@ export class GestureHost {
       this.arena.cancelled(stale, time);
     }
     this.arena.began(inputs);
+    for (const input of untracked) {
+      this.arena.untrackedBegan(input);
+    }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
     if (event.target instanceof Node) {
@@ -1377,10 +1405,30 @@ export class GestureHost {
     }
   };
 
+  /**
+   * A recognizer is about to scroll `scroller` itself (a menu's edge
+   * autoscroll, spec:AST-094 FR30): the scroll that write fires is not a
+   * finger's and not the browser taking one. It passes until the end of the
+   * next frame, when that event has fired; a real pan in that window still
+   * reports itself through pointercancel or touchcancel.
+   */
+  ownScroll(scroller: Node): void {
+    this.ownedScrolls.add(scroller);
+    const view = this.doc.defaultView;
+    if (view == null) {
+      return;
+    }
+    view.requestAnimationFrame(() => {
+      view.requestAnimationFrame(() => {
+        this.ownedScrolls.delete(scroller);
+      });
+    });
+  }
+
   private readonly onScroll = (event: Event): void => {
     const time = eventTime(event);
     const scroller = event.target === this.doc ? this.doc : event.target;
-    if (!(scroller instanceof Node)) {
+    if (!(scroller instanceof Node) || this.ownedScrolls.has(scroller)) {
       return;
     }
     // A scroll is a finger's only if that finger was inside this scroller,

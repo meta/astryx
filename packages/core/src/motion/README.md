@@ -43,9 +43,9 @@ The motion roles are the springs, durations and curves `spec:AST-094` FR4
 names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
-a plain constant. Touch motion stays internal: no public API sets a role. A
-role's value is carried by its CSS variable (`--motion-springs-settle`) on the
-element's scope, and an empty variable means the table's value. A table's
+a plain constant. Touch motion stays internal (`spec:AST-094` DEC-11): a role
+plays its table value, and nothing reads its CSS variable
+(`--motion-springs-settle`), so no page or theme style retunes it. A table's
 roles exist once its `register<Name>Table()` has run: the animator registers
 the Reduce Motion fade's curve, and code that plays the shared springs calls
 `registerSpringsTable()` before its first motion. The animator resolves each
@@ -209,8 +209,8 @@ Chromium and WebKit on the phone profile.
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A scope that sets `springs.settle`'s variable changes the curve the engine
-  plays for an element in it, and only there.
+- A scope that sets `springs.settle`'s variable changes nothing: touch motion
+  stays internal (DEC-11), so the engine plays the table's spring there too.
 
 ```
 pnpm test:interaction packages/core/src/motion
