@@ -2147,13 +2147,14 @@ export function createAnimator(
         return;
       }
       demote();
-      // A Reduce Motion move waiting to land lands now, on the element it
-      // ran on, whatever replaces it: a node that takes its place (React's
-      // replacement order, architecture:react-component-runtime INV6) or
-      // none shows it where it ends, never travelling while visible
-      // (design:reduced-motion DR2), and its handles settle finished.
-      landPending(true);
       if (next == null) {
+        // A Reduce Motion move waiting to land lands now, on the element it
+        // ran on: a node that replaces this one (React's replacement order,
+        // architecture:react-component-runtime INV6) shows it where it
+        // ends, and its handles settle finished. A new element attached
+        // straight away keeps the dip instead, and the move lands at its
+        // bottom, while invisible (design:reduced-motion DR2).
+        landPending(true);
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
         // left to animate, so at the end of the task every other handle
@@ -2189,7 +2190,14 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      handBackBorrow();
+      if (next == null) {
+        handBackBorrow();
+      } else if (borrowedOpacity != null) {
+        // A new element takes over a running borrowed dip: the dip keeps
+        // running there, so a pending move still lands while it is
+        // invisible; the outgoing element gets its stylesheet's opacity back.
+        target?.style.removeProperty('opacity');
+      }
       target = next;
       if (target == null) {
         return;
