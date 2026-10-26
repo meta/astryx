@@ -87,4 +87,4 @@ export type {
   UsePressTrackerOptions,
 } from './useGestureRecognizer';
 export {VelocityTracker} from './VelocityTracker';
-export type {VelocityStrategy, VelocityTrackerOptions} from './VelocityTracker';
+export type {VelocityTrackerOptions} from './VelocityTracker';
