@@ -74,11 +74,22 @@ function animationRecorder(): void {
       return;
     }
     seen.add(animation);
+    // The target's ancestors as recorded: an exit whose element the page
+    // removes at its end is still reported for the container it left.
+    const ancestors: Element[] = [];
+    for (
+      let node = (animation.effect as KeyframeEffect | null)?.target ?? null;
+      node != null;
+      node = node.parentElement
+    ) {
+      ancestors.push(node);
+    }
     const entry = {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
       startedAt: playStart(animation),
+      ancestors,
     };
     if (entry.startedAt == null) {
       unstarted.push(entry);
@@ -140,7 +151,15 @@ function animationRecorder(): void {
   w.__harnessAnimations = {
     log,
     record,
-    arm: () => (armedAt = performance.now()),
+    // Record first, then stamp strictly after the newest entry: a step that
+    // changed style just before has its transition created by that read,
+    // and it started before the arm.
+    arm: () => {
+      record();
+      const newest = log.length === 0 ? 0 : log[log.length - 1].seenAt;
+      armedAt = Math.max(performance.now(), newest + 0.001);
+      return armedAt;
+    },
     armedAt: () => armedAt,
   };
 }
@@ -844,6 +863,7 @@ export async function waitForAnimation(
               seenAt: number;
               finishedAt: number | null;
               startedAt: number | null;
+              ancestors: Element[];
             }[];
             record: () => void;
             armedAt: () => number;
@@ -916,7 +936,7 @@ export async function waitForAnimation(
         const recorded = recorder.log.filter(
           e =>
             e.seenAt >= after &&
-            inside(e.animation) &&
+            (inside(e.animation) || e.ancestors.includes(element)) &&
             e.animation.timeline instanceof DocumentTimeline,
         );
         // Running: since the watch, or (without one) any on the element. A
