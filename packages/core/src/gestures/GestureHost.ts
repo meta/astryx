@@ -1005,7 +1005,7 @@ export class GestureHost {
   /**
    * For one held press by a finger or a pen: text selection and the touch
    * callout off on the elements whose hold does something (a long press),
-   * as `holdSelectionStyle` decides (`spec:AST-094` FR41, pending #8454).
+   * as `holdSelectionStyle` decides (`spec:AST-094` FR41, DEC-9).
    * Everything else keeps the browser's long-press selection. Restored when
    * the contact ends; refcounted across contacts on one element.
    */
