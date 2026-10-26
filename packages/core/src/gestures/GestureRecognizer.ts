@@ -70,9 +70,10 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * the host calls it and never imports it, so a component without such a
    * hold does not bundle it. Content under a sheet's or a pager's pan stays
    * selectable, so there is none by default; a mouse keeps desktop selection
-   * either way. A long press always brings its own.
+   * either way. A long press brings its own when it has a hold (a
+   * `minimumPressDuration` above 0); `null` brings none.
    */
-  selectionLock?: SelectionLock;
+  selectionLock?: SelectionLock | null;
   /**
    * Hold the view's touch-ended (and the browser's click) while this
    * recognizer may still recognize. @default true
