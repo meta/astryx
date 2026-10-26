@@ -7,9 +7,6 @@
       "@astryxdesign/core/motion/*": ["../core/dist/motion/*"],
       "@astryxdesign/core/gestures": ["../core/dist/gestures/index"],
       "@astryxdesign/core/gestures/*": ["../core/dist/gestures/*"],
-      "@astryxdesign/core/hooks/isRtlElement": [
-        "../core/dist/hooks/isRtlElement"
-      ],
       "@astryxdesign/core/utils/touchPresentation": [
         "../core/dist/utils/touchPresentation"
       ]

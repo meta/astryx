@@ -167,6 +167,36 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
+    // jsdom drops touch-action from the style, so the writes are observed.
+    const {box} = mount('<div id="box"></div>');
+    const set = vi.spyOn(box.style, 'setProperty');
+    const remove = vi.spyOn(box.style, 'removeProperty');
+    const writes = () =>
+      set.mock.calls.filter(call => call[0] === 'touch-action').length;
+    let coarse = false;
+    const host2 = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => coarse,
+    });
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const detach = host2.attach(box, pan);
+    expect(writes()).toBe(0);
+    coarse = true;
+    host2.update(box);
+    expect(set).toHaveBeenLastCalledWith('touch-action', 'pan-y pinch-zoom');
+    pan.setEnabled(false);
+    expect(remove).toHaveBeenCalledWith('touch-action');
+    pan.setEnabled(true);
+    expect(writes()).toBe(2);
+    coarse = false;
+    host2.update(box);
+    expect(remove.mock.calls.filter(c => c[0] === 'touch-action').length).toBe(
+      2,
+    );
+    detach();
+  });
+
   it('registers no document listener for a disabled consumer until it is enabled (spec:AST-094 FR24)', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(document, 'addEventListener');
@@ -1159,31 +1189,32 @@ describe('GestureHost', () => {
     touch('touchend', photo, [finger], [], 1200);
   });
 
-  it('keeps native selection on a delegated pressable, whose hold does nothing (spec:AST-094 FR41)', () => {
+  it('locks for a hold that takes the touch, and nothing where it declines one: a zero-delay hold opts in with its own lock (spec:AST-094 FR41)', () => {
     detachers.push(coarsePrimaryPointer());
-    const {row, off} = mount(
-      '<div id="row" data-test-press></div><div id="off" data-test-press="off"></div>',
+    const {bar, lens, search} = mount(
+      '<div id="bar"><div id="lens">Lens</div><button id="search">Search</button></div>',
     );
+    // A tab bar's lens: a hold at 0 ms that brings the lock itself, and
+    // takes only touches on the lens, not on the search tab beside it.
     detachers.push(
-      host.addDelegatedConsumer({
-        attribute: 'data-test-press',
-        create: element =>
-          element.getAttribute('data-test-press') === 'off'
-            ? null
-            : new RecordingConsumer(),
-      }),
+      host.attach(
+        bar,
+        new LongPressGestureRecognizer({
+          minimumPressDuration: 0,
+          selectionLock: lockSelection,
+          shouldReceiveTouch: (_recognizer, contact) =>
+            contact.target instanceof Node && lens.contains(contact.target),
+        }),
+      ),
     );
-    const one = {id: 1, x: 5, y: 5};
-    const two = {id: 2, x: 9, y: 9};
-    touch('touchstart', row, [one], [one], 0);
-    touch('touchstart', row, [two], [one, two], 10);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', row, [one], [two], 100);
-    touch('touchend', row, [two], [], 200);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchstart', off, [one], [one], 300);
-    expect(off.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', off, [one], [], 400);
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', search, [finger], [finger], 0);
+    expect(bar.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', search, [finger], [], 100);
+    touch('touchstart', lens, [finger], [finger], 200);
+    expect(bar.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', lens, [finger], [], 300);
+    expect(bar.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
