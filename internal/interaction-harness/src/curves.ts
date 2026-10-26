@@ -811,6 +811,10 @@ export interface ActiveAnimation {
  * finished is reported too, with `finishedAt` set. For an action that may be
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
+ *
+ * A run going backward is read when it was reversed before it started; the
+ * recorder keeps one entry per `Animation` object, so an animation reversed
+ * or replayed mid-run is reported as its first run.
  */
 export async function waitForAnimation(
   locator: Locator,
