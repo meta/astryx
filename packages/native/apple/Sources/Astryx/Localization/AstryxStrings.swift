@@ -31,6 +31,19 @@ enum AstryxStrings {
     return result + rest
   }
 
+  /// What a busy view announces when it starts loading.
+  static var spinnerLoading: String { localized("@astryx.spinner.loading", "Loading") }
+  /// A thumbnail's name when it has no alt or label.
+  static var thumbnailFallbackName: String { localized("@astryx.thumbnail.fallbackName", "Thumbnail") }
+  /// The name of a thumbnail's open button.
+  static func thumbnailOpen(_ accessibleName: String) -> String {
+    fill(localized("@astryx.thumbnail.open", "Open {accessibleName}"), ["accessibleName": accessibleName])
+  }
+  /// The name of a thumbnail's remove button.
+  static func thumbnailRemove(_ accessibleName: String) -> String {
+    fill(localized("@astryx.thumbnail.remove", "Remove {accessibleName}"), ["accessibleName": accessibleName])
+  }
+
   static func localized(_ key: String, _ english: String) -> String {
     resourceBundle.localizedString(forKey: key, value: english, table: nil)
   }

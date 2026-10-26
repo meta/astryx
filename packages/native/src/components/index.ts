@@ -22,6 +22,7 @@ import {progressBar} from './ProgressBar.js';
 import {selector} from './Selector.js';
 import {switchControl} from './Switch.js';
 import {text} from './Text.js';
+import {thumbnail} from './Thumbnail.js';
 import {textInput} from './TextInput.js';
 import {vStack} from './VStack.js';
 
@@ -39,6 +40,7 @@ export const NATIVE_COMPONENTS: readonly NativeAdditions[] = [
   selector,
   switchControl,
   text,
+  thumbnail,
   textInput,
   vStack,
 ];
