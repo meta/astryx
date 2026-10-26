@@ -769,3 +769,90 @@ describe('usePressTracker keeps its press through an option change', () => {
     });
   }
 });
+
+describe('the hooks let go of an element removed while they stay mounted', () => {
+  it('useGestureRecognizer cancels its gesture without calling back, and works on a new element', () => {
+    const states: string[] = [];
+    function Maybe({shown}: {shown: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        r => states.push(r.state),
+      );
+      return shown ? <div data-testid="maybe" ref={ref} /> : null;
+    }
+    const {getByTestId, rerender} = render(<Maybe shown />);
+    const first = getByTestId('maybe');
+    touch('touchstart', first, {id: 11, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 11, x: 30, y: 0}, 16);
+    expect(states).toEqual(['began']);
+    rerender(<Maybe shown={false} />);
+    expect(states).toEqual(['began']);
+    rerender(<Maybe shown />);
+    const second = getByTestId('maybe');
+    touch('touchstart', second, {id: 12, x: 0, y: 0}, 100);
+    touch('touchmove', second, {id: 12, x: 30, y: 0}, 116);
+    expect(states).toEqual(['began', 'began']);
+    touch('touchend', second, {id: 12, x: 30, y: 0}, 132, true);
+  });
+
+  it('usePressTracker ends its press without calling back, and presses a new element', () => {
+    const events: ControlEvent[] = [];
+    const highlights: boolean[] = [];
+    function Maybe({shown}: {shown: boolean}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+      });
+      return shown ? (
+        <button data-testid="maybe" ref={ref} type="button">
+          Go
+        </button>
+      ) : null;
+    }
+    const {getByTestId, rerender} = render(<Maybe shown />);
+    touch('touchstart', getByTestId('maybe'), {id: 13, x: 1, y: 1}, 0);
+    expect(highlights).toEqual([true]);
+    rerender(<Maybe shown={false} />);
+    expect(highlights).toEqual([true]);
+    expect(events).toEqual(['touchDown']);
+    rerender(<Maybe shown />);
+    const button = getByTestId('maybe');
+    touch('touchstart', button, {id: 14, x: 1, y: 1}, 100);
+    touch('touchend', button, {id: 14, x: 1, y: 1}, 150, true);
+    expect(events).toEqual(['touchDown', 'touchDown', 'touchUpInside']);
+  });
+});
+
+describe('usePressTracker reads trackingExpansion as it is now', () => {
+  it('a smaller expansion takes effect without rebuilding the tracker', () => {
+    const events: ControlEvent[] = [];
+    function Tracked({expansion}: {expansion: number}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        trackingExpansion: expansion,
+      });
+      return (
+        <button data-testid="tracked" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId, rerender} = render(<Tracked expansion={70} />);
+    const button = getByTestId('tracked');
+    boundsOf(button, 100, 40);
+    touch('touchstart', button, {id: 15, x: 10, y: 10}, 0);
+    // 30 px below the bottom edge: inside a 70 px expansion.
+    touch('touchmove', button, {id: 15, x: 10, y: 70}, 16);
+    expect(events).not.toContain('touchDragExit');
+    rerender(<Tracked expansion={10} />);
+    // The same point is outside a 10 px expansion, mid-press.
+    touch('touchmove', button, {id: 15, x: 10, y: 71}, 32);
+    expect(events).toContain('touchDragExit');
+    touch('touchend', button, {id: 15, x: 10, y: 71}, 48, true);
+    expect(events).toContain('touchUpOutside');
+  });
+});
