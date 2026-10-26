@@ -40,7 +40,7 @@ separately targetable surface. The status and content targets remain unchanged.
 ## Compatibility and migration
 
 - Released default preserved: `no` — Banner no longer derives a live-region role from visual status
-- Compatibility class: breaking accessibility-semantic correction for the live-region change (DEP-0007), whose visual output, DOM structure, props, theming targets, and interaction behavior are unchanged. FR9's accepted target is a visual change: the Info status surface fills with `--color-info-muted` and built-in content takes the on-muted roles; props, DOM structure, and theming targets stay the same
+- Compatibility class: breaking accessibility-semantic correction for the live-region change (DEP-0007), whose visual output, DOM structure, props, theming targets, and interaction behavior are unchanged. FR9 is a visual change: the Info status surface fills with `--color-info-muted` and built-in content takes the on-muted roles; props, DOM structure, and theming targets stay the same
 - Controlled/uncontrolled behavior: unchanged
 - Migration decision: announce async outcomes in their transition handler with `useAnnounce`; add an explicit `role="status"` only for a persistent semantic mirror, and reserve `role="alert"` for genuinely urgent interruption. Inside a mounted live container, `spec:AST-086` FR4 applies instead.
 
@@ -85,7 +85,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The Banner frame that groups both surfaces and carries the current whole-banner
   elevation and elevated-card silhouette.
 - The semantic foreground context for Banner-authored title, description, icon,
-  collapse, and dismiss content on the status surface, as FR9's accepted target.
+  collapse, and dismiss content on the status surface.
   Built-in controls receive that context on their Button element only, so their
   tooltip remains an ordinary Button surface.
 
@@ -107,8 +107,8 @@ prop vocabulary or extensibility rule changes.
 
 ## Behavioral and layout contract
 
-The requirements below describe the current implementation, its additive
-frame target contract, and FR9's accepted status-colour target.
+The requirements below describe the current implementation and its additive
+frame target contract.
 
 | ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Basis                                                    | Contract state           |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------ |
@@ -120,7 +120,7 @@ frame target contract, and FR9's accepted status-colour target.
 | FR6 | The Banner frame exposes `banner-frame` and reflects `container` and `elevation`. The existing `banner` target remains on the Status surface rather than moving to the outermost DOM element.                                                                                                                                                                                                                                                                                                        | Owner decision; current source and tests                 | Current behavior         |
 | FR7 | `banner-frame` is additive. The existing `banner`, `banner-icon`, `banner-description`, and `banner-content` targets and their current axes remain unchanged.                                                                                                                                                                                                                                                                                                                                        | Current target inventory; compatibility policy           | Current behavior         |
 | FR8 | `status` controls visual meaning only and MUST NOT derive `role`, `aria-live`, or an announcement. Standard DOM props MAY provide an explicit persistent role, except on a Banner added inside a mounted live container (`spec:AST-086` FR4). Async outcomes MUST announce from the transition handler through `useAnnounce`, except inside a mounted live container, where `spec:AST-086` FR4 applies; `role="alert"` is reserved for genuinely urgent interruptive content.                        | Accessibility Checklist §Announcements; owner decision   | Current behavior         |
-| FR9 | The status surface fills with the matching `--color-<status>-muted` role (`--color-info-muted` for Info) and paints its built-in title, description, icon, collapse, and dismiss content with the matching `--color-on-<status>-muted` role. Banner supplies that semantic foreground context to each built-in Button element without changing Button-owned geometry or interaction layers; a sibling tooltip keeps Button's ordinary theme color. Consumer-provided `endContent` remains untouched. | Status-role architecture; Banner and Button source/tests | Accepted target          |
+| FR9 | The status surface fills with the matching `--color-<status>-muted` role (`--color-info-muted` for Info) and paints its built-in title, description, icon, collapse, and dismiss content with the matching `--color-on-<status>-muted` role. Banner supplies that semantic foreground context to each built-in Button element without changing Button-owned geometry or interaction layers; a sibling tooltip keeps Button's ordinary theme color. Consumer-provided `endContent` remains untouched. | Status-role architecture; Banner and Button source/tests | Current behavior         |
 
 ### Allowed variation
 
@@ -175,12 +175,12 @@ unchanged.
 
 ## Design relationships
 
-| Anatomy or state        | Design requirement                                                                                                                                                                                                         | Representation authority                      | Hierarchy role | Component contract |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------- | ------------------ |
-| Banner frame            | Groups the status and optional content surfaces and carries their shared silhouette and elevation.                                                                                                                         | Current source and public docs                | Supporting     | FR2, FR3, FR4      |
-| Status surface          | Acts as Banner's primary painted surface, carrying the status fill, message, and controls.                                                                                                                                 | Current source and public docs                | Prominent      | FR1                |
-| Content surface         | Carries optional supporting detail below the status surface.                                                                                                                                                               | Current source and public docs                | Supporting     | FR4, FR7           |
-| Action/dismiss controls | FR9's accepted target: built-in control content receives the Status surface's on-muted foreground on the Button element; interaction layers and tooltips remain Button-owned. Consumer-supplied `endContent` is unchanged. | Banner status context plus `component:Button` | Supporting     | FR7, FR9           |
+| Anatomy or state        | Design requirement                                                                                                                                                                                  | Representation authority                      | Hierarchy role | Component contract |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------- | ------------------ |
+| Banner frame            | Groups the status and optional content surfaces and carries their shared silhouette and elevation.                                                                                                  | Current source and public docs                | Supporting     | FR2, FR3, FR4      |
+| Status surface          | Acts as Banner's primary painted surface, carrying the status fill, message, and controls.                                                                                                          | Current source and public docs                | Prominent      | FR1                |
+| Content surface         | Carries optional supporting detail below the status surface.                                                                                                                                        | Current source and public docs                | Supporting     | FR4, FR7           |
+| Action/dismiss controls | Built-in control content receives the Status surface's on-muted foreground on the Button element; interaction layers and tooltips remain Button-owned. Consumer-supplied `endContent` is unchanged. | Banner status context plus `component:Button` | Supporting     | FR7, FR9           |
 
 The Banner frame is stable anatomy and owns the additive `banner-frame` target.
 The Status surface remains Banner's primary painted surface and keeps the
@@ -211,7 +211,7 @@ This map records runtime reachability. `banner` belongs to the primary Status
 surface rather than the outermost DOM element, while `banner-frame` belongs to
 the visible frame that owns whole-banner elevation and silhouette. Delegation to
 Button preserves each built-in control's anatomy and interaction ownership.
-Under FR9's accepted target, Banner supplies only the status-surface foreground
+Banner supplies only the status-surface foreground
 context on the Button element, and it does not restyle a consumer-provided
 `endContent` child.
 

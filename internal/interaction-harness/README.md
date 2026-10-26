@@ -73,7 +73,16 @@ identical values (an end value held so a later interruption can read it)
 ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
 the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
-than `playState`, does not wait the hold out.
+than `playState`, does not wait the hold out. That holds for an animation that
+plays forward under a linear or cubic-bézier effect easing (the time the run
+starts is solved from the curve); under any other effect easing (steps,
+`linear()` stops, an overshoot) or another direction the curve is read to its
+full end, and `waitForRest` waits the hold out. An animation reversed before it starts (`reverse()`
+on a new animation, a negative playback rate from the start) is reported by
+`waitForAnimation` from when it started, but `holdAnimations` refuses it:
+seeking and sampling run a curve forward. The recorder keeps one entry per
+`Animation` object, so one reversed or replayed mid-run is reported as its
+first run; take a fresh animation for each run a proof reads.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the

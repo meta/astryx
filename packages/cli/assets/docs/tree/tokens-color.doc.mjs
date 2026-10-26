@@ -27,6 +27,55 @@ export const docs = {
           "text": "Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching."
         },
         {
+          "type": "prose",
+          "text": "Status roles: pick the token by the surface. `<status>` is info, success, warning, or error."
+        },
+        {
+          "type": "table",
+          "headers": [
+            "Status role",
+            "Use it for",
+            "Pairs with"
+          ],
+          "rows": [
+            [
+              "--color-text-<status>",
+              "Status text on the page or a card (4.5:1 or more).",
+              "—"
+            ],
+            [
+              "--color-icon-<status>",
+              "Status icons on the page or a card. Defaults to the text colour.",
+              "—"
+            ],
+            [
+              "--color-border-<status>",
+              "Status borders on the page or a card, such as an invalid field. Defaults to the text colour.",
+              "—"
+            ],
+            [
+              "--color-<status>",
+              "Strong status fill, such as a Badge or StatusDot.",
+              "--color-on-<status>"
+            ],
+            [
+              "--color-on-<status>",
+              "Text and icons on the strong fill (4.5:1 or more).",
+              "--color-<status>"
+            ],
+            [
+              "--color-<status>-muted",
+              "Pale status fill, such as a Banner.",
+              "--color-on-<status>-muted"
+            ],
+            [
+              "--color-on-<status>-muted",
+              "Text and icons on the pale fill (4.5:1 or more).",
+              "--color-<status>-muted"
+            ]
+          ]
+        },
+        {
           "type": "table",
           "headers": [
             "Token",
@@ -155,6 +204,21 @@ export const docs = {
               "#E3193B"
             ],
             [
+              "--color-info",
+              "#0064E0",
+              "#0064E0"
+            ],
+            [
+              "--color-info-muted",
+              "#0082FB33",
+              "#0082FB3F"
+            ],
+            [
+              "--color-on-info",
+              "#FFFFFF",
+              "#FFFFFF"
+            ],
+            [
               "--color-success",
               "#0D8626",
               "#0D8626"
@@ -182,7 +246,7 @@ export const docs = {
             [
               "--color-on-error",
               "#FFFFFF",
-              "#FFFFFF"
+              "#0A1317"
             ],
             [
               "--color-warning",
@@ -198,6 +262,86 @@ export const docs = {
               "--color-on-warning",
               "#0A1317",
               "#0A1317"
+            ],
+            [
+              "--color-text-info",
+              "var(--color-text-blue)",
+              "var(--color-text-blue)"
+            ],
+            [
+              "--color-text-success",
+              "var(--color-text-green)",
+              "var(--color-text-green)"
+            ],
+            [
+              "--color-text-warning",
+              "var(--color-text-yellow)",
+              "var(--color-text-yellow)"
+            ],
+            [
+              "--color-text-error",
+              "var(--color-text-red)",
+              "var(--color-text-red)"
+            ],
+            [
+              "--color-icon-info",
+              "var(--color-text-info)",
+              "var(--color-text-info)"
+            ],
+            [
+              "--color-icon-success",
+              "var(--color-text-success)",
+              "var(--color-text-success)"
+            ],
+            [
+              "--color-icon-warning",
+              "var(--color-text-warning)",
+              "var(--color-text-warning)"
+            ],
+            [
+              "--color-icon-error",
+              "var(--color-text-error)",
+              "var(--color-text-error)"
+            ],
+            [
+              "--color-border-info",
+              "var(--color-text-info)",
+              "var(--color-text-info)"
+            ],
+            [
+              "--color-border-success",
+              "var(--color-text-success)",
+              "var(--color-text-success)"
+            ],
+            [
+              "--color-border-warning",
+              "var(--color-text-warning)",
+              "var(--color-text-warning)"
+            ],
+            [
+              "--color-border-error",
+              "var(--color-text-error)",
+              "var(--color-text-error)"
+            ],
+            [
+              "--color-on-info-muted",
+              "var(--color-text-blue)",
+              "var(--color-text-blue)"
+            ],
+            [
+              "--color-on-success-muted",
+              "var(--color-text-green)",
+              "var(--color-text-green)"
+            ],
+            [
+              "--color-on-warning-muted",
+              "var(--color-text-yellow)",
+              "var(--color-text-yellow)"
+            ],
+            [
+              "--color-on-error-muted",
+              "var(--color-text-red)",
+              "var(--color-text-red)"
             ],
             [
               "--color-border",
