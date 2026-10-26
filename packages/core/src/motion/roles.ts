@@ -6,29 +6,27 @@
  * @output registerMotionTable, motionRoleOf, motionRoleIn, listMotionRoles,
  *   motionRoleVariable, and the CSS form of a role's value
  *   (formatMotionRoleValue, parseMotionRoleValue)
- * @position Motion foundation; read by the theme (`defineTheme({motion})`
- *   writes role values) and by the code that resolves a role when a motion
- *   starts
+ * @position Motion foundation, internal to core: read by the code that
+ *   resolves a role when a motion starts. No public API writes a role: touch
+ *   motion stays internal until the public motion-token set is decided.
  *
- * A motion role is one value of a motion table that a theme may retune: a
+ * A motion role is one value of a motion table: a
  * spring, a duration (a key ending in `Ms`, in milliseconds) or a curve (four
  * cubic-bézier control points). The roles are the ones `spec:AST-094` FR4
  * names, each by its table path, such as `springs.settle` or
  * `timing.curves.move`: a table lists its roles when it registers, and every
  * other value, a component's measured spring included, stays an internal
- * constant that no theme reaches.
+ * constant.
  * A role is carried by one CSS custom property, `--motion-` followed by its id
- * in kebab case (`--motion-springs-settle`). A theme writes that property only
- * for the roles it sets; an empty property means the table's value, so the
- * table stays the one measured source of every default.
+ * in kebab case (`--motion-springs-settle`), which nothing public writes; an
+ * empty property means the table's value, so the table stays the one measured
+ * source of every value.
  *
  * Gesture thresholds, the velocity filter, the timings that decide who gets a
  * touch and haptics are not motion: they are not roles (tables leave them out
  * with `exclude`).
  *
- * SYNC: When modified, update:
- * - /packages/core/src/motion/roles.test.ts
- * - /scripts/generate-motion-roles.mjs (the generated role table in docs)
+ * SYNC: When modified, update /packages/core/src/motion/roles.test.ts.
  */
 
 import {
@@ -50,9 +48,9 @@ export interface MotionRole {
   /** The table path, e.g. `springs.sheetDetent`. */
   readonly id: string;
   readonly kind: MotionRoleKind;
-  /** The CSS custom property that carries a theme's value. */
+  /** The CSS custom property that carries the role's value. */
   readonly variable: string;
-  /** The table's value: the default when no theme sets the role. */
+  /** The table's value: what plays when the property is empty. */
   readonly value: SpringDescription | number | MotionCurvePoints;
 }
 

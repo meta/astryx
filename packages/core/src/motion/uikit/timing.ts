@@ -164,15 +164,15 @@ export const timing = {
 } as const;
 
 /**
- * Makes each spring, duration and curve above a motion role a theme may
- * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * Registers the springs, durations and curves above that spec:AST-094 FR4
+ * names as internal motion roles (motion/roles.ts). Nothing registers on import: the touch code that
  * animates with this table calls it once (it is idempotent), so a page that
  * never does ships no registry.
  */
 export function registerTimingTable(): void {
   registerMotionTable('timing', timing, {
     // Arbitration: who gets the touch, not how anything moves; the Reduced
-    // Motion fade, which no theme may lengthen (design:reduced-motion DR4);
+    // Motion fade, which nothing may lengthen (design:reduced-motion DR4);
     // and the keyboard's own timing, which motion in step with the keyboard
     // rides (spec:AST-094 FR4).
     exclude: [

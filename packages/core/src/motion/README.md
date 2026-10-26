@@ -5,8 +5,8 @@ UIKit constants table (every spring, duration, deceleration rate, rubber-band
 constant, curve and gesture threshold a touch presentation uses, each with its
 source) and the spring, decay, rubber-band and projection math UIKit uses.
 Nothing here is exported from the package entry point. Core's motion and
-gesture modules read the table by path; components take touch motion from the
-theme's motion roles (`spec:AST-094` FR4), not from this table.
+gesture modules read the table by path; components read touch motion through
+its internal motion roles (`roles.ts`), so each keeps its measured value.
 
 ## Files
 

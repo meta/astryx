@@ -12,7 +12,6 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {MOTION_ROLE_KINDS} from './roleKinds.generated';
 import {
   formatMotionRoleValue,
   isMotionRoleId,
@@ -166,7 +165,7 @@ describe('motion roles', () => {
     expect(motionRoleOf(springs.viewChange)?.id).toBe('springs.viewChange');
     expect(motionRoleOf(timing.curves.move)?.kind).toBe('curve');
     expect(motionRoleIn(timing, 'stateChangeMs')?.kind).toBe('duration');
-    // A component's measured value is a constant no theme reaches.
+    // A component's measured value is an internal constant, not a role.
     expect(motionRoleOf(springs.sheetPresent)).toBeUndefined();
     expect(springs.sheetPresent).toEqual(springs.viewChange);
     expect(motionRoleOf(scroll.bounce)).toBeUndefined();
@@ -186,14 +185,32 @@ describe('motion roles', () => {
     expect(new Set(variables).size).toBe(variables.length);
   });
 
-  it('lists every registered role, and its kind, in the generated role kinds', () => {
+  it('registers exactly the roles spec:AST-094 FR4 names, internally', () => {
     // Every table discovery registered (other tests here add fixtures).
     const discovered = listMotionRoles().filter(role =>
       DISCOVERED.has(role.id.split('.')[0]),
     );
     expect(
       Object.fromEntries(discovered.map(role => [role.id, role.kind])),
-    ).toEqual(MOTION_ROLE_KINDS);
+    ).toEqual({
+      'springs.directChange': 'spring',
+      'springs.emphasis': 'spring',
+      'springs.fingerTracking': 'spring',
+      'springs.menuClose': 'spring',
+      'springs.menuOpen': 'spring',
+      'springs.quickChange': 'spring',
+      'springs.settle': 'spring',
+      'springs.stateChange': 'spring',
+      'springs.subMenuBack': 'spring',
+      'springs.subMenuOpen': 'spring',
+      'springs.timedChange': 'spring',
+      'springs.viewChange': 'spring',
+      'timing.curves.entrance': 'curve',
+      'timing.curves.exit': 'curve',
+      'timing.curves.move': 'curve',
+      'timing.curves.viewChange': 'curve',
+      'timing.stateChangeMs': 'duration',
+    });
   });
 
   it('writes every table value in CSS form and reads back the same motion', () => {
