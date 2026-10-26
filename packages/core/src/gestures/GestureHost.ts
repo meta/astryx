@@ -1010,7 +1010,10 @@ export class GestureHost {
     if (!this.needsInput()) {
       return false;
     }
-    if (this.retainers > 0) {
+    // A retainer (a finger-scroll watch) listens only where the pointer is
+    // coarse: beside a per-event participant under a fine one it would keep
+    // every page listener installed for its whole life (FR24).
+    if (this.isCoarse && this.retainers > 0) {
       return true;
     }
     let isArmed = false;

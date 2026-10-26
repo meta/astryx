@@ -2851,7 +2851,10 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     );
     const pageListeners = () =>
       [...listening].filter(key => /:(touch|pointer|click)/.test(key));
-    // Attached and idle: nothing on the document or the window.
+    // Attached and idle: nothing on the document or the window, even beside
+    // a finger-scroll watch.
+    expect(pageListeners()).toEqual([]);
+    detachers.push(watchFingerScrolls(host, document));
     expect(pageListeners()).toEqual([]);
     const finger = {id: 1, x: 5, y: 5};
     touch('touchstart', stepper, [finger], [finger], 0);
