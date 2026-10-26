@@ -305,8 +305,9 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       .filter(entry => entry.type === 'touchmove' && entry.passive === false)
       .map(entry => entry.id),
   );
-  // Pans (the cards' too), a long press, a pinch and the sheet's pan can take
-  // a moving touch; a tap-only element and a press consumer never wait.
+  // Pans (the cards' and the switch's drag too), a long press, a pinch and
+  // the sheet's pan can take a moving touch; a tap-only element and a press
+  // consumer never wait.
   expect(new Set(blocking)).toEqual(
     new Set([
       'hpan',
@@ -314,6 +315,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'pinchable',
       'sheetBody',
       'slider',
+      'switchRow',
       'card',
       'cardLate',
     ]),
