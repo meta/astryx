@@ -5,6 +5,7 @@ public enum IconColor: String, CaseIterable, Codable, Sendable {
   case tertiary = "tertiary"
   case disabled = "disabled"
   case accent = "accent"
+  case info = "info"
   case success = "success"
   case error = "error"
   case warning = "warning"
