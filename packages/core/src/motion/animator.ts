@@ -372,8 +372,6 @@ interface Segment {
   speed(t: number): number;
   /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
   readonly jumps: ReadonlyArray<number>;
-  /** Constant between jumps: sampled at its jumps only. */
-  readonly steps?: true;
   /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
   readonly isFade?: true;
   readonly owner: HandleState;
@@ -878,9 +876,6 @@ export function createAnimator(
     const breaks = segment.jumps
       .map(j => segment.start + j)
       .filter(t => t > begin && t < end);
-    if (segment.steps) {
-      return [begin, ...breaks, end];
-    }
     const edges = [begin, ...breaks, end];
     for (let e = 0; e + 1 < edges.length; e++) {
       const a = edges[e];
@@ -2575,24 +2570,6 @@ export function createAnimator(
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
-      }
-      // A finished fade takes the travel waiting for it along, at the same
-      // instant: a pending jump never lands later, in view.
-      if (changed.includes('opacity')) {
-        for (const property of TRAVEL) {
-          const segment = segments.get(property);
-          if (
-            list.includes(property) ||
-            segment?.steps !== true ||
-            time >= segment.start + segment.duration
-          ) {
-            continue;
-          }
-          interrupt(property, time);
-          segments.delete(property);
-          resting[property] = segment.target;
-          changed.push(property);
-        }
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {
