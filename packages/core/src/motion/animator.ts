@@ -2108,8 +2108,14 @@ export function createAnimator(
                 ? IDENTITY.opacity
                 : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
           }
-          if (landing.fadeIn?.isBorrowed === true) {
+          if (
+            landing.fadeIn?.isBorrowed === true ||
+            landing.restoreIsBorrowed === true
+          ) {
+            // The stylesheet owns its opacity again: the fade's end value
+            // written inline goes with it.
             borrowedOpacity = null;
+            target?.style.removeProperty('opacity');
           }
           for (const owner of [landing.owner, ...landing.carried]) {
             carriedOwners.delete(owner);
@@ -2158,6 +2164,18 @@ export function createAnimator(
         return;
       }
       const time = now();
+      // A borrowed dip that ended while detached hands the stylesheet's
+      // opacity back instead of writing the borrowed value inline.
+      const dip = segments.get('opacity');
+      if (
+        borrowedOpacity != null &&
+        (dip == null || time >= dip.start + dip.duration)
+      ) {
+        borrowedOpacity = null;
+        segments.delete('opacity');
+        resting.opacity = IDENTITY.opacity;
+        target.style.removeProperty('opacity');
+      }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
         const isDefault = properties.every(
