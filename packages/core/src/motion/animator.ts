@@ -119,6 +119,12 @@ export interface MotionCurve {
   at(t: number): number;
   /** Velocity `t` seconds after the start, units/s. */
   velocity(t: number): number;
+  /**
+   * A transition started on release rather than a throw's momentum (a
+   * spring back from past an edge): under Reduce Motion it is no coast and
+   * cross-fades like `animate` (`design:reduced-motion` DR2).
+   */
+  readonly isTransition?: boolean;
 }
 
 export interface AnimateOptions {
@@ -437,6 +443,15 @@ const REDUCED_MOTION_MAX_FADE_MS = 200;
  * animator.stop(['y']);
  * ```
  */
+/**
+ * The transition `decay` hands a Reduce Motion transition curve to: under
+ * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
+ * spring itself is never solved.
+ */
+const REDUCED_TRANSITION: SpringTransition = {
+  spring: {duration: 0.5, bounce: 0},
+};
+
 export function createAnimator(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
@@ -1200,10 +1215,28 @@ export function createAnimator(
 
     decay(curves, decayOptions = {}) {
       const time = decayOptions.at ?? now();
+      // Under Reduce Motion only momentum keeps moving (DR2, DEC-2): a curve
+      // that is a transition plays as `animate` does, a cross-fade or at once.
+      const reduce = prefersReducedMotion();
+      const transitions: MotionValues = {};
+      for (const property of PROPERTIES) {
+        const curve = curves[property];
+        if (reduce && curve?.isTransition === true) {
+          transitions[property] = curve.at(curve.duration);
+        }
+      }
+      const transitioned =
+        Object.keys(transitions).length > 0
+          ? animator.animate(transitions, REDUCED_TRANSITION, {at: time})
+          : null;
       const {owner, finished} = newOwner();
       const properties = PROPERTIES.filter(
-        property => curves[property] != null,
+        property =>
+          curves[property] != null && transitions[property] === undefined,
       );
+      if (transitioned != null && properties.length === 0) {
+        return transitioned;
+      }
       for (const property of properties) {
         const curve = curves[property] as MotionCurve;
         interrupt(property, time);
@@ -1223,7 +1256,16 @@ export function createAnimator(
         });
       }
       commit(properties, time);
-      return makeHandle(owner, properties, finished, time);
+      const handle = makeHandle(owner, properties, finished, time);
+      if (transitioned == null) {
+        return handle;
+      }
+      return {
+        ...handle,
+        finished: Promise.all([handle.finished, transitioned.finished]).then(
+          ([coasted, faded]) => coasted && faded,
+        ),
+      };
     },
 
     stop(properties) {

@@ -18,7 +18,8 @@
  * - a coast that reaches an edge hands its velocity at the contact to the
  *   edge spring, which settles on the edge;
  * - released past an edge, it springs straight back with the release
- *   velocity;
+ *   velocity: a transition, not momentum, so under Reduce Motion `decay`
+ *   cross-fades it (`design:reduced-motion` DR2);
  * - at zero velocity inside its bounds, it rests where it is.
  *
  * SYNC: When modified, update coast.test.ts.
@@ -106,12 +107,16 @@ export function coast(
       // Released past an edge: straight back with the release velocity.
       const edge = from < bounds.min ? bounds.min : bounds.max;
       const back = solveSpring(bounce, {from, to: edge, velocity: v0});
-      curves[key] = settling(
-        back.settleTime(threshold),
-        edge,
-        t => back.value(t),
-        t => back.velocity(t),
-      );
+      curves[key] = {
+        ...settling(
+          back.settleTime(threshold),
+          edge,
+          t => back.value(t),
+          t => back.velocity(t),
+        ),
+        // A spring the release starts, not momentum (Reduce Motion: DR2).
+        isTransition: true,
+      };
       continue;
     }
     const glide = solveDecay({from, velocity: v0, rate});

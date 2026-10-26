@@ -707,6 +707,23 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a release past an edge springs back as a cross-fade, not momentum (DR2)', () => {
+    const {animator} = reduced();
+    animator.set({x: -80});
+    const start = clock;
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: 0, max: 100}}, at: start}),
+      {at: start},
+    );
+    for (let t = start; t <= start + fade; t += 2) {
+      if (animator.get('x', t) !== -80) {
+        expect(animator.get('opacity', t)).toBeCloseTo(0, 6);
+        break;
+      }
+    }
+    expect(animator.get('x', start + fade)).toBe(0);
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
