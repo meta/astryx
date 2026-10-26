@@ -45,7 +45,6 @@ import {useEffect, useState} from 'react';
 import {devWarn} from '../utils/devWarning';
 import {
   PRESSABLE_ATTRIBUTE,
-  PRESSED_ATTRIBUTE,
   isPressFeedbackInstalled,
 } from '../utils/pressFeedback';
 import {getGestureHost} from './GestureHost';
@@ -59,10 +58,14 @@ import {
 import type {GestureTouch, PointerKind} from './types';
 
 export interface PressAttributeOptions {
-  /** Marks a pressable surface. @default 'data-astryx-pressable' */
-  attribute?: string;
-  /** Written on the pressed surface. @default 'data-astryx-press' */
-  pressedAttribute?: string;
+  /**
+   * Marks a pressable surface. Required: the press feedback controller
+   * (utils/pressFeedback.ts) owns `data-astryx-pressable` and
+   * `data-astryx-press`, so this never writes them unasked.
+   */
+  attribute: string;
+  /** Written on the pressed surface. Required, for the same reason. */
+  pressedAttribute: string;
   /**
    * The profiles a marker's value selects; an empty or unknown value is
    * `control`. @default PRESS_PROFILES
@@ -116,9 +119,9 @@ function warnSharedAttributeOnce(): void {
  */
 export function installPressAttribute(
   doc: Document,
-  options: PressAttributeOptions = {},
+  options: PressAttributeOptions,
 ): () => void {
-  const attribute = options.attribute ?? PRESSABLE_ATTRIBUTE;
+  const attribute = options.attribute;
   let byAttribute = installs.get(doc);
   if (byAttribute == null) {
     byAttribute = new Map();
@@ -152,7 +155,7 @@ function addPressType(
   options: PressAttributeOptions,
 ): () => void {
   const host = getGestureHost(doc);
-  const pressed = options.pressedAttribute ?? PRESSED_ATTRIBUTE;
+  const pressed = options.pressedAttribute;
   const profiles: Readonly<Record<string, PressProfile>> =
     options.profiles ?? PRESS_PROFILES;
   const disabled = options.disabledSelector ?? DISABLED;
@@ -223,7 +226,7 @@ function addPressType(
  * mounted. Every component that paints a press can call it: installs are
  * counted, so the document holds one.
  */
-export function usePressAttribute(options: PressAttributeOptions = {}): void {
+export function usePressAttribute(options: PressAttributeOptions): void {
   // Installs are counted per attribute and the first one's options hold, so
   // later option changes are not reinstalled.
   const [initial] = useState(options);
