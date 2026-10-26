@@ -155,6 +155,28 @@ function hostRules(root: Document | ShadowRoot): string {
   return [...adopted, ...styles].join('\n');
 }
 
+/**
+ * Make `CSS.supports` answer as iOS WebKit does for its touch callout: there
+ * the selection lock is an inline style (`spec:AST-094` FR41), which these
+ * cases read.
+ */
+function asIosWebKit(): () => void {
+  const original = globalThis.CSS;
+  Object.defineProperty(globalThis, 'CSS', {
+    configurable: true,
+    value: {
+      ...original,
+      supports: (query: string) => query === '(-webkit-touch-callout: none)',
+    },
+  });
+  return () => {
+    Object.defineProperty(globalThis, 'CSS', {
+      configurable: true,
+      value: original,
+    });
+  };
+}
+
 function mount(html: string): Record<string, HTMLElement> {
   document.body.innerHTML = html;
   const elements: Record<string, HTMLElement> = {};
@@ -2001,6 +2023,7 @@ describe('GestureHost', () => {
     expect(lock).toHaveBeenCalledTimes(1);
   });
   it('locks for a hold that takes the touch, and nothing where it declines one: a zero-delay hold opts in with its own lock (spec:AST-094 FR41)', () => {
+    detachers.push(asIosWebKit());
     detachers.push(coarsePrimaryPointer());
     const {bar, lens, search} = mount(
       '<div id="bar"><div id="lens">Lens</div><button id="search">Search</button></div>',
@@ -2029,6 +2052,7 @@ describe('GestureHost', () => {
   });
 
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
+    detachers.push(asIosWebKit());
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(
       '<div id="row"></div><div id="sheet"></div><div id="slider"></div>',
@@ -2110,6 +2134,7 @@ describe('GestureHost', () => {
   });
 
   it('locks a checkbox under the finger inside a locked element, which WebKit makes selectable, but never a text field', () => {
+    detachers.push(asIosWebKit());
     detachers.push(coarsePrimaryPointer());
     const {row, check, field} = mount(
       '<div id="row"><input id="check" type="checkbox"><input id="field"></div>',
