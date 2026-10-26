@@ -69,6 +69,14 @@ dispatch latency, and the events go through the compositor's gesture detection
 the limits below. Read positions a frame after a move: Chromium delivers
 `pointermove` aligned to animation frames.
 
+**Stories, not Storybook.** `openStory` turns Storybook's highlight module off
+on every page it opens, and checks that its root element is absent. Left on,
+the module observes `#storybook-root` and, on every insertion, reads the
+computed style of every element on the page inside the inserting task (117
+reads and two forced style recalculations for one exit copy in a Button story),
+so a proof would measure Storybook as well as the component.
+`openStory(page, origin, id, args, {storybookHighlight: true})` keeps it on.
+
 **Curve sampling.** Pause every running animation (CSS transitions and
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
