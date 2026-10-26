@@ -36,6 +36,12 @@ export interface CastFrame {
 }
 
 export interface Screencast {
+  /**
+   * Frames captured so far: wait for the first one to know the cast saw the
+   * page before an animation starts (`busyWindowProof` then knows its at-rest
+   * position).
+   */
+  frameCount(): number;
   /** Stops and returns every frame captured, in order. */
   stop(): Promise<CastFrame[]>;
 }
@@ -111,6 +117,7 @@ async function chromiumScreencast(
     everyNthFrame,
   });
   return {
+    frameCount: () => frames.length,
     async stop() {
       await cdp.send('Page.stopScreencast');
       cdp.off('Page.screencastFrame', onFrame);
@@ -163,6 +170,7 @@ async function webkitScreencast(
   // by however long that frame took to come, 60–100 ms on a busy page.)
   const wallMinusMonotonic = Date.now() - Number(process.hrtime.bigint()) / 1e6;
   return {
+    frameCount: () => frames.length,
     async stop() {
       await session.send('Screencast.stopScreencast');
       session.off?.('Screencast.screencastFrame', onFrame);
