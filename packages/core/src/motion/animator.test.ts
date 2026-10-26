@@ -1122,6 +1122,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       ),
     );
 
+  it('an entrance after an outside finish starts from what is on screen', async () => {
+    const {animator} = reduced();
+    animator.animate(
+      {opacity: 0},
+      {spring: springs.settle},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(16);
+    // A test utility finishes the fade out: opacity 0 on screen, while the
+    // curve would still read about 0.93.
+    const [exit] = live('opacity');
+    exit.finish();
+    animator.animate(
+      {opacity: 1},
+      {spring: springs.settle},
+      {crossfadeAs: 'entrance'},
+    );
+    const fade = live('opacity').at(-1);
+    expect(fade?.keyframes[0].opacity).toBe('0');
+  });
+
   it('fades for 200 ms at most', () => {
     expect(fade).toBeGreaterThan(0);
     expect(fade).toBeLessThanOrEqual(200);

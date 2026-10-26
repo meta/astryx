@@ -1469,6 +1469,30 @@ export function createAnimator(
     for (const group of pendingGroups) {
       syncGroup(group);
     }
+    syncFinished();
+  };
+
+  /**
+   * An animation finished from outside (a test utility's or devtools'
+   * `finish()`) shows its end state while the model still reads its curve:
+   * the curve ends now in the model too, so the next call starts from what
+   * is on screen.
+   */
+  const syncFinished = () => {
+    for (const [channel, animation] of running) {
+      if (animation.playState !== 'finished') {
+        continue;
+      }
+      const time = now();
+      for (const property of CHANNELS[channel]) {
+        const segment = segments.get(property);
+        if (segment == null || time >= segment.start + segment.duration) {
+          continue;
+        }
+        segments.delete(property);
+        resting[property] = segment.target;
+      }
+    }
   };
 
   /** Moves a call from rest onto the time the browser started it. */
