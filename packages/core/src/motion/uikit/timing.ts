@@ -94,9 +94,9 @@ export const reducedMotionCrossFade = {
    * The Reduced Motion cross-fade, in ms, on `curves.move`: under
    * Reduce Motion an entrance, exit, presentation switch or state change
    * becomes an opacity-only cross-fade of this length on a coarse pointer
-   * (design:reduced-motion DR2 caps it at 200 ms; UIKit's own navigation
-   * cross-fade, measured below, runs 0.5 s). Not a theme role: no theme
-   * lengthens it (DR4).
+   * (design:reduced-motion DR2 caps it at 200 ms, by owner decision DEC-1
+   * of 2026-10-24, departing from UIKit's own navigation cross-fade,
+   * measured below at 0.5 s). Not a theme role: no theme lengthens it (DR4).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
    *   (the setting)
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
@@ -190,13 +190,21 @@ export function registerTimingTable(): void {
   registerMotionTable('timing', timing, {
     // Arbitration: who gets the touch, not how anything moves; the Reduced
     // Motion fade, which no theme may lengthen (design:reduced-motion DR4);
-    // and the keyboard's duration, which follows the keyboard, not a theme
-    // value (spec:AST-094 FR4).
+    // and the keyboard's own timing, which motion in step with the keyboard
+    // rides (spec:AST-094 FR4).
     exclude: [
       'press.scrollBrakeMs',
       'reducedMotionCrossFadeMs',
       'keyboardNotificationMs',
     ],
+    // The roles spec:AST-094 FR4 names for their use.
+    rename: {
+      implicitAnimationMs: 'stateChangeMs',
+      'curves.caDefault': 'curves.viewChange',
+      'curves.easeIn': 'curves.exit',
+      'curves.easeOut': 'curves.entrance',
+      'curves.easeInOut': 'curves.move',
+    },
   });
 }
 

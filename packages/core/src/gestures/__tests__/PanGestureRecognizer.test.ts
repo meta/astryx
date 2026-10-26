@@ -398,6 +398,26 @@ describe('PanGestureRecognizer', () => {
   });
 
   describe('claiming before it begins', () => {
+    it("claims at the table's measured early-claim distance (spec:AST-094 FR2)", () => {
+      const distance = UIKIT_GESTURES.pan.earlyClaimDistance.value;
+      expect(UIKIT_GESTURES.pan.earlyClaimDistance).toEqual({
+        value: 5,
+        unit: 'px',
+      });
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'up',
+        claimDistance: 'early',
+      });
+      const finger = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
+      finger.move(0, 100 - distance + 1, 16);
+      expect(pan.claimsEarly()).toBe(false);
+      finger.move(0, 100 - distance, 32);
+      expect(pan.claimsEarly()).toBe(true);
+      finger.up(48);
+    });
+
     it('a one-way pan that opts in claims once the finger has gone 5 px its way, and begins at 10', () => {
       const h = createHarness();
       const pan = new PanGestureRecognizer({
