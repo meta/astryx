@@ -1656,8 +1656,23 @@ export function createAnimator(
     calls: {group: StartGroup; changed: MotionProperty[]}[],
   ) => {
     for (const {group, changed} of calls) {
+      // Only the properties whose curve is still this call's: one a later
+      // presented call took over, or whose channel holds a curve of a call
+      // still waiting, starts with that call, after its own two frames.
+      const own = changed.filter(
+        property =>
+          segments.get(property)?.group === group &&
+          !CHANNELS[CHANNEL_OF[property]].some(other => {
+            const waiting = segments.get(other)?.group;
+            return (
+              waiting != null &&
+              waiting !== group &&
+              deferredCalls.some(call => call.group === waiting)
+            );
+          }),
+      );
       // From the call's own time: the curve starts at the browser's commit.
-      startCall(group, changed, group.provisional);
+      startCall(group, own, group.provisional);
     }
   };
 

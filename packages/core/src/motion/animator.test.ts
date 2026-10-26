@@ -985,6 +985,25 @@ describe('start: when a call\u2019s animations start', () => {
     expect(live('opacity')).toHaveLength(1);
   });
 
+  it('presented: a second presented call on the same property a frame later keeps its own two frames', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle}, {start: 'presented'});
+    clock = 1016;
+    await commitFrame(1016);
+    animator.animate({x: 200}, {spring: springs.settle}, {start: 'presented'});
+    // The first call's second frame: its property is now the second call's,
+    // so nothing starts yet.
+    clock = 1033;
+    await commitFrame(1033);
+    expect(live('translate')).toHaveLength(0);
+    // The second call's own second frame.
+    clock = 1050;
+    await commitFrame(1050);
+    expect(live('translate')).toHaveLength(1);
+    await commitFrame(1066);
+    expect(animator.get('x', 1066 + 5000)).toBeCloseTo(200, 3);
+  });
+
   it('presented: another change before then creates the animations first', async () => {
     const {animator} = setup();
     animator.animate({x: 100}, {spring: springs.settle}, {start: 'presented'});
