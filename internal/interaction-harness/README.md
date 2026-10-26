@@ -109,7 +109,7 @@ call into `curves.ts` on it (and on every later document): a frame loop on the
 page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
-`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+`waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
 set): a short entrance no longer races the first look on a cold page. When the
 action may be the page's first contact with the harness, take
 `watchAnimations(locator)` before it and read `watch.started()` after.
