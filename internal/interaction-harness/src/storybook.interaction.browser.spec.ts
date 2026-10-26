@@ -5,7 +5,8 @@
  * @input The built Storybook (`withStorybook`) and one of its stories
  * @output `openStory` turns Storybook's highlight module off, so an insertion
  *   in a story carries no `getComputedStyle` scan of the page; with the module
- *   on (the control), every insertion carries one
+ *   on (the control), every insertion carries one. Both engines; Chromium's
+ *   trace also counts the style recalculations the scan forces
  * @position Self-test for story.ts; it needs the built Storybook, as every
  *   component proof does
  */
@@ -60,22 +61,31 @@ test("openStory turns Storybook's highlight module off: an insertion in a story 
   page,
   browserName,
 }) => {
-  test.skip(
-    browserName !== 'chromium',
-    'rendering traces are Chromium-only (README: engine limits)',
-  );
+  // The insertion's reads in every engine, and in Chromium (whose trace the
+  // harness reads) the style recalculations between its marks.
+  const measure = async (p: Page) => {
+    if (browserName !== 'chromium') {
+      return {copy: await insertCopy(p), styleRecalc: null};
+    }
+    let copy = {from: 0, to: 0, scanned: 0, elements: 0};
+    const trace = await traceRendering(p, async () => {
+      copy = await insertCopy(p);
+    });
+    return {
+      copy,
+      styleRecalc:
+        countBetween(trace, copy.from, copy.to).UpdateLayoutTree ?? 0,
+    };
+  };
   // The harness default.
   await page.addInitScript(countStyleReads);
   await openStory(page, storybook(), 'core-button--primary');
   expect(await page.locator('#storybook-highlights-root').count()).toBe(0);
-  let off = {from: 0, to: 0, scanned: 0, elements: 0};
-  const offTrace = await traceRendering(page, async () => {
-    off = await insertCopy(page);
-  });
-  expect(off.scanned).toBe(0);
-  expect(countBetween(offTrace, off.from, off.to).UpdateLayoutTree ?? 0).toBe(
-    0,
-  );
+  const off = await measure(page);
+  expect(off.copy.scanned).toBe(0);
+  if (off.styleRecalc != null) {
+    expect(off.styleRecalc).toBe(0);
+  }
 
   // Control: Storybook's module kept on reads the style of every element on
   // the page inside the inserting task.
@@ -85,13 +95,10 @@ test("openStory turns Storybook's highlight module off: an insertion in a story 
     storybookHighlight: true,
   });
   expect(await control.locator('#storybook-highlights-root').count()).toBe(1);
-  let on = {from: 0, to: 0, scanned: 0, elements: 0};
-  const onTrace = await traceRendering(control, async () => {
-    on = await insertCopy(control);
-  });
-  expect(on.scanned).toBeGreaterThanOrEqual(on.elements);
-  expect(
-    countBetween(onTrace, on.from, on.to).UpdateLayoutTree ?? 0,
-  ).toBeGreaterThan(0);
+  const on = await measure(control);
+  expect(on.copy.scanned).toBeGreaterThanOrEqual(on.copy.elements);
+  if (on.styleRecalc != null) {
+    expect(on.styleRecalc).toBeGreaterThan(0);
+  }
   await control.close();
 });
