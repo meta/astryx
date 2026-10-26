@@ -1807,10 +1807,43 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     animator.animate({opacity: 0.5}, {spring: springs.settle});
     // Not while the element shows: at the bottom of the new call's dip.
     expect(animator.get('x')).toBe(0);
-    await advance(fade * 2);
+    const start = clock;
+    let landedAt: number | null = null;
+    while (clock <= start + fade * 2) {
+      await advance(2);
+      if (landedAt == null && animator.get('x') !== 0) {
+        landedAt = animator.get('opacity');
+      }
+    }
+    expect(landedAt).not.toBeNull();
+    expect(landedAt as number).toBeLessThan(0.05);
     expect(animator.get('x')).toBe(100);
     expect(animator.get('opacity')).toBeCloseTo(0.5, 9);
     await expect(move.finished).resolves.toBe(true);
+  });
+
+  it('a move whose opacity rises from or falls to a visible value lands only while transparent (DR1, DR2)', async () => {
+    for (const [from, to] of [
+      [0.5, 1],
+      [1, 0.5],
+    ] as const) {
+      const {animator} = reduced();
+      animator.set({opacity: from});
+      animator.animate({x: 100, opacity: to}, {spring: springs.navigationPush});
+      expect(animator.get('x')).toBe(0);
+      const start = clock;
+      let landedAt: number | null = null;
+      while (clock <= start + fade * 2) {
+        await advance(2);
+        if (landedAt == null && animator.get('x') !== 0) {
+          landedAt = animator.get('opacity');
+        }
+      }
+      expect(landedAt).not.toBeNull();
+      expect(landedAt as number).toBeLessThan(0.05);
+      expect(animator.get('x')).toBe(100);
+      expect(animator.get('opacity')).toBeCloseTo(to, 9);
+    }
   });
 
   it('an entrance lands in place and fades in', async () => {
