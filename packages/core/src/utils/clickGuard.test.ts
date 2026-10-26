@@ -64,6 +64,24 @@ describe('clickGuard', () => {
     document.removeEventListener('click', heard, {capture: true});
   });
 
+  it('keeps its place ahead of a window listener the page adds after the first gesture: installed once per window', () => {
+    const target = button();
+    armClickGuard(document);
+    disarmClickGuard(document);
+    const heard = vi.fn();
+    window.addEventListener('click', heard, {capture: true});
+    try {
+      armClickGuard(document);
+      expect(click(target).defaultPrevented).toBe(true);
+      expect(heard).not.toHaveBeenCalled();
+      // Disarmed, every click passes, the page's listener included.
+      expect(click(target).defaultPrevented).toBe(false);
+      expect(heard).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener('click', heard, {capture: true});
+    }
+  });
+
   it("lets through a keyboard's or a screen reader's click, a click the caller dispatches, and the haptic switch's", () => {
     const target = button();
     armClickGuard(document);
