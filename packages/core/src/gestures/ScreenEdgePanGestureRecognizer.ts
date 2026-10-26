@@ -21,10 +21,11 @@
  * the edge from the browser, which has nothing to scroll in so thin a band,
  * so the pan still decides at its 15 px hysteresis; on any wider view it
  * leaves the browser every touch behavior, so the author's scrolling there
- * is untouched (spec:AST-094 FR18).
+ * is untouched (spec:AST-094 FR18), and decides at 10 px, before the browser
+ * commits to a scroll (FR19).
  */
 
-import {UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
+import {UIKIT_PAN, UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
 import {ALL_NATIVE_TOUCH, type NativeTouchBehavior} from './GestureRecognizer';
 import {
   PanGestureRecognizer,
@@ -55,6 +56,8 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
   edgeRegion: number;
   /** The physical edge the current gesture started from. */
   activeEdge: 'left' | 'right' | 'top' | 'bottom' | null = null;
+  /** The hysteresis where the pan takes its axis (UIKit's 15 px). */
+  private readonly edgeHysteresis: number;
 
   constructor(options: ScreenEdgePanGestureRecognizerOptions = {}) {
     super({
@@ -65,6 +68,7 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
     this.edges = options.edges ?? ['leading'];
     this.edgeRegion =
       options.edgeRegion ?? UIKIT_SCREEN_EDGE_PAN.edgeRegion.value;
+    this.edgeHysteresis = this.hysteresis;
   }
 
   /**
@@ -111,6 +115,15 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
         return;
       }
       this.activeEdge = edge;
+      // Off the edge zone a one-edge pan leaves the browser every pan, so it
+      // decides within the 10 px the browser waits before it commits to a
+      // scroll (spec:AST-094 FR19); where it takes its axis, at UIKit's 15.
+      const offZone =
+        this.edges.length === 1 &&
+        !this.isEdgeZone(isAcrossHorizontal(this.edges[0]) ? 'x' : 'y');
+      this.hysteresis = offZone
+        ? Math.min(this.edgeHysteresis, UIKIT_PAN.hysteresis.value)
+        : this.edgeHysteresis;
       this.direction =
         edge === 'left'
           ? 'right'

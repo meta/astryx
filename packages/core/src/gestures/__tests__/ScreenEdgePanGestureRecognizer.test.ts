@@ -98,6 +98,7 @@ describe('ScreenEdgePanGestureRecognizer', () => {
   it('in the edge zone, still decides at its hysteresis', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    h.environment.view = {width: edge.edgeRegion, height: 844};
     const hysteresis = UIKIT_SCREEN_EDGE_PAN.hysteresis.value;
     h.finger(1)
       .down(10, 300, 0, {recognizers: [edge]})
@@ -105,6 +106,33 @@ describe('ScreenEdgePanGestureRecognizer', () => {
     expect(edge.state).toBe('possible');
     h.finger(1).drag(2, 0, 50);
     expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+});
+
+describe('off the edge zone', () => {
+  it('decides at 10 px, before the browser commits to a scroll (spec:AST-094 FR19)', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    h.environment.view = {width: 390, height: 844};
+    h.finger(1)
+      .down(10, 300, 0, {recognizers: [edge]})
+      .drag(9, 0, 30, 9);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(1, 0, 10, 1);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+
+  it('decides at its 15 px hysteresis when it takes its axis, from several edges', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left', 'right'],
+    });
+    h.environment.view = {width: 390, height: 844};
+    h.finger(1)
+      .down(10, 300, 0, {recognizers: [edge]})
+      .drag(UIKIT_SCREEN_EDGE_PAN.hysteresis.value - 1, 0, 30);
+    expect(edge.state).toBe('possible');
   });
 });
 
