@@ -774,3 +774,27 @@ describe('arena: round-five review fixes', () => {
     h.finger(1).up(600);
   });
 });
+
+describe('arena: a waiting recognition that fails on its re-attempt', () => {
+  it('gives its claim back when shouldBegin refuses once the requirement fails (FR19)', () => {
+    const h = createHarness();
+    let mayBegin = true;
+    const blocker = new Scripted('q', {
+      moved: (r, event) => (event.time >= 32 ? r.fail() : undefined),
+    });
+    const waiter = new Scripted('r', onMove, {shouldBegin: () => mayBegin});
+    waiter.requireToFail(blocker);
+    const finger = h
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [waiter, blocker]})
+      .move(20, 0, 16);
+    // r waits for q and holds the touch meanwhile.
+    expect(h.arena.isClaimed(1)).toBe(true);
+    mayBegin = false;
+    finger.move(40, 0, 32);
+    expect(h.log).toContain('q:failed@32');
+    expect(waiter.state).toBe('failed');
+    expect(h.arena.isClaimed(1)).toBe(false);
+    finger.up(48);
+  });
+});
