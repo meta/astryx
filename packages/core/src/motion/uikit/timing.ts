@@ -83,6 +83,45 @@ export const press = {
   buttonReleaseMs: 250,
 } as const;
 
+/**
+ * The Reduce Motion fade, its own export so the animator reads it without
+ * the rest of the table (`architecture:component-style-authoring` INV6).
+ * `timing` composes it under its table paths, `reducedMotionCrossFadeMs` and
+ * `curves.move`, so their roles are unchanged.
+ */
+export const reducedMotionCrossFade = {
+  /**
+   * Reduce Motion with Prefer Cross-Fade Transitions: a navigation push or pop
+   * becomes a cross-fade of this length on `curves.move` (the new view
+   * fades in while the old one fades out, with no travel), in ms. Sheets,
+   * full-screen modals and alerts fade on their own presentation spring
+   * instead. A reference reading only: under reduced motion a touch
+   * presentation follows `design:reduced-motion` DR2 and DR4, not this clock
+   * (`spec:AST-094` FR8).
+   * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
+   *   (the setting)
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, CAAnimation dump with Reduce Motion and Prefer
+   *   Cross-Fade Transitions on (opacity CABasicAnimation 0.5 s,
+   *   (0.42, 0, 0.58, 1)), Oct 23 2026
+   */
+  durationMs: 500,
+  /**
+   * `easeInEaseOut`; UIKit's default curve (`UIView.AnimationCurve
+   * .easeInOut`, "the default curve for most animations").
+   * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easeineaseout
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
+   *   Oct 23 2026
+   */
+  curve: [0.42, 0, 0.58, 1],
+} as const;
+
+// `timing` composes the fade from bindings, not property reads, so a bundle
+// that reads only the fade drops the rest of the table.
+const {durationMs: reducedMotionCrossFadeMs, curve: move} =
+  reducedMotionCrossFade;
+
 export const timing = {
   press,
   curves: {
@@ -95,15 +134,8 @@ export const timing = {
      *   Oct 23 2026
      */
     viewChange: [0.25, 0.1, 0.25, 1],
-    /**
-     * `easeInEaseOut`; UIKit's default curve (`UIView.AnimationCurve
-     * .easeInOut`, "the default curve for most animations").
-     * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easeineaseout
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, CAMediaTimingFunction read from UIView.animate,
-     *   Oct 23 2026
-     */
-    move: [0.42, 0, 0.58, 1],
+    // The Reduce Motion fade's curve, sourced on `reducedMotionCrossFade`.
+    move,
     /**
      * `easeIn`.
      * @source apple-docs https://developer.apple.com/documentation/quartzcore/camediatimingfunctionname/easein
@@ -145,22 +177,8 @@ export const timing = {
    *   iPhone 17 Pro, read, Oct 23 2026
    */
   stateChangeMs: 250,
-  /**
-   * Reduce Motion with Prefer Cross-Fade Transitions: a navigation push or pop
-   * becomes a cross-fade of this length on `curves.move` (the new view
-   * fades in while the old one fades out, with no travel), in ms. Sheets,
-   * full-screen modals and alerts fade on their own presentation spring
-   * instead. A reference reading only: under reduced motion a touch
-   * presentation follows `design:reduced-motion` DR2 and DR4, not this clock
-   * (`spec:AST-094` FR8).
-   * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
-   *   (the setting)
-   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, CAAnimation dump with Reduce Motion and Prefer
-   *   Cross-Fade Transitions on (opacity CABasicAnimation 0.5 s,
-   *   (0.42, 0, 0.58, 1)), Oct 23 2026
-   */
-  reducedMotionCrossFadeMs: 500,
+  // The Reduce Motion fade's length, sourced on `reducedMotionCrossFade`.
+  reducedMotionCrossFadeMs,
 } as const;
 
 /**

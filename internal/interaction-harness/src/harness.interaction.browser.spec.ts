@@ -961,6 +961,121 @@ test.describe('animation state', () => {
     expect(started.map(a => a.durationMs)).toEqual([300]);
   });
 
+  test('a wait answers with the animation the action started, not one that finished before it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const frames = [{opacity: 0.2}, {opacity: 1}];
+    // The recorder runs and is armed from here.
+    await waitForRest(box);
+    // A short one runs and ends; then the action starts a longer one, still
+    // pending when the wait first looks.
+    await box.evaluate(
+      (el, keyframes) => el.animate(keyframes, {duration: 40}).finished,
+      frames,
+    );
+    await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 1000});
+    }, frames);
+    const [found] = await waitForAnimation(box);
+    expect(found.durationMs).toBe(1000);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('a scroll-timeline animation in scope does not hold up a wait', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const scroller = page.locator('#scroller');
+    await waitForRest(scroller);
+    // A row driven by its scroller's timeline (it moves only on scroll), and
+    // a short document animation that ends.
+    await scroller.evaluate(el => {
+      const [row, other] = [...el.children] as HTMLElement[];
+      row.animate([{opacity: 0.5}, {opacity: 1}], {
+        timeline: new ScrollTimeline({source: el}),
+      });
+      // Scrolled to its end, the scroll-driven one has finished too: it is
+      // not a finished curve either.
+      el.scrollTop = el.scrollHeight;
+      return other.animate([{opacity: 0.2}, {opacity: 1}], {duration: 40})
+        .finished;
+    });
+    const [found] = await waitForAnimation(scroller, {timeout: 2000});
+    expect(found.durationMs).toBe(40);
+    expect(found.finishedAt).not.toBeNull();
+  });
+
+  test('a watch taken right after a style change does not report that change', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    // The step: a transition the next style read creates.
+    await box.evaluate(el => {
+      el.style.transition = 'opacity 300ms linear';
+      el.style.opacity = '0.5';
+    });
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 200})).rejects.toThrow(
+      /waitForAnimation/,
+    );
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('an exit whose element the page removes at its end is still reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const wrap = document.createElement('div');
+      wrap.id = 'wrap';
+      const leaf = document.createElement('div');
+      leaf.id = 'leaf';
+      leaf.style.cssText = 'width:20px;height:20px;background:#c33';
+      wrap.append(leaf);
+      document.body.append(wrap);
+    });
+    const wrap = page.locator('#wrap');
+    const watch = await watchAnimations(wrap);
+    await page.evaluate(() => {
+      const leaf = document.getElementById('leaf') as HTMLElement;
+      const exit = leaf.animate([{opacity: 1}, {opacity: 0}], {duration: 60});
+      exit.finished.then(() => leaf.remove());
+    });
+    await expect
+      .poll(() => page.evaluate(() => document.getElementById('leaf') == null))
+      .toBe(true);
+    const [exit] = await watch.started();
+    expect(exit.durationMs).toBe(60);
+    expect(exit.finishedAt).not.toBeNull();
+  });
+
+  test('a wait on an element no longer in the document rejects at its own timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const gone = document.createElement('div');
+      gone.id = 'gone';
+      document.body.append(gone);
+    });
+    const gone = page.locator('#gone');
+    const watch = await watchAnimations(gone);
+    await page.evaluate(() => document.getElementById('gone')?.remove());
+    for (const wait of [
+      () => watch.started({timeout: 300}),
+      () => waitForAnimation(gone, {timeout: 300}),
+      () => waitForRest(gone, {timeout: 300}),
+    ]) {
+      const startedAt = Date.now();
+      await expect(wait()).rejects.toThrow(/not in the document/);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');

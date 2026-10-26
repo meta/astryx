@@ -81,15 +81,16 @@ full end, and `waitForRest` waits the hold out. An animation reversed before it 
 on a new animation, a negative playback rate from the start) is reported by
 `waitForAnimation` from when it started, but `holdAnimations` refuses it:
 seeking and sampling run a curve forward. The recorder keeps one entry per
-`Animation` object, so one reversed or replayed mid-run is reported as its
-first run; take a fresh animation for each run a proof reads.
+`Animation` object, so one reversed or replayed mid-run is misread: a watch
+taken before the reversal rejects, and an unwatched wait returns at once with
+a curve dated before it. Take a fresh animation for each run a proof reads.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the
 page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
-`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+`waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
 set): a short entrance no longer races the first look on a cold page. When the
 action may be the page's first contact with the harness, take
 `watchAnimations(locator)` before it and read `watch.started()` after.
