@@ -29,6 +29,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `projection.ts`                                  | Release targets: the rest point nearest the projected coast; paging.                                                                                                 |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -42,9 +43,9 @@ The motion roles are the springs, durations and curves `spec:AST-094` FR4
 names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
-a plain constant. Touch motion stays internal: no public API sets a role. A
-role's value is carried by its CSS variable (`--motion-springs-settle`) on the
-element's scope, and an empty variable means the table's value. A table's
+a plain constant. Touch motion stays internal (`spec:AST-094` DEC-11): a role
+plays its table value, and nothing reads its CSS variable
+(`--motion-springs-settle`), so no page or theme style retunes it. A table's
 roles exist once its `register<Name>Table()` has run: the animator registers
 the Reduce Motion fade's curve, and code that plays the shared springs calls
 `registerSpringsTable()` before its first motion. The animator resolves each
@@ -139,9 +140,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
   travel. For motion the animator does not drive, `reducedMotionFade()`
   answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
-  A decay keeps its motion under Reduce Motion: momentum that continues a
-  throw is direct movement (DR2, DEC-2); a spring a component starts on
-  release toward a target it picks cross-fades.
+  A decay's momentum keeps its motion under Reduce Motion: momentum that
+  continues a throw is direct movement (DR2, DEC-2). A curve marked
+  `isTransition` (a coast's spring back from past an edge), like a spring a
+  component starts on release toward a target it picks, plays through the
+  Reduce Motion policy: a cross-fade on a coarse pointer, at once elsewhere.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
@@ -208,8 +211,8 @@ Chromium and WebKit on the phone profile.
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A scope that sets `springs.settle`'s variable changes the curve the engine
-  plays for an element in it, and only there.
+- A scope that sets `springs.settle`'s variable changes nothing: touch motion
+  stays internal (DEC-11), so the engine plays the table's spring there too.
 
 ```
 pnpm test:interaction packages/core/src/motion

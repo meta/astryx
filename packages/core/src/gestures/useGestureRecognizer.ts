@@ -81,6 +81,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
 ): R {
   const [recognizer] = useState(create);
   const onGestureRef = useRef(onGesture);
+  // Syncs the listener's ref with the caller's newest callback.
   useIsomorphicLayoutEffect(() => {
     onGestureRef.current = onGesture;
   });
@@ -91,8 +92,9 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   } = options;
   const isUnmountedRef = useIsUnmountedRef();
 
-  // The listener runs inside input events, never during a render or an
-  // Effect, and goes quiet once the component unmounts.
+  // Syncs the recognizer's target-action listener with this component. The
+  // listener runs inside input events, never during a render or an Effect,
+  // and goes quiet once the component unmounts.
   useEffect(
     () =>
       recognizer.addListener(current => {
@@ -103,8 +105,9 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer, isUnmountedRef],
   );
 
-  // The isEnabled sync runs first, under the guard, so disabling cancels a
-  // gesture in flight before its attachment goes.
+  // Syncs the recognizer's `isEnabled` with the option. It runs first,
+  // under the guard, so disabling cancels a gesture in flight before its
+  // attachment goes.
   useIsomorphicLayoutEffect(() => {
     syncingDepth += 1;
     try {
@@ -114,7 +117,8 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     }
   }, [recognizer, isEnabled]);
 
-  // A disabled gesture is not attached at all: no listener and no
+  // Syncs the document's gesture host with the element behind `ref`. A
+  // disabled gesture is not attached at all: no listener and no
   // `touch-action` of its own on the element (spec:AST-094 FR24). A replaced
   // node is released and the new one attached; detaching cancels a gesture in
   // progress from a layout effect, and that cancel reaches no caller callback
@@ -178,6 +182,7 @@ export function usePressTracker(
   // The ref is read through a ref too: a caller may pass a new ref object
   // on a render, and the one tracker must follow it.
   const refRef = useRef(ref);
+  // Syncs the options and ref refs with the newest render.
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
     refRef.current = ref;
@@ -187,6 +192,8 @@ export function usePressTracker(
   // One tracker for the component's life, reading its profile through the
   // options ref: a profile change never rebuilds it, so a press in progress
   // survives it (the change applies from the tracker's next read).
+  // `keepsTouch` is the exception, fixed when the tracker is created: it
+  // decides whether the host gives the element a blocking touchmove.
   const [tracker] = useState(
     () =>
       new PressTracker({
@@ -239,11 +246,13 @@ export function usePressTracker(
       }),
   );
   const {trackingExpansion} = options;
+  // Syncs the tracker's tracking expansion with the option.
   useIsomorphicLayoutEffect(() => {
     tracker.trackingExpansion =
       trackingExpansion ?? UIKIT_GESTURES.control.trackingExpansion.value;
   }, [tracker, trackingExpansion]);
 
+  // Syncs the host's press consumer with the element behind `ref`.
   // Releasing the element (a replaced node, unmount) disposes the press,
   // which un-highlights a control it was holding; a changed perEventPointer
   // re-attaches it.
@@ -272,8 +281,9 @@ export function usePressTracker(
     attachment,
   );
 
-  // The enabled state can change with any render: the host listens only
-  // while an enabled control is attached (spec:AST-094 FR24).
+  // Syncs the host's listeners with the tracker's enabled state, which can
+  // change with any render: the host listens only while an enabled control
+  // is attached (spec:AST-094 FR24).
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     if (element != null) {
@@ -290,6 +300,7 @@ export function usePressTracker(
  */
 function useIsUnmountedRef(): {readonly current: boolean} {
   const isUnmountedRef = useRef(false);
+  // Syncs the flag with the component's mount.
   useIsomorphicLayoutEffect(() => {
     isUnmountedRef.current = false;
     return () => {
@@ -316,6 +327,7 @@ function useAttachment(
     release: () => void;
   } | null>(null);
 
+  // Syncs the attachment with the DOM node `ref` holds after this commit.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     const current = attachmentRef.current;
@@ -327,6 +339,7 @@ function useAttachment(
       element == null ? null : {element, key, release: attach(element)};
   });
 
+  // Releases the attachment at unmount.
   useIsomorphicLayoutEffect(
     () => () => {
       attachmentRef.current?.release();

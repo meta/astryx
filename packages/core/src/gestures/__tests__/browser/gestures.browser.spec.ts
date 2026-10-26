@@ -9,8 +9,10 @@
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
  *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
- *   left to the browser, a second finger that never breaks the first, and
- *   timing taken from event timestamps under a blocked main thread
+ *   left to the browser, a second finger that never breaks the first,
+ *   timing taken from event timestamps under a blocked main thread, nothing
+ *   attached where the primary pointer is fine or a recognizer is disabled,
+ *   and a held finger's selection lock only where the hold takes the touch
  * @position Browser tests of packages/core/src/gestures (see
  *   playwright.config.ts beside this file). WebKit's Linux build cannot
  *   scroll, fling or pinch-zoom from injected touches, and synthesises a
@@ -35,21 +37,26 @@ interface Entry {
 }
 
 let bundle = '';
+let bareBundle = '';
 
 test.beforeAll(async () => {
-  const result = await build({
-    entryPoints: [
-      path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixture.ts'),
-    ],
-    bundle: true,
-    write: false,
-    format: 'iife',
-    platform: 'browser',
-    target: 'es2022',
-    // A development build, as an app's bundler would make one.
-    define: {'process.env.NODE_ENV': '"development"'},
-  });
-  bundle = result.outputFiles[0].text;
+  const bundleOf = async (file: string) => {
+    const result = await build({
+      entryPoints: [
+        path.join(path.dirname(fileURLToPath(import.meta.url)), file),
+      ],
+      bundle: true,
+      write: false,
+      format: 'iife',
+      platform: 'browser',
+      target: 'es2022',
+      // A development build, as an app's bundler would make one.
+      define: {'process.env.NODE_ENV': '"development"'},
+    });
+    return result.outputFiles[0].text;
+  };
+  bundle = await bundleOf('fixture.ts');
+  bareBundle = await bundleOf('bareFixture.ts');
 });
 
 type Point = {x: number; y: number};
@@ -221,6 +228,30 @@ async function open(page: Page, engine: string): Promise<Driver> {
   );
   await page.addScriptTag({content: bundle});
   return engine === 'webkit' ? webkitDriver(page) : chromiumDriver(page);
+}
+
+/** A page with nothing attached: the test attaches through `window.__api`. */
+async function openBare(page: Page, engine: string): Promise<Driver> {
+  await page.goto('about:blank');
+  await page.setContent(
+    '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+  );
+  await page.addScriptTag({content: bareBundle});
+  return engine === 'webkit' ? webkitDriver(page) : chromiumDriver(page);
+}
+
+/** An element's inline touch-action and the page's touch listeners now. */
+async function footprint(page: Page, id: string) {
+  return page.evaluate(
+    target => ({
+      touchAction:
+        document
+          .getElementById(target)
+          ?.style.getPropertyValue('touch-action') ?? null,
+      pageTouchListeners: window.__pageTouch,
+    }),
+    id,
+  );
 }
 
 async function center(page: Page, id: string): Promise<Point> {
@@ -649,6 +680,130 @@ test('a control that keeps its press through a drag holds the page still and sta
   kept = states(await log(page), 'kept');
   expect(kept).toContain('touchUpInside');
   expect(kept).not.toContain('touchCancel');
+});
+
+test('where the primary pointer is fine, the host writes no touch-action and registers no touch listener (spec:AST-094 FR19, FR24)', async ({
+  browser,
+}) => {
+  // A desktop: a mouse is the primary pointer.
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+    hasTouch: false,
+    isMobile: false,
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto('about:blank');
+    await page.setContent('<!doctype html><body></body>');
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, LongPressGestureRecognizer, PanGestureRecognizer} =
+        window.__api;
+      document.body.innerHTML =
+        '<div id="drag" style="height: 80px">drag</div><div id="hold" style="height: 80px">hold</div>';
+      host.attach(
+        document.getElementById('drag') as HTMLElement,
+        new PanGestureRecognizer({direction: 'horizontal'}),
+      );
+      host.attach(
+        document.getElementById('hold') as HTMLElement,
+        new LongPressGestureRecognizer(),
+      );
+    });
+    expect(await footprint(page, 'drag')).toEqual({
+      touchAction: '',
+      pageTouchListeners: 0,
+    });
+    expect((await footprint(page, 'hold')).touchAction).toBe('');
+  } finally {
+    await context.close();
+  }
+});
+
+test('a recognizer registers no touch listener and writes no touch-action while it is disabled, and does once it is enabled (spec:AST-094 FR24)', async ({
+  page,
+  browserName,
+}) => {
+  await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {host, PanGestureRecognizer} = window.__api;
+    document.body.innerHTML = '<div id="solo" style="height: 120px">solo</div>';
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      isEnabled: false,
+    });
+    (window as unknown as {__solo: typeof pan}).__solo = pan;
+    host.attach(document.getElementById('solo') as HTMLElement, pan);
+  });
+  expect(await footprint(page, 'solo')).toEqual({
+    touchAction: '',
+    pageTouchListeners: 0,
+  });
+  const setEnabled = async (isEnabled: boolean) =>
+    page.evaluate(next => {
+      const solo = (
+        window as unknown as {
+          __solo: {setEnabled(value: boolean): void};
+        }
+      ).__solo;
+      solo.setEnabled(next);
+      window.__api.host.update(document.getElementById('solo') as HTMLElement);
+    }, isEnabled);
+  await setEnabled(true);
+  const enabled = await footprint(page, 'solo');
+  expect(enabled.touchAction).toBe('pan-y pinch-zoom');
+  expect(enabled.pageTouchListeners).toBeGreaterThan(0);
+  await setEnabled(false);
+  expect(await footprint(page, 'solo')).toEqual({
+    touchAction: '',
+    pageTouchListeners: 0,
+  });
+});
+
+test('a zero-delay hold that brings its own lock turns selection off only for a touch it takes: a touch it declines keeps native selection (spec:AST-094 FR41)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {host, LongPressGestureRecognizer, lockSelection} = window.__api;
+    // A tab bar: its lens is a hold at 0 ms, and the search tab beside it
+    // is a button the lens's recognizer declines.
+    document.body.innerHTML =
+      '<div id="bar" style="display: flex; height: 80px"><div id="lens" style="flex: 1">lens</div><button id="search" style="width: 120px">search</button></div>';
+    const lens = document.getElementById('lens') as HTMLElement;
+    host.attach(
+      document.getElementById('bar') as HTMLElement,
+      new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        selectionLock: lockSelection,
+        shouldReceiveTouch: (_recognizer, touch) =>
+          touch.target instanceof Node && lens.contains(touch.target),
+      }),
+    );
+  });
+  const selection = async () =>
+    page.evaluate(() => {
+      const style = getComputedStyle(
+        document.getElementById('bar') ?? document.body,
+      );
+      return (
+        style.getPropertyValue('-webkit-user-select') ||
+        style.getPropertyValue('user-select')
+      );
+    });
+  const free = await selection();
+  expect(free).not.toBe('none');
+  const held: Record<string, string[]> = {};
+  for (const id of ['search', 'lens']) {
+    const at = await center(page, id);
+    await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+    const during = await selection();
+    await driver.play([{t: 0, down: []}]);
+    held[id] = [during, await selection()];
+  }
+  expect(held.search).toEqual([free, free]);
+  expect(held.lens).toEqual(['none', free]);
 });
 
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({

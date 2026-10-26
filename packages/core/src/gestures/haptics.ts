@@ -42,9 +42,9 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+export {HAPTIC_SWITCH_ATTRIBUTE};
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -86,6 +86,14 @@ const VISUALLY_HIDDEN =
   'opacity:0;pointer-events:none;';
 
 let nextLabelId = 0;
+
+/** A native disabled control, or one marked `aria-disabled`. */
+function isDisabledControl(control: HTMLElement): boolean {
+  return (
+    control.matches(':disabled') ||
+    control.getAttribute('aria-disabled') === 'true'
+  );
+}
 
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
@@ -133,17 +141,33 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   // through the control as a second click: keep it, and the switch's
   // change events, inside. A label with a control of its own gets that
   // click handed on, so the control still toggles.
+  // A disabled control gives no feedback (spec:AST-094 FR23): its label's
+  // activation neither toggles the switch, so nothing plays, nor reaches
+  // the control.
   const onClick = (event: Event) => {
     event.stopPropagation();
+    if (existing != null && isDisabledControl(existing)) {
+      event.preventDefault();
+      return;
+    }
     existing?.click();
   };
   const onFocus = (event: FocusEvent) => {
     const previous = event.relatedTarget;
-    if (existing instanceof HTMLElement && existing.tabIndex >= 0) {
+    if (
+      existing instanceof HTMLElement &&
+      existing.tabIndex >= 0 &&
+      !isDisabledControl(existing)
+    ) {
       existing.focus({preventScroll: true});
-    } else if (previous instanceof HTMLElement && previous.isConnected) {
+    }
+    if (doc.activeElement !== input) {
+      return;
+    }
+    if (previous instanceof HTMLElement && previous.isConnected) {
       previous.focus({preventScroll: true});
-    } else {
+    }
+    if (doc.activeElement === input) {
       input.blur();
     }
   };
