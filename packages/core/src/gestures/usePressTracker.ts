@@ -20,7 +20,7 @@
 
 import {useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_CONTROL} from '../motion/uikit/gestures';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
@@ -126,7 +126,7 @@ export function usePressTracker(
   // Syncs the tracker's tracking expansion with the option.
   useIsomorphicLayoutEffect(() => {
     tracker.trackingExpansion =
-      trackingExpansion ?? UIKIT_GESTURES.control.trackingExpansion.value;
+      trackingExpansion ?? UIKIT_CONTROL.trackingExpansion.value;
   }, [tracker, trackingExpansion]);
 
   // Syncs the host's press consumer with the element behind `ref`.
