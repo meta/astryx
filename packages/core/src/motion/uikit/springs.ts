@@ -262,10 +262,11 @@ export const springs = {
    */
   contextMenuDismiss: MENU_CLOSE_SPRING,
   /**
-   * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot. A reference reading only: under reduced motion a
-   * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
-   * spring (`spec:AST-094` FR8).
+   * What UIKit plays for a menu with Reduce Motion on: critically damped,
+   * slower, no overshoot. A reference reading of UIKit only, never played:
+   * under reduced motion no core transition springs (`design:reduced-motion`
+   * DR1); a touch presentation cross-fades instead (DR2), and nothing opts
+   * out (DR4, `spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026
