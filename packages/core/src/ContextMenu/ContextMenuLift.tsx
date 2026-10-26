@@ -55,17 +55,19 @@ const LIFT = contextMenu.lift;
 /**
  * The lift's springs, as measured: the preview grows and the tint fades in
  * on `springs.contextMenuLift`, the menu enters and the shadow rises and
- * fades on `morphSpring`, the preview returns on `morphSpring` while the tint
- * clears on `springs.contextMenuDismiss`.
+ * fades on `morphSpring`. The close: the menu shrinks back into the press on
+ * `springs.menuClose`, the spring a menu's close plays on (`spec:AST-094`
+ * FR31), while the preview returns and the tint clears on UIKit's measured
+ * dismissal, `springs.contextMenuDismiss` (the same spring).
  */
 const MOTION: LiftMotion = {
   lift: springs.contextMenuLift,
-  drop: LIFT.morphSpring,
+  drop: springs.contextMenuDismiss,
   clear: springs.contextMenuDismiss,
   shadowIn: LIFT.morphSpring,
   shadowOut: LIFT.morphSpring,
   surfaceIn: LIFT.morphSpring,
-  surfaceOut: LIFT.morphSpring,
+  surfaceOut: springs.menuClose,
 };
 
 /** Where a lift landed: the view's box, the preview's, and the viewport. */

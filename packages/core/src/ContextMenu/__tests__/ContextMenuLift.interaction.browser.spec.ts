@@ -689,7 +689,7 @@ test('the menu grows out of the finger on morphSpring, translate, scale and opac
   ).toEqual(['', '']);
 });
 
-test('closing shrinks the menu back into the finger on the layer runtime’s exit copy, translate, scale and opacity only, while the card returns on the morph spring', async ({
+test('closing shrinks the menu back into the finger on the layer runtime’s exit copy, translate, scale and opacity only, while the card returns, on UIKit’s dismissal spring (AST-094 FR31)', async ({
   page,
 }) => {
   const story = await openLiftStory(page);
@@ -750,7 +750,7 @@ test('closing shrinks the menu back into the finger on the layer runtime’s exi
       document.querySelector('[data-astryx-context-menu-lift-exit]') != null,
     layer: document.querySelector('[data-astryx-context-menu-lift]') != null,
   }));
-  const returning = solveSpring(toSpring(contextMenu.lift.morphSpring), {
+  const returning = solveSpring(toSpring(springs.contextMenuDismiss), {
     from: 1.13,
     to: 1,
   });
@@ -1138,6 +1138,70 @@ test('the lift keeps moving while the main thread is blocked: the card grows on 
   expect((proof.last ?? 0) - (proof.first ?? 0)).toBeGreaterThanOrEqual(4);
 });
 
+test('the close keeps going while the main thread is blocked: the menu’s exit copy shrinks on every frame', async ({
+  page,
+  browserName,
+}, testInfo) => {
+  // As the lift's own proof: Linux WebKit's compositor stalls with its main
+  // thread; iOS Safari is the simulator recording.
+  test.skip(
+    browserName !== 'chromium',
+    'Linux WebKit’s compositor stalls with its main thread; iOS Safari is the simulator recording',
+  );
+  const story = await openLiftStory(page);
+  await liftAndSettle(page, story);
+  await markSelector(page, '[data-astryx-context-menu-lift-exit]');
+  // A tap on the dim starts the close as its finger lifts (60 ms); blocked
+  // from 20 ms into the close, while the copy shrinks.
+  const busyWindow = await blockAfterTouch(page, 60 + 20, 200);
+  const cast = await startScreencast(page);
+  await story.driver.play(tap({x: 24, y: 24}, {holdMs: 60}));
+  await page.waitForTimeout(800);
+  const castFrames = await cast.stop();
+  const block = await busyWindow();
+  // The copy fades as it shrinks, so its marker pales: a wider tolerance
+  // keeps it tracked while it is still half opaque.
+  const tracked = await trackMarker(page, castFrames, {tolerance: 120});
+  const proof = busyWindowProof(tracked, block, {
+    axis: 'width',
+    settledWithin: 2,
+  });
+  await writeEvidence(
+    'busy-main-thread/contextmenu-lift-close',
+    {
+      [`${testInfo.project.name}.json`]: JSON.stringify(
+        {
+          block,
+          proof,
+          frames: tracked.map(f => ({
+            t: +(f.t - block.from).toFixed(1),
+            w: f.box?.width ?? null,
+          })),
+        },
+        null,
+        1,
+      ),
+    },
+    testInfo,
+  );
+  const film = await castStoryboard(page, castFrames, {
+    name: 'contextmenu-lift-close-busy-main-thread',
+    zero: block.from,
+    from: block.from - 40,
+    to: block.to + 40,
+    columns: 8,
+    cellScale: 0.35,
+    data: t => ({w: tracked.find(f => f.t === t)?.box?.width ?? -1}),
+  });
+  await film.write(testInfo, {block});
+  // Frames kept coming and the copy kept shrinking through the block: the
+  // harness judges each delivered frame (no stall, no frozen copy).
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  expect(proof.frames).toBeGreaterThanOrEqual(proof.expectedFrames - 2);
+  expect(proof.monotonic).toBe(true);
+  expect((proof.first ?? 0) - (proof.last ?? 0)).toBeGreaterThanOrEqual(4);
+});
+
 /** The lifted card's box, its opacity and the menu's filter, as the frame shows them. */
 type ReducedMotionSample = Awaited<ReturnType<typeof reducedMotionSample>>;
 
@@ -1157,6 +1221,8 @@ async function reducedMotionSample(page: Page) {
       opacity: preview ? Number(getComputedStyle(preview).opacity) : Number.NaN,
       filter: menu ? getComputedStyle(menu).filter : 'none',
       menuOpacity: menu ? Number(getComputedStyle(menu).opacity) : Number.NaN,
+      // Still lifted (in the top layer), not yet back in the page.
+      lifted: preview?.matches(':popover-open') ?? false,
     };
   });
 }
@@ -1226,6 +1292,24 @@ test('under Reduce Motion the lift cross-fades in place, as UIKit’s reduced pa
   ).toBe(true);
 });
 
+/** The menu's exit copy, as the frame shows it: its box and its opacity. */
+async function exitCopySample(page: Page) {
+  return page.evaluate(() => {
+    const copy = document.querySelector<HTMLElement>(
+      '[data-astryx-context-menu-lift-exit]',
+    );
+    const box = copy?.getBoundingClientRect();
+    return copy == null || box == null
+      ? null
+      : {
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          opacity: Number(getComputedStyle(copy).opacity),
+        };
+  });
+}
+
 test('under Reduce Motion closing fades the card out where it is, with no return travel', async ({
   page,
 }) => {
@@ -1241,27 +1325,53 @@ test('under Reduce Motion closing fades the card out where it is, with no return
   await holdAnimations(page);
   const times = timeline(300);
   const samples: ReducedMotionSample[] = [];
+  const copies: Awaited<ReturnType<typeof exitCopySample>>[] = [];
   for (const t of times) {
     await seekAnimations(page, t);
     samples.push(await reducedMotionSample(page));
+    copies.push(await exitCopySample(page));
   }
   await releaseAnimations(page);
-  const detail = JSON.stringify({open, samples});
-  // Gone within 200 ms (`design:reduced-motion` DR2).
+  const detail = JSON.stringify({open, samples, copies});
+  // The menu's exit copy fades where it stands too, gone within 200 ms
+  // (`spec:AST-094` FR8, `design:reduced-motion` DR2): no shrink, no travel.
+  const first = copies.find(copy => copy != null);
+  expect(first, detail).toBeDefined();
   for (const [i, t] of times.entries()) {
-    if (t >= 200 + 1000 / 60 && Number.isFinite(samples[i].opacity)) {
+    const copy = copies[i];
+    if (copy == null || first == null) {
+      continue;
+    }
+    expect(Math.abs(copy.x - first.x), detail).toBeLessThan(0.5);
+    expect(Math.abs(copy.y - first.y), detail).toBeLessThan(0.5);
+    expect(Math.abs(copy.width - first.width), detail).toBeLessThan(0.5);
+    if (t >= 200 + 1000 / 60) {
+      expect(copy.opacity, detail).toBeLessThan(0.001);
+    }
+  }
+  // While it is lifted the card fades where it is, gone within 200 ms
+  // (`design:reduced-motion` DR2); once the close settles it is back in the
+  // page, which the samples after that no longer judge.
+  const lifted = samples.filter(sample => sample.lifted);
+  expect(lifted.length, detail).toBeGreaterThan(times.length / 2);
+  for (const [i, t] of times.entries()) {
+    if (
+      samples[i].lifted &&
+      t >= 200 + 1000 / 60 &&
+      Number.isFinite(samples[i].opacity)
+    ) {
       expect(samples[i].opacity, detail).toBeLessThan(0.001);
     }
   }
-  for (const sample of samples) {
+  for (const sample of lifted) {
     expect(Math.abs(sample.x - open.x), detail).toBeLessThan(0.5);
     expect(Math.abs(sample.y - open.y), detail).toBeLessThan(0.5);
     expect(Math.abs(sample.width - open.width), detail).toBeLessThan(0.5);
   }
-  expect(samples.at(-1)?.opacity ?? 1, detail).toBeLessThan(0.5);
+  expect(lifted.at(-1)?.opacity ?? 1, detail).toBeLessThan(0.5);
   expect(
-    samples.every(
-      (s, i) => i === 0 || s.opacity <= samples[i - 1].opacity + 1e-4,
+    lifted.every(
+      (s, i) => i === 0 || s.opacity <= lifted[i - 1].opacity + 1e-4,
     ),
     detail,
   ).toBe(true);
