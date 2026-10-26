@@ -1457,6 +1457,46 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(replaced.animator.get('x')).toBe(100);
   });
 
+  it('dispose mid-dip or mid-exit leaves the element visible where it was going', async () => {
+    // A dip on an owned opacity.
+    const dip = reduced();
+    dip.animator.set({opacity: 0.8});
+    dip.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(50);
+    dip.animator.dispose();
+    expect(dip.element.style.opacity).toBe('0.8');
+    expect(dip.element.style.translate).toBe('100px 0px');
+    // An exit by role.
+    const exit = reduced();
+    exit.animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    exit.animator.dispose();
+    expect(['', '1']).toContain(exit.element.style.opacity);
+    expect(exit.element.style.translate).toBe('100px 0px');
+  });
+
+  it('a new element attached mid-dip takes the move already landed, never travelling while it shows', async () => {
+    const {animator} = reduced();
+    stylesheet = {opacity: '0.6'};
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(30);
+    const node = document.createElement('div');
+    animator.attach(node);
+    expect(animator.get('x')).toBe(100);
+    expect(node.style.translate).toBe('100px 0px');
+    expect(node.style.opacity).toBe('');
+    await expect(handle.finished).resolves.toBe(true);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(node.style.opacity).toBe('');
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});

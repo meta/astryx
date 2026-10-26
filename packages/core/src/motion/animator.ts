@@ -1132,6 +1132,52 @@ export function createAnimator(
    * Ends a borrowed dip on the element it ran on: the stylesheet owns its
    * opacity again (an unmount or a new element never keeps the borrow).
    */
+  /**
+   * Lands every Reduce Motion move still waiting, at once, on the current
+   * element: its travel, and the opacity its fade was heading to (the
+   * stylesheet's again for a borrowed one). Its calls settle `finished`.
+   */
+  const landPending = (finished: boolean) => {
+    if (landings.size === 0) {
+      return;
+    }
+    const changed = new Set<MotionProperty>();
+    let handedBack = false;
+    for (const landing of [...landings]) {
+      endLanding(landing);
+      for (const [property, value] of landing.values) {
+        segments.delete(property);
+        resting[property] = value;
+        changed.add(property);
+      }
+      if (landing.fadeIn != null || landing.restore != null) {
+        const borrowed =
+          landing.fadeIn?.isBorrowed === true ||
+          landing.restoreIsBorrowed === true;
+        segments.delete('opacity');
+        resting.opacity = borrowed
+          ? IDENTITY.opacity
+          : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
+        changed.add('opacity');
+        if (borrowed) {
+          borrowedOpacity = null;
+          handedBack = true;
+        }
+      }
+      for (const owner of [landing.owner, ...landing.carried]) {
+        carriedOwners.delete(owner);
+        if (!owner.settled) {
+          settle(owner, finished);
+        }
+      }
+    }
+    commit(changed, now());
+    if (handedBack) {
+      // The stylesheet owns its opacity again: no value stays inline.
+      target?.style.removeProperty('opacity');
+    }
+  };
+
   const handBackBorrow = () => {
     if (borrowedOpacity == null) {
       return;
@@ -2101,41 +2147,13 @@ export function createAnimator(
         return;
       }
       demote();
+      // A Reduce Motion move waiting to land lands now, on the element it
+      // ran on, whatever replaces it: a node that takes its place (React's
+      // replacement order, architecture:react-component-runtime INV6) or
+      // none shows it where it ends, never travelling while visible
+      // (design:reduced-motion DR2), and its handles settle finished.
+      landPending(true);
       if (next == null) {
-        // A Reduce Motion move waiting to land lands now, in the model: a
-        // node that replaces this one (React's replacement order,
-        // architecture:react-component-runtime INV6) shows it where it ends,
-        // and its handles settle finished.
-        for (const landing of [...landings]) {
-          endLanding(landing);
-          for (const [property, value] of landing.values) {
-            segments.delete(property);
-            resting[property] = value;
-          }
-          if (landing.fadeIn != null || landing.restore != null) {
-            segments.delete('opacity');
-            resting.opacity =
-              landing.fadeIn?.isBorrowed === true ||
-              landing.restoreIsBorrowed === true
-                ? IDENTITY.opacity
-                : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
-          }
-          if (
-            landing.fadeIn?.isBorrowed === true ||
-            landing.restoreIsBorrowed === true
-          ) {
-            // The stylesheet owns its opacity again: the fade's end value
-            // written inline goes with it.
-            borrowedOpacity = null;
-            target?.style.removeProperty('opacity');
-          }
-          for (const owner of [landing.owner, ...landing.carried]) {
-            carriedOwners.delete(owner);
-            if (!owner.settled) {
-              settle(owner, true);
-            }
-          }
-        }
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
         // left to animate, so at the end of the task every other handle
@@ -2586,17 +2604,10 @@ export function createAnimator(
     },
 
     dispose() {
-      // A Reduce Motion move still waiting to land never will: its call and
-      // the calls it carries settle as interrupted.
-      for (const landing of [...landings]) {
-        endLanding(landing);
-        for (const owner of [landing.owner, ...landing.carried]) {
-          carriedOwners.delete(owner);
-          if (!owner.settled) {
-            settle(owner, false);
-          }
-        }
-      }
+      // A Reduce Motion move still waiting to land is written at its end
+      // state, so the element is left visible where it was going; its call
+      // and the calls it carries settle as interrupted.
+      landPending(false);
       // Nothing moves any more: every atRest() wait settles.
       for (const wait of [...restWaits]) {
         wait.settle();
