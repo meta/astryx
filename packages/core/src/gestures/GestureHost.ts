@@ -111,6 +111,7 @@ import {
   presentedElements,
   presentedOffsetOf,
   resolvePresented,
+  watchPresentedElements,
 } from '../motion/presentation';
 import {UIKIT_CLICK, UIKIT_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
 import {
@@ -307,6 +308,10 @@ export class GestureHost {
   readonly arena: GestureArena;
   private readonly doc: Document;
   private readonly registry = new Map<Element, Registration>();
+  /** Stops following the animator's moving elements (iOS WebKit only). */
+  private stopWatchingMovers: (() => void) | null = null;
+  /** Whether the document carries the blocking touchmove for a mover. */
+  private isBlockingForMovers = false;
   /** Elements whose caller touch-action waits for a read after paint. */
   private readonly pendingCallerReads = new Set<HTMLElement>();
   private isCallerReadScheduled = false;
@@ -941,6 +946,63 @@ export class GestureHost {
     } else {
       this.uninstall();
     }
+    this.syncMoverBlocking();
+  }
+
+  /**
+   * Safari honours a blocking `touchmove` only where it was registered before
+   * the touch began, on the engine's own target, and on iOS WebKit a finger
+   * on an element a compositor animation moves lands, for the engine, on
+   * whatever sits under the motion's start (see presentedTarget). So while an
+   * element a recognizer that claims moving touches lives in (or around) is
+   * moving, the document carries the blocking listener (`spec:AST-094`
+   * FR19), and it comes off when the motion ends: only then does a scroll
+   * starting anywhere wait on the main thread.
+   */
+  private syncMoverBlocking(): void {
+    const isWatching = this.isInstalled && this.hitTestsLayout();
+    if (isWatching && this.stopWatchingMovers == null) {
+      this.stopWatchingMovers = watchPresentedElements(() =>
+        this.syncMoverBlocking(),
+      );
+    } else if (!isWatching && this.stopWatchingMovers != null) {
+      this.stopWatchingMovers();
+      this.stopWatchingMovers = null;
+    }
+    const needed =
+      isWatching &&
+      presentedElements().some(mover =>
+        this.hasClaimingRecognizerAround(mover),
+      );
+    if (needed === this.isBlockingForMovers) {
+      return;
+    }
+    this.isBlockingForMovers = needed;
+    if (needed) {
+      this.doc.addEventListener('touchmove', this.onBlockingTouchMove, {
+        passive: false,
+      });
+    } else {
+      this.doc.removeEventListener('touchmove', this.onBlockingTouchMove);
+    }
+  }
+
+  /** Whether a recognizer that claims moving touches lives in or around `mover`. */
+  private hasClaimingRecognizerAround(mover: Element): boolean {
+    if (!mover.isConnected || mover.ownerDocument !== this.doc) {
+      return false;
+    }
+    for (const [element, registration] of this.registry) {
+      if (
+        (mover.contains(element) || element.contains(mover)) &&
+        registration.recognizers.some(
+          recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** With nothing attached, stop listening and stop following the pointer. */

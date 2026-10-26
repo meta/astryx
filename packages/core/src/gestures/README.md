@@ -558,7 +558,12 @@ there, with z-order and `pointer-events` as the engine sees them. Press
 trackers take their bounds from `presentedRect`, the reported box moved by
 the motion since. A retargeted tap cancels the engine's click,
 which would hit the start position, and clicks what it touched; the
-swallower drops a late engine click, so the tap acts once. Not covered:
+swallower drops a late engine click, so the tap acts once. Safari honours a
+blocking `touchmove` only where it was registered before the touch began,
+on the engine's own target, which for a moving element is whatever sits
+under its start: so while an element a claiming recognizer lives in is
+moving, the document carries the blocking listener, and a scroll starting
+anywhere waits on the main thread only for that long. Not covered:
 scale and rotate (a zoom transition, a lifted preview is hit at its
 unscaled box) and CSS transitions or animations the animator did not start.
 

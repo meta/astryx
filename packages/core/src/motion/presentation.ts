@@ -6,8 +6,9 @@
  *   far their element is drawn from where the engine hit-tests it, and how
  *   to make the engine hit-test it where it is drawn
  * @output Exports registerPresentedOffset, presentedElements,
- *   presentedOffsetOf and resolvePresented: the registry the gesture host
- *   reads at touch-down to send a touch to what is drawn
+ *   presentedOffsetOf, resolvePresented and watchPresentedElements: the
+ *   registry the gesture host reads at touch-down to send a touch to what is
+ *   drawn, and follows to keep a drag on a moving element blocking
  * @position Motion foundation (DOM, no React). Written by animator.ts, read
  *   by gestures/GestureHost.ts; internal to core
  *
@@ -46,6 +47,31 @@ export interface PresentedSource {
 const ZERO: PresentedOffset = {x: 0, y: 0};
 
 const sources = new Map<Element, PresentedSource>();
+const watchers = new Set<() => void>();
+
+/** Tell every watcher the reported elements changed; one's throw stops none. */
+function notifyWatchers(): void {
+  for (const watcher of [...watchers]) {
+    try {
+      watcher();
+    } catch (error) {
+      queueMicrotask(() => {
+        throw error;
+      });
+    }
+  }
+}
+
+/**
+ * Call `listener` each time an element starts or stops being reported.
+ * Returns the function that stops it.
+ */
+export function watchPresentedElements(listener: () => void): () => void {
+  watchers.add(listener);
+  return () => {
+    watchers.delete(listener);
+  };
+}
 
 /**
  * Report an element drawn away from where the engine hit-tests it. Returns
@@ -56,9 +82,11 @@ export function registerPresentedOffset(
   source: PresentedSource,
 ): () => void {
   sources.set(element, source);
+  notifyWatchers();
   return () => {
     if (sources.get(element) === source) {
       sources.delete(element);
+      notifyWatchers();
     }
   };
 }
