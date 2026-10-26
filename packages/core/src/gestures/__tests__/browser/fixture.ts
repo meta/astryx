@@ -17,6 +17,8 @@ import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
 import {lockSelection} from '../../selectionLock';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
+import {PressTracker} from '../../PressTracker';
+import {holdPageScroll} from '../../pageHold';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 import {internals} from '../../recognizerInternals';
 
@@ -99,6 +101,9 @@ document.body.innerHTML = `
     <div id="switchRow" style="height: 60px; background: #efe">switch: a drag that turns selection off <input id="switchInput" type="checkbox" style="width: 40px; height: 40px"></div>
     <div id="card" style="height: 80px; background: #def">card (swipe up)</div>
     <div id="cardLate" style="height: 80px; background: #fed">card, claims only when it begins</div>
+    <div id="onePan" style="height: 160px; background: #dde">one-finger pan</div>
+    <div id="kept" style="height: 80px; background: #ede">kept press (a stepper's hold)</div>
+    <div id="plainArea" style="height: 160px; background: #eed">plain area</div>
     <div id="feed" style="height: 240px; overflow-y: auto; overscroll-behavior: contain; background: #efe">
       <div id="feedRow" style="height: 80px; background: #cfc">feed row (tap)</div>
       <div style="height: 1200px">feed content</div>
@@ -223,6 +228,36 @@ host.attachConsumer(element('passive'), {
   touchEnded: () => passiveEvent('ended'),
   touchCancelled: () => passiveEvent('cancelled'),
 });
+
+// A one-finger pan: a second finger before any claim fails it.
+const onePan = new PanGestureRecognizer({
+  name: 'onePan',
+  maximumNumberOfTouches: 1,
+});
+record(onePan, () => ({
+  x: onePan.translation().x,
+  y: onePan.translation().y,
+}));
+host.attach(element('onePan'), onePan);
+
+// A control that keeps its press through a drag, as a stepper's hold does.
+const keptEvent = (state: string) =>
+  window.__gestures.push({name: 'kept', state, time: performance.now()});
+host.attachConsumer(
+  element('kept'),
+  new PressTracker({
+    getBounds: () => element('kept').getBoundingClientRect(),
+    keepsTouch: true,
+    onControlEvent: event => keptEvent(event),
+    onHighlightChange: isHighlighted =>
+      keptEvent(isHighlighted ? 'highlight' : 'unhighlight'),
+  }),
+);
+
+// A scroll lock's page hold, held on demand: every one-finger pan would
+// scroll the page.
+(window as unknown as {__holdPage: () => () => void}).__holdPage = () =>
+  holdPageScroll(document, () => true);
 
 for (const type of ['click', 'mousedown']) {
   document.addEventListener(
