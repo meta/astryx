@@ -1122,7 +1122,13 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
-      if (pseudoElement != null) {
+      // A pseudo-element holds its resting value, unless the stylesheet
+      // takes it back now (a borrowed dip that has ended).
+      const handsBack =
+        channel === 'opacity' &&
+        borrowedOpacity != null &&
+        ![...landings].some(landing => landing.fadeIn?.isBorrowed === true);
+      if (pseudoElement != null && !handsBack) {
         hold(channel, now());
       }
       animation.cancel();
@@ -1139,9 +1145,86 @@ export function createAnimator(
       target == null
         ? NaN
         : Number.parseFloat(
-            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
+            view
+              ?.getComputedStyle(target, pseudoElement ?? null)
+              .getPropertyValue('opacity') ?? '',
           );
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+  };
+
+  /**
+   * Gives the element's opacity back to its stylesheet: an element's inline
+   * value goes; a pseudo-element, which has no inline style, loses the
+   * animation holding its value.
+   */
+  const releaseOwnOpacity = () => {
+    if (pseudoElement == null) {
+      target?.style.removeProperty('opacity');
+      return;
+    }
+    const held = running.get('opacity');
+    running.delete('opacity');
+    held?.cancel();
+  };
+
+  /**
+   * Lands every Reduce Motion move still waiting, at once, on the current
+   * element: its travel, and the opacity its fade was heading to (the
+   * stylesheet's again for a borrowed one). Its calls settle `finished`.
+   */
+  const landPending = (finished: boolean) => {
+    if (landings.size === 0) {
+      return;
+    }
+    const changed = new Set<MotionProperty>();
+    let handedBack = false;
+    for (const landing of [...landings]) {
+      endLanding(landing);
+      for (const [property, value] of landing.values) {
+        segments.delete(property);
+        resting[property] = value;
+        changed.add(property);
+      }
+      if (landing.fadeIn != null || landing.restore != null) {
+        const borrowed =
+          landing.fadeIn?.isBorrowed === true ||
+          landing.restoreIsBorrowed === true;
+        segments.delete('opacity');
+        resting.opacity = borrowed
+          ? IDENTITY.opacity
+          : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
+        changed.add('opacity');
+        if (borrowed) {
+          borrowedOpacity = null;
+          handedBack = true;
+        }
+      }
+      for (const owner of [landing.owner, ...landing.carried]) {
+        carriedOwners.delete(owner);
+        if (!owner.settled) {
+          settle(owner, finished);
+        }
+      }
+    }
+    commit(changed, now());
+    if (handedBack) {
+      // The stylesheet owns its opacity again: no value stays inline.
+      releaseOwnOpacity();
+    }
+  };
+
+  /**
+   * Ends a borrowed dip on the element it ran on: the stylesheet owns its
+   * opacity again (an unmount or a new element never keeps the borrow).
+   */
+  const handBackBorrow = () => {
+    if (borrowedOpacity == null) {
+      return;
+    }
+    borrowedOpacity = null;
+    segments.delete('opacity');
+    resting.opacity = IDENTITY.opacity;
+    releaseOwnOpacity();
   };
 
   /**
@@ -1151,7 +1234,7 @@ export function createAnimator(
    * is written and again when a motion ends.
    */
   const releaseIdentity = (channel: Channel) => {
-    if (target == null || pseudoElement != null || running.has(channel)) {
+    if (target == null || running.has(channel)) {
       return;
     }
     if (channel === 'opacity' && borrowedOpacity != null) {
@@ -1163,7 +1246,10 @@ export function createAnimator(
       borrowedOpacity = null;
       segments.delete('opacity');
       resting.opacity = IDENTITY.opacity;
-      target.style.removeProperty('opacity');
+      releaseOwnOpacity();
+      return;
+    }
+    if (pseudoElement != null) {
       return;
     }
     if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
@@ -1910,7 +1996,7 @@ export function createAnimator(
     commit(changed, time);
     if (landing.restoreIsBorrowed === true) {
       // The stylesheet owns its opacity again.
-      target?.style.removeProperty('opacity');
+      releaseOwnOpacity();
     }
     if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
@@ -1986,7 +2072,9 @@ export function createAnimator(
       !named &&
       borrowedOpacity == null &&
       !segments.has('opacity') &&
-      resting.opacity === IDENTITY.opacity
+      resting.opacity === IDENTITY.opacity &&
+      (pseudoElement != null ||
+        (target?.style.getPropertyValue('opacity') ?? '') === '')
         ? ownOpacity()
         : null;
     if (!entering && !leaving && role === 'entrance') {
@@ -2056,10 +2144,15 @@ export function createAnimator(
       // lends the same borrow to the next one: overlapping dips never pin
       // the stylesheet's value inline.
       const priorBorrow = borrowedOpacity;
+      // An opacity the animator left inline (a `set` over a stylesheet that
+      // hides or dims the element) is owned too: a dip returns to it.
       const ownsOpacity =
         named ||
         (priorBorrow == null &&
-          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
+          (segments.has('opacity') ||
+            resting.opacity !== IDENTITY.opacity ||
+            (pseudoElement == null &&
+              (target?.style.getPropertyValue('opacity') ?? '') !== '')));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
       // It opens at the opacity on screen: an earlier dip's, when one is
       // still running, else the borrowed stylesheet value.
@@ -2107,42 +2200,7 @@ export function createAnimator(
       if (next === target) {
         return;
       }
-      demote();
       if (next == null) {
-        // A Reduce Motion move waiting to land lands now, in the model: a
-        // node that replaces this one (React's replacement order,
-        // architecture:react-component-runtime INV6) shows it where it ends,
-        // and its handles settle finished.
-        for (const landing of [...landings]) {
-          endLanding(landing);
-          for (const [property, value] of landing.values) {
-            segments.delete(property);
-            resting[property] = value;
-          }
-          if (landing.fadeIn != null || landing.restore != null) {
-            segments.delete('opacity');
-            resting.opacity =
-              landing.fadeIn?.isBorrowed === true ||
-              landing.restoreIsBorrowed === true
-                ? IDENTITY.opacity
-                : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
-          }
-          if (
-            landing.fadeIn?.isBorrowed === true ||
-            landing.restoreIsBorrowed === true
-          ) {
-            // The stylesheet owns its opacity again: the fade's end value
-            // written inline goes with it.
-            borrowedOpacity = null;
-            target?.style.removeProperty('opacity');
-          }
-          for (const owner of [landing.owner, ...landing.carried]) {
-            carriedOwners.delete(owner);
-            if (!owner.settled) {
-              settle(owner, true);
-            }
-          }
-        }
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
         // left to animate, so at the end of the task every other handle
@@ -2157,6 +2215,10 @@ export function createAnimator(
               return;
             }
             unmountQueued = false;
+            // A Reduce Motion move still waiting lands in the model where it
+            // was going, as in dispose(), so a later attach shows the element
+            // there and visible; its calls settle as interrupted.
+            landPending(false);
             const time = now();
             for (const property of PROPERTIES) {
               interrupt(property, time);
@@ -2170,6 +2232,8 @@ export function createAnimator(
         // A node in place of the one just detached: no unmount.
         unmountQueued = false;
       }
+      // After the landing's commit, which can promote the element again.
+      demote();
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2178,13 +2242,23 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      if (
+        borrowedOpacity != null ||
+        [...landings].some(landing => landing.restoreIsBorrowed === true)
+      ) {
+        // A running borrowed dip (or an exit by role returning to the
+        // stylesheet) stays in the model through any attach, so a pending
+        // move still lands while the element is invisible; only the
+        // outgoing element gets its stylesheet's opacity back.
+        releaseOwnOpacity();
+      }
       target = next;
       if (target == null) {
         return;
       }
       const time = now();
-      // A borrowed dip that ended while detached hands the stylesheet's
-      // opacity back instead of writing the borrowed value inline.
+      // A borrowed dip that ended while detached hands the opacity back
+      // instead of writing the borrowed value inline.
       const dip = segments.get('opacity');
       if (
         borrowedOpacity != null &&
@@ -2193,7 +2267,6 @@ export function createAnimator(
         borrowedOpacity = null;
         segments.delete('opacity');
         resting.opacity = IDENTITY.opacity;
-        target.style.removeProperty('opacity');
       }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
@@ -2471,7 +2544,7 @@ export function createAnimator(
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {
-        target?.style.removeProperty('opacity');
+        releaseOwnOpacity();
       }
     },
 
@@ -2604,17 +2677,10 @@ export function createAnimator(
     },
 
     dispose() {
-      // A Reduce Motion move still waiting to land never will: its call and
-      // the calls it carries settle as interrupted.
-      for (const landing of [...landings]) {
-        endLanding(landing);
-        for (const owner of [landing.owner, ...landing.carried]) {
-          carriedOwners.delete(owner);
-          if (!owner.settled) {
-            settle(owner, false);
-          }
-        }
-      }
+      // A Reduce Motion move still waiting to land is written at its end
+      // state, so the element is left visible where it was going; its call
+      // and the calls it carries settle as interrupted.
+      landPending(false);
       // Nothing moves any more: every atRest() wait settles.
       for (const wait of [...restWaits]) {
         wait.settle();
@@ -2631,6 +2697,7 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      handBackBorrow();
       demote();
       target = null;
     },
