@@ -11,10 +11,13 @@
  */
 
 import {act, render} from '@testing-library/react';
-import {useRef} from 'react';
+import {useEffect, useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import type {SelectionLock} from '../GestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
+import {lockSelection} from '../selectionLock';
+import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {useGestureRecognizer} from '../useGestureRecognizer';
 import {usePressTracker} from '../usePressTracker';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
@@ -222,6 +225,38 @@ describe('useGestureRecognizer', () => {
     }
   });
 
+  it('reports nothing from the isEnabled Effect for a recognizer that required the disabled one to fail (react-component-runtime INV2)', () => {
+    const onSingle = vi.fn();
+    function Taps({isDoubleEnabled}: {isDoubleEnabled: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      const double = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+        undefined,
+        {isEnabled: isDoubleEnabled},
+      );
+      const single = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        onSingle,
+      );
+      useEffect(() => {
+        single.requireToFail(double);
+      }, [single, double]);
+      return <div data-testid="taps" ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Taps isDoubleEnabled />);
+    const surface = getByTestId('taps');
+    touch('touchstart', surface, {id: 1, x: 5, y: 5}, 0);
+    touch('touchend', surface, {id: 1, x: 5, y: 5}, 40, true);
+    // The single tap waits for the double tap to fail.
+    expect(onSingle).not.toHaveBeenCalled();
+    // Turning the double tap off fails it in the Effect, and the single tap
+    // recognizes in that same arena pass: its caller hears nothing from it.
+    rerender(<Taps isDoubleEnabled={false} />);
+    expect(onSingle).not.toHaveBeenCalled();
+  });
+
   it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
@@ -239,16 +274,19 @@ function Button({
   onEvent,
   cancelTravel,
   isBraking,
+  selectionLock,
 }: {
   onEvent: (event: ControlEvent) => void;
   cancelTravel?: number;
   isBraking?: () => boolean;
+  selectionLock?: SelectionLock;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   usePressTracker(ref, {
     onControlEvent: event => onEvent(event),
     cancelTravel,
     isBraking,
+    selectionLock,
   });
   return (
     <button data-testid="button" ref={ref} type="button">
@@ -267,6 +305,17 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 5, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 5, x: 1, y: 1}, 50, true);
     expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+
+  it('locks selection and the callout for each press of a control whose hold acts, given the lock (spec:AST-094 FR41)', () => {
+    const {getByTestId} = render(
+      <Button onEvent={() => {}} selectionLock={lockSelection} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 3, x: 1, y: 1}, 0);
+    expect(button.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', button, {id: 3, x: 1, y: 1}, 50, true);
+    expect(button.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('takes an option changed after mount from the next touch', () => {
@@ -306,7 +355,7 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
-  it("attaches a press tracker that reads each event's pointer where the primary pointer is fine, beside one that stays inactive", () => {
+  it('attaches a per-event press tracker where the primary pointer is fine, which takes no mouse press there, beside one that stays inactive', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -356,7 +405,9 @@ describe('usePressTracker', () => {
       boundsOf(stepper, 44, 44);
       mouse('pointerdown', stepper, 1);
       mouse('pointerup', stepper, 1);
-      expect(held).toEqual(['touchDown', 'touchUpInside']);
+      // Its press feedback is for a finger (spec:AST-094 FR19): a mouse
+      // keeps the desktop's handling.
+      expect(held).toEqual([]);
       const other = getByTestId('other');
       boundsOf(other, 44, 44);
       mouse('pointerdown', other, 2);

@@ -244,8 +244,9 @@ warning, so two writers never fight over the paint. Pass another
   `useGestureRecognizer` and `usePressTracker`), it gets the host's
   listeners, its deliveries and its own element's style on any pointer,
   with no warning, while everything else beside it stays inactive. There
-  such a press tracker's press never keeps its touch from the browser,
-  which still pans.
+  such a press tracker paints a finger's press and does nothing else: it
+  reports no control event, keeps nothing from the browser, which still
+  pans, and takes no mouse or pen press.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
@@ -278,7 +279,9 @@ warning, so two writers never fight over the paint. Pass another
   control's or a switch's drag) that would take the touch (enabled, and
   accepting its pointer), restored when the contact ends. The host calls
   the recognizer's lock and never imports one, so a component with no such
-  hold does not bundle it. A press-tracked
+  hold does not bundle it. A press tracker created with a `selectionLock`
+  (a control whose own record defines a hold action, such as a stepper's
+  hold-repeat) gets the same for each press. A press-tracked
   control or row whose hold does nothing, and the document press
   controller's surfaces (`usePressFeedback` rows), keep the browser's
   long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the
