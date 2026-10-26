@@ -15,7 +15,7 @@
  *   stylesheet hides stays visible once it retires; a dialog's ::backdrop follows
  *   the curve and holds its end state; a frame painted before the compositor
  *   has a curve shows the element where it is; a role variable set on a scope
- *   changes the curve the engine plays
+ *   changes nothing while touch motion stays internal
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
  */
@@ -191,8 +191,8 @@ test('a spring that ends inside the block keeps showing its end state', async ({
   const landed = xs.findIndex(x => x >= TRAVEL - 1);
   expect(landed).toBeGreaterThanOrEqual(0);
   // WebKit's compositor falls back to the main thread's last committed value
-  // when an animation ends during a block; the static hold of the end state
-  // under the curve keeps the end on screen until script runs again.
+  // when an animation ends during a block; the keyframes' hold of the end
+  // state past the curve keeps the end on screen until script runs again.
   for (const x of xs.slice(landed)) {
     expect(x).toBeGreaterThanOrEqual(TRAVEL - 1);
   }

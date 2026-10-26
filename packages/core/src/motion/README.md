@@ -158,11 +158,14 @@ await handle.finished; // true if it ran to the end, false if interrupted
 
 ### How it stays on the compositor
 
-Each curve is baked into keyframes, sampled adaptively until linear
-interpolation is within 0.05 px, and played with `easing: linear` on one
-start time. The element's inline style already holds the end values,
-and the keyframes hold the end state for a few seconds past the curve's end;
-the main thread drops the animation as soon as it runs after that end. So the
+Each curve is baked into keyframes on a 30 Hz grid, refined until linear
+interpolation is within each channel's tolerance (`SAMPLE_TOLERANCE`, a
+quarter pixel for a move), and played with `easing: linear` on one start
+time. The element's inline style holds the
+value the curve starts from, where the element is, never where it is going;
+the keyframes hold the end state for a minute past the curve's end
+(`END_HOLD_MS`), and the main thread retires a finished animation as soon as
+it runs after that end, writing the end values inline in the same task. So the
 frame an animation ends needs no main thread and shows no flicker, even when
 the main thread is blocked as the curve ends (WebKit's compositor otherwise
 falls back to the last value its main thread committed, mid-flight).
@@ -207,14 +210,15 @@ Chromium and WebKit on the phone profile.
 - A spring that ends inside the block keeps showing its end state. Without the
   animator's end-state hold, WebKit falls back to a mid-flight value.
 - No Layout or Paint runs while it animates (Chromium trace).
-- Seeked to fixed times, the engine plays the analytic curve within 0.05 px,
-  with every channel on one start time.
+- Seeked to fixed times, the engine plays the analytic curve within the
+  sampling tolerance, with every channel on one start time.
 - A finished animation leaves the element within a frame or two of the curve's
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A scope that sets `springs.settle`'s variable changes the curve the engine
-  plays for an element in it, and only there.
+- A scope that sets `springs.settle`'s variable changes nothing: the engine
+  plays the table's curve while touch motion stays internal
+  (`spec:AST-094` DEC-11).
 
 ```
 pnpm test:interaction packages/core/src/motion

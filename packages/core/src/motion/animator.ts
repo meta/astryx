@@ -65,9 +65,10 @@
  * from the frame on screen. Keyframes are sampled from the call's start, so
  * a value that keeps moving through a rebuild stays on its curve to the
  * frame. `options.start` changes that per call: `'commit'` dates a retarget
- * by the browser's commit as well, and `'presented'` creates the call's
- * animations two frames later, once its element at rest has been presented
- * (a UI process that applies commits late).
+ * by the browser's commit as well, and `'presented'` creates the animations
+ * of a call from rest two frames later, once its element at rest has been
+ * presented (a UI process that applies commits late); a retarget still starts
+ * now, from the value and velocity on screen.
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -229,12 +230,13 @@ export interface AnimateOptions {
    * - `'commit'`: a call that continues motion also starts when the browser
    *   commits it, dated by the browser rather than by the main thread, as a
    *   call from rest is.
-   * - `'presented'`: the call leaves its element at rest and creates its
-   *   animations two frames later, once the frame that carries the element at
-   *   rest has been presented; they then start at their commit. A busy UI
-   *   process delays the motion instead of skipping into it, for two frames
-   *   more before an idle start. Any other change to the animator before then
-   *   creates the animations first, in call order.
+   * - `'presented'`: a call from rest leaves its element at rest and creates
+   *   its animations two frames later, once the frame that carries the
+   *   element at rest has been presented; they then start at their commit. A
+   *   busy UI process delays the motion instead of skipping into it, for two
+   *   frames more before an idle start. Any other change to the animator
+   *   before then creates the animations first, in call order. A call that
+   *   continues motion on screen (a retarget) starts now, as by default.
    */
   start?: 'commit' | 'presented';
   /**
@@ -1470,8 +1472,10 @@ export function createAnimator(
       return null;
     }
     // A call that continues motion starts now unless it asks for the
-    // browser's start.
-    for (const channel of start == null ? channels : []) {
+    // browser's start (`commit`). `presented` asks only for a call from rest:
+    // an element still moving is not at rest, so a retarget starts now, from
+    // the value and velocity on screen (spec:AST-094 FR6).
+    for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
         if (

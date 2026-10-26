@@ -967,6 +967,29 @@ describe('start: when a call\u2019s animations start', () => {
     expect(animator.get('x', clock + 100)).toBeCloseTo(x.value(0.1), 9);
   });
 
+  it('presented: a retarget of a moving property starts now, from the value and velocity on screen (FR6)', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    await commitFrame(1000);
+    clock = 1100;
+    const from = animator.get('x');
+    const velocity = animator.getVelocity('x');
+    animator.animate({x: 0}, {spring: springs.settle}, {start: 'presented'});
+    // The element is moving, not at rest: no two frames on the old curve and
+    // no restart at the commit from the call's value. The new curve starts at
+    // the call, from what is on screen, as a retarget does.
+    const [animation] = live('translate');
+    expect(animation.startTime).toBe(1100);
+    expect(animator.get('x', 1100)).toBeCloseTo(from, 6);
+    expect(animator.getVelocity('x', 1100)).toBeCloseTo(velocity, 3);
+    const back = solveSpring(toSpring(springs.settle), {
+      from,
+      to: 0,
+      velocity,
+    });
+    expect(animator.get('x', 1200)).toBeCloseTo(back.value(0.1), 6);
+  });
+
   it('commit: a retarget is dated by the browser\u2019s commit, from the value on screen', async () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.settle});
