@@ -178,8 +178,9 @@ Animation keyframe animations.
 the model behind SwiftUI's `Spring`, `CASpringAnimation` and
 `UISpringTimingParameters`. A spring description stays in its source's
 vocabulary (mass, stiffness and damping; duration and bounce; response and
-damping ratio) and `toSpring` normalizes it, clamping overdamping to critical
-as Core Animation does for every spring UIKit attaches. The tests hold it to an
+damping ratio) and `toSpring` normalizes it. A mass, stiffness and damping
+description that does not allow overdamping is clamped to critical, as Core
+Animation does for every spring UIKit attaches. The tests hold it to an
 independent fourth-order Runge-Kutta integration over a sweep of damping
 ratios, responses and release velocities; to a port of WebKit's own spring
 solver; to the WWDC23 "Animate with springs" conversion equations; and to
