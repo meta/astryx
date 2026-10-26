@@ -13,8 +13,7 @@ Layer stays generic. The top layer, dismissal, the presentation hold
 (`Layer/presentationHold.ts`) and the shared exit copy
 (`Layer/layerExitCopy.ts`) belong to Layer; the lift only uses them. Its
 motion is the rect morph's (`motion/rectMorph.ts`), and its springs, scale
-rule and gap are the caller's own motion roles and constants, so a theme
-retunes them where the surface declares them.
+rule and gap are the caller's own.
 
 ## What a lift adds
 
