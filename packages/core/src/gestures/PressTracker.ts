@@ -191,7 +191,7 @@ export class PressTracker implements TouchConsumer {
   constructor(options: PressTrackerOptions) {
     if (options.keepsTouch === true) {
       // Only the tracked touch whose press was delivered is kept.
-      this.keepsTouch = () => this.isKept && this.touchId != null;
+      this.keepsTouch = touchId => this.isKept && this.touchId === touchId;
     }
     this.options = options;
     this.trackingExpansion =
@@ -365,7 +365,7 @@ export class PressTracker implements TouchConsumer {
    * undefined and keeps passive listeners, so a scroll starting on it never
    * waits on the main thread.
    */
-  readonly keepsTouch?: () => boolean;
+  readonly keepsTouch?: (touchId: number) => boolean;
 
   /** The selection lock of a control whose hold acts (FR41); see the option. */
   get selectionLock(): SelectionLock | undefined {

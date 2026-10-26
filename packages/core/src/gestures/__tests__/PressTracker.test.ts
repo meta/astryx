@@ -48,17 +48,17 @@ describe('PressTracker', () => {
     const h = createHarness();
     // A tap quicker than the delay: the press shows at the lift, for a flash.
     h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
-    expect(tracker.keepsTouch?.()).toBe(false);
+    expect(tracker.keepsTouch?.(1)).toBe(false);
     h.finger(1).up(DELAY / 2);
-    expect(tracker.keepsTouch?.()).toBe(false);
+    expect(tracker.keepsTouch?.(1)).toBe(false);
     // The next touch is not kept from its first move: its press waits for
     // the delay, so a scroll that starts on the control is the browser's.
     h.finger(2).down(150, 120, DELAY, {recognizers: [], consumer: tracker});
-    expect(tracker.keepsTouch?.()).toBe(false);
+    expect(tracker.keepsTouch?.(2)).toBe(false);
     vi.advanceTimersByTime(DELAY);
-    expect(tracker.keepsTouch?.()).toBe(true);
+    expect(tracker.keepsTouch?.(2)).toBe(true);
     h.finger(2).up(DELAY * 3);
-    expect(tracker.keepsTouch?.()).toBe(false);
+    expect(tracker.keepsTouch?.(2)).toBe(false);
   });
 
   it('highlights in the same frame outside a scroller and acts on touch up inside', () => {
