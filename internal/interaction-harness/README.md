@@ -27,6 +27,7 @@ pnpm test:interaction <spec file>         # one spec, both engines
 | `scripts.ts` | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`   | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `story.ts`   | `phone`, `withStorybook`, `openStory`, `frames`.                                                                                                                                                                              |
+| `math.ts`    | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 
 ## Real touch
 
