@@ -1021,6 +1021,7 @@ export function createAnimator(
       // A dip on a touch screen when no call owns opacity starts from and
       // returns to the element's own opacity, not the model's 1.
       // A dip already borrowing it does not make the call own it.
+      const previousBorrow = borrowedOpacity;
       const ownsOpacity =
         targets.opacity != null ||
         (borrowedOpacity == null &&
@@ -1141,7 +1142,12 @@ export function createAnimator(
         }
       }
       commit(changed, time);
-      borrowedOpacity = borrowed;
+      // A call that does not own opacity keeps a running borrowed dip's
+      // borrow, whatever it does itself (moves nothing, springs after a
+      // preference or pointer change), so the dip still hands the
+      // stylesheet's opacity back when it ends.
+      borrowedOpacity =
+        borrowed ?? (targets.opacity == null ? previousBorrow : null);
       return makeHandle(owner, changed, finished, time);
     },
 

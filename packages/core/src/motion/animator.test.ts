@@ -563,6 +563,30 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a call that does not own opacity keeps a running borrowed dip handing it back', async () => {
+    // One that moves nothing.
+    const still = reduced();
+    stylesheet = {opacity: '0.6'};
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + END_HOLD_MS + 1);
+    expect(still.element.style.opacity).toBe('');
+
+    // One that springs after Reduce Motion turned off mid-dip.
+    let reduce = true;
+    const changed = setup({
+      prefersReducedMotion: () => reduce,
+      isCoarsePointer: () => true,
+    });
+    changed.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    reduce = false;
+    changed.animator.animate({y: 20}, {spring: springs.navigationPush});
+    await advance(2000);
+    expect(changed.element.style.opacity).toBe('');
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
