@@ -149,6 +149,33 @@ export function isCustomCodeLanguage(language: string | CodeLanguage): boolean {
   );
 }
 
+/**
+ * Whether two languages paint and label the same: the same value, or custom
+ * languages with the same tokenize function, name, and identifiers — so an
+ * inline `createCodeLanguage({...})` does not re-tokenize on every render.
+ */
+export function sameCodeLanguage(
+  a: string | CodeLanguage,
+  b: string | CodeLanguage,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (typeof a === 'string' || typeof b === 'string') {
+    return false;
+  }
+  const painterA = codeLanguagePainter(a);
+  const painterB = codeLanguagePainter(b);
+  return (
+    painterA?.kind === 'tokenize' &&
+    painterB?.kind === 'tokenize' &&
+    painterA.tokenize === painterB.tokenize &&
+    a.name === b.name &&
+    a.identifiers.length === b.identifiers.length &&
+    a.identifiers.every((identifier, i) => identifier === b.identifiers[i])
+  );
+}
+
 /** The word a language reflects and labels: a string itself, or a value's name. */
 export function languageLabel(language: string | CodeLanguage): string {
   return typeof language === 'string' ? language : language.name;
