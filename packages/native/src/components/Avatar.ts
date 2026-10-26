@@ -13,6 +13,8 @@ import type {NativeAdditions} from '../contract/fromComponentDoc.js';
 export const avatar: NativeAdditions = {
   name: 'Avatar',
   baseTarget: 'root',
+  // `status` holds one AvatarStatusDot in the bottom trailing corner.
+  slots: {status: 'content'},
   callbacks: ['onClick'],
   sameMeaning: {onClick: 'a press, as in Compose'},
   // The named sizes every platform draws; the pixel sizes stay on the web.
@@ -22,6 +24,5 @@ export const avatar: NativeAdditions = {
   webOnly: {
     target: 'HTML link target',
     rel: 'HTML link relationship',
-    status: 'holds AvatarStatusDot, which has no native view yet',
   },
 };
