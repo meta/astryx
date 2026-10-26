@@ -1282,6 +1282,35 @@ describe('GestureHost', () => {
     expect(states).toEqual(['began', 'cancelled']);
   });
 
+  it('remembers a finger the window blur cancelled until it lifts, and refuses that lift its click: nothing acts (spec:AST-094 FR28)', () => {
+    const {box, page} = mount('<div id="box"></div><p id="page">text</p>');
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const states: string[] = [];
+    tap.addTransitionListener((_r, _from, to) => states.push(to));
+    detachers.push(host.attach(box, tap));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    window.dispatchEvent(new Event('blur'));
+    // The browser kept the touch alive: its lift would click the box.
+    const lift = touch('touchend', box, [finger], [], 80);
+    expect(lift.defaultPrevented).toBe(true);
+    expect(states).not.toContain('ended');
+    // Only that lift: a later finger with the same identifier keeps its
+    // click.
+    touch('touchstart', page, [finger], [finger], 200);
+    expect(touch('touchend', page, [finger], [], 260).defaultPrevented).toBe(
+      false,
+    );
+    // A cancelled finger whose lift never came: the next touch with its
+    // identifier is a new finger, and its lift keeps its click too.
+    touch('touchstart', box, [finger], [finger], 300);
+    window.dispatchEvent(new Event('blur'));
+    touch('touchstart', page, [finger], [finger], 400);
+    expect(touch('touchend', page, [finger], [], 460).defaultPrevented).toBe(
+      false,
+    );
+  });
+
   it('finishes a gesture whose target left the document mid-gesture', () => {
     const {box, child} = mount('<div id="box"><span id="child">x</span></div>');
     const pan = new PanGestureRecognizer({name: 'pan'});
