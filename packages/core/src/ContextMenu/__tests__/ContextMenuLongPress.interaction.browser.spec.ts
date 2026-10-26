@@ -327,7 +327,7 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
-test('the trigger’s selection and callout lock: its own style keeps it off at rest, and the gesture host locks it for a held press', async ({
+test('the trigger’s selection and callout lock: its own style keeps it off at rest, and the gesture host refuses a selection for a held press', async ({
   page,
 }) => {
   const {driver, trigger, center} = await openTouchStory(page);
@@ -345,19 +345,29 @@ test('the trigger’s selection and callout lock: its own style keeps it off at 
           computed.getPropertyValue('-webkit-user-select'),
       };
     });
+  // Whether a selection starting under the finger is refused now: where iOS
+  // WebKit does not run, the host's lock cancels `selectstart` and writes no
+  // style (spec:AST-094 FR41).
+  const refusesSelection = async () =>
+    page.evaluate(({x, y}) => {
+      const event = new Event('selectstart', {bubbles: true, cancelable: true});
+      (document.elementFromPoint(x, y) ?? document.body).dispatchEvent(event);
+      return event.defaultPrevented;
+    }, center);
   // At rest the trigger's own style keeps selection off (spec:AST-017
-  // FR59), whatever the host writes inline then.
-  const rest = await readLock();
-  expect(rest.computed).toBe('none');
-  // A held finger, short of the commit: the host's lock is on the element.
+  // FR59), and the host refuses nothing.
+  const rest = {...(await readLock()), refused: await refusesSelection()};
+  expect(rest).toEqual({inline: '', computed: 'none', refused: false});
+  // A held finger, short of the commit: the host refuses a selection under
+  // it, with no style written.
   const playing = driver.play(hold(center, commitMs - 100));
   await page.waitForTimeout(commitMs / 2);
-  const held = await readLock();
+  const held = {...(await readLock()), refused: await refusesSelection()};
   await playing;
   await page.waitForTimeout(100);
-  // Lifted with no menu: back to the rest value.
-  const lifted = await readLock();
-  expect(held).toEqual({inline: 'none', computed: 'none'});
+  // Lifted with no menu: back to the rest values.
+  const lifted = {...(await readLock()), refused: await refusesSelection()};
+  expect(held).toEqual({inline: '', computed: 'none', refused: true});
   expect(lifted).toEqual(rest);
   expect(
     await page.getByRole('menu', {name: 'Photo actions'}).isVisible(),
