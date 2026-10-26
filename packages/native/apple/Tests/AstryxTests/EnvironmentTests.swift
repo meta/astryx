@@ -85,3 +85,93 @@ import Testing
   environment.astryxTheme = .neutral
   #expect(environment.astryx.color("color-border") == Theme.neutral.light.color.border)
 }
+
+// Theme environment spec, E2 and E5: the theme writes SwiftUI's tint only,
+// so stock controls carry the brand and keep their own label colors.
+
+@MainActor
+@Test func theThemeSetsSwiftUIsTint() {
+  let swatch = Rectangle().fill(.tint).frame(width: 20, height: 20)
+  let light = Pixels(swatch, theme: .default)
+  #expect(close(light.at(10, 10), rgba(Theme.default.light.color.accent)))
+  let dark = Pixels(swatch, theme: .default, scheme: .dark)
+  #expect(close(dark.at(10, 10), rgba(astryxStockTint(Theme.default.dark.color.accent))))
+}
+
+@MainActor
+@Test func theThemeLeavesThePrimaryForegroundToTheSystem() {
+  let swatch = Rectangle().fill(.primary).frame(width: 20, height: 20)
+  #expect(Pixels(swatch, theme: .butter).at(10, 10) == Pixels(swatch).at(10, 10))
+}
+
+#if os(iOS)
+// On macOS, stock buttons and links are AppKit controls, which SwiftUI's image
+// renderer does not draw; the iOS Simulator lane checks them.
+@MainActor
+@Test func aStockLinkAndBorderlessButtonTakeTheTint() {
+  let accent = rgba(Theme.default.light.color.accent)
+  let link = SwiftUI.Link("Link", destination: URL(string: "https://example.com")!)
+    .font(.system(size: 48, weight: .black))
+  let borderless = SwiftUI.Button("Go") {}.buttonStyle(.borderless)
+    .font(.system(size: 48, weight: .black))
+  #expect(Pixels(link.fixedSize(), theme: .default).contains { close($0, accent) })
+  #expect(Pixels(borderless.fixedSize(), theme: .default).contains { close($0, accent) })
+}
+
+@MainActor
+@Test func aProminentButtonKeepsItsWhiteLabelOnTheTint() {
+  let button = SwiftUI.Button("Go") {}.buttonStyle(.borderedProminent)
+    .font(.system(size: 48, weight: .black))
+  let pixels = Pixels(button.fixedSize(), theme: .default)
+  #expect(pixels.contains { close($0, rgba(Theme.default.light.color.accent)) })
+  #expect(pixels.contains { $0[0] > 245 && $0[1] > 245 && $0[2] > 245 && $0[3] > 245 })
+}
+
+#endif
+
+// Theme environment spec, E2: stock controls draw white on their tint, so a
+// pale accent is not their tint; a single-mode theme sets its subtree's mode.
+
+@Test func aPaleAccentLeavesStockControlsTheSystemTint() {
+  for theme in [Theme.butter, .chocolate, .matcha, .neutral, .stone, .y2k, .gothic] {
+    let accent = theme.dark.color.accent
+    #expect(astryxContrast(.white, accent) < 3)
+    #expect(astryxStockTint(accent) == .accentColor)
+  }
+  for accent in [Theme.default.light.color.accent, Theme.default.dark.color.accent, Theme.butter.light.color.accent] {
+    #expect(astryxContrast(.white, accent) >= 3)
+    #expect(astryxStockTint(accent) == accent)
+  }
+}
+
+@Test func onlyASingleModeThemeSetsItsSubtreesMode() {
+  #expect(Theme.gothic.singleMode == .dark)
+  for theme in [Theme.default, .butter, .neutral, .stone, .y2k] {
+    #expect(theme.singleMode == nil)
+  }
+}
+
+@MainActor
+@Test func gothicInALightAppearanceDrawsStockSurfacesDark() {
+  let surface = Rectangle().fill(.background).frame(width: 20, height: 20)
+  let plain = Pixels(surface, scheme: .light)
+  let gothic = Pixels(surface, theme: .gothic, scheme: .light)
+  let brightness = { (p: [Int]) in p[0] + p[1] + p[2] }
+  #expect(brightness(gothic.at(10, 10)) < brightness(plain.at(10, 10)) / 2)
+}
+
+@MainActor
+@Test func aDarkSectionInALightThemeGetsDarkColors() {
+  // Core's default dark accent keeps its tint (3.11:1 against white), so the
+  // swatch shows the dark-mode decision rather than the system fallback.
+  let swatch = Rectangle().fill(.tint).frame(width: 20, height: 20)
+  let pixels = Pixels(swatch.environment(\.colorScheme, .dark), theme: .default, scheme: .light)
+  #expect(close(pixels.at(10, 10), rgba(Theme.default.dark.color.accent)))
+}
+
+@MainActor
+@Test func anInnerThemeReplacesTheOuterTint() {
+  let swatch = Rectangle().fill(.tint).frame(width: 20, height: 20).astryxTheme(.neutral)
+  let pixels = Pixels(swatch, theme: .butter)
+  #expect(close(pixels.at(10, 10), rgba(Theme.neutral.light.color.accent)))
+}
