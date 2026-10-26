@@ -113,13 +113,8 @@ import {
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
-<<<<<<< 21f65cf4af6d379e91efb7115333228d04013ac8
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
-=======
-import {HoverGestureRecognizer} from './HoverGestureRecognizer';
-import {TapGestureRecognizer} from './TapGestureRecognizer';
->>>>>>> 7f84cbf6a06e8ec0c47d70d4245b1909e57d94ee
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
 import {
   gestureHostStyle,
