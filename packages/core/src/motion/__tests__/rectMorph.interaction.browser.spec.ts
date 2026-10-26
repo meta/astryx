@@ -179,6 +179,145 @@ for (const kind of ['line', 'edge'] as const) {
   }
 }
 
+test('a dismissal started mid-present continues from the box on screen', async ({
+  page,
+}) => {
+  // FR6 is verified in a browser too: the switch happens on the compositor,
+  // so the box must not jump when the dismissal takes over mid-flight.
+  await open(page);
+  const surface = page.locator('#surface');
+  await markElement(surface, {inset: MARKER_INSET});
+  const cast = await startScreencast(page);
+  const atSwitch = await page.evaluate(
+    async ({box, square, spring, restart}) => {
+      const element = document.getElementById('surface') as HTMLElement;
+      const morph = Motion.createRectMorph(element);
+      const path = Motion.lerpPath(square, box, {opacity: [0, 1]});
+      const read = () => {
+        const r = element.getBoundingClientRect();
+        return {x: r.x, y: r.y, width: r.width};
+      };
+      const frame = async () => new Promise(requestAnimationFrame);
+      const step = (a: {x: number; y: number; width: number}, b: typeof a) =>
+        Math.max(
+          Math.abs(b.x - a.x),
+          Math.abs(b.y - a.y),
+          Math.abs(b.width - a.width),
+        );
+
+      await morph.present(path, spring).started;
+      // Partway up the present, with the box well away from both ends.
+      await new Promise(resolve => setTimeout(resolve, 160));
+      // What one frame of this motion is worth, read from the motion
+      // itself just before the switch.
+      const a0 = read();
+      await frame();
+      const a1 = read();
+      const travelBefore = step(a0, a1);
+
+      const before = read();
+      if (restart) {
+        // A restart: the box is put back on the path's start, which is what
+        // a morph that did not continue would do.
+        morph.reset();
+        morph.present(path, spring);
+      } else {
+        // Dismissing on the element itself: no copy, so the switch is the
+        // only thing that can move the box.
+        morph.dismiss(path, spring, {target: element});
+      }
+      await frame();
+      const after = read();
+      await frame();
+      const after2 = read();
+      const travelAfter = step(after, after2);
+
+      return {
+        before,
+        after,
+        switchStep: step(before, after),
+        travelBefore,
+        travelAfter,
+      };
+    },
+    {box: BOX, square: SQUARE, spring: SLOW, restart: false},
+  );
+  await page.waitForTimeout(200);
+  const tracked = await trackMarker(page, await cast.stop());
+  test.info().annotations.push({
+    type: 'switch',
+    description: JSON.stringify(atSwitch),
+  });
+  // The bound comes from the motion, not from a constant: crossing the
+  // switch may cost one frame of travel, and a frame is worth what the
+  // frames either side of it are worth. Subpixel rounding is the only
+  // slack. A restart from the path's start moves tens of pixels (the
+  // source is 160 px from rest on each axis), so it fails this by an order
+  // of magnitude — the case below proves that rather than asserting it.
+  const SUBPIXEL = 0.5;
+  const frameTravel =
+    Math.max(atSwitch.travelBefore, atSwitch.travelAfter) + SUBPIXEL;
+  expect(atSwitch.switchStep).toBeLessThanOrEqual(frameTravel);
+  // And the marker's path across the whole run never jumps.
+  const steps = tracked.filter(f => f.box != null);
+  const worstStep = steps
+    .slice(1)
+    .reduce(
+      (worst, frame, i) =>
+        Math.max(worst, Math.abs(frame.box!.y - steps[i].box!.y)),
+      0,
+    );
+  test
+    .info()
+    .annotations.push({type: 'worst step', description: String(worstStep)});
+  expect(worstStep).toBeLessThanOrEqual(24);
+});
+
+test('the same reading fails a restart, so the bound has teeth', async ({
+  page,
+}) => {
+  // The proof above is only worth its bound if a motion that does NOT
+  // continue fails it. Forcing a restart at the same moment moves the box
+  // back toward the path's start, far beyond one frame of travel.
+  await open(page);
+  const forced = await page.evaluate(
+    async ({box, square, spring}) => {
+      const element = document.getElementById('surface') as HTMLElement;
+      const morph = Motion.createRectMorph(element);
+      const path = Motion.lerpPath(square, box, {opacity: [0, 1]});
+      const read = () => {
+        const r = element.getBoundingClientRect();
+        return {x: r.x, y: r.y, width: r.width};
+      };
+      const frame = async () => new Promise(requestAnimationFrame);
+      const step = (a: {x: number; y: number; width: number}, b: typeof a) =>
+        Math.max(
+          Math.abs(b.x - a.x),
+          Math.abs(b.y - a.y),
+          Math.abs(b.width - a.width),
+        );
+      await morph.present(path, spring).started;
+      await new Promise(resolve => setTimeout(resolve, 160));
+      const a0 = read();
+      await frame();
+      const a1 = read();
+      const travelBefore = step(a0, a1);
+      const before = read();
+      morph.reset();
+      morph.present(path, spring);
+      await frame();
+      const after = read();
+      return {switchStep: step(before, after), travelBefore};
+    },
+    {box: BOX, square: SQUARE, spring: SLOW},
+  );
+  test.info().annotations.push({
+    type: 'forced restart',
+    description: JSON.stringify(forced),
+  });
+  expect(forced.switchStep).toBeGreaterThan(forced.travelBefore * 5);
+});
+
 test('a present keeps growing every frame through a 1 s main-thread block', async ({
   page,
 }) => {
