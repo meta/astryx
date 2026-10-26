@@ -14,6 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import type {PressEvent, PressGesture, PressPaint} from './pressGesture';
 import {
   idlePressGesture,
@@ -53,6 +54,14 @@ describe('the clocks are the native ones', () => {
     expect(PRESS_SLOP_PX).toBe(10);
     expect(PRESS_FADE_MS).toBe(200);
     expect(PRESS_FLASH_MS).toBe(100);
+  });
+
+  it("are the UIKit table's measured values, one definition each", () => {
+    // The machine keeps its own constants, so a pressable page loads no
+    // motion table; the table's entries stay the one definition.
+    expect(PRESS_ONSET_MS).toBe(UIKIT_GESTURES.press.contentTouchDelay.value);
+    expect(PRESS_FLASH_MS).toBe(UIKIT_GESTURES.press.quickTapFlash.value);
+    expect(PRESS_SLOP_PX).toBe(UIKIT_GESTURES.press.slop.value);
   });
 });
 

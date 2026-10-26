@@ -247,16 +247,19 @@ function Button({
   onEvent,
   cancelTravel,
   isBraking,
+  isDisabled = false,
 }: {
   onEvent: (event: ControlEvent) => void;
   cancelTravel?: number;
   isBraking?: () => boolean;
+  isDisabled?: boolean;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   usePressTracker(ref, {
     onControlEvent: event => onEvent(event),
     cancelTravel,
     isBraking,
+    isEnabled: () => !isDisabled,
   });
   return (
     <button data-testid="button" ref={ref} type="button">
@@ -266,6 +269,26 @@ function Button({
 }
 
 describe('usePressTracker', () => {
+  it('gives the host no listener while the control is disabled (FR24)', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    const {rerender, unmount} = render(
+      <Button onEvent={() => {}} isDisabled />,
+    );
+    const added = () =>
+      add.mock.calls.filter(([type]) => type === 'touchstart').length;
+    expect(added()).toBe(0);
+    rerender(<Button onEvent={() => {}} />);
+    expect(added()).toBe(1);
+    rerender(<Button onEvent={() => {}} isDisabled />);
+    expect(
+      remove.mock.calls.filter(([type]) => type === 'touchstart').length,
+    ).toBe(1);
+    unmount();
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
   it('reports UIControl events for a tap', () => {
     const events: ControlEvent[] = [];
     const {getByTestId} = render(

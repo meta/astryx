@@ -5,7 +5,8 @@
  * @input DropdownMenu server markup and React hydration
  * @output Proves a bottom-sheet DropdownMenu hydrates without a recoverable
  *   error while its on-demand sheet has not loaded (spec:AST-013 FR9)
- * @position SSR acceptance test for DropdownMenu
+ * @position SSR acceptance test for DropdownMenu; it waits for the on-demand
+ *   sheet modules each hydration starts, so none loads after teardown
  */
 
 import {act} from 'react';
@@ -40,6 +41,15 @@ async function serverRenderThenHydrate(): Promise<unknown[]> {
     root = hydrateRoot(container, tree, {
       onRecoverableError: error => recoverableErrors.push(error),
     });
+  });
+  // Right after hydration the sheet wrappers render and start loading the
+  // sheet on demand. Finish those loads before the test ends, or they
+  // resolve after this file's environment is torn down.
+  await act(async () => {
+    await Promise.all([
+      import('./MenuBottomSheet'),
+      import('./MenuBottomSheetActionList'),
+    ]);
   });
   await act(async () => {
     root.unmount();
