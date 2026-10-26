@@ -14,6 +14,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof} from './busy';
+import * as skip from './busy.skip.fixture';
 import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -37,6 +38,28 @@ function moving(dropped: readonly number[] = []): TrackedFrame[] {
 /** Index of the first frame at or after `t`. */
 const at = (t: number) => Math.ceil((t - 800) / FRAME);
 
+/** `moving()` with each frame in `repeats` presenting the previous frame's position. */
+function repeating(repeats: readonly number[]): TrackedFrame[] {
+  return moving().map((f, i) =>
+    repeats.includes(i)
+      ? ({...f, box: {...f.box!, y: 3 * (i - 1)}} as TrackedFrame)
+      : f,
+  );
+}
+
+/** A marker moving 3 px per frame from t = 800 to 1900, frames `intervals` apart in turn. */
+function cadenced(intervals: readonly number[]): TrackedFrame[] {
+  const frames: TrackedFrame[] = [];
+  for (let i = 0, t = 800; t <= 1900; i += 1) {
+    frames.push({
+      t,
+      box: {x: 0, y: 3 * i, width: 10, height: 10},
+    } as TrackedFrame);
+    t += intervals[i % intervals.length];
+  }
+  return frames;
+}
+
 describe('busyWindowProof verdict', () => {
   it('passes a compositor animation with every frame', () => {
     const proof = busyWindowProof(moving(), BLOCK);
@@ -59,28 +82,65 @@ describe('busyWindowProof verdict', () => {
     expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
   });
 
-  it('fails when more than 10% of the expected frames are missing', () => {
+  it('fails when more than 10% of the delivered frames do not move', () => {
     const k = at(1050);
-    // 39 frames expected: up to 3 may be missing (10% = 3.9).
+    // 39 frames delivered: up to 3 may show no new position (10% = 3.9).
     const scattered = [0, 12, 24].map(d => k + d);
-    expect(busyWindowProof(moving(scattered), BLOCK).verdict.failures).toEqual(
-      [],
-    );
+    expect(
+      busyWindowProof(repeating(scattered), BLOCK).verdict.failures,
+    ).toEqual([]);
     const many = [0, 6, 12, 18, 24].map(d => k + d);
     expect(
-      busyWindowProof(moving(many), BLOCK).verdict.failures.join('\n'),
+      busyWindowProof(repeating(many), BLOCK).verdict.failures.join('\n'),
     ).toMatch(/expected frames moved/);
   });
 
+  it('judges a frame the screencast did not deliver as a gap for the stall check, not a miss', () => {
+    // The same five frames, not delivered: two-interval gaps, and every
+    // delivered frame moved.
+    const k = at(1050);
+    const many = [0, 6, 12, 18, 24].map(d => k + d);
+    const proof = busyWindowProof(moving(many), BLOCK);
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.deliveredFrames).toBe(proof.moved);
+  });
+
+  it('judges an irregular cast on the frames it delivered', () => {
+    // A cast cycling 11.7, 11.7 and 17 ms: its median interval would expect
+    // 56 frames where it delivered 49, every one moved.
+    const proof = busyWindowProof(cadenced([11.7, 11.7, 17]), BLOCK);
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.deliveredFrames).toBe(49);
+    expect(proof.moved).toBe(49);
+    // Still a stall where it delivers nothing for four frames, and still a
+    // miss where five delivered frames show no new position.
+    const gap = cadenced([11.7, 11.7, 17]).filter(
+      f => f.t < 1300 || f.t > 1360,
+    );
+    expect(busyWindowProof(gap, BLOCK).verdict.failures.join('\n')).toMatch(
+      /longest stall/,
+    );
+    const unmoved = cadenced([11.7, 11.7, 17]).map((f, i, all) =>
+      [20, 26, 32, 38, 44].includes(i)
+        ? ({...f, box: {...all[i - 1].box!}} as TrackedFrame)
+        : f,
+    );
+    expect(busyWindowProof(unmoved, BLOCK).verdict.failures.join('\n')).toMatch(
+      /expected frames moved/,
+    );
+  });
+
   it('lets a short window miss a frame, not three', () => {
-    // 150 ms judged: 8 whole intervals, one miss allowed (10% would be 0.8).
+    // 150 ms judged: nine frames delivered, one miss allowed (10% would be 0.9).
     const short = {from: 1000, to: 1190};
     const k = at(1040);
-    expect(busyWindowProof(moving([k]), short).verdict.failures).toEqual([]);
-    // Three of nine missing fails, on frame count or cadence.
-    expect(busyWindowProof(moving([k, k + 3, k + 6]), short).verdict.pass).toBe(
-      false,
-    );
+    expect(busyWindowProof(repeating([k]), short).verdict.failures).toEqual([]);
+    expect(
+      busyWindowProof(
+        repeating([k, k + 3, k + 6]),
+        short,
+      ).verdict.failures.join('\n'),
+    ).toMatch(/expected frames moved/);
   });
 
   it('fails a frozen animation on every criterion', () => {
@@ -272,6 +332,141 @@ describe('busyWindowProof position step', () => {
     expect(fine.stepPx).toBe(1);
     expect(fine.pxPerFrame).toBeCloseTo(3, 1);
     expect(fine.notes).toEqual([]);
+  });
+});
+
+/** The compositor presenting every frame from `from` to `to`, minus `gaps` ([from, to] spans). */
+function drawn(
+  gaps: ReadonlyArray<readonly [number, number]> = [],
+  from = 700,
+  to = 2000,
+): number[] {
+  const draws: number[] = [];
+  for (let t = from; t <= to; t += FRAME) {
+    if (!gaps.some(([a, b]) => t > a && t < b)) {
+      draws.push(t);
+    }
+  }
+  return draws;
+}
+
+const skipFrames = (): TrackedFrame[] =>
+  skip.frames.map(
+    ([t, y]) =>
+      ({
+        t,
+        box: y == null ? null : {x: 0, y, width: 10, height: 10},
+      }) as TrackedFrame,
+  );
+
+describe('busyWindowProof with the compositor record', () => {
+  it('reads frames the screencast skipped while the compositor presented them as presented: a recorded run that fails without the record', () => {
+    const frames = skipFrames();
+    const alone = busyWindowProof(frames, skip.block, {settledWithin: 1});
+    expect(alone.verdict.failures.join('\n')).toMatch(
+      /longest stall 6\d\.\d ms = 4 intervals > 3/,
+    );
+    // Every frame the screencast delivered moved: only the stall remains,
+    // which the record resolves.
+    expect(alone.verdict.failures.join('\n')).not.toMatch(
+      /expected frames moved/,
+    );
+    const proof = busyWindowProof(frames, skip.block, {
+      settledWithin: 1,
+      presented: skip.presented,
+    });
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.recorderSkipped).toBe(5);
+    expect(proof.longestStallFrames).toBeLessThanOrEqual(2);
+    expect(proof.summary).toMatch(
+      /the screencast skipped 5 frames the compositor presented \(at \+3\d\d ms, \+4\d\d ms\)/,
+    );
+  });
+
+  it('counts a gap the compositor drew through as skipped, and one it did not draw through as a stall', () => {
+    const k = at(1300);
+    const gap: [number, number] = [
+      800 + (k - 1) * FRAME,
+      800 + (k + 4) * FRAME,
+    ];
+    const frames = moving([k, k + 1, k + 2, k + 3]);
+    expect(busyWindowProof(frames, BLOCK).verdict.pass).toBe(false);
+    const skipped = busyWindowProof(frames, BLOCK, {presented: drawn()});
+    expect(skipped.verdict.failures).toEqual([]);
+    expect(skipped.recorderSkipped).toBe(4);
+    const stalled = busyWindowProof(frames, BLOCK, {presented: drawn([gap])});
+    expect(stalled.recorderSkipped).toBe(0);
+    expect(stalled.verdict.failures.join('\n')).toMatch(/longest stall/);
+  });
+
+  it('still fails an element that does not move while the compositor presents for something else', () => {
+    const frozen = moving().map(f =>
+      f.t >= BLOCK.from && f.t <= BLOCK.to
+        ? ({...f, box: {...f.box!, y: 3 * at(BLOCK.from)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(frozen, BLOCK, {presented: drawn()});
+    expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
+    expect(proof.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+  });
+
+  it('still fails a frozen animation, whether or not the compositor presents during the block', () => {
+    const frozen = moving().filter(f => f.t < BLOCK.from || f.t > BLOCK.to);
+    for (const presented of [drawn([[BLOCK.from, BLOCK.to]]), drawn()]) {
+      const proof = busyWindowProof(frozen, BLOCK, {presented});
+      expect(proof.verdict.failures.join('\n')).toMatch(/no frame presented/);
+      expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
+    }
+  });
+
+  it('keeps a gap a stall when the screencast delivered a frame inside it that did not move', () => {
+    const k = at(1300);
+    const frames = moving([k, k + 1, k + 3]).map(f =>
+      f.t > 800 + (k + 1.5) * FRAME && f.t < 800 + (k + 2.5) * FRAME
+        ? ({...f, box: {...f.box!, y: 3 * (k - 1)}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(frames, BLOCK, {presented: drawn()});
+    expect(proof.recorderSkipped).toBe(0);
+    expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
+  });
+
+  it('still counts single dropped frames the compositor did not present as missed', () => {
+    const k = at(1050);
+    const drops = [0, 6, 12, 18, 24, 30].map(d => k + d);
+    const frames = moving(drops);
+    const gaps = drops.map(
+      i =>
+        [800 + (i - 0.5) * FRAME, 800 + (i + 0.5) * FRAME] as [number, number],
+    );
+    expect(
+      busyWindowProof(frames, BLOCK, {
+        presented: drawn(gaps),
+      }).verdict.failures.join('\n'),
+    ).toMatch(/expected frames moved/);
+    expect(
+      busyWindowProof(frames, BLOCK, {presented: drawn()}).verdict.failures,
+    ).toEqual([]);
+  });
+
+  it('judges a gap at the edge of the judged part from the screencast alone', () => {
+    // Nothing delivered for the block's first 90 ms: a stall at its start,
+    // whatever the compositor drew, since no moved frame opens the gap.
+    const frames = moving().filter(
+      f => f.t < BLOCK.from || f.t > BLOCK.from + 90,
+    );
+    const proof = busyWindowProof(frames, BLOCK, {presented: drawn()});
+    expect(proof.recorderSkipped).toBe(0);
+    expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
+  });
+
+  it('treats an empty record as no record, and says so', () => {
+    const frames = moving([at(1300), at(1300) + 1, at(1300) + 2, at(1300) + 3]);
+    const proof = busyWindowProof(frames, BLOCK, {presented: []});
+    expect(proof.verdict.failures).toEqual(
+      busyWindowProof(frames, BLOCK).verdict.failures,
+    );
+    expect(proof.summary).toMatch(/no compositor frames recorded/);
   });
 });
 

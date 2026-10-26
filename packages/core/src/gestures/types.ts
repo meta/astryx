@@ -163,12 +163,13 @@ export interface TouchConsumer {
    */
   allowsAncestorRecognizer?(recognizer: unknown): boolean;
   /**
-   * Whether the consumer holds its touch now (a control whose press was
-   * delivered): the host cancels the browser's pan for that finger, as
-   * UIKit's `touchesShouldCancel(in:)` is false for a tracking control. A
-   * move before the press is delivered still scrolls.
+   * Whether the consumer holds this touch now (a control whose press was
+   * delivered for that touch): the host cancels the browser's pan for that
+   * finger only, as UIKit's `touchesShouldCancel(in:)` is false for a
+   * tracking control. A move before the press is delivered, and another
+   * finger the consumer is not tracking, still scroll.
    */
-  keepsTouch?(): boolean;
+  keepsTouch?(touchId: number): boolean;
   /**
    * A control whose own record defines a hold action (a stepper's
    * hold-repeat) brings the lock that turns text selection and the callout

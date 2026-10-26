@@ -185,36 +185,25 @@ assistive-technology activation keep working.
 - `control` (a button, a switch): the highlight comes on in the same frame
   outside a scroller, the finger is tracked 70 pt beyond the bounds, and
   the release takes UIButton's 0.25 s;
-- `cell` (a table or collection row, always in a scroll view in UIKit): the
-  highlight always waits the content-touch delay, travel past the pan
-  hysteresis cancels the press for good, a quicker tap highlights at the
-  lift straight into the release, and the release takes the list's
-  deselect clock.
+- `cell` (a table or collection row): the highlight waits the content-touch
+  delay inside a scroll view and comes on at once outside one
+  (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press for
+  good, a quicker tap highlights at the lift straight into the release, and
+  the release takes the list's deselect clock.
 
-`paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})` is
-the one writer of `data-astryx-press`. It owns the release timer and writes
+`paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})`, in
+`utils/pressFeedback.ts`, is the one writer of `data-astryx-press`. It owns the release timer and writes
 only over values the caller may replace (by default none, `on` and
 `fading`), so a `held` row survives presses until its owner releases it
 with `onlyFrom: ['held']`.
 
-### Rows and cards: delegated press tracking
+### Rows and cards
 
 A list of a thousand rows cannot pay for a hook and four listeners per row.
-`installPressAttribute(document)` (or the `usePressAttribute()` hook) finds
-the innermost `[data-astryx-pressable]` under each landing touch and creates
-one `PressTracker` for that touch alone. It paints the press on the element:
-`data-astryx-press="on"` while pressed, `"fading"` for the release, removed
-at once on a cancel; the marker's value picks the profile (empty or
-`control`, `cell`). A disabled element takes the press and paints nothing.
-A touch that brakes a list the finger set moving paints nothing. A value the
-consumer did not write (a row kept `held` through a navigation push) is
-never overwritten or cleared. Installs are counted per attribute, so every
-component can call the hook. The default attribute pair is the one the
-document press controller (`installPressFeedback`, behind
-`usePressFeedback`) writes: while that controller is installed, the
-delegated press on the same attribute stays idle, with one development
-warning, so two writers never fight over the paint. Pass another
-`attribute` and `pressedAttribute`, or uninstall the controller.
+The document press controller (`utils/pressFeedback.ts`) presses the
+innermost enabled `[data-astryx-pressable]` under each touch and paints it,
+with no listener per row; a touch that brakes a scroll the finger set moving
+presses nothing.
 
 ## What the browser is told
 
@@ -464,10 +453,9 @@ Styles switch on the same conditions by writing the same query as a StyleX
 media key (`'@media (pointer: coarse)'`, and the compact-touch query spelled
 exactly as `COMPACT_TOUCH_QUERY`, which a test enforces), so the first paint
 is right. Behaviour reads
-`useTouchPresentation()` (SSR-safe), a decision taken once reads
-`readTouchPresentation()`, and a component with no interaction to infer
-from reads `useMotionPresentation()`: UIKit timings under a finger, theme
-tokens under a mouse.
+`useTouchPresentation()` (SSR-safe), a component with no interaction to
+infer from included (UIKit timings under a finger, its own motion under a
+mouse), and a decision taken once reads `readTouchPresentation()`.
 
 A component that, under a finger, presents a different surface or switches
 how an open surface follows input takes a `presentation` prop, and a
@@ -541,7 +529,6 @@ presentation above.
 - `__tests__/VelocityTracker.test.ts`: UIKit's filter against the velocities
   UIKit reported on recorded touch streams, and each strategy against the
   true velocity.
-- `__tests__/delegatedPress.test.ts`: delegated press tracking.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
   Chromium (CDP touches with timestamps) and WebKit (its own touch input).
