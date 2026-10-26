@@ -11,7 +11,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import {UIKIT_SWIPE} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
@@ -122,7 +122,7 @@ describe('delivery to the view', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [swipe], consumer});
     expect(consumer.events).toEqual([]);
-    h.advance(UIKIT_GESTURES.swipe.maximumDuration.value);
+    h.advance(UIKIT_SWIPE.maximumDuration.value);
     expect(consumer.events).toEqual(['began:1']);
   });
 });
