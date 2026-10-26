@@ -80,6 +80,7 @@ import {
 
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
+import {BottomSheetEscapeContext} from './bottomSheetEscape';
 
 const styles = stylex.create({
   dialog: {
@@ -100,6 +101,15 @@ const styles = stylex.create({
   },
   dialogOpen: {
     display: 'block',
+  },
+  // An open standalone dialog is its panel's positioner: the panel sits at its
+  // block end, centred, with no wrapper between them
+  // (architecture:component-style-authoring INV7). A tap beside a narrower
+  // panel lands on the dialog itself, which light dismiss reads.
+  dialogPanelHost: {
+    display: 'grid',
+    alignContent: 'end',
+    justifyItems: 'center',
   },
   dialogNonModal: {
     pointerEvents: 'none',
@@ -332,11 +342,13 @@ function StandaloneBottomSheet({
       ? {kind: 'exiting'}
       : {kind: 'hidden'};
 
+  // Popover's sheet may turn Escape off on its own (bottomSheetEscape.ts).
+  const isEscapeAllowed = use(BottomSheetEscapeContext);
   const dismissOnEscape = useCallback(() => {
-    if (isOpen && purpose !== 'required') {
+    if (isOpen && purpose !== 'required' && isEscapeAllowed) {
       onOpenChange(false);
     }
-  }, [isOpen, onOpenChange, purpose]);
+  }, [isEscapeAllowed, isOpen, onOpenChange, purpose]);
   const dismissOnLightInteraction = useCallback(() => {
     if (purpose === 'info') {
       onOpenChange(false);
@@ -432,7 +444,8 @@ function StandaloneBottomSheet({
   // rather than letting it close a layer behind it. `required` blocks too.
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: shouldPresent,
-    escapeBehavior: isOpen && purpose !== 'required' ? 'close' : 'block',
+    escapeBehavior:
+      isOpen && purpose !== 'required' && isEscapeAllowed ? 'close' : 'block',
     onDismiss: dismissOnEscape,
     getContainer: () => dialogRef.current,
     isPresent: () => dialogRef.current?.open ?? false,
@@ -470,6 +483,7 @@ function StandaloneBottomSheet({
       {...stylex.props(
         styles.dialog,
         shouldPresent && styles.dialogOpen,
+        shouldPresent && styles.dialogPanelHost,
         hasScrim && styles.scrim,
         hasScrim && !isOpen && isPresented && styles.scrimClosing,
         !hasScrim && styles.dialogNonModal,
@@ -482,25 +496,29 @@ function StandaloneBottomSheet({
       inert={!isOpen && isPresented ? true : undefined}
       onCancel={handleCancel}
       onClick={handleClick}>
-      <div {...stylex.props(styles.positioner)}>
-        <BottomSheetPanel
-          {...props}
-          ref={ref}
-          state={panelState}
-          height={height}
-          label={label}
-          snapPoints={snapPoints}
-          isSwipeDismissAllowed={purpose === 'info'}
-          isPageScrollLocked={shouldPresent && hasScrim}
-          xstyle={xstyle}
-          onDismiss={dismissOnLightInteraction}
-          onScrimOpacity={handleScrimOpacity}
-          onElementChange={handlePanelElementChange}
-          onMotionComplete={handleMotionComplete}>
-          <LayerDepthProvider>{children}</LayerDepthProvider>
-        </BottomSheetPanel>
-      </div>
-      <BottomSheetEdgeTint />
+      <BottomSheetPanel
+        {...props}
+        ref={ref}
+        state={panelState}
+        height={height}
+        label={label}
+        snapPoints={snapPoints}
+        isSwipeDismissAllowed={purpose === 'info'}
+        isPageScrollLocked={shouldPresent && hasScrim}
+        xstyle={xstyle}
+        onDismiss={dismissOnLightInteraction}
+        onScrimOpacity={handleScrimOpacity}
+        onElementChange={handlePanelElementChange}
+        onMotionComplete={handleMotionComplete}>
+        <LayerDepthProvider>
+          {/* A sheet opened inside this one starts from Escape on. */}
+          <BottomSheetEscapeContext value>{children}</BottomSheetEscapeContext>
+        </LayerDepthProvider>
+      </BottomSheetPanel>
+      {/* Its own element, outside the panel's transform, so it stays flush
+          with the viewport's bottom edge at every detent; only while the
+          sheet is presented, so a closed sheet renders no extra element. */}
+      {shouldPresent && <BottomSheetEdgeTint />}
     </dialog>
   );
 }
@@ -805,7 +823,12 @@ function SwitcherBottomSheetItem({
               fresh ownership scope so a nested BottomSheet is standalone unless
               it establishes a nested BottomSheetSwitcher of its own. */}
           <BottomSheetSwitcherContext value={null}>
-            <LayerDepthProvider>{children}</LayerDepthProvider>
+            <LayerDepthProvider>
+              {/* A sheet opened inside this one starts from Escape on. */}
+              <BottomSheetEscapeContext value>
+                {children}
+              </BottomSheetEscapeContext>
+            </LayerDepthProvider>
           </BottomSheetSwitcherContext>
         </BottomSheetPanel>
       </div>
