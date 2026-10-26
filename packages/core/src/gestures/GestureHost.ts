@@ -194,12 +194,11 @@ export interface AttachOptions {
    * The recognizer, or the press tracker, reads each event's pointer itself,
    * so it attaches even where the primary pointer is fine: the host installs
    * what it needs there, styles its element and raises no warning. A
-   * recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
-   * gets press feedback only, the exception `spec:AST-094` FR19 names in
-   * cixzhang's amendment: a finger's press is delivered and painted (a
-   * touchscreen laptop, an iPad with a trackpad), but it never keeps its
-   * touch from the browser, which still pans. Everything else stays inactive
-   * there. @default false
+   * recognizer does so as `spec:AST-057`'s row swipe does; a press tracker
+   * paints press feedback (an FR19 exception for press feedback only,
+   * pending in `spec:AST-094`'s amendment), and its press there never keeps
+   * its touch from the browser, which still pans. Everything else stays
+   * inactive there. @default false
    */
   perEventPointer?: boolean;
 }
@@ -753,7 +752,10 @@ export class GestureHost {
     return this.isCoarse || this.perEventRecognizers.has(recognizer);
   }
 
-  /** Whether a press consumer takes input now (FR19; its per-event opt-in). */
+  /**
+   * Whether a press consumer takes input now (FR19; its per-event opt-in,
+   * an FR19 exception for press feedback pending in AST-094's amendment).
+   */
   private isConsumerActive(consumer: TouchConsumer): boolean {
     return this.isCoarse || this.perEventConsumers.has(consumer);
   }
