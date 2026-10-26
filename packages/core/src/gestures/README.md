@@ -297,9 +297,11 @@ warning, so two writers never fight over the paint. Pass another
   as a held stepper; never plain buttons, links, cards or list cells) gets
   one: once its press is delivered its finger's moves are cancelled, so the
   browser's pan never takes the held control (UIKit's
-  `touchesShouldCancel(in:)` is false for a tracking control). A scroll that
-  starts on such a control waits on the main thread; a move before the
-  press is delivered still scrolls. The listener the host
+  `touchesShouldCancel(in:)` is false for a tracking control). Where the
+  pointer is coarse its element also gets `touch-action: manipulation`, as a
+  tap recognizer's does (`spec:AST-094` FR18), so taps in quick succession
+  never zoom. A scroll that starts on such a control waits on the main
+  thread; a move before the press is delivered still scrolls. The listener the host
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can
   claim while it moves.
