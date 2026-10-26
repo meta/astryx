@@ -2166,6 +2166,10 @@ export function createAnimator(
               return;
             }
             unmountQueued = false;
+            // A Reduce Motion move still waiting lands in the model where it
+            // was going, as in dispose(), so a later attach shows the element
+            // there and visible; its calls settle as interrupted.
+            landPending(false);
             const time = now();
             for (const property of PROPERTIES) {
               interrupt(property, time);
