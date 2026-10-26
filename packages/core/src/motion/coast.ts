@@ -18,7 +18,9 @@
  * - a coast that reaches an edge hands its velocity at the contact to the
  *   edge spring, which settles on the edge;
  * - released past an edge, it springs straight back with the release
- *   velocity;
+ *   velocity: a transition, not momentum, so under Reduce Motion `decay`
+ *   plays it as `animate` does, a cross-fade on a coarse pointer and at once
+ *   on any other (`design:reduced-motion` DR2, DR3);
  * - at zero velocity inside its bounds, it rests where it is.
  *
  * SYNC: When modified, update coast.test.ts.
@@ -36,9 +38,8 @@ export interface CoastOptions {
   /** Edges: a coast crossing one hands its velocity to `bounce`. */
   bounds?: Partial<Record<'x' | 'y', {min: number; max: number}>>;
   /**
-   * The edge spring; `scroll.bounce` by default, played as its motion role
-   * (its table value while touch motion stays internal, `spec:AST-094`
-   * DEC-11).
+   * The edge spring; `scroll.bounce` by default, which plays its table value
+   * (it is not a motion role: `spec:AST-094` FR4 lists no scroll spring).
    */
   bounce?: SpringDescription;
   /**
@@ -100,12 +101,16 @@ export function coast(
       // Released past an edge: straight back with the release velocity.
       const edge = from < bounds.min ? bounds.min : bounds.max;
       const back = solveSpring(bounce, {from, to: edge, velocity: v0});
-      curves[key] = settling(
-        back.settleTime(threshold),
-        edge,
-        t => back.value(t),
-        t => back.velocity(t),
-      );
+      curves[key] = {
+        ...settling(
+          back.settleTime(threshold),
+          edge,
+          t => back.value(t),
+          t => back.velocity(t),
+        ),
+        // A spring the release starts, not momentum (Reduce Motion: DR2).
+        isTransition: true,
+      };
       continue;
     }
     const glide = solveDecay({from, velocity: v0, rate});

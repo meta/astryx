@@ -185,11 +185,11 @@ assistive-technology activation keep working.
 - `control` (a button, a switch): the highlight comes on in the same frame
   outside a scroller, the finger is tracked 70 pt beyond the bounds, and
   the release takes UIButton's 0.25 s;
-- `cell` (a table or collection row, always in a scroll view in UIKit): the
-  highlight always waits the content-touch delay, travel past the pan
-  hysteresis cancels the press for good, a quicker tap highlights at the
-  lift straight into the release, and the release takes the list's
-  deselect clock.
+- `cell` (a table or collection row): the highlight waits the content-touch
+  delay inside a scroll view and comes on at once outside one
+  (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press for
+  good, a quicker tap highlights at the lift straight into the release, and
+  the release takes the list's deselect clock.
 
 `paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})`, in
 `utils/pressFeedback.ts`, is the one writer of `data-astryx-press`. It owns the release timer and writes
