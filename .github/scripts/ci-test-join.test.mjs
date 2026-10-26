@@ -18,13 +18,19 @@ const broad = {
   TEST_BUILD_RESULT: 'success',
   REGISTRY_CONTRACT_RESULT: 'success',
   TEST_NATIVE_SWIFT_RESULT: 'success',
+  PR_INTERACTION_RESULT: 'success',
 };
 
+// An override of `null` removes the variable, as a missing `needs` result would.
 function run(overrides = {}) {
+  const env = {...process.env, ...broad, ...overrides};
+  for (const [name, value] of Object.entries(env)) {
+    if (value === null) delete env[name];
+  }
   try {
     const stdout = execFileSync(process.execPath, [script], {
       encoding: 'utf8',
-      env: {...process.env, ...broad, ...overrides},
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     return {status: 0, output: stdout};
@@ -46,6 +52,10 @@ describe('pull-request test join', () => {
       ['REGISTRY_CONTRACT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'skipped'],
+      ['PR_INTERACTION_RESULT', 'failure'],
+      ['PR_INTERACTION_RESULT', 'skipped'],
+      ['PR_INTERACTION_RESULT', 'cancelled'],
+      ['PR_INTERACTION_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
     }
