@@ -370,6 +370,36 @@ describe('busyWindowProof with the compositor record', () => {
     ).toEqual([]);
   });
 
+  it('with a compositor record and an on-screen start, counts the frames it credits as skipped in what it judges', () => {
+    // On screen 87 ms into the block, then four delivered frames that show
+    // no new position: that fails on a full cast.
+    const misses = [15, 20, 25, 30];
+    const missing = startingAt(1087).map((f, i, all) =>
+      misses.includes(i)
+        ? ({...f, box: {...all[i - 1].box!}} as TrackedFrame)
+        : f,
+    );
+    const full = busyWindowProof(missing, BLOCK, {presented: drawn()});
+    expect(full.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+    // The screencast skipping the five frames after the on-screen frame
+    // changes nothing: the compositor presented them, and they are judged.
+    const skip = (frames: TrackedFrame[]) =>
+      frames.filter((_, i) => i < 2 || i > 6);
+    const skipped = busyWindowProof(skip(missing), BLOCK, {
+      presented: drawn(),
+    });
+    expect(skipped.recorderSkipped).toBe(5);
+    expect(skipped.verdict.failures.join('\n')).toMatch(
+      /expected frames moved/,
+    );
+    // And a run with no misses never reads as more than every frame moved.
+    const clean = busyWindowProof(skip(startingAt(1087)), BLOCK, {
+      presented: drawn(),
+    });
+    expect(clean.verdict.failures).toEqual([]);
+    expect(clean.movedFraction).toBeLessThanOrEqual(1);
+  });
+
   it('reads frames the screencast skipped while the compositor presented them as presented: a recorded run that fails without the record', () => {
     const frames = skipFrames();
     const alone = busyWindowProof(frames, skip.block, {settledWithin: 1});

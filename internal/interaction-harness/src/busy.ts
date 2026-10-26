@@ -452,9 +452,11 @@ export function busyWindowProof(
   // The frames judged for motion: the screencast's own frames in the judged
   // part (each `changes` entry is one of them), or, with a compositor record,
   // the compositor's frames from the first to the last moved frame (the gaps
-  // before and after them are the stall check's). A part that moved nothing,
-  // or delivered nothing, is judged against its span, so a frozen animation
-  // misses here too.
+  // before and after them are the stall check's). After an on-screen start
+  // they count from the on-screen frame, which `changes` leaves out, so the
+  // frames credited as skipped after it are judged too. A part that moved
+  // nothing, or delivered nothing, is judged against its span, so a frozen
+  // animation misses here too.
   const deliveredFrames = tracked.filter(
     f =>
       f.box != null &&
@@ -465,8 +467,9 @@ export function busyWindowProof(
     compositorFrameMs != null
       ? changes.length > 0
         ? Math.round(
-            (changes[changes.length - 1] - changes[0]) / compositorFrameMs,
-          ) + 1
+            (changes[changes.length - 1] - (onScreenFrom ?? changes[0])) /
+              compositorFrameMs,
+          ) + (onScreenFrom == null ? 1 : 0)
         : expectedFrames
       : deliveredFrames === 0
         ? expectedFrames
