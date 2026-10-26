@@ -200,7 +200,8 @@ export interface BusyProof extends FrameStats {
    * `moved` (and `recorderSkipped`) over the frames judged: the frames the
    * screencast delivered in the judged part, or with a compositor record the
    * compositor's frames from the first to the last moved frame;
-   * `expectedFrames` when nothing moved or was delivered.
+   * `expectedFrames` when nothing moved, or fewer than `minJudgedFrames`
+   * frames were delivered.
    */
   readonly movedFraction: number;
   /** The judgment against the limits (see `busyWindowProof`). */
@@ -226,7 +227,9 @@ export interface BusyProof extends FrameStats {
  * - at least `minMovedFraction` of the frames judged moved the tracked axis
  *   (a short window may still miss one): the frames the screencast delivered
  *   in the judged part, so an irregular cast is judged on what it delivered
- *   and a frame it did not deliver is a gap for the stall check, not a miss;
+ *   and a frame it did not deliver is a gap for the stall check, not a miss
+ *   (unless it delivered fewer than `minJudgedFrames` there: then every frame
+ *   of the judged part's span counts, so one late frame is not 1/1 moved);
  *   with a compositor record, the compositor's frames from the first to the
  *   last moved frame (the gaps before and after are the stall check's);
  * - the judged part spans at least `minJudgedFrames` frames. Fewer means the
