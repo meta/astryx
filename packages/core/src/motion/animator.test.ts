@@ -963,6 +963,28 @@ describe('start: when a call\u2019s animations start', () => {
     );
   });
 
+  it('presented: a call queued after another change flushed the queue still waits its own two frames', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle}, {start: 'presented'});
+    // Another change creates the waiting call's animations first.
+    animator.animate({y: 50}, {spring: springs.settle});
+    clock = 1016;
+    await commitFrame(1016);
+    animator.animate(
+      {opacity: 0.5},
+      {spring: springs.settle},
+      {start: 'presented'},
+    );
+    expect(live('opacity')).toHaveLength(0);
+    // The first call's second frame is this call's first: it still waits.
+    clock = 1033;
+    await commitFrame(1033);
+    expect(live('opacity')).toHaveLength(0);
+    clock = 1050;
+    await commitFrame(1050);
+    expect(live('opacity')).toHaveLength(1);
+  });
+
   it('presented: another change before then creates the animations first', async () => {
     const {animator} = setup();
     animator.animate({x: 100}, {spring: springs.settle}, {start: 'presented'});

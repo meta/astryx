@@ -1637,16 +1637,12 @@ export function createAnimator(
       // two frames later. Promoting now, a layer at rest for two frames, left
       // a stale paint of the element's rest in WebKit on iOS 26.2 (a title in
       // a scroller inside a clipped card) after the motion ended.
-      deferredCalls.push({group, changed});
-      if (!deferredWait) {
-        deferredWait = true;
-        requestFrame(() =>
-          requestFrame(() => {
-            deferredWait = false;
-            flushDeferred();
-          }),
-        );
-      }
+      // Each call waits its own two frames: one queued after another change
+      // flushed the queue, or after an earlier call's first frame, still
+      // waits its two.
+      const call = {group, changed};
+      deferredCalls.push(call);
+      requestFrame(() => requestFrame(() => flushDeferredThrough(call)));
       return;
     }
     startCall(group, changed, time);
@@ -1654,13 +1650,33 @@ export function createAnimator(
 
   /** Calls with `start: 'presented'` waiting for their second frame. */
   const deferredCalls: {group: StartGroup; changed: MotionProperty[]}[] = [];
-  let deferredWait = false;
+
+  /** Creates the animations of the given waiting calls, in call order. */
+  const startDeferred = (
+    calls: {group: StartGroup; changed: MotionProperty[]}[],
+  ) => {
+    for (const {group, changed} of calls) {
+      // From the call's own time: the curve starts at the browser's commit.
+      startCall(group, changed, group.provisional);
+    }
+  };
 
   /** Creates the animations of every waiting call, in call order. */
   const flushDeferred = () => {
-    for (const {group, changed} of deferredCalls.splice(0)) {
-      // From the call's own time: the curve starts at the browser's commit.
-      startCall(group, changed, group.provisional);
+    startDeferred(deferredCalls.splice(0));
+  };
+
+  /**
+   * A call's second frame: it starts, with every call queued before it (in
+   * call order), unless another change created it already.
+   */
+  const flushDeferredThrough = (call: {
+    group: StartGroup;
+    changed: MotionProperty[];
+  }) => {
+    const index = deferredCalls.indexOf(call);
+    if (index >= 0) {
+      startDeferred(deferredCalls.splice(0, index + 1));
     }
   };
 
