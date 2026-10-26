@@ -74,10 +74,9 @@ export const navigation = {
 } as const;
 
 /**
- * Makes each spring, duration and curve above a motion role a theme may
- * retune (motion/roles.ts). Nothing registers on import: the touch code that
- * animates with this table calls it once (it is idempotent), so a page that
- * never does ships no registry.
+ * Registers this table with the motion registry (motion/roles.ts). It lists
+ * no role: spec:AST-094 FR4 names none of its values, so each plays as
+ * measured. Nothing registers on import, and a second call does nothing.
  */
 export function registerNavigationTable(): void {
   registerMotionTable('navigation', navigation);
