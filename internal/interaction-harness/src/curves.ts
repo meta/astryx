@@ -953,7 +953,9 @@ export async function watchAnimations(
  * main-thread frame, which the trace counts. It then waits on timers for the
  * scheduled ends of the curves on the element instead, reading no style, so
  * motion that no animation drives (a script writing styles) is not seen until
- * the trace ends.
+ * the trace ends. Finding no animation, it looks again `frames` times a frame
+ * apart before settling, so one the action starts a few frames later is
+ * waited for.
  */
 export async function waitForRest(
   locator: Locator,
@@ -979,13 +981,18 @@ export async function waitForRest(
             backdrop,
           ].join(' | ');
         };
-        // The page's real frames, even while a timer gate holds its callbacks.
-        const frame =
-          (
-            window as unknown as {
-              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
-            }
-          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
+        // The page's real frames and timers, even while a timer gate holds
+        // its callbacks: a frozen gate never holds the wait itself.
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {
+              frame: typeof requestAnimationFrame;
+              timeout?: typeof setTimeout;
+            };
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? requestAnimationFrame;
+        const timeout = gate?.timeout ?? setTimeout;
         // Set by traceRendering while it traces (see the recorder above).
         const tracing = () =>
           (window as unknown as {__harnessRenderingTrace?: boolean})
@@ -1007,6 +1014,10 @@ export async function waitForRest(
         // While traced: one look at the animations, then a timer to the latest
         // scheduled curve end. One not started yet is looked at again a frame
         // later; a trace that has ended hands over to the per-frame check.
+        // Finding nothing settles only after `frames` looks a frame apart, as
+        // the per-frame check needs `frames` still frames: an animation the
+        // action starts a frame or two later is still waited for.
+        let idle = 0;
         const scheduled = () => {
           let wait = 0;
           for (const a of element.getAnimations({subtree: true})) {
@@ -1023,11 +1034,17 @@ export async function waitForRest(
             }
           }
           if (wait <= 0) {
-            settle();
-            return;
+            idle += 1;
+            if (idle >= need) {
+              settle();
+              return;
+            }
+            wait = 16;
+          } else {
+            idle = 0;
           }
           const room = deadline - performance.now();
-          setTimeout(
+          timeout(
             () => {
               if (performance.now() > deadline) {
                 reject(new Error('waitForRest: still moving at the deadline'));
