@@ -123,7 +123,12 @@ function customTokens(
   language: CodeLanguageInput,
 ): TokenLine[] | null {
   const resolved = resolveLanguage(language);
-  return resolved != null && 'tokenize' in resolved
+  if (resolved == null || !('tokenize' in resolved)) {
+    return null;
+  }
+  // A missing function paints nothing rather than throwing, as an absent
+  // `tokenizer` prop does.
+  return typeof resolved.tokenize === 'function'
     ? flatTokensToLines(resolved.tokenize(code, resolved.name), code)
     : null;
 }

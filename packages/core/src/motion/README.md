@@ -30,6 +30,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
+| `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -140,9 +141,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
   travel. For motion the animator does not drive, `reducedMotionFade()`
   answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
-  A decay keeps its motion under Reduce Motion: momentum that continues a
-  throw is direct movement (DR2, DEC-2); a spring a component starts on
-  release toward a target it picks cross-fades.
+  A decay's momentum keeps its motion under Reduce Motion: momentum that
+  continues a throw is direct movement (DR2, DEC-2). A curve marked
+  `isTransition` (a coast's spring back from past an edge), like a spring a
+  component starts on release toward a target it picks, plays through the
+  Reduce Motion policy: a cross-fade on a coarse pointer, at once elsewhere.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.

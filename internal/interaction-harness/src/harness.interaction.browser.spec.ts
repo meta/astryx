@@ -865,6 +865,34 @@ test.describe('frame evidence', () => {
     expect(outcome).toBe('rested');
   });
 
+  test('inside a trace, waitForRest rests beside a scroll-timeline animation', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await fixture(page);
+    const scroller = page.locator('#scroller');
+    await waitForRest(scroller);
+    let outcome = '';
+    await traceRendering(page, async () => {
+      // A row driven by its scroller's timeline: it moves only on scroll.
+      await scroller.evaluate(el => {
+        const row = el.firstElementChild as HTMLElement;
+        row.animate([{opacity: 0.5}, {opacity: 1}], {
+          timeline: new ScrollTimeline({source: el}),
+        });
+      });
+      outcome = await waitForRest(scroller, {timeout: 2000}).then(
+        () => 'rested',
+        (error: Error) => error.message,
+      );
+    });
+    expect(outcome).toBe('rested');
+  });
+
   test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({
     page,
     browserName,
