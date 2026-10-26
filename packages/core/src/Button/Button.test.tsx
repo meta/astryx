@@ -72,7 +72,7 @@ describe('Button', () => {
       'utf8',
     );
     expect(groupStylesSource).toContain(
-      "':where(.astryx-input-group > *):focus-visible'",
+      '`${DIRECT_INPUT_GROUP_ADDON}:focus-visible`',
     );
     expect(groupStylesSource).toMatch(
       /zIndex:\s*\{\s*default: null,\s*\[DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE\]: 2,/,
