@@ -29,6 +29,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `projection.ts`                                  | Release targets: the rest point nearest the projected coast; paging.                                                                                                 |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
