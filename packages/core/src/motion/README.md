@@ -76,7 +76,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - Promotion: every animation the animator creates, and every `set`, gives its
   channels a compositing layer in the same task (inline `will-change`, merged
   with the element's own), cleared 500 ms after the last motion. Mobile Safari
-  needs it to run a curve through a blocked main thread.
+  needs it to run a curve through a blocked main thread. A pseudo-element is
+  promoted through `--astryx-motion-will-change-<pseudo>` on its host; its
+  style opts in with
+  `willChange: 'var(--astryx-motion-will-change-before, auto)'`.
 - `atRest(properties)` resolves once none of them is moving, after the last
   curve ends, whoever started it.
 - `rebase({y: -shift})` moves properties at once, as a layout shift does; a
@@ -115,6 +118,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
+- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+  pseudo-element; with no inline style to hold it, a static filling animation
+  holds its end value until the next animation replaces it.
 
 ### How it stays on the compositor
 

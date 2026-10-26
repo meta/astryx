@@ -69,13 +69,17 @@
  * Chromium starts it after the block.
  *
  * Promotion: Mobile Safari runs an animation whose start time is set from
- * script on its compositor at its first commit only if the element already
- * has a compositing layer; without one, a block right after that commit
- * freezes it (iOS 26.2 simulator: 2 of 7 runs kept moving). Every animation
- * the animator creates, and every `set`, therefore promotes its channels in
- * the same task: inline `will-change` on the element, merged with the
- * element's own. That is enough (5 of 5, and 4 of 4 through the animator);
- * promotion ends PROMOTION_LINGER_MS after the last motion.
+ * script on its compositor at its first commit only if the element (or the
+ * pseudo-element) already has a compositing layer; without one, a block
+ * right after that commit freezes it (iOS 26.2 simulator: 2 of 7 runs kept
+ * moving, 0 of 5 on a ::before). Every animation the animator creates, and
+ * every `set`, therefore promotes its channels in the same task: inline
+ * `will-change` on the element, merged with the element's own, or the custom
+ * property `--astryx-motion-will-change-<pseudo>` on the host for a
+ * pseudo-element, whose style opts in with
+ * `will-change: var(--astryx-motion-will-change-before, auto)`. That is
+ * enough (5 of 5, and 4 of 4 through the animator); promotion ends
+ * PROMOTION_LINGER_MS after the last motion.
  *
  * Known limits, iOS Safari (measured on the iOS 26.2 simulator):
  * - a block in the task that starts a motion delays it: it starts when the
@@ -124,6 +128,10 @@
  * picks (a detent, a page), is a transition: it plays through the Reduce
  * Motion policy above, a cross-fade on a coarse pointer and at once
  * elsewhere (DR2, DR3).
+ *
+ * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
+ * inline style: its end value is held by a static filling animation (after a
+ * curve ends, and after `set`) until the next animation replaces it.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -224,6 +232,12 @@ export interface MotionCurve {
  * Options of `createAnimator`.
  */
 export interface AnimatorOptions {
+  /**
+   * Animates a pseudo-element of the element instead (`'::backdrop'` of a
+   * native dialog). A pseudo-element has no inline style, so a static filling
+   * animation holds its value after a curve ends and after `set`.
+   */
+  pseudoElement?: string;
   /** Starting values; identity by default. Never read from the DOM. */
   initial?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
@@ -557,10 +571,10 @@ function format(
   }
 }
 
-const shared = new WeakMap<HTMLElement, Animator>();
+const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
 
 /**
- * The one animator for `element`, created on
+ * The one animator for `element` (and `options.pseudoElement`), created on
  * first use. Code that animates one element from several places (a swipe on
  * x, a removal on y) shares it, so their curves compose in one `translate`
  * track and retargeting one axis leaves the other on its curve; two
@@ -572,10 +586,16 @@ export function animatorFor(
   element: HTMLElement,
   options: AnimatorOptions = {},
 ): Animator {
-  let animator = shared.get(element);
+  let byPseudo = shared.get(element);
+  if (byPseudo == null) {
+    byPseudo = new Map();
+    shared.set(element, byPseudo);
+  }
+  const key = options.pseudoElement ?? '';
+  let animator = byPseudo.get(key);
   if (animator == null) {
     animator = createAnimator(element, options);
-    shared.set(element, animator);
+    byPseudo.set(key, animator);
   }
   return animator;
 }
@@ -711,6 +731,7 @@ export function createAnimator(
           requestAnimationFrame(() => callback());
         }
       : null);
+  const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4).
   const prefersReducedMotion = defaultPrefersReducedMotion;
@@ -743,6 +764,11 @@ export function createAnimator(
   /** The element's own inline will-change, restored when promotion ends. */
   let ownWillChange: string | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A pseudo-element is promoted through a custom property on its host. */
+  const promotionProperty =
+    pseudoElement == null
+      ? null
+      : `--astryx-motion-will-change-${pseudoElement.replace(/^:+/, '')}`;
   /** Channels whose identity the last node held inline (see `attach`). */
   let heldIdentity = new Set<Channel>();
 
@@ -824,7 +850,7 @@ export function createAnimator(
     channel: Channel,
     value: (property: MotionProperty) => number,
   ) => {
-    if (target == null) {
+    if (target == null || pseudoElement != null) {
       return;
     }
     touched.add(channel);
@@ -889,14 +915,32 @@ export function createAnimator(
     return times;
   };
 
+  /** A pseudo-element's resting value, held by a static filling animation. */
+  const hold = (channel: Channel, time: number) => {
+    if (target == null) {
+      return;
+    }
+    const value = format(channel, finalValue);
+    const animation = target.animate([{[channel]: value}, {[channel]: value}], {
+      duration: 1,
+      fill: 'both',
+      pseudoElement,
+    });
+    animation.startTime = time;
+    running.set(channel, animation);
+  };
+
   const rebuild = (channel: Channel, time: number) => {
     const previous = running.get(channel);
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
-    // The element's inline style holds the end state, so its old animation
-    // can go first.
-    previous?.cancel();
+    // An element's inline style holds the end state, so its old animation can
+    // go first. A pseudo-element has none: its old animation keeps holding the
+    // value until the new one exists (same task, no frame in between).
+    if (pseudoElement == null) {
+      previous?.cancel();
+    }
     const properties = CHANNELS[channel];
     // Settled curves become resting values.
     for (const property of properties) {
@@ -913,6 +957,10 @@ export function createAnimator(
       return;
     }
     if (moving.length === 0) {
+      if (pseudoElement != null) {
+        hold(channel, time);
+      }
+      previous?.cancel();
       return;
     }
     // A channel rebuilt by an explicit call (set, rebase, a retarget of
@@ -939,6 +987,10 @@ export function createAnimator(
       ),
     );
     if (end <= from) {
+      if (pseudoElement != null) {
+        hold(channel, time);
+      }
+      previous?.cancel();
       return;
     }
     if (callGroup != null) {
@@ -1022,6 +1074,7 @@ export function createAnimator(
       // inline style already holds the same values, so that changes no pixel.
       fill: 'both',
       easing: 'linear',
+      ...(pseudoElement != null ? {pseudoElement} : {}),
     });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
@@ -1042,7 +1095,9 @@ export function createAnimator(
 
   /**
    * Once the main thread runs after the curve's end, the animation leaves the
-   * running state: the element's inline style already shows the end values.
+   * running state: an element's inline style already shows the end values; a
+   * pseudo-element's end value moves to a static holding animation, created
+   * before the long one goes.
    */
   const scheduleRetire = (
     channel: Channel,
@@ -1069,6 +1124,15 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
+      // A pseudo-element holds its resting value, unless the stylesheet
+      // takes it back now (a borrowed dip that has ended).
+      const handsBack =
+        channel === 'opacity' &&
+        borrowedOpacity != null &&
+        ![...landings].some(landing => landing.fadeIn?.isBorrowed === true);
+      if (pseudoElement != null && !handsBack) {
+        hold(channel, now());
+      }
       animation.cancel();
       releaseIdentity(channel);
       flushReleases();
@@ -1083,22 +1147,36 @@ export function createAnimator(
       target == null
         ? NaN
         : Number.parseFloat(
-            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
+            view
+              ?.getComputedStyle(target, pseudoElement ?? null)
+              .getPropertyValue('opacity') ?? '',
           );
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
   };
 
   /**
    * Whether the animator holds an opacity of its own on the element: an inline
-   * value it wrote (a `set` over a stylesheet that hides or dims it). A dip
-   * returns to that value.
+   * value it wrote, or a pseudo-element's holding animation (a `set` over a
+   * stylesheet that hides or dims it). A dip returns to that value.
    */
   const writesOwnOpacity = (): boolean =>
-    (target?.style.getPropertyValue('opacity') ?? '') !== '';
+    pseudoElement == null
+      ? (target?.style.getPropertyValue('opacity') ?? '') !== ''
+      : running.has('opacity');
 
-  /** Gives the element's opacity back to its stylesheet: its inline value goes. */
+  /**
+   * Gives the element's opacity back to its stylesheet: an element's inline
+   * value goes; a pseudo-element, which has no inline style, loses the
+   * animation holding its value.
+   */
   const releaseOwnOpacity = () => {
-    target?.style.removeProperty('opacity');
+    if (pseudoElement == null) {
+      target?.style.removeProperty('opacity');
+      return;
+    }
+    const held = running.get('opacity');
+    running.delete('opacity');
+    held?.cancel();
   };
 
   /**
@@ -1183,6 +1261,9 @@ export function createAnimator(
       releaseOwnOpacity();
       return;
     }
+    if (pseudoElement != null) {
+      return;
+    }
     if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
       return;
     }
@@ -1246,9 +1327,17 @@ export function createAnimator(
 
   // -- promotion -------------------------------------------------------------
 
-  /** Writes the promoted channels as will-change. */
+  /** Writes the promoted channels as will-change (or the pseudo's property). */
   const writePromotion = (element: HTMLElement) => {
     const list = [...promoted].join(', ');
+    if (promotionProperty != null) {
+      if (list === '') {
+        element.style.removeProperty(promotionProperty);
+      } else {
+        element.style.setProperty(promotionProperty, list);
+      }
+      return;
+    }
     if (list === '') {
       element.style.willChange = ownWillChange ?? '';
       ownWillChange = null;
@@ -1260,7 +1349,7 @@ export function createAnimator(
   };
 
   /**
-   * Gives the element a compositing layer for
+   * Gives the element (or its pseudo-element) a compositing layer for
    * `channel` from the task that starts the motion: Mobile Safari runs an
    * animation whose start time is set from script on its compositor at its
    * first commit only if the element already has a layer.
@@ -2052,9 +2141,25 @@ export function createAnimator(
       }
       // After the landing's commit, which can promote the element again.
       demote();
+      // A pseudo-element holds an identity with a static animation, which the
+      // cancel below drops: note the channels to hold again on the next node
+      // (never a borrowed opacity, which is the stylesheet's).
       const isOpacityBorrowed =
         borrowedOpacity != null ||
         [...landings].some(landing => landing.restoreIsBorrowed === true);
+      const pseudoHeld =
+        pseudoElement == null || target == null
+          ? null
+          : new Set(
+              (Object.keys(CHANNELS) as Channel[]).filter(
+                channel =>
+                  running.has(channel) &&
+                  !(channel === 'opacity' && isOpacityBorrowed) &&
+                  CHANNELS[channel].every(
+                    p => !segments.has(p) && resting[p] === IDENTITY[p],
+                  ),
+              ),
+            );
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2074,13 +2179,15 @@ export function createAnimator(
       // differs, kept through a detach for the node that comes next.
       if (target != null) {
         const outgoing = target;
-        heldIdentity = new Set(
-          (Object.keys(CHANNELS) as Channel[]).filter(
-            channel =>
-              outgoing.style.getPropertyValue(channel) ===
-              IDENTITY_TEXT[channel],
-          ),
-        );
+        heldIdentity =
+          pseudoHeld ??
+          new Set(
+            (Object.keys(CHANNELS) as Channel[]).filter(
+              channel =>
+                outgoing.style.getPropertyValue(channel) ===
+                IDENTITY_TEXT[channel],
+            ),
+          );
       }
       const held = heldIdentity;
       target = next;
@@ -2110,8 +2217,13 @@ export function createAnimator(
         } else if (held.has(channel)) {
           // An identity the animator held inline over a stylesheet that
           // differs goes onto the new node too (writeInline keeps it only
-          // where the new node's stylesheet still differs).
-          writeInline(channel, property => resting[property]);
+          // where the new node's stylesheet still differs); a pseudo-element's
+          // is held again.
+          if (pseudoElement != null) {
+            hold(channel, time);
+          } else {
+            writeInline(channel, property => resting[property]);
+          }
         }
       }
       flushReleases();
