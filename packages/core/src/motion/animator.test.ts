@@ -636,6 +636,20 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     next.remove();
   });
 
+  it('an identity held over a differing stylesheet follows a node replacement', () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0'};
+    animator.set({opacity: 1});
+    expect(element.style.opacity).toBe('1');
+    animator.attach(null);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(next);
+    expect(next.style.opacity).toBe('1');
+    expect(animator.get('opacity')).toBe(1);
+    next.remove();
+  });
+
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = (
       animator: ReturnType<typeof createAnimator>,
@@ -722,6 +736,26 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
       }
     }
     expect(animator.get('x', start + fade)).toBe(0);
+  });
+
+  it('a release with one axis past an edge is one handle: stop() stops the cross-fade too', async () => {
+    const {animator} = reduced();
+    animator.set({x: -80, y: 0});
+    const start = clock;
+    const handle = animator.decay(
+      coast(
+        animator,
+        {x: 0, y: 500},
+        {bounds: {x: {min: 0, max: 100}}, at: start},
+      ),
+      {at: start},
+    );
+    expect(handle.properties).toEqual(expect.arrayContaining(['x', 'y']));
+    await advance(fade / 4);
+    handle.stop();
+    await advance(fade + END_HOLD_MS + 1);
+    // x never lands at its edge after the stop.
+    expect(animator.get('x')).toBe(-80);
   });
 
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {

@@ -433,6 +433,15 @@ function defaultIsCoarsePointer(): boolean {
 const REDUCED_MOTION_MAX_FADE_MS = 200;
 
 /**
+ * The transition `decay` hands a Reduce Motion transition curve to: under
+ * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
+ * spring itself is never solved.
+ */
+const REDUCED_TRANSITION: SpringTransition = {
+  spring: {duration: 0.5, bounce: 0},
+};
+
+/**
  * Creates an animator for `element` (or for an element attached later).
  *
  * @example
@@ -445,15 +454,6 @@ const REDUCED_MOTION_MAX_FADE_MS = 200;
  * animator.stop(['y']);
  * ```
  */
-/**
- * The transition `decay` hands a Reduce Motion transition curve to: under
- * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
- * spring itself is never solved.
- */
-const REDUCED_TRANSITION: SpringTransition = {
-  spring: {duration: 0.5, bounce: 0},
-};
-
 export function createAnimator(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
@@ -477,6 +477,8 @@ export function createAnimator(
    */
   let borrowedOpacity: number | null = null;
   let target: HTMLElement | null = null;
+  /** Channels whose identity the last node held inline (see `attach`). */
+  let heldIdentity = new Set<Channel>();
 
   // -- reading the curves ---------------------------------------------------
 
@@ -1003,10 +1005,24 @@ export function createAnimator(
         // outgoing element gets its stylesheet's opacity back.
         target?.style.removeProperty('opacity');
       }
+      // Identities the outgoing node holds inline over a stylesheet that
+      // differs, kept through a detach for the node that comes next.
+      if (target != null) {
+        const outgoing = target;
+        heldIdentity = new Set(
+          (Object.keys(CHANNELS) as Channel[]).filter(
+            channel =>
+              outgoing.style.getPropertyValue(channel) ===
+              IDENTITY_TEXT[channel],
+          ),
+        );
+      }
+      const held = heldIdentity;
       target = next;
       if (target == null) {
         return;
       }
+      heldIdentity = new Set();
       const time = now();
       // A borrowed dip that ended while detached hands the opacity back
       // instead of writing the borrowed value inline.
@@ -1026,6 +1042,11 @@ export function createAnimator(
         );
         if (!isDefault) {
           rebuild(channel, time);
+        } else if (held.has(channel)) {
+          // An identity the animator held inline over a stylesheet that
+          // differs goes onto the new node too (writeInline keeps it only
+          // where the new node's stylesheet still differs).
+          writeInline(channel, property => resting[property]);
         }
       }
     },
@@ -1262,11 +1283,28 @@ export function createAnimator(
       if (transitioned == null) {
         return handle;
       }
+      // One handle for the whole release: the cross-faded axes too.
+      const faded = transitioned;
+      const owns = (property: MotionProperty) =>
+        faded.properties.includes(property);
       return {
         ...handle,
-        finished: Promise.all([handle.finished, transitioned.finished]).then(
-          ([coasted, faded]) => coasted && faded,
+        properties: [...handle.properties, ...faded.properties],
+        finished: Promise.all([handle.finished, faded.finished]).then(
+          ([coasted, done]) => coasted && done,
         ),
+        value: (property, at) =>
+          owns(property)
+            ? faded.value(property, at)
+            : handle.value(property, at),
+        velocity: (property, at) =>
+          owns(property)
+            ? faded.velocity(property, at)
+            : handle.velocity(property, at),
+        stop: () => {
+          handle.stop();
+          faded.stop();
+        },
       };
     },
 
