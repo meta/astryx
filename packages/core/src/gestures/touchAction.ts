@@ -28,7 +28,6 @@
  */
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
-import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 
 /** The intersection of what each touch recognizer leaves the browser. */
 export function combinedNativeBehavior(
