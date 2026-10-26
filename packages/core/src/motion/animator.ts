@@ -105,11 +105,12 @@ export interface SpringTransition {
 }
 
 /**
- * Any closed-form curve to play on the compositor: a momentum coast
- * (`coast.ts`), a spring chasing a moving target, a fitted UIKit curve.
- * Times are seconds from the curve's start; the value at `duration` is the
- * end state. Start it at the property's presentation value (`get`) to
- * continue without a jump.
+ * A momentum curve to play on the compositor: a released scroll view's coast
+ * and its edge bounce (`coast.ts`). Only momentum plays through `decay`:
+ * design:reduced-motion DR2 exempts it (DEC-2), so `decay` skips Reduce
+ * Motion; every other motion goes through `animate`. Times are seconds from
+ * the curve's start; the value at `duration` is the end state. Start it at
+ * the property's presentation value (`get`) to continue without a jump.
  */
 export interface MotionCurve {
   /** Length, s. */
@@ -222,6 +223,8 @@ interface Segment {
   readonly jumps: ReadonlyArray<number>;
   /** Constant between jumps: sampled at its jumps only. */
   readonly steps?: true;
+  /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
+  readonly isFade?: true;
   readonly owner: HandleState;
 }
 
@@ -896,6 +899,7 @@ export function createAnimator(
         1000,
       jumps,
       owner,
+      isFade: true,
     };
   };
 
@@ -1015,18 +1019,23 @@ export function createAnimator(
 
       // A dip on a touch screen when no call owns opacity starts from and
       // returns to the element's own opacity, not the model's 1.
+      // A dip already borrowing it does not make the call own it.
       const ownsOpacity =
         targets.opacity != null ||
-        segments.has('opacity') ||
-        resting.opacity !== IDENTITY.opacity;
+        (borrowedOpacity == null &&
+          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
       const borrowed =
-        reduce && !instant && travels && !ownsOpacity ? ownOpacity() : null;
+        reduce && !instant && travels && !ownsOpacity
+          ? (borrowedOpacity ?? ownOpacity())
+          : null;
       if (reduce) {
         const fade = Math.min(
           reducedMotionCrossFade.durationMs,
           REDUCED_MOTION_MAX_FADE_MS,
         );
-        const opacityNow = borrowed ?? valueAt('opacity', time);
+        const opacityNow = segments.has('opacity')
+          ? valueAt('opacity', time)
+          : (borrowed ?? valueAt('opacity', time));
         const fadeTo = borrowed ?? opacityTo;
         const entering = fadeTo > opacityNow + 1e-6;
         const leaving = fadeTo < opacityNow - 1e-6;
@@ -1130,17 +1139,28 @@ export function createAnimator(
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
+      const wasBorrowed = borrowedOpacity != null;
       for (const property of list) {
-        if (!segments.has(property)) {
+        const segment = segments.get(property);
+        if (segment == null) {
           continue;
         }
-        const value = valueAt(property, time);
+        // A Reduce Motion fade is never left half done: it finishes, and a
+        // dip on the stylesheet's opacity hands that opacity back.
+        const value = !segment.isFade
+          ? valueAt(property, time)
+          : wasBorrowed
+            ? IDENTITY.opacity
+            : segment.target;
         interrupt(property, time);
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
       }
       commit(changed, time);
+      if (wasBorrowed && changed.includes('opacity')) {
+        target?.style.removeProperty('opacity');
+      }
     },
 
     dispose() {

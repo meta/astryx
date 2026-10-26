@@ -512,6 +512,37 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a stop during a dip finishes the fade instead of freezing it', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 2 - 5);
+    expect(animator.get('opacity')).toBeLessThan(0.1);
+    animator.stop();
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it("a stop during a dip on the stylesheet's opacity hands it back", async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    animator.stop();
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    animator.animate({y: 50}, {spring: springs.navigationPush});
+    expect(animator.get('opacity', clock + fade)).toBeCloseTo(0.6, 9);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a move dips: fades out, jumps at the midpoint, fades back in', () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
