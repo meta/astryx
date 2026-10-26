@@ -66,8 +66,17 @@ interface ChainEntry {
 const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
 const EDGE_TOLERANCE = 1;
 
-/** The node's parent, crossing out of shadow roots. */
+/**
+ * The node's parent in the flat tree: a slotted node's slot, then out of
+ * shadow roots to their hosts, so a scroller inside a shadow tree around the
+ * slot is found.
+ */
 export function parentAcrossShadow(node: Node): Node | null {
+  const slot =
+    node instanceof Element || node instanceof Text ? node.assignedSlot : null;
+  if (slot != null) {
+    return slot;
+  }
   if (node.parentNode != null) {
     return node.parentNode instanceof ShadowRoot
       ? node.parentNode.host
@@ -235,26 +244,6 @@ export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
         }
       }
       return false;
-    },
-    distanceToEdge(dx: number, dy: number): number {
-      const ax = Math.abs(dx);
-      const ay = Math.abs(dy);
-      for (const entry of getChain()) {
-        if (ay >= ax && ay > 0 && entry.y && canMoveY(entry.element, dy)) {
-          const {element} = entry;
-          return dy > 0
-            ? element.scrollTop
-            : element.scrollHeight - element.clientHeight - element.scrollTop;
-        }
-        if (ax > ay && entry.x && canMoveX(entry, dx)) {
-          const {element} = entry;
-          const overflow = element.scrollWidth - element.clientWidth;
-          const min = entry.isRtl ? -overflow : 0;
-          const max = entry.isRtl ? 0 : overflow;
-          return dx > 0 ? element.scrollLeft - min : max - element.scrollLeft;
-        }
-      }
-      return 0;
     },
     get allowsNativePan(): boolean {
       getChain();

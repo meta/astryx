@@ -315,7 +315,6 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'sheetBody',
       'slider',
       'card',
-      'cardLate',
       'switchRow',
     ]),
   );
