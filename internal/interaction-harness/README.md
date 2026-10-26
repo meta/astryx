@@ -9,9 +9,11 @@ a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
 The harness proves its own instruments in
-[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
-every positive check has a negative control beside it (a rAF animation that
-freezes, a `top` animation that lays out every frame).
+[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
+The busy-main-thread proof and the rendering-trace counts have a negative
+control beside their positive checks (a rAF animation that freezes under a
+blocked main thread, a `top` animation that lays out every frame); other
+self-tests check an instrument against a known answer.
 
 ## Running
 
@@ -170,7 +172,9 @@ steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 On a loaded machine Chromium's screencast can skip frames the compositor
 still presents. `startCompositorTrace(page)`, started with the screencast and
 stopped after the block, records when the compositor presented each frame
-(`Display::FrameDisplayed`); pass it as `presented`. A gap between two moved
+(`Display::FrameDisplayed`); pass it as `presented`. The record is
+browser-wide (its frames carry no page identity), so it throws when another
+page is open as it starts or stops. A gap between two moved
 frames with nothing delivered inside it is then measured between the
 compositor's own frames: the frames it presented there count as presented
 (`recorderSkipped`, in the summary), and a gap it did not present through is
@@ -193,9 +197,12 @@ CSS animation or transition event names, once, when that animation starts, and
 catches up afterwards. A `waitForRest` awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
-animation the action starts a frame or two later is waited for) and reads no
+animation the action starts a frame or two later is waited for) and polls no
 style until the trace ends (in the anchored fixture's steady middle,
-24 Layouts before, 0 now). So do `waitForAnimation` and a watch's
+24 Layouts before, 0 now). Its one read of the element's animations, as it is
+called, restyles the element (2 Layouts and 2 style recalculations in the
+anchored fixture when called 200 ms into its animation), so await it right
+after the action that starts the motion, before the window a proof counts. So do `waitForAnimation` and a watch's
 `started()`: they take the element's animations from the recorder's log,
 judge a started one by its own times, and reach the element through a handle,
 since each `locator.evaluate` makes a main-thread frame (there too, 24

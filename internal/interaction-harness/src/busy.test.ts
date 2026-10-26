@@ -130,6 +130,18 @@ describe('busyWindowProof verdict', () => {
     );
   });
 
+  it('judges a window that delivered fewer than four frames against its span', () => {
+    // A rAF animation frozen by the block, in WebKit: one frame from before
+    // the block arrives 45 ms into it, then nothing until after it.
+    const late = moving().filter(f => f.t <= 1000 || f.t >= 1750);
+    late.push({
+      t: 1045,
+      box: {x: 0, y: 3 * at(1001), width: 10, height: 10},
+    } as TrackedFrame);
+    const proof = busyWindowProof(inPresentationOrder(late), BLOCK);
+    expect(proof.verdict.failures.join('\n')).toMatch(/expected frames moved/);
+  });
+
   it('lets a short window miss a frame, not three', () => {
     // 150 ms judged: nine frames delivered, one miss allowed (10% would be 0.9).
     const short = {from: 1000, to: 1190};

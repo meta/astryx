@@ -1339,9 +1339,12 @@ export async function watchAnimations(
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
  * scheduled ends of the curves on the element instead (a run going backward,
- * until it finishes), reading no style, so
- * motion that no animation drives (a script writing styles) is not seen until
- * the trace ends. Finding no animation, it looks again `frames` times a frame
+ * until it finishes), so motion that no animation drives (a script writing
+ * styles) is not seen until the trace ends. Its one read of the element's
+ * animations, as it is called, restyles the element (and lays out an anchored
+ * one) when an animation is already running there: await it right after the
+ * action that starts the motion, before the window a proof counts, not in its
+ * middle (README: No Layout / Paint). Finding no animation, it looks again `frames` times a frame
  * apart before settling, so one the action starts a few frames later is
  * waited for.
  */
