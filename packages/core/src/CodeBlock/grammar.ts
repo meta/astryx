@@ -37,7 +37,8 @@ export type CodeLanguageTokenize = (
 /**
  * A language value: an Astryx module from
  * `@astryxdesign/core/CodeBlock/languages/<path>`, or a custom language from
- * `createCodeLanguage`. Pass it as `language`.
+ * `createCodeLanguage`. Pass it as `language`, or list it in `codeLanguages`
+ * on Markdown, RichText, and DiffViewer.
  */
 export type CodeLanguage = {
   /** The identifier the label shows, such as `graphql`; shown verbatim. */
@@ -97,7 +98,8 @@ export type CreateCodeLanguageOptions = CodeLanguageMeta & {
 
 /**
  * Make a custom language value from your own tokenize function. It works
- * everywhere an Astryx language module does, starting with `language`.
+ * everywhere an Astryx language module does: as `language`, and in
+ * `codeLanguages` on Markdown, RichText, and DiffViewer.
  *
  * @example
  * ```
@@ -157,6 +159,20 @@ export function languageKey(language: string | CodeLanguage): string {
   return typeof language === 'string'
     ? language
     : (language.identifiers[0] ?? language.name);
+}
+
+/** Whether two lists name the same values in the same order. */
+export function sameCodeLanguageList(
+  a: ReadonlyArray<CodeLanguage> | undefined,
+  b: ReadonlyArray<CodeLanguage> | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null || a.length !== b.length) {
+    return false;
+  }
+  return a.every((language, i) => language === b[i]);
 }
 
 /** The listed value that claims `word`; a later entry wins. */
