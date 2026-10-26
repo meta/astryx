@@ -122,7 +122,9 @@ interface TraceEvent {
  * CSS `@keyframes` animation (and, for an unwatched `waitForAnimation`, a
  * cancelled CSS transition) the wait reads its timing, which flushes that
  * animation's style, so wait on such an animation with `waitForRest`, or
- * after the trace.
+ * after the trace. Taking a watch, or calling `waitForRest` while an
+ * animation already runs on the element, reads its animations once, which
+ * restyles it: do either before the window a proof counts.
  */
 export async function traceRendering(
   page: Page,

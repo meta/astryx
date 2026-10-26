@@ -195,9 +195,12 @@ CSS animation or transition event names, once, when that animation starts, and
 catches up afterwards. A `waitForRest` awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
-animation the action starts a frame or two later is waited for) and reads no
+animation the action starts a frame or two later is waited for) and polls no
 style until the trace ends (in the anchored fixture's steady middle,
-24 Layouts before, 0 now). So do `waitForAnimation` and a watch's
+24 Layouts before, 0 now). Its one read of the element's animations, as it is
+called, restyles the element (2 Layouts and 2 style recalculations in the
+anchored fixture when called 200 ms into its animation), so await it right
+after the action that starts the motion, before the window a proof counts. So do `waitForAnimation` and a watch's
 `started()`: they take the element's animations from the recorder's log,
 judge a started one by its own times, and reach the element through a handle,
 since each `locator.evaluate` makes a main-thread frame (there too, 24
