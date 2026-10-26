@@ -12,10 +12,10 @@
  * Storybook and the evidence directory are the host's own. The image tag
  * matches the installed playwright, so its browsers match the client.
  * Uses podman when present, else docker. `--network=host` lets the specs'
- * local Storybook server and the browser reach each other. Under docker the
- * container runs as the invoking user (rootless podman already maps it), so
- * the `test-results/` it writes into the mounted checkout stay the host
- * user's and the next host run can clear them.
+ * local Storybook server and the browser reach each other. Under a rootful
+ * docker daemon the container runs as the invoking user (rootless podman and
+ * rootless docker already map it), so the `test-results/` it writes into the
+ * mounted checkout stay the host user's and the next host run can clear them.
  */
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -50,10 +50,20 @@ const env = [
 ]
   .filter(name => process.env[name] != null)
   .flatMap(name => ['-e', `${name}=${process.env[name]}`]);
-// Docker runs the image as root unless told otherwise; the files it writes
-// into the bind mount would then be root's.
+// A rootful Docker daemon runs the image as root unless told otherwise; the
+// files it writes into the bind mount would then be root's. Rootless Docker
+// maps the container's root to the invoking user (as podman does), and any
+// other container uid to a subordinate host uid that cannot write the
+// checkout, so it gets no `--user`.
+const rootlessDocker =
+  engine === 'docker' &&
+  /name=rootless/.test(
+    spawnSync('docker', ['info', '--format', '{{json .SecurityOptions}}'], {
+      encoding: 'utf8',
+    }).stdout ?? '',
+  );
 const user =
-  engine === 'docker' && typeof process.getuid === 'function'
+  engine === 'docker' && !rootlessDocker && typeof process.getuid === 'function'
     ? [
         '--user',
         `${process.getuid()}:${process.getgid?.() ?? process.getuid()}`,
