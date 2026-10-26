@@ -8,6 +8,7 @@ import Foundation
 /// app then keeps drawing the rest of a newer core's tree.
 public enum AstryxNode: Decodable, Equatable, Sendable {
   case avatar(AvatarNode)
+  case avatarStatusDot(AvatarStatusDotNode)
   case badge(BadgeNode)
   case button(ButtonNode)
   case card(CardNode)
@@ -26,6 +27,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
   public var key: String {
     switch self {
     case .avatar(let node): return node.key
+    case .avatarStatusDot(let node): return node.key
     case .badge(let node): return node.key
     case .button(let node): return node.key
     case .card(let node): return node.key
@@ -52,6 +54,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
     do {
       switch component {
       case "Avatar": self = .avatar(try AvatarNode(from: decoder))
+      case "AvatarStatusDot": self = .avatarStatusDot(try AvatarStatusDotNode(from: decoder))
       case "Badge": self = .badge(try BadgeNode(from: decoder))
       case "Button": self = .button(try ButtonNode(from: decoder))
       case "Card": self = .card(try CardNode(from: decoder))

@@ -29,8 +29,9 @@
  *   its own events never bubble to the page (capture-phase listeners still
  *   see its click; the gesture host's click swallower skips it by
  *   attribute), and focus the label's activation gives it goes straight
- *   back, so a later Space never toggles it. A label that already labels
- *   another control gets no switch: its activation goes to that control.
+ *   back, so a later Space never toggles it. A label tied to its control
+ *   by `for`, or whose control is itself a switch, gets no switch; a label
+ *   wrapping its own control gets one, which hands each tap on to it.
  * - `playHaptic(kind)` vibrates where `navigator.vibrate` exists (Android
  *   browsers) with the kind's pattern, and does nothing elsewhere.
  *

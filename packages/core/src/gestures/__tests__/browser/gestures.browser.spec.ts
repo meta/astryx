@@ -240,18 +240,24 @@ async function openBare(page: Page, engine: string): Promise<Driver> {
   return engine === 'webkit' ? webkitDriver(page) : chromiumDriver(page);
 }
 
-/** An element's inline touch-action and the page's touch listeners now. */
+/**
+ * An element's inline touch-action and the page's touch listeners, read
+ * after the next frame: the host writes touch-action there (FR18), so an
+ * absent value is absent for good, not merely not yet written.
+ */
 async function footprint(page: Page, id: string) {
-  return page.evaluate(
-    target => ({
+  return page.evaluate(async target => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+    return {
       touchAction:
         document
           .getElementById(target)
           ?.style.getPropertyValue('touch-action') ?? null,
       pageTouchListeners: window.__pageTouch,
-    }),
-    id,
-  );
+    };
+  }, id);
 }
 
 async function center(page: Page, id: string): Promise<Point> {
@@ -310,6 +316,14 @@ test('derives touch-action per element from its recognizers', async ({
   browserName,
 }) => {
   await open(page, browserName);
+  // The host reads each author's value and writes its own in the frame
+  // after the attach (FR18).
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      }),
+  );
   const actions = await page.evaluate(() =>
     Object.fromEntries(
       ['hpan', 'tapper', 'presser', 'pinchable', 'sheetBody'].map(id => [
