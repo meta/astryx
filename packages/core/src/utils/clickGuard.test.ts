@@ -6,7 +6,8 @@
  * @output An armed guard swallows the browser's next click before any page
  *   listener and is spent; a click whose detail is 0, one dispatched inside
  *   withoutClickGuard and the haptic switch's click pass; the next
- *   pointerdown and the window disarm it; it listens only while armed; the
+ *   pointerdown and the window disarm it; it hears pointerdown only while
+ *   armed and keeps one click listener per window, ahead of later ones; the
  *   menu press model and the gesture host arm this one guard
  * @position Unit tests of packages/core/src/utils/clickGuard.ts
  */
@@ -112,19 +113,15 @@ describe('clickGuard', () => {
     expect(click(target).defaultPrevented).toBe(false);
   });
 
-  it('listens only while armed', () => {
+  it('hears pointerdown only while armed, and keeps its one click listener', () => {
+    armClickGuard(document);
+    disarmClickGuard(document);
     const add = vi.spyOn(window, 'addEventListener');
     const remove = vi.spyOn(window, 'removeEventListener');
     armClickGuard(document);
-    expect(add.mock.calls.map(call => call[0]).sort()).toEqual([
-      'click',
-      'pointerdown',
-    ]);
+    expect(add.mock.calls.map(call => call[0])).toEqual(['pointerdown']);
     disarmClickGuard(document);
-    expect(remove.mock.calls.map(call => call[0]).sort()).toEqual([
-      'click',
-      'pointerdown',
-    ]);
+    expect(remove.mock.calls.map(call => call[0])).toEqual(['pointerdown']);
   });
 
   it('is the one guard the menu press model and the gesture host arm', () => {

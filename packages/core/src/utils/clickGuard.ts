@@ -15,7 +15,9 @@
  * reports, on the window's capture phase through the input stream
  * (utils/inputStream.ts), so no framework sees it. It disarms on that click,
  * at the next `pointerdown` (a new gesture, whose click must act), or after
- * {@link CLICK_GUARD_WINDOW_MS}. While disarmed it has no listener at all.
+ * {@link CLICK_GUARD_WINDOW_MS}. Its click listener is installed once per
+ * window, at the first arm, and stays, so it keeps its place ahead of any
+ * window listener the page adds later; disarmed, it lets every click pass.
  *
  * Some clicks always pass:
  * - a click whose `detail` is 0: a keyboard's, a screen reader's, or an
@@ -45,7 +47,31 @@ interface Guard {
 }
 
 const guards = new Map<Document, Guard>();
+/** The windows whose click listener is installed (once each, for good). */
+const listeningViews = new WeakSet<Window>();
 let unguardedDepth = 0;
+
+/** Install the window's one click listener, ahead of the page's later ones. */
+function listenForClicks(view: Window): void {
+  if (listeningViews.has(view)) {
+    return;
+  }
+  listeningViews.add(view);
+  subscribeInput(
+    view,
+    'click',
+    event => {
+      const doc = view.document;
+      if (!guards.has(doc) || isExempt(event)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      disarmClickGuard(doc);
+    },
+    {cancels: true},
+  );
+}
 
 /** Swallow the browser's next click on `doc` (see the file header). */
 export function armClickGuard(doc: Document): void {
@@ -54,22 +80,10 @@ export function armClickGuard(doc: Document): void {
     return;
   }
   disarmClickGuard(doc);
+  listenForClicks(view);
   const guard: Guard = {unsubscribers: [], timer: null};
   guards.set(doc, guard);
   guard.unsubscribers.push(
-    subscribeInput(
-      view,
-      'click',
-      event => {
-        if (isExempt(event)) {
-          return;
-        }
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        disarmClickGuard(doc);
-      },
-      {cancels: true},
-    ),
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
