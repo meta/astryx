@@ -12,7 +12,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
-import {createHarness, ManualClock} from './harness';
+import {createHarness, ManualClock, RecordingConsumer} from './harness';
 import {coarsePrimaryPointer} from './pointerQuery';
 
 describe('a recognizer that never claims (a watcher)', () => {
@@ -48,6 +48,24 @@ describe('a recognizer that never claims (a watcher)', () => {
     expect(sheet.state).toBe('began');
     expect(h.claims).toEqual([1]);
     finger.up(32);
+  });
+
+  it('cancels no press under it when it begins: a held control keeps its touch (spec:AST-094 FR15, FR19)', () => {
+    const h = createHarness();
+    const watcher = new PanGestureRecognizer({
+      name: 'watcher',
+      direction: 'vertical',
+      claimsTouches: false,
+    });
+    const press = new RecordingConsumer();
+    const finger = h
+      .finger(1)
+      .down(0, 100, 0, {recognizers: [watcher], consumer: press})
+      .move(0, 130, 16);
+    expect(watcher.state).toBe('began');
+    expect(press.events).not.toContain('cancelled:1');
+    finger.up(32);
+    expect(press.events).toContain('ended:1');
   });
 
   it('follows a touch the browser took for a scroll until the lift', () => {

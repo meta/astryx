@@ -195,11 +195,11 @@ assistive-technology activation keep working.
 - `control` (a button, a switch): the highlight comes on in the same frame
   outside a scroller, the finger is tracked 70 pt beyond the bounds, and
   the release takes UIButton's 0.25 s;
-- `cell` (a table or collection row, always in a scroll view in UIKit): the
-  highlight always waits the content-touch delay, travel past the pan
-  hysteresis cancels the press for good, a quicker tap highlights at the
-  lift straight into the release, and the release takes the list's
-  deselect clock.
+- `cell` (a table or collection row): the highlight waits the content-touch
+  delay inside a scroll view and comes on at once outside one
+  (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press for
+  good, a quicker tap highlights at the lift straight into the release, and
+  the release takes the list's deselect clock.
 
 `paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})`, in
 `utils/pressFeedback.ts`, is the one writer of `data-astryx-press`. It owns the release timer and writes
@@ -490,10 +490,9 @@ Styles switch on the same conditions by writing the same query as a StyleX
 media key (`'@media (pointer: coarse)'`, and the compact-touch query spelled
 exactly as `COMPACT_TOUCH_QUERY`, which a test enforces), so the first paint
 is right. Behaviour reads
-`useTouchPresentation()` (SSR-safe), a decision taken once reads
-`readTouchPresentation()`, and a component with no interaction to infer
-from reads `useMotionPresentation()`: UIKit timings under a finger, theme
-tokens under a mouse.
+`useTouchPresentation()` (SSR-safe), a component with no interaction to
+infer from included (UIKit timings under a finger, its own motion under a
+mouse), and a decision taken once reads `readTouchPresentation()`.
 
 ## Migrating a raw-touch drag
 
@@ -574,7 +573,12 @@ there, with z-order and `pointer-events` as the engine sees them. Press
 trackers take their bounds from `presentedRect`, the reported box moved by
 the motion since. A retargeted tap cancels the engine's click,
 which would hit the start position, and clicks what it touched; the
-click guard drops a late engine click, so the tap acts once. Not covered:
+click guard drops a late engine click, so the tap acts once. Safari honours a
+blocking `touchmove` only where it was registered before the touch began,
+on the engine's own target, which for a moving element is whatever sits
+under its start: so while an element a claiming recognizer lives in is
+moving, the document carries the blocking listener, and a scroll starting
+anywhere waits on the main thread only for that long. Not covered:
 scale and rotate (a zoom transition, a lifted preview is hit at its
 unscaled box) and CSS transitions or animations the animator did not start.
 
