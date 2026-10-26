@@ -324,7 +324,7 @@ test.describe('holding', () => {
     await fixture(page);
     // Besides #box: a finished fade, an animation the page paused, one on a
     // scroll timeline, and a second runner started 100 ms after #box's.
-    await page.evaluate(async () => {
+    const startGap = await page.evaluate(async () => {
       const make = (id: string) => {
         const el = document.createElement('div');
         el.id = id;
@@ -360,15 +360,26 @@ test.describe('holding', () => {
           [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
           {duration: 600, easing: 'linear'},
         );
-      run(document.getElementById('box'));
-      await new Promise(resolve => setTimeout(resolve, 100));
-      run(make('later'));
+      const box = run(document.getElementById('box'));
+      const gap = new Promise(resolve => setTimeout(resolve, 100));
+      // #box's first frame comes late, as on a loaded machine: its start time
+      // resolves then, so the runners' offset is the difference of their start
+      // times, not the timer's 100 ms.
+      const until = performance.now() + 60;
+      while (performance.now() < until) {
+        // Busy: no frame runs.
+      }
+      await gap;
+      const later = run(make('later'));
+      await Promise.all([box?.ready, later?.ready]);
+      return Number(later?.startTime) - Number(box?.startTime);
     });
     const held = await holdAnimations(page);
     expect(held.map(a => a.target)).toEqual(['div#box', 'div#later']);
     const [first, later] = held;
     expect(first.offsetMs).toBe(0);
-    expect(later.offsetMs).toBeGreaterThan(80);
+    expect(startGap).toBeGreaterThan(0);
+    expect(later.offsetMs).toBeCloseTo(startGap, 0);
     const x = (id: string) =>
       page
         .locator(`#${id}`)
