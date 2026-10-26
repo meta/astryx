@@ -484,6 +484,26 @@ describe('useMenuPress — the trigger', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("a finger held on the trigger may drift 12 pt and still opens; past FR29's 13 pt drift allowance it is a scroll (spec:AST-094 FR29)", () => {
+    vi.useFakeTimers();
+    const hold = (drift: number) => {
+      const onOpenChange = vi.fn();
+      const {unmount} = render(<Harness onOpenChange={onOpenChange} />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      fireEvent.pointerMove(trigger, {...touch(), clientX: 0, clientY: drift});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      const opened = onOpenChange.mock.calls.some(([open]) => open === true);
+      fireEvent.pointerUp(trigger, touch());
+      unmount();
+      return opened;
+    };
+    expect(hold(12)).toBe(true);
+    expect(hold(14)).toBe(false);
+  });
+
   it('marks the menu root as carrying the press model', () => {
     render(<Harness />);
     expect(screen.getByRole('menu')).toHaveAttribute('data-astryx-menu-press');
