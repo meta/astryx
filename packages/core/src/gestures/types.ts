@@ -46,13 +46,6 @@ export interface NativeScrollProbe {
    * lets the browser pan that axis).
    */
   canScroll(dx: number, dy: number): boolean;
-  /**
-   * How much further (px) the scroller that would move for a finger moving
-   * by (dx, dy) can scroll before it reaches its edge; 0 when none would.
-   * Lets a scroll handoff place the point where the content ran out between
-   * two samples instead of at the next one.
-   */
-  distanceToEdge?(dx: number, dy: number): number;
   /** Whether any element under the touch can scroll natively at all. */
   readonly isInsideScroller: boolean;
   /**

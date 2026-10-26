@@ -31,6 +31,7 @@
     "test:a11y-contract": "playwright test --config playwright.config.ts --project chromium",
     "test:a11y-contract:pr": "node .github/scripts/a11y-pr-contracts.mjs",
     "test:docsite-browser": "playwright test --config apps/docsite/playwright.config.ts",
+    "test:interaction": "playwright test --config playwright.interaction.config.ts",
     "typecheck": "pnpm -r --no-bail --workspace-concurrency=1 --if-present --filter \"!@astryxdesign/docsite\" --filter \"!@astryxdesign/sandbox\" run typecheck",
     "check:package-boundaries": "node scripts/check-package-boundaries.js",
     "check:repo": "pnpm check:visual-owner && pnpm check:sync && pnpm check:neutral-palette-refs && pnpm check:stone-palette-refs && pnpm check:gothic-palette-refs && pnpm check:matcha-palette-refs && pnpm check:butter-palette-refs && pnpm check:y2k-palette-refs && pnpm check:data-tokens && pnpm check:token-docs && pnpm check:knowledge && pnpm check:package-boundaries && pnpm check:changesets && pnpm check:demo-media && pnpm check:executable-bits && pnpm check:cli-structure && pnpm check:use-client && pnpm check:portable-scripts && pnpm check:i18n-runtime && pnpm check:i18n-catalog && pnpm check:cldr-weekdays && pnpm check:fixtures && pnpm check:setup-contract",

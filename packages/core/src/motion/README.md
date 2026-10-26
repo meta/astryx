@@ -4,7 +4,9 @@ Internal motion foundation for the touch presentations of core components. It
 starts with the UIKit constants table: every spring, duration, deceleration
 rate, rubber-band constant, curve and gesture threshold a touch presentation
 uses, each with its source. Nothing here is exported from the package entry
-point; components import it by path.
+point. Core's motion and gesture modules read it by path; components take
+touch motion from the theme's motion roles (`spec:AST-094` FR4), not from
+this table.
 
 ## Files
 
@@ -15,7 +17,7 @@ point; components import it by path.
 | `uikit/scroll.ts`     | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.       |
 | `uikit/timing.ts`     | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.      |
 | `uikit/navigation.ts` | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                |
-| `uikit/gestures.ts`   | Gesture recognizer thresholds, the velocity filter and the haptic stand-ins, as typed entries the gesture system reads. |
+| `uikit/gestures.ts`   | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc). |
 | `MEASUREMENTS.md`     | The UIKit reference captures each unconfirmed value still needs.                                                        |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
@@ -47,12 +49,11 @@ Allowed source kinds:
 A `GUESS` or `webkit` value also names the measurement that will confirm or
 replace it (`@measure M-…`, listed in MEASUREMENTS.md). An entry may carry
 several sources when different parts come from different places.
-`uikit/gestures.ts` carries the same information as typed fields that the
-gesture system reads at run time: `{value, unit, source}` with a source of one
-of the kinds above, or `{value, unit, guess, measure}` with a `measure` that
-starts with its MEASUREMENTS.md ID. `uikit/uikit.test.ts` enforces all of it on
-every domain file, in both forms: an unsourced value, an unknown kind, a guess
-without a task, or a task missing from MEASUREMENTS.md fails the build.
+The sources are documentation and stay out of the bundle: no value carries
+them, `uikit/gestures.ts` included (its entries ship only `{value, unit}`).
+`uikit/uikit.test.ts` enforces all of it on every domain file: an unsourced
+value, an unknown kind, a guess without a task, a task missing from
+MEASUREMENTS.md, or a source in a value fails the build.
 
 Measurements come from the iOS simulator: built-in apps (Settings, Maps,
 Photos, Files, Contacts, Calendar, Reminders, Safari's own chrome) or a UIKit
