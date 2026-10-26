@@ -982,6 +982,9 @@ test.describe('animation state', () => {
       row.animate([{opacity: 0.5}, {opacity: 1}], {
         timeline: new ScrollTimeline({source: el}),
       });
+      // Scrolled to its end, the scroll-driven one has finished too: it is
+      // not a finished curve either.
+      el.scrollTop = el.scrollHeight;
       return other.animate([{opacity: 0.2}, {opacity: 1}], {duration: 40})
         .finished;
     });
