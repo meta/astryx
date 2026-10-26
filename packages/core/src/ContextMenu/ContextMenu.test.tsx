@@ -10,7 +10,15 @@
 
 import {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  afterEach,
+  beforeAll,
+  beforeEach,
+} from 'vitest';
 import {
   render,
   screen,
@@ -21,8 +29,8 @@ import {
   createEvent,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {readFileSync} from 'node:fs';
 import {ContextMenu} from './ContextMenu';
+import {loadContextMenuTouchLayer} from './lazyContextMenuTouchLayer';
 import {ContextMenuGroup} from './index';
 import {
   ContextMenuItem,
@@ -37,10 +45,16 @@ import {Divider} from '../Divider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {COMPACT_QUERY, TOUCH_QUERY} from '../utils/touchPresentation';
+import {HAPTIC_VIBRATION_PATTERNS} from '../motion/uikit';
+import {contextMenu} from '../motion/uikit/contextMenu';
 
 // The touch sheet is loaded lazily; resolve its modules once up front, so
 // ContextMenu's own lazy sheet renders within the cases' waitFor.
 beforeAll(warmMenuBottomSheet, 20000);
+// The touch layer loads on demand; load it once so a touch test's first
+// render runs it at once.
+beforeAll(loadContextMenuTouchLayer, 20000);
 
 function NestedDismissibleLayer({onDismiss}: {onDismiss: () => void}) {
   const [isOpen, setIsOpen] = useState(true);
@@ -345,7 +359,11 @@ describe('ContextMenu', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
+        // A compact touch screen: a coarse primary pointer, a narrow viewport.
+        matches:
+          query === COMPACT_TOUCH_PRESENTATION_QUERY ||
+          query === TOUCH_QUERY ||
+          query === COMPACT_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -528,114 +546,595 @@ describe('ContextMenu', () => {
     fireEvent.contextMenu(trigger, {clientX: 0, clientY: 0, detail: 0});
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
   });
+});
 
-  it('opens on touch long-press', () => {
-    vi.useFakeTimers();
-    try {
+/**
+ * A finger on the real gesture host: touch events with explicit contacts,
+ * stamped on the (faked) `performance.now()` clock the host reads.
+ */
+interface Contact {
+  id: number;
+  x: number;
+  y: number;
+}
+
+function dispatchTouch(
+  type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+  target: EventTarget,
+  changed: Contact[],
+  all: Contact[],
+): Event {
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  const toTouch = (contact: Contact) => ({
+    identifier: contact.id,
+    clientX: contact.x,
+    clientY: contact.y,
+    target,
+  });
+  Object.defineProperty(event, 'changedTouches', {value: changed.map(toTouch)});
+  Object.defineProperty(event, 'touches', {value: all.map(toTouch)});
+  Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+  target.dispatchEvent(event);
+  return event;
+}
+
+function finger(target: EventTarget, id = 1, x = 20, y = 20) {
+  const contact = {id, x, y};
+  return {
+    down: () => dispatchTouch('touchstart', target, [contact], [contact]),
+    moveTo: (nx: number, ny: number) => {
+      contact.x = nx;
+      contact.y = ny;
+      return dispatchTouch('touchmove', target, [contact], [contact]);
+    },
+    up: () => dispatchTouch('touchend', target, [contact], []),
+  };
+}
+
+const advance = (ms: number) =>
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
+
+/** The primary pointer answers `matches` to `(pointer: coarse)`. */
+function stubPointer(isCoarse: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: isCoarse && query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+/**
+ * A finger on iOS in jsdom: a coarse pointer, on an engine that supports
+ * `-webkit-touch-callout` (WebKit on iOS). Undone by vi.unstubAllGlobals().
+ */
+function stubIosTouch() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+  vi.stubGlobal('CSS', {
+    ...(globalThis as {CSS?: object}).CSS,
+    supports: (condition: string) =>
+      condition.includes('-webkit-touch-callout'),
+  });
+}
+
+/** A finger on Android: a coarse pointer, no WebKit touch callout. */
+function stubAndroidTouch() {
+  stubPointer(true);
+}
+
+// The gesture host lives as long as the document and remembers the latest
+// event time; each install of fake timers restarts `performance.now()` near 0,
+// so every case moves the faked clock past the ones before it.
+let clockEpoch = 0;
+
+// One touch model on every touch device (#8316): iOS and Android alike.
+describe.each([
+  ['iOS', stubIosTouch],
+  ['Android', stubAndroidTouch],
+] as const)(
+  'ContextMenu under a finger on %s: UIKit’s long-press timeline',
+  (_platform, stubTouch) => {
+    beforeEach(() => {
+      stubTouch();
+      vi.useFakeTimers({
+        toFake: [
+          'setTimeout',
+          'clearTimeout',
+          'setInterval',
+          'clearInterval',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'performance',
+          'Date',
+        ],
+      });
+      clockEpoch += 100_000;
+      vi.advanceTimersByTime(clockEpoch);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    function renderMenu(
+      props: {
+        isDisabled?: boolean;
+        presentation?: 'popover';
+        triggerAs?: 'div' | 'span';
+        onTouchStart?: (event: React.TouchEvent) => void;
+        onTouchEnd?: (event: React.TouchEvent) => void;
+      } = {},
+    ) {
       render(
-        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx" {...props}>
           <div>Long-press me</div>
         </ContextMenu>,
       );
-      const trigger = screen.getByTestId('ctx');
-      fireEvent.touchStart(trigger, {
-        touches: [{clientX: 20, clientY: 20}],
-      });
-      // Not open until the long-press threshold elapses.
-      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
+      return screen.getByTestId('ctx');
     }
-  });
 
-  it('composes consumer touch handlers with long-press detection', () => {
-    vi.useFakeTimers();
-    try {
+    it('opens for a finger still down at 735 ms (iOS 26.2), not a millisecond before', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(contextMenu.press.menuDisplayMs - 1);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      advance(1);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      press.up();
+    });
+
+    it('lights no row when a touch opens it: focus goes to the menu itself, not its first item', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      // The focus moves on the next frame.
+      advance(20);
+      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+      expect(
+        screen.getByRole('menuitem', {name: 'Item 1', hidden: true}),
+      ).not.toHaveFocus();
+      press.up();
+    });
+
+    it('opens at the lift for a finger lifted after the commit (400 ms), as UIKit does', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(529);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      press.up();
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens nothing for a drag past the tolerance after the commit, before the menu', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger, 1, 20, 20);
+      press.down();
+      advance(500);
+      press.moveTo(20, 50);
+      advance(500);
+      press.up();
+      advance(100);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+    });
+
+    it('keeps the menu open as the finger lifts: the lift sends no click or compatibility mouse events', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      const lift = press.up();
+      // A cancelled touchend is the one signal that stops the browser's click
+      // and its compatibility mousedown, which would read as a press outside.
+      expect(lift.defaultPrevented).toBe(true);
+      expect(screen.getByRole('menu', {hidden: true})).toBeInTheDocument();
+      expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+    });
+
+    it('still opens at 735 ms beside a consumer onTouchStart, which runs (#7167)', () => {
       const onTouchStart = vi.fn();
-      render(
-        <ContextMenu
-          items={[{label: 'Item 1'}]}
-          data-testid="ctx"
-          onTouchStart={onTouchStart}>
-          <div>Long-press me</div>
-        </ContextMenu>,
-      );
-
-      fireEvent.touchStart(screen.getByTestId('ctx'), {
-        touches: [{clientX: 20, clientY: 20}],
-      });
-      expect(onTouchStart).toHaveBeenCalledOnce();
-
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledOnce();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('clears a pending long-press when a consumer prevents default on touch end', () => {
-    vi.useFakeTimers();
-    try {
-      render(
-        <ContextMenu
-          items={[{label: 'Item 1'}]}
-          data-testid="ctx"
-          onTouchEnd={event => event.preventDefault()}>
-          <div>Long-press me</div>
-        </ContextMenu>,
-      );
-
-      const trigger = screen.getByTestId('ctx');
-      fireEvent.touchStart(trigger, {
-        touches: [{clientX: 20, clientY: 20}],
-      });
-      fireEvent.touchEnd(trigger);
-
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
+      const trigger = renderMenu({onTouchStart});
+      const press = finger(trigger);
+      press.down();
+      expect(onTouchStart).toHaveBeenCalledTimes(1);
+      advance(contextMenu.press.menuDisplayMs - 1);
       expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+      advance(1);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      press.up();
+    });
 
-  it('suppresses native text selection on the long-press trigger', () => {
-    const source = readFileSync(
-      'packages/core/src/ContextMenu/ContextMenu.tsx',
-      'utf8',
-    );
+    it('opens nothing for an early lift whose consumer onTouchEnd prevents default (#7167)', () => {
+      const onTouchEnd = vi.fn((event: React.TouchEvent) => {
+        event.preventDefault();
+      });
+      const trigger = renderMenu({onTouchEnd});
+      const press = finger(trigger);
+      press.down();
+      advance(200);
+      press.up();
+      expect(onTouchEnd).toHaveBeenCalledTimes(1);
+      advance(1000);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+    });
 
-    expect(source).toMatch(
-      /trigger:[\s\S]*?WebkitTouchCallout: 'none',[\s\S]*?WebkitUserSelect: 'none',[\s\S]*?userSelect: 'none'/,
-    );
-  });
-
-  it('cancels the long-press when the finger moves past the threshold', () => {
-    vi.useFakeTimers();
-    try {
-      render(
+    it('moves the recognizer to the new trigger when triggerAs swaps it: a hold on the new node opens the menu', () => {
+      const {rerender} = render(
         <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
           <div>Long-press me</div>
         </ContextMenu>,
       );
-      const trigger = screen.getByTestId('ctx');
-      fireEvent.touchStart(trigger, {touches: [{clientX: 20, clientY: 20}]});
-      // Move past MOVE_CANCEL_PX (10px) — treated as a scroll, not a press.
-      fireEvent.touchMove(trigger, {touches: [{clientX: 20, clientY: 40}]});
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
+      rerender(
+        <ContextMenu
+          items={[{label: 'Item 1'}]}
+          data-testid="ctx"
+          triggerAs="span">
+          <span>Long-press me</span>
+        </ContextMenu>,
+      );
+      const press = finger(screen.getByTestId('ctx'));
+      press.down();
+      advance(contextMenu.press.menuDisplayMs);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      press.up();
+    });
+
+    it('opens nothing for a press lifted before the commit, and leaves its click alone', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(250);
+      const lift = press.up();
+      expect(lift.defaultPrevented).toBe(false);
+      advance(1000);
       expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    });
+
+    it('cancels when the finger drifts past the tolerance on one axis (11.5 px)', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger, 1, 20, 20);
+      press.down();
+      advance(50);
+      press.moveTo(20, 31.6);
+      advance(1000);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      press.up();
+    });
+
+    it('still opens after a drift inside the tolerance', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger, 1, 20, 20);
+      press.down();
+      advance(50);
+      press.moveTo(31, 31); // 15.6 px away, 11 px on each axis
+      advance(contextMenu.press.menuDisplayMs);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      press.up();
+    });
+
+    it('cancels when a second finger lands before the commit', () => {
+      const trigger = renderMenu();
+      const first = {id: 1, x: 20, y: 20};
+      const second = {id: 2, x: 60, y: 20};
+      dispatchTouch('touchstart', trigger, [first], [first]);
+      advance(100);
+      dispatchTouch('touchstart', trigger, [second], [first, second]);
+      advance(1000);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      dispatchTouch('touchend', trigger, [first, second], []);
+    });
+
+    it('lets the long press decide while a finger is down: the browser’s own long-press menu opens nothing', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(380);
+      // Android Chrome fires contextmenu for a held finger on its own clock.
+      const native = new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 20,
+        clientY: 20,
+      });
+      trigger.dispatchEvent(native);
+      expect(native.defaultPrevented).toBe(true);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      advance(contextMenu.press.menuDisplayMs - 380);
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      press.up();
+    });
+
+    it('plays the click haptic at the commit where the platform vibrates, and none for an early lift', () => {
+      const vibrate = vi.fn(() => true);
+      Object.defineProperty(navigator, 'vibrate', {
+        value: vibrate,
+        configurable: true,
+      });
+      try {
+        const trigger = renderMenu();
+        const early = finger(trigger);
+        early.down();
+        advance(250);
+        early.up();
+        advance(500);
+        expect(vibrate).not.toHaveBeenCalled();
+
+        const held = finger(trigger);
+        held.down();
+        advance(contextMenu.press.commitMs - 1);
+        expect(vibrate).not.toHaveBeenCalled();
+        advance(1);
+        // At the commit, before the menu shows.
+        expect(vibrate).toHaveBeenCalledTimes(1);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        expect(vibrate).toHaveBeenCalledWith([
+          ...HAPTIC_VIBRATION_PATTERNS[contextMenu.commitHaptic].value,
+        ]);
+        held.up();
+      } finally {
+        // jsdom has no vibration API of its own.
+        delete (navigator as {vibrate?: unknown}).vibrate;
+      }
+    });
+
+    it('holds the page still while a menu a finger opened is up, and lets it go when the menu closes', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(contextMenu.press.commitMs);
+      // Lifted after the commit: the menu opens at the lift.
+      act(() => {
+        press.up();
+      });
+      expect(document.body.style.position).toBe('fixed');
+      act(() => {
+        fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+          key: 'Escape',
+        });
+      });
+      expect(document.body.style.position).toBe('');
+    });
+
+    it('leaves the page alone for a menu a right-click opened', () => {
+      const trigger = renderMenu();
+      fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20});
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      expect(document.body.style.position).toBe('');
+    });
+
+    it('passes touch events through to the consumer’s own handlers', () => {
+      const onTouchStart = vi.fn();
+      const onTouchEnd = vi.fn();
+      const trigger = renderMenu({onTouchStart, onTouchEnd});
+      const press = finger(trigger);
+      press.down();
+      press.up();
+      expect(onTouchStart).toHaveBeenCalledTimes(1);
+      expect(onTouchEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('makes the trigger a pressable surface of core’s one press machine, which starts and ends its growth', () => {
+      const trigger = renderMenu();
+      expect(trigger).toHaveAttribute('data-astryx-pressable');
+    });
+
+    it('keeps today’s menu with presentation="popover": a held finger opens it at 500 ms through today’s long press, with no growth and no scroll lock', () => {
+      const trigger = renderMenu({presentation: 'popover'});
+      const shows = () =>
+        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+      expect(trigger).not.toHaveAttribute('data-astryx-pressable');
+      const press = finger(trigger);
+      press.down();
+      advance(499);
+      expect(shows()).toBe(0);
+      advance(1);
+      expect(shows()).toBe(1);
+      // Today’s menu: the first row takes the focus, nothing grows, the page
+      // is not locked.
+      expect(trigger.style.getPropertyValue('scale')).toBe('');
+      expect(document.body.style.overflow).not.toBe('hidden');
+      press.up();
+      // The browser’s own long-press menu (Android Chrome) still opens it.
+      fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
+      expect(shows()).toBeGreaterThanOrEqual(1);
+    });
+
+    it('with presentation="popover", a drift past 10 px or a lift before 500 ms opens nothing (today’s long press)', () => {
+      const trigger = renderMenu({presentation: 'popover'});
+      const shows = () =>
+        vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+      let press = finger(trigger);
+      press.down();
+      advance(300);
+      press.up();
+      advance(400);
+      expect(shows()).toBe(0);
+      press = finger(trigger);
+      press.down();
+      press.moveTo(31, 20);
+      advance(600);
+      expect(shows()).toBe(0);
+      press.up();
+    });
+
+    it('opens nothing on touch when disabled', () => {
+      const trigger = renderMenu({isDisabled: true});
+      const press = finger(trigger);
+      press.down();
+      advance(1000);
+      expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      press.up();
+    });
+  },
+);
+
+describe('ContextMenu under a fine pointer: the touch model costs nothing', () => {
+  beforeEach(() => {
+    stubPointer(false);
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+        'Date',
+      ],
+    });
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('opens today’s menu for a finger held 500 ms (today’s long press), with no touch model: no growth, no scroll lock, the first row focused', () => {
+    // A fine pointer in this context, before any check.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const onTouchStart = vi.fn();
+    render(
+      <ContextMenu
+        items={[{label: 'Item 1'}]}
+        data-testid="ctx"
+        onTouchStart={onTouchStart}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('ctx');
+    expect(trigger).not.toHaveAttribute('data-astryx-pressable');
+    const press = finger(trigger);
+    press.down();
+    expect(onTouchStart).toHaveBeenCalledTimes(1);
+    advance(499);
+    expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+    advance(1);
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    expect(trigger.style.getPropertyValue('scale')).toBe('');
+    expect(document.body.style.overflow).not.toBe('hidden');
+    advance(20);
+    expect(
+      screen.getByRole('menuitem', {name: 'Item 1', hidden: true}),
+    ).toHaveFocus();
+    press.up();
+  });
+
+  it('does not hand the finger that opened the menu on to it: a slide onto a row and a lift pick nothing', () => {
+    const onClick = vi.fn();
+    render(
+      <ContextMenu items={[{label: 'Item 1', onClick}]} data-testid="ctx">
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('ctx');
+    const press = finger(trigger);
+    press.down();
+    advance(500);
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    const row = screen.getByRole('menuitem', {name: 'Item 1', hidden: true});
+    const box = row.getBoundingClientRect();
+    press.moveTo(box.left + 4, box.top + 4);
+    press.up();
+    advance(50);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('opens the cursor menu on a right-click, as before', () => {
+    render(
+      <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('ctx');
+    fireEvent.contextMenu(trigger, {clientX: 20, clientY: 20, detail: 1});
+    expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    advance(20);
+    expect(
+      screen.getByRole('menuitem', {name: 'Item 1', hidden: true}),
+    ).toHaveFocus();
+  });
+});
+
+describe('ContextMenu: the primary pointer alone picks a finger’s rules (spec:AST-094 FR13, FR33)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+        'Date',
+      ],
+    });
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('opens for the same held finger at 735 ms where the primary pointer is coarse, and at 500 ms where it is fine', () => {
+    const shows = () =>
+      vi.mocked(HTMLElement.prototype.showPopover).mock.calls.length;
+    const renderTrigger = () => {
+      const view = render(
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+          <div>Hold me</div>
+        </ContextMenu>,
+      );
+      return {trigger: screen.getByTestId('ctx'), unmount: view.unmount};
+    };
+    // Coarse: the touch model's timeline, no menu at 500 ms.
+    stubPointer(true);
+    const coarse = renderTrigger();
+    let press = finger(coarse.trigger);
+    press.down();
+    advance(600);
+    expect(shows()).toBe(0);
+    advance(contextMenu.press.menuDisplayMs - 600);
+    expect(shows()).toBe(1);
+    press.up();
+    coarse.unmount();
+    vi.mocked(HTMLElement.prototype.showPopover).mockClear();
+    // Fine: today's long press, the same finger opens at 500 ms.
+    stubPointer(false);
+    const fine = renderTrigger();
+    press = finger(fine.trigger);
+    press.down();
+    advance(499);
+    expect(shows()).toBe(0);
+    advance(1);
+    expect(shows()).toBe(1);
+    press.up();
   });
 });
 

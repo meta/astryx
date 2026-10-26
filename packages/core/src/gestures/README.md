@@ -459,6 +459,22 @@ is right. Behaviour reads
 from reads `useMotionPresentation()`: UIKit timings under a finger, theme
 tokens under a mouse.
 
+A component that, under a finger, presents a different surface or switches
+how an open surface follows input takes a `presentation` prop, and a
+caller's explicit value always wins over the touch default
+(`architecture:public-component-api` INV16). It resolves that prop with
+`usePresentation(presentation, {whenOmitted})` (`../utils/presentation.ts`;
+`readPresentation` at one moment): `surface` is the popover or the sheet;
+`touchModes` says whether its touch input modes apply (a finger, and not
+pinned to `'popover'`), the same on every touch device. An
+omitted value means the component's default, `whenOmitted: 'popover'` or
+`'touch'` (the popover surface with touch input modes), so it stays
+distinguishable from an explicit `'popover'`, which pins the fine surface
+and input modes on every device. A style that implements a touch surface or
+mode is applied with `touchModes`, not as a bare media key. Touch styling and
+touch-only behavior that a component's own record defines keep the touch
+presentation above.
+
 ## Known limits
 
 - **A scroll that begins on a recognizer waits for a busy main thread.** In

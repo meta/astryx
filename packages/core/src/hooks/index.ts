@@ -124,7 +124,11 @@ export type {
 } from './useInteractiveRole';
 
 export {useLongPress} from './useLongPress';
-export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
+export type {
+  LongPressStage,
+  UseLongPressOptions,
+  UseLongPressHandlers,
+} from './useLongPress';
 
 export {usePressFeedback} from './usePressFeedback';
 

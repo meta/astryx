@@ -589,3 +589,72 @@ export const InScrollContainer: Story = {
     </div>
   ),
 };
+
+const touchStyles = stylex.create({
+  card: {
+    width: '200px',
+    height: '120px',
+    display: 'grid',
+    placeItems: 'center',
+    borderRadius: '12px',
+    backgroundColor: '#e5e7eb',
+    color: '#374151',
+    userSelect: 'none',
+  },
+});
+
+export const TouchLongPress: Story = {
+  name: 'Touch / long press',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'On a touch screen (iOS or Android), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back. While the menu is up the page stays still, and the card returns to its size when the menu closes.',
+      },
+    },
+  },
+  render: () => (
+    <ContextMenu
+      data-testid="touch-context-menu"
+      label="Photo actions"
+      items={[
+        {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+        {label: 'Share', icon: ShareIcon, onClick: () => {}},
+        {label: 'Save to Files', icon: ArrowDownTrayIcon, onClick: () => {}},
+        {type: 'divider'},
+        {
+          label: 'Delete',
+          icon: TrashIcon,
+          variant: 'destructive',
+          onClick: () => {},
+        },
+      ]}>
+      <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+    </ContextMenu>
+  ),
+};
+
+export const TouchLongPressPopover: Story = {
+  name: 'Touch / long press, presentation="popover"',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth and no iOS timeline. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
+      },
+    },
+  },
+  render: () => (
+    <ContextMenu
+      data-testid="touch-context-menu"
+      label="Photo actions"
+      presentation="popover"
+      items={[
+        {label: 'Copy', icon: ClipboardIcon, onClick: () => {}},
+        {label: 'Share', icon: ShareIcon, onClick: () => {}},
+        {label: 'Save to Files', icon: ArrowDownTrayIcon, onClick: () => {}},
+      ]}>
+      <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
+    </ContextMenu>
+  ),
+};

@@ -2,7 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {renderHook, act} from '@testing-library/react';
-import {useLongPress} from './useLongPress';
+import {createLongPressDetector, useLongPress} from './useLongPress';
 
 // Minimal React.TouchEvent stand-in carrying only what the hook reads.
 function touchEvent(touches: {clientX: number; clientY: number}[]) {
@@ -148,5 +148,93 @@ describe('useLongPress', () => {
       vi.advanceTimersByTime(500);
     });
     expect(onLongPress).not.toHaveBeenCalled();
+  });
+});
+
+describe('useLongPress stages and clocks', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires a later stage of the same hold, at its time from the start', () => {
+    const onLongPress = vi.fn();
+    const onStage = vi.fn();
+    const {result} = renderHook(() =>
+      useLongPress({
+        onLongPress,
+        delayMs: 400,
+        stages: [{delayMs: 735, onStage}],
+      }),
+    );
+    act(() => {
+      result.current.start({x: 10, y: 20});
+    });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(onStage).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(334);
+    });
+    expect(onStage).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onStage).toHaveBeenCalledWith({x: 10, y: 20});
+  });
+
+  it('drops the later stages when the finger moves past the tolerance after the long press', () => {
+    const onStage = vi.fn();
+    const {result} = renderHook(() =>
+      useLongPress({
+        onLongPress: vi.fn(),
+        delayMs: 400,
+        moveCancelPx: 11.5,
+        stages: [{delayMs: 735, onStage}],
+      }),
+    );
+    act(() => {
+      result.current.start({x: 0, y: 0});
+      vi.advanceTimersByTime(500);
+    });
+    expect(result.current.moveTo({x: 11.5, y: 0})).toBe(true);
+    expect(result.current.moveTo({x: 0, y: 12})).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(onStage).not.toHaveBeenCalled();
+  });
+
+  it('counts the deadlines from the time it is given, on the clock it is given', () => {
+    let clock = 1000;
+    const timers: {deadline: number; callback: () => void}[] = [];
+    const fired: string[] = [];
+    const detector = createLongPressDetector(() => ({
+      delayMs: 400,
+      stages: [{delayMs: 735, onStage: () => fired.push(`stage@${clock}`)}],
+      onLongPress: () => fired.push(`press@${clock}`),
+      scheduler: {
+        now: () => clock,
+        setTimer: (deadline, callback) => {
+          const timer = {deadline, callback};
+          timers.push(timer);
+          return () => timers.splice(timers.indexOf(timer), 1);
+        },
+      },
+    }));
+    // The press started at 900 on that clock, before `now`.
+    detector.start({x: 0, y: 0}, 900);
+    expect(timers.map(timer => timer.deadline)).toEqual([1300]);
+    clock = 1300;
+    timers.shift()?.callback();
+    expect(timers.map(timer => timer.deadline)).toEqual([1635]);
+    clock = 1635;
+    timers.shift()?.callback();
+    expect(fired).toEqual(['press@1300', 'stage@1635']);
   });
 });

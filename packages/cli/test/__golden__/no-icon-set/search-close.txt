@@ -1,4 +1,4 @@
-Results for "close" (20 of 45)
+Results for "close" (20 of 46)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
