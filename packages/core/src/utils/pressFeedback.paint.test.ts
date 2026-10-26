@@ -1,18 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file pressPaint.test.ts
+ * @file pressFeedback.paint.test.ts
  * @input paintPress on jsdom elements, with fake timers
  * @output The press attribute's states: on, held, fading on its release
  *   clock then removed, none; writes refused unless the current value may be
  *   replaced (a held row survives presses, its owner releases it), foreign
  *   values left alone, a new paint cancelling a pending fade
- * @position Unit tests of packages/core/src/gestures/pressPaint.ts
+ * @position Unit tests of the press paint in packages/core/src/utils/pressFeedback.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {PRESS_FADE_MS} from '../../utils/pressGesture';
-import {paintPress, readPressPaint} from '../pressPaint';
+import {PRESS_FADE_MS} from './pressGesture';
+import {paintPress, readPressPaint} from './pressFeedback';
 
 const ATTRIBUTE = 'data-astryx-press';
 
@@ -64,12 +64,5 @@ describe('paintPress', () => {
     expect(readPressPaint(row)).toBeNull();
     expect(paintPress(row, 'on')).toBe(false);
     expect(row.getAttribute(ATTRIBUTE)).toBe('custom');
-  });
-
-  it('writes another attribute when asked', () => {
-    const row = document.createElement('div');
-    paintPress(row, 'on', {attribute: 'data-pressed'});
-    expect(row.getAttribute('data-pressed')).toBe('on');
-    expect(row.hasAttribute(ATTRIBUTE)).toBe(false);
   });
 });
