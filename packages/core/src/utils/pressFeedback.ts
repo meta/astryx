@@ -30,7 +30,7 @@
  *
  * A surface's hold does nothing, so it keeps the browser's long-press text
  * selection (`spec:AST-094` FR41); only an element whose hold does something
- * suppresses it, through the gesture host (gestures/selectionLock.ts).
+ * suppresses it, through the gesture host (utils/selectionLock.ts).
  *
  * Its one touch-only listener, `touchcancel`, is on only while the primary
  * pointer is coarse (coarsePointer.ts, `spec:AST-094` FR24).

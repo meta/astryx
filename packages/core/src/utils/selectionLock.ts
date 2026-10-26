@@ -6,11 +6,11 @@
  * @output Exports lockSelection: text selection and the touch callout off,
  *   inline and refcounted, until the returned release runs; and
  *   locksSelectionFor: which contacts take it
- * @position Shared by the gesture host (press consumers, and recognizers
- *   that set `preventsTextSelection`) and the document press controller
- *   (utils/pressFeedback.ts), so every press on a coarse pointer gets it
+ * @position Brought by the recognizers whose hold does something (a long
+ *   press, and a recognizer created with `selectionLock: lockSelection`); the
+ *   gesture host calls it and never imports it (`spec:AST-094` FR41)
  *
- * A UIKit control or cell never starts a selection under a held finger.
+ * A hold that does something never starts a selection under the finger.
  * WebKit's own stylesheet makes every input selectable
  * (`-webkit-user-select: text`), out of reach of an ancestor's lock: a
  * checkbox, a radio or a switch's input under the finger inside a locked
