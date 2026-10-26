@@ -21,6 +21,7 @@ import {
   PRESS_SCROLL_BRAKE_MS,
 } from '../../utils/pressGesture';
 import {scroll, springs, timing} from '.';
+import {UIKIT_GESTURES} from './gestures';
 
 // Modules in this folder that hold no table of their own: longPress.ts holds
 // only the long-press numbers, whose sources gestures.ts's entries carry.
@@ -275,6 +276,16 @@ function expectSourced(key: string, doc: string) {
 }
 
 describe('UIKit constants table: values', () => {
+  it('carries no stray-click guess: the click guard owns its window (M-G17)', () => {
+    // CLICK_GUARD_WINDOW_MS (utils/clickGuard.ts) bounds the stray click; the
+    // table's 1000 ms guess had no reader left once the guard replaced the
+    // host's swallower.
+    expect(Object.keys(UIKIT_GESTURES)).not.toContain('click');
+    expect(
+      Object.values(UIKIT_GESTURES).some(group => 'strayClickWindow' in group),
+    ).toBe(false);
+  });
+
   it('names each platform preset for its use, not its source', () => {
     // spec AST-094 FR4: a role is named for its use; the source stays in the
     // JSDoc (SwiftUI .smooth, UISpringTimingParameters(), Core Animation's
