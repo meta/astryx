@@ -60,6 +60,16 @@ export interface UseGestureRecognizerOptions {
  * );
  * ```
  */
+/**
+ * How many hooks are syncing a recognizer's `isEnabled` right now. That sync
+ * runs in an Effect, and the arena pass it starts can reach other
+ * recognizers (one that required the disabled one to fail recognizes in it),
+ * so while it runs no hook's listener calls its caller's callback
+ * (react-component-runtime INV2). Their later transitions report from the
+ * input events that cause them.
+ */
+let syncingDepth = 0;
+
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
   create: () => R,
@@ -68,9 +78,6 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
 ): R {
   const [recognizer] = useState(create);
   const onGestureRef = useRef(onGesture);
-  // True while an Effect drives the recognizer, so a transition it causes
-  // reaches no caller callback (react-component-runtime INV2, INV3).
-  const isSyncingRef = useRef(false);
   useIsomorphicLayoutEffect(() => {
     onGestureRef.current = onGesture;
   });
@@ -86,7 +93,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   useEffect(
     () =>
       recognizer.addListener(current => {
-        if (!isUnmountedRef.current && !isSyncingRef.current) {
+        if (!isUnmountedRef.current && syncingDepth === 0) {
           onGestureRef.current?.(current);
         }
       }),
@@ -104,11 +111,11 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   );
 
   useIsomorphicLayoutEffect(() => {
-    isSyncingRef.current = true;
+    syncingDepth += 1;
     try {
       recognizer.setEnabled(isEnabled);
     } finally {
-      isSyncingRef.current = false;
+      syncingDepth -= 1;
     }
   }, [recognizer, isEnabled]);
 
