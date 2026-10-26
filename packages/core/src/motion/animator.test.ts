@@ -1446,6 +1446,48 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('y')).toBe(stopped.y);
   });
 
+  it('a carried move keeps its own call: stopping or setting it settles that call, not the one carrying it', async () => {
+    for (const interrupt of ['set', 'stop'] as const) {
+      const {animator} = reduced();
+      const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+      await advance(fade / 4);
+      const b = animator.animate({y: 50}, {spring: springs.navigationPush});
+      if (interrupt === 'set') {
+        animator.set({x: 40});
+      } else {
+        a.stop();
+      }
+      await advance(fade * 2 + END_HOLD_MS + 1);
+      await expect(a.finished).resolves.toBe(false);
+      await expect(b.finished).resolves.toBe(true);
+      expect(animator.get('x')).toBe(interrupt === 'set' ? 40 : 0);
+      expect(animator.get('y')).toBe(50);
+    }
+  });
+
+  it("an earlier handle's stop leaves a later call's move on the same property alone", async () => {
+    const {animator} = reduced();
+    const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const b = animator.animate({x: 200}, {spring: springs.navigationPush});
+    a.stop();
+    await advance(fade * 2 + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(200);
+    await expect(a.finished).resolves.toBe(false);
+    await expect(b.finished).resolves.toBe(true);
+  });
+
+  it('a retargeted call settles interrupted; its retarget lands', async () => {
+    const {animator} = reduced();
+    const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const b = a.retarget({x: 150});
+    await advance(fade * 2 + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(150);
+    await expect(a.finished).resolves.toBe(false);
+    await expect(b.finished).resolves.toBe(true);
+  });
+
   it("a handle's stop mid-dip freezes its waiting travel where it is, as animator.stop() does (AST-094 FR6)", async () => {
     const {animator} = reduced();
     const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
