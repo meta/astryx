@@ -1248,6 +1248,25 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBeCloseTo(1, 9);
   });
 
+  it("a second call's fade re-times the first call's pending jump to its own invisible moment", async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const start = clock;
+    // x still waits for the first dip's bottom; y starts a new dip now.
+    animator.animate({y: 50}, {spring: springs.navigationPush});
+    // Neither moves while the element shows: both land at the new dip's
+    // bottom.
+    await advance(fade / 2 - 2);
+    expect(clock - start).toBe(fade / 2 - 2);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('y')).toBe(0);
+    await advance(4);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('y')).toBe(50);
+    expect(animator.get('opacity')).toBeLessThan(0.1);
+  });
+
   it('a stop during a dip finishes the fade instead of freezing it', async () => {
     const {animator} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
@@ -1265,6 +1284,26 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     animator.stop();
     expect(element.style.opacity).toBe('');
     expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a call that does not own opacity keeps a running borrowed dip handing it back', async () => {
+    // One that moves nothing.
+    const still = reduced();
+    stylesheet = {opacity: '0.6'};
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + END_HOLD_MS + 1);
+    expect(still.element.style.opacity).toBe('');
+
+    // One that springs after Reduce Motion turned off mid-dip.
+    const changed = setup({reduced: true, coarse: true});
+    changed.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    stubMedia(false, true);
+    changed.animator.animate({y: 20}, {spring: springs.navigationPush});
+    await advance(2000);
+    expect(changed.element.style.opacity).toBe('');
   });
 
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
