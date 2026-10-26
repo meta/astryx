@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme} from './defineTheme';
+import {defineTheme, generateThemeRules} from './defineTheme';
 import {
   resolveThemeToken,
   resolveThemeTokens,
@@ -329,6 +329,41 @@ describe('focus outline tokens', () => {
     expect(tokens['--focus-outline-color']).toBe('#00FF00');
     expect(tokens['--focus-outline-width']).toBe('4px');
     expect(tokens['--focus-outline-offset']).toBe('0px');
+  });
+});
+
+describe('resolveThemeTokens and derived status roles', () => {
+  it('resolves an unset status role to the value the theme CSS derives (INV17)', () => {
+    const theme = defineTheme({
+      name: 'derived-status',
+      tokens: {'--color-success': '#3FB950'},
+    });
+    const css = generateThemeRules(theme).join('\n');
+    const emitted =
+      /--color-text-success: light-dark\((#[0-9A-F]{6}), (#[0-9A-F]{6})\)/.exec(
+        css,
+      );
+    expect(emitted).not.toBeNull();
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'light'}),
+    ).toBe(emitted![1]);
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'dark'}),
+    ).toBe(emitted![2]);
+    // Icon and border follow the derived text role.
+    expect(
+      resolveThemeToken(theme, '--color-icon-success', {mode: 'light'}),
+    ).toBe(emitted![1]);
+  });
+
+  it('keeps a status role the theme sets', () => {
+    const theme = defineTheme({
+      name: 'set-status',
+      tokens: {'--color-success': '#3FB950', '--color-text-success': '#123456'},
+    });
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'light'}),
+    ).toBe('#123456');
   });
 });
 
