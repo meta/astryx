@@ -250,11 +250,22 @@ export function usePressTracker(
 
   // Syncs the host's listeners with the tracker's enabled state, which can
   // change with any render: the host listens only while an enabled control
-  // is attached (spec:AST-094 FR24).
+  // is attached (spec:AST-094 FR24). A control disabled under a finger ends
+  // that press here, inside the release guard: a disabled control tracks no
+  // touch, and this Effect calls back no caller, whether the host stops
+  // listening or another control keeps it listening.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
-    if (element != null) {
-      getGestureHost(element.ownerDocument).update(element);
+    isReleasingRef.current = true;
+    try {
+      if (tracker.isTracking && !(optionsRef.current.isEnabled?.() ?? true)) {
+        tracker.dispose();
+      }
+      if (element != null) {
+        getGestureHost(element.ownerDocument).update(element);
+      }
+    } finally {
+      isReleasingRef.current = false;
     }
   });
 
