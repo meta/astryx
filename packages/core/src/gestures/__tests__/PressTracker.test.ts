@@ -39,6 +39,28 @@ describe('PressTracker', () => {
     vi.useRealTimers();
   });
 
+  it('a keepsTouch tracker keeps only the touch whose press it delivered: a quick tap leaves the next touch free until its own press (spec:AST-094 FR19)', () => {
+    const tracker = new PressTracker({
+      getBounds: () => BOUNDS,
+      keepsTouch: true,
+      highlightDelay: 'always',
+    });
+    const h = createHarness();
+    // A tap quicker than the delay: the press shows at the lift, for a flash.
+    h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    expect(tracker.keepsTouch?.()).toBe(false);
+    h.finger(1).up(DELAY / 2);
+    expect(tracker.keepsTouch?.()).toBe(false);
+    // The next touch is not kept from its first move: its press waits for
+    // the delay, so a scroll that starts on the control is the browser's.
+    h.finger(2).down(150, 120, DELAY, {recognizers: [], consumer: tracker});
+    expect(tracker.keepsTouch?.()).toBe(false);
+    vi.advanceTimersByTime(DELAY);
+    expect(tracker.keepsTouch?.()).toBe(true);
+    h.finger(2).up(DELAY * 3);
+    expect(tracker.keepsTouch?.()).toBe(false);
+  });
+
   it('highlights in the same frame outside a scroller and acts on touch up inside', () => {
     const {events, highlights, tracker, h} = setup();
     h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
