@@ -195,6 +195,63 @@ test('a spring that ends inside the block keeps showing its end state', async ({
   }
 });
 
+test('under Reduce Motion, a dip a busy main thread lands late still ends within its 200 ms cross-fade', async ({
+  page,
+}) => {
+  // design:reduced-motion DR2 on a touch screen: the move dips (fades out,
+  // lands while transparent, fades back in) in 200 ms or less, opacity only.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await open(page);
+  const read = await page.evaluate(async travel => {
+    const box = document.getElementById('box') as HTMLElement;
+    const handle = window.animator.animate(
+      {x: travel},
+      {spring: Motion.springs.navigationPush},
+    );
+    const start = await handle.started;
+    // The main thread is busy from 60 to 180 ms into the dip, so the task
+    // that lands it (due at 100 ms) runs 80 ms late.
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 60 - performance.now())),
+    );
+    while (performance.now() < start + 180) {
+      // the main thread is busy
+    }
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 230 - performance.now())),
+    );
+    const style = getComputedStyle(box);
+    return {
+      at: performance.now() - start,
+      opacity: Number(style.opacity),
+      translate: style.translate,
+      animated: box
+        .getAnimations()
+        .flatMap(animation =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .flatMap(frame =>
+              Object.keys(frame).filter(
+                key =>
+                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                    key,
+                  ),
+              ),
+            ),
+        ),
+    };
+  }, TRAVEL);
+  test.info().annotations.push({
+    type: '30 ms after the cross-fade was due to end',
+    description: JSON.stringify(read),
+  });
+  // Landed, and fully back in by then: the late landing did not stretch it.
+  expect(read.translate).toBe(`${TRAVEL}px`);
+  expect(read.opacity).toBeCloseTo(1, 2);
+  // Opacity only: the travel is never animated.
+  expect(read.animated.every(key => key === 'opacity')).toBe(true);
+});
+
 test('a spring started right before a block plays in full after it', async ({
   page,
   browserName,
