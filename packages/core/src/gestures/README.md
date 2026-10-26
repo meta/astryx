@@ -226,16 +226,16 @@ warning, so two writers never fight over the paint. Pass another
   installs it and styles every element; turning fine cancels every touch in
   flight and removes it all. A development warning names the first attach
   under a fine pointer: attach touch work under a touch presentation. The
-  carve-out is what reads each event's pointer itself, attached with
+  one carve-out is a recognizer or press tracker that reads each event's
+  pointer itself, as `spec:AST-057`'s row swipe does, or a press tracker that
+  paints press feedback (an FR19 exception for press feedback only, pending
+  in `spec:AST-094`'s amendment): attached with
   `perEventPointer: true` (an option of `attach`, `attachConsumer`,
-  `useGestureRecognizer` and `usePressTracker`): it gets the host's
+  `useGestureRecognizer` and `usePressTracker`), it gets the host's
   listeners, its deliveries and its own element's style on any pointer,
-  with no warning, while everything else beside it stays inactive. A
-  recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
-  gets press feedback only, the exception `spec:AST-094` FR19 names in
-  cixzhang's amendment: a finger's press is delivered and painted (a
-  touchscreen laptop, an iPad with a trackpad), but it never keeps its
-  touch from the browser, which still pans.
+  with no warning, while everything else beside it stays inactive. There
+  such a press tracker's press never keeps its touch from the browser,
+  which still pans.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
