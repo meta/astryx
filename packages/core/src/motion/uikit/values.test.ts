@@ -2,15 +2,20 @@
 
 /**
  * @file values.test.ts
- * @input vitest, the UIKit constants table and the motion math
+ * @input vitest, the UIKit constants table, the motion math, and the press
+ *   overlay's release rule as StyleX's dev runtime injects it
  * @output Checks the table's values through the math that plays them: every
  *   spring is valid and settles; the alert spring is UIKit's legacy
  *   derivation; a sheet's detent and presentation springs render alike;
- *   scroll-to-top and the rubber band reproduce what UIKit was measured doing
+ *   scroll-to-top and the rubber band reproduce what UIKit was measured doing;
+ *   the press release curve is the press model's
  * @position Testing; the source rules are uikit.test.ts
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {describe, expect, it} from 'vitest';
+import {rulesDeclaredFor} from '../../__tests__/pressState';
+import {interactionOverlayStyles} from '../../utils/interactionOverlay.stylex';
 import {solveDecay} from '../decay';
 import {rubberBand} from '../rubberBand';
 import {
@@ -21,6 +26,7 @@ import {
   type SpringDescription,
 } from '../spring';
 import {scroll, springs} from '.';
+import {press} from './timing';
 
 describe('UIKit constants table through the motion math', () => {
   const springEntries: [string, SpringDescription][] = [
@@ -89,5 +95,27 @@ describe('UIKit constants table through the motion math', () => {
         ),
       ).toBeLessThan(0.5);
     }
+  });
+
+  it('the press release curve is the press model\u2019s RELEASE_EASE', () => {
+    // The table records the curve the touch press model ships with; this pins
+    // the two together so neither drifts alone. It reads the curve the
+    // overlay's fading arm ships (the rule StyleX injects), so it holds
+    // however the stylesheet spells the value.
+    const element = document.createElement('div');
+    element.className =
+      stylex.props(interactionOverlayStyles.backgroundColor).className ?? '';
+    const curves = rulesDeclaredFor(element)
+      .filter(rule =>
+        rule
+          .slice(0, rule.indexOf('{'))
+          .includes('[data-astryx-press="fading"]'),
+      )
+      .flatMap(rule => {
+        const match =
+          /animation-timing-function:\s*cubic-bezier\(([^)]*)\)/.exec(rule);
+        return match == null ? [] : [match[1].split(',').map(Number)];
+      });
+    expect(curves).toEqual([[...press.highlightOutCurve]]);
   });
 });

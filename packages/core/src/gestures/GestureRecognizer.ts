@@ -70,9 +70,10 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * the host calls it and never imports it, so a component without such a
    * hold does not bundle it. Content under a sheet's or a pager's pan stays
    * selectable, so there is none by default; a mouse keeps desktop selection
-   * either way. A long press always brings its own.
+   * either way. A long press brings its own when it has a hold (a
+   * `minimumPressDuration` above 0); `null` brings none.
    */
-  selectionLock?: SelectionLock;
+  selectionLock?: SelectionLock | null;
   /**
    * Hold the view's touch-ended (and the browser's click) while this
    * recognizer may still recognize. @default true
@@ -87,7 +88,8 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * recognizes. `false` makes a watcher (a tab bar that minimizes while the
    * page scrolls): it never claims, so it gets only passive listeners and
    * never delays a scroll; it prevents no other recognizer and none prevents
-   * it; and it keeps tracking a touch the browser takes for a scroll,
+   * it (`spec:AST-094` FR15); it cancels no press or click under it; and it
+   * keeps tracking a touch the browser takes for a scroll,
    * reporting through the native scroll and ending at the lift.
    * @default true
    */
@@ -425,9 +427,9 @@ export abstract class GestureRecognizer {
 
   /**
    * The browser took these touches for its own pan or zoom (their pointer
-   * stream is gone). Return true to keep tracking them, as a pan that takes
-   * the rest of a scroll over at its edge does; by default they are treated
-   * as cancelled.
+   * stream is gone). Return true to keep observing them; by default they are
+   * treated as cancelled. An observer never claims them: a drag the browser
+   * took stays the browser's (FR14).
    */
   protected touchesTakenByBrowser(
     touches: ReadonlyArray<GestureTouch>,
@@ -609,12 +611,19 @@ export abstract class GestureRecognizer {
     }
   }
 
+  /** @internal The host's hook: listeners follow whether anything is enabled. */
+  onEnabledChange: (() => void) | null = null;
+
   /**
    * UIKit's `isEnabled` setter: turning a recognizer off mid-gesture cancels
    * the gesture (an active one) or fails it (a possible one).
    */
   setEnabled(value: boolean): void {
+    const changed = this.isEnabled !== value;
     this.isEnabled = value;
+    if (changed) {
+      this.onEnabledChange?.();
+    }
     if (!value && (this.state !== 'possible' || this.isInvolved())) {
       this.cancel();
     }

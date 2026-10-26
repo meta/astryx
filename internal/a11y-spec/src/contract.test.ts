@@ -219,7 +219,7 @@ describe('definePattern', () => {
       ['docs/families/probes.md'],
       // Not public: a reviewer of this repository cannot open it, and it must
       // never appear in it.
-      ['https://www.internalfb.com/code/astryx/docs/families/probes.md'],
+      ['https://code.example.internal/astryx/docs/families/probes.md'],
       ['http://github.com/facebook/astryx/blob/' + PIN + '/docs/x.md'],
       // Every one of these moves out from under the quote.
       ['https://github.com/facebook/astryx/blob/main/docs/x.md'],

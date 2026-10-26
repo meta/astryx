@@ -22,6 +22,15 @@
 
 import type {CDPSession, Page} from '@playwright/test';
 
+/** Trace events that run page script: a listener, a timer, a frame callback. */
+const PAGE_SCRIPT_EVENTS = new Set([
+  'EventDispatch',
+  'FunctionCall',
+  'TimerFire',
+  'FireAnimationFrame',
+  'FireIdleCallback',
+]);
+
 /** Main-thread trace events that are rendering work, by their trace names. */
 export const RENDERING_EVENTS = [
   'UpdateLayoutTree', // style recalculation
@@ -44,8 +53,23 @@ export interface RenderingTrace {
   readonly prePaint: number;
   /** Window length, ms. */
   readonly durationMs: number;
-  /** Main-thread `RunTask`s longer than 50 ms inside the window (long tasks), epoch ms. */
+  /**
+   * The page's own main-thread tasks longer than 50 ms inside the window (long
+   * tasks), epoch ms. A task that ran a DevTools command (a `page.evaluate`)
+   * is one only if page script ran inside it (an event listener, a timer, a
+   * frame callback it set off); otherwise it is in `devtoolsTasks`.
+   */
   readonly longTasks: readonly {
+    readonly start: number;
+    readonly durationMs: number;
+  }[];
+  /**
+   * Main-thread tasks longer than 50 ms inside the window that ran a DevTools
+   * command and no page script, epoch ms: a harness read inside the body
+   * (`waitForAnimation` describing every animation's keyframes) or
+   * `blockMainThread(page, ms)` without `during`.
+   */
+  readonly devtoolsTasks: readonly {
     readonly start: number;
     readonly durationMs: number;
   }[];
@@ -84,7 +108,8 @@ interface TraceEvent {
 /**
  * Traces the page while `body` runs and counts the rendering work its main
  * thread did between a start mark (placed just before `body`) and an end mark
- * (just after).
+ * (just after). The harness's animation recorder and `waitForRest` stand down
+ * meanwhile, so a body may wait with either and add no frame of its own.
  */
 export async function traceRendering(
   page: Page,
@@ -172,9 +197,34 @@ export async function traceRendering(
       counted.push({name: e.name, t: toEpochMs(e.ts)});
     }
   }
-  const longTasks = events
-    .filter(e => onMain(e) && e.name === 'RunTask' && (e.dur ?? 0) > 50_000)
-    .map(e => ({start: toEpochMs(e.ts), durationMs: (e.dur ?? 0) / 1000}));
+  // A task that ran a DevTools command received it over the DevTools
+  // session's pipe; page script it set off shows as its listener, timer or
+  // frame callback.
+  const main = events.filter(e => onMain(e) && e.ph !== 'E');
+  const longTasks: {start: number; durationMs: number}[] = [];
+  const devtoolsTasks: {start: number; durationMs: number}[] = [];
+  for (const task of main) {
+    if (task.name !== 'RunTask' || (task.dur ?? 0) <= 50_000) {
+      continue;
+    }
+    const end = task.ts + (task.dur ?? 0);
+    const inside = main.filter(
+      e => e !== task && e.ts >= task.ts && e.ts <= end,
+    );
+    const devtools = inside.some(
+      e =>
+        e.name === 'Receive mojo message' &&
+        (
+          e.args?.chrome_mojo_event_info as
+            {mojo_interface_tag?: unknown} | undefined
+        )?.mojo_interface_tag === 'blink.mojom.DevToolsSession',
+    );
+    const pageScript = inside.some(e => PAGE_SCRIPT_EVENTS.has(e.name));
+    (devtools && !pageScript ? devtoolsTasks : longTasks).push({
+      start: toEpochMs(task.ts),
+      durationMs: (task.dur ?? 0) / 1000,
+    });
+  }
   return {
     counts,
     layout: counts.Layout ?? 0,
@@ -183,8 +233,66 @@ export async function traceRendering(
     prePaint: counts.PrePaint ?? 0,
     durationMs: (end.ts - start.ts) / 1000,
     longTasks,
+    devtoolsTasks,
     events: counted,
     window: {from: fromEpoch, to: toEpoch},
+  };
+}
+
+/**
+ * Records when the compositor presents each frame, for `busyWindowProof`'s
+ * `presented`: a Chromium trace of `Display::FrameDisplayed`, on the page
+ * clock. Start it with the screencast, before the block, and stop it after.
+ * Engines without a CDP trace (WebKit) resolve `stop()` to [], and the
+ * verdict then judges the screencast alone. It runs its own trace, so not
+ * inside `traceRendering`.
+ */
+export async function startCompositorTrace(
+  page: Page,
+): Promise<{stop(): Promise<number[]>}> {
+  let cdp: CDPSession;
+  try {
+    cdp = await page.context().newCDPSession(page);
+  } catch {
+    return {stop: async () => []};
+  }
+  const events: TraceEvent[] = [];
+  cdp.on('Tracing.dataCollected', ({value}) => {
+    events.push(...(value as unknown as TraceEvent[]));
+  });
+  const complete = new Promise<void>(resolve =>
+    cdp.once('Tracing.tracingComplete', () => resolve()),
+  );
+  await cdp.send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      includedCategories: [
+        'disabled-by-default-display.framedisplayed',
+        'blink.user_timing',
+      ],
+      excludedCategories: ['*'],
+    },
+  });
+  const tag = `harness-compositor-${Math.random().toString(36).slice(2, 8)}`;
+  const epoch = await page.evaluate(
+    n => performance.timeOrigin + performance.mark(n).startTime,
+    tag,
+  );
+  return {
+    async stop() {
+      await cdp.send('Tracing.end');
+      await complete;
+      await cdp.detach().catch(() => {});
+      const mark = events.find(e => e.name === tag);
+      if (mark == null) {
+        throw new Error('startCompositorTrace: the clock mark was not traced');
+      }
+      // Trace time (µs, monotonic) -> epoch ms, anchored on the mark.
+      return events
+        .filter(e => e.name === 'Display::FrameDisplayed')
+        .map(e => epoch + (e.ts - mark.ts) / 1000)
+        .sort((a, b) => a - b);
+    },
   };
 }
 
@@ -204,8 +312,8 @@ const LONG_TASK_SCRIPT = `(() => {
  * Chromium), through the Long Tasks API. That sees the tasks of the page's own
  * event loop: a timer, an event handler, `blockMainThread(page, ms, {during})`.
  * A DevTools `page.evaluate`, such as `blockMainThread(page, ms)` without
- * `during`, is not one of them and is never recorded here; the trace's
- * `longTasks` (`traceRendering`) counts every main-thread task over 50 ms.
+ * `during`, is not one of them and is never recorded here; `traceRendering`
+ * reports it in `devtoolsTasks`, apart from the page's `longTasks`.
  */
 export async function installLongTaskLog(page: Page): Promise<void> {
   await page.addInitScript(LONG_TASK_SCRIPT);

@@ -4,9 +4,10 @@
  * @file Banner.test.tsx
  * @input Uses vitest, @testing-library/react, Banner component
  * @output Unit tests for Banner component behavior, including default and
- *   explicit live-region roles, the 'banner-frame' theme target on the outer
- *   elevation/radius painter, and the 'banner-icon' theme target on the status
- *   icon glyph (#4166)
+ *   explicit live-region roles, augmented-status color fallback, scoped status
+ *   control context that does not recolor tooltips, the 'banner-frame' theme
+ *   target on the outer elevation/radius painter, and the 'banner-icon' theme
+ *   target on the status icon glyph (#4166)
  * @position Testing; validates Banner.tsx implementation
  *
  * SYNC: When modified, update this header
@@ -15,10 +16,11 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {Banner} from './Banner';
+import {Banner, type BannerStatus} from './Banner';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {registerIcons, resetIcons} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Banner', () => {
   afterEach(() => {
@@ -101,6 +103,71 @@ describe('Banner', () => {
     expect(screen.queryByText('This is a description')).not.toBeInTheDocument();
   });
 
+  it('keeps base title and description colors for an augmented status', () => {
+    const augmentedStatus = 'neutral' as unknown as BannerStatus;
+    const {rerender} = render(
+      <Banner
+        status={augmentedStatus}
+        title="Neutral title"
+        description="Neutral description"
+      />,
+    );
+
+    const customTitleClass = screen.getByText('Neutral title').className;
+    const customDescriptionClass = screen.getByText(
+      'Neutral description',
+    ).className;
+
+    rerender(
+      <Banner
+        status="info"
+        title="Info title"
+        description="Info description"
+      />,
+    );
+
+    expect(screen.getByText('Info title').className).not.toBe(customTitleClass);
+    expect(screen.getByText('Info description').className).not.toBe(
+      customDescriptionClass,
+    );
+  });
+
+  it.each([
+    ['info', 'var(--color-on-info-muted)'],
+    ['success', 'var(--color-on-success-muted)'],
+    ['warning', 'var(--color-on-warning-muted)'],
+    ['error', 'var(--color-on-error-muted)'],
+  ] as const)(
+    'routes %s built-in controls to the matching on-muted role without recoloring tooltips',
+    (status, expectedRole) => {
+      render(
+        <Banner
+          status={status}
+          title={`${status} banner`}
+          collapsible={{defaultIsOpen: true}}
+          isDismissable>
+          <div>Details</div>
+        </Banner>,
+      );
+
+      for (const button of [
+        screen.getByRole('button', {name: 'Collapse'}),
+        screen.getByRole('button', {name: `Dismiss ${status} banner`}),
+      ]) {
+        expect(
+          getComputedStyle(button).getPropertyValue('--color-text-primary'),
+        ).toBe(expectedRole);
+        const tooltip = document.getElementById(
+          button.getAttribute('aria-describedby')!,
+        );
+        expect(tooltip).not.toBeNull();
+        expect(
+          getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
+        ).not.toBe(expectedRole);
+      }
+    },
+  );
+
   it('renders dismiss button when isDismissable', () => {
     render(<Banner status="info" title="Dismissable" isDismissable />);
     expect(
@@ -162,10 +229,10 @@ describe('Banner', () => {
     expect(screen.queryByRole('button', {name: /^Dismiss/})).toBeNull();
   });
 
-  it('renders endContent', () => {
+  it('leaves consumer endContent outside the built-in status control context', () => {
     render(
       <Banner
-        status="info"
+        status="success"
         title="With Action"
         endContent={
           <button type="button" data-testid="end-btn">
@@ -174,7 +241,11 @@ describe('Banner', () => {
         }
       />,
     );
-    expect(screen.getByTestId('end-btn')).toBeInTheDocument();
+    const action = screen.getByTestId('end-btn');
+    expect(action).toBeInTheDocument();
+    expect(action.className).not.toContain(
+      'Banner__statusControlStyles.success',
+    );
   });
 
   it('renders card container by default', () => {
@@ -462,7 +533,7 @@ describe('Banner', () => {
     const target = container.querySelector(
       '.astryx-banner-icon[data-status="info"]',
     );
-    expect(target).toHaveAttribute('data-color', 'accent');
+    expect(target).toHaveAttribute('data-color', 'inherit');
   });
 
   it("keeps the 'banner-icon' target on the wrapper for a custom icon node", () => {
@@ -773,5 +844,17 @@ describe('Banner', () => {
       });
       expect(button).toHaveAccessibleDescription('Schließen');
     });
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('Banner forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<Banner status="error" title="Upload failed" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

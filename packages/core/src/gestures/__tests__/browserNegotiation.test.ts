@@ -53,18 +53,6 @@ describe('deriveTouchAction', () => {
     expect(
       deriveTouchAction([new SwipeGestureRecognizer({direction: 'left'})]),
     ).toBe('pan-y pinch-zoom');
-    expect(
-      deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading', 'trailing']}),
-      ]),
-    ).toBe('pan-y pinch-zoom');
-    // From one edge the pan goes one way, inward: the browser keeps every
-    // touch behavior and the pan claims as it begins (spec:AST-094 FR18).
-    expect(
-      deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
-      ]),
-    ).toBeNull();
   });
 
   it('leaves the browser everything for a one-way pan, or one that shares native scrolling', () => {
@@ -72,6 +60,12 @@ describe('deriveTouchAction', () => {
     // by cancelling touchmove when it begins.
     expect(
       deriveTouchAction([new PanGestureRecognizer({direction: 'down'})]),
+    ).toBeNull();
+    // A screen-edge pan from one edge goes one way, inward (spec:AST-094 FR18).
+    expect(
+      deriveTouchAction([
+        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
+      ]),
     ).toBeNull();
     expect(
       deriveTouchAction([
@@ -110,14 +104,10 @@ describe('deriveTouchAction', () => {
     ).toBe('pan-y pinch-zoom');
   });
 
-  it('turns off the callout and text selection under a long press', () => {
+  it('attaches the touch-action alone, never a selection lock (spec:AST-094 FR41)', () => {
+    // A mouse and a keyboard keep selecting (spec:AST-017 FR59); the lock
+    // for one held press is the long press's own selectionLock.
     expect(gestureHostStyle([new LongPressGestureRecognizer()])).toEqual({
-      touchAction: 'manipulation',
-      WebkitTouchCallout: 'none',
-      WebkitUserSelect: 'none',
-      userSelect: 'none',
-    });
-    expect(gestureHostStyle([new TapGestureRecognizer()])).toEqual({
       touchAction: 'manipulation',
     });
   });
@@ -206,11 +196,44 @@ describe('createNativeScrollProbe', () => {
     expect(probe.canScroll(0, 20)).toBe(false);
     expect(probe.canScroll(0, -20)).toBe(true);
     expect(probe.isInsideScroller).toBe(true);
-    expect(probe.distanceToEdge?.(0, -20)).toBe(600);
     scroller(list, {scrollTop: 600});
     expect(probe.canScroll(0, -20)).toBe(false);
     expect(probe.canScroll(0, 20)).toBe(true);
-    expect(probe.distanceToEdge?.(0, 20)).toBe(600);
+  });
+
+  it('finds a scroller in a shadow tree around the slot a light-DOM row is slotted into', () => {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.innerHTML =
+      '<div id="host"><button id="row">Row</button></div>';
+    const host = document.getElementById('host') as HTMLElement;
+    const row = document.getElementById('row') as HTMLElement;
+    const shadow = host.attachShadow({mode: 'open'});
+    shadow.innerHTML =
+      '<div id="list" style="overflow-y: auto"><slot></slot></div>';
+    const list = shadow.getElementById('list') as HTMLElement;
+    scroller(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+    const probe = createNativeScrollProbe(row);
+    expect(probe.isInsideScroller).toBe(true);
+    expect(probe.canScroll(0, -20)).toBe(true);
+  });
+
+  it('puts a control in a fixed bar outside the page it floats over (spec:AST-094 FR11)', () => {
+    document.body.innerHTML =
+      '<div id="bar" style="position: fixed"><button id="row">Row</button></div>';
+    const root = document.scrollingElement ?? document.documentElement;
+    scroller(root as HTMLElement, {
+      scrollTop: 0,
+      scrollHeight: 3000,
+      clientHeight: 800,
+    });
+    const probe = createNativeScrollProbe(document.getElementById('row'));
+    // The page still scrolls under a drag that starts on the bar, but the bar
+    // is not in a scroll view, so its control gets no content-touch delay.
+    expect(probe.isInsideScroller).toBe(false);
+    expect(probe.canScroll(0, -20)).toBe(true);
+    for (const key of ['scrollTop', 'scrollHeight', 'clientHeight']) {
+      Reflect.deleteProperty(root, key);
+    }
   });
 
   it('honors touch-action between the touch and the scroller', () => {

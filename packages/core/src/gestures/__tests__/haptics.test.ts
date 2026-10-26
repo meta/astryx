@@ -99,32 +99,79 @@ describe('attachTapHaptic', () => {
     expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
   });
 
-  it('hands focus back from the switch, so a later key never toggles it', () => {
-    document.body.innerHTML = '<input id="field" /><label id="tap">Tap</label>';
+  it('never leaves the focus on its hidden switch', () => {
+    document.body.innerHTML =
+      '<button id="before">Before</button><label id="tap">Tap</label>';
+    const before = document.getElementById('before') as HTMLButtonElement;
     const label = document.getElementById('tap') as HTMLLabelElement;
-    const field = document.getElementById('field') as HTMLInputElement;
     const release = attachTapHaptic(label);
-    const sw = label.querySelector(
+    const sw = label.querySelector<HTMLInputElement>(
       `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
-    ) as HTMLInputElement;
-    field.focus();
-    // The label's activation focuses its control.
-    sw.focus();
-    expect(document.activeElement).toBe(field);
-    field.blur();
+    )!;
+    before.focus();
+    // Chromium focuses a label's control on its activation.
     sw.focus();
     expect(document.activeElement).not.toBe(sw);
+    expect(document.activeElement).toBe(before);
     release();
   });
 
-  it('gives no switch to a label that already labels another control', () => {
+  it('keeps a label\u2019s own control: the tap plays and the control still toggles', () => {
     document.body.innerHTML =
-      '<label id="tap"><button id="go" type="button">Go</button></label>';
+      '<label id="tap"><input id="own" type="checkbox"> Remember me</label>';
     const label = document.getElementById('tap') as HTMLLabelElement;
+    const own = document.getElementById('own') as HTMLInputElement;
+    const onOwnClick = vi.fn();
+    own.addEventListener('click', onOwnClick);
     const release = attachTapHaptic(label);
-    expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
-    expect(label.control).toBe(document.getElementById('go'));
+    const sw = label.querySelector<HTMLInputElement>(
+      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
+    )!;
+    // The switch takes the label's activation, so a tap plays.
+    expect(label.control).toBe(sw);
+    // The checkbox keeps its name: the label's text, through aria-labelledby.
+    expect(own).toHaveAccessibleName('Remember me');
+    sw.click();
+    expect(sw.checked).toBe(true);
+    expect(own.checked).toBe(true);
+    expect(onOwnClick).toHaveBeenCalledTimes(1);
     release();
+    expect(label.control).toBe(own);
+    expect(own).not.toHaveAttribute('aria-labelledby');
+  });
+
+  it('gives a disabled control no feedback and leaves no focus on the switch (FR23)', () => {
+    document.body.innerHTML =
+      '<button id="before">Before</button>' +
+      '<label id="tap"><input id="own" type="checkbox" disabled> Remember me</label>';
+    const before = document.getElementById('before') as HTMLButtonElement;
+    const label = document.getElementById('tap') as HTMLLabelElement;
+    const own = document.getElementById('own') as HTMLInputElement;
+    const release = attachTapHaptic(label);
+    const sw = label.querySelector<HTMLInputElement>(
+      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
+    )!;
+    before.focus();
+    sw.focus();
+    sw.click();
+    // The switch did not toggle (nothing plays), the control did not change,
+    // and focus is not stranded on the hidden switch.
+    expect(sw.checked).toBe(false);
+    expect(own.checked).toBe(false);
+    expect(document.activeElement).toBe(before);
+    release();
+  });
+
+  it('leaves a label whose control is already a switch, or tied by for, as it is', () => {
+    document.body.innerHTML =
+      '<label id="a"><input type="checkbox" switch> Wi-Fi</label>' +
+      '<label id="b" for="c">Bluetooth</label><input id="c" type="checkbox">';
+    for (const id of ['a', 'b']) {
+      const label = document.getElementById(id) as HTMLLabelElement;
+      const release = attachTapHaptic(label);
+      expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
+      release();
+    }
   });
 
   it('reports whether the browser knows the switch control', () => {

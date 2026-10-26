@@ -3,12 +3,12 @@
 /**
  * @file resolveMotion.test.ts
  * @input resolveMotion.ts, the shared UIKit tables, a stubbed computed style
- * @output Proof that a role takes its theme scope's value, falls back to the
- *   table's value when the variable is empty, malformed or unreadable, reads
- *   each scope once until a theme attribute changes, and leaves values that
- *   are not roles alone; and that the animator plays the resolved spring
+ * @output Proof that, while touch motion stays internal (spec:AST-094
+ *   DEC-11), a role plays its table value whatever a scope's CSS variable
+ *   says, reads no style, and leaves values that are not roles alone; and
+ *   that the animator plays the table's spring
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
- *   browser proof reads real theme CSS: animator.interaction.browser.spec.ts)
+ *   browser proof: animator.interaction.browser.spec.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -17,10 +17,9 @@ import {coast} from './coast';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
 import {
-  navigation,
-  registerNavigationTable,
   registerSpringsTable,
   registerTimingTable,
+  scroll,
   springs,
   timing,
 } from './uikit';
@@ -28,23 +27,19 @@ import {
 // Like a touch module: register the tables these motions resolve from.
 registerSpringsTable();
 registerTimingTable();
-registerNavigationTable();
 
-/** Theme variables by scope element, as the stubbed computed style reports. */
-let variables: Map<Element, Record<string, string>>;
 let reads: number;
 
 beforeEach(() => {
-  variables = new Map();
   reads = 0;
   vi.spyOn(window, 'getComputedStyle').mockImplementation(
-    (element: Element) =>
+    () =>
       ({
-        getPropertyValue: (name: string) => {
+        getPropertyValue: () => {
           reads += 1;
-          return variables.get(element)?.[name] ?? '';
+          return '';
         },
-      }) as CSSStyleDeclaration,
+      }) as unknown as CSSStyleDeclaration,
   );
 });
 
@@ -53,128 +48,62 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function themed(name: string, values: Record<string, string>) {
+/** A scope that sets role variables, as a page's own style could. */
+function scoped(values: Record<string, string>) {
   const scope = document.createElement('div');
-  scope.setAttribute('data-astryx-theme', name);
+  scope.setAttribute('data-astryx-theme', 'soft');
+  for (const [name, value] of Object.entries(values)) {
+    scope.style.setProperty(name, value);
+  }
   const child = document.createElement('div');
   scope.append(child);
   document.body.append(scope);
-  variables.set(scope, values);
-  return {scope, child};
+  return child;
 }
 
-describe('a table nothing registered', () => {
-  it('plays its own value, whatever the theme sets', () => {
-    const element = document.createElement('div');
-    element.style.setProperty('--motion-fixture-unregistered-push', '0.9s 0.4');
-    const table = {push: {response: 0.3, dampingRatio: 1}};
-    expect(resolveMotion(element, table.push)).toBe(table.push);
-  });
-});
-
-describe('resolveMotion', () => {
-  it("takes the theme scope's value for a spring, a curve and a duration", () => {
-    const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+describe('resolveMotion while touch motion stays internal (DEC-11)', () => {
+  it('plays the table value for a spring, a curve and a duration, whatever a scope sets', () => {
+    const child = scoped({
+      '--motion-springs-settle': '0.8s 0.3',
       '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
-      '--motion-navigation-transition-ms': '300ms',
+      '--motion-timing-state-change-ms': '300ms',
     });
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
-      duration: 0.8,
-      bounce: 0.3,
-    });
-    expect(resolveMotion(child, timing.curves.move)).toEqual([0.4, 0, 0.2, 1]);
-    expect(resolveMotion(child, navigation, 'transitionMs')).toBe(300);
-  });
-
-  it("falls back to the table's value when the variable is empty, malformed or unreadable", () => {
-    const {child} = themed('plain', {
-      '--motion-springs-navigation-push': 'bouncy',
-    });
-    expect(resolveMotion(child, springs.sheetPresent)).toBe(
-      springs.sheetPresent,
+    expect(resolveMotion(child, springs.settle)).toBe(springs.settle);
+    expect(resolveMotion(child, timing.curves.move)).toBe(timing.curves.move);
+    expect(resolveMotion(child, timing, 'stateChangeMs')).toBe(
+      timing.stateChangeMs,
     );
-    expect(resolveMotion(child, springs.navigationPush)).toBe(
-      springs.navigationPush,
-    );
-    expect(resolveMotion(null, springs.sheetPresent)).toBe(
-      springs.sheetPresent,
-    );
-    const detached = document.createElement('div');
-    expect(resolveMotion(detached, navigation, 'transitionMs')).toBe(
-      navigation.transitionMs,
-    );
-  });
-
-  it('leaves values that are not roles alone, without reading style', () => {
-    const {child} = themed('soft', {});
-    const inline = {response: 0.4, dampingRatio: 0.9};
-    expect(resolveMotion(child, inline)).toBe(inline);
-    expect(resolveMotion(child, timing.press, 'scrollBrakeMs')).toBe(
-      timing.press.scrollBrakeMs,
-    );
+    expect(resolveMotion(null, springs.settle)).toBe(springs.settle);
+    // No style is read to resolve a role.
     expect(reads).toBe(0);
   });
 
-  it('reads each scope once, until its theme attribute changes', async () => {
-    const {scope, child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
-    });
-    resolveMotion(child, springs.sheetPresent);
-    resolveMotion(scope, springs.sheetPresent);
-    expect(reads).toBe(1);
-
-    variables.set(scope, {'--motion-springs-sheet-present': '0.4s 0'});
-    scope.setAttribute('data-astryx-theme', 'brisk');
-    await Promise.resolve();
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
-      duration: 0.4,
-      bounce: 0,
-    });
-    expect(reads).toBe(2);
+  it('leaves values that are not roles alone', () => {
+    const inline = {response: 0.4, dampingRatio: 0.9};
+    expect(resolveMotion(document.body, inline)).toBe(inline);
+    expect(resolveMotion(document.body, springs.sheetPresent)).toBe(
+      springs.sheetPresent,
+    );
+    expect(resolveMotion(document.body, timing.press, 'scrollBrakeMs')).toBe(
+      timing.press.scrollBrakeMs,
+    );
   });
 });
 
-describe('the animator under a theme', () => {
-  it('reads again in the next task, and listens to nothing', async () => {
-    const listen = vi.spyOn(window, 'addEventListener');
-    const Observer = vi.fn();
-    vi.stubGlobal('MutationObserver', Observer);
-    const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
-    });
-    resolveMotion(child, springs.sheetPresent);
-    resolveMotion(child, springs.sheetPresent);
-    expect(reads).toBe(1);
-    await Promise.resolve();
-    resolveMotion(child, springs.sheetPresent);
-    expect(reads).toBe(2);
-    expect(listen).not.toHaveBeenCalled();
-    expect(Observer).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+describe('the animator', () => {
+  it("plays the table's spring even where a scope sets the role's variable", () => {
+    const child = scoped({'--motion-springs-settle': '0.8s 0.3'});
+    const animator = createAnimator(child, {now: () => 0});
+    animator.set({y: 300});
+    animator.animate({y: 0}, {spring: springs.settle}, {at: 0});
+    const table = solveSpring(toSpring(springs.settle), {from: 300, to: 0});
+    for (const ms of [50, 150, 400]) {
+      expect(animator.get('y', ms)).toBeCloseTo(table.value(ms / 1000), 3);
+    }
+    animator.dispose();
   });
-
-  it('sees a theme switched earlier in the same task', () => {
-    const {scope, child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
-    });
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
-      duration: 0.8,
-      bounce: 0.3,
-    });
-    // Same task: the observer's callback has not run yet.
-    scope.setAttribute('data-astryx-theme', 'firm');
-    variables.set(scope, {'--motion-springs-sheet-present': '0.4s 0'});
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
-      duration: 0.4,
-      bounce: 0,
-    });
-  });
-
-  it('a coast plays the edge spring its theme sets (scroll.bounce)', () => {
-    const {child} = themed('soft', {
-      '--motion-scroll-bounce': '0.8s 0.3',
-    });
+  it('a coast plays the table edge spring whatever a scope sets: scroll.bounce is no role', () => {
+    const child = scoped({'--motion-scroll-bounce': '0.8s 0.3'});
     const animator = createAnimator(child, {now: () => 0});
     animator.set({x: 60});
     // Released past the edge: straight back on the edge spring.
@@ -182,38 +111,13 @@ describe('the animator under a theme', () => {
       coast(animator, {x: 0}, {bounds: {x: {min: -500, max: 0}}, at: 0}),
       {at: 0},
     );
-    const expected = solveSpring(toSpring({duration: 0.8, bounce: 0.3}), {
+    const expected = solveSpring(toSpring(scroll.bounce), {
       from: 60,
       to: 0,
     });
     for (const ms of [50, 150, 400]) {
       expect(animator.get('x', ms)).toBeCloseTo(expected.value(ms / 1000), 3);
     }
-    animator.dispose();
-  });
-
-  it('plays the spring its theme sets for a table spring', () => {
-    const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
-    });
-    const animator = createAnimator(child, {now: () => 0});
-    animator.set({y: 300});
-    animator.animate({y: 0}, {spring: springs.sheetPresent}, {at: 0});
-    const expected = solveSpring(toSpring({duration: 0.8, bounce: 0.3}), {
-      from: 300,
-      to: 0,
-    });
-    const table = solveSpring(toSpring(springs.sheetPresent), {
-      from: 300,
-      to: 0,
-    });
-    for (const ms of [50, 150, 400]) {
-      expect(animator.get('y', ms)).toBeCloseTo(expected.value(ms / 1000), 3);
-    }
-    // And not the table's spring.
-    expect(
-      Math.abs(animator.get('y', 150) - table.value(0.15)),
-    ).toBeGreaterThan(20);
     animator.dispose();
   });
 });
