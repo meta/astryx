@@ -33,39 +33,11 @@ const neutralSyntax = defineSyntaxTheme({
 });
 
 const neutralLocalTokens: Record<string, TokenValue> = {
+  // Deprecated: kept with its released name, meaning, and value for Neutral
+  // extensions (theme:neutral DEC-1); Neutral itself paints status through the
+  // portable --color-* roles and no longer reads it.
   '--astryx-theme-neutral-color-status-fill-accent': ['#0074e2', '#6d9cfe'],
-  '--astryx-theme-neutral-color-status-fill-success': ['#198100', '#64af4c'],
-  '--astryx-theme-neutral-color-status-fill-warning': '#ffce2f',
-  '--astryx-theme-neutral-color-status-fill-error': ['#c9303a', '#ff705d'],
-  '--astryx-theme-neutral-color-status-muted-accent': [
-    blue.light[85],
-    withAlpha(blue.dark[75], '3D'),
-  ],
-  '--astryx-theme-neutral-color-on-tint-neutral': ['#fafafa4D', '#0a0a0a4D'],
-  '--astryx-theme-neutral-color-on-tint-overlay-hover': [
-    '#fafafa1A',
-    '#0a0a0a1A',
-  ],
-  '--astryx-theme-neutral-color-on-tint-overlay-pressed': [
-    '#fafafa33',
-    '#0a0a0a33',
-  ],
-  '--astryx-theme-neutral-color-destructive-overlay-hover': [
-    withAlpha(red.light[70], '0D'),
-    withAlpha(red.dark[65], '0D'),
-  ],
-  '--astryx-theme-neutral-color-destructive-overlay-pressed': [
-    withAlpha(red.light[70], '1A'),
-    withAlpha(red.dark[65], '1A'),
-  ],
 };
-
-const statusFill = {
-  accent: 'var(--astryx-theme-neutral-color-status-fill-accent)',
-  success: 'var(--astryx-theme-neutral-color-status-fill-success)',
-  warning: 'var(--astryx-theme-neutral-color-status-fill-warning)',
-  error: 'var(--astryx-theme-neutral-color-status-fill-error)',
-} as const;
 
 export const neutralTheme = defineTheme({
   name: 'neutral',
@@ -154,15 +126,31 @@ export const neutralTheme = defineTheme({
     '--color-on-error': [neutral.light[100], neutral.dark[5]],
     '--color-on-warning': neutral.light[5],
 
+    '--color-info': ['#0074e2', '#6d9cfe'],
+    '--color-info-muted': [blue.light[85], withAlpha(blue.dark[75], '3D')],
+    '--color-on-info': [neutral.light[100], neutral.dark[5]],
+
+    '--color-text-info': [blue.light[45], blue.dark[80]],
+    '--color-text-success': [green.light[45], green.light[75]],
+    '--color-text-warning': [yellow.light[45], yellow.light[80]],
+    '--color-text-error': [red.light[45], red.dark[80]],
+
+    '--color-on-info-muted': [blue.light[25], blue.dark[80]],
+    '--color-on-success-muted': [green.light[25], green.light[75]],
+    '--color-on-warning-muted': [yellow.light[25], yellow.light[80]],
+    '--color-on-error-muted': [red.light[25], red.dark[80]],
+
     // Icon
     '--color-icon-accent': [neutral.light[10], neutral.dark[95]],
     '--color-icon-primary': [neutral.light[0], neutral.dark[100]],
     '--color-icon-secondary': [neutral.light[45], neutral.dark[65]],
     '--color-icon-disabled': [neutral.light[60], neutral.dark[35]],
 
-    '--color-success': [green.light[25], green.light[80]],
-    '--color-error': [red.light[25], red.dark[85]],
-    '--color-warning': [yellow.light[25], yellow.light[85]],
+    // Strong status fills (architecture:theme-tokens INV11): Neutral's
+    // reviewed status-fill colours, with --color-on-<status> above.
+    '--color-success': ['#198100', '#64af4c'],
+    '--color-warning': '#ffce2f',
+    '--color-error': ['#c9303a', '#ff705d'],
     '--color-success-muted': [green.dark[85], withAlpha(green.light[75], '3D')],
     '--color-error-muted': [red.light[85], withAlpha(red.dark[75], '3D')],
     '--color-warning-muted': [
@@ -182,7 +170,7 @@ export const neutralTheme = defineTheme({
       withAlpha(neutral.light[0], '1A'),
       withAlpha(neutral.dark[0], '4D'),
     ],
-    '--color-tint-hover': ['black', 'white'],
+    '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     '--color-background-red': [red.light[85], red.dark[25]],
     '--color-border-red': [red.light[80], red.light[65]],
@@ -288,34 +276,14 @@ export const neutralTheme = defineTheme({
     button: {
       'variant:destructive': {
         backgroundColor: 'var(--color-error-muted)',
-        color: 'var(--color-error)',
-        '--color-overlay-hover':
-          'var(--astryx-theme-neutral-color-destructive-overlay-hover)',
-        '--color-overlay-pressed':
-          'var(--astryx-theme-neutral-color-destructive-overlay-pressed)',
+        color: 'var(--color-on-error-muted)',
       },
     },
 
     badge: {
-      'variant:info': {
-        backgroundColor: statusFill.accent,
-        color: 'var(--color-on-accent)',
-      },
       'variant:neutral': {
         backgroundColor: 'var(--color-background-gray)',
         color: 'var(--color-text-gray)',
-      },
-      'variant:success': {
-        backgroundColor: statusFill.success,
-        color: 'var(--color-on-success)',
-      },
-      'variant:warning': {
-        backgroundColor: statusFill.warning,
-        color: 'var(--color-on-warning)',
-      },
-      'variant:error': {
-        backgroundColor: statusFill.error,
-        color: 'var(--color-on-error)',
       },
 
       'variant:red': {
@@ -360,18 +328,6 @@ export const neutralTheme = defineTheme({
       },
     },
 
-    'status-dot': {
-      'variant:success': {backgroundColor: statusFill.success},
-      'variant:warning': {backgroundColor: statusFill.warning},
-      'variant:error': {backgroundColor: statusFill.error},
-      'variant:accent': {backgroundColor: statusFill.accent},
-    },
-
-    'avatar-status-dot': {
-      'variant:success': {backgroundColor: statusFill.success},
-      'variant:error': {backgroundColor: statusFill.error},
-    },
-
     // Give the Neutral segmented control a roomier inset without changing its
     // outside height. The selected item stays flat against the tinted track.
     'segmented-control': {
@@ -394,45 +350,6 @@ export const neutralTheme = defineTheme({
       },
     },
 
-    banner: {
-      base: {
-        '--color-neutral': 'var(--astryx-theme-neutral-color-on-tint-neutral)',
-        '--color-overlay-hover':
-          'var(--astryx-theme-neutral-color-on-tint-overlay-hover)',
-        '--color-overlay-pressed':
-          'var(--astryx-theme-neutral-color-on-tint-overlay-pressed)',
-      },
-      'status:info': {
-        '--color-accent-muted':
-          'var(--astryx-theme-neutral-color-status-muted-accent)',
-        '--color-text-primary': 'var(--color-text-blue)',
-        '--color-text-secondary': 'var(--color-text-blue)',
-        '--color-accent': 'var(--color-text-blue)',
-      },
-      'status:success': {
-        '--color-text-primary': 'var(--color-text-green)',
-        '--color-text-secondary': 'var(--color-text-green)',
-        '--color-success': 'var(--color-text-green)',
-      },
-      'status:warning': {
-        '--color-text-primary': 'var(--color-text-yellow)',
-        '--color-text-secondary': 'var(--color-text-yellow)',
-        '--color-warning': 'var(--color-text-yellow)',
-      },
-      'status:error': {
-        '--color-text-primary': 'var(--color-text-red)',
-        '--color-text-secondary': 'var(--color-text-red)',
-        '--color-error': 'var(--color-text-red)',
-      },
-    },
-
-    'step-indicator': {
-      'status:accent': {'--color-accent': statusFill.accent},
-      'status:success': {'--color-success': statusFill.success},
-      'status:warning': {'--color-warning': statusFill.warning},
-      'status:error': {'--color-error': statusFill.error},
-    },
-
     switch: {
       base: {
         '--color-background-gray': 'var(--color-border-emphasized)',
@@ -442,18 +359,6 @@ export const neutralTheme = defineTheme({
     'progress-bar': {
       base: {
         '--color-background-muted': 'var(--color-border-emphasized)',
-      },
-      'variant:accent': {
-        '--color-accent': statusFill.accent,
-      },
-      'variant:success': {
-        '--color-success': statusFill.success,
-      },
-      'variant:warning': {
-        '--color-warning': statusFill.warning,
-      },
-      'variant:error': {
-        '--color-error': statusFill.error,
       },
     },
 

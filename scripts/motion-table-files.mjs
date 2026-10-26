@@ -6,10 +6,9 @@
  * @output motionTableFiles: every non-test source file that registers a motion
  *   table (a `register<Name>Table` function, or a legacy module-level
  *   `registerMotionTable` call)
- * @position Shared by scripts/generate-motion-roles.mjs and
- *   packages/core/src/motion/roles.test.ts, so the generated role list and the
- *   registry the test builds come from the same tables. Tooling only: nothing
- *   at runtime registers every table.
+ * @position Used by packages/core/src/motion/roles.test.ts to register every
+ *   table the way discovery would. Tooling only: nothing at runtime registers
+ *   every table.
  */
 
 import {readdirSync, readFileSync} from 'node:fs';
