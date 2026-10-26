@@ -35,7 +35,7 @@
  * the content's edge, as a UIKit scroll view keeps it (`spec:AST-094` FR14).
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {centroid} from './geometry';
 import {
   ALL_NATIVE_TOUCH,
@@ -60,9 +60,11 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   direction?: PanDirection;
   /**
    * For a pan limited to an axis: how much the movement along the axis must
-   * exceed the movement across it to begin. Above 1, movement between the
-   * two lines keeps the pan waiting (a thumb's arc is not yet a direction);
-   * below 1, the pan claims drags up to atan(1 / axisRatio) off its axis.
+   * exceed the movement across it to begin. Above 1, movement that is still
+   * between the two lines when the pan reaches its hysteresis fails it: a pan
+   * that competes with native scrolling decides within 10 px
+   * (`spec:AST-094` FR19). Below 1, the pan claims drags up to
+   * atan(1 / axisRatio) off its axis.
    * @default 1
    */
   axisRatio?: number;
@@ -113,7 +115,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.minimumNumberOfTouches = options.minimumNumberOfTouches ?? 1;
     this.maximumNumberOfTouches =
       options.maximumNumberOfTouches ?? Number.POSITIVE_INFINITY;
-    this.hysteresis = options.hysteresis ?? UIKIT_GESTURES.pan.hysteresis.value;
+    this.hysteresis = options.hysteresis ?? UIKIT_PAN.hysteresis.value;
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
@@ -283,7 +285,8 @@ export class PanGestureRecognizer extends GestureRecognizer {
 
   /**
    * What this movement means for a pan limited to a direction: begin, fail,
-   * or wait for more movement (see `axisRatio`).
+   * or undecided (between `axisRatio`'s lines), which fails it too once it
+   * reaches its hysteresis.
    */
   protected classify(translation: Point): 'begin' | 'fail' | 'wait' {
     if (this.direction === 'any') {
@@ -324,6 +327,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
       return;
     }
     if (verdict === 'wait') {
+      // Past its 10 px begin and still no clear axis: a pan that competes
+      // with native scrolling must decide by then (`spec:AST-094` FR19), so
+      // it leaves the touch to the browser.
+      this.setState('failed');
       return;
     }
     if (this.scrollEdge && this.nativeCanScroll(moved.x, moved.y)) {

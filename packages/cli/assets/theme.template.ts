@@ -186,11 +186,6 @@ export const myTheme = defineTheme({
    *   Cinematic {fast: 200, medium: 500, slow: 1200}
    * `easing` overrides --ease-standard.
    *
-   * `springs`, `durations` and `curves` retune touch motion roles by table
-   * path; a role left out keeps its measured default:
-   *   springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}
-   *   durations: {'navigation.transitionMs': 300}
-   *
    * Reference: `astryx docs motion`.
    */
   motion: {fast: 175, medium: 410, slow: 975, ratio: 0.75},

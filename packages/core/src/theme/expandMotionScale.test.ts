@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {describe, it, expect} from 'vitest';
 import {expandMotionScale} from './expandMotionScale';
 
@@ -124,5 +126,20 @@ describe('expandMotionScale', () => {
     expect(medMax).toBeLessThan(slowMin);
     expect(slowMin).toBeLessThan(slow);
     expect(slow).toBeLessThan(slowMax);
+  });
+});
+
+// @ts-expect-error The role-keyed theme types are not public: motion stays internal.
+import type {MotionRoleValues as _NotPublic} from '../index';
+
+describe('touch motion stays internal', () => {
+  it('exports no motion-role surface from the theme entry or the package root', () => {
+    // The package root re-exports the theme entry and nothing from motion/.
+    const read = (file: string) =>
+      fs.readFileSync(path.resolve(__dirname, file), 'utf8');
+    expect(read('../index.ts')).not.toMatch(/from '\.\/motion/);
+    expect(read('./index.ts')).not.toMatch(
+      /expandMotionRoles|motionScaleOf|MotionConfig|MotionRoleValues|MotionCurvePoints|registerMotionTable|motion\/role/,
+    );
   });
 });

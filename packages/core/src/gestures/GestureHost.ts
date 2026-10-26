@@ -73,10 +73,8 @@
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch, a rotation) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
- *   recognizer owns one of its touches, or while a one-way overlay pan
- *   claims early (5 px its way, under WebKit's 10–11 px scroll claim; the
- *   pan then commits to the touch, since Safari gives the page no scroll
- *   once one of its moves was cancelled). Nothing else is ever cancelled, so a
+ *   recognizer owns one of its touches (a pan claims when it begins, at
+ *   UIKit's 10 pt, `spec:AST-094` FR17). Nothing else is ever cancelled, so a
  *   touch nobody claims scrolls exactly as it would without the system. The
  *   known cost: a scroll that BEGINS on such an element waits for a busy main
  *   thread (measured in iOS Safari; a passive listener would hand every
@@ -166,6 +164,12 @@ export interface GestureHostOptions {
   inputMode?: 'auto' | 'pointer-events';
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: GestureArenaOptions['onTransition'];
+  /**
+   * Whether the primary pointer is coarse (a phone, a tablet). Where it is
+   * fine, the host registers no listener at all (`spec:AST-094` FR19, FR24).
+   * @default `(pointer: coarse)` on the document's window
+   */
+  isPrimaryPointerCoarse?: () => boolean;
 }
 
 /**
@@ -336,6 +340,9 @@ export class GestureHost {
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   /** The last position fed per contact, so one channel's echo is dropped. */
+  private readonly isPrimaryPointerCoarse: () => boolean;
+  /** Whether the host follows `(pointer: coarse)` (no read was passed). */
+  private readonly followsPointer: boolean;
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
@@ -419,6 +426,12 @@ export class GestureHost {
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
     });
+    const view = doc.defaultView;
+    // A test may pass its own read; otherwise the one coarse-pointer gate,
+    // followed as it changes.
+    this.followsPointer = options.isPrimaryPointerCoarse == null;
+    this.isPrimaryPointerCoarse =
+      options.isPrimaryPointerCoarse ?? (() => isCoarsePointer(view));
   }
 
   // --- Attachment ------------------------------------------------------------
@@ -442,13 +455,15 @@ export class GestureHost {
     } else {
       registration.recognizers.push(recognizer);
     }
+    recognizer.onEnabledChange = () => {
+      this.refresh(element, registration);
+      this.syncListeners();
+    };
     this.refresh(element, registration);
-    this.install();
+    this.syncListeners();
     return () => {
-      if (this.perEventRecognizers.delete(recognizer) && !this.needsInput()) {
-        // The last recognizer that needed input where the pointer is fine.
-        this.uninstall();
-      }
+      recognizer.onEnabledChange = null;
+      this.perEventRecognizers.delete(recognizer);
       const index = registration.recognizers.indexOf(recognizer);
       if (index >= 0) {
         registration.recognizers.splice(index, 1);
@@ -467,6 +482,8 @@ export class GestureHost {
       }
       this.refresh(element, registration);
       this.cleanup(element, registration);
+      // A registration that stays may have lost its last enabled member.
+      this.syncListeners();
     };
   }
 
@@ -483,13 +500,10 @@ export class GestureHost {
     } else if (!this.isCoarse) {
       this.warnFinePointer();
     }
-    this.install();
     this.refresh(element, registration);
+    this.syncListeners();
     return () => {
-      if (this.perEventConsumers.delete(consumer) && !this.needsInput()) {
-        // The last consumer that needed input where the pointer is fine.
-        this.uninstall();
-      }
+      this.perEventConsumers.delete(consumer);
       if (registration.consumer === consumer) {
         registration.consumer = null;
       }
@@ -497,6 +511,8 @@ export class GestureHost {
       // the element keeps its recognizers.
       this.refresh(element, registration);
       this.cleanup(element, registration);
+      // A registration that stays may have lost its last enabled member.
+      this.syncListeners();
     };
   }
 
@@ -510,7 +526,7 @@ export class GestureHost {
     if (!this.isCoarse) {
       this.warnFinePointer();
     }
-    this.install();
+    this.syncListeners();
     return () => {
       this.delegated.delete(type);
       this.uninstallIfIdle();
@@ -583,12 +599,16 @@ export class GestureHost {
     }
   }
 
-  /** Re-derive an element's styles after its recognizers' options changed. */
+  /**
+   * Re-derive an element's styles and the host's listeners after its
+   * recognizers' options or its consumer's enabled state changed.
+   */
   update(element: Element): void {
     const registration = this.registry.get(element);
     if (registration != null) {
       this.refresh(element, registration);
     }
+    this.syncListeners();
   }
 
   /**
@@ -641,7 +661,8 @@ export class GestureHost {
       scroller,
       (this.scrollWatchers.get(scroller) ?? 0) + 1,
     );
-    this.install();
+    this.watchPointer();
+    this.syncListeners();
     let isWatching = true;
     return () => {
       if (!isWatching) {
@@ -727,11 +748,15 @@ export class GestureHost {
     const needsListener =
       registration.recognizers.some(
         recognizer =>
-          this.isActive(recognizer) && claimsWhileMoving(recognizer),
+          this.isActive(recognizer) &&
+          recognizer.isEnabled &&
+          claimsWhileMoving(recognizer),
       ) ||
       // A kept press holds its touch only where the pointer is coarse; a
       // per-event tracker elsewhere gives press feedback only (FR19).
-      (registration.consumer?.keepsTouch != null && this.isCoarse);
+      (registration.consumer?.keepsTouch != null &&
+        registration.consumer.isEnabled?.() !== false &&
+        this.isCoarse);
     // The blocking listener sits on the element itself (FR19: a scroll that
     // starts elsewhere never waits on it), but every element shares the
     // host's one handler, which routes through the arena.
@@ -812,7 +837,25 @@ export class GestureHost {
     this.uninstallIfIdle();
   }
 
+  /**
+   * Listen only while something could take a touch now (`spec:AST-094`
+   * FR19, FR24): an enabled recognizer or consumer that takes input (where
+   * the primary pointer is coarse, or one attached with `perEventPointer`),
+   * a delegated consumer where it is coarse, or a finger-scroll watch.
+   * Otherwise no document listener is registered, so a desktop page and a
+   * disabled control pay nothing.
+   */
+  private syncListeners(): void {
+    if (this.shouldListen()) {
+      this.install();
+    } else {
+      this.uninstall();
+    }
+  }
+
+  /** With nothing attached, stop listening and stop following the pointer. */
   private uninstallIfIdle(): void {
+    this.syncListeners();
     if (
       this.registry.size === 0 &&
       this.delegated.size === 0 &&
@@ -830,10 +873,10 @@ export class GestureHost {
       return;
     }
     const view = this.doc.defaultView;
-    this.isCoarse = isCoarsePointer(view);
-    this.stopWatchingPointer = watchCoarsePointer(view, isCoarse =>
-      this.pointerChanged(isCoarse),
-    );
+    this.isCoarse = this.isPrimaryPointerCoarse();
+    this.stopWatchingPointer = this.followsPointer
+      ? watchCoarsePointer(view, isCoarse => this.pointerChanged(isCoarse))
+      : () => {};
   }
 
   /**
@@ -845,17 +888,13 @@ export class GestureHost {
       return;
     }
     this.isCoarse = isCoarse;
-    if (isCoarse) {
-      this.install();
-    } else {
+    if (!isCoarse) {
       this.cancelEverything(this.arena.now());
-      if (!this.needsInput()) {
-        this.uninstall();
-      }
     }
     for (const [element, registration] of this.registry) {
       this.refresh(element, registration);
     }
+    this.syncListeners();
   }
 
   /** Something attached where the primary pointer is fine: say so once. */
@@ -870,6 +909,33 @@ export class GestureHost {
           "press tracker that reads each event's pointer itself (spec:AST-057).",
       );
     }
+  }
+
+  private shouldListen(): boolean {
+    if (!this.needsInput()) {
+      return false;
+    }
+    if (
+      this.scrollWatchers.size > 0 ||
+      (this.isCoarse && this.delegated.size > 0)
+    ) {
+      return true;
+    }
+    for (const registration of this.registry.values()) {
+      const consumer = registration.consumer;
+      if (
+        (consumer != null &&
+          consumer.isEnabled?.() !== false &&
+          this.isConsumerActive(consumer)) ||
+        registration.recognizers.some(
+          recognizer => recognizer.isEnabled && this.isActive(recognizer),
+        ) ||
+        (this.isCoarse && registration.hovers.some(r => r.isEnabled))
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // --- Listeners -------------------------------------------------------------

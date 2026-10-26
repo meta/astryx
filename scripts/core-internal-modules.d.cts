@@ -7,7 +7,10 @@
  */
 
 declare const coreInternalModules: {
-  /** The internal module paths Lab imports: motion, gestures, the touch resolver. */
+  /**
+   * The internal module paths Lab imports: motion, gestures, the touch
+   * resolver and the writing-direction read (isRtlElement).
+   */
   CORE_INTERNAL_SPECIFIER: RegExp;
   /**
    * The file an internal core specifier names (core's built file, or its

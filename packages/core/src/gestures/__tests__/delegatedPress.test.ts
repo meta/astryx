@@ -62,24 +62,19 @@ const ATTRIBUTES = {
   pressedAttribute: 'data-astryx-press',
 } as const;
 
-// A phone: the host attaches only where the primary pointer is coarse.
-let restorePointer: () => void;
-beforeEach(() => {
-  restorePointer = coarsePrimaryPointer();
-});
-afterEach(() => {
-  restorePointer();
-});
-
 let release: () => void = () => {};
+let restorePointer: () => void = () => {};
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // A phone: the document's host listens only where the pointer is coarse.
+  restorePointer = coarsePrimaryPointer();
   release = installPressAttribute(document, ATTRIBUTES);
 });
 
 afterEach(() => {
   release();
+  restorePointer();
   vi.useRealTimers();
   document.body.innerHTML = '';
 });
