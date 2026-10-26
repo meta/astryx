@@ -375,11 +375,12 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   expect(result.worstOpacity).toBeLessThan(0.003);
 });
 
-test('a role variable set on a scope changes the curve the engine plays', async ({
+test('a role variable set on a scope changes nothing while touch motion stays internal', async ({
   page,
 }) => {
-  // A scope sets the role's variable (no public API writes one while touch
-  // motion stays internal); the box outside the scope keeps the table's spring.
+  // A page's own style sets the role's variable on a scope; touch motion
+  // stays internal (spec:AST-094 DEC-11), so both boxes play the table's
+  // spring.
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
@@ -407,13 +408,10 @@ test('a role variable set on a scope changes the curve the engine plays', async 
         from: 300,
         to: 0,
       }),
-      themed: Motion.solveSpring(
-        Motion.toSpring({duration: 0.8, bounce: 0.3}),
-        {
-          from: 300,
-          to: 0,
-        },
-      ),
+      themed: Motion.solveSpring(Motion.toSpring(Motion.springs.settle), {
+        from: 300,
+        to: 0,
+      }),
     };
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
@@ -445,12 +443,12 @@ test('a role variable set on a scope changes the curve the engine plays', async 
     type: 'themed spring',
     description: JSON.stringify(result),
   });
-  // Each box plays its own spring: the themed one overshoots, the table's
-  // (critically damped) does not.
+  // Both boxes play the table's (critically damped) spring: neither
+  // overshoots.
   expect(result.plain.worst).toBeLessThan(0.06);
   expect(result.themed.worst).toBeLessThan(0.06);
-  expect(result.themed.lowest).toBeLessThan(-10);
   expect(result.plain.lowest).toBeGreaterThan(-0.5);
+  expect(result.themed.lowest).toBeGreaterThan(-0.5);
 });
 
 test('a finished animation leaves the element once the curve ends', async ({
