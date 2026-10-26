@@ -3,8 +3,9 @@
 /**
  * @file harness.interaction.browser.spec.ts
  * @input Fixture pages written inline (no Storybook), real Chromium/WebKit
- * @output Proof that each harness instrument measures what it claims, with a
- *   negative control beside every positive one: scripted timestamps reach the
+ * @output Proof that each harness instrument measures what it claims (the
+ *   busy-main-thread proof and the rendering-trace counts with a negative
+ *   control beside their positive checks): scripted timestamps reach the
  *   page; a flick flings natively (Chromium); a second finger and a pinch
  *   arrive as distinct pointers; the screencast shows a compositor animation
  *   advancing through a blocked main thread while a rAF animation freezes;
@@ -979,6 +980,34 @@ test.describe('frame evidence', () => {
       'CSSTransition',
     ]);
     expect(ended.every(a => a.finishedAt != null)).toBe(true);
+  });
+
+  test('the compositor record refuses another open page, whose frames it could not tell apart', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the compositor record is a Chromium trace (README: engine limits)',
+    );
+    await fixture(page);
+    // Another page animating: its presented frames would be credited to
+    // this one, so the record refuses to start.
+    const other = await page.context().newPage();
+    await other.setContent(
+      '<style>@keyframes spin{to{transform:rotate(360deg)}}</style><div style="width:50px;height:50px;background:red;animation:spin 1s linear infinite"></div>',
+    );
+    await expect(startCompositorTrace(page)).rejects.toThrow(
+      /another page is open as the trace starts/,
+    );
+    await other.close();
+    // A page opened mid-trace: stop() refuses too.
+    const record = await startCompositorTrace(page);
+    const late = await page.context().newPage();
+    await expect(record.stop()).rejects.toThrow(
+      /another page is open as the trace stops/,
+    );
+    await late.close();
   });
 
   test('the long-task log fails closed when it never ran on the document', async ({
