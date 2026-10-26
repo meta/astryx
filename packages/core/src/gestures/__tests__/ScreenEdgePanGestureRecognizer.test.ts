@@ -66,10 +66,11 @@ describe('ScreenEdgePanGestureRecognizer', () => {
     const page = new ScreenEdgePanGestureRecognizer();
     page.view = viewOfSize(390, 844);
     expect(page.nativeTouchBehavior).toEqual(ALL_NATIVE_TOUCH);
+    // A pan from several edges too, off their zones.
     expect(
       new ScreenEdgePanGestureRecognizer({edges: ['left', 'right']})
-        .nativeTouchBehavior.panX,
-    ).toBe(false);
+        .nativeTouchBehavior,
+    ).toEqual(ALL_NATIVE_TOUCH);
   });
 
   it('takes the axis across its edge in the edge zone, a view no wider than the edge region (spec:AST-094 FR18)', () => {
@@ -122,7 +123,7 @@ describe('off the edge zone', () => {
     expect(h.log[0]).toMatch(/^edge:began@/);
   });
 
-  it('decides at its 15 px hysteresis when it takes its axis, from several edges', () => {
+  it('from several edges, also decides at 10 px off their zones', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({
       name: 'edge',
@@ -131,8 +132,44 @@ describe('off the edge zone', () => {
     h.environment.view = {width: 390, height: 844};
     h.finger(1)
       .down(10, 300, 0, {recognizers: [edge]})
-      .drag(UIKIT_SCREEN_EDGE_PAN.hysteresis.value - 1, 0, 30);
-    expect(edge.state).toBe('possible');
+      .drag(10, 0, 30, 10);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+});
+
+describe('a pan from several edges (spec:AST-094 FR18)', () => {
+  it('outside every edge zone leaves the browser every touch behavior', () => {
+    const edge = new ScreenEdgePanGestureRecognizer({
+      edges: ['left', 'bottom'],
+    });
+    edge.view = viewOfSize(390, 844);
+    expect(edge.nativeTouchBehavior).toEqual(ALL_NATIVE_TOUCH);
+  });
+
+  it('inside a side edge zone claims pan-x only', () => {
+    const edge = new ScreenEdgePanGestureRecognizer({
+      edges: ['left', 'bottom'],
+    });
+    edge.view = viewOfSize(edge.edgeRegion, 844);
+    expect(edge.nativeTouchBehavior).toEqual({
+      panX: false,
+      panY: true,
+      pinchZoom: true,
+      doubleTapZoom: false,
+    });
+  });
+
+  it('inside a bottom edge zone claims pan-y only', () => {
+    const edge = new ScreenEdgePanGestureRecognizer({
+      edges: ['left', 'bottom'],
+    });
+    edge.view = viewOfSize(390, edge.edgeRegion);
+    expect(edge.nativeTouchBehavior).toEqual({
+      panX: true,
+      panY: false,
+      pinchZoom: true,
+      doubleTapZoom: false,
+    });
   });
 });
 

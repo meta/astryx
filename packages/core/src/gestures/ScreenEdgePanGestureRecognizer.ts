@@ -22,7 +22,8 @@
  * so the pan still decides at its 15 px hysteresis; on any wider view it
  * leaves the browser every touch behavior, so the author's scrolling there
  * is untouched (spec:AST-094 FR18), and decides at 10 px, before the browser
- * commits to a scroll (FR19).
+ * commits to a scroll (FR19). A pan from several edges claims each axis only
+ * in the zone of the edges it watches on that axis.
  */
 
 import {UIKIT_PAN, UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
@@ -72,33 +73,24 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
   }
 
   /**
-   * A pan from one edge takes the axis across that edge, but only in the
-   * edge zone, a view no wider than `edgeRegion` across the edge; on a wider
-   * view it leaves the browser every touch behavior, as a one-way pan does
-   * (spec:AST-094 FR18). Pans from several edges keep the browser the axis
-   * along them.
+   * The pan takes the axis across its edges only in their edge zone, a view
+   * no wider than `edgeRegion` across them; elsewhere it leaves the browser
+   * every touch behavior, so the author's scrolling is untouched
+   * (spec:AST-094 FR18). A pan from several edges takes each axis only in the
+   * zone of the edges it watches on that axis, never across a whole wider
+   * element.
    */
   override get nativeTouchBehavior(): NativeTouchBehavior {
-    if (this.edges.length === 1) {
-      const across = isAcrossHorizontal(this.edges[0]) ? 'x' : 'y';
-      return this.isEdgeZone(across)
-        ? {
-            panX: across !== 'x',
-            panY: across !== 'y',
-            pinchZoom: true,
-            doubleTapZoom: false,
-          }
-        : ALL_NATIVE_TOUCH;
+    const takesX = this.edges.some(isAcrossHorizontal) && this.isEdgeZone('x');
+    const takesY =
+      this.edges.some(edge => !isAcrossHorizontal(edge)) &&
+      this.isEdgeZone('y');
+    if (!takesX && !takesY) {
+      return ALL_NATIVE_TOUCH;
     }
-    const horizontal = this.edges.some(
-      edge => edge !== 'top' && edge !== 'bottom',
-    );
-    const vertical = this.edges.some(
-      edge => edge === 'top' || edge === 'bottom',
-    );
     return {
-      panX: !horizontal,
-      panY: !vertical,
+      panX: !takesX,
+      panY: !takesY,
       pinchZoom: true,
       doubleTapZoom: false,
     };
@@ -115,12 +107,12 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
         return;
       }
       this.activeEdge = edge;
-      // Off the edge zone a one-edge pan leaves the browser every pan, so it
+      // Off its edge's zone the pan leaves the browser that axis, so it
       // decides within the 10 px the browser waits before it commits to a
-      // scroll (spec:AST-094 FR19); where it takes its axis, at UIKit's 15.
-      const offZone =
-        this.edges.length === 1 &&
-        !this.isEdgeZone(isAcrossHorizontal(this.edges[0]) ? 'x' : 'y');
+      // scroll (spec:AST-094 FR19); where it takes the axis, at UIKit's 15.
+      const offZone = !this.isEdgeZone(
+        edge === 'left' || edge === 'right' ? 'x' : 'y',
+      );
       this.hysteresis = offZone
         ? Math.min(this.edgeHysteresis, UIKIT_PAN.hysteresis.value)
         : this.edgeHysteresis;
