@@ -1879,6 +1879,29 @@ describe('holdPageScroll', () => {
     expect(decide).toHaveBeenCalledWith(scrim, 0, -50);
   });
 
+  it('keeps holding the first finger after a second finger touches and lifts', () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    detachers.push(hold(() => true));
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
+    expect(
+      touch('touchmove', scrim, at(1, 100, 250), at(1, 100, 250), 16)
+        .defaultPrevented,
+    ).toBe(true);
+    // A second finger lands and lifts: while two are down, nothing is
+    // cancelled, so the page can zoom.
+    const both = [...at(1, 100, 250), ...at(2, 200, 300)];
+    touch('touchstart', scrim, at(2, 200, 300), both, 32);
+    expect(
+      touch('touchmove', scrim, at(2, 200, 260), both, 48).defaultPrevented,
+    ).toBe(false);
+    touch('touchend', scrim, at(2, 200, 260), at(1, 100, 250), 64);
+    // Alone again, the first finger is held for the rest of its touch.
+    expect(
+      touch('touchmove', scrim, at(1, 100, 200), at(1, 100, 200), 80)
+        .defaultPrevented,
+    ).toBe(true);
+  });
+
   it('judges a pan once it clears the slop, so a first wobble does not fix its axis', () => {
     const {strip} = mount('<div id="strip"></div>');
     const decide = vi.fn((_origin: EventTarget | null, dx: number) => dx === 0);
