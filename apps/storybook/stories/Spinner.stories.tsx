@@ -319,9 +319,13 @@ const activityStyles = stylex.create({
     top: 0,
     borderRadius: 9999,
     // UIKit's secondary label color, light and dark (the alphas above are
-    // the images', which include its own); a theme color works too. Under
-    // forced colors a background becomes the page's Canvas, which would hide
-    // every spoke; the spokes keep the system text color instead.
+    // the images', which include its own). Its brightest spoke reaches only
+    // 2.74:1 on a white page, under the 3:1 WCAG asks of non-text graphics;
+    // an app that needs 3:1 can draw the spokes in the theme's primary text
+    // color (`colorVars['--color-text-primary']`: 3.64:1 at the same alphas,
+    // where the secondary text color is lighter, 2.25:1). Under forced colors
+    // a background becomes the page's Canvas, which would hide every spoke;
+    // the spokes keep the system text color instead.
     backgroundColor: {
       default: 'light-dark(#3C3C43, #EBEBF5)',
       '@media (forced-colors: active)': 'CanvasText',
@@ -394,7 +398,8 @@ function ActivityIndicator({
 
 /**
  * The iOS look, composed from existing APIs: copy `ActivityIndicator` from
- * this story's source into an app that wants it.
+ * `apps/storybook/stories/Spinner.stories.tsx` into an app that wants it (the
+ * code panel shows only this story's render).
  */
 export const IOSStyleActivityIndicator: Story = {
   name: 'iOS-style activity indicator (composed)',
