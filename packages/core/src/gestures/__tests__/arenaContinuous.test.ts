@@ -29,22 +29,6 @@ describe('conflict matrix', () => {
     expect(h.claims).toEqual([]);
   });
 
-  it('a claiming recognizer that asks to keep a touch the browser took is cancelled anyway (AST-094 FR14)', () => {
-    class KeepsTaken extends PanGestureRecognizer {
-      protected override touchesTakenByBrowser(): boolean {
-        return true;
-      }
-    }
-    const h = createHarness();
-    const pan = new KeepsTaken({name: 'pan'});
-    h.finger(1).down(0, 100, 0, {recognizers: [pan]});
-    h.finger(1).takenByBrowser(10);
-    // Further moves cannot begin it: the browser's scroll keeps the touch.
-    h.finger(1).move(0, 160, 30);
-    expect(h.log).toEqual(['pan:failed@10', 'pan:possible@10']);
-    expect(h.claims).toEqual([]);
-  });
-
   it('pan at a scroll edge (scrollEdge): begins and claims when the content cannot scroll that way', () => {
     const atTop = createHarness();
     const sheet = new PanGestureRecognizer({

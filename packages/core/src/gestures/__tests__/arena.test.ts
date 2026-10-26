@@ -698,3 +698,79 @@ describe('arena: a lift that decides a waiting recognition', () => {
     expect(h.deferredClicks).toEqual([]);
   });
 });
+
+/** Keeps observing a touch the browser took, as a scroll-edge watcher does. */
+class Observer extends Scripted {
+  protected override touchesTakenByBrowser(): boolean {
+    return true;
+  }
+}
+
+describe('arena: round-five review fixes', () => {
+  it('never claims a touch the browser took, even for a watcher that begins later (FR14)', () => {
+    const h = createHarness();
+    const watcher = new Observer('watcher', onMove);
+    const finger = h.finger(1).down(0, 0, 0, {recognizers: [watcher]});
+    finger.takenByBrowser(10);
+    finger.move(0, 40, 20);
+    expect(h.log).toContain('watcher:began@20');
+    expect(h.claims).toEqual([]);
+    expect(h.arena.isClaimed(1)).toBe(false);
+    finger.up(40);
+  });
+
+  it('settles once, with the outermost call, when a listener cancels during a touch-down', () => {
+    const h = createHarness();
+    const elsewhere = new Scripted('elsewhere');
+    h.finger(9).down(500, 500, 0, {recognizers: [elsewhere]});
+    const consumer = new RecordingConsumer();
+    const first = new Scripted('first', {began: () => elsewhere.cancel()});
+    const holder = new Scripted('holder', {}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 10, {recognizers: [first, holder], consumer});
+    // The holder heard the touch and fails at the lift: the click goes.
+    expect(h.finger(1).up(40)).toBe('allow');
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+    h.finger(9).up(50);
+  });
+
+  it('keeps a discrete winner exclusive against a waiter its win releases (FR15)', () => {
+    const h = createHarness();
+    const winner = new Scripted(
+      'R',
+      {moved: (r, event) => (event.time >= 32 ? r.recognize() : undefined)},
+      {discrete: true},
+    );
+    const blocker = new Scripted('O1', {moved: () => {}});
+    const waiter = new Scripted('P', onMove);
+    waiter.requireToFail(blocker);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [winner, blocker, waiter]})
+      .move(5, 0, 16)
+      .move(10, 0, 32);
+    expect(h.log).toContain('R:ended@32');
+    expect(h.log).not.toContain('P:began@32');
+    expect(waiter.state).toBe('failed');
+    h.finger(1).up(48);
+  });
+
+  it('lets the innermost deadline win a tie at the same instant (FR15)', () => {
+    const h = createHarness();
+    const inner = new Scripted('inner', {
+      moved: (r, event) =>
+        r.state === 'possible' && event.time === 10
+          ? r.recognizeAt(500)
+          : undefined,
+    });
+    const outer = new Scripted('outer', {
+      began: r => r.recognizeAt(500),
+      moved: () => {},
+    });
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [inner, outer]})
+      .move(1, 0, 10);
+    h.arena.advanceTime(500);
+    expect(h.log).toContain('inner:began@500');
+    expect(outer.state).toBe('failed');
+    h.finger(1).up(600);
+  });
+});
