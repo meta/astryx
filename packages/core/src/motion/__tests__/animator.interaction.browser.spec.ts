@@ -13,7 +13,7 @@
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
  *   the curve and holds its end state; a role variable set on a scope
- *   changes the curve the engine plays
+ *   changes nothing while touch motion stays internal (DEC-11)
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
  */
