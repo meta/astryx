@@ -5,8 +5,8 @@
 /**
  * @file lift.ts
  * @input An element to lift (the source) and, beside it, a surface that
- *   grows out of the press (a menu's popover); the caller's springs (motion
- *   roles a theme may retune), scale rule and tint; the rect morph
+ *   grows out of the press (a menu's popover); the caller's springs, scale
+ *   rule and tint; the rect morph
  *   (motion/rectMorph.ts); the layer runtime's presentation hold, exit copy,
  *   viewport gutter and declared inset
  * @output Exports createLift: lift a source out of the page above a tinted
@@ -97,7 +97,7 @@ import {
  */
 const CLICK_AFTER_LIFT_MS = 350;
 
-/** The springs of a lift; the caller's motion roles. */
+/** The springs of a lift: the caller's. */
 export interface LiftMotion {
   /** The source grows to its lifted rect on it, and the tint fades in. */
   readonly lift: SpringDescription;
@@ -210,7 +210,7 @@ interface LiftedSurface {
 interface LiftState {
   readonly generation: number;
   readonly options: LiftOptions;
-  /** The springs, as the source's theme set them at the lift. */
+  /** The springs, resolved where the source is at the lift. */
   readonly motion: LiftMotion;
   readonly attribute: string;
   readonly source: HTMLElement;
@@ -418,8 +418,9 @@ function probe(
 }
 
 /**
- * The lift's springs as `element`'s theme sets them, read once: plain
- * springs, which nothing reads from the page again.
+ * The lift's springs as they resolve at `element` (a spring that is a motion
+ * role, through its role), read once: plain springs, which nothing reads
+ * from the page again.
  */
 function resolvedMotion(element: Element, motion: LiftMotion): LiftMotion {
   const resolve = (spring: SpringDescription): SpringDescription => ({
