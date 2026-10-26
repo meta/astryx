@@ -43,6 +43,8 @@ interface Recorded {
   cancelled: boolean;
   /** A sampler holding it (the interaction harness pauses to seek). */
   paused: boolean;
+  /** Frames a resumed (play()) animation still waits for its start. */
+  startDelayFrames: number;
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
@@ -116,12 +118,16 @@ beforeEach(() => {
       },
       ready,
       commit(at) {
-        // A paused animation's pending pause completes without a start.
-        if (!this.cancelled && start == null && !this.paused) {
+        // A paused animation's pending pause completes without a start; one
+        // resumed with play() gets its start a frame later.
+        if (this.startDelayFrames > 0) {
+          this.startDelayFrames -= 1;
+        } else if (!this.cancelled && start == null && !this.paused) {
           start = at;
         }
         resolveReady(this);
       },
+      startDelayFrames: 0,
       finish() {
         this.finished = true;
       },
@@ -1514,12 +1520,18 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       await commitFrame(clock);
       for (const animation of recorded) {
         if (release === 'resume') {
+          // play(): pending, so the start comes a frame later, after the
+          // frame's callbacks.
           animation.paused = false;
+          animation.startDelayFrames = 1;
         } else {
           animation.finish();
         }
       }
-      await advance(fade * 2 + END_HOLD_MS + 50);
+      // Frames keep coming: step the clock through the landing.
+      for (let step = 0; step < 16; step++) {
+        await advance(fade / 4);
+      }
       expect(animator.get('x')).toBe(100);
       expect(animator.get('opacity')).toBe(1);
       await expect(handle.finished).resolves.toBe(true);
