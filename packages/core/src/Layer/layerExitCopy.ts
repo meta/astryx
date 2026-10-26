@@ -23,7 +23,10 @@
  * has no ids, no form names and no form owner (a cloned checked radio would
  * otherwise take the live group's selection, and a named field would
  * submit), is `inert` and hidden from assistive technology, and takes no
- * pointer events. A layer has one copy: placing another for the same layer
+ * pointer events. Embedded content (an iframe, an object or embed, media, a
+ * canvas) stands in the copy as an empty box of its size: a deep copy would
+ * load or play it again (an iframe navigates, autoplay restarts, a canvas
+ * comes back blank). A layer has one copy: placing another for the same layer
  * takes the previous one away; other layers' copies stay.
  *
  * It is shown only in the top layer, as a manual popover, so a clipping,
@@ -182,6 +185,35 @@ function layoutBox(element: HTMLElement, view: Window): LayerExitBox {
   };
 }
 
+/** Content a deep copy would load or play again. */
+const EMBEDDED_CONTENT = 'iframe, object, embed, video, audio, canvas';
+
+/**
+ * An empty box standing where embedded content was drawn: the copied node's
+ * classes and inline style, sized to the live node's box, with nothing in it.
+ */
+function emptyBox(
+  copied: HTMLElement,
+  live: HTMLElement | undefined,
+  view: Window,
+): HTMLElement {
+  const box = copied.ownerDocument.createElement('span');
+  box.className = copied.className;
+  const inline = copied.getAttribute('style');
+  if (inline != null) {
+    box.setAttribute('style', inline);
+  }
+  const display = live == null ? 'inline' : view.getComputedStyle(live).display;
+  box.style.setProperty(
+    'display',
+    display === 'inline' || display === '' ? 'inline-block' : display,
+  );
+  box.style.setProperty('box-sizing', 'border-box');
+  box.style.setProperty('width', `${live?.offsetWidth ?? 0}px`);
+  box.style.setProperty('height', `${live?.offsetHeight ?? 0}px`);
+  return box;
+}
+
 /**
  * Copies `element` into a static box where it is drawn, marked with
  * `attribute`, inserts it right after the element and shows it in the top
@@ -246,8 +278,6 @@ export function placeLayerExitCopy(
   style.setProperty('pointer-events', 'none');
   style.setProperty('animation-name', 'none');
   style.setProperty('overflow', 'visible');
-  element.after(copy);
-  copies.set(element, copy);
   // Scrolled content stays where it was scrolled to, once the copy is shown
   // (a hidden box keeps no scroll position).
   const scrolled: [Element, number, number][] = [];
@@ -259,6 +289,17 @@ export function placeLayerExitCopy(
       scrolled.push([target, source.scrollTop, source.scrollLeft]);
     }
   });
+  // Embedded content would load or play again in a deep copy (an iframe
+  // navigates, autoplay media restarts, a canvas comes back blank): each one
+  // stands as an empty box of the same size where it was drawn.
+  const liveEmbeds = element.querySelectorAll<HTMLElement>(EMBEDDED_CONTENT);
+  copy
+    .querySelectorAll<HTMLElement>(EMBEDDED_CONTENT)
+    .forEach((node, index) => {
+      node.replaceWith(emptyBox(node, liveEmbeds[index], view));
+    });
+  element.after(copy);
+  copies.set(element, copy);
   const show = (): boolean => {
     try {
       copy.showPopover();
