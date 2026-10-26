@@ -124,16 +124,14 @@
  * transition. A spring a component starts on release toward a target it
  * picks (a detent, a page) is a transition, and cross-fades (DR2).
  *
- * Roles: a spring or curve that is one of a registered table's motion roles
- * plays the value its CSS variable carries on the element's scope, or the
- * table's value when none is set (resolveMotion.ts; nothing public sets one
- * while touch motion stays internal): `springs.settle` once
- * `registerSpringsTable()` has run, the Reduce Motion fade's curve (the
- * animator registers that role alone). Every other value, and a table never
- * registered, plays its own value, and the fade's length is not a role. A
- * role is read once, when the motion starts, from the scope's computed style: no layout, and the start, the promotion
- * and the browser-set start time are unchanged. A spring written inline at the
- * call site is played as given.
+ * Roles: every spring and curve the animator plays passes through
+ * resolveMotion.ts, which names the motion role it plays (`springs.settle`
+ * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
+ * which the animator registers alone). While touch motion stays internal
+ * (`spec:AST-094` DEC-11), a role plays its table value: nothing reads a CSS
+ * variable or the element's style for it. A spring written inline at the call
+ * site, and a table never registered, play as given; the fade's length is not
+ * a role.
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
@@ -1682,7 +1680,7 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // A role takes its scope's value, read once here, at the start.
+    // The motion role it plays: its table value while DEC-11 holds.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
