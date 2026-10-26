@@ -29,10 +29,11 @@ export type UsePressTrackerOptions = Omit<
   'getBounds' | 'view'
 > & {
   /**
-   * The control gives press feedback per event, so its tracker attaches even
-   * where the primary pointer is fine, with no warning: there a finger's
-   * press is delivered and painted, but never keeps its touch from the
-   * browser (`spec:AST-094` FR19's press-feedback exception). @default false
+   * The control paints press feedback per event, so its tracker attaches
+   * even where the primary pointer is fine, with no warning (an FR19
+   * exception for press feedback only, pending in `spec:AST-094`'s
+   * amendment): there a finger's press never keeps its touch from the
+   * browser. @default false
    */
   perEventPointer?: boolean;
 };
