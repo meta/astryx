@@ -271,8 +271,10 @@ warning, so two writers never fight over the paint. Pass another
   `touchmove` when it begins.
 
   `pinch-zoom` stays in the value unless a pinch or rotation recognizer is
-  attached, so the page stays zoomable (WCAG 1.4.4). A long press also turns
-  off the iOS callout and text selection on its element.
+  attached, so the page stays zoomable (WCAG 1.4.4). A long press with a
+  hold also turns off the iOS callout and text selection on its element for
+  its press; one at 0 ms (a touch-down detector) or given
+  `selectionLock: null` leaves them to the browser.
 
   While a finger or a pen is down, the host turns them off too only where
   the hold does something (`spec:AST-094` FR41): on the element of a
