@@ -68,7 +68,12 @@ function buildFixture() {
   git(upstream, ['config', 'user.email', 'test@test.co']);
   git(upstream, ['config', 'user.name', 'Test']);
   fs.writeFileSync(path.join(upstream, 'package.json'), '{}');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/index.ts'), "export {Card} from './Card';\n");
+  fs.mkdirSync(path.join(upstream, 'packages/core/src/Badge'), {recursive: true});
+  fs.writeFileSync(path.join(upstream, 'packages/core/src/index.ts'), "export {Card} from './Card';\nexport {Badge} from './Badge';\n");
+  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.tsx'), 'export function Badge() {}\n');
+  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.doc.mjs'), "export default {name: 'Badge'};\n");
+  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/index.ts'), "export {Badge} from './Badge';\n");
+  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.tsx'), 'export function Card() {}\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.doc.mjs'), "export default {name: 'Card'};\n");
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), "export {Card} from './Card';\n");
@@ -128,6 +133,8 @@ function buildFixture() {
   git(upstream, ['branch', 'feature', branchPoint]);
   git(upstream, ['checkout', '-q', 'feature']);
   fs.appendFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), 'export const Card = {}\n');
+  // Only Badge's knowledge record changes: no browser audit owns Badge.
+  fs.appendFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), 'record text\n');
   fs.appendFileSync(
     path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
     'export const richTextChanged = true\n',
@@ -194,6 +201,8 @@ describe('analyze-pr shallow-clone recovery', () => {
         'richtext/RichTextView',
         'vega/VegaChart',
       ]);
+      expect(analysis.modifiedComponentOwners).not.toContain('core/Badge');
+      expect(analysis.unresolvedComponentSources).not.toContain('core/Badge');
       expect(analysis.modifiedComponentOwners).not.toContain('core/InteractiveRoleContext');
       expect(analysis.modifiedComponentOwners).not.toContain('lab/Sankey');
       expect(analysis.forceFullComponentAudits).toBe(true);

@@ -121,28 +121,6 @@ export const reducedMotionCrossFade = {
 const {durationMs: reducedMotionCrossFadeMs, curve: move} =
   reducedMotionCrossFade;
 
-/**
- * The keyboard notifications' duration, its own export so the keyboard layout
- * guide reads it without the rest of the table
- * (`architecture:component-style-authoring` INV6). `timing` composes it under
- * its table path, `keyboardNotificationMs`, which stays out of the roles.
- */
-export const keyboardNotification = {
-  /**
-   * The duration the keyboard notifications report
-   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
-   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
-   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
-   *   Oct 23 2026
-   */
-  durationMs: 383.3,
-} as const;
-
-// Composed from a binding, so a bundle that reads only the keyboard's
-// duration drops the rest of the table.
-const {durationMs: keyboardNotificationMs} = keyboardNotification;
-
 export const timing = {
   press,
   curves: {
@@ -182,8 +160,15 @@ export const timing = {
    *   iPhone 17 Pro, read, Oct 23 2026
    */
   navigationBarHideShowMs: 200,
-  // The keyboard notifications' duration, sourced on `keyboardNotification`.
-  keyboardNotificationMs,
+  /**
+   * The duration the keyboard notifications report
+   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
+   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
+   *   Oct 23 2026
+   */
+  keyboardNotificationMs: 383.3,
   /**
    * Core Animation's implicit animation duration
    * (`CATransaction.animationDuration()`), in ms.
@@ -212,14 +197,6 @@ export function registerTimingTable(): void {
       'reducedMotionCrossFadeMs',
       'keyboardNotificationMs',
     ],
-    // The roles spec:AST-094 FR4 names for their use.
-    rename: {
-      implicitAnimationMs: 'stateChangeMs',
-      'curves.caDefault': 'curves.viewChange',
-      'curves.easeIn': 'curves.exit',
-      'curves.easeOut': 'curves.entrance',
-      'curves.easeInOut': 'curves.move',
-    },
     // The motion roles: only the ones spec:AST-094 FR4 names. The press
     // clocks and every other value are internal measured constants.
     roles: [
