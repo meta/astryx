@@ -59,7 +59,9 @@ function Sheet() {
   `highlightDelay`, `cancelTravel` and `quickTapFlash` (and the ref itself)
   as they are now, so a change, even mid-press, never drops the press in
   progress. Unmounting or losing its element calls neither
-  `onHighlightChange` nor `onControlEvent`.
+  `onHighlightChange` nor `onControlEvent`, and neither does disabling the
+  control under a finger: the press ends, so the handler that disables it
+  clears its own highlight.
 
 Outside React, `getGestureHost(document).attach(element, recognizer)` does
 the same and returns a detach function. `getGestureHost(document).fingersDown()`
@@ -223,12 +225,15 @@ presses nothing.
   paints press feedback (an FR19 exception for press feedback only, pending
   in `spec:AST-094`'s amendment): attached with
   `perEventPointer: true` (an option of `attach`, `attachConsumer`,
-  `useGestureRecognizer` and `usePressTracker`), it gets the host's
-  listeners, its deliveries and its own element's style on any pointer,
-  with no warning, while everything else beside it stays inactive. There
-  such a press tracker paints a finger's press and does nothing else: it
-  reports no control event, keeps nothing from the browser, which still
-  pans, and takes no mouse or pen press.
+  `useGestureRecognizer` and `usePressTracker`), it attaches on any pointer
+  with no warning, while everything else beside it stays inactive. A
+  per-event recognizer gets the host's listeners, its deliveries and its own
+  element's style. Where the pointer is fine, a per-event press tracker gets
+  only passive `touchstart` and `pointerdown` listeners on its own element
+  and no style; the host's document and window listeners are added at a
+  finger's press on it and removed once that press ends. It paints that
+  press and does nothing else: it reports no control event, keeps nothing
+  from the browser, which still pans, and takes no mouse or pen press.
   Even where it is coarse, the host listens only while something enabled
   could take a touch: a disabled recognizer or consumer registers nothing
   (FR24), and after a consumer's `isEnabled()` changes, `host.update(element)`

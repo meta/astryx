@@ -3,14 +3,14 @@
 'use client';
 
 /**
- * @file presentationHold.ts
+ * @file inputHold.ts
  * @input A layer's root element, what ends the hold (a promise, or an
  *   animator handle's `finished`), and its scope; the gesture host's touch
  *   gates
- * @output holdPresentation, usePresentationHold, isInHeldLayer and
- *   isPresentationShield: input held away from a layer while its
+ * @output holdInput, useInputHold, isInHeldLayer and
+ *   isInputShield: input held away from a layer while its
  *   presentation runs
- * @position The Layer module's one presentation hold, for every component
+ * @position The Layer module's one input hold, for every component
  *   whose layer presents or dismisses under a finger
  *
  * UIKit delivers no touch while a presentation runs: until it completes, a
@@ -43,7 +43,7 @@
  * is held all the same. A hit test that must see past held input (a press
  * the finger that opened the layer continues, captured before the hold
  * began) skips shields and nothing else: the first element of
- * `elementsFromPoint` for which `isPresentationShield` is false, so an
+ * `elementsFromPoint` for which `isInputShield` is false, so an
  * overlay really above the layer still wins. The shield is a manual
  * popover, so its `toggle` events reach a document listener that logs
  * every popover's: such a log keeps to its own popovers.
@@ -56,9 +56,9 @@
  * walking the flat tree as it does (a slotted node to its slot, a shadow
  * root to its host).
  *
- * SYNC: When modified, update presentationHold.test.tsx,
- * __tests__/presentationHold.interaction.browser.spec.ts and the components
- * that hold their layer (holdPresentation and usePresentationHold callers).
+ * SYNC: When modified, update inputHold.test.tsx,
+ * __tests__/inputHold.interaction.browser.spec.ts and the components
+ * that hold their layer (holdInput and useInputHold callers).
  */
 
 import {useEffect, type RefObject} from 'react';
@@ -66,17 +66,17 @@ import {getGestureHost} from '../gestures/GestureHost';
 import {parentAcrossShadow} from '../gestures/nativeScroll';
 
 /** What a hold covers: the whole viewport, or the layer alone. */
-export type PresentationHoldScope = 'viewport' | 'layer';
+export type InputHoldScope = 'viewport' | 'layer';
 
 /** What ends a hold: a promise, or an animator handle (its `finished`). */
-export type PresentationHoldEnd =
+export type InputHoldEnd =
   PromiseLike<unknown> | {readonly finished: PromiseLike<unknown>};
 
-export interface PresentationHoldOptions {
+export interface InputHoldOptions {
   /** The hold ends when this settles. */
-  until: PresentationHoldEnd;
+  until: InputHoldEnd;
   /** `'viewport'` while presenting, `'layer'` while dismissing. */
-  scope: PresentationHoldScope;
+  scope: InputHoldScope;
 }
 
 interface HeldLayer {
@@ -95,7 +95,7 @@ const liveShields = new WeakSet<Node>();
  * Whether `node` is the shield of a live hold. A hit test that must see past
  * held input takes the first element of `elementsFromPoint` that is not one.
  */
-export function isPresentationShield(node: Node | null): boolean {
+export function isInputShield(node: Node | null): boolean {
   return node != null && liveShields.has(node);
 }
 
@@ -193,9 +193,9 @@ function addShield(layer: Element): HTMLElement {
  * Holds input away from `layer` until `until` settles. Returns the release
  * (idempotent), for a hold that ends early.
  */
-export function holdPresentation(
+export function holdInput(
   layer: Element,
-  {until, scope}: PresentationHoldOptions,
+  {until, scope}: InputHoldOptions,
 ): () => void {
   gate(layer.ownerDocument);
   let state = held.get(layer);
@@ -310,9 +310,9 @@ function restoreInert(content: Map<Element, boolean>): void {
  * inert bar, a presentation driven by state); released when `isHeld` turns
  * false or the component unmounts.
  */
-export function usePresentationHold(
+export function useInputHold(
   ref: RefObject<Element | null>,
-  {isHeld, scope}: {isHeld: boolean; scope: PresentationHoldScope},
+  {isHeld, scope}: {isHeld: boolean; scope: InputHoldScope},
 ): void {
   useEffect(() => {
     const layer = ref.current;
@@ -320,7 +320,7 @@ export function usePresentationHold(
       return;
     }
     // Released by the cleanup alone.
-    return holdPresentation(layer, {
+    return holdInput(layer, {
       until: new Promise<never>(() => {}),
       scope,
     });

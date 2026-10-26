@@ -117,16 +117,11 @@ describe('a recognizer that never claims (a watcher)', () => {
   });
 
   it('leaves the browser every touch behavior: its direction writes no touch-action', () => {
-    // The host reads an author's touch-action and writes its own in the
-    // next frame (spec:AST-094 FR18): fake that frame.
-    vi.useFakeTimers({toFake: ['requestAnimationFrame']});
-    detach.push(() => vi.useRealTimers());
     document.body.innerHTML = '<div id="list"></div><div id="row"></div>';
     const list = document.getElementById('list') as HTMLElement;
     const row = document.getElementById('row') as HTMLElement;
     const host = new GestureHost(document, {clock: new ManualClock()});
     const listStyle = vi.spyOn(list.style, 'setProperty');
-    const rowStyle = vi.spyOn(row.style, 'setProperty');
     detach.push(
       host.attach(
         list,
@@ -150,11 +145,13 @@ describe('a recognizer that never claims (a watcher)', () => {
         new PanGestureRecognizer({name: 'swipe', direction: 'horizontal'}),
       ),
     );
-    vi.advanceTimersByTime(16);
+    expect(list.hasAttribute('data-astryx-touch-action')).toBe(false);
+    expect(row.getAttribute('data-astryx-touch-action')).toBe(
+      'pan-y pinch-zoom',
+    );
     expect(listStyle).not.toHaveBeenCalledWith(
       'touch-action',
       expect.anything(),
     );
-    expect(rowStyle).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
   });
 });

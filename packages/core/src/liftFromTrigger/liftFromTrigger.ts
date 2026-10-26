@@ -3,19 +3,19 @@
 'use client';
 
 /**
- * @file lift.ts
+ * @file liftFromTrigger.ts
  * @input An element to lift (the source) and, beside it, a surface that
  *   grows out of the press (a menu's popover); the caller's springs, scale
  *   rule and tint; the rect morph
- *   (motion/rectMorph.ts); the layer runtime's presentation hold, exit copy,
+ *   (motion/rectMorph.ts); the layer runtime's input hold, exit copy,
  *   viewport gutter and declared inset
- * @output Exports createLift: lift a source out of the page above a tinted
+ * @output Exports createLiftFromTrigger: lift a source out of the page above a tinted
  *   backdrop, grow a surface out of the press beside it, shrink the surface
  *   back into the press, and return the source to its place
  * @position The one lift-from-trigger presentation, internal to core and
  *   opt-in: only a surface that chooses it uses it (ContextMenu's touch
  *   invocation today). Layer stays generic: the top layer, dismissal, the
- *   presentation hold and the shared exit copy are its; this module only
+ *   input hold and the shared exit copy are its; this module only
  *   uses them
  *
  * UIKit's context menu lifts the long-pressed view out of the page: it grows
@@ -52,21 +52,21 @@
  * its own along the same path; the tint as a spring-sampled Web Animation of
  * the layer's `::backdrop`. A tap or
  * a drag that lands while the lift and the surface grow reaches nothing
- * (the presentation hold, FR35); the close holds the layer until the source
+ * (the input hold, FR35); the close holds the layer until the source
  * is back, the surface's exit is done and every press on the layer has
  * lifted. Its timers and document listeners end with it (FR24). Reduce
  * Motion is the animator's (design:reduced-motion): opacity only.
  *
  * SYNC: When modified, update:
- * - /packages/core/src/lift/lift.test.ts
- * - /packages/core/src/lift/__tests__/lift.interaction.browser.spec.ts
+ * - /packages/core/src/liftFromTrigger/liftFromTrigger.test.ts
+ * - /packages/core/src/liftFromTrigger/__tests__/liftFromTrigger.interaction.browser.spec.ts
  */
 
 import type {LayerInset} from '../Layer/LayerContext';
 import {placeLayerExitCopy} from '../Layer/layerExitCopy';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
-import {holdPresentation} from '../Layer/presentationHold';
+import {holdInput} from '../Layer/inputHold';
 import type {MotionHandle} from '../motion/animator';
 import {progressCurve} from '../motion/progress';
 import {
@@ -85,10 +85,10 @@ import {
   type SpringDescription,
 } from '../motion/spring';
 import {
-  liftedRect,
-  type LiftScaleRule,
-  type LiftViewport,
-} from './liftGeometry';
+  liftFromTriggerRect,
+  type LiftFromTriggerScaleRule,
+  type LiftFromTriggerViewport,
+} from './liftFromTriggerGeometry';
 
 /**
  * How long the layer waits, once the last pointer that went down on it has
@@ -98,7 +98,7 @@ import {
 const CLICK_AFTER_LIFT_MS = 350;
 
 /** The springs of a lift: the caller's. */
-export interface LiftMotion {
+export interface LiftFromTriggerMotion {
   /** The source grows to its lifted rect on it, and the tint fades in. */
   readonly lift: SpringDescription;
   /** The source returns to its place on it. */
@@ -115,10 +115,10 @@ export interface LiftMotion {
   readonly surfaceOut: SpringDescription;
 }
 
-export interface LiftOptions {
-  readonly motion: LiftMotion;
+export interface LiftFromTriggerOptions {
+  readonly motion: LiftFromTriggerMotion;
   /** How far the source grows. */
-  readonly scale: LiftScaleRule;
+  readonly scale: LiftFromTriggerScaleRule;
   /**
    * The width a surface grows out of, centered on the press (its height
    * keeps the surface's aspect); a point by default.
@@ -152,13 +152,13 @@ export interface LiftOptions {
 }
 
 /** Where a lift landed. */
-export interface LiftResult {
+export interface LiftFromTriggerResult {
   /** The source's box as laid out, viewport px. */
   readonly source: MorphRect;
   /** The rect it lands on. */
   readonly lifted: MorphRect;
   /** The viewport and the layer runtime's gutter it lifted in. */
-  readonly viewport: LiftViewport;
+  readonly viewport: LiftFromTriggerViewport;
   /**
    * An empty box at the lifted rect, in the layer: what a surface is placed
    * against (an anchor inside the source would move with the source's
@@ -167,12 +167,15 @@ export interface LiftResult {
   readonly anchor: HTMLElement;
 }
 
-export interface Lift {
+export interface LiftFromTrigger {
   /**
    * Lifts `source`: returns where it lands, or null without the popover API
    * (nothing changes then). A lift already up ends at once.
    */
-  lift(source: HTMLElement, options: LiftOptions): LiftResult | null;
+  lift(
+    source: HTMLElement,
+    options: LiftFromTriggerOptions,
+  ): LiftFromTriggerResult | null;
   /**
    * Grows `surface` (a popover laid out at rest, or an element inside one)
    * out of `press` (client px) into its box, or, without a press, fades it
@@ -209,9 +212,9 @@ interface LiftedSurface {
 
 interface LiftState {
   readonly generation: number;
-  readonly options: LiftOptions;
+  readonly options: LiftFromTriggerOptions;
   /** The springs, resolved where the source is at the lift. */
-  readonly motion: LiftMotion;
+  readonly motion: LiftFromTriggerMotion;
   readonly attribute: string;
   readonly source: HTMLElement;
   readonly sourceRect: MorphRect;
@@ -422,7 +425,10 @@ function probe(
  * role, through its role), read once: plain springs, which nothing reads
  * from the page again.
  */
-function resolvedMotion(element: Element, motion: LiftMotion): LiftMotion {
+function resolvedMotion(
+  element: Element,
+  motion: LiftFromTriggerMotion,
+): LiftFromTriggerMotion {
   const resolve = (spring: SpringDescription): SpringDescription => ({
     ...resolveMotion(element, spring),
   });
@@ -591,7 +597,7 @@ const KEPT_PROPERTIES = [
 ] as const;
 
 /** Creates a lift; one per component that offers it. */
-export function createLift(): Lift {
+export function createLiftFromTrigger(): LiftFromTrigger {
   let state: LiftState | null = null;
   let generation = 0;
 
@@ -733,8 +739,8 @@ export function createLift(): Lift {
 
   const lift = (
     source: HTMLElement,
-    options: LiftOptions,
-  ): LiftResult | null => {
+    options: LiftFromTriggerOptions,
+  ): LiftFromTriggerResult | null => {
     if (state != null) {
       end(state);
     }
@@ -801,7 +807,7 @@ export function createLift(): Lift {
     });
     const tint = probed['background-color'];
     const shadow = probed['box-shadow'];
-    const viewport: LiftViewport = {
+    const viewport: LiftFromTriggerViewport = {
       width: doc.documentElement.clientWidth || view?.innerWidth || 0,
       height: view?.innerHeight ?? doc.documentElement.clientHeight,
       gutter: {
@@ -811,7 +817,7 @@ export function createLift(): Lift {
       },
       direction,
     };
-    const lifted = liftedRect(sourceRect, viewport, options.scale);
+    const lifted = liftFromTriggerRect(sourceRect, viewport, options.scale);
     // Writes from here on.
     options.release?.();
     const layer = createLayer(doc, attribute);
@@ -1009,7 +1015,7 @@ export function createLift(): Lift {
     // No touch reaches the layer, or anything under it, while the source
     // grows (spec:AST-094 FR35); a surface extends the hold to its own
     // growth.
-    current.releaseGrowHold = holdPresentation(layer, {
+    current.releaseGrowHold = holdInput(layer, {
       scope: 'viewport',
       until: growing.finished,
     });
@@ -1025,7 +1031,7 @@ export function createLift(): Lift {
   ) => {
     releaseGrowHold(current);
     const until = Promise.all([current.growing.finished, surfaceSettled]);
-    current.releaseGrowHold = holdPresentation(current.layer, {
+    current.releaseGrowHold = holdInput(current.layer, {
       scope: 'viewport',
       until,
     });
@@ -1245,7 +1251,7 @@ export function createLift(): Lift {
     // layer has lifted.
     const ended = settled.then(async () => current.untilPointersLift());
     current.releaseHold?.();
-    current.releaseHold = holdPresentation(layer, {
+    current.releaseHold = holdInput(layer, {
       scope: 'layer',
       until: ended,
     });
