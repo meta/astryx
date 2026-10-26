@@ -635,6 +635,18 @@
     "defaultMessage": "Item {position, number}",
     "description": "What reorder announcements call a List row that shows no text, such as an icon-only row. `{position}` is its 1-based place (e.g. \"after Item 2\")."
   },
+  "@astryx.list.reorderMoveUp": {
+    "defaultMessage": "Move up",
+    "description": "Accessible label of the up-arrow button in the hint a List row's reorder mode shows: it moves the row one place up, as the Up arrow key does."
+  },
+  "@astryx.list.reorderMoveDown": {
+    "defaultMessage": "Move down",
+    "description": "Accessible label of the down-arrow button in the hint a List row's reorder mode shows: it moves the row one place down, as the Down arrow key does."
+  },
+  "@astryx.list.reorderDone": {
+    "defaultMessage": "Done",
+    "description": "Button in the hint a List row's reorder mode shows: it ends the mode and keeps the moves, as Escape does."
+  },
   "@astryx.list.reorderModeDone": {
     "defaultMessage": "Done, {label} at position {position, number} of {total, number}",
     "description": "Screen-reader announcement when a List row's reorder mode ends (Escape, the handle again, or Done), keeping its moves. `{label}` is the row's text, `{position}` its 1-based place, `{total}` the number of rows (e.g. \"Done, Milk at position 3 of 5\")."
