@@ -382,18 +382,6 @@ export function registerSpringsTable(): void {
     // reduced-motion animation (DR4). The keyboard's spring rides the
     // keyboard's own motion and is not a role (spec:AST-094 FR4).
     exclude: ['menuReducedMotion', 'keyboard'],
-    // The roles spec:AST-094 FR4 names for their use; the table keeps the
-    // names of the sources the values come from.
-    rename: {
-      interactive: 'fingerTracking',
-      bouncy: 'emphasis',
-      smooth: 'settle',
-      snappy: 'quickChange',
-      uikitDefault: 'viewChange',
-      uikitSpringDuration: 'timedChange',
-      swiftUIDefault: 'stateChange',
-      swiftUISpring: 'directChange',
-    },
     // The motion roles: only the ones spec:AST-094 FR4 names. Every other
     // spring here is a component's measured value, internal to it.
     roles: [
