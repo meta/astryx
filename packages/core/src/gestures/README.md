@@ -260,9 +260,12 @@ warning, so two writers never fight over the paint. Pass another
 
   While a finger or a pen is down, the host turns them off too only where
   the hold does something (`spec:AST-094` FR41): on the element of a
-  recognizer with `preventsTextSelection` (a slider's thumb, a segmented
+  recognizer created with a `selectionLock` (pass `lockSelection`; a
+  slider's thumb, a segmented
   control's or a switch's drag) that would take the touch (enabled, and
-  accepting its pointer), restored when the contact ends. A press-tracked
+  accepting its pointer), restored when the contact ends. The host calls
+  the recognizer's lock and never imports one, so a component with no such
+  hold does not bundle it. A press-tracked
   control or row whose hold does nothing, and the document press
   controller's surfaces (`usePressFeedback` rows), keep the browser's
   long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the

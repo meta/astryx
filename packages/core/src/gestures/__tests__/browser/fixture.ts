@@ -15,6 +15,7 @@ import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
+import {lockSelection} from '../../selectionLock';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 import {internals} from '../../recognizerInternals';
@@ -192,7 +193,7 @@ host.attach(
   new PanGestureRecognizer({
     name: 'slider',
     direction: 'horizontal',
-    preventsTextSelection: true,
+    selectionLock: lockSelection,
   }),
 );
 
@@ -201,7 +202,7 @@ host.attach(
   new PanGestureRecognizer({
     name: 'switchRow',
     direction: 'horizontal',
-    preventsTextSelection: true,
+    selectionLock: lockSelection,
   }),
 );
 
