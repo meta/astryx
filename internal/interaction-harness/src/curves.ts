@@ -57,6 +57,23 @@ function animationRecorder(): void {
   // Entries whose start time has not resolved yet (still pending when seen).
   let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
+  // When the animation began to play, on the document timeline. A run going
+  // backward reports as its startTime the moment its current time would
+  // reach 0, a whole run after it began (it begins at its end).
+  const playStart = (animation: Animation): number | null => {
+    if (animation.startTime == null) {
+      return null;
+    }
+    const rate = animation.playbackRate;
+    if (rate >= 0) {
+      return Number(animation.startTime);
+    }
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    return Number(animation.startTime) - end / Math.abs(rate);
+  };
   const remember = (animation: Animation) => {
     // A running animation is recorded while still pending: on a cold page the
     // next frame can come only after a short animation has finished.
@@ -68,8 +85,7 @@ function animationRecorder(): void {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
-      startedAt:
-        animation.startTime == null ? null : Number(animation.startTime),
+      startedAt: playStart(animation),
     };
     if (entry.startedAt == null) {
       unstarted.push(entry);
@@ -84,9 +100,9 @@ function animationRecorder(): void {
         );
         const at = (event as AnimationPlaybackEvent).timelineTime;
         entry.startedAt =
-          animation.startTime != null
-            ? Number(animation.startTime)
-            : (at == null ? entry.finishedAt : Number(at)) - end;
+          playStart(animation) ??
+          (at == null ? entry.finishedAt : Number(at)) -
+            end / Math.abs(animation.playbackRate || 1);
       }
     });
     log.push(entry);
@@ -100,7 +116,7 @@ function animationRecorder(): void {
     }
     unstarted = unstarted.filter(entry => {
       if (entry.startedAt == null && entry.animation.startTime != null) {
-        entry.startedAt = Number(entry.animation.startTime);
+        entry.startedAt = playStart(entry.animation);
       }
       return entry.startedAt == null && entry.animation.playState !== 'idle';
     });
@@ -837,18 +853,21 @@ export async function waitForAnimation(
         ) => {
           const effect = a.effect as KeyframeEffect | null;
           const timing = effect?.getComputedTiming();
-          // The recorded start stands in once the page has cancelled it. An
-          // animation running backward started when its current time last
-          // stood at its end: its startTime is where it would reach 0.
+          // The recorded start stands in once the page has cancelled it. A
+          // run going backward began at its end: its startTime is where its
+          // current time would reach 0, a whole run later.
           const rate = a.playbackRate;
+          const speed = Math.abs(rate || 1);
+          const endTime = Number(timing?.endTime ?? 0);
+          const delay = Number(timing?.delay ?? 0);
+          const start =
+            a.startTime == null
+              ? recordedStart
+              : rate < 0
+                ? Number(a.startTime) - endTime / speed
+                : Number(a.startTime);
           const startedAt =
-            rate < 0 && a.currentTime != null
-              ? performance.timeOrigin +
-                Number(document.timeline.currentTime ?? performance.now()) -
-                (Number(timing?.endTime ?? 0) - Number(a.currentTime)) /
-                  Math.abs(rate)
-              : performance.timeOrigin +
-                Number(a.startTime ?? recordedStart ?? Number.NaN);
+            performance.timeOrigin + Number(start ?? Number.NaN);
           const name =
             'transitionProperty' in a
               ? (a as unknown as {transitionProperty: string})
@@ -860,9 +879,16 @@ export async function waitForAnimation(
             kind: a.constructor.name,
             name,
             // Through the playback rate's speed: at rate 2 a curve runs in half
-            // its duration.
-            from: startedAt + Number(timing?.delay ?? 0) / Math.abs(rate || 1),
-            to: startedAt + curveEnd(a) / Math.abs(rate || 1),
+            // its duration. Backward, the end delay plays first and the start
+            // delay last.
+            from:
+              rate < 0
+                ? startedAt + Number(timing?.endDelay ?? 0) / speed
+                : startedAt + delay / speed,
+            to:
+              rate < 0
+                ? startedAt + (endTime - delay) / speed
+                : startedAt + curveEnd(a) / speed,
             durationMs: Number(timing?.duration ?? 0),
             easing: String(effect?.getTiming().easing ?? 'linear'),
             keyframes: (effect?.getKeyframes() ?? []).map(
