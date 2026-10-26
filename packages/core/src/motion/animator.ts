@@ -2146,7 +2146,6 @@ export function createAnimator(
       if (next === target) {
         return;
       }
-      demote();
       if (next == null) {
         // A Reduce Motion move waiting to land lands now, on the element it
         // ran on: a node that replaces this one (React's replacement order,
@@ -2182,6 +2181,8 @@ export function createAnimator(
         // A node in place of the one just detached: no unmount.
         unmountQueued = false;
       }
+      // After the landing's commit, which can promote the element again.
+      demote();
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2192,7 +2193,10 @@ export function createAnimator(
       retireTimers.clear();
       if (next == null) {
         handBackBorrow();
-      } else if (borrowedOpacity != null) {
+      } else if (
+        borrowedOpacity != null ||
+        [...landings].some(landing => landing.restoreIsBorrowed === true)
+      ) {
         // A new element takes over a running borrowed dip: the dip keeps
         // running there, so a pending move still lands while it is
         // invisible; the outgoing element gets its stylesheet's opacity back.
