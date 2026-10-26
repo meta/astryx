@@ -12,7 +12,10 @@
  * Storybook and the evidence directory are the host's own. The image tag
  * matches the installed playwright, so its browsers match the client.
  * Uses podman when present, else docker. `--network=host` lets the specs'
- * local Storybook server and the browser reach each other.
+ * local Storybook server and the browser reach each other. Under docker the
+ * container runs as the invoking user (rootless podman already maps it), so
+ * the `test-results/` it writes into the mounted checkout stay the host
+ * user's and the next host run can clear them.
  */
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -47,9 +50,21 @@ const env = [
 ]
   .filter(name => process.env[name] != null)
   .flatMap(name => ['-e', `${name}=${process.env[name]}`]);
+// Docker runs the image as root unless told otherwise; the files it writes
+// into the bind mount would then be root's.
+const user =
+  engine === 'docker' && typeof process.getuid === 'function'
+    ? [
+        '--user',
+        `${process.getuid()}:${process.getgid?.() ?? process.getuid()}`,
+        '-e',
+        'HOME=/tmp',
+      ]
+    : [];
 const command = [
   'run',
   '--rm',
+  ...user,
   '--network=host',
   '--ipc=host',
   '-v',
