@@ -939,16 +939,18 @@ export class GestureHost {
   ): {
     recognizers: GestureRecognizer[];
     consumer: TouchConsumer | null;
+    consumerElement: Element | null;
     hovers: HoverGestureRecognizer[];
   } {
     const recognizers: GestureRecognizer[] = [];
     const hovers: HoverGestureRecognizer[] = [];
     let consumer: TouchConsumer | null = null;
+    let consumerElement: Element | null = null;
     if (
       target instanceof Node &&
       [...this.touchGates].some(gate => gate(target))
     ) {
-      return {recognizers, consumer, hovers};
+      return {recognizers, consumer, consumerElement, hovers};
     }
     let hasConsumerOwner = pointerType == null;
     for (
@@ -982,6 +984,7 @@ export class GestureHost {
         this.isConsumerActive(registration.consumer)
       ) {
         consumer = registration.consumer;
+        consumerElement = node;
         hasConsumerOwner = true;
         continue;
       }
@@ -991,21 +994,23 @@ export class GestureHost {
       for (const type of this.delegated) {
         if (node.hasAttribute(type.attribute)) {
           consumer = type.create(node, pointerType);
+          consumerElement = node;
           hasConsumerOwner = true;
           break;
         }
       }
     }
-    return {recognizers, consumer, hovers};
+    return {recognizers, consumer, consumerElement, hovers};
   }
 
   /**
    * Turn text selection and the touch callout off, for as long as this
    * finger or pen is down, only on the elements whose hold does something:
-   * a long press's (a menu, a hold-repeat) and those of recognizers created
-   * with a `selectionLock` (a slider's thumb, a switch's drag). Anything whose hold does nothing, a
-   * press-tracked control or row included, keeps the browser's long-press
-   * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
+   * a long press's (a menu, a hold-repeat), those of recognizers created
+   * with a `selectionLock` (a slider's thumb, a switch's drag) and that of a
+   * press tracker created with one (a stepper's hold-repeat). Anything whose
+   * hold does nothing, a plain press-tracked control or row included, keeps
+   * the browser's long-press selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
    * lock only where the primary pointer is coarse (locksSelectionFor), so
    * desktop selection is untouched.
    */
@@ -1013,6 +1018,8 @@ export class GestureHost {
     id: number,
     recognizers: ReadonlyArray<GestureRecognizer>,
     target: EventTarget | null,
+    consumer: TouchConsumer | null,
+    consumerElement: Element | null,
   ): void {
     // Each recognizer whose hold does something brings its lock; the host
     // never imports one (a component without such a hold does not bundle
@@ -1031,6 +1038,12 @@ export class GestureHost {
         elements.add(recognizer.view);
         byLock.set(lock, elements);
       }
+    }
+    const consumerLock = consumer?.selectionLock;
+    if (consumerLock != null && consumerElement != null) {
+      const elements = byLock.get(consumerLock) ?? new Set<Element>();
+      elements.add(consumerElement);
+      byLock.set(consumerLock, elements);
     }
     if (byLock.size > 0) {
       const undo = [...byLock].map(([lock, elements]) =>
@@ -1107,14 +1120,17 @@ export class GestureHost {
         stale.push(previous);
       }
       const target = touch.target instanceof Node ? touch.target : event.target;
-      const {recognizers, consumer} = this.participantsAt(target, 'touch');
+      const {recognizers, consumer, consumerElement} = this.participantsAt(
+        target,
+        'touch',
+      );
       if (recognizers.length === 0 && consumer == null) {
         continue;
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
       if (locksSelectionFor('touch', this.doc.defaultView)) {
-        this.lockSelection(id, recognizers, target);
+        this.lockSelection(id, recognizers, target, consumer, consumerElement);
       }
       this.watchTarget(
         touch.identifier,
@@ -1594,7 +1610,7 @@ export class GestureHost {
     if (event.pointerType === 'mouse' && event.button !== 0) {
       return;
     }
-    const {recognizers, consumer} = this.participantsAt(
+    const {recognizers, consumer, consumerElement} = this.participantsAt(
       event.target,
       event.pointerType,
     );
@@ -1604,7 +1620,13 @@ export class GestureHost {
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
     if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
-      this.lockSelection(id, recognizers, event.target);
+      this.lockSelection(
+        id,
+        recognizers,
+        event.target,
+        consumer,
+        consumerElement,
+      );
     }
     this.arena.began([
       {

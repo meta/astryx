@@ -13,8 +13,10 @@
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import type {SelectionLock} from '../GestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
+import {lockSelection} from '../selectionLock';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
@@ -238,16 +240,19 @@ function Button({
   onEvent,
   cancelTravel,
   isBraking,
+  selectionLock,
 }: {
   onEvent: (event: ControlEvent) => void;
   cancelTravel?: number;
   isBraking?: () => boolean;
+  selectionLock?: SelectionLock;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   usePressTracker(ref, {
     onControlEvent: event => onEvent(event),
     cancelTravel,
     isBraking,
+    selectionLock,
   });
   return (
     <button data-testid="button" ref={ref} type="button">
@@ -266,6 +271,17 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 5, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 5, x: 1, y: 1}, 50, true);
     expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+
+  it('locks selection and the callout for each press of a control whose hold acts, given the lock (spec:AST-094 FR41)', () => {
+    const {getByTestId} = render(
+      <Button onEvent={() => {}} selectionLock={lockSelection} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 3, x: 1, y: 1}, 0);
+    expect(button.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', button, {id: 3, x: 1, y: 1}, 50, true);
+    expect(button.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('takes an option changed after mount from the next touch', () => {

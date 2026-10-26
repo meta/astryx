@@ -154,6 +154,7 @@ export function usePressTracker(
     cancelTravel,
     quickTapFlash,
     keepsTouch,
+    selectionLock,
     perEventPointer = false,
   } = options;
   // A profile change after mount takes effect from the next touch: the
@@ -180,6 +181,7 @@ export function usePressTracker(
         cancelTravel,
         quickTapFlash,
         keepsTouch,
+        selectionLock,
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
@@ -206,6 +208,7 @@ export function usePressTracker(
       cancelTravel,
       quickTapFlash,
       keepsTouch,
+      selectionLock,
     ],
   );
 

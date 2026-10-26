@@ -20,6 +20,7 @@ import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
+import type {SelectionLock} from '../GestureRecognizer';
 import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
@@ -156,6 +157,13 @@ afterEach(() => {
   document.body.innerHTML = '';
   restorePointer();
 });
+
+/** A press tracker whose hold acts, as a stepper's hold-repeat (FR41). */
+class LockingConsumer extends RecordingConsumer {
+  constructor(readonly selectionLock: SelectionLock = lockSelection) {
+    super();
+  }
+}
 
 describe('GestureHost', () => {
   it('sets touch-action and the long-press styles on attach, and restores them on detach', () => {
@@ -1125,6 +1133,45 @@ describe('GestureHost', () => {
     touch('touchend', off, [one], [], 400);
   });
 
+  it("calls a press tracker's own selection lock for each finger's press, a stepper's hold-repeat, and nowhere else (spec:AST-094 FR41)", () => {
+    detachers.push(coarsePrimaryPointer());
+    const {stepper, row} = mount(
+      '<div id="stepper">+</div><div id="row">Row</div>',
+    );
+    const release = vi.fn();
+    const lock = vi.fn(
+      (_elements: Iterable<Element>, _target: EventTarget | null) => release,
+    );
+    detachers.push(
+      host.attachConsumer(stepper, new LockingConsumer(lock)),
+      host.attachConsumer(row, new RecordingConsumer()),
+    );
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', stepper, [finger], [finger], 0);
+    expect(lock).toHaveBeenCalledTimes(1);
+    expect([...lock.mock.calls[0][0]]).toEqual([stepper]);
+    expect(release).not.toHaveBeenCalled();
+    touch('touchend', stepper, [finger], [], 600);
+    expect(release).toHaveBeenCalledTimes(1);
+    // A mouse press keeps desktop selection.
+    pointer('pointerdown', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 700,
+    });
+    pointer('pointerup', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      time: 750,
+    });
+    // A tracker whose hold does nothing brings no lock.
+    touch('touchstart', row, [finger], [finger], 800);
+    touch('touchend', row, [finger], [], 900);
+    expect(lock).toHaveBeenCalledTimes(1);
+  });
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(

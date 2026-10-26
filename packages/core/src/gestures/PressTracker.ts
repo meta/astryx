@@ -47,7 +47,7 @@
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {timing} from '../motion/uikit/timing';
 import {travel} from './geometry';
-import type {GestureRecognizer} from './GestureRecognizer';
+import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
 import type {GestureTouch, TouchConsumer} from './types';
 
@@ -85,6 +85,14 @@ export interface PressTrackerOptions {
    * @default false
    */
   keepsTouch?: boolean;
+  /**
+   * For a control whose own record defines a hold action (a stepper's
+   * hold-repeat): pass `lockSelection` (gestures/selectionLock.ts) to turn
+   * text selection and the callout off for each press, where the primary
+   * pointer is coarse (`spec:AST-094` FR41). A control whose hold does
+   * nothing passes none. @default undefined
+   */
+  selectionLock?: SelectionLock;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -174,6 +182,9 @@ export class PressTracker implements TouchConsumer {
   constructor(options: PressTrackerOptions) {
     if (options.keepsTouch === true) {
       this.keepsTouch = () => this.isKept;
+    }
+    if (options.selectionLock != null) {
+      this.selectionLock = options.selectionLock;
     }
     this.options = options;
     this.trackingExpansion =
@@ -335,6 +346,9 @@ export class PressTracker implements TouchConsumer {
    * waits on the main thread.
    */
   readonly keepsTouch?: () => boolean;
+
+  /** The selection lock of a control whose hold acts (FR41); see the option. */
+  readonly selectionLock?: SelectionLock;
 
   private clearHighlightTimer(): void {
     if (this.highlightTimer != null) {
