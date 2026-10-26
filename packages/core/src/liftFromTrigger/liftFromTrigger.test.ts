@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file lift.test.ts
+ * @file liftFromTrigger.test.ts
  * @input vitest (jsdom), the lift, stand-ins for the popover API and for
  *   layout (jsdom has neither) and a spy on the input hold
  * @output Checks the lift's bookkeeping in the page: while up it adds the
@@ -12,12 +12,15 @@
  *   it over repeated lifts; the gutter it reads; the holds it takes; taps on
  *   its backdrop
  * @position Testing; the motion, the top layer and the counts in real
- *   engines are proven in __tests__/lift.interaction.browser.spec.ts
+ *   engines are proven in __tests__/liftFromTrigger.interaction.browser.spec.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as inputHold from '../Layer/inputHold';
-import {createLift, type LiftOptions} from './lift';
+import {
+  createLiftFromTrigger,
+  type LiftFromTriggerOptions,
+} from './liftFromTrigger';
 
 vi.mock('../Layer/inputHold', async importOriginal => ({
   ...(await importOriginal<typeof inputHold>()),
@@ -28,7 +31,9 @@ const {holdInput} = inputHold;
 
 const SPRING = {response: 0.3, dampingRatio: 1};
 
-function options(overrides: Partial<LiftOptions> = {}): LiftOptions {
+function options(
+  overrides: Partial<LiftFromTriggerOptions> = {},
+): LiftFromTriggerOptions {
   return {
     motion: {
       lift: SPRING,
@@ -194,7 +199,7 @@ describe('lift', () => {
   it('adds the layer, its shadow and anchor, and one placeholder while lifted, whatever the source holds; the source keeps its place among its siblings', () => {
     const {source, before} = renderList();
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     const result = lift.lift(source, options());
     expect(result).not.toBeNull();
     // 13 elements lifted (the row and its 12), 4 added.
@@ -262,7 +267,7 @@ describe('lift', () => {
         return resolved;
       },
     );
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     const result = lift.lift(source, options({inset: {blockEnd: 56}}));
     expect(declaredInset).toBe('56px');
     expect(result?.viewport.gutter).toEqual({top: 47, bottom: 34, inline: 16});
@@ -273,7 +278,7 @@ describe('lift', () => {
   it('a drop puts back exactly what the source had inline, and takes the placeholder and the layer away', async () => {
     const {source} = renderList();
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options());
     lift.drop();
     await vi.runAllTimersAsync();
@@ -287,7 +292,7 @@ describe('lift', () => {
   it('an unmount mid-lift ends it at once: no element, document listener or timer left', () => {
     const {source} = renderList();
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options());
     lift.dispose();
     expectInlineAsBefore(source);
@@ -300,7 +305,7 @@ describe('lift', () => {
   it('an unmount while the close waits for a press on the layer to lift leaves nothing behind either', async () => {
     const {source} = renderList();
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options());
     const layer = document.body.lastElementChild as HTMLElement;
     // A finger down on the layer, never lifted: the close waits for it.
@@ -319,7 +324,7 @@ describe('lift', () => {
   it('twenty lifts and drops leave the page, the document listeners and the timers as they were (no leaks)', async () => {
     const {source} = renderList();
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     for (let i = 0; i < 20; i++) {
       lift.lift(source, options());
       lift.drop();
@@ -336,7 +341,7 @@ describe('lift', () => {
     const html = document.body.innerHTML;
     // @ts-expect-error: a browser without the popover API.
     HTMLElement.prototype.showPopover = undefined;
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     expect(lift.lift(source, options())).toBeNull();
     expect(document.body.innerHTML).toBe(html);
   });
@@ -345,7 +350,7 @@ describe('lift', () => {
     const {source} = renderList();
     source.style.position = 'absolute';
     const rest = count();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options());
     expect(count()).toBe(rest + 3);
     lift.dispose();
@@ -359,7 +364,7 @@ describe('lift', () => {
     );
     const menu = document.getElementById('menu') as HTMLElement;
     place(menu, 40, 380, 250, 200);
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options());
     const layer = document.querySelector('[data-test-lift]');
     expect(vi.mocked(holdInput)).toHaveBeenLastCalledWith(layer, {
@@ -387,7 +392,7 @@ describe('lift', () => {
   it('a press that went down and lifted on the layer is a backdrop tap; one that came from elsewhere is not', () => {
     const {source} = renderList();
     const onBackdropTap = vi.fn();
-    const lift = createLift();
+    const lift = createLiftFromTrigger();
     lift.lift(source, options({onBackdropTap}));
     const layer = document.body.lastElementChild as HTMLElement;
     const pointer = (type: string, pointerId: number) => {
