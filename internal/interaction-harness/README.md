@@ -173,7 +173,11 @@ down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
 animation the action starts a frame or two later is waited for) and reads no
 style until the trace ends (in the anchored fixture's steady middle,
-24 Layouts before, 0 now).
+24 Layouts before, 0 now). The trace's `longTasks` are the page's own: a task
+that ran a DevTools command (a harness read such as `waitForAnimation`
+describing keyframes, or `blockMainThread` without `during`) is in
+`devtoolsTasks` instead, unless page script ran inside it (a listener or timer
+the evaluate set off).
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
