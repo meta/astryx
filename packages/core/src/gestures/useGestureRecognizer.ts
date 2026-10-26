@@ -69,18 +69,20 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   );
 
   useIsomorphicLayoutEffect(() => {
+    recognizer.setEnabled(isEnabled);
+  }, [recognizer, isEnabled]);
+
+  // A disabled gesture is not attached at all: no listener and no
+  // `touch-action` of its own on the element (spec:AST-094 FR24).
+  useIsomorphicLayoutEffect(() => {
     const element = ref.current;
-    if (element == null) {
+    if (element == null || !isEnabled) {
       return undefined;
     }
     return getGestureHost(element.ownerDocument).attach(element, recognizer, {
       manageStyle,
     });
-  }, [ref, recognizer, manageStyle]);
-
-  useIsomorphicLayoutEffect(() => {
-    recognizer.setEnabled(isEnabled);
-  }, [recognizer, isEnabled]);
+  }, [ref, recognizer, manageStyle, isEnabled]);
 
   return recognizer;
 }
@@ -121,6 +123,16 @@ export function usePressTracker(
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
         isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
+        // A touch that brakes a scroll the finger set moving presses nothing
+        // (GestureHost.isScrollBraking), unless the caller decides.
+        isBraking: touch => {
+          const element = ref.current;
+          return (
+            optionsRef.current.isBraking?.(touch) ??
+            (element != null &&
+              getGestureHost(element.ownerDocument).isScrollBraking(element))
+          );
+        },
       }),
   );
 
