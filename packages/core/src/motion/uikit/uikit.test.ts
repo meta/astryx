@@ -43,7 +43,7 @@ const PROVENANCE_KEYS = new Set(['source', 'guess', 'measure']);
 const MEASURED =
   /^@source measured: .*iOS \d.*(\b20\d\d-\d\d-\d\d\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d\d\b)/;
 const SOURCE_KINDS =
-  /^@source (apple-docs https:\/\/developer\.apple\.com\/|wwdc \d{4}-\d+ |webkit Source\/|aosp frameworks\/|measured: .*iOS \d|GUESS — )/;
+  /^@source (apple-docs https:\/\/developer\.apple\.com\/|wwdc \d{4}-\d+ |webkit Source\/|measured: .*iOS \d|GUESS — )/;
 
 interface Leaf {
   file: string;
