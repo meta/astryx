@@ -300,11 +300,24 @@ export class GestureHost {
       onTransition: options.onTransition,
     });
     const view = doc.defaultView;
+    const coarseQuery =
+      options.isPrimaryPointerCoarse == null &&
+      typeof view?.matchMedia === 'function'
+        ? view.matchMedia('(pointer: coarse)')
+        : null;
     this.isPrimaryPointerCoarse =
-      options.isPrimaryPointerCoarse ??
-      (() =>
-        typeof view?.matchMedia === 'function' &&
-        view.matchMedia('(pointer: coarse)').matches);
+      options.isPrimaryPointerCoarse ?? (() => coarseQuery?.matches ?? false);
+    // The primary pointer can change (a tablet's keyboard attached or
+    // removed): styles and listeners follow it.
+    coarseQuery?.addEventListener?.('change', () => this.refreshAll());
+  }
+
+  /** Re-derive every element's styles and the host's listeners. */
+  private refreshAll(): void {
+    for (const [element, registration] of this.registry) {
+      this.refresh(element, registration);
+    }
+    this.syncListeners();
   }
 
   // --- Attachment ------------------------------------------------------------
@@ -464,7 +477,13 @@ export class GestureHost {
   }
 
   private applyStyle(element: HTMLElement, registration: Registration): void {
-    const style = gestureHostStyle(registration.recognizers);
+    // Where the primary pointer is fine, or no attached recognizer is
+    // enabled, the host manages no style: the element keeps its own
+    // touch-action (spec:AST-094 FR19); any value set before is restored.
+    // A disabled recognizer leaves the browser everything too.
+    const style: GestureHostStyle = this.isPrimaryPointerCoarse()
+      ? gestureHostStyle(registration.recognizers.filter(r => r.isEnabled))
+      : {};
     for (const key of Object.keys(
       STYLE_PROPERTIES,
     ) as (keyof GestureHostStyle)[]) {
