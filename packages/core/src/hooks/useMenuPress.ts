@@ -97,6 +97,13 @@ export const MENU_PRESS_SURFACE_ATTR = 'data-astryx-menu-press-surface';
 export const MENU_PRESS_STRAY_CLICK_MS = CLICK_GUARD_WINDOW_MS;
 /** How long a finger must rest on the trigger before the menu opens under it. */
 export const MENU_PRESS_LONG_PRESS_MS = LONG_PRESS_DURATION_MS;
+/**
+ * How far a finger held on a DropdownMenu trigger may move before the open,
+ * in CSS px: `spec:AST-094` FR29's drift allowance (FR2's table: unmeasured,
+ * a 12 pt move still opened). ContextMenu keeps the long press's own
+ * allowable movement.
+ */
+export const MENU_PRESS_TRIGGER_DRIFT_PX = 13;
 /** Distance from a scrolling menu's edge within which a resting pointer scrolls. */
 export const MENU_PRESS_AUTOSCROLL_ZONE_PX = 24;
 const AUTOSCROLL_STEP_PX = 6;
@@ -618,8 +625,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         lastPointerEventRef.current = event;
         const gesture = gestureRef.current;
         if (gesture.phase === 'triggerPress') {
-          // A finger that travels is scrolling, not holding. The tolerance is
-          // the shared hook's, so it cannot drift from ContextMenu's.
+          // A finger that travels past FR29's drift allowance is scrolling,
+          // not holding.
           const isPending = longPressApiRef.current?.moveTo({
             x: event.clientX,
             y: event.clientY,
@@ -727,6 +734,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   longPressApiRef.current = useLongPress({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
+    moveCancelPx: MENU_PRESS_TRIGGER_DRIFT_PX,
   });
 
   // --- Handlers ------------------------------------------------------------
