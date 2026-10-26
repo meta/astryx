@@ -2,6 +2,7 @@
 
 import type {CSSProperties} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {Text} from '@astryxdesign/core/Text';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -267,5 +268,140 @@ export const NarrowFlexHost: Story = {
         </div>
       </VStack>
     </VStack>
+  ),
+};
+
+// An iOS-style activity indicator, for an app that wants that look: not a
+// Spinner option but a component composed from StyleX and plain elements, to
+// copy. As UIActivityIndicatorView draws it (iOS 26): eight capsule spokes, a
+// bright head that steps clockwise one spoke every 100 ms (a turn every
+// 0.8 s), and the trail dimming behind it, in UIKit's gray. Each spoke runs
+// one opacity animation whose holds are joined by short linear ramps rather
+// than steps(), which WebKit runs only on the main thread, so it keeps turning
+// while a script runs. Like UIKit's, it keeps its pace under Reduce Motion and
+// turns clockwise in right-to-left layouts.
+
+/**
+ * A spoke's opacity from the moment the head reaches it: UIKit's sixteen
+ * images a turn, 50 ms each, with its spokes' alphas.
+ */
+const activitySpoke = stylex.keyframes({
+  '0%': {opacity: 0.51},
+  '6.24%': {opacity: 0.51},
+  '6.25%': {opacity: 0.467},
+  '12.49%': {opacity: 0.467},
+  '12.5%': {opacity: 0.424},
+  '18.74%': {opacity: 0.424},
+  '18.75%': {opacity: 0.38},
+  '24.99%': {opacity: 0.38},
+  '25%': {opacity: 0.337},
+  '31.24%': {opacity: 0.337},
+  '31.25%': {opacity: 0.294},
+  '37.49%': {opacity: 0.294},
+  '37.5%': {opacity: 0.251},
+  '43.74%': {opacity: 0.251},
+  '43.75%': {opacity: 0.208},
+  '49.99%': {opacity: 0.208},
+  '50%': {opacity: 0.165},
+  '100%': {opacity: 0.165},
+});
+
+const activityStyles = stylex.create({
+  indicator: {
+    position: 'relative',
+    display: 'inline-block',
+    flexShrink: 0,
+  },
+  medium: {width: 20, height: 20},
+  large: {width: 37, height: 37},
+  spoke: {
+    position: 'absolute',
+    top: 0,
+    borderRadius: 9999,
+    // UIKit's secondary label color, light and dark (the alphas above are
+    // the images', which include its own); a theme color works too. Under
+    // forced colors a background becomes the page's Canvas, which would hide
+    // every spoke; the spokes keep the system text color instead.
+    backgroundColor: {
+      default: 'light-dark(#3C3C43, #EBEBF5)',
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    forcedColorAdjust: {
+      default: null,
+      '@media (forced-colors: active)': 'none',
+    },
+    animationName: activitySpoke,
+    animationDuration: '0.8s',
+    animationTimingFunction: 'linear',
+    animationIterationCount: 'infinite',
+  },
+  // 2.55 pt wide, from 3.35 to 10 pt out from the center of the 20 pt box.
+  spokeMedium: {
+    left: 8.725,
+    width: 2.55,
+    height: 6.65,
+    transformOrigin: '1.275px 10px',
+  },
+  // 5 pt wide, from 5.5 to 17.5 pt out from a center 1 pt up and left of the
+  // 37 pt box's (UIKit draws the large image from its top-left corner).
+  spokeLarge: {
+    left: 15,
+    width: 5,
+    height: 12,
+    transformOrigin: '2.5px 17.5px',
+  },
+  // Spoke k sits k × 45° clockwise from 12 o'clock. The head starts at
+  // 9 o'clock (spoke 6) and reaches spoke k ((k − 6) mod 8) × 100 ms later.
+  spokeAt: (index: number) => ({
+    transform: `rotate(${index * 45}deg)`,
+    animationDelay: `${((((index - 6) % 8) + 8) % 8) * 100 - 800}ms`,
+  }),
+});
+
+/**
+ * UIKit's activity indicator, medium (20 pt) or large (37 pt). It is a named
+ * image, not a live region: mounted already named, a status element would
+ * announce nothing reliably, so the app announces loading itself, once,
+ * through the shared channel (`useAnnounce` from `@astryxdesign/core/hooks`).
+ */
+function ActivityIndicator({
+  size = 'medium',
+  label = 'Loading',
+}: {
+  size?: 'medium' | 'large';
+  label?: string;
+}) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      {...stylex.props(activityStyles.indicator, activityStyles[size])}>
+      {Array.from({length: 8}, (_, index) => (
+        <span
+          key={index}
+          {...stylex.props(
+            activityStyles.spoke,
+            size === 'large'
+              ? activityStyles.spokeLarge
+              : activityStyles.spokeMedium,
+            activityStyles.spokeAt(index),
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The iOS look, composed from existing APIs: copy `ActivityIndicator` from
+ * this story's source into an app that wants it.
+ */
+export const IOSStyleActivityIndicator: Story = {
+  name: 'iOS-style activity indicator (composed)',
+  render: () => (
+    <HStack gap={6} vAlign="center">
+      <ActivityIndicator />
+      <ActivityIndicator size="large" />
+    </HStack>
   ),
 };
