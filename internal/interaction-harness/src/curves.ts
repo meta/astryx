@@ -441,9 +441,11 @@ export async function seekAnimations(
         const end = Number(
           animation.effect?.getComputedTiming().endTime ?? Infinity,
         );
-        const local = Math.min(t - offset, end - inset);
+        // A faster rate runs more curve per timeline ms.
+        const rate = animation.playbackRate || 1;
+        const local = Math.min((t - offset) * rate, end - inset);
         animation.currentTime = local;
-        presented = Math.max(presented, local + offset);
+        presented = Math.max(presented, local / rate + offset);
       });
       return Number.isFinite(presented) ? presented : t;
     },
@@ -594,19 +596,27 @@ export async function sampleCurve(
           const end = Number(
             animation.effect?.getComputedTiming().endTime ?? Infinity,
           );
-          const local = Math.min(t - offset, end - inset);
+          // A faster rate runs more curve per timeline ms.
+          const rate = animation.playbackRate || 1;
+          const local = Math.min((t - offset) * rate, end - inset);
           animation.currentTime = local;
-          presented = Math.max(presented, local + offset);
+          presented = Math.max(presented, local / rate + offset);
           const properties = own[index];
           if (properties == null) {
             return;
           }
-          presentedOwn = Math.max(presentedOwn, local + offset);
+          presentedOwn = Math.max(presentedOwn, local / rate + offset);
           if (TRANSFORM.some(p => properties.has(p))) {
-            presentedTransform = Math.max(presentedTransform, local + offset);
+            presentedTransform = Math.max(
+              presentedTransform,
+              local / rate + offset,
+            );
           }
           if (properties.has('opacity')) {
-            presentedOpacity = Math.max(presentedOpacity, local + offset);
+            presentedOpacity = Math.max(
+              presentedOpacity,
+              local / rate + offset,
+            );
           }
         });
         const or = (value: number, fallback: number) =>
@@ -849,8 +859,10 @@ export async function waitForAnimation(
           return {
             kind: a.constructor.name,
             name,
-            from: startedAt + Number(timing?.delay ?? 0),
-            to: startedAt + curveEnd(a),
+            // Through the playback rate's speed: at rate 2 a curve runs in half
+            // its duration.
+            from: startedAt + Number(timing?.delay ?? 0) / Math.abs(rate || 1),
+            to: startedAt + curveEnd(a) / Math.abs(rate || 1),
             durationMs: Number(timing?.duration ?? 0),
             easing: String(effect?.getTiming().easing ?? 'linear'),
             keyframes: (effect?.getKeyframes() ?? []).map(
@@ -876,13 +888,18 @@ export async function waitForAnimation(
             ? element.getAnimations({subtree: true})
             : recorded.filter(e => e.finishedAt == null).map(e => e.animation)
         ).filter(a => a.playState === 'running' && a.startTime != null);
-        // Progress along the curve: a transition's delay presents nothing.
-        const progressed = running.filter(
-          a =>
-            Number(a.currentTime ?? 0) -
-              Number(a.effect?.getComputedTiming().delay ?? 0) >=
-            minProgress,
-        );
+        // Progress along the curve, on the timeline: a transition's delay
+        // presents nothing, a run going backward (`reverse()`) progresses from
+        // its end, and a faster rate presents more curve per ms.
+        const progressed = running.filter(a => {
+          const timing = a.effect?.getComputedTiming();
+          const time = Number(a.currentTime ?? 0);
+          const local =
+            a.playbackRate < 0
+              ? Number(timing?.endTime ?? 0) - time
+              : time - Number(timing?.delay ?? 0);
+          return local / Math.abs(a.playbackRate || 1) >= minProgress;
+        });
         if (progressed.length > 0) {
           return progressed.map(a => describe(a, null, null));
         }

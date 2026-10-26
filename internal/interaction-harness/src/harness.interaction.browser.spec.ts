@@ -510,6 +510,56 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
+  test('a reversed run counts its progress from its end, and a faster playback rate is read on the timeline by waits, seeks and samples', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Reversed, the run starts at its end: progress counts down from there,
+    // so a wait for 100 ms of it returns once the run has presented that much.
+    const watch = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{translate: '0px 0px'}, {translate: '100px 0px'}], {
+        duration: 1000,
+        easing: 'linear',
+      }).reverse();
+    });
+    await watch.started({minProgressMs: 100});
+    const presented = await box.evaluate(el => {
+      const [animation] = el.getAnimations();
+      return (
+        Number(animation.effect?.getComputedTiming().endTime ?? 0) -
+        Number(animation.currentTime ?? 0)
+      );
+    });
+    expect(presented).toBeGreaterThanOrEqual(100);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // At playback rate 2 a 1,000 ms curve runs 500 ms: its interval, and a
+    // seek or sample at t reads the curve at 2t.
+    const fast = await watchAnimations(box);
+    await box.evaluate(el => {
+      const animation = el.animate(
+        [{translate: '0px 0px'}, {translate: '100px 0px'}],
+        {duration: 1000, easing: 'linear'},
+      );
+      animation.playbackRate = 2;
+    });
+    const [running] = await fast.started();
+    expect(running.to - running.from).toBeCloseTo(500, 0);
+    await holdAnimations(page, box);
+    await seekAnimations(page, 125);
+    const x = await box.evaluate(
+      el =>
+        new DOMMatrix(getComputedStyle(el).transform).m41 +
+        Number.parseFloat(getComputedStyle(el).translate || '0'),
+    );
+    expect(x).toBeCloseTo(25, 0);
+    const [sample] = await sampleCurve(box, [250]);
+    expect(sample.transform.translateX).toBeCloseTo(50, 0);
+    await releaseAnimations(page, {finish: true});
+  });
+
   test('a held end is solved through a cubic-bézier effect easing, a reversed one reads to the full end, and a rotate about x composes on its axis', async ({
     page,
   }) => {
