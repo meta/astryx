@@ -655,6 +655,44 @@ test.describe('frame evidence', () => {
     expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
   });
 
+  test('a waitForRest awaited inside a traced body runs on the real timers, so a frozen timer gate cannot hold it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    await installTimerGate(page);
+    await freezeTimers(page);
+    let outcome = '';
+    await traceRendering(page, async () => {
+      await pop.evaluate(el => {
+        el.animate(
+          [{transform: 'translateY(0px)'}, {transform: 'translateY(100px)'}],
+          {duration: 300},
+        );
+      });
+      // Held by the gate, the wait would neither resolve nor reach its
+      // deadline: the race reads that as "held".
+      outcome = await Promise.race([
+        waitForRest(pop, {timeout: 2000}).then(
+          () => 'rested',
+          () => 'rejected',
+        ),
+        new Promise<string>(resolve => setTimeout(() => resolve('held'), 4000)),
+      ]);
+    });
+    await thawTimers(page);
+    expect(outcome).toBe('rested');
+  });
+
   test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({
     page,
     browserName,

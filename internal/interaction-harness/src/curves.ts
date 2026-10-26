@@ -979,13 +979,18 @@ export async function waitForRest(
             backdrop,
           ].join(' | ');
         };
-        // The page's real frames, even while a timer gate holds its callbacks.
-        const frame =
-          (
-            window as unknown as {
-              __harnessTimerGate?: {frame: typeof requestAnimationFrame};
-            }
-          ).__harnessTimerGate?.frame ?? requestAnimationFrame;
+        // The page's real frames and timers, even while a timer gate holds
+        // its callbacks: a frozen gate never holds the wait itself.
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {
+              frame: typeof requestAnimationFrame;
+              timeout?: typeof setTimeout;
+            };
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? requestAnimationFrame;
+        const timeout = gate?.timeout ?? setTimeout;
         // Set by traceRendering while it traces (see the recorder above).
         const tracing = () =>
           (window as unknown as {__harnessRenderingTrace?: boolean})
@@ -1027,7 +1032,7 @@ export async function waitForRest(
             return;
           }
           const room = deadline - performance.now();
-          setTimeout(
+          timeout(
             () => {
               if (performance.now() > deadline) {
                 reject(new Error('waitForRest: still moving at the deadline'));
