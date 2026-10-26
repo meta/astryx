@@ -264,6 +264,9 @@ describe('GestureHost', () => {
   });
 
   it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
+    // The author's value is read in the next frame (FR18): fake the frame.
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    detachers.push(() => vi.useRealTimers());
     // jsdom drops touch-action from the style, so the writes are observed.
     const {box} = mount('<div id="box"></div>');
     const set = vi.spyOn(box.style, 'setProperty');
@@ -280,6 +283,7 @@ describe('GestureHost', () => {
     expect(writes()).toBe(0);
     coarse = true;
     host2.update(box);
+    vi.advanceTimersByTime(16);
     expect(set).toHaveBeenLastCalledWith('touch-action', 'pan-y pinch-zoom');
     pan.setEnabled(false);
     expect(remove).toHaveBeenCalledWith('touch-action');
@@ -363,6 +367,9 @@ describe('GestureHost', () => {
   });
 
   it('sets touch-action on attach and restores it on detach; the long-press styles wait for a held press', () => {
+    // The author's value is read in the next frame (FR18): fake the frame.
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    detachers.push(() => vi.useRealTimers());
     const {box} = mount('<div id="box" style="color: red"></div>');
     const set = vi.spyOn(box.style, 'setProperty');
     const remove = vi.spyOn(box.style, 'removeProperty');
@@ -371,6 +378,7 @@ describe('GestureHost', () => {
       new PanGestureRecognizer({direction: 'horizontal'}),
     );
     const detachPress = host.attach(box, new LongPressGestureRecognizer());
+    vi.advanceTimersByTime(16);
     expect(set).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
     expect(set).not.toHaveBeenCalledWith('-webkit-touch-callout', 'none');
     detachPress();
@@ -952,8 +960,8 @@ describe('GestureHost', () => {
           new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
         ),
       );
-      // A stylesheet's value is read after paint (see below).
-      vi.advanceTimersByTime(50);
+      // A stylesheet's value is read in the next frame (see below).
+      vi.advanceTimersByTime(16);
       expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
       // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
       expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
@@ -1008,7 +1016,7 @@ describe('GestureHost', () => {
     }
   });
 
-  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's after paint", () => {
+  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's in the next frame", () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
     try {
@@ -1035,10 +1043,12 @@ describe('GestureHost', () => {
       expect(read).not.toHaveBeenCalled();
       // The caller's inline value: pan-y pinch-zoom ∩ pan-y, at once.
       expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
-      // A stylesheet's value: the host's own until the frame has painted,
-      // then what both allow.
-      expect(set).toHaveBeenLastCalledWith('touch-action', 'manipulation');
-      vi.advanceTimersByTime(50);
+      // A stylesheet's value: nothing until the next frame reads it, then
+      // what both allow.
+      expect(
+        set.mock.calls.filter(([name]) => name === 'touch-action'),
+      ).toEqual([]);
+      vi.advanceTimersByTime(16);
       expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
       expect(read).toHaveBeenCalledTimes(1);
     } finally {
