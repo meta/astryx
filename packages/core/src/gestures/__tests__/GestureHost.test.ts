@@ -1078,6 +1078,47 @@ describe('GestureHost', () => {
     touch('touchend', slider, [finger], [], 40);
   });
 
+  it('shares one blocking touchmove handler among the elements that claim while moving: 200 pans, one handler, none for a tap (spec:AST-094 FR19)', () => {
+    const added = vi.spyOn(Element.prototype, 'addEventListener');
+    try {
+      const pans = Array.from({length: 200}, () => {
+        const element = document.createElement('div');
+        document.body.appendChild(element);
+        detachers.push(
+          host.attach(
+            element,
+            new PanGestureRecognizer({direction: 'horizontal'}),
+          ),
+          () => element.remove(),
+        );
+        return element;
+      });
+      const tapTarget = document.createElement('div');
+      document.body.appendChild(tapTarget);
+      detachers.push(host.attach(tapTarget, new TapGestureRecognizer()), () =>
+        tapTarget.remove(),
+      );
+      const blocking = added.mock.calls
+        .map((call, index) => ({
+          call,
+          element: added.mock.contexts[index] as Element,
+        }))
+        .filter(
+          ({call: [type, , options]}) =>
+            type === 'touchmove' &&
+            typeof options === 'object' &&
+            options.passive === false,
+        );
+      // Each claiming element carries the listener itself, so a scroll that
+      // starts outside the rows never waits on it...
+      expect(blocking.map(({element}) => element)).toEqual(pans);
+      // ...and all of them share the host's one handler.
+      expect(new Set(blocking.map(({call}) => call[1])).size).toBe(1);
+    } finally {
+      added.mockRestore();
+    }
+  });
+
   it('keeps native long-press selection on a press-tracked element whose hold does nothing (spec:AST-094 FR41)', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, text} = mount(
