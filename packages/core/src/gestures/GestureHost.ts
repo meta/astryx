@@ -244,6 +244,9 @@ export class GestureHost {
   /** The elements each held contact turned selection off on. */
   private readonly heldSelectionBy = new Map<number, HTMLElement[]>();
   private readonly isPrimaryPointerCoarse: () => boolean;
+  private readonly coarseQuery: MediaQueryList | null;
+  private isWatchingPointer = false;
+  private readonly onPointerKindChange = (): void => this.refreshAll();
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
@@ -284,9 +287,7 @@ export class GestureHost {
         : null;
     this.isPrimaryPointerCoarse =
       options.isPrimaryPointerCoarse ?? (() => coarseQuery?.matches ?? false);
-    // The primary pointer can change (a tablet's keyboard attached or
-    // removed): styles and listeners follow it.
-    coarseQuery?.addEventListener?.('change', () => this.refreshAll());
+    this.coarseQuery = coarseQuery;
   }
 
   /** Re-derive every element's styles and the host's listeners. */
@@ -490,10 +491,25 @@ export class GestureHost {
 
   /**
    * Listen only while something could take a touch: the primary pointer is
-   * coarse and an enabled recognizer or an enabled consumer is attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
+   * coarse and an enabled recognizer or an enabled consumer is attached
+   * (`spec:AST-094` FR19, FR24). Otherwise no document listener is
    * registered, so a desktop page pays nothing.
    */
   private syncListeners(): void {
+    // The primary pointer can change (a tablet's keyboard attached or
+    // removed): while anything is attached, styles and listeners follow it.
+    // Nothing touch-related stays once the last attachment goes (FR24).
+    const hasAttachments = this.registry.size > 0;
+    if (hasAttachments && !this.isWatchingPointer) {
+      this.coarseQuery?.addEventListener?.('change', this.onPointerKindChange);
+      this.isWatchingPointer = true;
+    } else if (!hasAttachments && this.isWatchingPointer) {
+      this.coarseQuery?.removeEventListener?.(
+        'change',
+        this.onPointerKindChange,
+      );
+      this.isWatchingPointer = false;
+    }
     if (this.shouldListen()) {
       this.install();
     } else if (this.isInstalled) {
