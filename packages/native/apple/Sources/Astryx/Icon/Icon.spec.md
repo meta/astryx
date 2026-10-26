@@ -135,6 +135,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   view is hidden from VoiceOver. With a label, it is one image element named by
   the label, keeping SwiftUI's image trait and adding none (`spec:AST-082` FR17;
   Swift accessibility X1, X4).
+  In an avatar's status slot a labeled icon also names the status, which joins
+  the avatar's name (`component:swift/Avatar` AR6).
 - **AR2 — Rendered tree not measured.** Tests assert what the view sets; the
   rendered accessibility tree is not measured until an app-hosted target exists.
 

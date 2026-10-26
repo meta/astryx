@@ -82,6 +82,16 @@ function leavesOf(file: string): Leaf[] {
       starts.push(index);
     }
   });
+  // Values bound from one of those groups (`const {curve: move} = group;`)
+  // are checked where the group declares them too.
+  const bindings = /^const \{([^}]+)\} =\s*(?:\n\s*)?(\w+);/gm;
+  for (const [, names, group] of text.matchAll(bindings)) {
+    if (exported.has(group)) {
+      for (const name of names.split(',')) {
+        exported.add(name.split(':').pop()!.trim());
+      }
+    }
+  }
   expect(starts.length).toBeGreaterThan(0);
   return [
     ...starts.flatMap(start => leavesFrom(file, lines, start, exported)),
