@@ -121,8 +121,27 @@ export interface BusyVerdict {
 
 export interface BusyProof extends FrameStats {
   readonly window: BusyWindow;
-  /** The part of the window judged: inside the margins, up to `settledWithin`. */
+  /**
+   * The part of the window judged: inside the margins, up to `settledWithin`,
+   * and from `onScreenFromMs` when that is set.
+   */
   readonly judged: {readonly from: number; readonly to: number};
+  /**
+   * When the tracked value was seen at rest before the judged part (a frame
+   * there, no change in the 250 ms before it: a just-started animation not on
+   * screen yet), ms after the window's start of its first presented change
+   * inside the block, where judging starts; null otherwise.
+   */
+  readonly onScreenFromMs: number | null;
+  /**
+   * The cast's position step, CSS px: the largest of 0.5, 1 and 2 that every
+   * tracked position is a multiple of (WebKit's casts are 2: see the README).
+   */
+  readonly stepPx: number;
+  /** The tracked value's mean motion per screencast interval in the judged part, px. */
+  readonly pxPerFrame: number;
+  /** Facts worth reading beside the verdict, which never fail it. */
+  readonly notes: readonly string[];
   /**
    * The screencast's frame interval, from the frames around the window as well
    * as inside it (a short window has few intervals; a frozen one has none).
@@ -180,6 +199,20 @@ export interface BusyProof extends FrameStats {
  *   animation under test was not moving during the block (it settled before
  *   the block, or the block caught another animation), so there is nothing to
  *   judge, and that fails rather than passes.
+ *
+ * A just-started animation can reach the screen after the block began (its
+ * hand-off to the compositor lags under load: 50–100 ms in WebKit). When the
+ * tracked value was seen at rest before the judged part (a frame there, and no
+ * change in the 250 ms before it), judging starts at its first presented
+ * change inside the block, which the
+ * proof reports as `onScreenFromMs`. The judged part still ends with the
+ * block and the `minJudgedFrames` floor applies to it, so a start the block
+ * itself delays fails; an animation that was already moving is judged from
+ * the block's start, and a stall there fails as before.
+ *
+ * `stepPx` and `pxPerFrame` say whether a frame's motion is resolvable at
+ * all: under two position steps per frame, a frame delivered early can show
+ * no step and read as not moved, which the proof notes (never a failure).
  */
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
@@ -247,29 +280,46 @@ export function busyWindowProof(
     }
   }
   const inner = {from: window.from + marginMs, to: end};
-  const stats = frameStats(
-    tracked.map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]})),
-    inner,
-  );
   const values = tracked
     .filter(f => f.t >= inner.from && f.t <= inner.to)
     .map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]}));
   const before = [...tracked].reverse().find(f => f.t < inner.from);
   let previous: number | null = before?.box == null ? null : before.box[axis];
-  const changes: number[] = [];
+  const inWindow: number[] = [];
   for (const v of values) {
     if (
       v.value != null &&
       previous != null &&
       Math.abs(v.value - previous) > 0.25
     ) {
-      changes.push(v.t);
+      inWindow.push(v.t);
     }
     if (v.value != null) {
       previous = v.value;
     }
   }
-  const edges = [inner.from, ...changes, inner.to];
+  // Seen at rest before the judged part (a frame there, and no change in the
+  // 250 ms before it): the first presented change is the animation's on-screen
+  // start, and judging starts there. With no frame before, nothing is known,
+  // and the window is judged from its start.
+  const prior = tracked.filter(f => f.box != null && f.t < inner.from);
+  let leadFrom = 0;
+  prior.forEach((f, i) => {
+    if (f.t < inner.from - 250) {
+      leadFrom = i;
+    }
+  });
+  const lead = prior.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
+  const movedBefore = lead.some(
+    (value, i) => i > leadFrom && Math.abs(value - lead[i - 1]) > 0.25,
+  );
+  const onScreenFrom =
+    prior.length > 0 && !movedBefore && inWindow.length > 0
+      ? inWindow[0]
+      : null;
+  const judged = {from: onScreenFrom ?? inner.from, to: inner.to};
+  const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
+  const edges = [judged.from, ...changes, judged.to];
   const stalls = edges.slice(1).map((t, i) => t - edges[i]);
   const longestStallMs = Math.max(...stalls);
   // Where the longest stall starts, from the start of the window.
@@ -281,14 +331,41 @@ export function busyWindowProof(
     .slice(1)
     .map((t, i) => t - around[i])
     .sort((a, b) => a - b);
+  const stats = frameStats(
+    tracked.map(f => ({t: f.t, value: f.box == null ? null : f.box[axis]})),
+    judged,
+  );
   const cadence =
     intervals.length >= 4
       ? intervals[Math.floor(intervals.length / 2)]
       : stats.medianFrameMs || 1000 / 60;
-  const expectedFrames = Math.floor((inner.to - inner.from) / cadence);
+  const expectedFrames = Math.floor((judged.to - judged.from) / cadence);
   const longestStallFrames = Math.round(longestStallMs / cadence);
   const moved = changes.length;
   const movedFraction = moved / Math.max(1, expectedFrames);
+  // The cast's position step, and the motion per interval it has to resolve.
+  const positions = tracked.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
+  const stepPx =
+    [2, 1, 0.5].find(step =>
+      positions.every(p => Math.abs(p / step - Math.round(p / step)) < 0.01),
+    ) ?? 0.5;
+  const judgedValues = tracked.flatMap(f =>
+    f.box != null && f.t >= judged.from && f.t <= judged.to
+      ? [{t: f.t, value: f.box[axis]}]
+      : [],
+  );
+  const first = judgedValues[0];
+  const last = judgedValues[judgedValues.length - 1];
+  const pxPerFrame =
+    first == null || last == null || last.t <= first.t
+      ? 0
+      : Math.abs(last.value - first.value) / ((last.t - first.t) / cadence);
+  const notes: string[] = [];
+  if (pxPerFrame > 0 && pxPerFrame < 2 * stepPx) {
+    notes.push(
+      `${pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps: a frame delivered early can show no step and read as not moved`,
+    );
+  }
   const failures: string[] = [];
   if (stats.frames === 0) {
     failures.push('no frame presented in the judged part');
@@ -304,7 +381,7 @@ export function busyWindowProof(
   }
   if (expectedFrames < minJudgedFrames) {
     failures.push(
-      `${(inner.to - inner.from).toFixed(0)} ms judged = ${expectedFrames} frames < ${minJudgedFrames}: the animation under test was not moving during the block`,
+      `${(judged.to - judged.from).toFixed(0)} ms judged = ${expectedFrames} frames < ${minJudgedFrames}: the animation under test was not moving during the block`,
     );
   }
   const allowedMisses = Math.max(
@@ -316,16 +393,27 @@ export function busyWindowProof(
       `${moved} of ${expectedFrames} expected frames moved (${(movedFraction * 100).toFixed(0)}% < ${(minMovedFraction * 100).toFixed(0)}%)`,
     );
   }
+  const onScreenFromMs =
+    onScreenFrom == null ? null : onScreenFrom - window.from;
   const summary =
-    `${(inner.to - inner.from).toFixed(0)} ms judged at ${cadence.toFixed(1)} ms/frame: ${stats.frames} frames presented, ` +
+    `${(judged.to - judged.from).toFixed(0)} ms judged at ${cadence.toFixed(1)} ms/frame: ${stats.frames} frames presented, ` +
     `${moved}/${expectedFrames} moved (${(movedFraction * 100).toFixed(0)}%), ` +
     `median ${stats.medianFrameMs.toFixed(1)} ms, ` +
     `longest stall ${longestStallMs.toFixed(1)} ms (${longestStallFrames} intervals) at +${longestStallAtMs.toFixed(0)} ms, ` +
-    `${stats.monotonic ? 'monotonic' : 'not monotonic'}`;
+    `${stats.monotonic ? 'monotonic' : 'not monotonic'}, ` +
+    `${pxPerFrame.toFixed(1)} px/frame in ${stepPx} px steps` +
+    (onScreenFromMs == null
+      ? ''
+      : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
+    notes.map(note => `; note: ${note}`).join('');
   return {
     ...stats,
     window,
-    judged: inner,
+    judged,
+    onScreenFromMs,
+    stepPx,
+    pxPerFrame,
+    notes,
     cadenceMs: cadence,
     longestStallMs,
     longestStallAtMs,
