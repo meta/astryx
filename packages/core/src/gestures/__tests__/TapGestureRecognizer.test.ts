@@ -106,6 +106,39 @@ describe('TapGestureRecognizer', () => {
     expect(double.state).toBe('failed');
   });
 
+  it('recognizes a two-finger double tap, placing each tap at its fingers’ centroid', () => {
+    const separation = UIKIT_GESTURES.tap.allowableSeparation.value;
+    const make = () => {
+      const h = createHarness();
+      const tap = new TapGestureRecognizer({
+        name: 'two',
+        numberOfTapsRequired: 2,
+        numberOfTouchesRequired: 2,
+      });
+      // First tap: fingers 80 px apart, the right one lifting last.
+      h.finger(1).down(0, 0, 0, {recognizers: [tap]});
+      h.finger(2).down(80, 0, 10, {recognizers: [tap]});
+      h.finger(1).up(50);
+      h.finger(2).up(60);
+      expect(tap.completedTaps).toBe(1);
+      return {h, tap};
+    };
+    // The same two fingers again, a few px off: one double tap, though the
+    // first finger lands 78 px from where the last one lifted.
+    const near = make();
+    near.h.finger(3).down(2, 1, 150, {recognizers: [near.tap]});
+    near.h.finger(4).down(82, 1, 160, {recognizers: [near.tap]});
+    near.h.finger(3).up(200);
+    near.h.finger(4).up(210);
+    expect(near.h.log).toEqual(['two:ended@210', 'two:possible@210']);
+    // A second tap whose centroid lands too far from the first's fails.
+    const far = make();
+    far.h.finger(3).down(separation + 1, 0, 150, {recognizers: [far.tap]});
+    expect(far.tap.state).toBe('possible');
+    far.h.finger(4).down(separation + 81, 0, 160, {recognizers: [far.tap]});
+    expect(far.tap.state).toBe('failed');
+  });
+
   it('fails a hold past a finite maximum tap duration', () => {
     const h = createHarness();
     const tap = new TapGestureRecognizer({
