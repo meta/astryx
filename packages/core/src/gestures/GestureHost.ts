@@ -131,6 +131,11 @@ import {internals} from './recognizerInternals';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {locksSelectionFor} from './selectionLock';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
+import {
+  markTouchAction,
+  TOUCH_ACTION_ATTRIBUTE,
+  unmarkTouchAction,
+} from './touchActionRule';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -141,10 +146,12 @@ interface Registration {
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
   /**
-   * The element's own `touch-action` before the host wrote one (its classes
-   * or inline style), read once; the host never allows more than it does.
+   * What the element's own stylesheet gives it, read in a frame for the
+   * derived value the host marked then: `null` where the host's rule is in
+   * force (the author sets nothing else); the host never allows more than
+   * the author does. `null` before the read.
    */
-  callerTouchAction: string | null;
+  authorTouchAction: {derived: string; author: string | null} | null;
   manageStyle: boolean;
 }
 
@@ -413,6 +420,14 @@ export class GestureHost {
   private readonly perEventRecognizers = new Set<GestureRecognizer>();
   /** Press consumers attached with `perEventPointer`: active on any pointer. */
   private readonly perEventConsumers = new Set<TouchConsumer>();
+  /**
+   * Where the primary pointer is fine: the elements of enabled
+   * perEventPointer press trackers, which listen for a finger's press
+   * themselves, and whether such a press is in progress (the host's document
+   * and window listeners last only that long).
+   */
+  private readonly armedElements = new Map<Element, () => void>();
+  private isArmedPress = false;
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -702,7 +717,7 @@ export class GestureHost {
         consumer: null,
         hasTouchMoveListener: false,
         savedStyle: new Map(),
-        callerTouchAction: null,
+        authorTouchAction: null,
         manageStyle: true,
       };
       this.registry.set(element, registration);
@@ -792,25 +807,8 @@ export class GestureHost {
     ) as (keyof GestureHostStyle)[]) {
       const property = STYLE_PROPERTIES[key];
       let value = style[key];
-      if (value != null && key === 'touchAction') {
-        // The author's value (a trigger's own `touch-action: none`) stays in
-        // force: the host writes what both allow, never wider (spec:AST-094
-        // FR18, DEC-8). An inline value is the style's own, read with no
-        // recalc. A stylesheet's needs a computed read, which waits for the
-        // next frame, before its paint, never inside an attach (a forced
-        // recalc over whatever just mounted); until then the host writes
-        // nothing, so the author's value stands.
-        const callerInline = registration.savedStyle.has(property)
-          ? (registration.savedStyle.get(property) ?? '')
-          : element.style.getPropertyValue(property);
-        const caller =
-          callerInline !== '' ? callerInline : registration.callerTouchAction;
-        if (caller != null) {
-          value = intersectTouchAction(value, caller);
-        } else {
-          this.readCallerTouchActionInNextFrame(element);
-          continue;
-        }
+      if (key === 'touchAction') {
+        value = this.touchActionToWrite(element, registration, value);
       }
       if (value != null) {
         if (!registration.savedStyle.has(property)) {
@@ -833,11 +831,62 @@ export class GestureHost {
   }
 
   /**
-   * Read the touch-action an author's stylesheet gives `element` in the next
-   * frame, before it paints, then write what both allow. Batched: one style
-   * read serves every pending element, and the writes follow the reads. The
-   * host has written no touch-action on them yet, so the read is the
-   * author's own value.
+   * The touch-action to write inline, if any. The author's value (a
+   * trigger's own `touch-action: none`) stays in force and the host never
+   * allows more (spec:AST-094 FR18, DEC-8):
+   * - an inline value is the style's own, read with no recalc, and the host
+   *   writes what both allow, inline;
+   * - otherwise the element is marked with the derived value, under a rule
+   *   any author rule outranks, as the recognizer attaches: a subtree that
+   *   mounts with it is styled once, never restyled for it in a later frame.
+   *   The next frame reads what is in force, styles clean, and the host
+   *   writes inline only what both allow where that is narrower than an
+   *   author rule's value.
+   */
+  private touchActionToWrite(
+    element: HTMLElement,
+    registration: Registration,
+    derived: string | undefined,
+  ): string | undefined {
+    if (derived == null) {
+      unmarkTouchAction(element);
+      registration.authorTouchAction = null;
+      return undefined;
+    }
+    const property = STYLE_PROPERTIES.touchAction;
+    const inline = registration.savedStyle.has(property)
+      ? (registration.savedStyle.get(property) ?? '')
+      : element.style.getPropertyValue(property);
+    if (inline !== '') {
+      unmarkTouchAction(element);
+      return intersectTouchAction(derived, inline);
+    }
+    if (!markTouchAction(element, derived)) {
+      // No document or shadow root to hold the rule (a detached element):
+      // nothing is styled there, and the next frame looks again.
+      this.readCallerTouchActionInNextFrame(element);
+      return undefined;
+    }
+    const read = registration.authorTouchAction;
+    if (read == null || read.derived !== derived) {
+      // The rule is in force until the read: the derived value, or the
+      // author's where the author sets one.
+      this.readCallerTouchActionInNextFrame(element);
+      return undefined;
+    }
+    if (read.author == null) {
+      return undefined;
+    }
+    const both = intersectTouchAction(derived, read.author);
+    return both === read.author ? undefined : both;
+  }
+
+  /**
+   * Read the touch-action in force on each marked element in the next frame,
+   * then apply its style again. Batched: one style read serves every pending
+   * element, and the writes follow the reads. The host has written no
+   * touch-action inline on them, so a value other than the mark is an author
+   * rule's.
    */
   private readCallerTouchActionInNextFrame(element: HTMLElement): void {
     this.pendingCallerReads.add(element);
@@ -850,15 +899,22 @@ export class GestureHost {
       const pending: [HTMLElement, Registration][] = [];
       for (const candidate of this.pendingCallerReads) {
         const registration = this.registry.get(candidate);
-        if (registration != null && registration.callerTouchAction == null) {
+        if (registration != null) {
           pending.push([candidate, registration]);
         }
       }
       this.pendingCallerReads.clear();
       const view = this.doc.defaultView;
       for (const [candidate, registration] of pending) {
-        registration.callerTouchAction =
-          view?.getComputedStyle(candidate).touchAction || 'auto';
+        const derived = candidate.getAttribute(TOUCH_ACTION_ATTRIBUTE);
+        if (derived == null || view == null) {
+          continue;
+        }
+        const inForce = view.getComputedStyle(candidate).touchAction || 'auto';
+        registration.authorTouchAction = {
+          derived,
+          author: inForce === derived ? null : inForce,
+        };
       }
       for (const [candidate, registration] of pending) {
         this.applyStyle(candidate, registration);
@@ -890,11 +946,103 @@ export class GestureHost {
    * disabled control pay nothing.
    */
   private syncListeners(): void {
+    this.syncArmed();
     if (this.shouldListen()) {
       this.install();
     } else {
       this.uninstall();
     }
+  }
+
+  /**
+   * Where the primary pointer is fine, an enabled perEventPointer press
+   * tracker's element listens for a finger's press itself (passive, on the
+   * element only): the host's document and window listeners are added at
+   * that press's start and removed at its end, so an idle tracker leaves
+   * none (spec:AST-094 FR19's exception, for a press's feedback only).
+   */
+  private syncArmed(): void {
+    const wanted = new Set<Element>();
+    if (!this.isCoarse) {
+      for (const [element, registration] of this.registry) {
+        const consumer = registration.consumer;
+        if (
+          consumer != null &&
+          this.perEventConsumers.has(consumer) &&
+          consumer.isEnabled?.() !== false
+        ) {
+          wanted.add(element);
+        }
+      }
+    }
+    for (const [element, release] of this.armedElements) {
+      if (!wanted.has(element)) {
+        release();
+        this.armedElements.delete(element);
+      }
+    }
+    for (const element of wanted) {
+      if (this.armedElements.has(element)) {
+        continue;
+      }
+      element.addEventListener(
+        'touchstart',
+        this.onArmedPress,
+        PASSIVE_CAPTURE,
+      );
+      element.addEventListener(
+        'pointerdown',
+        this.onArmedPress,
+        PASSIVE_CAPTURE,
+      );
+      this.armedElements.set(element, () => {
+        element.removeEventListener(
+          'touchstart',
+          this.onArmedPress,
+          PASSIVE_CAPTURE,
+        );
+        element.removeEventListener(
+          'pointerdown',
+          this.onArmedPress,
+          PASSIVE_CAPTURE,
+        );
+      });
+    }
+    if (wanted.size === 0) {
+      this.isArmedPress = false;
+    }
+  }
+
+  /** A finger's press on an armed element: listen for this press. */
+  private readonly onArmedPress = (event: Event): void => {
+    if (
+      this.isInstalled ||
+      (event.type === 'pointerdown' &&
+        (event as PointerEvent).pointerType !== 'touch')
+    ) {
+      return;
+    }
+    this.isArmedPress = true;
+    this.install();
+    // The document's capture phase is over for this event: hand it on.
+    if (event.type === 'touchstart') {
+      this.onTouchStart(event as TouchEvent);
+    } else {
+      this.onPointerDown(event as PointerEvent);
+    }
+  };
+
+  /** After a contact ends: an armed press that is over stops listening. */
+  private releaseArmedPress(): void {
+    if (!this.isArmedPress) {
+      return;
+    }
+    queueMicrotask(() => {
+      if (this.isArmedPress && this.arena.touches.length === 0) {
+        this.isArmedPress = false;
+        this.syncListeners();
+      }
+    });
   }
 
   /** With nothing attached, stop listening and stop following the pointer. */
@@ -958,12 +1106,22 @@ export class GestureHost {
     if (this.scrollWatchers.size > 0) {
       return true;
     }
+    let isArmed = false;
     for (const registration of this.registry.values()) {
       const consumer = registration.consumer;
       if (
-        (consumer != null &&
-          consumer.isEnabled?.() !== false &&
-          this.isConsumerActive(consumer)) ||
+        consumer != null &&
+        consumer.isEnabled?.() !== false &&
+        this.isConsumerActive(consumer)
+      ) {
+        if (this.isCoarse) {
+          return true;
+        }
+        // A perEventPointer press tracker where the pointer is fine: only
+        // while a press it armed is in progress (syncArmed).
+        isArmed = true;
+      }
+      if (
         registration.recognizers.some(
           recognizer => recognizer.isEnabled && this.isActive(recognizer),
         ) ||
@@ -972,7 +1130,7 @@ export class GestureHost {
         return true;
       }
     }
-    return false;
+    return isArmed && this.isArmedPress;
   }
 
   // --- Listeners -------------------------------------------------------------
@@ -1472,6 +1630,7 @@ export class GestureHost {
   }
 
   private readonly onTouchEnd = (event: TouchEvent): void => {
+    this.releaseArmedPress();
     this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
@@ -1503,6 +1662,7 @@ export class GestureHost {
   };
 
   private readonly onTouchCancel = (event: TouchEvent): void => {
+    this.releaseArmedPress();
     this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
@@ -1821,6 +1981,7 @@ export class GestureHost {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       // The lift itself is the touchend's: it alone can cancel the click.
       this.fingerPointers.delete(event.pointerId);
@@ -1842,6 +2003,7 @@ export class GestureHost {
   };
 
   private readonly onPointerCancel = (event: PointerEvent): void => {
+    this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       const id =
         this.fingerPointers.get(event.pointerId) ??
