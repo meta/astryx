@@ -947,6 +947,28 @@ test.describe('animation state', () => {
     expect(started.map(a => a.durationMs)).toEqual([300]);
   });
 
+  test('a wait answers with the animation the action started, not one that finished before it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const frames = [{opacity: 0.2}, {opacity: 1}];
+    // The recorder runs and is armed from here.
+    await waitForRest(box);
+    // A short one runs and ends; then the action starts a longer one, still
+    // pending when the wait first looks.
+    await box.evaluate(
+      (el, keyframes) => el.animate(keyframes, {duration: 40}).finished,
+      frames,
+    );
+    await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 1000});
+    }, frames);
+    const [found] = await waitForAnimation(box);
+    expect(found.durationMs).toBe(1000);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
