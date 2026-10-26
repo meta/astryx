@@ -22,6 +22,7 @@ import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
 import {VelocityTracker} from '../VelocityTracker';
+import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {gestureHosts} from '../hostRegistry';
@@ -1305,7 +1306,7 @@ describe('GestureHost', () => {
     const drag = new PanGestureRecognizer({
       name: 'drag',
       direction: 'horizontal',
-      preventsTextSelection: true,
+      selectionLock: lockSelection,
     });
     detachers.push(host.attach(slider, drag));
     drag.setEnabled(false);
@@ -1382,7 +1383,7 @@ describe('GestureHost', () => {
         slider,
         new PanGestureRecognizer({
           direction: 'horizontal',
-          preventsTextSelection: true,
+          selectionLock: lockSelection,
         }),
       ),
     );
@@ -1426,7 +1427,7 @@ describe('GestureHost', () => {
         slider,
         new PanGestureRecognizer({
           direction: 'horizontal',
-          preventsTextSelection: true,
+          selectionLock: lockSelection,
         }),
       ),
     );
@@ -1462,7 +1463,7 @@ describe('GestureHost', () => {
         row,
         new PanGestureRecognizer({
           direction: 'horizontal',
-          preventsTextSelection: true,
+          selectionLock: lockSelection,
         }),
       ),
     );
