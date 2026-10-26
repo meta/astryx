@@ -239,20 +239,22 @@ async function openBare(page: Page, engine: string): Promise<Driver> {
 }
 
 /**
- * An element's inline touch-action and the page's touch listeners, read
- * after the next frame: the host writes touch-action there (FR18), so an
- * absent value is absent for good, not merely not yet written.
+ * The touch-action the host gives an element (its mark, or an inline value
+ * it wrote) and the page's touch listeners, read after the next frame: the
+ * host reads an author's value there (FR18), so an absent value is absent
+ * for good, not merely not yet written.
  */
 async function footprint(page: Page, id: string) {
   return page.evaluate(async target => {
     await new Promise<void>(resolve => {
       requestAnimationFrame(() => resolve());
     });
+    const element = document.getElementById(target);
     return {
       touchAction:
-        document
-          .getElementById(target)
-          ?.style.getPropertyValue('touch-action') ?? null,
+        element?.getAttribute('data-astryx-touch-action') ??
+        element?.style.getPropertyValue('touch-action') ??
+        null,
       pageTouchListeners: window.__pageTouch,
     };
   }, id);

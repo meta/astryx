@@ -104,6 +104,11 @@ import type {
   TouchSample,
 } from './types';
 import {locksSelectionFor} from './selectionLock';
+import {
+  markTouchAction,
+  TOUCH_ACTION_ATTRIBUTE,
+  unmarkTouchAction,
+} from './touchActionRule';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -113,10 +118,12 @@ interface Registration {
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
   /**
-   * The element's own `touch-action` before the host wrote one (its classes
-   * or inline style), read once; the host never allows more than it does.
+   * What the element's own stylesheet gives it, read in a frame for the
+   * derived value the host marked then: `null` where the host's rule is in
+   * force (the author sets nothing else); the host never allows more than
+   * the author does. `null` before the read.
    */
-  callerTouchAction: string | null;
+  authorTouchAction: {derived: string; author: string | null} | null;
   manageStyle: boolean;
 }
 
@@ -440,7 +447,7 @@ export class GestureHost {
         consumer: null,
         touchMoveListener: null,
         savedStyle: new Map(),
-        callerTouchAction: null,
+        authorTouchAction: null,
         manageStyle: true,
       };
       this.registry.set(element, registration);
@@ -479,25 +486,8 @@ export class GestureHost {
     ) as (keyof GestureHostStyle)[]) {
       const property = STYLE_PROPERTIES[key];
       let value = style[key];
-      if (value != null && key === 'touchAction') {
-        // The author's value (a trigger's own `touch-action: none`) stays in
-        // force: the host writes what both allow, never wider (spec:AST-094
-        // FR18, DEC-8). An inline value is the style's own, read with no
-        // recalc. A stylesheet's needs a computed read, which waits for the
-        // next frame, before its paint, never inside an attach (a forced
-        // recalc over whatever just mounted); until then the host writes
-        // nothing, so the author's value stands.
-        const callerInline = registration.savedStyle.has(property)
-          ? (registration.savedStyle.get(property) ?? '')
-          : element.style.getPropertyValue(property);
-        const caller =
-          callerInline !== '' ? callerInline : registration.callerTouchAction;
-        if (caller != null) {
-          value = intersectTouchAction(value, caller);
-        } else {
-          this.readCallerTouchActionInNextFrame(element);
-          continue;
-        }
+      if (key === 'touchAction') {
+        value = this.touchActionToWrite(element, registration, value);
       }
       if (value != null) {
         if (!registration.savedStyle.has(property)) {
@@ -520,11 +510,62 @@ export class GestureHost {
   }
 
   /**
-   * Read the touch-action an author's stylesheet gives `element` in the next
-   * frame, before it paints, then write what both allow. Batched: one style
-   * read serves every pending element, and the writes follow the reads. The
-   * host has written no touch-action on them yet, so the read is the
-   * author's own value.
+   * The touch-action to write inline, if any. The author's value (a
+   * trigger's own `touch-action: none`) stays in force and the host never
+   * allows more (spec:AST-094 FR18, DEC-8):
+   * - an inline value is the style's own, read with no recalc, and the host
+   *   writes what both allow, inline;
+   * - otherwise the element is marked with the derived value, under a rule
+   *   any author rule outranks, as the recognizer attaches: a subtree that
+   *   mounts with it is styled once, never restyled for it in a later frame.
+   *   The next frame reads what is in force, styles clean, and the host
+   *   writes inline only what both allow where that is narrower than an
+   *   author rule's value.
+   */
+  private touchActionToWrite(
+    element: HTMLElement,
+    registration: Registration,
+    derived: string | undefined,
+  ): string | undefined {
+    if (derived == null) {
+      unmarkTouchAction(element);
+      registration.authorTouchAction = null;
+      return undefined;
+    }
+    const property = STYLE_PROPERTIES.touchAction;
+    const inline = registration.savedStyle.has(property)
+      ? (registration.savedStyle.get(property) ?? '')
+      : element.style.getPropertyValue(property);
+    if (inline !== '') {
+      unmarkTouchAction(element);
+      return intersectTouchAction(derived, inline);
+    }
+    if (!markTouchAction(element, derived)) {
+      // No document or shadow root to hold the rule (a detached element):
+      // nothing is styled there, and the next frame looks again.
+      this.readCallerTouchActionInNextFrame(element);
+      return undefined;
+    }
+    const read = registration.authorTouchAction;
+    if (read == null || read.derived !== derived) {
+      // The rule is in force until the read: the derived value, or the
+      // author's where the author sets one.
+      this.readCallerTouchActionInNextFrame(element);
+      return undefined;
+    }
+    if (read.author == null) {
+      return undefined;
+    }
+    const both = intersectTouchAction(derived, read.author);
+    return both === read.author ? undefined : both;
+  }
+
+  /**
+   * Read the touch-action in force on each marked element in the next frame,
+   * then apply its style again. Batched: one style read serves every pending
+   * element, and the writes follow the reads. The host has written no
+   * touch-action inline on them, so a value other than the mark is an author
+   * rule's.
    */
   private readCallerTouchActionInNextFrame(element: HTMLElement): void {
     this.pendingCallerReads.add(element);
@@ -537,15 +578,22 @@ export class GestureHost {
       const pending: [HTMLElement, Registration][] = [];
       for (const candidate of this.pendingCallerReads) {
         const registration = this.registry.get(candidate);
-        if (registration != null && registration.callerTouchAction == null) {
+        if (registration != null) {
           pending.push([candidate, registration]);
         }
       }
       this.pendingCallerReads.clear();
       const view = this.doc.defaultView;
       for (const [candidate, registration] of pending) {
-        registration.callerTouchAction =
-          view?.getComputedStyle(candidate).touchAction || 'auto';
+        const derived = candidate.getAttribute(TOUCH_ACTION_ATTRIBUTE);
+        if (derived == null || view == null) {
+          continue;
+        }
+        const inForce = view.getComputedStyle(candidate).touchAction || 'auto';
+        registration.authorTouchAction = {
+          derived,
+          author: inForce === derived ? null : inForce,
+        };
       }
       for (const [candidate, registration] of pending) {
         this.applyStyle(candidate, registration);
