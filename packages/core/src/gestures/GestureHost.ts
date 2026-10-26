@@ -115,7 +115,7 @@ import {
   type GestureClock,
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './haptics';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 import {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
