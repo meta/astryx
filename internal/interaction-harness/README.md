@@ -62,7 +62,10 @@ than `playState`, does not wait the hold out. That holds for an animation that
 plays forward under a linear or cubic-bézier effect easing (the time the run
 starts is solved from the curve); under any other effect easing (steps,
 `linear()` stops, an overshoot) or another direction the curve is read to its
-full end, and `waitForRest` waits the hold out.
+full end, and `waitForRest` waits the hold out. An animation running backward (`reverse()`, a
+negative playback rate) is reported by `waitForAnimation` from when it
+started, but `holdAnimations` refuses it: seeking and sampling run a curve
+forward.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the

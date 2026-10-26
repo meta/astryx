@@ -548,20 +548,27 @@ test.describe('holding', () => {
     expect(reversed.curveEndMs).toBeCloseTo(1000, 0);
     await releaseAnimations(page, {finish: true});
 
-    // So does one reversed by `reverse()` (a negative playback rate).
-    await box.evaluate(el => {
-      el.animate(
+    // One reversed by `reverse()` (a negative playback rate) is reported as
+    // starting when it did, running its whole curve, and is refused by a
+    // hold, which seeks curves forward only.
+    const readyAt = await box.evaluate(async el => {
+      const animation = el.animate(
         [
           {translate: '0px 0px', offset: 0},
           {translate: '100px 0px', offset: 0.5},
           {translate: '100px 0px', offset: 1},
         ],
         {duration: 1000, easing: 'linear'},
-      ).reverse();
+      );
+      animation.reverse();
+      await animation.ready;
+      return performance.timeOrigin + performance.now();
     });
-    const [played] = await holdAnimations(page, box);
-    expect(played.curveEndMs).toBeCloseTo(1000, 0);
-    await releaseAnimations(page, {finish: true});
+    const [running] = await waitForAnimation(box);
+    expect(Math.abs(running.from - readyAt)).toBeLessThan(100);
+    expect(running.to - running.from).toBeCloseTo(1000, -1);
+    await expect(holdAnimations(page, box)).rejects.toThrow(/runs backward/);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
 
     await box.evaluate(el => {
       el.animate([{rotate: 'x 0deg'}, {rotate: 'x 60deg'}], {

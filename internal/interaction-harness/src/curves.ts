@@ -314,6 +314,15 @@ export async function holdAnimations(
           (target != null && (root === target || root.contains(target))))
       );
     });
+    // Seeking and sampling run a curve forward: an animation running
+    // backward (`reverse()`, a negative playback rate) cannot be held and
+    // read, so it is refused rather than misread.
+    const backward = all.find(animation => animation.playbackRate < 0);
+    if (backward != null) {
+      throw new Error(
+        `holdAnimations: ${describe((backward.effect as KeyframeEffect | null)?.target ?? null) ?? 'an animation'} runs backward (reverse() or a negative playback rate); hold and sample a forward run instead`,
+      );
+    }
     // Each animation's start on the document timeline, read before the pause
     // clears it (a pending play has no start time yet: it starts now).
     const starts = all.map(animation =>
@@ -802,10 +811,18 @@ export async function waitForAnimation(
         ) => {
           const effect = a.effect as KeyframeEffect | null;
           const timing = effect?.getComputedTiming();
-          // The recorded start stands in once the page has cancelled it.
+          // The recorded start stands in once the page has cancelled it. An
+          // animation running backward started when its current time last
+          // stood at its end: its startTime is where it would reach 0.
+          const rate = a.playbackRate;
           const startedAt =
-            performance.timeOrigin +
-            Number(a.startTime ?? recordedStart ?? Number.NaN);
+            rate < 0 && a.currentTime != null
+              ? performance.timeOrigin +
+                Number(document.timeline.currentTime ?? performance.now()) -
+                (Number(timing?.endTime ?? 0) - Number(a.currentTime)) /
+                  Math.abs(rate)
+              : performance.timeOrigin +
+                Number(a.startTime ?? recordedStart ?? Number.NaN);
           const name =
             'transitionProperty' in a
               ? (a as unknown as {transitionProperty: string})
