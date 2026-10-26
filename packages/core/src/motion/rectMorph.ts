@@ -514,9 +514,11 @@ export function createRectMorph(
   });
 
   // The springs are resolved against the element that plays them: a
-  // registered table's leaf is a motion role, and a theme that retunes it
-  // owns its value (spec:AST-094 FR4). A table nothing registered keeps its
-  // own value, so a caller's bare spring is unaffected.
+  // registered table's leaf is a motion role, so the morph plays the value
+  // that role resolves to rather than the table's raw one. Nothing writes a
+  // role variable yet, so today the two agree; the morph is ready for the
+  // day they differ. A table nothing registered keeps its own value, so a
+  // caller's bare spring is unaffected.
   const curvesFor = (
     on: Element,
     path: MorphPath,

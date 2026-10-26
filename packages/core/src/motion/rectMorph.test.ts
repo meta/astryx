@@ -536,9 +536,12 @@ describe('createRectMorph', () => {
     await vi.advanceTimersByTimeAsync(ms);
   };
 
-  it("plays the theme's spring, not the table's (spec:AST-094 FR4)", () => {
-    // A registered table's leaf is a motion role, so a theme that retunes
-    // it owns the value the morph plays.
+  it('plays the role\u2019s resolved value, not the table\u2019s raw one', () => {
+    // A registered table's leaf is a motion role, and the morph plays what
+    // the role resolves to on the element. No theme writes a role variable
+    // today — `defineTheme` takes the motion scale, not per-role values —
+    // so the scope's value is stubbed here: this pins the resolution, not a
+    // theme capability.
     const {element, morph} = setup();
     const scope = document.createElement('div');
     scope.setAttribute('data-astryx-theme', 'brisk');
