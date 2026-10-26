@@ -1594,13 +1594,12 @@ describe('decay: momentum curves (a coast)', () => {
     };
     animator.decay({
       x: linear,
-      opacity: {duration: 0, at: () => 0.5, velocity: () => 0},
+      y: {duration: 0, at: () => 5, velocity: () => 0},
     });
     await commitFrame(clock); // the browser starts it
     expect(animator.get('x', 1250)).toBeCloseTo(50, 9);
     expect(animator.get('x', 1e7)).toBeCloseTo(100, 9);
-    expect(animator.get('opacity')).toBe(0.5);
-    expect(element.style.opacity).toBe('0.5');
+    expect(animator.get('y')).toBe(5);
   });
 
   it('keeps moving under Reduced Motion: momentum continues the throw (DEC-2)', async () => {

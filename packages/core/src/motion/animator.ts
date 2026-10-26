@@ -305,22 +305,26 @@ export interface Animator {
    * presentation values, velocities, `stop`, `finished` and the shared
    * clock work the same, and a later `animate` starts from the curve's
    * value and velocity. Reduced Motion treats a curve that moves x, y, rotate
-   * or scale as travel (`reducedMotion`, `'crossfade'` by default). Its
-   * handle has no spring of its own: `retarget` needs one.
+   * or scale as travel, which the policy replaces (design:reduced-motion: a
+   * cross-fade after a touch, an immediate change otherwise). Its handle has
+   * no spring of its own: `retarget` needs one.
    */
   play(
     curves: Partial<Record<MotionProperty | 'scale', MotionCurve>>,
     options?: AnimateOptions,
   ): MotionHandle;
   /**
-   * Plays momentum curves as given, one per property: a released scroll
-   * view's coast and edge bounce, which `coast()` (coast.ts) builds.
-   * Reduced Motion does not apply: momentum that continues a throw is direct
-   * movement (design:reduced-motion DR2, DEC-2). Only a surface that coasts
-   * imports the coast math and the scroll table.
+   * Plays momentum curves as given, on the translate axes only: a released
+   * scroll view's coast and edge bounce, which `coast()` (coast.ts) builds
+   * from a finger's release velocity. Reduced Motion does not apply:
+   * momentum that continues a throw is direct movement
+   * (design:reduced-motion DR2, DEC-2). Anything else (a fade, a slide a
+   * tap starts) is a transition: play it with `play` or `animate`, which
+   * apply the Reduce Motion policy. Only a surface that coasts imports the
+   * coast math and the scroll table.
    */
   decay(
-    curves: Partial<Record<MotionProperty, MotionCurve>>,
+    curves: Partial<Record<'x' | 'y', MotionCurve>>,
     options?: Pick<AnimateOptions, 'at'>,
   ): MotionHandle;
   /**
@@ -437,6 +441,9 @@ const PROPERTIES: ReadonlyArray<MotionProperty> = [
   'scaleY',
   'opacity',
 ];
+
+/** The axes momentum moves: `decay` takes only these (DR2, DEC-2). */
+const DECAY_PROPERTIES: ReadonlyArray<'x' | 'y'> = ['x', 'y'];
 
 const IDENTITY: Record<MotionProperty, number> = {
   x: 0,
@@ -639,10 +646,11 @@ function defaultNow(): number {
 /**
  * Whether the user asked for reduced motion (`prefers-reduced-motion:
  * reduce`), read at the moment of the call: the preference the animator uses
- * by default for its Reduce Motion substitution. A component whose UIKit
- * counterpart does something other than a cross-fade under Reduce Motion
- * reads it here and picks its own curve. False without a window (server
- * rendering).
+ * by default for its Reduce Motion substitution. A component never reads it
+ * to pick a curve of its own: its motion settings do not override the
+ * policy (design:reduced-motion DR4); `animator.reducedMotion()` or
+ * `reducedMotionFade()` gives the policy's answer. False without a window
+ * (server rendering).
  */
 export function defaultPrefersReducedMotion(): boolean {
   return (
@@ -2101,7 +2109,8 @@ export function createAnimator(
       syncPending();
       const time = decayOptions.at ?? now();
       const {owner, finished} = newOwner();
-      const properties = PROPERTIES.filter(
+      // Momentum moves the translate axes only (DR2's throw exception).
+      const properties = DECAY_PROPERTIES.filter(
         property => curves[property] != null,
       );
       const group = beginGroup(time, properties, decayOptions.at);
