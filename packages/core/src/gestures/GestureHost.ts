@@ -1341,7 +1341,8 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          (this.isCoarse && this.arena.consumerOf(id)?.keepsTouch?.() === true))
+          (this.isCoarse &&
+            this.arena.consumerOf(id)?.keepsTouch?.(id) === true))
       ) {
         event.preventDefault();
         return;
