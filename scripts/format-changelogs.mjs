@@ -11,7 +11,7 @@
  *
  *   ### Patch Changes
  *
- *   - [fix] XDSButton: spinner contrast (#2717) — thanks @cindyxz
+ *   - [fix] XDSButton: spinner contrast (#2717) — thanks @cixzhang
  *   - [breaking] Stack element -> as (#2441) — thanks @ejhammond
  *
  * This rewrites the just-added version block of every package CHANGELOG into
@@ -32,7 +32,7 @@
  *
  *   Thanks to everyone who contributed to this release:
  *
- *   - @cindyxz
+ *   - @cixzhang
  *   - @ejhammond
  *
  *   ---                            (divider before the previous version)

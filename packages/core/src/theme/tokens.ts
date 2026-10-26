@@ -27,6 +27,7 @@ import {
   type TokenValue,
 } from './defineTheme';
 import {parseColor, formatColor} from '../utils/color';
+import {generatedScopedStatusRoleDefaults} from './generateThemeRules';
 
 /** Resolved color mode used when choosing the side of light/dark token values. */
 export type ResolvedThemeMode = 'light' | 'dark';
@@ -405,6 +406,23 @@ export function resolveThemeTokens(
     return resolveReferences(resolved);
   }
 
+  // A theme's local tokens resolve its references to them, then leave the
+  // result: they are theme-local names, not Astryx tokens.
+  const localKeys = new Set(Object.keys(theme.localTokens ?? {}));
+  for (const [key, value] of Object.entries(theme.localTokens ?? {})) {
+    resolved[key] = resolveXDSTokenValue(value, mode);
+  }
+
+  // Status roles the theme leaves unset resolve as its generated root CSS
+  // declares them (architecture:theme-compilation INV16 and INV17), so
+  // JavaScript and CSS agree (architecture:theme-tokens INV6).
+  for (const [key, value] of generatedScopedStatusRoleDefaults(
+    theme.tokens,
+    theme.localTokens ?? {},
+  )) {
+    resolved[key] = resolveXDSTokenValue(value, mode);
+  }
+
   for (const [key, value] of Object.entries(theme.tokens)) {
     resolved[key] = resolveXDSTokenValue(value, mode);
   }
@@ -417,7 +435,11 @@ export function resolveThemeTokens(
     }
   }
 
-  return resolveReferences(resolved);
+  return Object.fromEntries(
+    Object.entries(resolveReferences(resolved)).filter(
+      ([key]) => !localKeys.has(key),
+    ),
+  );
 }
 
 /** Resolve one Astryx token value for a theme and effective color mode. */
