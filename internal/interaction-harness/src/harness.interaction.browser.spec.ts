@@ -493,7 +493,9 @@ test.describe('holding', () => {
     const [mid] = await sampleCurve(box, [150]);
     expect(mid.transform.translateX).toBeCloseTo(40.3, 2);
     expect(mid.transform.translateY).toBeCloseTo(10.1, 2);
-    await releaseAnimations(page);
+    // Finished, so no frame can pass between this release and the next
+    // animation with the first one still running.
+    await releaseAnimations(page, {finish: true});
 
     await box.evaluate(el => {
       el.animate(
@@ -509,6 +511,41 @@ test.describe('holding', () => {
       /cannot resolve translate/,
     );
     await releaseAnimations(page);
+  });
+
+  test('a held end under a non-linear effect easing is read to the full end, and a rotate about x composes on its axis', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: '0px 0px', offset: 0},
+          {translate: '100px 0px', offset: 0.5},
+          {translate: '100px 0px', offset: 1},
+        ],
+        {duration: 1000, easing: 'cubic-bezier(0.42, 0, 1, 1)'},
+      );
+    });
+    const [held] = await holdAnimations(page, box);
+    // The keyframe offset 0.5 is progress, not 500 ms of time.
+    expect(held.curveEndMs).toBeCloseTo(1000, 0);
+    await releaseAnimations(page, {finish: true});
+
+    await box.evaluate(el => {
+      el.animate([{rotate: 'x 0deg'}, {rotate: 'x 60deg'}], {
+        duration: 300,
+        easing: 'linear',
+      });
+    });
+    await holdAnimations(page, box);
+    const [end] = await sampleCurve(box, [300]);
+    // About x, nothing turns in the plane: no z rotation, and y shrinks by
+    // cos 60°.
+    expect(end.transform.rotate).toBeCloseTo(0, 1);
+    expect(end.transform.scaleY).toBeCloseTo(0.5, 2);
+    await releaseAnimations(page, {finish: true});
   });
 
   test('a hold stays where it was read, not a frame later', async ({page}) => {
