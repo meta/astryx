@@ -2127,6 +2127,43 @@ test.describe('animation state', () => {
     }
   });
 
+  test('inside a rendering trace too, a wait on an element no longer in the document rejects as missing', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await fixture(page);
+    await page.evaluate(() => {
+      const gone = document.createElement('div');
+      gone.id = 'gone';
+      document.body.append(gone);
+    });
+    const gone = page.locator('#gone');
+    const watch = await watchAnimations(gone);
+    await page.evaluate(() => document.getElementById('gone')?.remove());
+    const outcomes: string[] = [];
+    await traceRendering(page, async () => {
+      for (const wait of [
+        () => watch.started({timeout: 300}),
+        () => waitForAnimation(gone, {timeout: 300}),
+      ]) {
+        outcomes.push(
+          await wait().then(
+            () => 'resolved',
+            (error: Error) => error.message,
+          ),
+        );
+      }
+    });
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) {
+      expect(outcome).toMatch(/not in the document/);
+    }
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
