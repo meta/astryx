@@ -2049,6 +2049,28 @@ describe('holdPageScroll', () => {
     expect(decide).toHaveBeenCalledWith(scrim, 0, -50);
   });
 
+  it("judges a new touch afresh when it reuses the last touch's identifier", () => {
+    const {scrim} = mount('<div id="scrim"></div>');
+    // The backdrop pan would scroll the page; the list pan scrolls the list.
+    const decide = vi.fn(
+      (_origin: EventTarget | null, _dx: number, dy: number) => dy < 0,
+    );
+    detachers.push(hold(decide));
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 0);
+    expect(
+      touch('touchmove', scrim, at(1, 100, 250), at(1, 100, 250), 16)
+        .defaultPrevented,
+    ).toBe(true);
+    touch('touchend', scrim, at(1, 100, 250), [], 32);
+    // The next touch reuses identifier 1 and pans the other way.
+    touch('touchstart', scrim, at(1, 100, 300), at(1, 100, 300), 48);
+    expect(
+      touch('touchmove', scrim, at(1, 100, 350), at(1, 100, 350), 64)
+        .defaultPrevented,
+    ).toBe(false);
+    expect(decide).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps holding the first finger after a second finger touches and lifts', () => {
     const {scrim} = mount('<div id="scrim"></div>');
     detachers.push(hold(() => true));
