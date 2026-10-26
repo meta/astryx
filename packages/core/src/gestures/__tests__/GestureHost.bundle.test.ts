@@ -4,8 +4,7 @@
  * @file GestureHost.bundle.test.ts
  * @input GestureHost.ts, bundled and minified by esbuild
  * @output The gesture host carries only the UIKit gesture groups it reads,
- *   never the whole table nor the click group the click guard replaced
- *   (architecture:component-style-authoring INV6)
+ *   never the whole table (architecture:component-style-authoring INV6)
  * @position Bundle evidence for packages/core/src/gestures: every recognizer
  *   and press tracker attaches through the host, so what it imports ships
  *   with every touch component
@@ -62,12 +61,11 @@ describe('the gesture host bundle', () => {
     // The table's own keys: only the union of every group has them.
     expect(text).not.toContain('screenEdgePan:');
     expect(text).not.toContain('longPress:');
-    // Groups the host never reads (the click guard keeps its own window).
+    // Groups the host never reads.
     for (const key of [
       'edgeRegion:',
       'minimumMovementDecay:',
       'scrollReleaseWeight:',
-      'strayClickWindow:',
     ]) {
       expect(text).not.toContain(key);
     }

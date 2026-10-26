@@ -288,17 +288,6 @@ export const UIKIT_VELOCITY = {
   stillness: {value: 40, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
-export const UIKIT_CLICK = {
-  /**
-   * Longest the system waits for the browser's click after a touch it
-   * swallows. iOS and Chromium deliver it right after `touchend`; this only
-   * bounds a click that never comes.
-   * @source GUESS — A safety bound, not a UIKit number.
-   * @measure M-G17
-   */
-  strayClickWindow: {value: 1000, unit: 'ms'},
-} as const satisfies Record<string, GestureConstant>;
-
 /**
  * Every group in one object, for a reader that needs several. A reader of
  * one group imports it by name instead (`UIKIT_PAN`): object properties do
@@ -316,7 +305,6 @@ export const UIKIT_GESTURES = {
   control: UIKIT_CONTROL,
   press: UIKIT_PRESS,
   velocity: UIKIT_VELOCITY,
-  click: UIKIT_CLICK,
 } as const;
 
 /**
