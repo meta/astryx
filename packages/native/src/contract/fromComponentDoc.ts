@@ -87,7 +87,7 @@ export interface NativeAdditions {
    * Props whose web type is wider than a portable kind, with the closed set of
    * values every platform supports, each mapped to the one web value it means
    * (AST-082 FR4), such as Button `width`: `content` is the web's `'auto'`
-   * and `fill` its `'100%'`. The first value is the default. The prop's other
+   * and `fill` its `'100%'`. The web's default keeps its meaning. The prop's other
    * web values stay in the web contract.
    */
   readonly projections?: Readonly<
