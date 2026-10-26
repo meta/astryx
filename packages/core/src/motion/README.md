@@ -100,9 +100,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
   every `animate` and `play` is replaced and nothing moves, scales or
   springs. On a coarse primary pointer, or for a call started by a touch
   drag's release (`{touchRelease: true}`), it is an opacity-only cross-fade
-  of `timing.reducedMotionCrossFadeMs` (200 ms): an entrance lands and fades
-  in, an exit fades out then lands, an opacity change fades, any other move
-  dips (fade out, land, fade in). Travel lands with a plain style write while
+  of `timing.reducedMotionCrossFadeMs` (200 ms): an entrance from 0 lands and
+  fades in, an exit to 0 fades out then lands, an opacity change fades, any
+  other move dips (fade out, land, fade in). Travel lands with a plain style write while
   the element is transparent, never as an animated transform. On any other
   pointer it completes at once.
   `{crossfadeAs: 'entrance'}` or `'exit'` gives a slide that changes no
