@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file presentationHold.interaction.browser.spec.ts
- * @input The presentation-hold fixture bundled with esbuild, a phone-sized
+ * @file inputHold.interaction.browser.spec.ts
+ * @input The input-hold fixture bundled with esbuild, a phone-sized
  *   touch screen, and real engine touch input (touchDriver)
  * @output Browser proof of what the unit tests cannot see: the hold's shield
  *   is the hit target over the whole viewport, above a modal dialog in the
@@ -10,17 +10,17 @@
  *   layer (the gesture host's touch gate) and leaves a light-dismissing
  *   popover open; a layer root that takes no hits itself (pointer-events:
  *   none, or visibility: hidden, its content opting back in) is held all the
- *   same; keys still act while a presentation holds; a dismissal's
+ *   same; keys still act during a presentation's input hold; a dismissal's
  *   hold makes the content inert and moves focus out of it, so no key acts
  *   on it either (a focused button that turns inert still takes Enter and
  *   Space in both engines); each release gives input back; a hit test
- *   that skips shields (isPresentationShield) finds what lies beneath, and
+ *   that skips shields (isInputShield) finds what lies beneath, and
  *   a layer above the held one still wins; a one-finger
  *   pan on the shield scrolls nothing while a pinch on it still zooms the
  *   page (spec:AST-094 FR10, FR18, FR35; Chromium, which pinch-zooms from
  *   injected touches)
- * @position Browser tests of packages/core/src/Layer/presentationHold.ts, run
- *   by the interaction project (`pnpm test:interaction presentationHold`)
+ * @position Browser tests of packages/core/src/Layer/inputHold.ts, run
+ *   by the interaction project (`pnpm test:interaction inputHold`)
  */
 
 import path from 'node:path';
@@ -54,7 +54,7 @@ test.beforeAll(async () => {
     entryPoints: [
       path.join(
         path.dirname(fileURLToPath(import.meta.url)),
-        'presentationHold.fixture.ts',
+        'inputHold.fixture.ts',
       ),
     ],
     bundle: true,
@@ -118,7 +118,7 @@ async function centre(page: Page, id: string): Promise<Point> {
 // A tap's click (or its recognition) lands within a few frames.
 const settle = async (page: Page) => page.waitForTimeout(250);
 
-test('while a presentation holds a modal dialog, a tap on it or beside it reaches nothing, keys still act, and the release gives touch back', async ({
+test("during a presentation's input hold on a modal dialog, a tap on it or beside it reaches nothing, keys still act, and the release gives touch back", async ({
   page,
 }) => {
   const driver = await load(page);
@@ -135,7 +135,7 @@ test('while a presentation holds a modal dialog, a tap on it or beside it reache
   await settle(page);
   // No click, and the recognizer on the dialog saw nothing: the gate.
   expect(await readLog(page)).toEqual({clicks: [], taps: 0, toggles: []});
-  // Keys still act while a presentation holds.
+  // Keys still act during a presentation's input hold.
   await page.locator('#action').focus();
   await page.keyboard.press('Enter');
   await expect
