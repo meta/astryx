@@ -83,15 +83,12 @@ export function formatMotionRoleValue(
         'a spring is {response, dampingRatio}, {duration, bounce} or {mass?, stiffness, damping}',
       );
     }
-    const spring = toSpring(value);
-    // No damping (a bounce of 1 or more, a damping ratio or damping of 0)
-    // never settles: the animator would play the swing to its 30 s cap.
-    if (!(spring.damping > 0)) {
+    const {duration, bounce} = durationBounceOf(toSpring(value));
+    if (!(bounce < 1)) {
       throw new RangeError(
-        'a spring must settle: a bounce under 1, or a damping ratio and damping above 0',
+        'a spring must settle: its bounce must be below 1 (a damping ratio above 0)',
       );
     }
-    const {duration, bounce} = durationBounceOf(spring);
     return `${short(duration)}s ${short(bounce)}`;
   }
   if (kind === 'duration') {

@@ -118,6 +118,20 @@ export const UIKIT_GESTURES = {
      *   0 at .began
      */
     hysteresis: {value: 10, unit: 'px'},
+    /**
+     * Travel in a one-way pan's direction from which the pan cancels its
+     * touch's moves before it begins, under the distance at which WebKit
+     * claims a slow drag for scrolling (10–11 px). Not a UIKit value: it gives
+     * an overlay's drag (a toast, a banner) on the web the outcome UIKit gives
+     * it, where a drag that starts on an overlay never reaches the content
+     * behind it.
+     * @source measured: Mobile Safari 26.2, iOS 26.2 simulator, HID drags,
+     *   Oct 24 2026: cancelling every touchmove from 8 px keeps a scrollable
+     *   page still; a one-way upward pan over a scrollable page that cancels
+     *   from 4–5 px keeps the page still and its card follows the finger
+     *   exactly
+     */
+    earlyClaimDistance: {value: 5, unit: 'px'},
   },
   swipe: {
     /**

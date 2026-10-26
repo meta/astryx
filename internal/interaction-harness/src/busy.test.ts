@@ -89,7 +89,7 @@ describe('busyWindowProof verdict', () => {
     const proof = busyWindowProof(frozen, BLOCK);
     expect(proof.changed).toBe(0);
     expect(proof.verdict.pass).toBe(false);
-    expect(proof.verdict.failures.join('\n')).toMatch(/median frame interval/);
+    expect(proof.verdict.failures.join('\n')).toMatch(/no frame presented/);
     expect(proof.verdict.failures.join('\n')).toMatch(/longest stall/);
     expect(proof.verdict.failures.join('\n')).toMatch(/expected frames moved/);
   });
@@ -119,11 +119,19 @@ describe('busyWindowProof verdict', () => {
     ).toMatch(/frames < 4: the animation under test was not moving/);
   });
 
-  it('fails a half-rate animation (median interval above display rate)', () => {
+  it('judges the frames a slower screencast delivers by default, and display rate only when asked', () => {
+    // One frame in six, as a loaded machine's screencast delivers: every
+    // delivered frame moved, so the default verdict passes.
+    const sixth = moving().filter((_, i) => i % 6 === 0);
+    expect(busyWindowProof(sixth, BLOCK).verdict.failures).toEqual([]);
+    // Half rate fails only a proof that claims display rate.
     const odd = moving().filter((_, i) => i % 2 === 1);
-    expect(busyWindowProof(odd, BLOCK).verdict.failures.join('\n')).toMatch(
-      /median frame interval/,
-    );
+    expect(busyWindowProof(odd, BLOCK).verdict.pass).toBe(true);
+    expect(
+      busyWindowProof(odd, BLOCK, {maxMedianFrameMs: 20}).verdict.failures.join(
+        '\n',
+      ),
+    ).toMatch(/median frame interval/);
   });
 });
 

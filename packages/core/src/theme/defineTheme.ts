@@ -241,9 +241,9 @@ export interface DefineThemeInput {
    * `fast`, `medium` and `ratio` together, or none of them.
    *
    * `springs`, `durations` and `curves` retune touch motion roles: the
-   * springs, durations and curves touch presentations play, each named by
-   * its table path (`astryx docs motion` lists them with their defaults). A
-   * role the theme does not set keeps its measured default.
+   * springs, durations and curves touch presentations play, each named for
+   * its use (`astryx docs motion` lists them with their defaults). A role the
+   * theme does not set keeps its measured default, and a spring must settle.
    *
    * Explicit `tokens` overrides take precedence over motion-generated values.
    *
