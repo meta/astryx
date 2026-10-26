@@ -590,8 +590,10 @@ export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
 
 /**
  * Keyframes are added until linear interpolation is within this: a quarter of
- * a CSS pixel, a twentieth of a degree, a 2000th of the size, about one step
- * of an 8-bit alpha. Every one is below what a moving element can show.
+ * a device pixel (this quarter of a CSS pixel, divided by the device pixel
+ * ratio where it is above 1), a twentieth of a degree, a 2000th of the size,
+ * about one step of an 8-bit alpha. Every one is below what a moving element
+ * can show.
  */
 const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
   x: 0.25,
@@ -1138,15 +1140,17 @@ export function createAnimator(
         }
       }
     }
+    // Read where the keyframes are baked: a page moved to another screen
+    // bakes its next motion for that screen.
+    const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
-        for (const t of sampleTimes(
-          property,
-          from,
-          end,
-          SAMPLE_TOLERANCE[property] * scale,
-        )) {
+        const tolerance =
+          SAMPLE_TOLERANCE[property] *
+          scale *
+          (property === 'x' || property === 'y' ? devicePixel : 1);
+        for (const t of sampleTimes(property, from, end, tolerance)) {
           times.add(t);
         }
       }

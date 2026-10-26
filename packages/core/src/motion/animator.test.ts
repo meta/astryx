@@ -307,6 +307,37 @@ describe('animate: keyframes on the compositor', () => {
     ).toEqual([300, 0]);
   });
 
+  it('on a 3x screen, bakes the spring within a quarter of a device pixel', async () => {
+    vi.stubGlobal('devicePixelRatio', 3);
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(1000);
+    const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
+    const duration = Number(animation.options.duration) - END_HOLD_MS;
+    let worst = 0;
+    for (let t = 0; t <= duration; t += 0.5) {
+      const [x] = sampleAt(animation, 'translate', 1000 + t);
+      worst = Math.max(worst, Math.abs(x - curve.value(t / 1000)));
+    }
+    // In device pixels, as the curve's chords are checked at their quarters.
+    expect(worst * 3).toBeLessThan(0.26);
+  });
+
+  it('on a 1x screen, bakes no more keyframes than a quarter of a CSS pixel needs', () => {
+    const count = (ratio: number) => {
+      vi.stubGlobal('devicePixelRatio', ratio);
+      recorded = [];
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      return live('translate')[0].keyframes.length;
+    };
+    const desktop = count(1);
+    expect(desktop).toBeLessThan(count(3));
+    // A ratio below 1 (a zoomed-out page) bakes as 1, never coarser.
+    expect(count(0.5)).toBe(desktop);
+  });
+
   it('keeps the keyframe count modest (adaptive sampling)', () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.settle});
