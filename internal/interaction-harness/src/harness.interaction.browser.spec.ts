@@ -548,6 +548,21 @@ test.describe('holding', () => {
     expect(reversed.curveEndMs).toBeCloseTo(1000, 0);
     await releaseAnimations(page, {finish: true});
 
+    // So does one reversed by `reverse()` (a negative playback rate).
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: '0px 0px', offset: 0},
+          {translate: '100px 0px', offset: 0.5},
+          {translate: '100px 0px', offset: 1},
+        ],
+        {duration: 1000, easing: 'linear'},
+      ).reverse();
+    });
+    const [played] = await holdAnimations(page, box);
+    expect(played.curveEndMs).toBeCloseTo(1000, 0);
+    await releaseAnimations(page, {finish: true});
+
     await box.evaluate(el => {
       el.animate([{rotate: 'x 0deg'}, {rotate: 'x 60deg'}], {
         duration: 300,

@@ -182,8 +182,12 @@ async function installCurveEnd(page: Page): Promise<void> {
         return delay + active;
       }
       // A held end is read only for an animation that plays forward: run
-      // backward (or alternating), the held run is where its motion starts.
-      if ((timing?.direction ?? 'normal') !== 'normal') {
+      // backward (a reverse or alternating direction, or `reverse()`'s
+      // negative playback rate), the held run is where its motion starts.
+      if (
+        (timing?.direction ?? 'normal') !== 'normal' ||
+        animation.playbackRate < 0
+      ) {
         return delay + active;
       }
       const frames = effect.getKeyframes();
