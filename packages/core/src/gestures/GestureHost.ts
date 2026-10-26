@@ -82,10 +82,13 @@ import {
 import type {GestureRecognizer} from './GestureRecognizer';
 import {HAPTIC_SWITCH_ATTRIBUTE} from './haptics';
 import {HoverGestureRecognizer} from './HoverGestureRecognizer';
-import {PanGestureRecognizer} from './PanGestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
-import {gestureHostStyle, type GestureHostStyle} from './touchAction';
+import {
+  gestureHostStyle,
+  holdSelectionStyle,
+  type GestureHostStyle,
+} from './touchAction';
 import type {
   GestureEnvironment,
   GestureTouch,
@@ -157,6 +160,22 @@ function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
 }
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+
+/** The inline properties a held press sets to none (holdSelectionStyle). */
+const HOLD_SELECTION_PROPERTIES = [
+  '-webkit-touch-callout',
+  '-webkit-user-select',
+  'user-select',
+] as const;
+
+/** Elements a held press turned selection off on, and what to restore. */
+const heldSelection = new WeakMap<
+  HTMLElement,
+  {
+    count: number;
+    saved: ReadonlyArray<{name: string; value: string; priority: string}>;
+  }
+>();
 const ACTIVE_CAPTURE = {capture: true, passive: false} as const;
 
 type StylusTouch = Touch & {touchType?: string};
@@ -211,7 +230,17 @@ export class GestureHost {
   /** Touch.identifier → the element the finger landed on. */
   private readonly touchTargets = new Map<number, EventTarget>();
   /** Finger targets with listeners of their own, and how many fingers each. */
-  private readonly watched = new Map<EventTarget, number>();
+  /**
+   * Finger targets with listeners of their own: how many fingers each, and
+   * how many of those a recognizer could claim while they move (only those
+   * need the blocking `touchmove` listener).
+   */
+  private readonly watched = new Map<
+    EventTarget,
+    {count: number; blocking: number}
+  >();
+  /** Fingers whose target listener is the blocking one. */
+  private readonly blockingFingers = new Set<number>();
   /** Touch events already handled (the document's and the target's listeners both see one). */
   private readonly processed = new WeakSet<Event>();
   /** pointerId → arena id, for live mouse and pen contacts. */
@@ -231,6 +260,8 @@ export class GestureHost {
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   /** The last position fed per contact, so one channel's echo is dropped. */
+  /** The elements each held contact turned selection off on. */
+  private readonly heldSelectionBy = new Map<number, HTMLElement[]>();
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
@@ -605,7 +636,12 @@ export class GestureHost {
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
-      this.watchTarget(touch.identifier, target);
+      this.holdSelection(id, recognizers);
+      this.watchTarget(
+        touch.identifier,
+        target,
+        recognizers.some(claimsWhileMoving),
+      );
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target});
       inputs.push({
@@ -689,50 +725,33 @@ export class GestureHost {
     this.feedMoves(inputs);
   };
 
-  /** Cancel a `touchmove` while a recognizer owns one of its fingers. */
+  /**
+   * Cancel a `touchmove` while a recognizer owns one of its fingers. A touch
+   * no recognizer owns keeps its moves (`spec:AST-094` FR19): nothing is
+   * cancelled before a recognizer begins, or for a touch it does not track.
+   */
   private cancelIfClaimed(event: TouchEvent): void {
     if (!event.cancelable || event.defaultPrevented) {
       return;
     }
-    const fingers = [
-      ...touchesOf(event.touches),
-      ...touchesOf(event.changedTouches),
-    ];
-    for (const touch of fingers) {
+    // Only the touches this move reports: another finger a recognizer owns
+    // does not make this one its own.
+    const moved = touchesOf(event.changedTouches);
+    for (const touch of moved) {
       const id = this.touchIds.get(touch.identifier);
       if (id != null && this.arena.isClaimed(id)) {
         event.preventDefault();
         return;
       }
     }
-    for (const id of this.pointerIds.values()) {
-      if (this.arena.isClaimed(id)) {
-        // A pen whose pointer a recognizer owns: its stylus touches too.
-        event.preventDefault();
-        return;
-      }
-    }
-    // A one-way pan over content the browser could scroll (an overlay)
-    // claims before it begins, once the finger has gone its claim distance
-    // its way.
-    const ids = new Set<number>();
-    for (const touch of fingers) {
-      const id = this.touchIds.get(touch.identifier);
-      if (id != null) {
-        ids.add(id);
-      }
-    }
-    for (const recognizer of this.arena.involvedRecognizers) {
-      if (
-        recognizer instanceof PanGestureRecognizer &&
-        recognizer.claimsEarly() &&
-        recognizer.trackedTouches.some(touch => ids.has(touch.id))
-      ) {
-        // Safari gives the page no scroll for a touch once one of its moves
-        // was cancelled, so the pan commits to the touch.
-        event.preventDefault();
-        recognizer.commitClaim();
-        return;
+    if (moved.some(touch => (touch as StylusTouch).touchType === 'stylus')) {
+      for (const id of this.pointerIds.values()) {
+        if (this.arena.isClaimed(id)) {
+          // A pen whose pointer a recognizer owns: its stylus touches too,
+          // never a finger no recognizer owns.
+          event.preventDefault();
+          return;
+        }
       }
     }
   }
@@ -795,6 +814,11 @@ export class GestureHost {
     this.cancelIfClaimed(event as TouchEvent);
   };
 
+  /** The same for a finger nothing could claim while it moves: never blocks. */
+  private readonly onTargetTouchMovePassive = (event: Event): void => {
+    this.onTouchMove(event as TouchEvent);
+  };
+
   private readonly onTargetTouchEnd = (event: Event): void => {
     this.onTouchEnd(event as TouchEvent);
   };
@@ -834,24 +858,41 @@ export class GestureHost {
     }
   }
 
-  private watchTarget(identifier: number, target: EventTarget | null): void {
+  private watchTarget(
+    identifier: number,
+    target: EventTarget | null,
+    isBlocking: boolean,
+  ): void {
     if (target == null || typeof target.addEventListener !== 'function') {
       return;
     }
     this.touchTargets.set(identifier, target);
-    const count = this.watched.get(target) ?? 0;
-    this.watched.set(target, count + 1);
-    if (count === 0) {
-      target.addEventListener('touchmove', this.onTargetTouchMove, {
-        passive: false,
-      });
+    const state = this.watched.get(target);
+    if (state == null) {
+      this.watched.set(target, {count: 1, blocking: isBlocking ? 1 : 0});
+      if (isBlocking) {
+        this.blockingFingers.add(identifier);
+      }
+      target.addEventListener(
+        'touchmove',
+        isBlocking ? this.onTargetTouchMove : this.onTargetTouchMovePassive,
+        {passive: !isBlocking},
+      );
       target.addEventListener('touchend', this.onTargetTouchEnd, {
         passive: false,
       });
       target.addEventListener('touchcancel', this.onTargetTouchCancel, {
         passive: true,
       });
+      return;
     }
+    const wasBlocking = state.blocking > 0;
+    state.count += 1;
+    if (isBlocking) {
+      state.blocking += 1;
+      this.blockingFingers.add(identifier);
+    }
+    this.swapTargetTouchMove(target, wasBlocking, state.blocking > 0);
   }
 
   private unwatchTarget(identifier: number): void {
@@ -860,15 +901,51 @@ export class GestureHost {
       return;
     }
     this.touchTargets.delete(identifier);
-    const count = (this.watched.get(target) ?? 1) - 1;
-    if (count > 0) {
-      this.watched.set(target, count);
+    const state = this.watched.get(target);
+    if (state == null) {
+      return;
+    }
+    const wasBlocking = state.blocking > 0;
+    state.count -= 1;
+    if (this.blockingFingers.delete(identifier)) {
+      state.blocking -= 1;
+    }
+    if (state.count > 0) {
+      this.swapTargetTouchMove(target, wasBlocking, state.blocking > 0);
       return;
     }
     this.watched.delete(target);
-    target.removeEventListener('touchmove', this.onTargetTouchMove);
+    target.removeEventListener(
+      'touchmove',
+      wasBlocking ? this.onTargetTouchMove : this.onTargetTouchMovePassive,
+    );
     target.removeEventListener('touchend', this.onTargetTouchEnd);
     target.removeEventListener('touchcancel', this.onTargetTouchCancel);
+  }
+
+  /**
+   * Keeps one `touchmove` listener on a watched target: the blocking one
+   * while a finger on it could be claimed as it moves, a passive one
+   * otherwise, so a scroll starting there never waits on the main thread
+   * (`spec:AST-094` FR19).
+   */
+  private swapTargetTouchMove(
+    target: EventTarget,
+    wasBlocking: boolean,
+    isBlocking: boolean,
+  ): void {
+    if (wasBlocking === isBlocking) {
+      return;
+    }
+    target.removeEventListener(
+      'touchmove',
+      wasBlocking ? this.onTargetTouchMove : this.onTargetTouchMovePassive,
+    );
+    target.addEventListener(
+      'touchmove',
+      isBlocking ? this.onTargetTouchMove : this.onTargetTouchMovePassive,
+      {passive: !isBlocking},
+    );
   }
 
   /** Stop tracking a finger by its Touch.identifier; returns its arena id. */
@@ -925,8 +1002,80 @@ export class GestureHost {
     }
   }
 
+  /**
+   * For one held press by a finger or a pen: text selection and the touch
+   * callout off on the elements whose hold does something (a long press),
+   * as `holdSelectionStyle` decides (`spec:AST-094` FR41, DEC-9).
+   * Everything else keeps the browser's long-press selection. Restored when
+   * the contact ends; refcounted across contacts on one element.
+   */
+  private holdSelection(
+    id: number,
+    recognizers: ReadonlyArray<GestureRecognizer>,
+  ): void {
+    const elements = new Set<HTMLElement>();
+    for (const recognizer of recognizers) {
+      if (
+        recognizer.view instanceof HTMLElement &&
+        recognizer.isEnabled &&
+        holdSelectionStyle([recognizer]) != null
+      ) {
+        elements.add(recognizer.view);
+      }
+    }
+    if (elements.size === 0) {
+      return;
+    }
+    const held = [...elements];
+    for (const element of held) {
+      const entry = heldSelection.get(element);
+      if (entry != null) {
+        entry.count += 1;
+        continue;
+      }
+      const saved = HOLD_SELECTION_PROPERTIES.map(name => ({
+        name,
+        value: element.style.getPropertyValue(name),
+        priority: element.style.getPropertyPriority(name),
+      }));
+      for (const name of HOLD_SELECTION_PROPERTIES) {
+        element.style.setProperty(name, 'none');
+      }
+      heldSelection.set(element, {count: 1, saved});
+    }
+    this.heldSelectionBy.set(id, held);
+  }
+
+  /** Undo `holdSelection` for a contact that ended; idempotent. */
+  private releaseSelection(id: number): void {
+    const held = this.heldSelectionBy.get(id);
+    if (held == null) {
+      return;
+    }
+    this.heldSelectionBy.delete(id);
+    for (const element of held) {
+      const entry = heldSelection.get(element);
+      if (entry == null) {
+        continue;
+      }
+      entry.count -= 1;
+      if (entry.count > 0) {
+        continue;
+      }
+      heldSelection.delete(element);
+      for (const {name, value, priority} of entry.saved) {
+        if (value === '') {
+          element.style.removeProperty(name);
+        } else {
+          element.style.setProperty(name, value, priority);
+        }
+      }
+    }
+  }
+
   /** Forget a contact's pairing and echo state. */
   private forgetContact(id: number): void {
+    this.releaseSelection(id);
     this.lastFed.delete(id);
     this.judgedUncancelable.delete(id);
     this.unpairedTouches.delete(id);
@@ -966,6 +1115,9 @@ export class GestureHost {
     }
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
+    if (event.pointerType !== 'mouse') {
+      this.holdSelection(id, recognizers);
+    }
     this.arena.began([
       {
         id,
@@ -1027,6 +1179,7 @@ export class GestureHost {
       return;
     }
     this.pointerIds.delete(event.pointerId);
+    this.releaseSelection(id);
     const dispositions = this.arena.ended([
       {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
     ]);
@@ -1050,6 +1203,7 @@ export class GestureHost {
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
       this.pointerIds.delete(event.pointerId);
+      this.releaseSelection(id);
       this.arena.cancelled([id], eventTime(event));
     }
   };
@@ -1244,6 +1398,9 @@ export class GestureHost {
   /** The app lost focus: UIKit cancels every touch in flight. */
   private cancelEverything(time: number): void {
     const ids = [...this.pointerIds.values()];
+    for (const id of ids) {
+      this.releaseSelection(id);
+    }
     for (const identifier of [...this.touchIds.keys()]) {
       const id = this.forgetFinger(identifier);
       if (id != null) {
