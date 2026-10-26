@@ -26,7 +26,10 @@ export const SWIFT_IOS_STRINGS_DIR = path.join(
 );
 
 /** The catalog messages the Swift components speak. */
-export const SWIFT_IOS_STRING_KEYS = ['@astryx.button.loading'];
+export const SWIFT_IOS_STRING_KEYS = [
+  '@astryx.avatar.nameWithStatus',
+  '@astryx.button.loading',
+];
 
 // Apple names a localization by its language alone unless one language has
 // several catalogs (pt-BR, pt-PT), and writes Chinese by script.
