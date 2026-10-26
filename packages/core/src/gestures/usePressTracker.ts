@@ -59,6 +59,7 @@ export function usePressTracker(
   // The ref is read through a ref too: a caller may pass a new ref object
   // on a render, and the one tracker must follow it.
   const refRef = useRef(ref);
+  // Syncs the options and ref refs with the newest render.
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
     refRef.current = ref;
@@ -122,11 +123,13 @@ export function usePressTracker(
       }),
   );
   const {trackingExpansion} = options;
+  // Syncs the tracker's tracking expansion with the option.
   useIsomorphicLayoutEffect(() => {
     tracker.trackingExpansion =
       trackingExpansion ?? UIKIT_GESTURES.control.trackingExpansion.value;
   }, [tracker, trackingExpansion]);
 
+  // Syncs the host's press consumer with the element behind `ref`.
   // Releasing the element (a replaced node, unmount) disposes the press,
   // which un-highlights a control it was holding; a changed perEventPointer
   // re-attaches it.
@@ -155,12 +158,12 @@ export function usePressTracker(
     attachment,
   );
 
-  // The enabled state can change with any render: the host listens only
-  // while an enabled control is attached (spec:AST-094 FR24). A control
-  // disabled under a finger ends that press here, inside the release guard:
-  // a disabled control tracks no touch, and this Effect calls back no
-  // caller, whether the host stops listening or another control keeps it
-  // listening.
+  // Syncs the host's listeners with the tracker's enabled state, which can
+  // change with any render: the host listens only while an enabled control
+  // is attached (spec:AST-094 FR24). A control disabled under a finger ends
+  // that press here, inside the release guard: a disabled control tracks no
+  // touch, and this Effect calls back no caller, whether the host stops
+  // listening or another control keeps it listening.
   useIsomorphicLayoutEffect(() => {
     const element = refRef.current.current;
     isReleasingRef.current = true;
