@@ -118,11 +118,14 @@
  * the fade's length is not a theme role.
  *
  * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
- * decay only ever continues the velocity a finger handed it on release
+ * decay's momentum continues the velocity a finger handed it on release
  * (UIScrollView's coast after a flick, with its bounce at an edge), so it
  * keeps its motion, as native momentum does: it is direct movement, not a
- * transition. A spring a component starts on release toward a target it
- * picks (a detent, a page) is a transition, and cross-fades (DR2).
+ * transition. A curve marked `isTransition` (coast()'s spring back from past
+ * an edge), like a spring a component starts on release toward a target it
+ * picks (a detent, a page), is a transition: it plays through the Reduce
+ * Motion policy above, a cross-fade on a coarse pointer and at once
+ * elsewhere (DR2, DR3).
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
@@ -197,11 +200,11 @@ export interface AnimateOptions {
 }
 
 /**
- * Any closed-form curve to play on the compositor (`Animator.play`): a
- * spring chasing a moving target, a piecewise curve, a fitted UIKit curve.
- * Times are seconds from the curve's start; the value at `duration` is the
- * end state. Start it at the property's presentation value (`get`) to
- * continue without a jump.
+ * Any closed-form curve to play on the compositor (`Animator.play`, and a
+ * release's coast through `Animator.decay`): a spring chasing a moving
+ * target, a piecewise curve, a fitted UIKit curve. Times are seconds from
+ * the curve's start; the value at `duration` is the end state. Start it at
+ * the property's presentation value (`get`) to continue without a jump.
  */
 export interface MotionCurve {
   /** Length, s. */
@@ -323,12 +326,13 @@ export interface Animator {
   /**
    * Plays momentum curves as given, on the translate axes only: a released
    * scroll view's coast and edge bounce, which `coast()` (coast.ts) builds
-   * from a finger's release velocity. Reduced Motion does not apply:
-   * momentum that continues a throw is direct movement
-   * (design:reduced-motion DR2, DEC-2). Anything else (a fade, a slide a
-   * tap starts) is a transition: play it with `play` or `animate`, which
-   * apply the Reduce Motion policy. Only a surface that coasts imports the
-   * coast math and the scroll table.
+   * from a finger's release velocity. Under Reduce Motion momentum keeps
+   * its motion: it continues a throw, direct movement (design:reduced-motion
+   * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
+   * past an edge) is a transition and plays through the Reduce Motion
+   * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
+   * is a transition too: play it with `play` or `animate`. Only a surface
+   * that coasts imports the coast math and the scroll table.
    */
   decay(
     curves: Partial<Record<'x' | 'y', MotionCurve>>,
@@ -693,6 +697,15 @@ export function defaultIsCoarsePointer(): boolean {
 }
 
 /**
+ * The transition `decay` hands a Reduce Motion transition curve to: under
+ * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
+ * spring itself is never solved.
+ */
+const REDUCED_TRANSITION: SpringTransition = {
+  spring: {duration: 0.5, bounce: 0},
+};
+
+/**
  * Creates an animator for `element` (or for an element attached later).
  *
  * @example
@@ -706,15 +719,6 @@ export function defaultIsCoarsePointer(): boolean {
  * animator.stop(['y']);
  * ```
  */
-/**
- * The transition `decay` hands a Reduce Motion transition curve to: under
- * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
- * spring itself is never solved.
- */
-const REDUCED_TRANSITION: SpringTransition = {
-  spring: {duration: 0.5, bounce: 0},
-};
-
 export function createAnimator(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
@@ -765,6 +769,8 @@ export function createAnimator(
     pseudoElement == null
       ? null
       : `--astryx-motion-will-change-${pseudoElement.replace(/^:+/, '')}`;
+  /** Channels whose identity the last node held inline (see `attach`). */
+  let heldIdentity = new Set<Channel>();
 
   // -- reading the curves ---------------------------------------------------
 
@@ -2238,6 +2244,25 @@ export function createAnimator(
       }
       // After the landing's commit, which can promote the element again.
       demote();
+      // A pseudo-element holds an identity with a static animation, which the
+      // cancel below drops: note the channels to hold again on the next node
+      // (never a borrowed opacity, which is the stylesheet's).
+      const isOpacityBorrowed =
+        borrowedOpacity != null ||
+        [...landings].some(landing => landing.restoreIsBorrowed === true);
+      const pseudoHeld =
+        pseudoElement == null || target == null
+          ? null
+          : new Set(
+              (Object.keys(CHANNELS) as Channel[]).filter(
+                channel =>
+                  running.has(channel) &&
+                  !(channel === 'opacity' && isOpacityBorrowed) &&
+                  CHANNELS[channel].every(
+                    p => !segments.has(p) && resting[p] === IDENTITY[p],
+                  ),
+              ),
+            );
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2246,20 +2271,33 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      if (
-        borrowedOpacity != null ||
-        [...landings].some(landing => landing.restoreIsBorrowed === true)
-      ) {
+      if (isOpacityBorrowed) {
         // A running borrowed dip (or an exit by role returning to the
         // stylesheet) stays in the model through any attach, so a pending
         // move still lands while the element is invisible; only the
         // outgoing element gets its stylesheet's opacity back.
         releaseOwnOpacity();
       }
+      // Identities the outgoing node holds inline over a stylesheet that
+      // differs, kept through a detach for the node that comes next.
+      if (target != null) {
+        const outgoing = target;
+        heldIdentity =
+          pseudoHeld ??
+          new Set(
+            (Object.keys(CHANNELS) as Channel[]).filter(
+              channel =>
+                outgoing.style.getPropertyValue(channel) ===
+                IDENTITY_TEXT[channel],
+            ),
+          );
+      }
+      const held = heldIdentity;
       target = next;
       if (target == null) {
         return;
       }
+      heldIdentity = new Set();
       const time = now();
       // A borrowed dip that ended while detached hands the opacity back
       // instead of writing the borrowed value inline.
@@ -2279,6 +2317,16 @@ export function createAnimator(
         );
         if (!isDefault) {
           rebuild(channel, time);
+        } else if (held.has(channel)) {
+          // An identity the animator held inline over a stylesheet that
+          // differs goes onto the new node too (writeInline keeps it only
+          // where the new node's stylesheet still differs); a pseudo-element's
+          // is held again.
+          if (pseudoElement != null) {
+            hold(channel, time);
+          } else {
+            writeInline(channel, property => resting[property]);
+          }
         }
       }
       flushReleases();
@@ -2536,11 +2584,31 @@ export function createAnimator(
       if (transitioned == null) {
         return handle;
       }
+      // One handle for the whole release: the cross-faded axes too.
+      const faded = transitioned;
+      const owns = (property: MotionProperty) =>
+        faded.properties.includes(property);
       return {
         ...handle,
-        finished: Promise.all([handle.finished, transitioned.finished]).then(
-          ([coasted, faded]) => coasted && faded,
+        properties: [...handle.properties, ...faded.properties],
+        started: Promise.all([handle.started, faded.started]).then(
+          ([coasting]) => coasting,
         ),
+        finished: Promise.all([handle.finished, faded.finished]).then(
+          ([coasted, done]) => coasted && done,
+        ),
+        value: (property, at) =>
+          owns(property)
+            ? faded.value(property, at)
+            : handle.value(property, at),
+        velocity: (property, at) =>
+          owns(property)
+            ? faded.velocity(property, at)
+            : handle.velocity(property, at),
+        stop: () => {
+          handle.stop();
+          faded.stop();
+        },
       };
     },
 
