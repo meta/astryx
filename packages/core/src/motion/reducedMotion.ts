@@ -73,8 +73,8 @@ export interface ReducedMotionFade {
  * animator does not drive (two titles cross-fading with Web Animations):
  * null when motion is not reduced (play the normal motion), else an
  * opacity-only fade of 200 ms on a coarse pointer or for a touch release, or
- * duration 0 (at once) on any other pointer. The curve follows the element's
- * theme; the length is fixed.
+ * duration 0 (at once) on any other pointer, on Core Animation's easeInOut;
+ * the length is fixed.
  */
 export function reducedMotionFade(
   element?: Element | null,

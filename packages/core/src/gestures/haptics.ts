@@ -87,6 +87,14 @@ const VISUALLY_HIDDEN =
 
 let nextLabelId = 0;
 
+/** A native disabled control, or one marked `aria-disabled`. */
+function isDisabledControl(control: HTMLElement): boolean {
+  return (
+    control.matches(':disabled') ||
+    control.getAttribute('aria-disabled') === 'true'
+  );
+}
+
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
   return input.type === 'checkbox' && input.hasAttribute('switch');
@@ -133,17 +141,33 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   // through the control as a second click: keep it, and the switch's
   // change events, inside. A label with a control of its own gets that
   // click handed on, so the control still toggles.
+  // A disabled control gives no feedback (spec:AST-094 FR23): its label's
+  // activation neither toggles the switch, so nothing plays, nor reaches
+  // the control.
   const onClick = (event: Event) => {
     event.stopPropagation();
+    if (existing != null && isDisabledControl(existing)) {
+      event.preventDefault();
+      return;
+    }
     existing?.click();
   };
   const onFocus = (event: FocusEvent) => {
     const previous = event.relatedTarget;
-    if (existing instanceof HTMLElement && existing.tabIndex >= 0) {
+    if (
+      existing instanceof HTMLElement &&
+      existing.tabIndex >= 0 &&
+      !isDisabledControl(existing)
+    ) {
       existing.focus({preventScroll: true});
-    } else if (previous instanceof HTMLElement && previous.isConnected) {
+    }
+    if (doc.activeElement !== input) {
+      return;
+    }
+    if (previous instanceof HTMLElement && previous.isConnected) {
       previous.focus({preventScroll: true});
-    } else {
+    }
+    if (doc.activeElement === input) {
       input.blur();
     }
   };

@@ -263,6 +263,28 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 8, x: 30, y: 0}, 132, true);
   });
 
+  it('follows the element behind the ref when it is replaced (INV6)', () => {
+    const states: string[] = [];
+    function Swapped({id}: {id: string}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        r => states.push(r.state),
+      );
+      return <div key={id} data-testid={id} ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Swapped id="first" />);
+    act(() => {
+      rerender(<Swapped id="second" />);
+    });
+    const second = getByTestId('second');
+    touch('touchstart', second, {id: 9, x: 0, y: 0}, 0);
+    touch('touchmove', second, {id: 9, x: 30, y: 0}, 16);
+    expect(states).toContain('began');
+    touch('touchend', second, {id: 9, x: 30, y: 0}, 32, true);
+  });
+
   it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
@@ -402,6 +424,23 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
     expect(events).toEqual([]);
+  });
+
+  it('tracks the element behind the ref when it is replaced (INV6)', () => {
+    const events: ControlEvent[] = [];
+    function Swapped({id}: {id: string}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {onControlEvent: event => events.push(event)});
+      return <button key={id} data-testid={id} ref={ref} type="button" />;
+    }
+    const {getByTestId, rerender} = render(<Swapped id="first" />);
+    act(() => {
+      rerender(<Swapped id="second" />);
+    });
+    const second = getByTestId('second');
+    touch('touchstart', second, {id: 10, x: 1, y: 1}, 0);
+    touch('touchend', second, {id: 10, x: 1, y: 1}, 50, true);
+    expect(events).toEqual(['touchDown', 'touchUpInside']);
   });
 
   it('presses nothing for a touch that brakes a scroll', () => {
