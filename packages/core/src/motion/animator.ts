@@ -110,7 +110,9 @@
  *
  * Reduced Motion (design:reduced-motion): with `prefers-reduced-motion:
  * reduce`, every `animate` and `play` (travel or opacity, on a spring or any
- * curve) is replaced, and nothing moves, scales or springs:
+ * curve) is replaced, and nothing moves, scales or springs. The planner
+ * (reducedMotionPlan.ts) decides what each call becomes; the animator
+ * applies the plan and runs its landings:
  * - on a coarse primary pointer, or for a call started by a touch drag's
  *   release on any pointer (`touchRelease`), it becomes (DR2) an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
@@ -131,11 +133,14 @@
  * the fade's length is not a role.
  *
  * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
- * decay only ever continues the velocity a finger handed it on release
+ * decay's momentum continues the velocity a finger handed it on release
  * (UIScrollView's coast after a flick, with its bounce at an edge), so it
  * keeps its motion, as native momentum does: it is direct movement, not a
- * transition. A spring a component starts on release toward a target it
- * picks (a detent, a page) is a transition, and cross-fades (DR2).
+ * transition. A curve marked `isTransition` (coast()'s spring back from past
+ * an edge), like a spring a component starts on release toward a target it
+ * picks (a detent, a page), is a transition: it plays through the Reduce
+ * Motion policy above, a cross-fade on a coarse pointer and at once
+ * elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
  * resolveMotion.ts, which names the motion role it plays (`springs.settle`
@@ -155,6 +160,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
+ * - /packages/core/src/motion/reducedMotionPlan.ts (the Reduce Motion plan)
  * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
  * - /packages/core/src/motion/resolveMotion.ts (the roles it resolves)
  * - /packages/core/src/motion/README.md
@@ -167,6 +173,11 @@ import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
 } from './uikit/timing';
+import {
+  planReducedMotion,
+  TRAVEL_PROPERTIES,
+  type ReducedMotionView,
+} from './reducedMotionPlan';
 
 /**
  * A value the animator can drive.
@@ -254,11 +265,11 @@ export interface AnimateOptions {
 }
 
 /**
- * Any closed-form curve to play on the compositor (`Animator.play`): a
- * spring chasing a moving target, a piecewise curve, a fitted UIKit curve.
- * Times are seconds from the curve's start; the value at `duration` is the
- * end state. Start it at the property's presentation value (`get`) to
- * continue without a jump.
+ * Any closed-form curve to play on the compositor (`Animator.play`, and a
+ * release's coast through `Animator.decay`): a spring chasing a moving
+ * target, a piecewise curve, a fitted UIKit curve. Times are seconds from
+ * the curve's start; the value at `duration` is the end state. Start it at
+ * the property's presentation value (`get`) to continue without a jump.
  */
 export interface MotionCurve {
   /** Length, s. */
@@ -267,6 +278,12 @@ export interface MotionCurve {
   at(t: number): number;
   /** Velocity `t` seconds after the start, units/s. */
   velocity(t: number): number;
+  /**
+   * A transition started on release rather than a throw's momentum (a
+   * spring back from past an edge): under Reduce Motion it is no coast and
+   * cross-fades like `animate` (`design:reduced-motion` DR2).
+   */
+  readonly isTransition?: boolean;
 }
 
 /**
@@ -397,12 +414,13 @@ export interface Animator {
   /**
    * Plays momentum curves as given, on the translate axes only: a released
    * scroll view's coast and edge bounce, which `coast()` (coast.ts) builds
-   * from a finger's release velocity. Reduced Motion does not apply:
-   * momentum that continues a throw is direct movement
-   * (design:reduced-motion DR2, DEC-2). Anything else (a fade, a slide a
-   * tap starts) is a transition: play it with `play` or `animate`, which
-   * apply the Reduce Motion policy. Only a surface that coasts imports the
-   * coast math and the scroll table.
+   * from a finger's release velocity. Under Reduce Motion momentum keeps
+   * its motion: it continues a throw, direct movement (design:reduced-motion
+   * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
+   * past an edge) is a transition and plays through the Reduce Motion
+   * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
+   * is a transition too: play it with `play` or `animate`. Only a surface
+   * that coasts imports the coast math and the scroll table.
    */
   decay(
     curves: Partial<Record<'x' | 'y', MotionCurve>>,
@@ -447,8 +465,6 @@ interface Segment {
   speed(t: number): number;
   /** Times (ms after the start) where the value jumps; `at` is right-continuous. */
   readonly jumps: ReadonlyArray<number>;
-  /** Constant between jumps: sampled at its jumps only. */
-  readonly steps?: true;
   /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
   readonly isFade?: true;
   readonly owner: HandleState;
@@ -624,13 +640,7 @@ const RETIRE_RECHECK_MS = 100;
 /** How long an element stays promoted after its last motion, ms. */
 export const PROMOTION_LINGER_MS = 500;
 
-const TRAVEL: ReadonlyArray<MotionProperty> = [
-  'x',
-  'y',
-  'rotate',
-  'scaleX',
-  'scaleY',
-];
+const TRAVEL = TRAVEL_PROPERTIES;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
@@ -797,6 +807,15 @@ export function defaultIsCoarsePointer(): boolean {
 }
 
 /**
+ * The transition `decay` hands a Reduce Motion transition curve to: under
+ * Reduce Motion `animate` plays no spring (a cross-fade, or at once), so the
+ * spring itself is never solved.
+ */
+const REDUCED_TRANSITION: SpringTransition = {
+  spring: {duration: 0.5, bounce: 0},
+};
+
+/**
  * Creates an animator for `element` (or for an element attached later).
  *
  * @example
@@ -860,6 +879,8 @@ export function createAnimator(
     pseudoElement == null
       ? null
       : `--astryx-motion-will-change-${pseudoElement.replace(/^:+/, '')}`;
+  /** Channels whose identity the last node held inline (see `attach`). */
+  let heldIdentity = new Set<Channel>();
 
   // -- reading the curves ---------------------------------------------------
 
@@ -977,9 +998,6 @@ export function createAnimator(
     const breaks = segment.jumps
       .map(j => segment.start + j)
       .filter(t => t > begin && t < end);
-    if (segment.steps) {
-      return [begin, ...breaks, end];
-    }
     const edges = [begin, ...breaks, end];
     for (let e = 0; e + 1 < edges.length; e++) {
       const a = edges[e];
@@ -1909,7 +1927,7 @@ export function createAnimator(
     const curves = new Map<MotionProperty, Segment>();
     for (const property of properties) {
       const segment = segments.get(property);
-      if (segment != null && segment.owner === owner && !segment.steps) {
+      if (segment != null && segment.owner === owner) {
         curves.set(property, segment);
       }
     }
@@ -2310,10 +2328,29 @@ export function createAnimator(
     }
   };
 
+  /** What the Reduce Motion planner reads of this animator. */
+  const planView: ReducedMotionView = {
+    valueAt,
+    opacityHeading: () => opacityHeading(),
+    ownOpacity: () => ownOpacity(),
+    writesOwnOpacity: () => writesOwnOpacity(),
+    get borrowedOpacity() {
+      return borrowedOpacity;
+    },
+    get hasOpacityCurve() {
+      return segments.has('opacity');
+    },
+    get restingOpacity() {
+      return resting.opacity;
+    },
+    get hasPendingLanding() {
+      return landings.size > 0;
+    },
+  };
+
   /**
-   * Reduced Motion (see the file header): with `fade`, an opacity-only
-   * cross-fade whose travel lands while the element is transparent; without,
-   * everything at once.
+   * Reduced Motion (see the file header): the planner's plan
+   * (reducedMotionPlan.ts) as this call's segments.
    */
   const reducedMotion = (
     owner: HandleState,
@@ -2323,149 +2360,27 @@ export function createAnimator(
     fade: boolean,
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
-    const next: Partial<Record<MotionProperty, Segment | null>> = {};
-    const holds: Partial<Record<MotionProperty, number>> = {};
-    if (!fade) {
-      for (const property of properties) {
-        next[property] = null;
-      }
-      return {next, holds, landing: null};
-    }
-    const opacityNow = valueAt('opacity', time);
-    // A fade the call does not name keeps going where it was heading.
-    const opacityTo = targets.opacity ?? opacityHeading();
-    const travel = properties.filter(
-      property =>
-        TRAVEL.includes(property) &&
-        Math.abs((targets[property] as number) - valueAt(property, time)) >
-          1e-9,
+    const plan = planReducedMotion(
+      planView,
+      time,
+      targets,
+      properties,
+      fade,
+      role,
     );
-    // Only the call's own opacity (or its role) makes it an entrance or an
-    // exit: a fade it does not name, such as a dip still running, does not.
-    const named = targets.opacity != null;
-    let entering = named && opacityTo > opacityNow + 1e-6;
-    let leaving = named && opacityTo < opacityNow - 1e-6;
-    let fadeFrom = opacityNow;
-    let fadeTo = opacityTo;
-    let restore: number | null = null;
-    // A fade by role on a surface no call owns opacity on starts from, or
-    // returns to, the element's own (stylesheet) opacity, as a dip does.
-    const roleBorrow =
-      role != null &&
-      !named &&
-      borrowedOpacity == null &&
-      !segments.has('opacity') &&
-      resting.opacity === IDENTITY.opacity &&
-      !writesOwnOpacity()
-        ? ownOpacity()
-        : null;
-    if (!entering && !leaving && role === 'entrance') {
-      entering = true;
-      fadeFrom = 0;
-      fadeTo = roleBorrow ?? opacityTo;
-    } else if (!entering && !leaving && role === 'exit') {
-      leaving = true;
-      fadeFrom = roleBorrow ?? opacityNow;
-      fadeTo = 0;
-      restore = roleBorrow ?? opacityTo;
+    const next: Partial<Record<MotionProperty, Segment | null>> = {};
+    for (const property of plan.atOnce) {
+      next[property] = null;
     }
-    // A move still waiting to land (an earlier dip's) lands at this call's
-    // invisible moment, never while the element shows.
-    const pending = landings.size > 0;
-    // Not a role: nothing lengthens it (design:reduced-motion DR4).
-    const ms = reducedMotionCrossFade.durationMs;
-    for (const property of properties) {
-      if (TRAVEL.includes(property)) {
-        next[property] = null;
-      }
+    if (plan.opacityFade != null) {
+      next.opacity = fadeSegment(owner, time, plan.opacityFade);
     }
-    const landsLater = (at: number, fadeIn: Landing['fadeIn']) => {
-      const values = new Map<MotionProperty, number>();
-      for (const property of travel) {
-        holds[property] = valueAt(property, time);
-        values.set(property, targets[property] as number);
-      }
-      return {
-        at,
-        values,
-        fadeIn,
-        restore,
-        ...(roleBorrow != null && restore != null
-          ? {restoreIsBorrowed: true}
-          : {}),
-      };
+    return {
+      next,
+      holds: plan.holds,
+      landing: plan.landing,
+      borrowed: plan.borrowed,
     };
-    if (entering && !pending) {
-      // Lands at once (the travel is null above) and fades in.
-      next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: fadeFrom},
-        {at: ms, value: fadeTo},
-      ]);
-      return {next, holds, landing: null, borrowed: roleBorrow};
-    }
-    if (leaving) {
-      // Fades out in place, then lands.
-      next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: fadeFrom},
-        {at: ms, value: fadeTo},
-      ]);
-      return {
-        next,
-        holds,
-        landing:
-          travel.length > 0 || restore != null || pending
-            ? landsLater(ms, null)
-            : null,
-      };
-    }
-    if (travel.length > 0 || pending) {
-      // A dip: fades out, lands while transparent, fades back in. When no
-      // call owns opacity it starts from and returns to the element's own
-      // (stylesheet) opacity, not the model's 1.
-      // A dip still running on borrowed opacity (its fade out or back in)
-      // lends the same borrow to the next one: overlapping dips never pin
-      // the stylesheet's value inline.
-      const priorBorrow = borrowedOpacity;
-      // An opacity the animator left inline (a `set` over a stylesheet that
-      // hides or dims the element) is owned too: a dip returns to it.
-      const ownsOpacity =
-        named ||
-        (priorBorrow == null &&
-          (segments.has('opacity') ||
-            resting.opacity !== IDENTITY.opacity ||
-            writesOwnOpacity()));
-      const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
-      if (borrowed != null && borrowed <= 1e-6) {
-        // A stylesheet that hides the element lends nothing: invisible, the
-        // move lands at once (the travel is null above), with no dip.
-        return {next, holds, landing: null};
-      }
-      // It opens at the opacity on screen: an earlier dip's, when one is
-      // still running, else the borrowed stylesheet value.
-      next.opacity = fadeSegment(owner, time, [
-        {
-          at: 0,
-          value: segments.has('opacity')
-            ? opacityNow
-            : (borrowed ?? opacityNow),
-        },
-        {at: ms / 2, value: 0},
-      ]);
-      return {
-        next,
-        holds,
-        landing: landsLater(ms / 2, {
-          to: borrowed ?? opacityTo,
-          ms: ms / 2,
-          isBorrowed: borrowed != null,
-        }),
-        borrowed,
-      };
-    }
-    if ('opacity' in targets) {
-      next.opacity = null;
-    }
-    return {next, holds, landing: null};
   };
 
   const animator: Animator = {
@@ -2521,6 +2436,25 @@ export function createAnimator(
       }
       // After the landing's commit, which can promote the element again.
       demote();
+      // A pseudo-element holds an identity with a static animation, which the
+      // cancel below drops: note the channels to hold again on the next node
+      // (never a borrowed opacity, which is the stylesheet's).
+      const isOpacityBorrowed =
+        borrowedOpacity != null ||
+        [...landings].some(landing => landing.restoreIsBorrowed === true);
+      const pseudoHeld =
+        pseudoElement == null || target == null
+          ? null
+          : new Set(
+              (Object.keys(CHANNELS) as Channel[]).filter(
+                channel =>
+                  running.has(channel) &&
+                  !(channel === 'opacity' && isOpacityBorrowed) &&
+                  CHANNELS[channel].every(
+                    p => !segments.has(p) && resting[p] === IDENTITY[p],
+                  ),
+              ),
+            );
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2529,20 +2463,33 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      if (
-        borrowedOpacity != null ||
-        [...landings].some(landing => landing.restoreIsBorrowed === true)
-      ) {
+      if (isOpacityBorrowed) {
         // A running borrowed dip (or an exit by role returning to the
         // stylesheet) stays in the model through any attach, so a pending
         // move still lands while the element is invisible; only the
         // outgoing element gets its stylesheet's opacity back.
         releaseOwnOpacity();
       }
+      // Identities the outgoing node holds inline over a stylesheet that
+      // differs, kept through a detach for the node that comes next.
+      if (target != null) {
+        const outgoing = target;
+        heldIdentity =
+          pseudoHeld ??
+          new Set(
+            (Object.keys(CHANNELS) as Channel[]).filter(
+              channel =>
+                outgoing.style.getPropertyValue(channel) ===
+                IDENTITY_TEXT[channel],
+            ),
+          );
+      }
+      const held = heldIdentity;
       target = next;
       if (target == null) {
         return;
       }
+      heldIdentity = new Set();
       const time = now();
       // A borrowed dip that ended while detached hands the opacity back
       // instead of writing the borrowed value inline.
@@ -2562,6 +2509,16 @@ export function createAnimator(
         );
         if (!isDefault) {
           rebuild(channel, time);
+        } else if (held.has(channel)) {
+          // An identity the animator held inline over a stylesheet that
+          // differs goes onto the new node too (writeInline keeps it only
+          // where the new node's stylesheet still differs); a pseudo-element's
+          // is held again.
+          if (pseudoElement != null) {
+            hold(channel, time);
+          } else {
+            writeInline(channel, property => resting[property]);
+          }
         }
       }
       flushReleases();
@@ -2629,7 +2586,7 @@ export function createAnimator(
             animateOptions.additive === true && velocities[property] == null
               ? segmentAt(property, time)
               : null;
-          if (running != null && !isHeld(running) && !running.steps) {
+          if (running != null && !isHeld(running)) {
             next[property] = additiveSegment(
               owner,
               property,
@@ -2752,7 +2709,6 @@ export function createAnimator(
         if (
           running != null &&
           !isHeld(running) &&
-          !running.steps &&
           curve.duration > 0 &&
           Math.abs(curve.at(curve.duration) - curve.at(0)) > 1e-9
         ) {
@@ -2823,11 +2779,29 @@ export function createAnimator(
       syncPending();
       flushDeferred();
       const time = decayOptions.at ?? now();
+      // Under Reduce Motion only momentum keeps moving (DR2, DEC-2): a curve
+      // that is a transition plays as `animate` does, a cross-fade or at once.
+      const reduce = prefersReducedMotion();
+      const transitions: MotionValues = {};
+      for (const property of DECAY_PROPERTIES) {
+        const curve = curves[property];
+        if (reduce && curve?.isTransition === true) {
+          transitions[property] = curve.at(curve.duration);
+        }
+      }
+      const transitioned =
+        Object.keys(transitions).length > 0
+          ? animator.animate(transitions, REDUCED_TRANSITION, {at: time})
+          : null;
       const {owner, finished} = newOwner();
       // Momentum moves the translate axes only (DR2's throw exception).
       const properties = DECAY_PROPERTIES.filter(
-        property => curves[property] != null,
+        property =>
+          curves[property] != null && transitions[property] === undefined,
       );
+      if (transitioned != null && properties.length === 0) {
+        return transitioned;
+      }
       const group = beginGroup(time, properties, decayOptions.at);
       for (const property of properties) {
         const curve = curves[property] as MotionCurve;
@@ -2848,7 +2822,36 @@ export function createAnimator(
         });
       }
       commitCall(group, owner, properties, time);
-      return makeHandle(owner, properties, finished, time, group);
+      const handle = makeHandle(owner, properties, finished, time, group);
+      if (transitioned == null) {
+        return handle;
+      }
+      // One handle for the whole release: the cross-faded axes too.
+      const faded = transitioned;
+      const owns = (property: MotionProperty) =>
+        faded.properties.includes(property);
+      return {
+        ...handle,
+        properties: [...handle.properties, ...faded.properties],
+        started: Promise.all([handle.started, faded.started]).then(
+          ([coasting]) => coasting,
+        ),
+        finished: Promise.all([handle.finished, faded.finished]).then(
+          ([coasted, done]) => coasted && done,
+        ),
+        value: (property, at) =>
+          owns(property)
+            ? faded.value(property, at)
+            : handle.value(property, at),
+        velocity: (property, at) =>
+          owns(property)
+            ? faded.velocity(property, at)
+            : handle.velocity(property, at),
+        stop: () => {
+          handle.stop();
+          faded.stop();
+        },
+      };
     },
 
     stop(properties) {
@@ -2880,24 +2883,6 @@ export function createAnimator(
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
-      }
-      // A finished fade takes the travel waiting for it along, at the same
-      // instant: a pending jump never lands later, in view.
-      if (changed.includes('opacity')) {
-        for (const property of TRAVEL) {
-          const segment = segments.get(property);
-          if (
-            list.includes(property) ||
-            segment?.steps !== true ||
-            time >= segment.start + segment.duration
-          ) {
-            continue;
-          }
-          interrupt(property, time);
-          segments.delete(property);
-          resting[property] = segment.target;
-          changed.push(property);
-        }
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {
