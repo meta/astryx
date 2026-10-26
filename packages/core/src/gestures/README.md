@@ -309,10 +309,10 @@ warning, so two writers never fight over the paint. Pass another
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can
   claim while it moves.
-- **No early claim.** A pan claims its touch when it begins, at UIKit's
-  10 pt hysteresis, which is within the 10 px decision `spec:AST-094` FR19
-  asks of a recognizer that competes with native scrolling; nothing claims
-  earlier (FR17, FR19), so a 5 to 9 pt drag stays the browser's.
+- **Claim at the begin.** A pan claims its touch only as it begins, at
+  UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
+  a scroll at 10–11 px; a drag the browser took first stays the browser's
+  (FR14).
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
   (the last cancelable `touchmove` at 10 px), and cancelling every
@@ -527,10 +527,6 @@ way:
   reveal inside the row would never wait, but it tracks with scroll physics
   rather than UIKit's measured tracking spring; it is a possible opt-in, not
   the default.
-- **A jitter on an overlay keeps the touch.** A finger that moves 5 px or
-  more in a one-way overlay's direction and then drags the other way moves
-  the overlay, not the page behind it, for that touch (UIKit's outcome, and
-  Safari would not scroll the page after a cancelled move anyway).
 - **Follow-up:** Chromium keeps 3:1 to 1.5:1 drags as swipes even with a
   passive listener (its `touch-action` filter drops a `pan-y` scroll that
   starts sideways), so a passive listener there would cost no parity. It

@@ -172,7 +172,7 @@ record(sheet, () => ({y: sheet.translation().y}));
 host.attach(element('sheetBody'), sheet);
 
 // A one-way pan over the scrollable page, as a toast's upward swipe is: it
-// claims its direction when it begins, at 10 pt (spec:AST-094 FR17, FR19).
+// claims its touch as it begins, at UIKit's 10 pt (spec:AST-094 FR19).
 const card = new PanGestureRecognizer({name: 'card', direction: 'up'});
 record(card, () => ({x: card.translation().x, y: card.translation().y}));
 host.attach(element('card'), card);

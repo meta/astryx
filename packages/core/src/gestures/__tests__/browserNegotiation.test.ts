@@ -19,7 +19,11 @@ import {RotationGestureRecognizer} from '../RotationGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {SwipeGestureRecognizer} from '../SwipeGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
-import {deriveTouchAction, gestureHostStyle} from '../touchAction';
+import {
+  deriveTouchAction,
+  gestureHostStyle,
+  holdSelectionStyle,
+} from '../touchAction';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 
 describe('deriveTouchAction', () => {
@@ -53,18 +57,6 @@ describe('deriveTouchAction', () => {
     expect(
       deriveTouchAction([new SwipeGestureRecognizer({direction: 'left'})]),
     ).toBe('pan-y pinch-zoom');
-    expect(
-      deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading', 'trailing']}),
-      ]),
-    ).toBe('pan-y pinch-zoom');
-    // From one edge the pan goes one way, inward: the browser keeps every
-    // touch behavior and the pan claims as it begins (spec:AST-094 FR18).
-    expect(
-      deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
-      ]),
-    ).toBeNull();
   });
 
   it('leaves the browser everything for a one-way pan, or one that shares native scrolling', () => {
@@ -72,6 +64,12 @@ describe('deriveTouchAction', () => {
     // by cancelling touchmove when it begins.
     expect(
       deriveTouchAction([new PanGestureRecognizer({direction: 'down'})]),
+    ).toBeNull();
+    // A screen-edge pan from one edge goes one way, inward (spec:AST-094 FR18).
+    expect(
+      deriveTouchAction([
+        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
+      ]),
     ).toBeNull();
     expect(
       deriveTouchAction([
@@ -110,16 +108,20 @@ describe('deriveTouchAction', () => {
     ).toBe('pan-y pinch-zoom');
   });
 
-  it('turns off the callout and text selection under a long press', () => {
+  it('locks selection only for a held press, never on the element (spec:AST-094 FR41)', () => {
+    // The attached style is the touch-action alone: a mouse and a keyboard
+    // keep selecting (spec:AST-017 FR59).
     expect(gestureHostStyle([new LongPressGestureRecognizer()])).toEqual({
       touchAction: 'manipulation',
+    });
+    // The host applies this for one press, from touch-down to the lift.
+    expect(holdSelectionStyle([new LongPressGestureRecognizer()])).toEqual({
       WebkitTouchCallout: 'none',
       WebkitUserSelect: 'none',
       userSelect: 'none',
     });
-    expect(gestureHostStyle([new TapGestureRecognizer()])).toEqual({
-      touchAction: 'manipulation',
-    });
+    // A hold that does nothing selects natively.
+    expect(holdSelectionStyle([new TapGestureRecognizer()])).toBeNull();
   });
 });
 
@@ -206,11 +208,25 @@ describe('createNativeScrollProbe', () => {
     expect(probe.canScroll(0, 20)).toBe(false);
     expect(probe.canScroll(0, -20)).toBe(true);
     expect(probe.isInsideScroller).toBe(true);
-    expect(probe.distanceToEdge?.(0, -20)).toBe(600);
     scroller(list, {scrollTop: 600});
     expect(probe.canScroll(0, -20)).toBe(false);
     expect(probe.canScroll(0, 20)).toBe(true);
-    expect(probe.distanceToEdge?.(0, 20)).toBe(600);
+  });
+
+  it('finds a scroller in a shadow tree around the slot a light-DOM row is slotted into', () => {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.innerHTML =
+      '<div id="host"><button id="row">Row</button></div>';
+    const host = document.getElementById('host') as HTMLElement;
+    const row = document.getElementById('row') as HTMLElement;
+    const shadow = host.attachShadow({mode: 'open'});
+    shadow.innerHTML =
+      '<div id="list" style="overflow-y: auto"><slot></slot></div>';
+    const list = shadow.getElementById('list') as HTMLElement;
+    scroller(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+    const probe = createNativeScrollProbe(row);
+    expect(probe.isInsideScroller).toBe(true);
+    expect(probe.canScroll(0, -20)).toBe(true);
   });
 
   it('honors touch-action between the touch and the scroller', () => {

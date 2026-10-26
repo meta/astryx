@@ -56,6 +56,12 @@ function mount(html: string): Record<string, HTMLElement> {
   return elements;
 }
 
+/** The attributes these tests track (the controller's own, for familiarity). */
+const ATTRIBUTES = {
+  attribute: 'data-astryx-pressable',
+  pressedAttribute: 'data-astryx-press',
+} as const;
+
 // A phone: the host attaches only where the primary pointer is coarse.
 let restorePointer: () => void;
 beforeEach(() => {
@@ -69,7 +75,7 @@ let release: () => void = () => {};
 
 beforeEach(() => {
   vi.useFakeTimers();
-  release = installPressAttribute(document);
+  release = installPressAttribute(document, ATTRIBUTES);
 });
 
 afterEach(() => {
@@ -201,7 +207,7 @@ describe('installPressAttribute', () => {
   });
 
   it('counts installs and adds no listener to the marked elements', () => {
-    const second = installPressAttribute(document);
+    const second = installPressAttribute(document, ATTRIBUTES);
     const {row} = mount('<div id="row" data-astryx-pressable>Row</div>');
     const add = vi.spyOn(row, 'addEventListener');
     release();
@@ -215,11 +221,10 @@ describe('installPressAttribute', () => {
     expect(types.every(type => type.startsWith('touch'))).toBe(true);
   });
 
-  it('presses a cell with the cell profile: delayed, cancelled by travel, its own release', () => {
+  it('presses a cell with the cell profile: at once outside a scroller, cancelled by travel, its own release', () => {
     const {row} = mount('<div id="row" data-astryx-pressable="cell">Row</div>');
     touch('touchstart', row, {id: 1, x: 5, y: 5}, 0);
-    expect(row.hasAttribute('data-astryx-press')).toBe(false);
-    vi.advanceTimersByTime(UIKIT_GESTURES.press.contentTouchDelay.value);
+    // Outside a scroll view the delay does not apply (AST-094 FR11).
     expect(row.getAttribute('data-astryx-press')).toBe('on');
     touch('touchend', row, {id: 1, x: 5, y: 5}, 200);
     vi.advanceTimersByTime(PRESS_PROFILES.cell.releaseMs);
@@ -236,6 +241,7 @@ describe('installPressAttribute', () => {
   it('lets an accepts gate decide per touch', () => {
     release();
     release = installPressAttribute(document, {
+      ...ATTRIBUTES,
       accepts: element => element.id !== 'skip',
     });
     const {skip, row} = mount(
