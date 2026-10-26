@@ -190,7 +190,13 @@ describe('GitHub Pages compatibility landing', () => {
     expect(document.querySelector('meta[name="robots"]')?.content).toBe(
       'noindex, follow',
     );
-    expect(PAGE).not.toMatch(/internalfb|localhost|@xds|@nest/i);
+    // Only public hosts: no loopback, private-suffix or "internal" host.
+    expect(PAGE).not.toMatch(
+      /\b(?:localhost|(?:[a-z0-9-]+\.)+(?:internal|local|lan|corp)|[a-z0-9.-]*internal[a-z0-9.-]*\.[a-z]{2,})\b/i,
+    );
+    // The only package scope it may name is Astryx's own.
+    expect(PAGE).not.toMatch(/@(?!astryxdesign\/)[a-z0-9-]+\/[a-z]/i);
+    expect(PAGE).not.toMatch(/@xds/i);
   });
 
   it.each([

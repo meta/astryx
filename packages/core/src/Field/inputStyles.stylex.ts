@@ -79,13 +79,13 @@ export const inputWrapperStyles = stylex.create({
  */
 export const inputStatusBorderStyles = stylex.create({
   warning: {
-    borderColor: colorVars['--color-warning'],
+    borderColor: colorVars['--color-border-warning'],
   },
   error: {
-    borderColor: colorVars['--color-error'],
+    borderColor: colorVars['--color-border-error'],
   },
   success: {
-    borderColor: colorVars['--color-success'],
+    borderColor: colorVars['--color-border-success'],
   },
 });
 
@@ -131,20 +131,20 @@ export const inputStatusHoverShadowStyles = stylex.create({
 export const inputStatusFocusWithinStyles = stylex.create({
   warning: {
     borderColor: {
-      default: colorVars['--color-warning'],
-      ':focus-within': colorVars['--color-warning'],
+      default: colorVars['--color-border-warning'],
+      ':focus-within': colorVars['--color-border-warning'],
     },
   },
   error: {
     borderColor: {
-      default: colorVars['--color-error'],
-      ':focus-within': colorVars['--color-error'],
+      default: colorVars['--color-border-error'],
+      ':focus-within': colorVars['--color-border-error'],
     },
   },
   success: {
     borderColor: {
-      default: colorVars['--color-success'],
-      ':focus-within': colorVars['--color-success'],
+      default: colorVars['--color-border-success'],
+      ':focus-within': colorVars['--color-border-success'],
     },
   },
 });
@@ -157,20 +157,20 @@ export const inputStatusFocusWithinStyles = stylex.create({
 export const inputStatusFocusStyles = stylex.create({
   warning: {
     borderColor: {
-      default: colorVars['--color-warning'],
-      ':focus': colorVars['--color-warning'],
+      default: colorVars['--color-border-warning'],
+      ':focus': colorVars['--color-border-warning'],
     },
   },
   error: {
     borderColor: {
-      default: colorVars['--color-error'],
-      ':focus': colorVars['--color-error'],
+      default: colorVars['--color-border-error'],
+      ':focus': colorVars['--color-border-error'],
     },
   },
   success: {
     borderColor: {
-      default: colorVars['--color-success'],
-      ':focus': colorVars['--color-success'],
+      default: colorVars['--color-border-success'],
+      ':focus': colorVars['--color-border-success'],
     },
   },
 });

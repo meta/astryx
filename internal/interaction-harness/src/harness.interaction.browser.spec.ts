@@ -1117,7 +1117,7 @@ test.describe('holding', () => {
     await fixture(page);
     // Besides #box: a finished fade, an animation the page paused, one on a
     // scroll timeline, and a second runner started 100 ms after #box's.
-    await page.evaluate(async () => {
+    const startGap = await page.evaluate(async () => {
       const make = (id: string) => {
         const el = document.createElement('div');
         el.id = id;
@@ -1153,15 +1153,26 @@ test.describe('holding', () => {
           [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
           {duration: 600, easing: 'linear'},
         );
-      run(document.getElementById('box'));
-      await new Promise(resolve => setTimeout(resolve, 100));
-      run(make('later'));
+      const box = run(document.getElementById('box'));
+      const gap = new Promise(resolve => setTimeout(resolve, 100));
+      // #box's first frame comes late, as on a loaded machine: its start time
+      // resolves then, so the runners' offset is the difference of their start
+      // times, not the timer's 100 ms.
+      const until = performance.now() + 60;
+      while (performance.now() < until) {
+        // Busy: no frame runs.
+      }
+      await gap;
+      const later = run(make('later'));
+      await Promise.all([box?.ready, later?.ready]);
+      return Number(later?.startTime) - Number(box?.startTime);
     });
     const held = await holdAnimations(page);
     expect(held.map(a => a.target)).toEqual(['div#box', 'div#later']);
     const [first, later] = held;
     expect(first.offsetMs).toBe(0);
-    expect(later.offsetMs).toBeGreaterThan(80);
+    expect(startGap).toBeGreaterThan(0);
+    expect(later.offsetMs).toBeCloseTo(startGap, 0);
     const x = (id: string) =>
       page
         .locator(`#${id}`)
@@ -1292,7 +1303,57 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
-  test('a held end under a non-linear effect easing is read to the full end, and a rotate about x composes on its axis', async ({
+  test('a reversed run counts its progress from its end, and a faster playback rate is read on the timeline by waits, seeks and samples', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Reversed, the run starts at its end: progress counts down from there,
+    // so a wait for 100 ms of it returns once the run has presented that much.
+    const watch = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{translate: '0px 0px'}, {translate: '100px 0px'}], {
+        duration: 1000,
+        easing: 'linear',
+      }).reverse();
+    });
+    await watch.started({minProgressMs: 100});
+    const presented = await box.evaluate(el => {
+      const [animation] = el.getAnimations();
+      return (
+        Number(animation.effect?.getComputedTiming().endTime ?? 0) -
+        Number(animation.currentTime ?? 0)
+      );
+    });
+    expect(presented).toBeGreaterThanOrEqual(100);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // At playback rate 2 a 1,000 ms curve runs 500 ms: its interval, and a
+    // seek or sample at t reads the curve at 2t.
+    const fast = await watchAnimations(box);
+    await box.evaluate(el => {
+      const animation = el.animate(
+        [{translate: '0px 0px'}, {translate: '100px 0px'}],
+        {duration: 1000, easing: 'linear'},
+      );
+      animation.playbackRate = 2;
+    });
+    const [running] = await fast.started();
+    expect(running.to - running.from).toBeCloseTo(500, 0);
+    await holdAnimations(page, box);
+    await seekAnimations(page, 125);
+    const x = await box.evaluate(
+      el =>
+        new DOMMatrix(getComputedStyle(el).transform).m41 +
+        Number.parseFloat(getComputedStyle(el).translate || '0'),
+    );
+    expect(x).toBeCloseTo(25, 0);
+    const [sample] = await sampleCurve(box, [250]);
+    expect(sample.transform.translateX).toBeCloseTo(50, 0);
+    await releaseAnimations(page, {finish: true});
+  });
+
+  test('a held end is solved through a cubic-bézier effect easing, a reversed one reads to the full end, and a rotate about x composes on its axis', async ({
     page,
   }) => {
     await fixture(page);
@@ -1308,9 +1369,83 @@ test.describe('holding', () => {
       );
     });
     const [held] = await holdAnimations(page, box);
-    // The keyframe offset 0.5 is progress, not 500 ms of time.
-    expect(held.curveEndMs).toBeCloseTo(1000, 0);
+    // The keyframe offset 0.5 is progress, not 500 ms of time: the run starts
+    // where the eased progress reaches 0.5.
+    const ease = cubicBezier(0.42, 0, 1, 1);
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 60; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (ease(mid) < 0.5) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    expect(held.curveEndMs).toBeCloseTo(lo * 1000, 0);
+    expect(held.curveEndMs).toBeGreaterThan(600);
     await releaseAnimations(page, {finish: true});
+
+    // Played in reverse, the held run is where the motion starts: the curve
+    // runs to the full end.
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: '0px 0px', offset: 0},
+          {translate: '100px 0px', offset: 0.5},
+          {translate: '100px 0px', offset: 1},
+        ],
+        {duration: 1000, easing: 'linear', direction: 'reverse'},
+      );
+    });
+    const [reversed] = await holdAnimations(page, box);
+    expect(reversed.curveEndMs).toBeCloseTo(1000, 0);
+    await releaseAnimations(page, {finish: true});
+
+    // One reversed by `reverse()` (a negative playback rate) is reported as
+    // starting when it did, running its whole curve, and is refused by a
+    // hold, which seeks curves forward only.
+    const watch = await watchAnimations(box);
+    const readyAt = await box.evaluate(async el => {
+      const animation = el.animate(
+        [
+          {translate: '0px 0px', offset: 0},
+          {translate: '100px 0px', offset: 0.5},
+          {translate: '100px 0px', offset: 1},
+        ],
+        {duration: 1000, easing: 'linear'},
+      );
+      animation.reverse();
+      await animation.ready;
+      return performance.timeOrigin + performance.now();
+    });
+    const [running] = await watch.started();
+    expect(Math.abs(running.from - readyAt)).toBeLessThan(100);
+    expect(running.to - running.from).toBeCloseTo(1000, -1);
+    await expect(holdAnimations(page, box)).rejects.toThrow(/runs backward/);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // A property keyed only before the held run, and a last keyframe short of
+    // offset 1, each get an implicit end frame: the curve runs to its end.
+    for (const keyframes of [
+      [
+        {translate: '0px 0px', opacity: 0, offset: 0},
+        {translate: '100px 0px', offset: 0.5},
+        {translate: '100px 0px', offset: 1},
+      ],
+      [
+        {translate: '0px 0px', offset: 0},
+        {translate: '100px 0px', offset: 0.5},
+        {translate: '100px 0px', offset: 0.8},
+      ],
+    ]) {
+      await box.evaluate((el, frames) => {
+        el.animate(frames, {duration: 1000, easing: 'linear'});
+      }, keyframes);
+      const [moving] = await holdAnimations(page, box);
+      expect(moving.curveEndMs).toBeCloseTo(1000, 0);
+      await releaseAnimations(page, {finish: true});
+    }
 
     await box.evaluate(el => {
       el.animate([{rotate: 'x 0deg'}, {rotate: 'x 60deg'}], {
@@ -1744,6 +1879,100 @@ test.describe('animation state', () => {
     expect(entrance.from).toBeLessThan(triggeredAt + 500);
     expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
     expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
+  });
+
+  test('a run going backward is dated from when it began: with a delay, ended before the look, or cancelled when it ends', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const frames = [
+      {translate: '0px 0px', offset: 0},
+      {translate: '100px 0px', offset: 1},
+    ];
+
+    // A 300 ms delay plays last when going backward: the curve starts at once.
+    let watch = await watchAnimations(box);
+    let readyAt = await box.evaluate(async (el, keyframes) => {
+      const animation = el.animate(keyframes, {duration: 400, delay: 300});
+      animation.reverse();
+      await animation.ready;
+      return performance.timeOrigin + performance.now();
+    }, frames);
+    const [delayed] = await watch.started();
+    expect(Math.abs(delayed.from - readyAt)).toBeLessThan(50);
+    expect(delayed.to - delayed.from).toBeCloseTo(400, 0);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // A short one that ended before the look keeps its curve inside its life.
+    watch = await watchAnimations(box);
+    readyAt = await box.evaluate(async (el, keyframes) => {
+      const animation = el.animate(keyframes, {duration: 60});
+      animation.reverse();
+      await animation.ready;
+      return performance.timeOrigin + performance.now();
+    }, frames);
+    await page.waitForTimeout(200);
+    const [ended] = await watch.started();
+    expect(ended.finishedAt).not.toBeNull();
+    expect(Math.abs(ended.from - readyAt)).toBeLessThan(50);
+    expect(ended.to).toBeLessThanOrEqual((ended.finishedAt ?? 0) + 1);
+
+    // One the page cancels when it ends keeps its start.
+    watch = await watchAnimations(box);
+    readyAt = await box.evaluate(async (el, keyframes) => {
+      const animation = el.animate(keyframes, {duration: 60});
+      animation.addEventListener('finish', () => animation.cancel(), {
+        once: true,
+      });
+      animation.reverse();
+      await animation.ready;
+      return performance.timeOrigin + performance.now();
+    }, frames);
+    await page.waitForTimeout(200);
+    const [cancelled] = await watch.started();
+    expect(Math.abs(cancelled.from - readyAt)).toBeLessThan(50);
+    expect(cancelled.to - cancelled.from).toBeCloseTo(60, 0);
+
+    // Read right after finish(), before the finish event is delivered: the
+    // scheduled end goes through the rate (backward, it is the startTime).
+    for (const rate of [-1, 2]) {
+      watch = await watchAnimations(box);
+      await box.evaluate(
+        async (el, [keyframes, playbackRate]) => {
+          const animation = el.animate(keyframes as Keyframe[], {
+            duration: 1000,
+          });
+          animation.playbackRate = playbackRate as number;
+          await animation.ready;
+          animation.finish();
+        },
+        [frames, rate] as const,
+      );
+      const [read] = await watch.started();
+      expect(read.finishedAt).not.toBeNull();
+      expect(Math.abs((read.finishedAt ?? 0) - read.to)).toBeLessThan(50);
+    }
+
+    // Going backward, an end delay presents nothing: a run still inside it
+    // has not progressed.
+    await box.evaluate((el, keyframes) => {
+      const animation = el.animate(keyframes, {duration: 400, endDelay: 500});
+      animation.reverse();
+    }, frames);
+    await expect(
+      waitForAnimation(box, {minProgressMs: 100, timeout: 300}),
+    ).rejects.toThrow();
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // Nor is it rest: waitForRest waits out the end delay and the curve.
+    const restFrom = await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 600, endDelay: 500}).reverse();
+      return performance.now();
+    }, frames);
+    await waitForRest(box, {timeout: 5_000});
+    const restAt = await box.evaluate(() => performance.now());
+    expect(restAt - restFrom).toBeGreaterThan(1_000);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({

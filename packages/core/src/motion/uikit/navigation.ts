@@ -24,6 +24,7 @@
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
 
+import {registerMotionTable} from '../roles';
 export const navigation = {
   /**
    * The push and pop springs start moving at this many travels per second
@@ -71,3 +72,12 @@ export const navigation = {
    */
   interactivePopFinishThreshold: 0.5,
 } as const;
+
+/**
+ * Registers this table with the motion registry (motion/roles.ts). It lists
+ * no role: spec:AST-094 FR4 names none of its values, so each plays as
+ * measured. Nothing registers on import, and a second call does nothing.
+ */
+export function registerNavigationTable(): void {
+  registerMotionTable('navigation', navigation);
+}
