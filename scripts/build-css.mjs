@@ -378,9 +378,6 @@ export function composePackageStylesheet(banner, css) {
  * its own. The dynamic-style variables StyleX sets inline (`--x-<property>`)
  * are not generated names and are never reported, nor is a name that is not
  * hash-shaped (StyleX's hash is four to seven base-36 characters).
- *
- * SYNC: packages/build/src/undefinedVariables.ts is the same check for an
- * app's production build.
  */
 export function undefinedStyleXVariables(css, providerCss = '') {
   const declared = new Set(
