@@ -1900,8 +1900,50 @@ describe('attach', () => {
     const handle = animator.animate({x: 300}, {spring: springs.settle});
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     animator.attach(null);
+    // At the end of the task, once no node has replaced it.
+    await Promise.resolve();
     expect(vi.getTimerCount()).toBe(0);
     await expect(handle.finished).resolves.toBe(false);
+  });
+
+  it('a node replacement keeps every handle and atRest() wait: the motion goes on on the new node', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 300}, {spring: springs.settle});
+    let rested = false;
+    void animator.atRest().then(() => {
+      rested = true;
+    });
+    let finished: boolean | null = null;
+    void handle.finished.then(value => {
+      finished = value;
+    });
+    // React's replacement order: the old node detaches, the new one attaches.
+    animator.attach(null);
+    animator.attach(document.createElement('div'));
+    for (let tick = 0; tick < 5; tick++) {
+      await Promise.resolve();
+    }
+    expect(finished).toBeNull();
+    expect(rested).toBe(false);
+    await advance(5000);
+    expect(finished).toBe(true);
+    expect(rested).toBe(true);
+  });
+
+  it('unmounting settles every atRest() wait, as dispose() does', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    let rested = false;
+    void animator.atRest().then(() => {
+      rested = true;
+    });
+    animator.attach(null);
+    // Without advancing time: the curve has not ended.
+    for (let tick = 0; tick < 5; tick++) {
+      await Promise.resolve();
+    }
+    expect(rested).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('detaching cancels the running animations', async () => {

@@ -763,6 +763,8 @@ export function createAnimator(
   const pendingGroups = new Set<StartGroup>();
   /** atRest() calls still waiting; dispose settles them. */
   const restWaits = new Set<RestWait>();
+  /** A detach that settles as an unmount at the end of the task, unless an attach follows. */
+  let unmountQueued = false;
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -2106,17 +2108,32 @@ export function createAnimator(
             }
           }
         }
-        // Unmount: nothing is left to animate, so every other handle settles
-        // as interrupted and no completion timer outlives the element, as in
-        // dispose() (architecture:react-component-runtime INV5).
-        const time = now();
-        for (const property of PROPERTIES) {
-          interrupt(property, time);
+        // Unmount, unless a node replaces this one in the same task (React's
+        // replacement order: attach(null), then the new node): nothing is
+        // left to animate, so at the end of the task every other handle
+        // settles as interrupted, every atRest() wait settles and no
+        // completion timer outlives the element, as in dispose()
+        // (architecture:react-component-runtime INV5). A replacement keeps
+        // them all: the motion goes on on the new node.
+        if (!unmountQueued) {
+          unmountQueued = true;
+          queueMicrotask(() => {
+            if (!unmountQueued) {
+              return;
+            }
+            unmountQueued = false;
+            const time = now();
+            for (const property of PROPERTIES) {
+              interrupt(property, time);
+            }
+            for (const wait of [...restWaits]) {
+              wait.settle();
+            }
+          });
         }
-        // Nothing moves any more: every atRest() wait settles.
-        for (const wait of [...restWaits]) {
-          wait.settle();
-        }
+      } else {
+        // A node in place of the one just detached: no unmount.
+        unmountQueued = false;
       }
       for (const animation of running.values()) {
         animation.cancel();
