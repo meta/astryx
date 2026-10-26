@@ -8,7 +8,10 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import type {SelectionLock} from '../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
+import {lockSelection} from '../selectionLock';
 import {createHarness} from './harness';
 
 describe('LongPressGestureRecognizer', () => {
@@ -100,5 +103,65 @@ describe('LongPressGestureRecognizer', () => {
     h.finger(2).down(2, 0, 200, {recognizers: [press]});
     h.advance(700);
     expect(press.state).toBe('began');
+  });
+
+  it('counts only quick taps with the required fingers in the taps phase', () => {
+    const tapLimit = UIKIT_GESTURES.tap.maximumTapDuration.value;
+    // A first touch held past a tap's limit is no tap.
+    const held = createHarness();
+    const slow = new LongPressGestureRecognizer({
+      name: 'slow',
+      numberOfTapsRequired: 1,
+    });
+    held.finger(1).down(0, 0, 0, {recognizers: [slow]});
+    held.finger(1).up(tapLimit + 100);
+    expect(held.log).toContain(`slow:failed@${tapLimit + 100}`);
+    // With two fingers required, a one-finger tap is no tap.
+    const fingers = createHarness();
+    const two = new LongPressGestureRecognizer({
+      name: 'two',
+      numberOfTapsRequired: 1,
+      numberOfTouchesRequired: 2,
+    });
+    fingers.finger(1).down(0, 0, 0, {recognizers: [two]});
+    fingers.finger(1).up(80);
+    expect(fingers.log).toContain('two:failed@80');
+  });
+
+  it('keeps a begun press through a second finger, and ends it at the first finger’s lift (FR10)', () => {
+    const h = createHarness();
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    h.finger(1).down(0, 0, 0, {recognizers: [press]});
+    h.advance(600);
+    expect(press.state).toBe('began');
+    h.finger(2).down(80, 0, 700, {recognizers: [press]});
+    expect(press.state).toBe('began');
+    expect(press.numberOfTouches).toBe(1);
+    h.finger(1).up(800);
+    expect(h.log).toContain('press:ended@800');
+  });
+});
+
+describe('LongPressGestureRecognizer selection lock (spec:AST-094 FR41)', () => {
+  it('brings the lock for a hold, none for a touch-down detector at 0 ms, and none when told null', () => {
+    expect(new LongPressGestureRecognizer().selectionLock).toBe(lockSelection);
+    expect(
+      new LongPressGestureRecognizer({minimumPressDuration: 300}).selectionLock,
+    ).toBe(lockSelection);
+    // A 0 ms long press recognizes at touch-down: it has no hold to act on,
+    // so the browser keeps its native long press.
+    expect(
+      new LongPressGestureRecognizer({minimumPressDuration: 0}).selectionLock,
+    ).toBeNull();
+    expect(
+      new LongPressGestureRecognizer({selectionLock: null}).selectionLock,
+    ).toBeNull();
+    const own: SelectionLock = () => () => {};
+    expect(
+      new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        selectionLock: own,
+      }).selectionLock,
+    ).toBe(own);
   });
 });

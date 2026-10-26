@@ -16,7 +16,7 @@
  * - Participation. A new touch is offered to every recognizer on its hit
  *   path, innermost first; each one that accepts it tracks it until it ends.
  * - Exclusivity. Two recognizers that share a touch are not active at once
- *   unless one of them allows it (`shouldRecognizeSimultaneously`). The first
+ *   unless both allow it (`shouldRecognizeSimultaneously`, FR15). The first
  *   to recognize fails the other possible ones; a recognizer that tries to
  *   begin while a conflicting one is active fails instead.
  * - Failure requirements. A recognizer that requires another to fail waits
@@ -207,6 +207,7 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
+          ...(input.isFeedbackOnly === true ? {isFeedbackOnly: true} : {}),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
@@ -353,7 +354,8 @@ export class GestureArena {
    * stream is gone (`pointercancel`) and no click will follow. Possible
    * recognizers sharing them fail and active ones are cancelled, as UIKit
    * fails everything a scroll view's pan beats, except a recognizer that
-   * keeps observing the touch to take it over at a scroll edge.
+   * keeps observing the touch. Such a watcher never claims it: a drag the
+   * browser took stays the browser's (FR14).
    */
   browserTookOver(ids: ReadonlyArray<number>, time: number): void {
     this.run(time, () => {
@@ -490,7 +492,9 @@ export class GestureArena {
     for (const other of this.active) {
       if (
         other !== recognizer &&
-        isActive(other.state) &&
+        // A discrete winner (`ended`) still holding its touches blocks too.
+        (isActive(other.state) ||
+          (other.state === 'ended' && other.trackedTouches.length > 0)) &&
         this.conflicts(other, recognizer)
       ) {
         this.fail(recognizer);
@@ -642,7 +646,13 @@ export class GestureArena {
     const claimed: number[] = [];
     for (const touch of recognizer.trackedTouches) {
       const record = this.records.get(touch.id);
-      if (record != null && !record.isLifted && !record.isClaimed) {
+      if (
+        record != null &&
+        !record.isLifted &&
+        !record.isClaimed &&
+        !record.touch.takenByBrowser
+      ) {
+        // A touch the browser took stays the browser's (FR14).
         record.isClaimed = true;
         claimed.push(touch.id);
       }
@@ -850,7 +860,11 @@ export class GestureArena {
       this.flushTimers(time);
       this.currentTime = this.clampTime(time);
       body();
-      this.settle();
+      // Re-entrant calls settle with the outermost one: settling mid-delivery
+      // would reset recognizers that have not heard the event yet.
+      if (this.depth === 1) {
+        this.settle();
+      }
     } finally {
       this.depth -= 1;
       if (this.depth === 0) {
@@ -865,7 +879,12 @@ export class GestureArena {
       for (const entry of this.timers) {
         if (
           entry[1].deadline <= upTo &&
-          (due == null || entry[1].deadline < due[1].deadline)
+          (due == null ||
+            entry[1].deadline < due[1].deadline ||
+            // Same instant: the innermost (earlier in `active`) goes first,
+            // as FR15's innermost rule decides a tie on one event.
+            (entry[1].deadline === due[1].deadline &&
+              this.rank(entry[0]) < this.rank(due[0])))
         ) {
           due = entry;
         }
@@ -877,9 +896,18 @@ export class GestureArena {
       this.timers.delete(recognizer);
       this.currentTime = this.clampTime(timer.deadline);
       timer.callback();
-      this.settle();
+      // Inside a re-entrant entry the outermost call settles (see run()).
+      if (this.depth <= 1) {
+        this.settle();
+      }
     }
     this.scheduleRealTimer();
+  }
+
+  /** A recognizer's place in resolution order: innermost first, idle last. */
+  private rank(recognizer: GestureRecognizer): number {
+    const index = this.active.indexOf(recognizer);
+    return index === -1 ? Number.POSITIVE_INFINITY : index;
   }
 
   private settle(): void {

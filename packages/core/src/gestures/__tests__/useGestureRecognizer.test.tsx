@@ -11,10 +11,13 @@
  */
 
 import {act, render} from '@testing-library/react';
-import {useRef} from 'react';
+import {StrictMode, useEffect, useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import type {SelectionLock} from '../GestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
+import {lockSelection} from '../selectionLock';
+import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
@@ -221,6 +224,38 @@ describe('useGestureRecognizer', () => {
     }
   });
 
+  it('reports nothing from the isEnabled Effect for a recognizer that required the disabled one to fail (react-component-runtime INV2)', () => {
+    const onSingle = vi.fn();
+    function Taps({isDoubleEnabled}: {isDoubleEnabled: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      const double = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+        undefined,
+        {isEnabled: isDoubleEnabled},
+      );
+      const single = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        onSingle,
+      );
+      useEffect(() => {
+        single.requireToFail(double);
+      }, [single, double]);
+      return <div data-testid="taps" ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Taps isDoubleEnabled />);
+    const surface = getByTestId('taps');
+    touch('touchstart', surface, {id: 1, x: 5, y: 5}, 0);
+    touch('touchend', surface, {id: 1, x: 5, y: 5}, 40, true);
+    // The single tap waits for the double tap to fail.
+    expect(onSingle).not.toHaveBeenCalled();
+    // Turning the double tap off fails it in the Effect, and the single tap
+    // recognizes in that same arena pass: its caller hears nothing from it.
+    rerender(<Taps isDoubleEnabled={false} />);
+    expect(onSingle).not.toHaveBeenCalled();
+  });
+
   it('detaches on unmount', () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
@@ -238,16 +273,19 @@ function Button({
   onEvent,
   cancelTravel,
   isBraking,
+  selectionLock,
 }: {
   onEvent: (event: ControlEvent) => void;
   cancelTravel?: number;
   isBraking?: () => boolean;
+  selectionLock?: SelectionLock;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   usePressTracker(ref, {
     onControlEvent: event => onEvent(event),
     cancelTravel,
     isBraking,
+    selectionLock,
   });
   return (
     <button data-testid="button" ref={ref} type="button">
@@ -266,6 +304,17 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 5, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 5, x: 1, y: 1}, 50, true);
     expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+
+  it('locks selection and the callout for each press of a control whose hold acts, given the lock (spec:AST-094 FR41)', () => {
+    const {getByTestId} = render(
+      <Button onEvent={() => {}} selectionLock={lockSelection} />,
+    );
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 3, x: 1, y: 1}, 0);
+    expect(button.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', button, {id: 3, x: 1, y: 1}, 50, true);
+    expect(button.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('takes an option changed after mount from the next touch', () => {
@@ -305,7 +354,7 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
-  it("attaches a press tracker that reads each event's pointer where the primary pointer is fine, beside one that stays inactive", () => {
+  it('attaches a per-event press tracker where the primary pointer is fine, which takes no mouse press there, beside one that stays inactive', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -355,7 +404,9 @@ describe('usePressTracker', () => {
       boundsOf(stepper, 44, 44);
       mouse('pointerdown', stepper, 1);
       mouse('pointerup', stepper, 1);
-      expect(held).toEqual(['touchDown', 'touchUpInside']);
+      // Its press feedback is for a finger (spec:AST-094 FR19): a mouse
+      // keeps the desktop's handling.
+      expect(held).toEqual([]);
       const other = getByTestId('other');
       boundsOf(other, 44, 44);
       mouse('pointerdown', other, 2);
@@ -636,4 +687,172 @@ describe('usePressTracker hit-tests the element behind its ref now', () => {
       expect(events).not.toContain('touchUpInside');
     });
   }
+});
+
+function SwappedSurface({
+  which,
+  onPan,
+}: {
+  which: 'a' | 'b';
+  onPan: (recognizer: PanGestureRecognizer) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useGestureRecognizer(
+    ref,
+    () => new PanGestureRecognizer({direction: 'horizontal'}),
+    onPan,
+  );
+  return which === 'a' ? (
+    <div key="a" data-testid="a" ref={ref} />
+  ) : (
+    <div key="b" data-testid="b" ref={ref} />
+  );
+}
+
+describe('useGestureRecognizer follows a replaced node', () => {
+  for (const strict of [false, true]) {
+    it(`cancels a gesture in flight without calling the listener from the effect${strict ? ' (StrictMode)' : ''}`, () => {
+      const states: string[] = [];
+      const wrap = (node: React.ReactElement) =>
+        strict ? <StrictMode>{node}</StrictMode> : node;
+      const {getByTestId, rerender} = render(
+        wrap(<SwappedSurface which="a" onPan={r => states.push(r.state)} />),
+      );
+      const a = getByTestId('a');
+      touch('touchstart', a, {id: 3, x: 0, y: 0}, 0);
+      touch('touchmove', a, {id: 3, x: 30, y: 0}, 16);
+      expect(states).toEqual(['began']);
+      rerender(
+        wrap(<SwappedSurface which="b" onPan={r => states.push(r.state)} />),
+      );
+      // The replaced node's cancel comes from a layout effect: no callback.
+      expect(states).toEqual(['began']);
+      // The new node drives the same recognizer.
+      const b = getByTestId('b');
+      touch('touchstart', b, {id: 4, x: 0, y: 0}, 100);
+      touch('touchmove', b, {id: 4, x: 30, y: 0}, 116);
+      expect(states).toEqual(['began', 'began']);
+      touch('touchend', b, {id: 4, x: 30, y: 0}, 132, true);
+    });
+  }
+});
+
+describe('usePressTracker keeps its press through an option change', () => {
+  for (const strict of [false, true]) {
+    it(`a press in progress survives a rerender with new options${strict ? ' (StrictMode)' : ''}`, () => {
+      const events: ControlEvent[] = [];
+      const highlights: boolean[] = [];
+      function Held({cancelTravel}: {cancelTravel?: number}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        usePressTracker(ref, {
+          onControlEvent: event => events.push(event),
+          onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+          cancelTravel,
+        });
+        return (
+          <button data-testid="held" ref={ref} type="button">
+            Go
+          </button>
+        );
+      }
+      const wrap = (node: React.ReactElement) =>
+        strict ? <StrictMode>{node}</StrictMode> : node;
+      const {getByTestId, rerender} = render(wrap(<Held />));
+      const button = getByTestId('held');
+      touch('touchstart', button, {id: 6, x: 1, y: 1}, 0);
+      expect(highlights).toEqual([true]);
+      rerender(wrap(<Held cancelTravel={50} />));
+      // Still pressed: the tracker was not rebuilt or disposed.
+      expect(highlights).toEqual([true]);
+      touch('touchend', button, {id: 6, x: 1, y: 1}, 50, true);
+      expect(events).toEqual(['touchDown', 'touchUpInside']);
+    });
+  }
+});
+
+describe('the hooks let go of an element removed while they stay mounted', () => {
+  it('useGestureRecognizer cancels its gesture without calling back, and works on a new element', () => {
+    const states: string[] = [];
+    function Maybe({shown}: {shown: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new PanGestureRecognizer({direction: 'horizontal'}),
+        r => states.push(r.state),
+      );
+      return shown ? <div data-testid="maybe" ref={ref} /> : null;
+    }
+    const {getByTestId, rerender} = render(<Maybe shown />);
+    const first = getByTestId('maybe');
+    touch('touchstart', first, {id: 11, x: 0, y: 0}, 0);
+    touch('touchmove', first, {id: 11, x: 30, y: 0}, 16);
+    expect(states).toEqual(['began']);
+    rerender(<Maybe shown={false} />);
+    expect(states).toEqual(['began']);
+    rerender(<Maybe shown />);
+    const second = getByTestId('maybe');
+    touch('touchstart', second, {id: 12, x: 0, y: 0}, 100);
+    touch('touchmove', second, {id: 12, x: 30, y: 0}, 116);
+    expect(states).toEqual(['began', 'began']);
+    touch('touchend', second, {id: 12, x: 30, y: 0}, 132, true);
+  });
+
+  it('usePressTracker ends its press without calling back, and presses a new element', () => {
+    const events: ControlEvent[] = [];
+    const highlights: boolean[] = [];
+    function Maybe({shown}: {shown: boolean}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+      });
+      return shown ? (
+        <button data-testid="maybe" ref={ref} type="button">
+          Go
+        </button>
+      ) : null;
+    }
+    const {getByTestId, rerender} = render(<Maybe shown />);
+    touch('touchstart', getByTestId('maybe'), {id: 13, x: 1, y: 1}, 0);
+    expect(highlights).toEqual([true]);
+    rerender(<Maybe shown={false} />);
+    expect(highlights).toEqual([true]);
+    expect(events).toEqual(['touchDown']);
+    rerender(<Maybe shown />);
+    const button = getByTestId('maybe');
+    touch('touchstart', button, {id: 14, x: 1, y: 1}, 100);
+    touch('touchend', button, {id: 14, x: 1, y: 1}, 150, true);
+    expect(events).toEqual(['touchDown', 'touchDown', 'touchUpInside']);
+  });
+});
+
+describe('usePressTracker reads trackingExpansion as it is now', () => {
+  it('a smaller expansion takes effect without rebuilding the tracker', () => {
+    const events: ControlEvent[] = [];
+    function Tracked({expansion}: {expansion: number}) {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref, {
+        onControlEvent: event => events.push(event),
+        trackingExpansion: expansion,
+      });
+      return (
+        <button data-testid="tracked" ref={ref} type="button">
+          Go
+        </button>
+      );
+    }
+    const {getByTestId, rerender} = render(<Tracked expansion={70} />);
+    const button = getByTestId('tracked');
+    boundsOf(button, 100, 40);
+    touch('touchstart', button, {id: 15, x: 10, y: 10}, 0);
+    // 30 px below the bottom edge: inside a 70 px expansion.
+    touch('touchmove', button, {id: 15, x: 10, y: 70}, 16);
+    expect(events).not.toContain('touchDragExit');
+    rerender(<Tracked expansion={10} />);
+    // The same point is outside a 10 px expansion, mid-press.
+    touch('touchmove', button, {id: 15, x: 10, y: 71}, 32);
+    expect(events).toContain('touchDragExit');
+    touch('touchend', button, {id: 15, x: 10, y: 71}, 48, true);
+    expect(events).toContain('touchUpOutside');
+  });
 });
