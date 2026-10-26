@@ -283,6 +283,31 @@ describe('GestureHost', () => {
     expect(press.numberOfTouches).toBe(0);
   });
 
+  it("keeps a recognizer's own-scroll exemption until the newest call's frame has passed, so an autoscroll every frame keeps its finger (spec:AST-094 FR30)", async () => {
+    const {list} = mount('<div id="list"><div id="row"></div></div>');
+    scrollable(list, {scrollHeight: 1000, clientHeight: 200});
+    const row = document.getElementById('row')!;
+    const press = new LongPressGestureRecognizer({
+      name: 'press',
+      allowableMovement: 100,
+    });
+    detachers.push(host.attach(row, press));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [finger], [finger], 0);
+    const moved = {...finger, y: 40};
+    touch('touchmove', row, [moved], [moved], 16);
+    const frame = async () =>
+      new Promise(resolve => requestAnimationFrame(resolve));
+    // An edge autoscroll writes every frame, announcing each write.
+    host.ownScroll(list);
+    await frame();
+    host.ownScroll(list);
+    await frame();
+    // The first call's frame has passed, the newest one's has not.
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(1);
+  });
+
   it('watches the pointer kind only while something is attached (spec:AST-094 FR24)', () => {
     const {box} = mount('<div id="box"></div>');
     const add = vi.fn();
@@ -361,6 +386,32 @@ describe('GestureHost', () => {
     coarse.update(box);
     expect(types(removed)).toContain('touchstart');
     detach();
+  });
+
+  it('stops listening when a detach leaves an element only disabled recognizers, or a consumer leaves only them (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const types = () =>
+      removed.mock.calls
+        .map(call => call[0])
+        .filter(t => /^(touch|pointer)/.test(t));
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    const detachOff = coarse.attach(
+      box,
+      new PanGestureRecognizer({isEnabled: false}),
+    );
+    const detachOn = coarse.attach(box, new TapGestureRecognizer());
+    removed.mockClear();
+    detachOn();
+    expect(types()).toContain('touchstart');
+    const detachConsumer = coarse.attachConsumer(box, new RecordingConsumer());
+    removed.mockClear();
+    detachConsumer();
+    expect(types()).toContain('touchstart');
+    detachOff();
   });
 
   it('registers no document listener where the primary pointer is fine, or while nothing enabled is attached (spec:AST-094 FR19, FR24)', () => {
@@ -1641,6 +1692,35 @@ describe('GestureHost', () => {
     touch('touchmove', box, [{...finger, x: 40}], [{...finger, x: 40}], 16);
     window.dispatchEvent(new Event('blur'));
     expect(states).toEqual(['began', 'cancelled']);
+  });
+
+  it('remembers a finger the window blur cancelled until it lifts, and refuses that lift its click: nothing acts (spec:AST-094 FR28)', () => {
+    const {box, page} = mount('<div id="box"></div><p id="page">text</p>');
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const states: string[] = [];
+    tap.addTransitionListener((_r, _from, to) => states.push(to));
+    detachers.push(host.attach(box, tap));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    window.dispatchEvent(new Event('blur'));
+    // The browser kept the touch alive: its lift would click the box.
+    const lift = touch('touchend', box, [finger], [], 80);
+    expect(lift.defaultPrevented).toBe(true);
+    expect(states).not.toContain('ended');
+    // Only that lift: a later finger with the same identifier keeps its
+    // click.
+    touch('touchstart', page, [finger], [finger], 200);
+    expect(touch('touchend', page, [finger], [], 260).defaultPrevented).toBe(
+      false,
+    );
+    // A cancelled finger whose lift never came: the next touch with its
+    // identifier is a new finger, and its lift keeps its click too.
+    touch('touchstart', box, [finger], [finger], 300);
+    window.dispatchEvent(new Event('blur'));
+    touch('touchstart', page, [finger], [finger], 400);
+    expect(touch('touchend', page, [finger], [], 460).defaultPrevented).toBe(
+      false,
+    );
   });
 
   it('finishes a gesture whose target left the document mid-gesture', () => {
