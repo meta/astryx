@@ -10,25 +10,47 @@
  *
  * For hover-triggered overlays, use HoverCard instead.
  *
+ * `presentation` chooses the surface, with the vocabulary DropdownMenu and
+ * Selector use: the anchored popover (the default), a BottomSheet, or
+ * `adaptive` — a BottomSheet on a compact touch screen and the popover
+ * elsewhere (the shared adaptive presentation policy), which is what iOS does
+ * with a popover unless the app keeps it. The surface is chosen when the
+ * popover opens; whichever is open stays until it closes. The BottomSheet
+ * loads on demand (lazyPopoverBottomSheet.ts).
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Popover/Popover.test.tsx
  * - /packages/core/src/Popover/index.ts
+ * - /packages/core/src/Popover/PopoverPresentation.test.tsx
  * - /apps/storybook/stories/Popover.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Popover/ (showcase blocks)
  */
 
 import React, {
   useCallback,
+  useEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import type {
+  AdaptivePresentation,
+  ResolvedAdaptivePresentation,
+} from '../hooks/useAdaptivePresentation';
+import {
+  compactDefinition,
+  DEFAULT_COMPACT_DEFINITION,
+} from '../theme/themeAdaptations';
+import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
 import type {BaseProps} from '../BaseProps';
 import {usePopover} from './usePopover';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -36,12 +58,66 @@ import {clampInlineSize, isIntrinsicInlineSize} from '../Layer/clampInlineSize';
 import {spacingVars} from '../theme/tokens.stylex';
 import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import type {SpacingStep} from '../utils/types';
+import {BottomSheetEscapeContext} from '../BottomSheet/bottomSheetEscape';
+import {
+  PopoverBottomSheet,
+  preloadPopoverBottomSheet,
+} from './lazyPopoverBottomSheet';
+import {Button} from '../Button';
+import {useTranslator} from '../i18n';
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
 const BUTTON_SELECTOR = 'button, [role="button"]';
+
+const subscribeToNothing = () => () => {};
+const notCompactTouch = () => false;
+
+/**
+ * The surface `presentation` resolves to now. `adaptive` takes the sheet on a
+ * compact screen with a coarse pointer, compact as the active theme defines
+ * it (spec:AST-012 FR9: narrower than its `md` point or shorter than 500).
+ * Only an adaptive popover reads the theme and subscribes to that query, so a
+ * default popover holds no viewport or document listener. The theme is the
+ * nearest Theme provider's; without one, the registered root theme's, as
+ * AppShell reads it (architecture:theme-application).
+ */
+function usePresentationSurface(
+  presentation: AdaptivePresentation,
+): ResolvedAdaptivePresentation {
+  const isAdaptive = presentation === 'adaptive';
+  const points =
+    useThemeDefinition(isAdaptive)?.__adaptations?.widthBreakpoints;
+  const query = useMemo(
+    () =>
+      (points == null ? DEFAULT_COMPACT_DEFINITION : compactDefinition(points))
+        .coarsePointerQuery,
+    [points],
+  );
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      const mql = window.matchMedia(query);
+      mql.addEventListener('change', onStoreChange);
+      return () => mql.removeEventListener('change', onStoreChange);
+    },
+    [query],
+  );
+  const getSnapshot = useCallback(
+    () => window.matchMedia(query).matches,
+    [query],
+  );
+  const isCompactTouch = useSyncExternalStore(
+    isAdaptive ? subscribe : subscribeToNothing,
+    isAdaptive ? getSnapshot : notCompactTouch,
+    notCompactTouch,
+  );
+  if (!isAdaptive) {
+    return presentation;
+  }
+  return isCompactTouch ? 'bottom-sheet' : 'popover';
+}
 /**
  * Find the trigger button inside a container element.
  * Looks for `<button>` or `[role="button"]` — either the element itself
@@ -54,9 +130,25 @@ function findTriggerButton(el: HTMLElement): HTMLElement | null {
   return el.querySelector<HTMLElement>(BUTTON_SELECTOR);
 }
 
+/** The trigger's own name: its `aria-label`, else its text. */
+function readTriggerText(trigger: HTMLElement): string {
+  return (
+    trigger.getAttribute('aria-label')?.trim() ||
+    trigger.textContent?.trim() ||
+    ''
+  );
+}
+
 // =============================================================================
 // Types
 // =============================================================================
+
+/**
+ * The surface a Popover presents its content on: anchored to the trigger, in
+ * a BottomSheet, or adaptive (a BottomSheet on a compact touch screen, the
+ * popover elsewhere).
+ */
+export type PopoverPresentation = AdaptivePresentation;
 
 /**
  * Props passed to render-prop children for explicit trigger wiring.
@@ -181,7 +273,9 @@ export interface PopoverProps extends Pick<
 
   /**
    * Accessible label for the popover dialog.
-   * Recommended for accessibility when `role` is `'dialog'`.
+   * Recommended for accessibility when `role` is `'dialog'`. A sheet
+   * (`presentation`) without one is named by the trigger's text, so it is
+   * never an unnamed dialog.
    */
   label?: string;
 
@@ -247,6 +341,28 @@ export interface PopoverProps extends Pick<
   hasEscapeDismiss?: boolean;
 
   /**
+   * The surface that holds the content. `'popover'` anchors it to the
+   * trigger. `'bottom-sheet'` presents it in a modal BottomSheet, labeled
+   * by `label`. `'adaptive'` presents the BottomSheet on a compact touch
+   * screen (a coarse pointer on a screen the theme counts as compact:
+   * narrower than its `md` width point or shorter than 500px, so a phone in
+   * either orientation) and the anchored popover elsewhere, which is what iOS
+   * does with a popover by default.
+   *
+   * In a sheet, `placement`, `alignment`, `width`, `role`, `isModal` and
+   * `hasAutoFocus` do not apply (the sheet is a modal dialog with its own
+   * focus handling); `xstyle`, `className` and `style` style the sheet's
+   * panel, as they style the anchored surface; `padding` insets the
+   * sheet's content. The sheet always light-dismisses (a tap outside it or a
+   * swipe down closes it, whatever `hasLightDismiss` says), Escape follows
+   * `hasEscapeDismiss`, and the fallback close stays hidden as on the
+   * anchored surface. The surface is
+   * chosen when the popover opens and kept until it closes.
+   * @default 'popover'
+   */
+  presentation?: PopoverPresentation;
+
+  /**
    * Test ID for the popover container.
    */
   'data-testid'?: string;
@@ -264,6 +380,35 @@ const styles = stylex.create({
   // don't shift the anchor position and cause popover jitter.
   anchorWrapper: {
     display: 'inline-flex',
+  },
+  // The sheet's fallback close control: hidden until it is reached, as the
+  // anchored surface's is, on the Button itself rather than a wrapper
+  // (architecture:component-style-authoring INV7). Taken out of flow and
+  // clipped at rest, it rejoins the flow when focused, set below the content
+  // with room for its focus ring.
+  sheetFallbackClose: {
+    position: {
+      default: 'absolute',
+      ':focus': 'relative',
+    },
+    clipPath: {
+      default: 'inset(50%)',
+      ':focus': 'none',
+    },
+    marginBlockStart: {
+      default: 0,
+      ':focus': spacingVars['--spacing-3'],
+    },
+    // Block-level when revealed, so it starts its own line below inline
+    // content rather than sitting on its last line.
+    display: {
+      default: null,
+      ':focus': 'flex',
+    },
+    width: {
+      default: null,
+      ':focus': 'fit-content',
+    },
   },
   // The painted surface is capped to the viewport with the layer runtime's
   // one definition (spec:AST-059 FR2, FR3): the layer box above it caps the
@@ -359,15 +504,21 @@ export function Popover({
   hasAutoFocus,
   hasLightDismiss = true,
   hasEscapeDismiss = true,
+  presentation = 'popover',
   xstyle,
   className,
   style,
   'data-testid': testId,
 }: PopoverProps): ReactElement {
+  const t = useTranslator();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const measurementFrameRef = useRef<number | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const isControlled = isOpen !== undefined;
+  // The bottom-sheet presentation: the surface it resolves to now, and
+  // whether the sheet is the surface that is open.
+  const resolvedPresentation = usePresentationSurface(presentation);
+  const [isSheetOpenState, setIsSheetOpenState] = useState(false);
 
   const handlePopoverShow = useCallback(() => {
     onOpenChange?.(true);
@@ -403,6 +554,144 @@ export function Popover({
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
   });
+
+  // A controlled popover opens on the surface its presentation resolves to
+  // as it opens, and keeps that surface until it closes: a phone rotated past
+  // the compact width while the sheet is open keeps its sheet.
+  const [controlledSurface, setControlledSurface] = useState<
+    'popover' | 'bottom-sheet' | null
+  >(null);
+  // The latch is set during render, as the controlled `isOpen` turns on or
+  // off, so the open surface is known in the same render that opens it.
+  if (isControlled) {
+    if (isOpen !== true && controlledSurface != null) {
+      setControlledSurface(null);
+    } else if (isOpen === true && controlledSurface == null) {
+      setControlledSurface(popover.isOpen ? 'popover' : resolvedPresentation);
+    }
+  }
+  const isSheetOpen = isControlled
+    ? isOpen === true && controlledSurface === 'bottom-sheet'
+    : isSheetOpenState;
+  // One presentation at a time (architecture:component-style-authoring
+  // INV7): the sheet is mounted, in place of the anchored layer, while it is
+  // the surface an opening would choose (a compact touch screen, or
+  // `'bottom-sheet'`) and the anchored popover is not the open one, while it
+  // is open, and through its exit after it was. Closed, it holds the content
+  // as the anchored layer does, so state kept in the content (a ticked box,
+  // typed text) survives a reopen. After a sheet closes on a screen that has
+  // stopped being compact, it stays through its exit, so the exit plays out
+  // and its dialog hands focus back to the trigger (component:Popover AR4),
+  // and gives way to the anchored layer once its dialog has closed.
+  const [hasSheetBeenOpen, setHasSheetBeenOpen] = useState(false);
+  // The trigger's text, which names a sheet that has no `label` (DEC-8).
+  const [triggerText, setTriggerText] = useState('');
+  if (isSheetOpen && !hasSheetBeenOpen) {
+    setHasSheetBeenOpen(true);
+  }
+  const isSheetMounted =
+    isSheetOpen ||
+    hasSheetBeenOpen ||
+    (resolvedPresentation === 'bottom-sheet' && !popover.isOpen);
+  const sheetPanelRef = useRef<HTMLDivElement | null>(null);
+  const [isSheetPanelAttached, setSheetPanelAttached] = useState(false);
+  const attachSheetPanel = useCallback((panel: HTMLDivElement | null) => {
+    sheetPanelRef.current = panel;
+    setSheetPanelAttached(panel != null);
+  }, []);
+  // Focus enters the sheet at each opening as it enters the anchored popover
+  // (FR2): a caller's `[data-autofocus]`, else the first genuine content
+  // control (never the injected fallback close, never BottomSheet's own
+  // scroll area), else that scroll area: the sheet's labelled surface, which
+  // paints the shared focus ring under the keyboard. It runs a frame after
+  // BottomSheet presents the dialog; BottomSheet is unchanged.
+  useEffect(() => {
+    if (!isSheetOpen || !isSheetPanelAttached) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const sheetPanel = sheetPanelRef.current;
+      if (sheetPanel == null) {
+        return;
+      }
+      const dialog = sheetPanel.closest('dialog');
+      if (dialog == null || !dialog.open) {
+        return;
+      }
+      const active = sheetPanel.ownerDocument.activeElement;
+      if (
+        active != null &&
+        active !== sheetPanel &&
+        active !== dialog &&
+        sheetPanel.contains(active)
+      ) {
+        return;
+      }
+      const target =
+        sheetPanel.querySelector<HTMLElement>('[data-autofocus]') ??
+        Array.from(
+          sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+        ).find(
+          element =>
+            // BottomSheet's scroll area is the panel's own child; content
+            // sits inside it.
+            element.parentElement !== sheetPanel &&
+            element.closest('[data-astryx-popover-fallback-close]') == null,
+        );
+      if (target != null) {
+        target.focus({preventScroll: true});
+        return;
+      }
+      // The scroll area is a tab stop only while its content overflows; it is
+      // focusable from script either way.
+      const surface = Array.from(sheetPanel.children).find(
+        (child): child is HTMLElement =>
+          child instanceof HTMLElement &&
+          child.getAttribute('role') === 'group',
+      );
+      if (surface == null) {
+        return;
+      }
+      if (!surface.hasAttribute('tabindex')) {
+        surface.tabIndex = -1;
+      }
+      surface.focus({preventScroll: true});
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isSheetOpen, isSheetPanelAttached]);
+  useEffect(() => {
+    if (isSheetOpen || !hasSheetBeenOpen) {
+      return;
+    }
+    const dialog = sheetPanelRef.current?.closest('dialog');
+    if (dialog == null || !dialog.open) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- syncs with the sheet's <dialog>: it is already closed, so its close event has fired and its exit is over; unmount it
+      setHasSheetBeenOpen(false);
+      return;
+    }
+    const handleClose = () => setHasSheetBeenOpen(false);
+    dialog.addEventListener('close', handleClose);
+    return () => dialog.removeEventListener('close', handleClose);
+  }, [hasSheetBeenOpen, isSheetOpen]);
+  // An open on a compact touch screen shows the sheet at once: its module
+  // loads as soon as the sheet can be the surface, with nothing rendered.
+  useEffect(() => {
+    if (resolvedPresentation === 'bottom-sheet') {
+      preloadPopoverBottomSheet();
+    }
+  }, [resolvedPresentation]);
+  const isAnySurfaceOpen = popover.isOpen || isSheetOpen;
+  const sheetId = `${popover.id}-sheet`;
+
+  const setSheetOpen = useCallback(
+    (next: boolean) => {
+      if (!isControlled) {
+        setIsSheetOpenState(next);
+      }
+      onOpenChange?.(next);
+    },
+    [isControlled, onOpenChange],
+  );
 
   const measureOverflow = useCallback(() => {
     const surface = popover.contentRef.current;
@@ -481,6 +770,16 @@ export function Popover({
   }, [content, popover.isOpen, scheduleOverflowMeasurement]);
 
   // Shared handler for click events on the trigger button.
+  // A render-prop trigger is the caller's element, reached through the ref
+  // the render prop hands it; its text names a sheet that has no `label`.
+  const renderTriggerRef = useRef<HTMLElement | null>(null);
+  const setRenderTrigger = useCallback(
+    (element: HTMLElement | null) => {
+      renderTriggerRef.current = element;
+      popover.triggerRef(element);
+    },
+    [popover],
+  );
   const handleTriggerClick = useCallback(
     (event?: {currentTarget: EventTarget | null}) => {
       // An aria-disabled trigger stays focusable but opens nothing
@@ -493,9 +792,22 @@ export function Popover({
       ) {
         return;
       }
+      // Opening chooses the surface; an open popover closes as a popover.
+      if (
+        isSheetOpen ||
+        (!popover.isOpen && resolvedPresentation === 'bottom-sheet')
+      ) {
+        const opener =
+          trigger instanceof HTMLElement ? trigger : renderTriggerRef.current;
+        if (opener != null) {
+          setTriggerText(readTriggerText(opener));
+        }
+        setSheetOpen(!isSheetOpen);
+        return;
+      }
       popover.toggle();
     },
-    [isEnabled, popover],
+    [isEnabled, isSheetOpen, popover, resolvedPresentation, setSheetOpen],
   );
 
   // Shared handler for keydown events on role="button" elements.
@@ -518,18 +830,20 @@ export function Popover({
   const attachTrigger = useCallback(
     (button: HTMLElement) => {
       // ARIA attributes
+      // The sheet's surface is a dialog whatever the popover's role.
       button.setAttribute(
         'aria-haspopup',
-        popover.triggerProps['aria-haspopup'],
+        isSheetMounted ? 'dialog' : popover.triggerProps['aria-haspopup'],
       );
-      button.setAttribute(
-        'aria-expanded',
-        String(popover.triggerProps['aria-expanded']),
-      );
+      button.setAttribute('aria-expanded', String(isAnySurfaceOpen));
       button.setAttribute(
         'aria-controls',
-        popover.triggerProps['aria-controls'],
+        isSheetMounted ? sheetId : popover.triggerProps['aria-controls'],
       );
+      // The trigger's text is in the DOM the caller rendered, read as the
+      // trigger attaches; it names a sheet that has no `label` (DEC-8).
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the caller-rendered trigger's text, which only the DOM holds
+      setTriggerText(readTriggerText(button));
 
       // Event handlers
       button.addEventListener('click', handleTriggerClick);
@@ -551,7 +865,14 @@ export function Popover({
         }
       };
     },
-    [popover, handleTriggerClick, handleTriggerKeyDown],
+    [
+      popover,
+      isAnySurfaceOpen,
+      isSheetMounted,
+      sheetId,
+      handleTriggerClick,
+      handleTriggerKeyDown,
+    ],
   );
 
   // Sibling mode: attach to external anchorRef
@@ -629,17 +950,23 @@ export function Popover({
     };
   }, [anchorRef, popover, attachTrigger]);
 
-  // Sync controlled state
+  // Sync controlled state: show or hide the anchored popover, the one surface
+  // with an imperative API, to follow the latch. The sheet follows the latch
+  // in render (`isSheetOpen`).
   useIsomorphicLayoutEffect(() => {
     if (!isControlled) {
       return;
     }
-    if (isOpen && !popover.isOpen) {
-      popover.show();
-    } else if (!isOpen && popover.isOpen) {
-      popover.hide();
+    if (!isOpen) {
+      if (popover.isOpen) {
+        popover.hide();
+      }
+      return;
     }
-  }, [isOpen, isControlled, popover]);
+    if (controlledSurface === 'popover' && !popover.isOpen) {
+      popover.show();
+    }
+  }, [isOpen, isControlled, popover, controlledSurface]);
 
   // Popover's one sizing fact: an explicit width wins over trigger matching.
   // Fit against the viewport is the layer runtime's (spec:AST-059).
@@ -652,16 +979,63 @@ export function Popover({
       );
   const layerXstyle = [popoverSizeXstyle, layerAnimations[placement]];
 
+  // One instance of the content at a time: the sheet holds it while it is
+  // mounted, the anchored layer otherwise.
+  const isContentInSheet = isSheetMounted;
+  const anchoredContent = (
+    <div data-testid={isContentInSheet ? undefined : testId}>
+      {isContentInSheet ? null : content}
+    </div>
+  );
+  // The sheet renders while it is the open surface and through its exit. It
+  // always light-dismisses: a tap outside it or a swipe down closes it,
+  // whatever `hasLightDismiss` says, so a finger always has a way out
+  // (DEC-8). Escape follows `hasEscapeDismiss`, and the fallback close stays
+  // hidden until it is reached, as on the anchored surface.
+  const sheet = isSheetMounted ? (
+    <BottomSheetEscapeContext value={hasEscapeDismiss}>
+      <PopoverBottomSheet
+        ref={attachSheetPanel}
+        id={sheetId}
+        isOpen={isSheetOpen}
+        onOpenChange={setSheetOpen}
+        label={label ?? triggerText}
+        height="tall"
+        padding={padding}
+        xstyle={xstyle}
+        className={className}
+        style={style}
+        data-testid={isContentInSheet ? testId : undefined}>
+        {isContentInSheet ? content : null}
+        {isContentInSheet && hasCloseButton !== false ? (
+          <Button
+            data-astryx-popover-fallback-close=""
+            variant="secondary"
+            label={closeButtonLabel ?? t('@astryx.popover.close')}
+            onClick={() => setSheetOpen(false)}
+            xstyle={styles.sheetFallbackClose}
+          />
+        ) : null}
+      </PopoverBottomSheet>
+    </BottomSheetEscapeContext>
+  ) : null;
+
+  // The anchored layer, unless the sheet is the presentation that is mounted.
+  const anchoredLayer = isSheetMounted
+    ? null
+    : popover.render(anchoredContent, {
+        placement,
+        alignment,
+        offset: spacingVars['--spacing-1'],
+        xstyle: layerXstyle,
+      });
+
   // Sibling mode: render only the popover (no wrapper needed)
   if (anchorRef && children == null) {
     return (
       <>
-        {popover.render(<div data-testid={testId}>{content}</div>, {
-          placement,
-          alignment,
-          offset: spacingVars['--spacing-1'],
-          xstyle: layerXstyle,
-        })}
+        {anchoredLayer}
+        {sheet}
       </>
     );
   }
@@ -671,23 +1045,19 @@ export function Popover({
 
   if (isRenderProp) {
     const triggerProps: PopoverTriggerRenderProps = {
-      ref: popover.triggerRef,
+      ref: setRenderTrigger,
       // The caller renders and owns this trigger element.
       onClick: () => handleTriggerClick(),
       'aria-haspopup': 'dialog',
-      'aria-expanded': popover.isOpen,
-      'aria-controls': popover.id,
+      'aria-expanded': isAnySurfaceOpen,
+      'aria-controls': isSheetMounted ? sheetId : popover.id,
     };
 
     return (
       <>
         {children(triggerProps)}
-        {popover.render(<div data-testid={testId}>{content}</div>, {
-          placement,
-          alignment,
-          offset: spacingVars['--spacing-1'],
-          xstyle: layerXstyle,
-        })}
+        {anchoredLayer}
+        {sheet}
       </>
     );
   }
@@ -700,12 +1070,8 @@ export function Popover({
           {children}
         </div>
       </InteractiveRoleContext>
-      {popover.render(<div data-testid={testId}>{content}</div>, {
-        placement,
-        alignment,
-        offset: spacingVars['--spacing-1'],
-        xstyle: layerXstyle,
-      })}
+      {anchoredLayer}
+      {sheet}
     </>
   );
 }

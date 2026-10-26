@@ -6,7 +6,7 @@
  *   scroll and visibility events
  * @output Exports paintPress and readPressPaint (the one writer of the press
  *   attribute for every painter), PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE,
- *   pressableProps, installPressFeedback and subscribePressPaint
+ *   pressableProps and installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
  *   per document that writes `data-astryx-press` on the nearest pressable surface.
  *   Installed by usePressFeedback (hooks/usePressFeedback.ts) on first mount;
@@ -145,53 +145,6 @@ export function readPressPaint(element: Element): PressPaint | null {
   return PAINTS.has(value) ? (value as PressPaint) : null;
 }
 
-/** Who follows the paint of each surface: one registry, no observer. */
-const paintListeners = new WeakMap<Element, Set<(paint: PressPaint) => void>>();
-
-/**
- * Call `listener` with the paint `element` gets each time it changes (`on`
- * once the controller believes the press, `held`, `fading` while a release
- * fades, `none` when it clears), from the controller or any other painter,
- * until the returned function runs. One registry serves every surface, so a
- * page of many triggers adds no observer and no listener per trigger. Not
- * exported from the package entry point.
- */
-export function subscribePressPaint(
-  element: Element,
-  listener: (paint: PressPaint) => void,
-): () => void {
-  let listeners = paintListeners.get(element);
-  if (listeners == null) {
-    listeners = new Set();
-    paintListeners.set(element, listeners);
-  }
-  listeners.add(listener);
-  return () => {
-    const current = paintListeners.get(element);
-    current?.delete(listener);
-    if (current?.size === 0) {
-      paintListeners.delete(element);
-    }
-  };
-}
-
-/** Tell `element`'s subscribers its new paint; one's throw stops no other. */
-function reportPaint(element: Element, paint: PressPaint): void {
-  const listeners = paintListeners.get(element);
-  if (listeners == null) {
-    return;
-  }
-  for (const listener of [...listeners]) {
-    try {
-      listener(paint);
-    } catch (error) {
-      queueMicrotask(() => {
-        throw error;
-      });
-    }
-  }
-}
-
 /**
  * Write `next` on `element` if its state is one of `onlyFrom`: THE ONE
  * WRITER of the press attribute, for the controller and every other painter
@@ -216,9 +169,6 @@ function writePress(
     element.removeAttribute(PRESSED_ATTRIBUTE);
   } else if (current !== next) {
     element.setAttribute(PRESSED_ATTRIBUTE, next);
-  }
-  if (current !== next) {
-    reportPaint(element, next);
   }
   return true;
 }
@@ -246,7 +196,6 @@ export function paintPress(
         fadeTimers.delete(element);
         if (element.getAttribute(PRESSED_ATTRIBUTE) === 'fading') {
           element.removeAttribute(PRESSED_ATTRIBUTE);
-          reportPaint(element, 'none');
         }
       }, options.releaseMs ?? PRESS_FADE_MS),
     );

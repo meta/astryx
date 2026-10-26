@@ -361,7 +361,6 @@ DEC-6 does not require unrelated components to add a new floor.
 
   | Component                          | Root styling reaches | Base props reach                       | Primary semantic control    | Root styling migrates to |
   | ---------------------------------- | -------------------- | -------------------------------------- | --------------------------- | ------------------------ |
-  | TextInput                          | control box          | native input                           | native input                | `control*`               |
   | TextArea                           | control box          | native textarea                        | native textarea             | `control*`               |
   | NumberInput                        | control box          | native input                           | native input                | `control*`               |
   | FileInput                          | control box          | native file input                      | native file input           | `control*`               |
