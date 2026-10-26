@@ -73,24 +73,6 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   lockAxis?: boolean;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
-  /**
-   * Travel (px) from which, while it is still possible, the pan claims its
-   * touch: the host cancels the touch's moves, so the
-   * browser cannot scroll first (WebKit claims a slow drag at 10–11 px). From
-   * the first cancelled move the touch is the pan's (Safari gives the page no
-   * scroll for that touch any more): a reversal, a second finger or content
-   * that could scroll no longer fails it, and it begins at its hysteresis
-   * whichever way the finger goes. For overlays such as toasts and banners:
-   * in UIKit a drag that starts on an overlay never reaches the content
-   * behind it. `'early'` is the measured distance
-   * (`UIKIT_GESTURES.pan.earlyClaimDistance`), for one-way pans. A number
-   * applies to any direction: an axis pan inside a scroller that must take a
-   * diagonal's other component from the browser before its own claim (a
-   * pager in a vertical list). Off by default: a pan over content (a row's
-   * swipe, an edge pan) leaves a wobble to the scroll.
-   * @default null
-   */
-  claimDistance?: number | 'early' | null;
 }
 
 const ZERO: Point = {x: 0, y: 0};
@@ -115,10 +97,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   axisRatio: number;
   lockAxis: boolean;
   scrollEdge: boolean;
-  /** See the option; `undefined` means the default for this pan's setup. */
-  claimDistance: number | 'early' | null;
-  /** Whether a move was cancelled for this pan's early claim: the touch is its own. */
-  isClaimCommitted = false;
   /** The axis a `lockAxis` pan locked to when it began. */
   lockedAxis: 'x' | 'y' | null = null;
   /** The movement the begin threshold took (excluded from `translation()`). */
@@ -145,7 +123,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
-    this.claimDistance = options.claimDistance ?? null;
     this.tracker = new VelocityTracker();
   }
 
@@ -232,11 +209,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
 
   protected override acceptsTouch(touch: GestureTouch): boolean {
     if (
-      (isActive(this.state) || this.isClaimCommitted) &&
+      isActive(this.state) &&
       this.numberOfTouches >= this.maximumNumberOfTouches
     ) {
-      // A moving pan, or one whose touch the host already took from the
-      // browser, keeps its fingers: an extra one never fails it.
+      // A moving pan keeps its fingers: an extra one never fails it.
       return false;
     }
     return super.acceptsTouch(touch);
@@ -300,7 +276,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   protected override reset(): void {
-    this.isClaimCommitted = false;
     this.lockedAxis = null;
     this.travelAtBegan = ZERO;
     this.origin = ZERO;
@@ -312,62 +287,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * @internal Whether the host should cancel this pan's touch moves now,
-   * before it begins: the finger has travelled `claimDistance` its way (or
-   * the pan already committed to the touch), and the browser could
-   * otherwise scroll it first.
-   */
-  claimsEarly(): boolean {
-    if (this.state !== 'possible' || this.pending != null) {
-      return false;
-    }
-    if (this.isClaimCommitted) {
-      return true;
-    }
-    // An explicit distance claims for any direction: an axis pan taking a
-    // diagonal's other component from the browser before the browser's own
-    // claim (a pager inside a vertical scroller). `'early'` is for a one-way
-    // pan only; an axis pan already keeps its axis through touch-action.
-    const distance =
-      typeof this.claimDistance === 'number'
-        ? this.claimDistance
-        : this.claimDistance === 'early' &&
-            DIRECTION_VECTORS[this.direction] != null
-          ? UIKIT_GESTURES.pan.earlyClaimDistance.value
-          : null;
-    const count = this.numberOfTouches;
-    if (
-      distance == null ||
-      count < this.minimumNumberOfTouches ||
-      count > this.maximumNumberOfTouches
-    ) {
-      return false;
-    }
-    const moved = this.raw;
-    return (
-      Math.max(Math.abs(moved.x), Math.abs(moved.y)) >= distance &&
-      this.classify(moved) === 'begin' &&
-      !(this.scrollEdge && this.nativeCanScroll(moved.x, moved.y))
-    );
-  }
-
-  /**
-   * @internal The host cancelled a move for this pan's early claim: the
-   * touch is the pan's now, and a reversal can no longer fail it.
-   */
-  commitClaim(): void {
-    if (this.state === 'possible') {
-      this.isClaimCommitted = true;
-    }
-  }
-
-  /**
    * What this movement means for a pan limited to a direction: begin, fail,
    * or wait for more movement (see `axisRatio`).
    */
   protected classify(translation: Point): 'begin' | 'fail' | 'wait' {
-    if (this.direction === 'any' || this.isClaimCommitted) {
-      // A pan that committed to its touch begins whichever way it goes.
+    if (this.direction === 'any') {
       return 'begin';
     }
     const isHorizontal =
@@ -407,14 +331,9 @@ export class PanGestureRecognizer extends GestureRecognizer {
     if (verdict === 'wait') {
       return;
     }
-    if (
-      this.scrollEdge &&
-      !this.isClaimCommitted &&
-      this.nativeCanScroll(moved.x, moved.y)
-    ) {
+    if (this.scrollEdge && this.nativeCanScroll(moved.x, moved.y)) {
       // The content under the finger still scrolls this way: it is a scroll,
-      // the browser's to the lift (FR14). A pan that committed to its touch
-      // keeps it.
+      // the browser's to the lift (FR14).
       this.setState('failed');
       return;
     }
