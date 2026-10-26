@@ -20,7 +20,7 @@
  * a blocked main thread delays the callback, not the moment it reports.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
 import {travel} from './geometry';
 import {
   GestureRecognizer,
@@ -58,10 +58,9 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     super(options);
     this.minimumPressDuration =
       options.minimumPressDuration ??
-      UIKIT_GESTURES.longPress.minimumPressDuration.value;
+      UIKIT_LONG_PRESS.minimumPressDuration.value;
     this.allowableMovement =
-      options.allowableMovement ??
-      UIKIT_GESTURES.longPress.allowableMovement.value;
+      options.allowableMovement ?? UIKIT_LONG_PRESS.allowableMovement.value;
     this.numberOfTapsRequired = options.numberOfTapsRequired ?? 0;
     this.numberOfTouchesRequired = options.numberOfTouchesRequired ?? 1;
   }
@@ -162,7 +161,7 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     this.tapStartedAt = null;
     this.tapMostTouches = 0;
     if (
-      heldFor > UIKIT_GESTURES.tap.maximumTapDuration.value ||
+      heldFor > UIKIT_TAP.maximumTapDuration.value ||
       fingers !== this.numberOfTouchesRequired
     ) {
       this.setState('failed');
@@ -170,7 +169,7 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     }
     this.tapsDone += 1;
     this.setTimer(
-      event.time + UIKIT_GESTURES.tap.maximumIntervalBetweenTaps.value,
+      event.time + UIKIT_TAP.maximumIntervalBetweenTaps.value,
       () => {
         this.setState('failed');
       },

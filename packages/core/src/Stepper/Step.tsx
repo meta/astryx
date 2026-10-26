@@ -535,18 +535,27 @@ const styles = stylex.create({
     color: colorVars['--color-accent'],
   },
   iconSuccess: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-icon-success'],
   },
   iconWarning: {
-    color: colorVars['--color-warning'],
+    color: colorVars['--color-icon-warning'],
   },
   iconError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-icon-error'],
   },
 
   // Number badge — same box as every other indicator (see INDICATOR_SIZE).
   numberBadge: {
     display: 'grid',
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
     placeItems: 'center',
     width: INDICATOR_SIZE,
     height: INDICATOR_SIZE,

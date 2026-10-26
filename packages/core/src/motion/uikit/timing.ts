@@ -96,7 +96,7 @@ export const reducedMotionCrossFade = {
    * becomes an opacity-only cross-fade of this length on a coarse pointer
    * (design:reduced-motion DR2 caps it at 200 ms, by owner decision DEC-1
    * of 2026-10-24, departing from UIKit's own navigation cross-fade,
-   * measured below at 0.5 s). Not a theme role: no theme lengthens it (DR4).
+   * measured below at 0.5 s). Not a role: nothing lengthens it (DR4).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
    *   (the setting)
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
@@ -120,6 +120,28 @@ export const reducedMotionCrossFade = {
 // that reads only the fade drops the rest of the table.
 const {durationMs: reducedMotionCrossFadeMs, curve: move} =
   reducedMotionCrossFade;
+
+/**
+ * The keyboard notifications' duration, its own export so the keyboard layout
+ * guide reads it without the rest of the table
+ * (`architecture:component-style-authoring` INV6). `timing` composes it under
+ * its table path, `keyboardNotificationMs`, which stays out of the roles.
+ */
+export const keyboardNotification = {
+  /**
+   * The duration the keyboard notifications report
+   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
+   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
+   *   Oct 23 2026
+   */
+  durationMs: 383.3,
+} as const;
+
+// Composed from a binding, so a bundle that reads only the keyboard's
+// duration drops the rest of the table.
+const {durationMs: keyboardNotificationMs} = keyboardNotification;
 
 export const timing = {
   press,
@@ -160,15 +182,8 @@ export const timing = {
    *   iPhone 17 Pro, read, Oct 23 2026
    */
   navigationBarHideShowMs: 200,
-  /**
-   * The duration the keyboard notifications report
-   * (UIKeyboardAnimationDurationUserInfoKey, with curve 7), show and hide
-   * alike, in ms. The frame follows `springs.keyboard`, cut at this time.
-   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, UIKeyboardWillShow / WillHide / WillChangeFrame read,
-   *   Oct 23 2026
-   */
-  keyboardNotificationMs: 383.3,
+  // The keyboard notifications' duration, sourced on `keyboardNotification`.
+  keyboardNotificationMs,
   /**
    * Core Animation's implicit animation duration
    * (`CATransaction.animationDuration()`), in ms.
@@ -181,15 +196,15 @@ export const timing = {
 } as const;
 
 /**
- * Makes each spring, duration and curve above a motion role a theme may
- * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * Registers the springs, durations and curves above that spec:AST-094 FR4
+ * names as internal motion roles (motion/roles.ts). Nothing registers on import: the touch code that
  * animates with this table calls it once (it is idempotent), so a page that
  * never does ships no registry.
  */
 export function registerTimingTable(): void {
   registerMotionTable('timing', timing, {
     // Arbitration: who gets the touch, not how anything moves; the Reduced
-    // Motion fade, which no theme may lengthen (design:reduced-motion DR4);
+    // Motion fade, which nothing may lengthen (design:reduced-motion DR4);
     // and the keyboard's own timing, which motion in step with the keyboard
     // rides (spec:AST-094 FR4).
     exclude: [
@@ -205,6 +220,15 @@ export function registerTimingTable(): void {
       'curves.easeOut': 'curves.entrance',
       'curves.easeInOut': 'curves.move',
     },
+    // The motion roles: only the ones spec:AST-094 FR4 names. The press
+    // clocks and every other value are internal measured constants.
+    roles: [
+      'stateChangeMs',
+      'curves.viewChange',
+      'curves.exit',
+      'curves.entrance',
+      'curves.move',
+    ],
   });
 }
 
@@ -217,5 +241,7 @@ const reducedMotionCrossFadeRoles = {curves: {move}};
  * table (the animator, reducedMotionFade()). The fade's length is not a role.
  */
 export function registerReducedMotionCrossFade(): void {
-  registerMotionTable('timing', reducedMotionCrossFadeRoles);
+  registerMotionTable('timing', reducedMotionCrossFadeRoles, {
+    roles: ['curves.move'],
+  });
 }

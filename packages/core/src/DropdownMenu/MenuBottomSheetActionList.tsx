@@ -33,9 +33,9 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   destructiveAction: {
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
-    color: colorVars['--color-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
+    color: colorVars['--color-text-error'],
   },
   structuralItem: {
     listStyleType: 'none',
