@@ -70,6 +70,7 @@ import {
   sampleRects,
   seekAnimations,
   springStep,
+  startCompositorTrace,
   startScreencast,
   Storyboard,
   tap,
@@ -369,6 +370,85 @@ test.describe('frame evidence', () => {
     expect(slowRaf.verdict.failures.join('\n')).toMatch(/longest stall/);
   });
 
+  test('frames the screencast skips while the compositor presents them are not a stall; a frozen animation still fails with the compositor record', async ({
+    page,
+    browserName,
+  }, testInfo) => {
+    test.skip(
+      browserName !== 'chromium',
+      'compositor traces are Chromium-only (README: engine limits)',
+    );
+    await busyFixture(page);
+    const box = page.locator('#box');
+    await markElement(box, {mode: 'outline'});
+    const run = async (driver: 'compositor' | 'raf') => {
+      await box.evaluate((el, how) => {
+        el.getAnimations().forEach(a => a.cancel());
+        el.style.transform = 'none';
+        if (how === 'compositor') {
+          el.animate(
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
+            {duration: 1600, easing: 'linear'},
+          );
+        } else {
+          const start = performance.now();
+          const step = (now: number) => {
+            const p = Math.min(1, (now - start) / 1600);
+            el.style.transform = `translateY(${560 * p}px)`;
+            if (p < 1) {
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        }
+      }, driver);
+      const cast = await startScreencast(page);
+      const compositor = await startCompositorTrace(page);
+      await page.waitForTimeout(200);
+      const window = await blockMainThread(page, 700);
+      await page.waitForTimeout(200);
+      const presented = await compositor.stop();
+      const tracked = await trackMarker(page, await cast.stop());
+      return {window, tracked, presented};
+    };
+
+    const moving = await run('compositor');
+    expect(moving.presented.length).toBeGreaterThan(0);
+    // The screencast as a loaded machine delivers it: four frames in a row
+    // skipped mid-block, which the compositor still presented.
+    const mid = moving.tracked.findIndex(f => f.t > moving.window.from + 350);
+    const skipped = moving.tracked.filter((_, i) => i < mid || i >= mid + 4);
+    const alone = busyWindowProof(skipped, moving.window, {axis: 'y'});
+    expect(alone.verdict.failures.join('\n'), alone.summary).toMatch(
+      /longest stall/,
+    );
+    const proof = busyWindowProof(skipped, moving.window, {
+      axis: 'y',
+      presented: moving.presented,
+    });
+    testInfo.annotations.push({
+      type: 'busy-main-thread compositor record',
+      description: proof.summary,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.recorderSkipped).toBeGreaterThanOrEqual(4);
+
+    // A rAF animation presents no change for the whole block: the record
+    // excuses nothing, whatever the compositor drew meanwhile.
+    const frozen = await run('raf');
+    const still = busyWindowProof(frozen.tracked, frozen.window, {
+      axis: 'y',
+      presented: frozen.presented,
+    });
+    testInfo.annotations.push({
+      type: 'busy-main-thread rAF control, compositor record',
+      description: `${still.summary}; compositor frames inside the block: ${frozen.presented.filter(t => t > frozen.window.from && t < frozen.window.to).length}`,
+    });
+    expect(still.verdict.pass).toBe(false);
+    expect(still.recorderSkipped).toBe(0);
+    expect(still.verdict.failures.join('\n')).toMatch(/longest stall/);
+  });
+
   test('a block that starts during a just-started transition still lets the compositor advance it', async ({
     page,
   }, testInfo) => {
@@ -653,6 +733,86 @@ test.describe('frame evidence', () => {
     );
     // It still waited for the curve to end.
     expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
+  });
+
+  test('a waitForRest awaited inside a traced body waits for an animation the action starts two frames later', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    const trace = await traceRendering(page, async () => {
+      // The action starts the animation two frames later, as a component's
+      // effect often does.
+      await pop.evaluate(el => {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            (window as unknown as {__started: number}).__started =
+              performance.timeOrigin + performance.now();
+            el.animate(
+              [
+                {transform: 'translateY(0px)'},
+                {transform: 'translateY(100px)'},
+              ],
+              {duration: 600},
+            );
+          }),
+        );
+      });
+      await waitForRest(pop);
+    });
+    const started = await page.evaluate(
+      () => (window as unknown as {__started?: number}).__started ?? null,
+    );
+    // The traced window holds the whole animation.
+    expect(started).not.toBeNull();
+    expect(trace.window.to - (started as number)).toBeGreaterThanOrEqual(590);
+  });
+
+  test('a waitForRest awaited inside a traced body runs on the real timers, so a frozen timer gate cannot hold it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    await installTimerGate(page);
+    await freezeTimers(page);
+    let outcome = '';
+    await traceRendering(page, async () => {
+      await pop.evaluate(el => {
+        el.animate(
+          [{transform: 'translateY(0px)'}, {transform: 'translateY(100px)'}],
+          {duration: 300},
+        );
+      });
+      // Held by the gate, the wait would neither resolve nor reach its
+      // deadline: the race reads that as "held".
+      outcome = await Promise.race([
+        waitForRest(pop, {timeout: 2000}).then(
+          () => 'rested',
+          () => 'rejected',
+        ),
+        new Promise<string>(resolve => setTimeout(() => resolve('held'), 4000)),
+      ]);
+    });
+    await thawTimers(page);
+    expect(outcome).toBe('rested');
   });
 
   test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({

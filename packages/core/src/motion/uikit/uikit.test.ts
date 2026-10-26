@@ -59,20 +59,28 @@ interface Leaf {
 function leavesOf(file: string): Leaf[] {
   const text = fs.readFileSync(path.resolve(__dirname, file), 'utf8');
   const lines = text.split('\n');
-  // Every exported table object: a domain may export a group of its own
-  // (the press clocks) so a reader takes that group alone.
-  const starts = lines.flatMap((line, index) =>
-    /^export const \w+ = \{$/.test(line) ? [index] : [],
-  );
+  // Every exported object: a row when its own JSDoc carries the source (one
+  // spring, exported so a reader takes it alone), otherwise a table or a
+  // group of its own (the press clocks) whose leaves carry the sources.
+  const starts: number[] = [];
+  const rows: Leaf[] = [];
+  // The groups and rows this file exports itself: a leaf that only names one
+  // of them is checked where it is declared.
+  const exported = new Set<string>();
+  lines.forEach((line, index) => {
+    const match = /^export const (\w+) = \{/.exec(line);
+    if (match == null) {
+      return;
+    }
+    exported.add(match[1]);
+    const doc = docAbove(lines, index);
+    if (/^@source /m.test(doc)) {
+      rows.push({file, key: match[1], doc});
+    } else if (line.endsWith('{')) {
+      starts.push(index);
+    }
+  });
   expect(starts.length).toBeGreaterThan(0);
-  // The groups this file exports itself: a leaf that only names one of them
-  // is checked where that group is declared.
-  const exported = new Set(
-    lines.flatMap(line => {
-      const match = /^export const (\w+) = \{$/.exec(line);
-      return match == null ? [] : [match[1]];
-    }),
-  );
   // Values bound from one of those groups (`const {curve: move} = group;`)
   // are checked where the group declares them too.
   const bindings = /^const \{([^}]+)\} =\s*(?:\n\s*)?(\w+);/gm;
@@ -83,7 +91,25 @@ function leavesOf(file: string): Leaf[] {
       }
     }
   }
-  return starts.flatMap(start => leavesFrom(file, lines, start, exported));
+  return [
+    ...starts.flatMap(start => leavesFrom(file, lines, start, exported)),
+    ...rows,
+  ];
+}
+
+/** The JSDoc block right above line `index`, without its comment markers. */
+function docAbove(lines: string[], index: number): string {
+  if (!lines[index - 1]?.trim().endsWith('*/')) {
+    return '';
+  }
+  let first = index - 1;
+  while (first > 0 && !lines[first].trim().startsWith('/**')) {
+    first--;
+  }
+  return lines
+    .slice(first, index)
+    .map(text => text.trim().replace(/^\/?\*+\/?\s?/, '') + '\n')
+    .join('');
 }
 
 function leavesFrom(
@@ -281,6 +307,31 @@ describe('UIKit constants table: values', () => {
       expect(springs).not.toHaveProperty(name);
     }
     expect(timing).not.toHaveProperty('implicitAnimationMs');
+  });
+
+  it('rows measured on one spring stay equal', () => {
+    // Each row is its own literal so a bundle keeps only the rows it
+    // imports (springRows.test.ts); these were measured to share a spring.
+    for (const group of [
+      // UIKit's default spring.
+      ['viewChange', 'sheetPresent', 'sheetDismiss', 'banner'],
+      ['navigationPush', 'navigationPop'],
+      // The presentation's pace at 80 % damping.
+      ['sheetReleaseFast', 'sheetDismissSwipe'],
+      // UIKit's legacy 0.404 s spring, critically damped.
+      [
+        'alertPresent',
+        'alertDismiss',
+        'actionSheetPresent',
+        'actionSheetDismiss',
+      ],
+      ['menuOpen', 'contextMenuLift'],
+      ['menuClose', 'contextMenuDismiss'],
+    ] as const) {
+      for (const name of group.slice(1)) {
+        expect(springs[name], name).toEqual(springs[group[0]]);
+      }
+    }
   });
 
   it('UIKit\u2019s default spring has the documented damping ratio 4.56 before clamping', () => {
