@@ -1361,6 +1361,20 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     next.remove();
   });
 
+  it('an identity held over a differing stylesheet follows a node replacement', () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0'};
+    animator.set({opacity: 1});
+    expect(element.style.opacity).toBe('1');
+    animator.attach(null);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(next);
+    expect(next.style.opacity).toBe('1');
+    expect(animator.get('opacity')).toBe(1);
+    next.remove();
+  });
+
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
       animator: ReturnType<typeof createAnimator>,
@@ -1432,6 +1446,51 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     animator.stop(['opacity']);
     expect(animator.get('x')).toBe(100);
     expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a release past an edge springs back as a cross-fade, not momentum (DR2)', async () => {
+    const {animator} = reduced();
+    animator.set({x: -80});
+    const start = clock;
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: 0, max: 100}}, at: start}),
+      {at: start},
+    );
+    // The plan lands by timer: step the clock; it moves only while invisible.
+    let moved = false;
+    while (clock <= start + fade) {
+      await advance(2);
+      if (!moved && animator.get('x') !== -80) {
+        moved = true;
+        expect(animator.get('opacity')).toBeLessThan(0.1);
+      }
+    }
+    expect(moved).toBe(true);
+    expect(animator.get('x')).toBe(0);
+  });
+
+  it('a release with one axis past an edge is one handle: stop() stops the cross-fade too', async () => {
+    const {animator} = reduced();
+    animator.set({x: -80, y: 0});
+    const start = clock;
+    const handle = animator.decay(
+      coast(
+        animator,
+        {x: 0, y: 500},
+        {bounds: {x: {min: 0, max: 100}}, at: start},
+      ),
+      {at: start},
+    );
+    expect(handle.properties).toEqual(expect.arrayContaining(['x', 'y']));
+    await advance(fade / 4);
+    handle.stop();
+    // Under the Reduce Motion plan a stop finishes the cross-fade and lands
+    // x with it, at once and while invisible: nothing moves after the stop.
+    const stopped = {x: animator.get('x'), y: animator.get('y')};
+    expect(stopped.x).toBe(0);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(stopped.x);
+    expect(animator.get('y')).toBe(stopped.y);
   });
 
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
@@ -1651,6 +1710,23 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       expect(live('opacity')).toEqual([]);
       expect(element.style.opacity).toBe('0.5');
     }
+  });
+
+  it("a pseudo-element's identity hold follows a node replacement", () => {
+    const {animator, element} = setup({pseudoElement: '::backdrop'});
+    pseudoStylesheet = {opacity: '0'};
+    animator.set({opacity: 1});
+    animator.attach(null);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(next);
+    const held = live('opacity').filter(
+      animation => animation.element === next,
+    );
+    expect(held).toHaveLength(1);
+    expect(Number(held[0].keyframes.at(-1)!.opacity)).toBe(1);
+    expect(live('opacity').some(a => a.element === element)).toBe(false);
+    next.remove();
   });
 
   it('a pseudo-element shown over a hiding stylesheet keeps its own opacity through a move', async () => {
