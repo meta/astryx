@@ -234,8 +234,9 @@ warning, so two writers never fight over the paint. Pass another
   `useGestureRecognizer` and `usePressTracker`), it gets the host's
   listeners, its deliveries and its own element's style on any pointer,
   with no warning, while everything else beside it stays inactive. There
-  such a press tracker's press never keeps its touch from the browser,
-  which still pans.
+  such a press tracker paints a finger's press and does nothing else: it
+  reports no control event, keeps nothing from the browser, which still
+  pans, and takes no mouse or pen press.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)

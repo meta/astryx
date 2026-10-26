@@ -123,8 +123,9 @@ export type UsePressTrackerOptions = Omit<
    * The control paints press feedback per event, so its tracker attaches
    * even where the primary pointer is fine, with no warning (an FR19
    * exception for press feedback only, pending in `spec:AST-094`'s
-   * amendment): there a finger's press never keeps its touch from the
-   * browser. @default false
+   * amendment): there a finger's press is painted and nothing else (no
+   * control event, nothing kept), and a mouse or pen press is not taken.
+   * @default false
    */
   perEventPointer?: boolean;
 };

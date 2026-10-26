@@ -98,6 +98,13 @@ export interface GestureTouch {
   readonly scroll: NativeScrollProbe | null;
   /** The browser took this contact for its own pan or zoom. */
   takenByBrowser: boolean;
+  /**
+   * A finger delivered where the primary pointer is fine, which only a
+   * per-event press tracker hears (an FR19 exception for press feedback
+   * only, pending in `spec:AST-094`'s amendment): the tracker paints its
+   * press and reports no control event.
+   */
+  readonly isFeedbackOnly?: boolean;
 }
 
 /**
@@ -119,6 +126,8 @@ export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
+  /** See GestureTouch.isFeedbackOnly. */
+  readonly isFeedbackOnly?: boolean;
 }
 
 /**

@@ -321,7 +321,7 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
-  it("attaches a press tracker that reads each event's pointer where the primary pointer is fine, beside one that stays inactive", () => {
+  it('attaches a per-event press tracker where the primary pointer is fine, which takes no mouse press there, beside one that stays inactive', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -371,7 +371,9 @@ describe('usePressTracker', () => {
       boundsOf(stepper, 44, 44);
       mouse('pointerdown', stepper, 1);
       mouse('pointerup', stepper, 1);
-      expect(held).toEqual(['touchDown', 'touchUpInside']);
+      // Its press feedback is for a finger (spec:AST-094 FR19): a mouse
+      // keeps the desktop's handling.
+      expect(held).toEqual([]);
       const other = getByTestId('other');
       boundsOf(other, 44, 44);
       mouse('pointerdown', other, 2);

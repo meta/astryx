@@ -323,6 +323,10 @@ export class PressTracker implements TouchConsumer {
   }
 
   private emit(event: ControlEvent, touch: GestureTouch): void {
+    // A finger where the primary pointer is fine gets press feedback only.
+    if (touch.isFeedbackOnly === true) {
+      return;
+    }
     this.options.onControlEvent?.(event, touch);
   }
 

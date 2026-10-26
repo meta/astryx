@@ -203,11 +203,11 @@ export interface AttachOptions {
    * The recognizer, or the press tracker, reads each event's pointer itself,
    * so it attaches even where the primary pointer is fine: the host installs
    * what it needs there, styles its element and raises no warning. A
-   * recognizer does so as `spec:AST-057`'s row swipe does; a press tracker
-   * paints press feedback (an FR19 exception for press feedback only,
-   * pending in `spec:AST-094`'s amendment), and its press there never keeps
-   * its touch from the browser, which still pans. Everything else stays
-   * inactive there. @default false
+   * recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
+   * there paints a finger's press feedback only (an FR19 exception for press
+   * feedback only, pending in `spec:AST-094`'s amendment): no control event,
+   * nothing kept from the browser, which still pans, and no mouse or pen
+   * press. Everything else stays inactive there. @default false
    */
   perEventPointer?: boolean;
 }
@@ -981,7 +981,10 @@ export class GestureHost {
       // takes part (FR19); an inactive one is as if absent.
       if (
         registration?.consumer != null &&
-        this.isConsumerActive(registration.consumer)
+        this.isConsumerActive(registration.consumer) &&
+        // Where the pointer is fine its press feedback is for a finger only:
+        // a mouse or a pen there keeps the desktop's own handling (FR19).
+        (this.isCoarse || pointerType === 'touch')
       ) {
         consumer = registration.consumer;
         consumerElement = node;
@@ -1150,6 +1153,9 @@ export class GestureHost {
         scroll: createNativeScrollProbe(target),
         recognizers,
         consumer,
+        // Where the pointer is fine only per-event participants hear it, and
+        // a press tracker among them gives press feedback only (FR19).
+        ...(this.isCoarse ? {} : {isFeedbackOnly: true}),
       });
     }
     if (stale.length > 0) {
@@ -1639,6 +1645,7 @@ export class GestureHost {
         scroll: createNativeScrollProbe(event.target),
         recognizers,
         consumer,
+        ...(this.isCoarse ? {} : {isFeedbackOnly: true}),
       },
     ]);
   };

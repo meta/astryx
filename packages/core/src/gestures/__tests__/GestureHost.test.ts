@@ -1810,7 +1810,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("lets a press tracker that reads each event's pointer take a mouse hold where the pointer is fine, beside one that stays inactive", () => {
+  it('where the pointer is fine, a per-event press tracker takes no mouse press, and attaches with no warning beside one that stays inactive (spec:AST-094 FR19)', () => {
     const warn = quietWarning();
     detachers.push(pointerQuery(false).restore);
     const {stepper, other} = mount(
@@ -1821,10 +1821,11 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       new PressTracker({
         getBounds: () => bounds,
         onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted =>
+          events.push(isHighlighted ? 'highlight' : 'unhighlight'),
       });
     const held: string[] = [];
     const inactive: string[] = [];
-    // NumberInput's stepper repeats under a held mouse as under a finger.
     detachers.push(
       host.attachConsumer(stepper, tracker(held), {perEventPointer: true}),
     );
@@ -1844,7 +1845,9 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       y: 5,
       time: 600,
     });
-    expect(held).toEqual(['touchDown', 'touchUpInside']);
+    // Press feedback is for a finger: a mouse keeps the desktop's handling,
+    // with no paint and no control event.
+    expect(held).toEqual([]);
     pointer('pointerdown', other, {
       id: 2,
       pointerType: 'mouse',
@@ -1863,7 +1866,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(inactive).toEqual([]);
   });
 
-  it("where the pointer is fine, gives a per-event press tracker's finger its press feedback only: the browser keeps the pan (spec:AST-094 FR19)", () => {
+  it("where the pointer is fine, gives a per-event press tracker's finger its press feedback only: it paints, reports no control event, and the browser keeps the pan (spec:AST-094 FR19)", () => {
     quietWarning();
     const pointer = pointerQuery(false);
     detachers.push(pointer.restore);
@@ -1883,17 +1886,20 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     const finger = {id: 1, x: 5, y: 5};
     const moved = {id: 1, x: 5, y: 60};
     touch('touchstart', stepper, [finger], [finger], 0);
-    // Its press is delivered and painted, as under a coarse pointer.
-    expect(events).toContain('touchDown');
+    // Its press is painted, as under a coarse pointer, and reports nothing.
     expect(highlights).toContain(true);
+    expect(events).toEqual([]);
     // But it never keeps the touch from the browser: the page still pans.
     expect(
       touch('touchmove', stepper, [moved], [moved], 16).defaultPrevented,
     ).toBe(false);
     touch('touchend', stepper, [moved], [], 32);
-    // On a coarse primary pointer the same held press keeps its touch.
+    expect(events).toEqual([]);
+    // On a coarse primary pointer the same held press reports its events
+    // and keeps its touch.
     pointer.set(true);
     touch('touchstart', stepper, [finger], [finger], 100);
+    expect(events).toEqual(['touchDown']);
     expect(
       touch('touchmove', stepper, [moved], [moved], 116).defaultPrevented,
     ).toBe(true);
