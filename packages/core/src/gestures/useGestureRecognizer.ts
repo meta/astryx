@@ -25,6 +25,7 @@
 
 import {useEffect, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {useAttachment, useIsUnmountedRef} from './useAttachment';
@@ -48,6 +49,17 @@ export interface UseGestureRecognizerOptions {
 }
 
 /**
+ * How many hooks are driving a recognizer from an Effect right now: an
+ * `isEnabled` sync, or the detach of a replaced node that cancels a gesture
+ * in flight. The arena pass either starts can reach other recognizers (one
+ * that required the disabled one to fail recognizes in it), so while it runs
+ * no hook's listener calls its caller's callback (react-component-runtime
+ * INV2, INV3). Their later transitions report from the input events that
+ * cause them.
+ */
+let syncingDepth = 0;
+
+/**
  * Attach a recognizer to the element behind `ref`.
  *
  * @example
@@ -61,15 +73,6 @@ export interface UseGestureRecognizerOptions {
  * );
  * ```
  */
-/**
- * How many hooks are syncing a recognizer's `isEnabled` right now. That sync
- * runs in an Effect, and the arena pass it starts can reach other
- * recognizers (one that required the disabled one to fail recognizes in it),
- * so while it runs no hook's listener calls its caller's callback
- * (react-component-runtime INV2). Their later transitions report from the
- * input events that cause them.
- */
-let syncingDepth = 0;
 
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
@@ -101,13 +104,26 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer, isUnmountedRef],
   );
 
+  // Detaching (a replaced node, unmount, a `manageStyle` change) cancels a
+  // gesture in progress from a layout effect: that cancel reaches no caller
+  // callback (react-component-runtime INV2, INV3).
   useAttachment(
     ref,
-    element =>
-      getGestureHost(element.ownerDocument).attach(element, recognizer, {
-        manageStyle,
-        perEventPointer,
-      }),
+    element => {
+      const detach = getGestureHost(element.ownerDocument).attach(
+        element,
+        recognizer,
+        {manageStyle, perEventPointer},
+      );
+      return () => {
+        syncingDepth += 1;
+        try {
+          detach();
+        } finally {
+          syncingDepth -= 1;
+        }
+      };
+    },
     `${manageStyle}:${perEventPointer}`,
   );
 
