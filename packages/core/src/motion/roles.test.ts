@@ -90,6 +90,69 @@ describe('motion roles', () => {
     expect(motionRoleIn(table.curves, 'out')?.id).toBe('fixture.curves.out');
   });
 
+  it('names the shared roles for their use, as spec:AST-094 FR4 does', () => {
+    expect(
+      [
+        springs.fingerTracking,
+        springs.emphasis,
+        springs.settle,
+        springs.quickChange,
+        springs.viewChange,
+        springs.timedChange,
+        springs.stateChange,
+        springs.directChange,
+        springs.menuOpen,
+        springs.menuClose,
+        timing.curves.viewChange,
+        timing.curves.exit,
+        timing.curves.entrance,
+        timing.curves.move,
+      ].map(leaf => motionRoleOf(leaf)?.id),
+    ).toEqual([
+      'springs.fingerTracking',
+      'springs.emphasis',
+      'springs.settle',
+      'springs.quickChange',
+      'springs.viewChange',
+      'springs.timedChange',
+      'springs.stateChange',
+      'springs.directChange',
+      'springs.menuOpen',
+      'springs.menuClose',
+      'timing.curves.viewChange',
+      'timing.curves.exit',
+      'timing.curves.entrance',
+      'timing.curves.move',
+    ]);
+    expect(motionRoleIn(timing, 'stateChangeMs')?.id).toBe(
+      'timing.stateChangeMs',
+    );
+    // A preset or curve-shape name is no role id.
+    for (const old of [
+      'springs.smooth',
+      'springs.bouncy',
+      'timing.curves.easeInOut',
+      'timing.implicitAnimationMs',
+    ]) {
+      expect(listMotionRoles().map(role => role.id)).not.toContain(old);
+    }
+  });
+
+  it("leaves the keyboard's motion out: it rides the keyboard (FR4)", () => {
+    expect(motionRoleOf(springs.keyboard)).toBeUndefined();
+    expect(motionRoleIn(timing, 'keyboardNotificationMs')).toBeUndefined();
+  });
+
+  it('refuses a spring that never settles', () => {
+    expect(() =>
+      formatMotionRoleValue('spring', {duration: 0.5, bounce: 1}),
+    ).toThrow(/must settle/);
+    expect(() =>
+      formatMotionRoleValue('spring', {response: 0.5, dampingRatio: 0}),
+    ).toThrow(/must settle/);
+    expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
+  });
+
   it('makes the shared tables roles, without their thresholds and arbitration timings', () => {
     expect(motionRoleOf(springs.sheetPresent)?.id).toBe('springs.sheetPresent');
     expect(motionRoleOf(springs.viewChange)?.id).toBe('springs.viewChange');

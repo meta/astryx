@@ -592,17 +592,15 @@ that reacts to scrolling keeps hearing it.
   sits between a 12 pt move that opened the menu and a 14 pt move that did
   not. Is that bracket its justification, or does it need a finer
   measurement? (`owner decision`)
-- **OQ6 — Opening a sub-menu without a lift.** A sub-menu drills in when a
-  finger lifts on its row (FR26, FR34). Can a held finger also open it
-  by resting on that row, and keep picking inside it without lifting?
-  `module:DropdownMenu/useMenuPress` ORD1a covers only a mouse.
-  (`owner decision`)
+- **OQ6 — Opening a sub-menu without a lift.** Resolved by
+  `module:DropdownMenu/useMenuPress` DEC-8: a finger resting on a sub-menu row
+  never opens it; a lift on the row does (its FR10).
 - **OQ7 — The opening haptic.** UIKit plays a haptic as a held finger
   opens a menu; a page in iOS Safari cannot (FR23). Where does the menu record
   that gap? (`owner decision`)
-- **OQ8 — Withdrawing a tentative open.** What does a screen reader hear when
-  a menu that a held finger opened is withdrawn by a cancel before the
-  finger reached it? (`owner decision`)
+- **OQ8 — Withdrawing a tentative open.** Resolved by
+  `module:DropdownMenu/useMenuPress` DEC-8: nothing withdraws an open, so a
+  screen reader hears one open and one close (its AR5).
 - **OQ9 — Where a menu sits on a compact touch screen.** Should an anchored
   menu on a compact touch screen (`spec:AST-012` FR9) cover its trigger,
   centered on it and top-aligned with it, or bottom-aligned with it when the

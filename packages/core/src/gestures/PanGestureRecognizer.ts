@@ -84,22 +84,14 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
    * reaches the content behind it. A `scrollEdge` pan claims at its begin
    * instead, since UIKit gives a reversed drag to its content. `null` turns
    * it off.
-   * @default EARLY_CLAIM_DISTANCE for a one-way pan without `scrollEdge`;
-   *   none otherwise
+   * @default `UIKIT_GESTURES.pan.earlyClaimDistance` (5 px) for a one-way
+   *   pan without `scrollEdge`; none otherwise
    */
   claimDistance?: number | null;
 }
 
-/**
- * How far a finger may travel in a competing pan's direction before the pan
- * cancels the touch's moves, kept under the distance at which WebKit claims
- * a slow drag (10–11 px, SAFARI_SCROLL_CLAIM in motion/uikit/gestures.ts).
- * @source measured: Mobile Safari 26.2, iOS 26.2 simulator, HID drags:
- *   cancelling every touchmove from 8 px keeps a scrollable page still; a
- *   one-way upward pan over a scrollable page that cancels from 4–5 px keeps
- *   the page still and its card follows the finger exactly
- */
-const EARLY_CLAIM_DISTANCE = 5;
+/** Where a one-way pan claims its touch by default (`spec:AST-094` FR2). */
+const EARLY_CLAIM_DISTANCE = UIKIT_GESTURES.pan.earlyClaimDistance.value;
 
 const ZERO: Point = {x: 0, y: 0};
 
