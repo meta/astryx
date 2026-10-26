@@ -388,9 +388,11 @@ export abstract class GestureRecognizer {
 
   /**
    * The browser took these touches for its own pan or zoom (their pointer
-   * stream is gone). Return true to keep tracking them, as a pan that takes
-   * the rest of a scroll over at its edge does; by default they are treated
-   * as cancelled.
+   * stream is gone). By default they are treated as cancelled. Only a
+   * recognizer that never claims touches (a watcher, `spec:AST-094` FR20)
+   * may return true to keep observing them; a claiming recognizer is
+   * cancelled whatever this returns, since a drag the browser is scrolling
+   * never changes hands midway (FR14).
    */
   protected touchesTakenByBrowser(
     touches: ReadonlyArray<GestureTouch>,
@@ -560,8 +562,13 @@ export abstract class GestureRecognizer {
     if (own.length === 0) {
       return;
     }
-    if (!isTerminal(this.state) && this.touchesTakenByBrowser(own, event)) {
-      return;
+    if (!isTerminal(this.state)) {
+      if (this.claimsTouches) {
+        // FR14: the browser's scroll keeps the touch to its end.
+        this.touchesCancelled(own, event);
+      } else if (this.touchesTakenByBrowser(own, event)) {
+        return;
+      }
     }
     for (const touch of own) {
       this.touches.delete(touch.id);

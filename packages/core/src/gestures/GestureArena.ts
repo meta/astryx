@@ -343,8 +343,9 @@ export class GestureArena {
    * The browser took these contacts for its own pan or zoom: their pointer
    * stream is gone (`pointercancel`) and no click will follow. Possible
    * recognizers sharing them fail and active ones are cancelled, as UIKit
-   * fails everything a scroll view's pan beats, except a recognizer that
-   * keeps observing the touch to take it over at a scroll edge.
+   * fails everything a scroll view's pan beats. Only a watcher (a recognizer
+   * that never claims) may keep observing the touch; nothing takes it over
+   * midway (`spec:AST-094` FR14).
    */
   browserTookOver(ids: ReadonlyArray<number>, time: number): void {
     this.run(time, () => {
