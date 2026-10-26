@@ -2870,10 +2870,15 @@ async function themeBuildInternal(
     /** @type {string[]} */
     const droppedDeclarations = [];
 
-    const {component, prose} = _generateThemeRulesSplit(
-      resolvedTheme,
-      droppedDeclarations,
-    );
+    let themeRules;
+    try {
+      themeRules = _generateThemeRulesSplit(resolvedTheme, droppedDeclarations);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Theme normalization failed.';
+      throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
+    }
+    const {component, prose} = themeRules;
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
     // (generateThemeCSS) always emits them, so the build must too, or the

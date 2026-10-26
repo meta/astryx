@@ -27,7 +27,6 @@
 import type {ComponentStyleMap, TokenName, TokenValue} from './defineTheme';
 import type {TypographyConfig, TypographyRole} from './types';
 import type {MotionScaleConfig} from './expandMotionScale';
-import {hasMotionScale, type MotionConfig} from './expandMotionRoles';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
@@ -134,11 +133,8 @@ export interface ThemeAdaptationValue {
   color?: Partial<ColorScaleConfig>;
   /** Radius axis overrides, completed from root metadata. */
   radius?: Partial<RadiusScaleConfig>;
-  /**
-   * Motion axis overrides: a duration scale completed from root metadata,
-   * and motion roles (springs, durations, curves) written as given.
-   */
-  motion?: MotionConfig;
+  /** Motion axis overrides, completed from root metadata. */
+  motion?: Partial<MotionScaleConfig>;
   /** Portable semantic-token writes. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
   /** Replacements for exact theme-local names enrolled by the root lineage. */
@@ -623,14 +619,7 @@ function valueToThemeInput(
       ? completeRadius(axes.radius, value.radius, `${path}.radius`)
       : undefined,
     motion: value.motion
-      ? {
-          ...(hasMotionScale(value.motion)
-            ? completeMotion(axes.motion, value.motion, `${path}.motion`)
-            : {}),
-          springs: value.motion.springs,
-          durations: value.motion.durations,
-          curves: value.motion.curves,
-        }
+      ? completeMotion(axes.motion, value.motion, `${path}.motion`)
       : undefined,
     tokens: value.tokens,
     components: value.components,
@@ -804,9 +793,8 @@ function assertNoReachableTokenCycles(
   for (const width of widthEnvironments) {
     for (const pointer of COMPLETE_ENVIRONMENT_VALUES.pointer) {
       for (const contrast of COMPLETE_ENVIRONMENT_VALUES.contrast) {
-        for (const environment of COMPLETE_ENVIRONMENT_VALUES.motion.map(
-          motion => ({width, pointer, contrast, motion}),
-        )) {
+        for (const motion of COMPLETE_ENVIRONMENT_VALUES.motion) {
+          const environment = {width, pointer, contrast, motion};
           const matchingRuleIndexes = tokenRuleIndexes.filter(index =>
             conditionMatchesEnvironment(rules[index].when, points, environment),
           );
