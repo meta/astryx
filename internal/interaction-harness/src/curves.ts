@@ -11,7 +11,8 @@
  *   transform/opacity at each t, with the individual `translate`, `rotate` and
  *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
  *   picks one channel out of the samples for ./math's `compareCurve`, and the
- *   animation-state waits `waitForAnimation` and `waitForRest`.
+ *   animation-state waits `waitForAnimation`, `watchAnimations` and
+ *   `waitForRest`.
  * @position Curve sampling: the exact presented value of an animation at a
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
@@ -82,11 +83,22 @@ function animationRecorder(): void {
       return;
     }
     seen.add(animation);
+    // The target's ancestors as recorded: an exit whose element the page
+    // removes at its end is still reported for the container it left.
+    const ancestors: Element[] = [];
+    for (
+      let node = (animation.effect as KeyframeEffect | null)?.target ?? null;
+      node != null;
+      node = node.parentElement
+    ) {
+      ancestors.push(node);
+    }
     const entry = {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
       startedAt: playStart(animation),
+      ancestors,
     };
     if (entry.startedAt == null) {
       unstarted.push(entry);
@@ -148,7 +160,15 @@ function animationRecorder(): void {
   w.__harnessAnimations = {
     log,
     record,
-    arm: () => (armedAt = performance.now()),
+    // Record first, then stamp strictly after the newest entry: a step that
+    // changed style just before has its transition created by that read,
+    // and it started before the arm.
+    arm: () => {
+      record();
+      const newest = log.length === 0 ? 0 : log[log.length - 1].seenAt;
+      armedAt = Math.max(performance.now(), newest + 0.001);
+      return armedAt;
+    },
     armedAt: () => armedAt,
   };
 }
@@ -816,7 +836,7 @@ export interface ActiveAnimation {
  * It does not race a short animation: the page records every animation from
  * its first frame (from the first call into this module on the page: this,
  * `waitForRest`, `watchAnimations`, sampling or holding), so one that started
- * after the last `waitForRest` or `waitForAnimation` and has already
+ * after the last `waitForRest`, `waitForAnimation` or `watchAnimations` and has already
  * finished is reported too, with `finishedAt` set. For an action that may be
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
@@ -854,6 +874,7 @@ export async function waitForAnimation(
               seenAt: number;
               finishedAt: number | null;
               startedAt: number | null;
+              ancestors: Element[];
             }[];
             record: () => void;
             armedAt: () => number;
@@ -921,8 +942,13 @@ export async function waitForAnimation(
           );
         };
         const after = watchedFrom ?? recorder.armedAt();
+        // Document-timeline animations only, as for holdAnimations: a scroll-
+        // or view-timeline one that reached its end is not a finished curve.
         const recorded = recorder.log.filter(
-          e => e.seenAt >= after && inside(e.animation),
+          e =>
+            e.seenAt >= after &&
+            (inside(e.animation) || e.ancestors.includes(element)) &&
+            e.animation.timeline instanceof DocumentTimeline,
         );
         // Running: since the watch, or (without one) any on the element. A
         // pending one (no start time yet) counts too: the action's animation
