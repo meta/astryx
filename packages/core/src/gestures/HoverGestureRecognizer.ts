@@ -12,6 +12,10 @@
  * recognizer is silent on touch screens, as UIKit's is on an iPhone. It
  * claims nothing and conflicts with nothing: the host drives it directly,
  * outside the touch arena.
+ *
+ * Governed by architecture:interaction-modality: hover only enhances, so no
+ * behavior may depend on this recognizer alone, and a touch or keyboard
+ * path reaches whatever it reveals.
  */
 
 import {
