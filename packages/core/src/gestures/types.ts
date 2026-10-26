@@ -16,9 +16,7 @@
 export type GestureState =
   'possible' | 'began' | 'changed' | 'ended' | 'cancelled' | 'failed';
 
-/**
- * What made the contact. A pen on an iPad is `pen`, not `touch`.
- */
+/** What made the contact. A pen on an iPad is `pen`, not `touch`. */
 export type PointerKind = 'touch' | 'mouse' | 'pen';
 
 export interface Point {
@@ -26,9 +24,7 @@ export interface Point {
   readonly y: number;
 }
 
-/**
- * One position of a contact at one instant, in client (viewport) CSS px.
- */
+/** One position of a contact at one instant, in client (viewport) CSS px. */
 export interface TouchSample {
   readonly x: number;
   readonly y: number;
@@ -50,13 +46,6 @@ export interface NativeScrollProbe {
    * lets the browser pan that axis).
    */
   canScroll(dx: number, dy: number): boolean;
-  /**
-   * How much further (px) the scroller that would move for a finger moving
-   * by (dx, dy) can scroll before it reaches its edge; 0 when none would.
-   * Lets a scroll handoff place the point where the content ran out between
-   * two samples instead of at the next one.
-   */
-  distanceToEdge?(dx: number, dy: number): number;
   /** Whether any element under the touch can scroll natively at all. */
   readonly isInsideScroller: boolean;
   /**
@@ -98,9 +87,7 @@ export interface GestureTouch {
   takenByBrowser: boolean;
 }
 
-/**
- * The input a host hands the arena for one contact in one event.
- */
+/** The input a host hands the arena for one contact in one event. */
 export interface TouchInput {
   readonly id: number;
   readonly x: number;
@@ -110,18 +97,14 @@ export interface TouchInput {
   readonly history?: ReadonlyArray<TouchSample>;
 }
 
-/**
- * A new contact: where it is, what made it, and what it landed on.
- */
+/** A new contact: where it is, what made it, and what it landed on. */
 export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
 }
 
-/**
- * What a recognizer is told alongside the touches that changed.
- */
+/** What a recognizer is told alongside the touches that changed. */
 export interface GestureEventContext {
   /** Timestamp of the event being processed. */
   readonly time: number;
