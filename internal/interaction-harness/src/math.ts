@@ -261,16 +261,22 @@ export function compareCurve(
     actual: s.value,
     expected: expected(s.t),
   }));
+  // A point that cannot be compared (a missing reference value, an oracle
+  // with a NaN parameter) is a failure, never a pass.
+  const errorOf = (p: (typeof points)[number]) =>
+    Number.isFinite(p.actual) && Number.isFinite(p.expected)
+      ? Math.abs(p.actual - p.expected)
+      : Number.POSITIVE_INFINITY;
   let worst = points[0];
   let sumSq = 0;
   for (const p of points) {
-    const error = Math.abs(p.actual - p.expected);
+    const error = errorOf(p);
     sumSq += error * error;
-    if (error > Math.abs(worst.actual - worst.expected)) {
+    if (error > errorOf(worst)) {
       worst = p;
     }
   }
-  const maxError = Math.abs(worst.actual - worst.expected);
+  const maxError = errorOf(worst);
   return {
     pass: maxError <= tolerance,
     tolerance,

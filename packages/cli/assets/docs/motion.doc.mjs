@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'Touch motion has a table of springs, durations and curves, each read from UIKit on the iOS simulator or taken from Apple documentation. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A motion reads its roles as it starts, so a theme change applies from the next motion.',
+          text: 'Touch motion has a table of springs, durations and curves, each read from UIKit on the iOS simulator or taken from Apple documentation. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A value in `motion.durations` applies to its role and takes precedence for it; the `fast`/`medium` duration scale sets the duration tokens a CSS transition reads and never changes a touch motion role. A motion reads its roles as it starts, so a theme change applies from the next motion.',
         },
         {
           type: 'code',

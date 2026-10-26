@@ -89,13 +89,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - Destination acceptance, blocking, and router handoff — owned by
   `family:navigation-destinations`.
-- The collapsed item's tooltip and how it attaches — outside this record.
+- The collapsed item's tooltip and how it attaches — owned by
+  `component:SideNavItem`.
 - Exact fill colors, radius, row height, and row padding per size — owned by
   the shared nav item styles and the `side-nav-item` theme target.
 - Layout of caller content placed directly inside a SideNavItem that is not a
   SideNavItem — owned by the product callsite.
-- SideNavHeading, SideNavCollapseButton, and the SideNav header, footer, and
-  resize zones.
+- SideNavHeading — owned by `component:SideNavHeading`; SideNavCollapseButton —
+  owned by `component:SideNavCollapseButton`.
+- The SideNav header, footer, and resize zones.
 
 ## Public concepts
 
