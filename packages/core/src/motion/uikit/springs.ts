@@ -305,7 +305,7 @@ export const springs = {
    * Menus opening and closing under Reduce Motion: critically damped,
    * slower, no overshoot. A reference reading only: under reduced motion a
    * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
-   * spring (`spec:AST-094` FR8), and it is not a theme motion role.
+   * spring (`spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026
@@ -378,9 +378,20 @@ export function registerSpringsTable(): void {
   registerMotionTable('springs', springs, {
     // UIKit's menus under Reduce Motion: nothing springs under reduced
     // motion (design:reduced-motion DR1), and no theme value may change a
-    // reduced-motion animation (DR4). The keyboard's spring: motion in step
-    // with the keyboard rides the keyboard's own motion, not a theme value
-    // (spec:AST-094 FR4).
+    // reduced-motion animation (DR4). The keyboard's spring rides the
+    // keyboard's own motion and is not a theme role (spec:AST-094 FR4).
     exclude: ['menuReducedMotion', 'keyboard'],
+    // The roles spec:AST-094 FR4 names for their use; the table keeps the
+    // names of the sources the values come from.
+    rename: {
+      interactive: 'fingerTracking',
+      bouncy: 'emphasis',
+      smooth: 'settle',
+      snappy: 'quickChange',
+      uikitDefault: 'viewChange',
+      uikitSpringDuration: 'timedChange',
+      swiftUIDefault: 'stateChange',
+      swiftUISpring: 'directChange',
+    },
   });
 }

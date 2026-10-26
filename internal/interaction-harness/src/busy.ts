@@ -166,11 +166,13 @@ export interface BusyProof extends FrameStats {
  * The window is trimmed by `marginMs` at both ends so the frame the block
  * started on and the one it ended on are not counted.
  *
- * The verdict tolerates what a loaded machine does to a screencast (a dropped
- * frame or two) and nothing a main-thread animation does (it presents no
- * frame for the whole block). It passes when:
- * - the median interval between presented frames is at most
- *   `maxMedianFrameMs` (display rate);
+ * The verdict judges the frames the screencast delivered, whatever its rate
+ * (a loaded machine's screencast can deliver one frame in five or six), and
+ * tolerates nothing a main-thread animation does (it presents no frame for
+ * the whole block). It passes when:
+ * - the judged part presented at least one frame, and, only when a proof
+ *   claims display rate and passes `maxMedianFrameMs`, their median interval
+ *   is at most that;
  * - no stall spans more than `maxStallFrames` screencast intervals;
  * - at least `minMovedFraction` of the frames the window should present at
  *   that cadence moved the tracked axis (a short window may still miss one);
@@ -187,14 +189,18 @@ export function busyWindowProof(
     marginMs = 20,
     settledWithin,
     settledAt,
-    maxMedianFrameMs = 20,
+    maxMedianFrameMs = Infinity,
     maxStallFrames = 3,
     minMovedFraction = 0.9,
     minJudgedFrames = 4,
   }: {
     axis?: 'x' | 'y' | 'width' | 'height';
     marginMs?: number;
-    /** Display rate: the most the median frame interval may be, ms. */
+    /**
+     * Opt-in, for a proof that claims display rate: the most the median frame
+     * interval may be, ms (20 at 60 Hz). Off by default, since it measures the
+     * screencast's own rate as much as the animation.
+     */
     maxMedianFrameMs?: number;
     /** The most screencast intervals one stall may span (3 = two dropped frames). */
     maxStallFrames?: number;
@@ -284,7 +290,9 @@ export function busyWindowProof(
   const moved = changes.length;
   const movedFraction = moved / Math.max(1, expectedFrames);
   const failures: string[] = [];
-  if (stats.frames === 0 || stats.medianFrameMs > maxMedianFrameMs) {
+  if (stats.frames === 0) {
+    failures.push('no frame presented in the judged part');
+  } else if (stats.medianFrameMs > maxMedianFrameMs) {
     failures.push(
       `median frame interval ${stats.medianFrameMs.toFixed(1)} ms > ${maxMedianFrameMs} ms (${stats.frames} frames presented)`,
     );
