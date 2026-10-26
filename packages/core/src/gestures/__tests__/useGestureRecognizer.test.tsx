@@ -487,6 +487,84 @@ describe('usePressTracker', () => {
     expect(events).toEqual([]);
   });
 
+  function PressInTaps({
+    isDoubleEnabled,
+    hasSingle,
+    onEvent,
+  }: {
+    isDoubleEnabled: boolean;
+    hasSingle: boolean;
+    onEvent: (event: ControlEvent | 'highlight' | 'unhighlight') => void;
+  }) {
+    const outer = useRef<HTMLDivElement>(null);
+    const inner = useRef<HTMLButtonElement>(null);
+    const double = useGestureRecognizer(
+      outer,
+      () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+      undefined,
+      {isEnabled: isDoubleEnabled},
+    );
+    const single = useGestureRecognizer(
+      outer,
+      () => new TapGestureRecognizer(),
+      undefined,
+      {isEnabled: hasSingle},
+    );
+    useEffect(() => {
+      single.requireToFail(double);
+    }, [single, double]);
+    usePressTracker(inner, {
+      onControlEvent: onEvent,
+      onHighlightChange: isHighlighted =>
+        onEvent(isHighlighted ? 'highlight' : 'unhighlight'),
+    });
+    return (
+      <div ref={outer}>
+        <button data-testid="press" ref={inner} type="button" />
+      </div>
+    );
+  }
+
+  it.each([
+    ['alone', false],
+    ['with a single tap waiting on it', true],
+  ])(
+    'ends a press that waits on an ancestor double tap after, not inside, the isEnabled Effect that turns it off (%s; react-component-runtime INV2)',
+    async (_event, hasSingle) => {
+      const events: (ControlEvent | 'highlight' | 'unhighlight')[] = [];
+      const {getByTestId, rerender} = render(
+        <PressInTaps
+          isDoubleEnabled
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      const button = getByTestId('press');
+      touch('touchstart', button, {id: 21, x: 1, y: 1}, 0);
+      touch('touchend', button, {id: 21, x: 1, y: 1}, 40, true);
+      const before = [...events];
+      // Turning the double tap off fails it in the Effect: whatever that
+      // arena pass resolves for the press reaches no caller callback.
+      rerender(
+        <PressInTaps
+          isDoubleEnabled={false}
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      expect(events).toEqual(before);
+      // Just after it, the press ends and un-highlights: nothing is left
+      // highlighted.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(events.slice(before.length)).toEqual([
+        'touchUpInside',
+        'unhighlight',
+      ]);
+    },
+  );
+
   it('tracks the element behind the ref when it is replaced (INV6)', () => {
     const events: ControlEvent[] = [];
     function Swapped({id}: {id: string}) {
