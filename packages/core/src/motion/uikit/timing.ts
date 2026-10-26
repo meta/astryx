@@ -24,6 +24,8 @@
  *   there and must agree; uikit/uikit.test.ts checks it)
  */
 
+import {registerMotionTable} from '../roles';
+
 /**
  * The touch press clocks, its own export so a reader of one clock does not
  * bundle the rest of the table (`architecture:component-style-authoring`
@@ -177,3 +179,32 @@ export const timing = {
   // The Reduce Motion fade's length, sourced on `reducedMotionCrossFade`.
   reducedMotionCrossFadeMs,
 } as const;
+
+/**
+ * Registers the springs, durations and curves above that spec:AST-094 FR4
+ * names as internal motion roles (motion/roles.ts). Nothing registers on import: the touch code that
+ * animates with this table calls it once (it is idempotent), so a page that
+ * never does ships no registry.
+ */
+export function registerTimingTable(): void {
+  registerMotionTable('timing', timing, {
+    // Arbitration: who gets the touch, not how anything moves; the Reduced
+    // Motion fade, which nothing may lengthen (design:reduced-motion DR4);
+    // and the keyboard's own timing, which motion in step with the keyboard
+    // rides (spec:AST-094 FR4).
+    exclude: [
+      'press.scrollBrakeMs',
+      'reducedMotionCrossFadeMs',
+      'keyboardNotificationMs',
+    ],
+    // The motion roles: only the ones spec:AST-094 FR4 names. The press
+    // clocks and every other value are internal measured constants.
+    roles: [
+      'stateChangeMs',
+      'curves.viewChange',
+      'curves.exit',
+      'curves.entrance',
+      'curves.move',
+    ],
+  });
+}
