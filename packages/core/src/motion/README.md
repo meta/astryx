@@ -120,7 +120,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
   composes in one `translate` track.
 - `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
-  holds its end value until the next animation replaces it.
+  holds its end value until the next animation replaces it, while the
+  pseudo-element exists. A dialog's `::backdrop` is made again each time the
+  dialog opens, so a presentation `set`s its starting value in the task that
+  opens it.
 
 ### How it stays on the compositor
 

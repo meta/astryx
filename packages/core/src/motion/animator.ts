@@ -131,7 +131,10 @@
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it.
+ * curve ends, and after `set`) until the next animation replaces it, and for
+ * as long as the pseudo-element exists. The browser makes a `::backdrop`
+ * again each time its dialog opens, without the hold, so a presentation
+ * calls `set` with its starting value in the task that opens the dialog.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
