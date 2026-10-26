@@ -149,7 +149,7 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
-  it('sets touch-action and the long-press styles on attach, and restores them on detach', () => {
+  it('sets touch-action on attach and restores it on detach; the long-press styles wait for a held press', () => {
     const {box} = mount('<div id="box" style="color: red"></div>');
     const set = vi.spyOn(box.style, 'setProperty');
     const remove = vi.spyOn(box.style, 'removeProperty');
@@ -159,12 +159,34 @@ describe('GestureHost', () => {
     );
     const detachPress = host.attach(box, new LongPressGestureRecognizer());
     expect(set).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
-    expect(set).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
-    expect(set).toHaveBeenCalledWith('user-select', 'none');
+    expect(set).not.toHaveBeenCalledWith('-webkit-touch-callout', 'none');
     detachPress();
-    expect(remove).toHaveBeenCalledWith('-webkit-touch-callout');
     detachPan();
     expect(remove).toHaveBeenCalledWith('touch-action');
+  });
+
+  it('turns selection and the callout off for one held press, only where the hold does something (spec:AST-094 FR41)', () => {
+    const {hold, plain} = mount(
+      '<div><div id="hold"></div><div id="plain"></div></div>',
+    );
+    detachers.push(host.attach(hold, new LongPressGestureRecognizer()));
+    detachers.push(host.attach(plain, new TapGestureRecognizer()));
+    // jsdom drops the prefixed properties, so the writes are observed.
+    const set = vi.spyOn(hold.style, 'setProperty');
+    const remove = vi.spyOn(hold.style, 'removeProperty');
+    const plainSet = vi.spyOn(plain.style, 'setProperty');
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', hold, [finger], [finger], 0);
+    expect(set).toHaveBeenCalledWith('-webkit-touch-callout', 'none');
+    expect(set).toHaveBeenCalledWith('user-select', 'none');
+    expect(remove).not.toHaveBeenCalledWith('user-select');
+    touch('touchend', hold, [finger], [], 100);
+    expect(remove).toHaveBeenCalledWith('-webkit-touch-callout');
+    expect(remove).toHaveBeenCalledWith('user-select');
+    const other = {id: 2, x: 10, y: 40};
+    touch('touchstart', plain, [other], [other], 200);
+    expect(plainSet).not.toHaveBeenCalledWith('user-select', 'none');
+    touch('touchend', plain, [other], [], 260);
   });
 
   it('cancels touchmove only once a recognizer owns the touch, and swallows the click', () => {
