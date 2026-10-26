@@ -841,23 +841,69 @@ describe('GestureHost', () => {
   });
 
   it("writes a touch-action no wider than the caller's own", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
-    const {trigger, strip} = mount(
-      '<div id="trigger" data-touch-action="none"></div><div id="strip" data-touch-action="pan-y"></div>',
-    );
-    const set = vi.spyOn(trigger.style, 'setProperty');
-    const setStrip = vi.spyOn(strip.style, 'setProperty');
-    detachers.push(
-      host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
-      host.attach(
-        strip,
-        new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
-      ),
-    );
-    expect(set).toHaveBeenCalledWith('touch-action', 'none');
-    // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
-    expect(setStrip).toHaveBeenCalledWith('touch-action', 'pan-y');
-    restore();
+    try {
+      const {trigger, strip} = mount(
+        '<div id="trigger" data-touch-action="none"></div><div id="strip" data-touch-action="pan-y"></div>',
+      );
+      const set = vi.spyOn(trigger.style, 'setProperty');
+      const setStrip = vi.spyOn(strip.style, 'setProperty');
+      detachers.push(
+        host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
+        host.attach(
+          strip,
+          new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
+        ),
+      );
+      // A stylesheet's value is read after paint (see below).
+      vi.advanceTimersByTime(50);
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
+      // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
+      expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's after paint", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    const restore = touchActionFromData();
+    try {
+      const {trigger, strip} = mount(
+        '<div id="trigger" data-touch-action="none"></div><div id="strip"></div>',
+      );
+      // jsdom keeps no touch-action in a style: this stands in for the
+      // caller's inline `touch-action: pan-y`.
+      vi.spyOn(strip.style, 'getPropertyValue').mockImplementation(name =>
+        name === 'touch-action' ? 'pan-y' : '',
+      );
+      const set = vi.spyOn(trigger.style, 'setProperty');
+      const setStrip = vi.spyOn(strip.style, 'setProperty');
+      const read = vi.mocked(window.getComputedStyle);
+      read.mockClear();
+      detachers.push(
+        host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
+        host.attach(
+          strip,
+          new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
+        ),
+      );
+      // Attaching forces no style recalc over whatever just mounted.
+      expect(read).not.toHaveBeenCalled();
+      // The caller's inline value: pan-y pinch-zoom ∩ pan-y, at once.
+      expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+      // A stylesheet's value: the host's own until the frame has painted,
+      // then what both allow.
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'manipulation');
+      vi.advanceTimersByTime(50);
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
   });
 
   it('drives mouse input through Pointer Events', () => {
