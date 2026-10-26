@@ -1929,7 +1929,10 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     await commitFrame(clock);
     await advance(20);
     animator.attach(null);
+    // The unmount is deferred to a microtask: read once it has run.
+    await Promise.resolve();
     expect(element.style.willChange).toBe('');
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("a new element taking over an exit by role leaves the stylesheet's opacity on the outgoing one", async () => {
