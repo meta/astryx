@@ -21,4 +21,3 @@ export * from './scripts';
 export * from './story';
 export * from './storyboard';
 export * from './touch';
-export * from './trace';
