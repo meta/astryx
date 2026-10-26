@@ -13,8 +13,7 @@
  *
  * - Fingers begin and end with Touch Events: they are the only cancelable
  *   channel (a pointer event's preventDefault cannot stop a scroll or a
- *   click), they keep arriving after the browser takes a pan (which a scroll
- *   handoff needs), and every event lists all the fingers at once. A
+ *   click), and every event lists all the fingers at once. A
  *   finger's movement comes from BOTH its `touchmove`s and its
  *   `pointermove`s (paired at touchstart by target and position), the echo
  *   of one in the other dropped: Chromium sends no `touchmove` until a
@@ -56,11 +55,6 @@
  *   (`detail === 0`) always pass.
  * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
  *   press never also opens the browser's menu.
- *
- * DELEGATED CONSUMERS. A consumer type registered with an attribute (a
- * pressable row) is found at touch-down by walking up from the touch target,
- * and an instance is created for that one touch: a list of a thousand rows
- * costs nothing until a finger lands on one.
  *
  * SSR-safe: nothing touches `window` or `document` until something attaches.
  *
@@ -250,6 +244,9 @@ export class GestureHost {
   /** The elements each held contact turned selection off on. */
   private readonly heldSelectionBy = new Map<number, HTMLElement[]>();
   private readonly isPrimaryPointerCoarse: () => boolean;
+  private readonly coarseQuery: MediaQueryList | null;
+  private isWatchingPointer = false;
+  private readonly onPointerKindChange = (): void => this.refreshAll();
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
@@ -290,9 +287,7 @@ export class GestureHost {
         : null;
     this.isPrimaryPointerCoarse =
       options.isPrimaryPointerCoarse ?? (() => coarseQuery?.matches ?? false);
-    // The primary pointer can change (a tablet's keyboard attached or
-    // removed): styles and listeners follow it.
-    coarseQuery?.addEventListener?.('change', () => this.refreshAll());
+    this.coarseQuery = coarseQuery;
   }
 
   /** Re-derive every element's styles and the host's listeners. */
@@ -496,10 +491,25 @@ export class GestureHost {
 
   /**
    * Listen only while something could take a touch: the primary pointer is
-   * coarse and an enabled recognizer or an enabled consumer is attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
+   * coarse and an enabled recognizer or an enabled consumer is attached
+   * (`spec:AST-094` FR19, FR24). Otherwise no document listener is
    * registered, so a desktop page pays nothing.
    */
   private syncListeners(): void {
+    // The primary pointer can change (a tablet's keyboard attached or
+    // removed): while anything is attached, styles and listeners follow it.
+    // Nothing touch-related stays once the last attachment goes (FR24).
+    const hasAttachments = this.registry.size > 0;
+    if (hasAttachments && !this.isWatchingPointer) {
+      this.coarseQuery?.addEventListener?.('change', this.onPointerKindChange);
+      this.isWatchingPointer = true;
+    } else if (!hasAttachments && this.isWatchingPointer) {
+      this.coarseQuery?.removeEventListener?.(
+        'change',
+        this.onPointerKindChange,
+      );
+      this.isWatchingPointer = false;
+    }
     if (this.shouldListen()) {
       this.install();
     } else if (this.isInstalled) {

@@ -149,6 +149,29 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it('watches the pointer kind only while something is attached (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const add = vi.fn();
+    const remove = vi.fn();
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: add,
+      removeEventListener: remove,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const host2 = new GestureHost(document, {clock});
+      expect(add).not.toHaveBeenCalled();
+      const detach = host2.attach(box, new PanGestureRecognizer());
+      expect(add).toHaveBeenCalledTimes(1);
+      detach();
+      expect(remove).toHaveBeenCalledWith('change', add.mock.calls[0][1]);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
   it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
     // jsdom drops touch-action from the style, so the writes are observed.
     const {box} = mount('<div id="box"></div>');
