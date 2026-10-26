@@ -742,6 +742,19 @@ describe('review fixes', () => {
     );
   });
 
+  it('a later {at} than a call from rest still waiting keeps its own clock, with no hold', async () => {
+    const {animator} = setup();
+    animator.animate({opacity: 0}, {spring: springs.settle});
+    // A frame later the browser has still not started it (a busy compositor),
+    // and a tap's call names its own, later clock.
+    clock = 1011;
+    animator.animate({opacity: 1}, {spring: springs.settle}, {at: 1011});
+    const fade = recorded.filter(a => !a.cancelled).at(-1);
+    expect(fade?.startTime).toBe(1011);
+    // The curve moves from its first keyframe on.
+    expect(fade?.keyframes[1].opacity).not.toBe(fade?.keyframes[0].opacity);
+  });
+
   it('a call adopted by a later same-task call starts at the commit, after the work between them', async () => {
     const {animator} = setup();
     const first = animator.animate({x: 100}, {spring: springs.settle});
@@ -1032,6 +1045,19 @@ describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => 
 });
 
 describe('set: direct manipulation', () => {
+  it('a commit that leaves several channels at identity reads the stylesheet once', () => {
+    // Each read after a write forces a style recalculation (a lifted menu
+    // that grows back to identity on translate, scale and opacity paid one
+    // per channel in its opening commit).
+    const {animator} = setup();
+    animator.set({x: 10, scale: 2, opacity: 0.5});
+    const reads = vi.mocked(window.getComputedStyle).mock.calls.length;
+    animator.set({x: 0, scale: 1, opacity: 1});
+    expect(vi.mocked(window.getComputedStyle).mock.calls.length - reads).toBe(
+      1,
+    );
+  });
+
   it('writes one inline style per move and starts no animation', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
@@ -1108,6 +1134,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       ),
     );
 
+  it('an entrance after an outside finish starts from what is on screen', async () => {
+    const {animator} = reduced();
+    animator.animate(
+      {opacity: 0},
+      {spring: springs.settle},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(16);
+    // A test utility finishes the fade out: opacity 0 on screen, while the
+    // curve would still read about 0.93.
+    const [exit] = live('opacity');
+    exit.finish();
+    animator.animate(
+      {opacity: 1},
+      {spring: springs.settle},
+      {crossfadeAs: 'entrance'},
+    );
+    const fade = live('opacity').at(-1);
+    expect(fade?.keyframes[0].opacity).toBe('0');
+  });
+
   it('fades for 200 ms at most', () => {
     expect(fade).toBeGreaterThan(0);
     expect(fade).toBeLessThanOrEqual(200);
@@ -1178,6 +1226,58 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('x')).toBe(100);
     expect(replacement.style.translate).toBe('100px 0px');
     await expect(handle.finished).resolves.toBe(true);
+  });
+
+  it('a move that overlaps a running fade lands only once the element is invisible', async () => {
+    const {animator} = reduced();
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.navigationPush});
+    await advance(fade / 3);
+    const start = clock;
+    expect(animator.get('opacity')).toBeGreaterThan(0.1);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    // Still where it was while it shows; it moves at the bottom of the dip.
+    await advance(fade / 2 - 2);
+    expect(clock - start).toBe(fade / 2 - 2);
+    expect(animator.get('x')).toBe(0);
+    await advance(4);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeLessThan(0.1);
+    await advance(fade);
+    expect(animator.get('opacity')).toBeCloseTo(1, 9);
+  });
+
+  it('a stop during a dip finishes the fade instead of freezing it', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 2 - 5);
+    expect(animator.get('opacity')).toBeLessThan(0.1);
+    animator.stop();
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it("a stop during a dip on the stylesheet's opacity hands it back", async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    animator.stop();
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    animator.animate({y: 50}, {spring: springs.navigationPush});
+    await advance(fade / 2);
+    // Landed, and fading back in to the stylesheet's value.
+    expect(animator.get('opacity', clock + fade / 2)).toBeCloseTo(0.6, 9);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
@@ -1817,6 +1917,16 @@ describe('attach', () => {
       1,
     );
     expect(element.style.translate).toBe('300px 0px');
+  });
+
+  it('unmounting settles a pending atRest() wait and leaves no poll timer', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const rest = animator.atRest();
+    animator.attach(null);
+    // Resolves without any timer running (none is advanced here).
+    await rest;
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('unmounting settles every handle as interrupted and leaves no timer', async () => {
