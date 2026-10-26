@@ -22,6 +22,7 @@ public struct AstryxNodeView: View {
     case .avatar(let avatar):
       Avatar(avatar.viewProps(send: send)) { AstryxNodeList(nodes: avatar.props.status ?? [], send: send) }
     case .avatarStatusDot(let dot): AvatarStatusDot(dot.viewProps(send: send))
+    case .thumbnail(let thumbnail): Thumbnail(thumbnail.viewProps(send: send))
     default: AstryxUnsupportedNode(component: Self.componentName(node))
     }
   }
@@ -42,6 +43,7 @@ public struct AstryxNodeView: View {
     case .selector: "Selector"
     case .switch: "Switch"
     case .text: "Text"
+    case .thumbnail: "Thumbnail"
     case .textInput: "TextInput"
     case .vStack: "VStack"
     case .unsupported(let component, _): component
