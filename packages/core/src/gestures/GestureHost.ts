@@ -13,8 +13,7 @@
  *
  * - Fingers begin and end with Touch Events: they are the only cancelable
  *   channel (a pointer event's preventDefault cannot stop a scroll or a
- *   click), they keep arriving after the browser takes a pan (which a scroll
- *   handoff needs), and every event lists all the fingers at once. A
+ *   click), and every event lists all the fingers at once. A
  *   finger's movement comes from BOTH its `touchmove`s and its
  *   `pointermove`s (paired at touchstart by target and position), the echo
  *   of one in the other dropped: Chromium sends no `touchmove` until a
@@ -56,11 +55,6 @@
  *   (`detail === 0`) always pass.
  * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
  *   press never also opens the browser's menu.
- *
- * DELEGATED CONSUMERS. A consumer type registered with an attribute (a
- * pressable row) is found at touch-down by walking up from the touch target,
- * and an instance is created for that one touch: a list of a thousand rows
- * costs nothing until a finger lands on one.
  *
  * SSR-safe: nothing touches `window` or `document` until something attaches.
  *

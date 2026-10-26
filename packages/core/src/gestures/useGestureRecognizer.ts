@@ -60,6 +60,8 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   });
   const {isEnabled = true, manageStyle = true} = options;
 
+  // Syncs the recognizer's target-action listeners with the caller's
+  // callback (read through a ref, so a new function re-subscribes nothing).
   useEffect(
     () =>
       recognizer.addListener(current => {
@@ -68,21 +70,26 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer],
   );
 
+  // Syncs the recognizer's `isEnabled` (UIKit's): turning it off mid-gesture
+  // cancels the gesture, which the listener above reports.
   useIsomorphicLayoutEffect(() => {
     recognizer.setEnabled(isEnabled);
   }, [recognizer, isEnabled]);
 
-  // A disabled gesture is not attached at all: no listener and no
-  // `touch-action` of its own on the element (spec:AST-094 FR24).
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    if (element == null || !isEnabled) {
-      return undefined;
-    }
-    return getGestureHost(element.ownerDocument).attach(element, recognizer, {
-      manageStyle,
-    });
-  }, [ref, recognizer, manageStyle, isEnabled]);
+  // Syncs the document's gesture host with the element behind `ref`: attached
+  // while enabled, re-attached when the node is replaced. A disabled gesture
+  // is not attached at all: no listener and no `touch-action` of its own on
+  // the element (spec:AST-094 FR24).
+  useNodeAttachment(
+    ref,
+    element =>
+      isEnabled
+        ? getGestureHost(element.ownerDocument).attach(element, recognizer, {
+            manageStyle,
+          })
+        : null,
+    [recognizer, manageStyle, isEnabled],
+  );
 
   return recognizer;
 }
@@ -136,23 +143,27 @@ export function usePressTracker(
       }),
   );
 
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    if (element == null) {
-      return undefined;
-    }
-    const detach = getGestureHost(element.ownerDocument).attachConsumer(
-      element,
-      tracker,
-    );
-    return () => {
-      detach();
-      tracker.dispose();
-    };
-  }, [ref, tracker]);
+  // Syncs the document's gesture host with the element behind `ref`: the
+  // tracker is its press consumer, moved when the node is replaced, and a
+  // press in progress ends with it.
+  useNodeAttachment(
+    ref,
+    element => {
+      const detach = getGestureHost(element.ownerDocument).attachConsumer(
+        element,
+        tracker,
+      );
+      return () => {
+        detach();
+        tracker.dispose();
+      };
+    },
+    [tracker],
+  );
 
-  // The enabled state can change with any render: the host listens only
-  // while an enabled control is attached (spec:AST-094 FR24).
+  // Syncs the host's listeners with the tracker's enabled state, which can
+  // change with any render: the host listens only while an enabled control
+  // is attached (spec:AST-094 FR24).
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     if (element != null) {
@@ -161,6 +172,50 @@ export function usePressTracker(
   });
 
   return tracker;
+}
+
+/**
+ * Keeps `attach` applied to the element behind `ref`: checked after every
+ * render, so a replaced node (a re-keyed or swapped element) is detached and
+ * the new one attached, a removed one detached, and a change in `deps`
+ * re-attaches (`architecture:react-component-runtime` INV6). Costs no render.
+ * `attach` returns its detach, or null for nothing attached.
+ */
+function useNodeAttachment<T extends Element>(
+  ref: RefObject<T | null>,
+  attach: (element: T) => (() => void) | null,
+  deps: ReadonlyArray<unknown>,
+): void {
+  const attachedRef = useRef<{
+    element: T;
+    deps: ReadonlyArray<unknown>;
+    detach: (() => void) | null;
+  } | null>(null);
+  // Syncs the attachment with the DOM node the caller's ref holds after
+  // this commit.
+  useIsomorphicLayoutEffect(() => {
+    const element = ref.current;
+    const current = attachedRef.current;
+    if (
+      current != null &&
+      current.element === element &&
+      current.deps.length === deps.length &&
+      current.deps.every((dep, index) => Object.is(dep, deps[index]))
+    ) {
+      return;
+    }
+    current?.detach?.();
+    attachedRef.current =
+      element == null ? null : {element, deps, detach: attach(element)};
+  });
+  // Detaches at unmount.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      attachedRef.current?.detach?.();
+      attachedRef.current = null;
+    },
+    [],
+  );
 }
 
 /** PressTracker's own default: an ancestor's single-finger single tap. */
