@@ -450,8 +450,15 @@ interface Landing {
   /** ms after the call's start. */
   readonly at: number;
   readonly values: Map<MotionProperty, number>;
-  /** The fade back in that follows the landing (a dip). */
-  fadeIn: {readonly to: number; readonly ms: number} | null;
+  /**
+   * The fade back in that follows the landing (a dip); `isBorrowed` when it
+   * returns to the stylesheet's opacity, which owns it again once it ends.
+   */
+  fadeIn: {
+    readonly to: number;
+    readonly ms: number;
+    readonly isBorrowed?: boolean;
+  } | null;
   /** The opacity written with the landing (an exit by role). */
   restore: number | null;
   /** Earlier calls whose landings this one carries: they land with it. */
@@ -745,6 +752,11 @@ export function createAnimator(
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
+  /**
+   * The stylesheet's opacity a Reduce Motion dip borrowed because no call
+   * owned opacity; the dip runs from and back to it, then hands it back.
+   */
+  let borrowedOpacity: number | null = null;
   let target: HTMLElement | null = null;
   /** Calls from rest whose start still waits for the browser's commit. */
   const pendingGroups = new Set<StartGroup>();
@@ -1213,8 +1225,28 @@ export function createAnimator(
    * element, in which case the identity stays inline. Runs when such a value
    * is written and again when a motion ends.
    */
+  /** The element's own (stylesheet) opacity, read once when a dip starts. */
+  const ownOpacity = (): number => {
+    const view = target?.ownerDocument.defaultView;
+    const value =
+      target == null
+        ? NaN
+        : Number.parseFloat(
+            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
+          );
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+  };
+
   const releaseIdentity = (channel: Channel) => {
     if (target == null || pseudoElement != null || running.has(channel)) {
+      return;
+    }
+    if (channel === 'opacity' && borrowedOpacity != null) {
+      // A dip on the stylesheet's opacity ended: the stylesheet owns it again.
+      borrowedOpacity = null;
+      segments.delete('opacity');
+      resting.opacity = IDENTITY.opacity;
+      target.style.removeProperty('opacity');
       return;
     }
     const text = target.style.getPropertyValue(channel);
@@ -1223,8 +1255,8 @@ export function createAnimator(
     }
     target.style.removeProperty(channel);
     const view = target.ownerDocument.defaultView;
-    const resting = view?.getComputedStyle(target).getPropertyValue(channel);
-    if (resting != null && !isIdentityText(channel, resting)) {
+    const underneath = view?.getComputedStyle(target).getPropertyValue(channel);
+    if (underneath != null && !isIdentityText(channel, underneath)) {
       target.style.setProperty(channel, text);
     }
   };
@@ -1719,6 +1751,9 @@ export function createAnimator(
     for (const property of changed) {
       channels.add(CHANNEL_OF[property]);
     }
+    if (channels.has('opacity')) {
+      borrowedOpacity = null;
+    }
     for (const channel of channels) {
       rebuild(channel, time);
     }
@@ -1866,6 +1901,11 @@ export function createAnimator(
       changed.push('opacity');
     }
     commit(changed, time);
+    if (landing.fadeIn?.isBorrowed === true) {
+      // The fade back in returns to the stylesheet's opacity: it owns it
+      // again once the fade ends (releaseIdentity).
+      borrowedOpacity = landing.fadeIn.to;
+    }
     // The calls it carries are done: their travel has landed.
     for (const carried of landing.carried) {
       carriedOwners.delete(carried);
@@ -1973,15 +2013,26 @@ export function createAnimator(
       };
     }
     if (travel.length > 0) {
-      // A dip: fades out, lands while transparent, fades back in.
+      // A dip: fades out, lands while transparent, fades back in. When no
+      // call owns opacity it starts from and returns to the element's own
+      // (stylesheet) opacity, not the model's 1.
+      const ownsOpacity =
+        named ||
+        segments.has('opacity') ||
+        resting.opacity !== IDENTITY.opacity;
+      const borrowed = ownsOpacity ? null : ownOpacity();
       next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: opacityNow},
+        {at: 0, value: borrowed ?? opacityNow},
         {at: ms / 2, value: 0},
       ]);
       return {
         next,
         holds,
-        landing: landsLater(ms / 2, {to: opacityTo, ms: ms / 2}),
+        landing: landsLater(ms / 2, {
+          to: borrowed ?? opacityTo,
+          ms: ms / 2,
+          isBorrowed: borrowed != null,
+        }),
       };
     }
     if ('opacity' in targets) {
@@ -2010,6 +2061,19 @@ export function createAnimator(
       }
       present(false);
       demote();
+      if (next == null) {
+        // Unmount: nothing is left to animate, so every handle settles as
+        // interrupted and no completion timer outlives the element, as in
+        // dispose() (architecture:react-component-runtime INV5).
+        const time = now();
+        for (const property of PROPERTIES) {
+          interrupt(property, time);
+        }
+        // Nothing moves any more: every atRest() wait settles.
+        for (const wait of [...restWaits]) {
+          wait.settle();
+        }
+      }
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2020,23 +2084,6 @@ export function createAnimator(
       retireTimers.clear();
       target = next;
       if (target == null) {
-        // Detached (its component unmounted, or the ref moved): the waits
-        // callers hold end now rather than at the curves' end
-        // (architecture:react-component-runtime INV5). The curves stay, so
-        // a later attach plays them on.
-        const owners = new Set<HandleState>();
-        for (const segment of segments.values()) {
-          owners.add(segment.owner);
-        }
-        for (const landing of landings) {
-          owners.add(landing.owner);
-        }
-        for (const owner of owners) {
-          settle(owner, false);
-        }
-        for (const wait of [...restWaits]) {
-          wait.settle();
-        }
         return;
       }
       const time = now();
