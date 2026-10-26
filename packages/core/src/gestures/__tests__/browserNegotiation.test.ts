@@ -229,6 +229,25 @@ describe('createNativeScrollProbe', () => {
     expect(probe.canScroll(0, -20)).toBe(true);
   });
 
+  it('puts a control in a fixed bar outside the page it floats over (spec:AST-094 FR11)', () => {
+    document.body.innerHTML =
+      '<div id="bar" style="position: fixed"><button id="row">Row</button></div>';
+    const root = document.scrollingElement ?? document.documentElement;
+    scroller(root as HTMLElement, {
+      scrollTop: 0,
+      scrollHeight: 3000,
+      clientHeight: 800,
+    });
+    const probe = createNativeScrollProbe(document.getElementById('row'));
+    // The page still scrolls under a drag that starts on the bar, but the bar
+    // is not in a scroll view, so its control gets no content-touch delay.
+    expect(probe.isInsideScroller).toBe(false);
+    expect(probe.canScroll(0, -20)).toBe(true);
+    for (const key of ['scrollTop', 'scrollHeight', 'clientHeight']) {
+      Reflect.deleteProperty(root, key);
+    }
+  });
+
   it('honors touch-action between the touch and the scroller', () => {
     const {list, row} = setup('overflow-y: auto');
     row.setAttribute('data-touch-action', 'pan-x');
