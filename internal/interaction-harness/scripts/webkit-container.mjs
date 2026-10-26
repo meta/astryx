@@ -16,10 +16,19 @@
  * docker daemon the container runs as the invoking user (rootless podman and
  * rootless docker already map it), so the `test-results/` it writes into the
  * mounted checkout stay the host user's and the next host run can clear them.
+ *
+ * WebKit composites through Mesa's software GL in the image, which compiles
+ * each shader variant the first time a page draws it: 450–700 ms for the
+ * first frame of a blurred or newly animated layer, long enough for a short
+ * animation to end before it is ever presented. Mesa caches what it compiles,
+ * and the cache is kept on the host (`~/.cache/astryx-webkit-shaders/<image>`,
+ * or `ASTRYX_WEBKIT_SHADER_CACHE`), so a run starts with every shader an
+ * earlier run compiled instead of paying for them in its first tests.
  */
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -42,6 +51,19 @@ if (engine == null) {
   process.exit(1);
 }
 const args = process.argv.slice(2);
+// Where the container sees the host's shader cache (see the header).
+const containerShaderCache = '/astryx-shader-cache';
+const shaderCache =
+  process.env.ASTRYX_WEBKIT_SHADER_CACHE ??
+  path.join(
+    os.homedir(),
+    '.cache',
+    'astryx-webkit-shaders',
+    image.replace(/[^\w.-]+/g, '_'),
+  );
+fs.mkdirSync(shaderCache, {recursive: true});
+// The harness self-test reads this marker inside the container.
+fs.writeFileSync(path.join(shaderCache, 'ASTRYX-SHADER-CACHE'), `${image}\n`);
 const env = [
   'ASTRYX_STORYBOOK_DIR',
   'ASTRYX_INTERACTION_EVIDENCE',
@@ -84,6 +106,10 @@ const command = [
   '--pids-limit=-1',
   '-v',
   `${root}:${root}`,
+  '-v',
+  `${shaderCache}:${containerShaderCache}`,
+  '-e',
+  `MESA_SHADER_CACHE_DIR=${containerShaderCache}`,
   '-w',
   root,
   ...env,
