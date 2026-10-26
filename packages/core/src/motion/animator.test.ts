@@ -1378,6 +1378,21 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     next.remove();
   });
 
+  it('a node detached mid-dip and attached again in a later task shows the move landed and visible', async () => {
+    const {animator, element} = reduced();
+    // The call owns its opacity: its dip writes the low opacity inline.
+    animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
+    await advance(25);
+    expect(Number(element.style.opacity)).toBeLessThan(1);
+    animator.attach(null);
+    await advance(100);
+    animator.attach(element);
+    expect(animator.get('x')).toBe(240);
+    expect(animator.get('opacity')).toBe(1);
+    expect(element.style.opacity).not.toBe('0');
+    expect(Number(element.style.opacity || '1')).toBe(1);
+  });
+
   it('an identity held over a differing stylesheet follows a node replacement', () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0'};

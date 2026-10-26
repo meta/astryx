@@ -2260,15 +2260,24 @@ export function createAnimator(
         // them all: the motion goes on on the new node.
         if (!unmountQueued) {
           unmountQueued = true;
+          const detached = target;
           queueMicrotask(() => {
             if (!unmountQueued) {
               return;
             }
             unmountQueued = false;
-            // A Reduce Motion move still waiting lands in the model where it
-            // was going, as in dispose(), so a later attach shows the element
-            // there and visible; its calls settle as interrupted.
-            landPending(false);
+            // A Reduce Motion move still waiting lands where it was going, as
+            // in dispose(), on the node just detached too: a dip's fade out
+            // left its low opacity inline there, so a later attach of that
+            // node (a Suspense or Activity reveal) shows it landed and
+            // visible. Its calls settle as interrupted.
+            const current = target;
+            target = detached;
+            try {
+              landPending(false);
+            } finally {
+              target = current;
+            }
             const time = now();
             for (const property of PROPERTIES) {
               interrupt(property, time);
