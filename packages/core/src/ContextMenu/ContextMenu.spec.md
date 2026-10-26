@@ -261,7 +261,7 @@ elements more than under a fine pointer, within the open-layer allowance of
   page does not move while the trigger is in the top layer.
 
 None of the four is themeable or part of the anatomy, none is mounted at rest, and no content is mounted
-twice: the trigger lifts itself, with no copy. The presentation hold's shield
+twice: the trigger lifts itself, with no copy. The input hold's shield
 joins while the lift grows, and the layer runtime's exit copy while the menu
 closes.
 

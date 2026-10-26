@@ -7,7 +7,7 @@
  * @output Checks that ContextMenu loads its touch layer only under the touch
  *   model: never for a fine pointer or `presentation="popover"`; nor, with
  *   it, the lift presentation and the lift module, the rect morph, the
- *   compositor animator or the presentation hold, which only the touch layer
+ *   compositor animator or the input hold, which only the touch layer
  *   imports
  * @position Testing for ContextMenu.tsx and lazyContextMenuTouchLayer.ts
  *
