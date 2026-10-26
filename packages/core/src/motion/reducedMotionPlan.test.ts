@@ -77,6 +77,42 @@ describe('planReducedMotion', () => {
     expect(plan.holds).toEqual({x: 0});
   });
 
+  it('a move whose opacity rises from a visible value dips rather than landing in view', () => {
+    const plan = planReducedMotion(
+      view({valueAt: p => (p === 'opacity' ? 0.5 : 0)}),
+      0,
+      {x: 100, opacity: 1},
+      ['x', 'opacity'],
+      true,
+    );
+    expect(plan.opacityFade).toEqual([
+      {at: 0, value: 0.5},
+      {at: MS / 2, value: 0},
+    ]);
+    expect(plan.landing?.at).toBe(MS / 2);
+    expect(plan.landing?.fadeIn).toEqual({
+      to: 1,
+      ms: MS / 2,
+      isBorrowed: false,
+    });
+  });
+
+  it('a move whose opacity falls to a visible value dips rather than landing in view', () => {
+    const plan = planReducedMotion(
+      view(),
+      0,
+      {x: 100, opacity: 0.5},
+      ['x', 'opacity'],
+      true,
+    );
+    expect(plan.landing?.at).toBe(MS / 2);
+    expect(plan.landing?.fadeIn).toEqual({
+      to: 0.5,
+      ms: MS / 2,
+      isBorrowed: false,
+    });
+  });
+
   it('a move alone dips on the stylesheet opacity it borrows, and lands at the bottom', () => {
     const plan = planReducedMotion(
       view({ownOpacity: () => 0.6}),
