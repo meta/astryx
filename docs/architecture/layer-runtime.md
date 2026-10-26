@@ -55,14 +55,25 @@ deciding_specs: [spec:AST-038, spec:AST-059]
 {
   "scope": "global",
   "triggers": {
-    "layering": ["INV2", "INV5", "INV6", "INV7", "INV11", "INV12"],
+    "layering": [
+      "INV2",
+      "INV5",
+      "INV6",
+      "INV7",
+      "INV11",
+      "INV12",
+      "INV14",
+      "INV15"
+    ],
     "layout": ["INV3", "INV11", "INV12"]
   }
 }
 ```
 
-This record describes the layer runtime shipped on current `main`. Accepted but
-unimplemented changes live in `spec:AST-003`; they are not current architecture.
+This record describes the layer runtime shipped on current `main`, except
+INV14 and INV15, which state required ownership the runtime does not yet meet;
+Current gaps lists where it falls short. Other accepted but unimplemented
+changes live in `spec:AST-003`; they are not current architecture.
 
 ## Purpose
 
@@ -439,6 +450,30 @@ layers use Layer rendering without joining Escape/platform dismissal.
   correct, and the runtime polls nothing: an anchor that a scrolled
   container hides is followed again when an intersection observer reports it
   back in view.
+- **INV14 — The runtime owns every layer's shared mechanism.** Internally, the layer runtime owns the shared
+  mechanism layers use: top-layer mounting, close-request delivery, the
+  presentation hold (keeping a layer's chosen presentation from the open until
+  the close settles), the one shared exit copy (the single Core mechanism
+  `architecture:component-style-authoring` INV7 names), and the backdrop tint,
+  drawn with `::backdrop`. A component that needs one of these uses the
+  runtime's rather than building its own. Each component still decides when it
+  dismisses, how it is hosted, and how it is presented, including the
+  backdrop's color and every other visual treatment (INV9;
+  `family:overlay-dismissal` AV3, AV4, AV6; `spec:AST-003` FR10). The runtime's
+  public exports are unchanged.
+- **INV15 — One lift-from-trigger module, opt-in per surface.** Lift-from-trigger presentation lives in one
+  internal module separate from the layer runtime: the lift from the trigger,
+  using the real trigger or a clone, whichever keeps the motion on the
+  compositor (`spec:AST-094` FR5);
+  the grow from the trigger's rectangle through the shared rectangle morph
+  (one Core animation from one rectangle to another); and
+  the exit, played through the runtime's exit copy (INV14). A clone of the
+  trigger is the one transient copy `architecture:component-style-authoring`
+  INV7 allows: inert, hidden from assistive technology, and removed when the
+  lift settles. Surfaces opt in;
+  any surface that lifts uses this module and never its own copy, and layers
+  that do not lift do not use it. It is internal and unexported
+  (`spec:AST-017` FR21).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -467,6 +502,11 @@ Current gaps are observable facts, not current target behavior:
 `spec:AST-003` is the accepted, unimplemented change that owns requirements,
 migration, verification, and completion criteria for these gaps. This record must
 be updated only as that work ships.
+
+INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them: no
+shared presentation hold, exit copy, runtime backdrop tint, or lift module
+exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
+and Selector each build their own top-layer mounting, exit, or backdrop.
 
 ## Change coupling
 
@@ -557,16 +597,17 @@ this current architecture record.
 
 ## Verification
 
-| Invariant  | Evidence                                                                                                                                                    | Failure signal                                                                                                                                                                                                |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2 | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                 | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                               |
-| INV3–INV5  | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                       |
-| INV11      | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor |
-| INV12      | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                          | A layer whose first painted rectangle differs from its settled one                                                                                                                                            |
-| INV6, INV7 | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                               | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                         |
-| INV8       | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                              | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                         |
-| INV9       | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                         | A current local channel silently changes ownership or policy                                                                                                                                                  |
-| INV10      | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                             | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                            |
+| Invariant    | Evidence                                                                                                                                                    | Failure signal                                                                                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                 | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                               |
+| INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                       |
+| INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor |
+| INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                          | A layer whose first painted rectangle differs from its settled one                                                                                                                                            |
+| INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                               | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                         |
+| INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                              | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                         |
+| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                         | A current local channel silently changes ownership or policy                                                                                                                                                  |
+| INV10        | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                             | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                            |
+| INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                      |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
