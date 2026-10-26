@@ -233,7 +233,7 @@ describe('interaction proof routing', () => {
     }
   });
 
-  it('keeps the harness, components, Storybook and its own setup in scope', () => {
+  it('keeps the harness, components, themes, Storybook and its own setup in scope', () => {
     const pattern = new RegExp(
       decide().run.match(/bash "\$helper" "\$BASE_SHA" '([^']+)'/)[1],
     );
@@ -242,6 +242,8 @@ describe('interaction proof routing', () => {
       'internal/a11y-spec/src/storybook.ts',
       'playwright.interaction.config.ts',
       'packages/core/src/BottomSheet/BottomSheet.tsx',
+      // Themes set the motion durations components animate with.
+      'packages/themes/neutral/src/neutralTheme.ts',
       'apps/storybook/.storybook/preview.tsx',
       '.github/workflows/ci.yml',
       'package.json',
@@ -253,6 +255,7 @@ describe('interaction proof routing', () => {
       'docs/specs/AST-030/spec.md',
       'apps/docsite/src/app/page.tsx',
       'packages/core/package.json',
+      'packages/themes/neutral/package.json',
       '.github/scripts/native-swift.sh',
     ]) {
       expect(pattern.test(untouched), untouched).toBe(false);

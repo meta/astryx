@@ -1767,7 +1767,7 @@ jobs:
             && git fetch --quiet --no-tags --depth=1 origin "$BASE_SHA" \
             && git show "$BASE_SHA:.github/scripts/pr-scope-touches.sh" > "$helper"; then
             scope=0
-            bash "$helper" "$BASE_SHA" '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)' || scope=$?
+            bash "$helper" "$BASE_SHA" '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)' || scope=$?
           fi
           if [ "$scope" = 1 ]; then
             echo 'No harness, component, Storybook or proof-setup change; skipping the interaction proofs.'
