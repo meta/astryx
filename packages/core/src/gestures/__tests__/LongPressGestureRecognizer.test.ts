@@ -125,4 +125,17 @@ describe('LongPressGestureRecognizer', () => {
     fingers.finger(1).up(80);
     expect(fingers.log).toContain('two:failed@80');
   });
+
+  it('keeps a begun press through a second finger, and ends it at the first finger’s lift (FR10)', () => {
+    const h = createHarness();
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    h.finger(1).down(0, 0, 0, {recognizers: [press]});
+    h.advance(600);
+    expect(press.state).toBe('began');
+    h.finger(2).down(80, 0, 700, {recognizers: [press]});
+    expect(press.state).toBe('began');
+    expect(press.numberOfTouches).toBe(1);
+    h.finger(1).up(800);
+    expect(h.log).toContain('press:ended@800');
+  });
 });

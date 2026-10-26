@@ -152,10 +152,11 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
       return;
     }
     // A completed tap of the taps phase: quick, and with the press's finger
-    // count, as a tap recognizer's would be. Its bounds are the tap
-    // recognizer's (UIKit's measured `maximumTapDuration` and interval),
-    // assumed for this phase: UILongPressGestureRecognizer's own are not
-    // measured.
+    // count, as a tap recognizer's would be. GUESS: its hold limit and
+    // interval are the tap recognizer's (UIKit's measured
+    // `maximumTapDuration` and `maximumIntervalBetweenTaps`), until
+    // measurement M-G20 (motion/MEASUREMENTS.md) reads
+    // UILongPressGestureRecognizer's own.
     const heldFor = event.time - (this.tapStartedAt ?? event.time);
     const fingers = this.tapMostTouches;
     this.tapStartedAt = null;
