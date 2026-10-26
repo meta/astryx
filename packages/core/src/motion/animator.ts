@@ -1610,14 +1610,14 @@ export function createAnimator(
       resolveGroup(group, group.provisional);
       return;
     }
-    // Paused before its first frame (a harness holding it, a page pausing
-    // every animation): no start yet, and neither `ready` nor the first frame
-    // will look again, so keep looking each frame until it is resumed (its
-    // start is set) or finished (its own clock).
+    // No start yet (paused before its first frame by a harness or a page,
+    // or resumed with play() and still pending): neither `ready` nor the
+    // first frame will look again, so keep looking each frame until the call
+    // has a start, or its animations finish (its own clock) or are cancelled.
     if (
       group.animations.some(
         animation =>
-          animation.playState === 'paused' && animation.startTime == null,
+          animation.startTime == null && animation.playState !== 'idle',
       )
     ) {
       requestFrame?.(() => syncGroup(group));
