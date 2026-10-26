@@ -11,7 +11,7 @@
  */
 
 import {act, render} from '@testing-library/react';
-import {useEffect, useRef} from 'react';
+import {StrictMode, useEffect, useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {SelectionLock} from '../GestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
@@ -685,6 +685,87 @@ describe('usePressTracker hit-tests the element behind its ref now', () => {
       expect(events).toContain('touchDown');
       expect(events).toContain('touchUpOutside');
       expect(events).not.toContain('touchUpInside');
+    });
+  }
+});
+
+function SwappedSurface({
+  which,
+  onPan,
+}: {
+  which: 'a' | 'b';
+  onPan: (recognizer: PanGestureRecognizer) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useGestureRecognizer(
+    ref,
+    () => new PanGestureRecognizer({direction: 'horizontal'}),
+    onPan,
+  );
+  return which === 'a' ? (
+    <div key="a" data-testid="a" ref={ref} />
+  ) : (
+    <div key="b" data-testid="b" ref={ref} />
+  );
+}
+
+describe('useGestureRecognizer follows a replaced node', () => {
+  for (const strict of [false, true]) {
+    it(`cancels a gesture in flight without calling the listener from the effect${strict ? ' (StrictMode)' : ''}`, () => {
+      const states: string[] = [];
+      const wrap = (node: React.ReactElement) =>
+        strict ? <StrictMode>{node}</StrictMode> : node;
+      const {getByTestId, rerender} = render(
+        wrap(<SwappedSurface which="a" onPan={r => states.push(r.state)} />),
+      );
+      const a = getByTestId('a');
+      touch('touchstart', a, {id: 3, x: 0, y: 0}, 0);
+      touch('touchmove', a, {id: 3, x: 30, y: 0}, 16);
+      expect(states).toEqual(['began']);
+      rerender(
+        wrap(<SwappedSurface which="b" onPan={r => states.push(r.state)} />),
+      );
+      // The replaced node's cancel comes from a layout effect: no callback.
+      expect(states).toEqual(['began']);
+      // The new node drives the same recognizer.
+      const b = getByTestId('b');
+      touch('touchstart', b, {id: 4, x: 0, y: 0}, 100);
+      touch('touchmove', b, {id: 4, x: 30, y: 0}, 116);
+      expect(states).toEqual(['began', 'began']);
+      touch('touchend', b, {id: 4, x: 30, y: 0}, 132, true);
+    });
+  }
+});
+
+describe('usePressTracker keeps its press through an option change', () => {
+  for (const strict of [false, true]) {
+    it(`a press in progress survives a rerender with new options${strict ? ' (StrictMode)' : ''}`, () => {
+      const events: ControlEvent[] = [];
+      const highlights: boolean[] = [];
+      function Held({cancelTravel}: {cancelTravel?: number}) {
+        const ref = useRef<HTMLButtonElement>(null);
+        usePressTracker(ref, {
+          onControlEvent: event => events.push(event),
+          onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+          cancelTravel,
+        });
+        return (
+          <button data-testid="held" ref={ref} type="button">
+            Go
+          </button>
+        );
+      }
+      const wrap = (node: React.ReactElement) =>
+        strict ? <StrictMode>{node}</StrictMode> : node;
+      const {getByTestId, rerender} = render(wrap(<Held />));
+      const button = getByTestId('held');
+      touch('touchstart', button, {id: 6, x: 1, y: 1}, 0);
+      expect(highlights).toEqual([true]);
+      rerender(wrap(<Held cancelTravel={50} />));
+      // Still pressed: the tracker was not rebuilt or disposed.
+      expect(highlights).toEqual([true]);
+      touch('touchend', button, {id: 6, x: 1, y: 1}, 50, true);
+      expect(events).toEqual(['touchDown', 'touchUpInside']);
     });
   }
 });

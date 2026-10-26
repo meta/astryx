@@ -187,9 +187,6 @@ export class PressTracker implements TouchConsumer {
     if (options.keepsTouch === true) {
       this.keepsTouch = () => this.isKept;
     }
-    if (options.selectionLock != null) {
-      this.selectionLock = options.selectionLock;
-    }
     this.options = options;
     this.trackingExpansion =
       options.trackingExpansion ??
@@ -356,7 +353,9 @@ export class PressTracker implements TouchConsumer {
   readonly keepsTouch?: () => boolean;
 
   /** The selection lock of a control whose hold acts (FR41); see the option. */
-  readonly selectionLock?: SelectionLock;
+  get selectionLock(): SelectionLock | undefined {
+    return this.options.selectionLock;
+  }
 
   private clearHighlightTimer(): void {
     if (this.highlightTimer != null) {
