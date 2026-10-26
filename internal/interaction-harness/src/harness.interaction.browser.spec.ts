@@ -107,6 +107,24 @@ const FIXTURE = `<!doctype html><meta name=viewport content="width=device-width,
 <div id=box></div>
 <div id=scroller>${Array.from({length: 200}, (_, i) => `<div class=row>row ${i}</div>`).join('')}</div>`;
 
+// The busy-main-thread proofs' page: one box with room to move 560 px down,
+// nothing over it. 560 px in 1,600 ms is about 4.8 px a frame, more than two
+// of WebKit's 2 px position steps (README: frame evidence), so every frame's
+// motion is resolvable.
+const BUSY_FIXTURE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<style>
+  body { margin: 0; background: #fff; }
+  #box { position: absolute; left: 20px; top: 40px; width: 80px; height: 80px; background: #36c; }
+</style>
+<div id=box></div>`;
+
+async function busyFixture(page: Page) {
+  await page.route('http://busy.test/', route =>
+    route.fulfill({contentType: 'text/html', body: BUSY_FIXTURE}),
+  );
+  await page.goto('http://busy.test/');
+}
+
 // A real navigation (not setContent, whose document.open() erases the window
 // listeners the input log installs).
 async function fixture(page: Page) {
@@ -282,7 +300,7 @@ test.describe('frame evidence', () => {
   test('a compositor animation advances every frame through a blocked main thread; a rAF one freezes, whatever the screencast rate', async ({
     page,
   }, testInfo) => {
-    await fixture(page);
+    await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
 
@@ -292,14 +310,14 @@ test.describe('frame evidence', () => {
         el.style.transform = 'none';
         if (how === 'compositor') {
           el.animate(
-            [{transform: 'translateX(0px)'}, {transform: 'translateX(280px)'}],
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
             {duration: 1600, easing: 'linear'},
           );
         } else {
           const start = performance.now();
           const step = (now: number) => {
             const p = Math.min(1, (now - start) / 1600);
-            el.style.transform = `translateX(${280 * p}px)`;
+            el.style.transform = `translateY(${560 * p}px)`;
             if (p < 1) {
               requestAnimationFrame(step);
             }
@@ -312,7 +330,7 @@ test.describe('frame evidence', () => {
       const window = await blockMainThread(page, 700);
       await page.waitForTimeout(200);
       const tracked = await trackMarker(page, await cast.stop());
-      return busyWindowProof(tracked, window, {axis: 'x'});
+      return busyWindowProof(tracked, window, {axis: 'y'});
     };
 
     const compositor = await run('compositor');
@@ -322,6 +340,9 @@ test.describe('frame evidence', () => {
     });
     expect(compositor.verdict.failures, compositor.summary).toEqual([]);
     expect(compositor.monotonic).toBe(true);
+    // Resolvable on the cast's grid: two position steps or more per frame.
+    expect(compositor.notes, compositor.summary).toEqual([]);
+    expect(compositor.pxPerFrame).toBeGreaterThanOrEqual(2 * compositor.stepPx);
 
     const raf = await run('raf');
     testInfo.annotations.push({
@@ -354,16 +375,19 @@ test.describe('frame evidence', () => {
     // `during` blocks in the frame the transition has run 16 ms. In WebKit
     // the transition reaches the compositor in that frame's rendering update,
     // so a loop inside the rAF callback froze it (2 of 29 frames moved).
-    // Linear and longer than the block, so every frame of the block moves a
-    // whole pixel or more and the transition is still running when it ends.
-    await fixture(page);
+    // Linear and longer than the block, so every frame of the block moves two
+    // position steps or more and the transition is still running when it
+    // ends. The cast shows the box at rest first, so a transition that reaches
+    // the screen after the block began is judged from there (onScreenFromMs).
+    await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     const cast = await startScreencast(page);
+    await expect.poll(() => cast.frameCount()).toBeGreaterThan(0);
     await box.evaluate(el => {
       el.style.transition = 'transform 1600ms linear';
       el.getBoundingClientRect();
-      el.style.transform = 'translateX(280px)';
+      el.style.transform = 'translateY(560px)';
     });
     const window = await blockMainThread(page, 700, {
       during: box,
@@ -371,7 +395,7 @@ test.describe('frame evidence', () => {
     });
     await waitForRest(box);
     const tracked = await trackMarker(page, await cast.stop());
-    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    const proof = busyWindowProof(tracked, window, {axis: 'y'});
     testInfo.annotations.push({
       type: 'busy-main-thread transition',
       description: proof.summary,
@@ -386,7 +410,7 @@ test.describe('frame evidence', () => {
     // An animation created in the frame the helper looks is still pending (not
     // committed to the compositor). A block that started on it then froze it
     // in Chromium: no presented frame moved.
-    await fixture(page);
+    await busyFixture(page);
     const box = page.locator('#box');
     await markElement(box, {mode: 'outline'});
     await box.evaluate(el => {
@@ -402,7 +426,7 @@ test.describe('frame evidence', () => {
         n += 1;
         if (n === 12) {
           el.animate(
-            [{transform: 'translateX(0px)'}, {transform: 'translateX(280px)'}],
+            [{transform: 'translateY(0px)'}, {transform: 'translateY(560px)'}],
             {duration: 1600, easing: 'linear'},
           );
           return;
@@ -417,7 +441,7 @@ test.describe('frame evidence', () => {
     });
     await waitForRest(box);
     const tracked = await trackMarker(page, await cast.stop());
-    const proof = busyWindowProof(tracked, window, {axis: 'x'});
+    const proof = busyWindowProof(tracked, window, {axis: 'y'});
     testInfo.annotations.push({
       type: 'busy-main-thread pending animation',
       description: proof.summary,

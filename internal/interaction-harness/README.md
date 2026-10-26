@@ -131,6 +131,20 @@ raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
 
+A just-started animation can reach the screen after the block began (50–100 ms
+later in WebKit on a loaded machine). When the cast saw the element at rest
+before the block (wait for `cast.frameCount()` to pass 0 before starting the
+animation), judging starts at its first presented change: the judged part still
+ends with the block and still needs four intervals, and `onScreenFromMs` and the
+summary report when it came. An element already moving is judged from the
+block's start. WebKit's casts are 2 px quantized: the frames come at the
+viewport's size, but the page in them is captured at half resolution, so
+positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+motion per frame, a frame delivered a few ms early shows no step and reads as
+not moved. The proof reports `stepPx` and `pxPerFrame` and notes motion under
+two steps per frame, which never fails it. Move a proof's element at least two
+steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
+
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
