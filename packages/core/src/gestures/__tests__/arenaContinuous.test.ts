@@ -4,8 +4,8 @@
  * @file arenaContinuous.test.ts
  * @input GestureArena with pans, long presses, taps, consumers and scroll
  *   probes, driven by synthetic touches with explicit timestamps
- * @output The pan's conflicts: native scrolling (failing, scroll edge),
- *   long press vs pan, nested pans, delegate hooks, two fingers on
+ * @output The pan's conflicts: native scrolling (failing, scroll edge,
+ *   handoff), long press vs pan, nested pans, delegate hooks, two fingers on
  *   two views, delivery while moving, cancellation from code, the clock
  * @position Unit tests of packages/core/src/gestures/GestureArena.ts
  */
@@ -56,6 +56,31 @@ describe('conflict matrix', () => {
     });
     midContent.finger(1).drag(0, 30, 50, 5);
     expect(midContent.log).toEqual(['sheet:failed@20']);
+  });
+
+  it("a drag that began as a scroll stays the browser's past the content's edge (spec:AST-094 FR14)", () => {
+    const h = createHarness();
+    const sheet = new PanGestureRecognizer({
+      name: 'sheet',
+      direction: 'down',
+      scrollEdge: true,
+    });
+    let scrollTop = 30;
+    const finger = h.finger(1).down(0, 100, 0, {
+      recognizers: [sheet],
+      scroll: scrollProbe(() => scrollTop > 0),
+    });
+    // The content scrolls toward its top: the drag is the browser's.
+    finger.move(0, 120, 16);
+    finger.takenByBrowser(20);
+    // It reaches its top mid-gesture; the finger keeps pulling.
+    scrollTop = 0;
+    finger.move(0, 160, 32);
+    finger.move(0, 200, 48);
+    finger.up(64);
+    // It failed at its first move and is reset when the browser takes the
+    // touch: it never begins, however far the finger pulls.
+    expect(h.log).toEqual(['sheet:failed@16', 'sheet:possible@20']);
   });
 
   it('long press vs pan: holding still wins for the long press', () => {

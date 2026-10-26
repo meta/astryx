@@ -8,6 +8,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {createHarness} from './harness';
 
@@ -100,5 +101,28 @@ describe('LongPressGestureRecognizer', () => {
     h.finger(2).down(2, 0, 200, {recognizers: [press]});
     h.advance(700);
     expect(press.state).toBe('began');
+  });
+
+  it('counts only quick taps with the required fingers in the taps phase', () => {
+    const tapLimit = UIKIT_GESTURES.tap.maximumTapDuration.value;
+    // A first touch held past a tap's limit is no tap.
+    const held = createHarness();
+    const slow = new LongPressGestureRecognizer({
+      name: 'slow',
+      numberOfTapsRequired: 1,
+    });
+    held.finger(1).down(0, 0, 0, {recognizers: [slow]});
+    held.finger(1).up(tapLimit + 100);
+    expect(held.log).toContain(`slow:failed@${tapLimit + 100}`);
+    // With two fingers required, a one-finger tap is no tap.
+    const fingers = createHarness();
+    const two = new LongPressGestureRecognizer({
+      name: 'two',
+      numberOfTapsRequired: 1,
+      numberOfTouchesRequired: 2,
+    });
+    fingers.finger(1).down(0, 0, 0, {recognizers: [two]});
+    fingers.finger(1).up(80);
+    expect(fingers.log).toContain('two:failed@80');
   });
 });

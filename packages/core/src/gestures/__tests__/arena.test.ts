@@ -22,6 +22,7 @@ import {
   type GestureRecognizerOptions,
 } from '../GestureRecognizer';
 import type {GestureEventContext, GestureTouch} from '../types';
+import {GestureArena, type GestureClock} from '../GestureArena';
 import {createHarness, RecordingConsumer} from './harness';
 
 type Step = (recognizer: Scripted, event: GestureEventContext) => void;
@@ -72,6 +73,11 @@ class Scripted extends GestureRecognizer {
   fail(): void {
     this.isWaiting = false;
     this.setState('failed');
+  }
+
+  /** Recognize at `deadline` on the event clock, unless the touch lifts. */
+  recognizeAt(deadline: number): void {
+    this.setTimer(deadline, () => this.recognize());
   }
 
   /** Wait for more input until `deadline` on the event clock, then fail. */
@@ -384,5 +390,387 @@ describe('arena: cancellation and time', () => {
     h.finger(1).down(0, 0, 100, {recognizers: [r]});
     h.finger(1).move(5, 0, 90);
     expect(h.log).toEqual(['r:began@100']);
+  });
+});
+
+/** A clock whose timers run one task at a time, as an event loop does. */
+class TaskClock implements GestureClock {
+  time = 0;
+  private nextId = 1;
+  private readonly tasks = new Map<number, {at: number; run: () => void}>();
+  now(): number {
+    return this.time;
+  }
+  setTimeout(run: () => void, delay: number): number {
+    const id = this.nextId++;
+    this.tasks.set(id, {at: this.time + delay, run});
+    return id;
+  }
+  clearTimeout(id: number): void {
+    this.tasks.delete(id);
+  }
+  /** Run the earliest task due by `time`, if any. */
+  runTask(time: number): void {
+    this.time = time;
+    const due = [...this.tasks.entries()]
+      .filter(([, task]) => task.at <= time)
+      .sort((a, b) => a[1].at - b[1].at)[0];
+    if (due != null) {
+      this.tasks.delete(due[0]);
+      due[1].run();
+    }
+  }
+}
+
+/** A long press: recognizes 500 ms after touch-down unless the touch lifts. */
+function pressArena(): {clock: TaskClock; arena: GestureArena; log: string[]} {
+  const clock = new TaskClock();
+  const log: string[] = [];
+  const arena: GestureArena = new GestureArena({
+    clock,
+    onTransition: (recognizer, _from, to) =>
+      log.push(`${recognizer.name}:${to}@${arena.now()}`),
+  });
+  const press = new Scripted('press', {
+    began: (self, event) => self.recognizeAt(event.time + 500),
+  });
+  arena.began([
+    {
+      id: 1,
+      x: 0,
+      y: 0,
+      time: 0,
+      pointerType: 'touch',
+      target: null,
+      scroll: null,
+      recognizers: [press],
+      consumer: null,
+    },
+  ]);
+  return {clock, arena, log};
+}
+
+describe('arena: a timer that fires late', () => {
+  it('lets a lift queued before its deadline run first', () => {
+    const {clock, arena, log} = pressArena();
+    // A long task held the main thread from 100 to 800 ms; the finger
+    // lifted at 300. The timer task runs first, then the queued lift.
+    clock.runTask(800);
+    arena.ended([{id: 1, x: 0, y: 0, time: 300}]);
+    clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+  });
+
+  it('still fires on its deadline when nothing was queued', () => {
+    const {clock, arena, log} = pressArena();
+    clock.runTask(800);
+    clock.runTask(800);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 820}]);
+  });
+});
+
+describe('arena: claims', () => {
+  it('keeps an idle recognizer usable after cancel()', () => {
+    const h = createHarness();
+    const r = new Scripted('r', onMove);
+    r.cancel();
+    expect(r.state).toBe('possible');
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [r]})
+      .move(5, 0, 16);
+    expect(h.log).toContain('r:began@16');
+    h.finger(1).up(32);
+  });
+
+  it('gives back the claim of a waiting recognition that fails', () => {
+    const h = createHarness();
+    const waiting = new Scripted('waiting', onMove);
+    const blocker = new Scripted('blocker');
+    waiting.requireToFail(blocker);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [waiting, blocker]})
+      .move(5, 0, 16);
+    expect(h.arena.isClaimed(1)).toBe(true);
+    waiting.cancel();
+    expect(waiting.state).toBe('failed');
+    expect(h.arena.isClaimed(1)).toBe(false);
+    h.finger(1).up(32);
+  });
+
+  it('gives a resting finger back when its gesture is cancelled, so a pinch can zoom the page', () => {
+    const h = createHarness();
+    const r = new Scripted('r', onMove);
+    const first = h
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [r]})
+      .move(5, 0, 16);
+    expect(h.arena.isClaimed(1)).toBe(true);
+    r.cancel();
+    expect(h.arena.isClaimed(1)).toBe(false);
+    // A second finger lands with nothing on its path: the browser owns both.
+    const second = h.finger(2).down(200, 200, 40, {recognizers: []});
+    expect(h.arena.isClaimed(2)).toBe(false);
+    first.move(0, 0, 56);
+    second.move(220, 220, 56);
+    expect(h.arena.isClaimed(1)).toBe(false);
+    first.up(80);
+    second.up(80);
+  });
+});
+
+/** Records the touches that began off its hit path. */
+class ElsewhereRecorder extends Scripted {
+  readonly elsewhere: number[] = [];
+  protected override touchBeganElsewhere(
+    touches: ReadonlyArray<GestureTouch>,
+  ): void {
+    this.elsewhere.push(...touches.map(touch => touch.id));
+  }
+}
+
+describe("arena: a touch that begins off an active recognizer's hit path", () => {
+  it('is reported to the recognizer, not delivered as its own', () => {
+    const h = createHarness();
+    const recorder = new ElsewhereRecorder('recorder');
+    const first = h.finger(1).down(0, 0, 0, {recognizers: [recorder]});
+    expect(recorder.elsewhere).toEqual([]);
+    const second = h.finger(2).down(300, 300, 16, {recognizers: []});
+    expect(recorder.elsewhere).toEqual([2]);
+    expect(recorder.numberOfTouches).toBe(1);
+    first.up(40);
+    second.up(40);
+  });
+
+  it('is not reported to a recognizer tracking nothing', () => {
+    const h = createHarness();
+    const recorder = new ElsewhereRecorder('recorder');
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [recorder]})
+      .up(20);
+    h.finger(2).down(300, 300, 100, {recognizers: []}).up(120);
+    expect(recorder.elsewhere).toEqual([]);
+  });
+});
+
+describe('arena: resolution order across fingers', () => {
+  it('lets the inner recognizer win a tie even when another finger brought the outer one first', () => {
+    const h = createHarness();
+    const inner = new Scripted('inner', onMove);
+    const outer = new Scripted('outer', onMove);
+    // Finger 1 lands on the outer view only; finger 2 on the inner view,
+    // inside it. Both recognize on the same move event.
+    h.arena.began([
+      {
+        id: 1,
+        x: 0,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [outer],
+        consumer: null,
+      },
+      {
+        id: 2,
+        x: 50,
+        y: 0,
+        time: 0,
+        pointerType: 'touch',
+        target: null,
+        scroll: null,
+        recognizers: [inner, outer],
+        consumer: null,
+      },
+    ]);
+    h.arena.moved([
+      {id: 1, x: 10, y: 0, time: 16},
+      {id: 2, x: 60, y: 0, time: 16},
+    ]);
+    expect(inner.state).toBe('began');
+    expect(outer.state).toBe('failed');
+    h.arena.ended([
+      {id: 1, x: 10, y: 0, time: 32},
+      {id: 2, x: 60, y: 0, time: 32},
+    ]);
+  });
+});
+
+describe('arena: a held view', () => {
+  it('is released in the same settle as the recognizer that held it finishes', () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    // Delays the view's touch, then lifts without deciding: it finishes as
+    // `possible` with nothing left to track.
+    const r = new Scripted('r', {ended: () => {}}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 0, {recognizers: [r], consumer});
+    expect(consumer.events).toEqual([]);
+    h.finger(1).up(40);
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+  });
+});
+
+describe('arena: review fixes', () => {
+  it('runs a cancel from code at the last event time, not wall time', () => {
+    const h = createHarness();
+    const other = new Scripted('other');
+    h.finger(9)
+      .down(500, 500, 0, {recognizers: [other]})
+      .up(10);
+    const press = new Scripted('press', {
+      began: (self, event) => self.recognizeAt(event.time + 500),
+      moved: (self, event) => {
+        const touch = event.allTouches[0];
+        if (touch != null && Math.abs(touch.x - touch.startX) > 10) {
+          self.fail();
+        }
+      },
+    });
+    h.finger(1).down(0, 0, 1000, {recognizers: [press]});
+    // Wall time is 1800; a 40 px move stamped 1300 is still queued.
+    h.clock.time = 1800;
+    other.cancel();
+    h.arena.moved([{id: 1, x: 40, y: 0, time: 1300}]);
+    expect(h.log).toContain('press:failed@1300');
+    expect(h.log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    h.finger(1).up(1900, 40, 0);
+  });
+
+  it('keeps two recognizers exclusive when only one delegate allows both', () => {
+    const h = createHarness();
+    const a = new Scripted('a', onMove, {
+      shouldRecognizeSimultaneously: () => true,
+    });
+    const b = new Scripted('b', onMove);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [a, b]})
+      .move(5, 0, 16);
+    expect(h.log).toContain('a:began@16');
+    expect(b.state).toBe('failed');
+    h.finger(1).up(32);
+  });
+
+  it("gives the click with the touch when the view's hold ends on the lift", () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    const r = new Scripted('r', {}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 0, {recognizers: [r], consumer});
+    expect(consumer.events).toEqual([]);
+    const click = h.finger(1).up(40);
+    expect(click).toBe('allow');
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+    expect(h.deferredClicks).toEqual([]);
+  });
+
+  it("keeps a recognized discrete gesture's claim when a partner is cancelled", () => {
+    const h = createHarness();
+    const swipe = new Scripted(
+      'swipe',
+      {moved: r => (r.state === 'possible' ? r.recognize() : undefined)},
+      {discrete: true},
+    );
+    const pan = new Scripted('pan', onMove);
+    swipe.recognizeSimultaneouslyWith(pan);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [swipe, pan]})
+      .move(5, 0, 16);
+    expect(swipe.state).toBe('ended');
+    expect(h.arena.isClaimed(1)).toBe(true);
+    pan.cancel();
+    expect(h.arena.isClaimed(1)).toBe(true);
+    h.finger(1).up(32);
+  });
+});
+
+describe('arena: a lift that decides a waiting recognition', () => {
+  it('answers the click with the final outcome, not a defer it already resolved', () => {
+    const h = createHarness();
+    const consumer = new RecordingConsumer();
+    // r recognizes at the lift but waits for q to fail; q lifts undecided.
+    const q = new Scripted('q', {ended: () => {}});
+    const r = atLift('r');
+    r.requireToFail(q);
+    h.finger(1).down(0, 0, 0, {recognizers: [r, q], consumer});
+    const click = h.finger(1).up(40);
+    expect(h.log).toContain('r:ended@40');
+    expect(click).toBe('suppress');
+    expect(h.deferredClicks).toEqual([]);
+  });
+});
+
+/** Keeps observing a touch the browser took, as a scroll-edge watcher does. */
+class Observer extends Scripted {
+  protected override touchesTakenByBrowser(): boolean {
+    return true;
+  }
+}
+
+describe('arena: round-five review fixes', () => {
+  it('never claims a touch the browser took, even for a watcher that begins later (FR14)', () => {
+    const h = createHarness();
+    const watcher = new Observer('watcher', onMove);
+    const finger = h.finger(1).down(0, 0, 0, {recognizers: [watcher]});
+    finger.takenByBrowser(10);
+    finger.move(0, 40, 20);
+    expect(h.log).toContain('watcher:began@20');
+    expect(h.claims).toEqual([]);
+    expect(h.arena.isClaimed(1)).toBe(false);
+    finger.up(40);
+  });
+
+  it('settles once, with the outermost call, when a listener cancels during a touch-down', () => {
+    const h = createHarness();
+    const elsewhere = new Scripted('elsewhere');
+    h.finger(9).down(500, 500, 0, {recognizers: [elsewhere]});
+    const consumer = new RecordingConsumer();
+    const first = new Scripted('first', {began: () => elsewhere.cancel()});
+    const holder = new Scripted('holder', {}, {delaysTouchesBegan: true});
+    h.finger(1).down(0, 0, 10, {recognizers: [first, holder], consumer});
+    // The holder heard the touch and fails at the lift: the click goes.
+    expect(h.finger(1).up(40)).toBe('allow');
+    expect(consumer.events).toEqual(['began:1', 'ended:1']);
+    h.finger(9).up(50);
+  });
+
+  it('keeps a discrete winner exclusive against a waiter its win releases (FR15)', () => {
+    const h = createHarness();
+    const winner = new Scripted(
+      'R',
+      {moved: (r, event) => (event.time >= 32 ? r.recognize() : undefined)},
+      {discrete: true},
+    );
+    const blocker = new Scripted('O1', {moved: () => {}});
+    const waiter = new Scripted('P', onMove);
+    waiter.requireToFail(blocker);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [winner, blocker, waiter]})
+      .move(5, 0, 16)
+      .move(10, 0, 32);
+    expect(h.log).toContain('R:ended@32');
+    expect(h.log).not.toContain('P:began@32');
+    expect(waiter.state).toBe('failed');
+    h.finger(1).up(48);
+  });
+
+  it('lets the innermost deadline win a tie at the same instant (FR15)', () => {
+    const h = createHarness();
+    const inner = new Scripted('inner', {
+      moved: (r, event) =>
+        r.state === 'possible' && event.time === 10
+          ? r.recognizeAt(500)
+          : undefined,
+    });
+    const outer = new Scripted('outer', {
+      began: r => r.recognizeAt(500),
+      moved: () => {},
+    });
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [inner, outer]})
+      .move(1, 0, 10);
+    h.arena.advanceTime(500);
+    expect(h.log).toContain('inner:began@500');
+    expect(outer.state).toBe('failed');
+    h.finger(1).up(600);
   });
 });

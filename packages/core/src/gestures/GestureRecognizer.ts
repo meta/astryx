@@ -294,12 +294,16 @@ export abstract class GestureRecognizer {
     );
   }
 
-  /** @internal Whether this and `other` may be active together. */
+  /**
+   * @internal Whether this and `other` may be active together: both allow it
+   * (`recognizeSimultaneouslyWith` sets both sides; each delegate answers for
+   * its own recognizer), so one delegate alone keeps them exclusive (FR15).
+   */
   allowsSimultaneous(other: GestureRecognizer): boolean {
     return (
       this.simultaneousWith.has(other) ||
-      this.options.shouldRecognizeSimultaneously?.(this, other) === true ||
-      other.options.shouldRecognizeSimultaneously?.(other, this) === true
+      (this.options.shouldRecognizeSimultaneously?.(this, other) === true &&
+        other.options.shouldRecognizeSimultaneously?.(other, this) === true)
     );
   }
 
@@ -384,9 +388,9 @@ export abstract class GestureRecognizer {
 
   /**
    * The browser took these touches for its own pan or zoom (their pointer
-   * stream is gone). Return true to keep tracking them, as a pan that takes
-   * the rest of a scroll over at its edge does; by default they are treated
-   * as cancelled.
+   * stream is gone). Return true to keep observing them; by default they are
+   * treated as cancelled. An observer never claims them: a drag the browser
+   * took stays the browser's (FR14).
    */
   protected touchesTakenByBrowser(
     touches: ReadonlyArray<GestureTouch>,
@@ -395,6 +399,18 @@ export abstract class GestureRecognizer {
     this.touchesCancelled(touches, event);
     return false;
   }
+
+  /**
+   * A touch began elsewhere (off this recognizer's hit path) while this
+   * recognizer tracks touches of its own. It is not this recognizer's touch
+   * and is never delivered as one; a recognizer that a foreign finger should
+   * end (a menu's press slide) cancels itself here. By default nothing
+   * happens.
+   */
+  protected touchBeganElsewhere(
+    _touches: ReadonlyArray<GestureTouch>,
+    _event: GestureEventContext,
+  ): void {}
 
   /** Clear per-gesture state before the next attempt. */
   protected reset(): void {}
@@ -474,6 +490,17 @@ export abstract class GestureRecognizer {
     }
     this.location();
     this.touchesBegan(touches, event);
+  }
+
+  /** @internal */
+  deliverBeganElsewhere(
+    touches: ReadonlyArray<GestureTouch>,
+    event: GestureEventContext,
+  ): void {
+    if (isTerminal(this.state)) {
+      return;
+    }
+    this.touchBeganElsewhere(touches, event);
   }
 
   /** @internal */
@@ -558,7 +585,8 @@ export abstract class GestureRecognizer {
       this.arena.stop(this);
     } else if (isActive(this.state)) {
       this.applyState('cancelled');
-    } else if (this.state === 'possible') {
+    } else if (this.state === 'possible' && this.isInvolved()) {
+      // An idle recognizer stays `possible`: nothing would ever reset it.
       this.applyState('failed');
     }
   }
