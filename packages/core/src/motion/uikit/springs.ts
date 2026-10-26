@@ -6,20 +6,19 @@
  * @output Exports `springs`, every UIKit / SwiftUI interaction spring the
  *   touch presentations use, each in the vocabulary of its source
  *   (SpringDescription: duration/bounce, response/dampingRatio or
- *   mass/stiffness/damping; `toSpring` normalizes)
+ *   mass/stiffness/damping; a reader normalizes them to one form)
  * @position The springs domain of the UIKit constants table (motion/uikit)
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
  * measured | GUESS); webkit and GUESS values also carry the `@measure` task
- * that will confirm or replace them (motion/README.md lists them all).
- * sources.test.ts enforces both.
+ * that will confirm or replace them (MEASUREMENTS.md lists them all).
+ * uikit.test.ts enforces both.
  *
- * Most interaction springs below are GUESSES today: UIKit does not document
- * the springs of its own transitions, and the simulator measurements that
- * will replace them (method in motion/README.md) have not run yet. Each
- * guess starts from the nearest sourced spring and names it, so a component
- * built on the table gets the right value the moment the measurement lands,
- * without changing.
+ * Most springs are measured on iOS 26.2 or documented by Apple; two are still
+ * GUESSES (`segmentedThumb`, `banner`) and two come from WebKit
+ * (`switchThumbMove`, `switchThumbStretch`). A guess starts from the
+ * nearest sourced spring and names it, so a component built on the table
+ * gets the right value the moment its measurement lands, without changing.
  *
  * Press highlight in/out are fades, not springs: see timing.ts.
  *
@@ -28,9 +27,8 @@
  */
 
 /**
- * UIKit's default spring (see `springs.uikitDefault` for its sources). The
- * guesses below start from it: the system-driven transitions it is believed
- * to drive until each is measured.
+ * UIKit's default spring (see `springs.viewChange` for its sources), shared
+ * by the system transitions measured to run on it.
  */
 const UIKIT_DEFAULT_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
 
@@ -68,42 +66,42 @@ export const springs = {
    * `.spring(duration:bounce:)` defaults.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/smooth(duration:extrabounce:)
    */
-  smooth: {duration: 0.5, bounce: 0},
+  settle: {duration: 0.5, bounce: 0},
   /**
    * SwiftUI `.snappy`: "small amount of bounce", base bounce 0.15.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/snappy(duration:extrabounce:)
    */
-  snappy: {duration: 0.5, bounce: 0.15},
+  quickChange: {duration: 0.5, bounce: 0.15},
   /**
    * SwiftUI `.bouncy`: base bounce 0.3.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/bouncy(duration:extrabounce:)
    */
-  bouncy: {duration: 0.5, bounce: 0.3},
+  emphasis: {duration: 0.5, bounce: 0.3},
   /**
    * SwiftUI `interactiveSpring()` defaults: for a value that tracks a finger.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/interactivespring(response:dampingfraction:blendduration:)
    */
-  interactive: {response: 0.15, dampingRatio: 0.86},
+  fingerTracking: {response: 0.15, dampingRatio: 0.86},
   /**
    * SwiftUI `Animation.default` since iOS 17 (what `withAnimation` uses).
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/default
    */
-  swiftUIDefault: {response: 0.55, dampingRatio: 1},
+  stateChange: {response: 0.55, dampingRatio: 1},
   /**
    * SwiftUI `.spring(response:dampingFraction:blendDuration:)` defaults.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/spring(response:dampingfraction:blendduration:)
    */
-  swiftUISpring: {response: 0.5, dampingRatio: 0.825},
+  directChange: {response: 0.5, dampingRatio: 0.825},
   /**
    * UIKit `UIView.animate(springDuration:bounce:…)` defaults (iOS 17).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiview/animate(springduration:bounce:initialspringvelocity:delay:options:animations:completion:)
    */
-  uikitSpringDuration: {duration: 0.5, bounce: 0},
+  timedChange: {duration: 0.5, bounce: 0},
   /**
    * UIKit's default spring, `UISpringTimingParameters()`: Apple documents
    * its damping ratio as 4.56, which is exactly 500 ÷ (2·√(3·1000)).
    * Overdamped on paper; Core Animation treats overdamping as critical
-   * unless told otherwise, which `toSpring` mirrors: in effect a critically
+   * unless told otherwise, so in effect it is a critically
    * damped spring with ω₀ = 18.26 rad/s (response 0.344 s) that settles in
    * 0.506 s. The keyboard does not use it (see `keyboard`).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uispringtimingparameters/init() (damping ratio 4.56)
@@ -114,7 +112,7 @@ export const springs = {
    *   `UIView.animate` with curve 7 outside the keyboard is this spring with
    *   its duration forced to 0.5 s
    */
-  uikitDefault: UIKIT_DEFAULT_SPRING,
+  viewChange: UIKIT_DEFAULT_SPRING,
 
   // ---------------------------------------------------------------------
   // Navigation (UINavigationController)
@@ -265,7 +263,9 @@ export const springs = {
   contextMenuDismiss: MENU_CLOSE_SPRING,
   /**
    * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot.
+   * slower, no overshoot. A reference reading only: under reduced motion a
+   * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
+   * spring (`spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026
@@ -282,7 +282,8 @@ export const springs = {
    *   `thumbMoveSpring = SpringSolver(1.0, 438.649…, 31.4159…)`, "Values
    *   chosen for consistency with UIKit" (= response 0.30 s, ratio 0.75);
    *   its settling duration is WebKit's iOS switch duration 0.48801 s
-   *   (RenderThemeIOS.h)
+   *   (RenderThemeIOS.h). These are WebKit's iOS 18 values: UIKit's own
+   *   switch frames differ, and a switch reads its measured table instead.
    * @measure M-SW02
    */
   switchThumbMove: {response: 0.3, dampingRatio: 0.75},
@@ -291,7 +292,8 @@ export const springs = {
    * @source webkit Source/WebCore/rendering/cocoa/RenderThemeCocoa.mm
    *   `thumbPressSpring = SpringSolver(1.0, 322.272…, 31.2364…)`, "Values
    *   chosen for consistency with UIKit" (= response 0.35 s, ratio 0.87);
-   *   settles in WebKit's held duration 0.50740 s (RenderThemeIOS.h)
+   *   settles in WebKit's held duration 0.50740 s (RenderThemeIOS.h). As
+   *   for `switchThumbMove`, UIKit's own frames differ.
    * @measure M-SW03
    */
   switchThumbStretch: {response: 0.35, dampingRatio: 0.87},
