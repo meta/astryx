@@ -241,20 +241,22 @@ async function openBare(page: Page, engine: string): Promise<Driver> {
 }
 
 /**
- * An element's inline touch-action and the page's touch listeners, read
- * after the next frame: the host writes touch-action there (FR18), so an
- * absent value is absent for good, not merely not yet written.
+ * The touch-action the host gives an element (its mark, or an inline value
+ * it wrote) and the page's touch listeners, read after the next frame: the
+ * host reads an author's value there (FR18), so an absent value is absent
+ * for good, not merely not yet written.
  */
 async function footprint(page: Page, id: string) {
   return page.evaluate(async target => {
     await new Promise<void>(resolve => {
       requestAnimationFrame(() => resolve());
     });
+    const element = document.getElementById(target);
     return {
       touchAction:
-        document
-          .getElementById(target)
-          ?.style.getPropertyValue('touch-action') ?? null,
+        element?.getAttribute('data-astryx-touch-action') ??
+        element?.style.getPropertyValue('touch-action') ??
+        null,
       pageTouchListeners: window.__pageTouch,
     };
   }, id);
@@ -732,6 +734,98 @@ test('where the primary pointer is fine, the host writes no touch-action and reg
   } finally {
     await context.close();
   }
+});
+
+test("the host's touch-action applies from the attach itself, an author rule outranks it from the first frame, and a shadow root gets it too (spec:AST-094 FR18, DEC-8)", async ({
+  page,
+  browserName,
+}) => {
+  await openBare(page, browserName);
+  const actions = await page.evaluate(() => {
+    const {host, PanGestureRecognizer, LongPressGestureRecognizer} =
+      window.__api;
+    const author = document.createElement('style');
+    author.textContent = '#authored { touch-action: none; }';
+    document.head.append(author);
+    document.body.innerHTML =
+      '<div id="plain" style="height: 60px"></div><div id="authored" style="height: 60px"></div><div id="shadowed" style="height: 60px"></div>';
+    const plain = document.getElementById('plain') as HTMLElement;
+    const authored = document.getElementById('authored') as HTMLElement;
+    const inner = document.createElement('div');
+    inner.style.height = '60px';
+    (document.getElementById('shadowed') as HTMLElement)
+      .attachShadow({mode: 'open'})
+      .append(inner);
+    host.attach(plain, new PanGestureRecognizer({direction: 'horizontal'}));
+    host.attach(authored, new LongPressGestureRecognizer());
+    host.attach(inner, new LongPressGestureRecognizer());
+    // Read in the attach's own task, before any frame.
+    return {
+      plain: getComputedStyle(plain).touchAction,
+      authored: getComputedStyle(authored).touchAction,
+      inner: getComputedStyle(inner).touchAction,
+    };
+  });
+  expect(actions).toEqual({
+    plain: 'pan-y pinch-zoom',
+    authored: 'none',
+    inner: 'manipulation',
+  });
+});
+
+test('a subtree that mounts with a recognizer is styled once: the host adds no second recalc of it (spec:AST-094 FR18)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'counts style recalcs in a Chromium trace',
+  );
+  await openBare(page, browserName);
+  const cdp = await page.context().newCDPSession(page);
+  const events: {name: string; args?: {elementCount?: number}}[] = [];
+  cdp.on('Tracing.dataCollected', ({value}) => {
+    events.push(...(value as unknown as typeof events));
+  });
+  const complete = new Promise(resolve => {
+    cdp.once('Tracing.tracingComplete', resolve);
+  });
+  await cdp.send('Tracing.start', {
+    transferMode: 'ReportEvents',
+    traceConfig: {
+      includedCategories: [
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+      ],
+      excludedCategories: ['*'],
+    },
+  });
+  await page.evaluate(async () => {
+    const {host, PanGestureRecognizer} = window.__api;
+    const wheel = document.createElement('div');
+    for (let i = 0; i < 300; i += 1) {
+      const row = document.createElement('div');
+      row.textContent = `Row ${i}`;
+      wheel.append(row);
+    }
+    document.body.append(wheel);
+    host.attach(wheel, new PanGestureRecognizer({direction: 'vertical'}));
+    for (let i = 0; i < 4; i += 1) {
+      await new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    }
+  });
+  await cdp.send('Tracing.end');
+  await complete;
+  // The subtree's first styling, and no recalc of it after: a touch-action
+  // written later would restyle every row (each one's effective value).
+  const subtreeRecalcs = events.filter(
+    event =>
+      event.name === 'UpdateLayoutTree' &&
+      (event.args?.elementCount ?? 0) >= 300,
+  );
+  expect(subtreeRecalcs).toHaveLength(1);
 });
 
 test('a recognizer registers no touch listener and writes no touch-action while it is disabled, and does once it is enabled (spec:AST-094 FR24)', async ({
