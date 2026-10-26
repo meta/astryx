@@ -42,9 +42,9 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+export {HAPTIC_SWITCH_ATTRIBUTE};
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -85,34 +85,50 @@ const VISUALLY_HIDDEN =
   'overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;' +
   'opacity:0;pointer-events:none;';
 
-function swallow(event: Event): void {
-  event.stopPropagation();
+let nextLabelId = 0;
+
+/** A native disabled control, or one marked `aria-disabled`. */
+function isDisabledControl(control: HTMLElement): boolean {
+  return (
+    control.matches(':disabled') ||
+    control.getAttribute('aria-disabled') === 'true'
+  );
 }
 
-/**
- * The label's activation focuses its control (Chromium does): give focus
- * back to where it was, or drop it, so keys never reach the hidden switch.
- */
-function handBackFocus(event: FocusEvent): void {
-  const input = event.currentTarget as HTMLInputElement;
-  const previous = event.relatedTarget;
-  if (
-    previous instanceof HTMLElement &&
-    previous !== input &&
-    previous.isConnected
-  ) {
-    previous.focus({preventScroll: true});
-  } else {
-    input.blur();
-  }
+/** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
+function isSwitch(input: HTMLInputElement): boolean {
+  return input.type === 'checkbox' && input.hasAttribute('switch');
+}
+
+function swallow(event: Event): void {
+  event.stopPropagation();
 }
 
 /**
  * Make every real tap on `label` play iOS Safari's light impact, by giving it
  * a hidden switch to toggle. Returns a function that removes the switch.
  * Harmless where switches have no haptics.
+ *
+ * - The switch never keeps the focus: where a label's activation focuses
+ *   its control (Chromium), the focus goes on to the label's own control,
+ *   or back where it was, so it never lands on an `aria-hidden` element.
+ * - A label that already has a control keeps it: the switch takes the
+ *   label's activation (it goes first) and hands the click on to that
+ *   control, so the tap plays and the control still toggles. The control
+ *   keeps its name too: while the switch is attached it is labelled by the
+ *   label through `aria-labelledby`, unless it already names itself. A control
+ *   that is itself a switch plays on its own, and a label tied to its
+ *   control by `for` cannot be given a second one: both are left as they
+ *   are.
  */
 export function attachTapHaptic(label: HTMLLabelElement): () => void {
+  const existing = label.control;
+  if (
+    (existing instanceof HTMLInputElement && isSwitch(existing)) ||
+    (existing != null && label.htmlFor !== '')
+  ) {
+    return () => {};
+  }
   const doc = label.ownerDocument;
   const input = doc.createElement('input');
   input.type = 'checkbox';
@@ -123,23 +139,73 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   input.style.cssText = VISUALLY_HIDDEN;
   // The label's activation clicks the switch, and that click would bubble
   // through the control as a second click: keep it, and the switch's
-  // change events, inside.
-  label.appendChild(input);
-  if (label.control != null && label.control !== input) {
-    // The label already labels another control (a nested one, or `for`):
-    // its activation goes there, and this switch would never toggle.
-    input.remove();
-    return () => undefined;
-  }
-  input.addEventListener('click', swallow);
+  // change events, inside. A label with a control of its own gets that
+  // click handed on, so the control still toggles.
+  // A disabled control gives no feedback (spec:AST-094 FR23): its label's
+  // activation neither toggles the switch, so nothing plays, nor reaches
+  // the control.
+  const onClick = (event: Event) => {
+    event.stopPropagation();
+    if (existing != null && isDisabledControl(existing)) {
+      event.preventDefault();
+      return;
+    }
+    existing?.click();
+  };
+  const onFocus = (event: FocusEvent) => {
+    const previous = event.relatedTarget;
+    if (
+      existing instanceof HTMLElement &&
+      existing.tabIndex >= 0 &&
+      !isDisabledControl(existing)
+    ) {
+      existing.focus({preventScroll: true});
+    }
+    if (doc.activeElement !== input) {
+      return;
+    }
+    if (previous instanceof HTMLElement && previous.isConnected) {
+      previous.focus({preventScroll: true});
+    }
+    if (doc.activeElement === input) {
+      input.blur();
+    }
+  };
+  input.addEventListener('click', onClick);
   input.addEventListener('change', swallow);
   input.addEventListener('input', swallow);
-  input.addEventListener('focus', handBackFocus);
+  input.addEventListener('focus', onFocus);
+  // The switch becomes the label's control, so the control the label named
+  // is named through `aria-labelledby` instead (the switch is aria-hidden,
+  // so the label's text is the name).
+  let labelledControl: HTMLElement | null = null;
+  let addedLabelId = false;
+  if (existing != null) {
+    label.prepend(input);
+    if (
+      existing instanceof HTMLElement &&
+      !existing.hasAttribute('aria-labelledby') &&
+      !existing.hasAttribute('aria-label')
+    ) {
+      if (label.id === '') {
+        label.id = `astryx-haptic-label-${(nextLabelId += 1)}`;
+        addedLabelId = true;
+      }
+      existing.setAttribute('aria-labelledby', label.id);
+      labelledControl = existing;
+    }
+  } else {
+    label.appendChild(input);
+  }
   return () => {
-    input.removeEventListener('click', swallow);
+    labelledControl?.removeAttribute('aria-labelledby');
+    if (addedLabelId) {
+      label.removeAttribute('id');
+    }
+    input.removeEventListener('click', onClick);
     input.removeEventListener('change', swallow);
     input.removeEventListener('input', swallow);
-    input.removeEventListener('focus', handBackFocus);
+    input.removeEventListener('focus', onFocus);
     input.remove();
   };
 }

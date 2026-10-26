@@ -4,7 +4,9 @@
  * @file touchAction.ts
  * @input The recognizers attached to one element
  * @output Exports deriveTouchAction (the element's `touch-action`) and
- *   gestureHostStyle (every inline style a host sets for its recognizers)
+ *   gestureHostStyle (the inline style a host sets for its recognizers). The
+ *   selection and callout lock for one held press is the recognizer's own
+ *   `selectionLock` (gestures/selectionLock.ts), which the host calls
  * @position Browser negotiation of packages/core/src/gestures, pure so a
  *   server render can emit the same style the client would set
  *
@@ -26,7 +28,6 @@
  */
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
-import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 import {internals} from './recognizerInternals';
 
 /**
@@ -92,9 +93,10 @@ export interface GestureHostStyle {
 }
 
 /**
- * Every style a host sets for these recognizers: the `touch-action`, and for
- * a long press, no iOS callout and no text selection under the held finger
- * (a long-pressed row in UIKit selects no text).
+ * The style a host sets for these recognizers while they are attached: the
+ * `touch-action`. Text selection is not locked here: a mouse, a keyboard and
+ * assistive technology keep selecting as they do today (spec:AST-017 FR59,
+ * spec:AST-094 FR41).
  */
 export function gestureHostStyle(
   recognizers: ReadonlyArray<GestureRecognizer>,
@@ -103,17 +105,6 @@ export function gestureHostStyle(
   const touchAction = deriveTouchAction(recognizers);
   if (touchAction != null) {
     style.touchAction = touchAction;
-  }
-  if (
-    recognizers.some(
-      recognizer =>
-        recognizer instanceof LongPressGestureRecognizer &&
-        internals(recognizer).acceptsTouchInput,
-    )
-  ) {
-    style.WebkitTouchCallout = 'none';
-    style.WebkitUserSelect = 'none';
-    style.userSelect = 'none';
   }
   return style;
 }

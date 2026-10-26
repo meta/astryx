@@ -6,8 +6,8 @@ constant, curve and gesture threshold a touch presentation uses, each with its
 source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
-components take touch motion from the theme's motion roles (`spec:AST-094`
-FR4), not from this table.
+components read touch motion through its internal motion roles (`roles.ts`),
+so each keeps its measured value; no shipped component reads the roles yet.
 
 ## Files
 
@@ -21,7 +21,7 @@ FR4), not from this table.
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `roles.ts`                                       | Motion roles: each spring, duration and curve of a registered table, named by its path, and its CSS variable.                                                        |
-| `resolveMotion.ts`                               | A role's value under an element's theme, read once when a motion starts.                                                                                             |
+| `resolveMotion.ts`                               | A role's value: its table value while touch motion stays internal (`spec:AST-094` DEC-11).                                                                           |
 | `MEASUREMENTS.md`                                | The UIKit reference captures each unconfirmed value still needs.                                                                                                     |
 | `spring.ts`                                      | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.                                                        |
 | `decay.ts`                                       | UIScrollView's momentum coast.                                                                                                                                       |
@@ -32,6 +32,7 @@ FR4), not from this table.
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `rectMorph.ts`                                   | Grow out of a source rect and shrink back into it: paths (a straight line, a popover’s edge growth), present and dismiss.                                            |
+| `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
 | `useAnimator.ts`                                 | React wrapper that never re-renders per frame.                                                                                                                       |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -39,43 +40,45 @@ Component-specific values (a sheet's detents, a switch's geometry, a context
 menu's timeline) live in a domain file per component, `uikit/<component>.ts`,
 under the same rules.
 
-## Theme
+## Motion roles
 
-Every spring, duration (a key ending in `Ms`) and curve of a table that calls
-`registerMotionTable` is a motion role named for its use (`spec:AST-094` FR4):
-its table path, such as `springs.sheetPresent`, unless the table renames it,
-as the shared tables do (`springs.settle`, `timing.curves.move`). A theme
-retunes a role
-with `defineTheme({motion: {springs, durations, curves}})`, which writes the
-role's CSS variable (`--motion-springs-sheet-present: 0.6s 0.1`) only for the
-roles it sets; the table's value stays the default. A table's values become
-roles once its `register<Name>Table()` has run: the animator registers the
-Reduce Motion fade's curve and a coast the scroll table, and code that plays springs calls
-`registerSpringsTable()` before its first motion, or its springs play the
-table's values whatever the theme sets. The animator resolves each table
-spring and curve it is handed when the motion starts; code that times
-something itself calls `resolveMotion(element, timing.press, 'highlightOutMs')`.
-Gesture thresholds and the timings that decide who gets a touch are not roles
-(`exclude`). `pnpm generate:motion-roles` regenerates the role table in the
-motion docs.
+The motion roles are the springs, durations and curves `spec:AST-094` FR4
+names for their use (`springs.settle`, `timing.stateChangeMs`,
+`timing.curves.move`, …): a shared table lists them when it registers
+(`roles`), and every other value, a component's measured spring included, is
+a plain constant. Touch motion stays internal (`spec:AST-094` DEC-11): a role
+plays its table value, and nothing reads its CSS variable
+(`--motion-springs-settle`), so no page or theme style retunes it. A table's
+roles exist once its `register<Name>Table()` has run: the animator registers
+the Reduce Motion fade's curve, and code that plays the shared springs calls
+`registerSpringsTable()` before its first motion. The animator resolves each
+role it is handed when the motion starts; code that times something itself
+calls `resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and
+the timings that decide who gets a touch are not roles.
 
 ## Animator
 
 ```
 import {createAnimator} from '../motion/animator';
+import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
+import {resolveMotion} from '../motion/resolveMotion';
 import {registerSpringsTable, springs} from '../motion/uikit';
 
-// Once, so the springs follow the theme's roles:
+// Once, so the springs are registered as their roles:
 registerSpringsTable();
 
 const animator = createAnimator(sheet);
+// The animator plays a motion role (spec:AST-094 FR4), its table value while
+// touch motion stays internal (DEC-11); math on a spring reads the role with
+// resolveMotion.
+const spring = springs.settle;
 
 // A drag writes one style per frame and never renders:
 animator.set({y: offset});
 
 // The finger lifts: spring to the detent with the release velocity (px/s).
-const handle = animator.animate({y: detent}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+const handle = animator.animate({y: detent}, {spring, velocity: {y: 1200}});
 
 // A finger lands mid-flight: where is the sheet right now, how fast?
 const y = animator.get('y', event.timeStamp);
@@ -87,7 +90,7 @@ animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, ma
 
 // Any closed-form curve, here a press that keeps deepening: the target
 // scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
+const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
   from: 1,
   target: 1,
   slope: -0.16,
@@ -140,9 +143,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
   travel. For motion the animator does not drive, `reducedMotionFade()`
   answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
-  A decay keeps its motion under Reduce Motion: momentum that continues a
-  throw is direct movement (DR2, DEC-2); a spring a component starts on
-  release toward a target it picks cross-fades.
+  A decay's momentum keeps its motion under Reduce Motion: momentum that
+  continues a throw is direct movement (DR2, DEC-2). A curve marked
+  `isTransition` (a coast's spring back from past an edge), like a spring a
+  component starts on release toward a target it picks, plays through the
+  Reduce Motion policy: a cross-fade on a coarse pointer, at once elsewhere.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
@@ -177,8 +182,9 @@ Animation keyframe animations.
 the model behind SwiftUI's `Spring`, `CASpringAnimation` and
 `UISpringTimingParameters`. A spring description stays in its source's
 vocabulary (mass, stiffness and damping; duration and bounce; response and
-damping ratio) and `toSpring` normalizes it, clamping overdamping to critical
-as Core Animation does for every spring UIKit attaches. The tests hold it to an
+damping ratio) and `toSpring` normalizes it. A mass, stiffness and damping
+description that does not allow overdamping is clamped to critical, as Core
+Animation does for every spring UIKit attaches. The tests hold it to an
 independent fourth-order Runge-Kutta integration over a sweep of damping
 ratios, responses and release velocities; to a port of WebKit's own spring
 solver; to the WWDC23 "Animate with springs" conversion equations; and to
@@ -208,8 +214,8 @@ Chromium and WebKit on the phone profile.
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A theme that retunes `springs.sheetPresent` changes the curve the engine
-  plays for an element in its scope, and only there.
+- A scope that sets `springs.settle`'s variable changes nothing: touch motion
+  stays internal (DEC-11), so the engine plays the table's spring there too.
 
 ```
 pnpm test:interaction packages/core/src/motion

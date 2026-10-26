@@ -509,7 +509,7 @@ function CompareResultView({
           style={{
             padding: 10,
             borderRadius: 8,
-            color: 'var(--color-error)',
+            color: 'var(--color-on-error-muted)',
             backgroundColor: 'var(--color-error-muted)',
           }}>
           <strong>{error.familyId}:</strong> {error.message}
@@ -781,7 +781,7 @@ function ResultView({result}: {result: PaletteGenerationResult}) {
           style={{
             padding: 10,
             borderRadius: 8,
-            color: 'var(--color-error)',
+            color: 'var(--color-on-error-muted)',
             backgroundColor: 'var(--color-error-muted)',
           }}>
           <strong>{error.familyId}:</strong> {error.message}

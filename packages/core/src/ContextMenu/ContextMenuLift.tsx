@@ -25,7 +25,8 @@
  * The lift module (lift/lift.ts) plays it: the trigger itself lifts into the
  * top layer, with one placeholder holding its spot, and nothing of the lift
  * is in the DOM at rest. ContextMenu supplies UIKit's numbers: the scale rule
- * (`contextMenu.lift`), the springs as motion roles a theme may retune, the
+ * (`contextMenu.lift`), its measured springs (internal: touch motion has no
+ * theme surface), the
  * tint (the theme's modal overlay, `--color-overlay`; UIKit's own is #16152A
  * at 21 %) and the shadow (the theme's `--shadow-high`; UIKit's: black at
  * 0.30, radius 20, no offset, shaped by the view's pixels). A block trigger
@@ -115,8 +116,9 @@ export function useContextMenuLift(
         if (trigger == null) {
           return null;
         }
-        // The lift's springs are motion roles a theme may retune: register
-        // their tables before the first motion (idempotent).
+        // The springs' tables register before the first motion (idempotent):
+        // `springs.menuClose` resolves through its role (spec:AST-094 FR4);
+        // every other spring is its table's.
         registerContextMenuTable();
         registerSpringsTable();
         return lift.lift(trigger, {

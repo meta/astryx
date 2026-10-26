@@ -433,6 +433,14 @@ out of architecture records.
 - `xstyle`, `className`, `style`, a ref, or an event handler is dropped or
   clobbered by spread order.
 - A parent wraps slot content or mirrors props that belong to the slotted child.
+- A prop reaches into a subcomponent's anatomy, a composition renders a slot
+  the anatomy does not describe, or a rendered content slot is not a part named in the anatomy
+  ([INV18](../architecture/public-component-api.md#boundaries-and-invariants)).
+- A feature with a large resource cost loads for every caller, with no plug-in
+  path or named feature prop (INV19).
+- A boolean prop only swaps visuals where a variant fits (INV20).
+- A new API shares a job with an existing one that is not being deprecated in
+  its favor (INV21).
 - A proposal invents a nested `theme.components.button.variants` layer instead of
   using the current component target and style-key contract.
 - A green docs parser is treated as full API proof. Parsing and selected drift

@@ -17,7 +17,7 @@
  * one, as the interactive pop gesture's is.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
 import {ALL_NATIVE_TOUCH, type NativeTouchBehavior} from './GestureRecognizer';
 import {
   PanGestureRecognizer,
@@ -47,12 +47,12 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
   constructor(options: ScreenEdgePanGestureRecognizerOptions = {}) {
     super({
       maximumNumberOfTouches: 1,
-      hysteresis: UIKIT_GESTURES.screenEdgePan.hysteresis.value,
+      hysteresis: UIKIT_SCREEN_EDGE_PAN.hysteresis.value,
       ...options,
     });
     this.edges = options.edges ?? ['leading'];
     this.edgeRegion =
-      options.edgeRegion ?? UIKIT_GESTURES.screenEdgePan.edgeRegion.value;
+      options.edgeRegion ?? UIKIT_SCREEN_EDGE_PAN.edgeRegion.value;
   }
 
   /**
