@@ -65,6 +65,93 @@ async function roleRows() {
   return {rows: mod.rows, files};
 }
 
+/**
+ * Roles whose default is not a UIKit reading or an Apple documentation value,
+ * by role id: `guess` when every `@source` above the entry is a GUESS (a
+ * measurement task is listed), `WebKit` when one names WebKit. Read from the
+ * JSDoc right above each leaf of the exported table objects; a group composed
+ * into a table by name (`press,`) lends its leaves that table's path.
+ * @param {string[]} files
+ * @returns {Map<string, string>}
+ */
+function sourceLabels(files) {
+  const labels = new Map();
+  for (const file of files) {
+    const own = new Map();
+    const aliases = [];
+    let stack = null;
+    let doc = '';
+    let inDoc = false;
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      const trimmed = line.trim();
+      const start = /^export const (\w+) = \{$/.exec(line);
+      if (start) {
+        stack = [start[1]];
+        doc = '';
+        continue;
+      }
+      if (stack == null) {
+        continue;
+      }
+      if (trimmed.startsWith('/**')) {
+        inDoc = true;
+        doc = '';
+      }
+      if (inDoc) {
+        doc += `${trimmed}\n`;
+        inDoc = !trimmed.endsWith('*/');
+        continue;
+      }
+      if (trimmed === '' || trimmed.startsWith('//')) {
+        continue;
+      }
+      if (trimmed.startsWith('} as const')) {
+        stack = null;
+        continue;
+      }
+      const group = /^(\w+): \{$/.exec(trimmed);
+      if (group) {
+        stack.push(group[1]);
+        doc = '';
+        continue;
+      }
+      if (/^\},?$/.test(trimmed)) {
+        stack.pop();
+        continue;
+      }
+      const composed = /^(\w+),$/.exec(trimmed);
+      if (composed) {
+        aliases.push([composed[1], [...stack, composed[1]].join('.')]);
+        doc = '';
+        continue;
+      }
+      const leaf = /^(\w+): /.exec(trimmed);
+      if (leaf) {
+        const sources = [...doc.matchAll(/@source\s+(\S+)/g)].map(m => m[1]);
+        const label =
+          sources.length > 0 && sources.every(source => source === 'GUESS')
+            ? 'guess'
+            : sources.some(source => /^webkit$/i.test(source))
+              ? 'WebKit'
+              : null;
+        if (label != null) {
+          own.set([...stack, leaf[1]].join('.'), label);
+        }
+        doc = '';
+      }
+    }
+    for (const [path, label] of own) {
+      labels.set(path, label);
+      for (const [name, target] of aliases) {
+        if (path.startsWith(`${name}.`)) {
+          labels.set(`${target}${path.slice(name.length)}`, label);
+        }
+      }
+    }
+  }
+  return labels;
+}
+
 function render(rows, indent) {
   return rows
     .map(row => `${indent}[${row.map(cell => `'${cell}'`).join(', ')}],`)
@@ -73,6 +160,13 @@ function render(rows, indent) {
 
 const check = process.argv.includes('--check');
 const {rows, files} = await roleRows();
+const labels = sourceLabels(files);
+// The docs table marks a default that is a guess or comes from WebKit.
+const docRows = rows.map(([id, variable, kind, value]) =>
+  labels.has(id)
+    ? [id, variable, kind, `${value} (${labels.get(id)})`]
+    : [id, variable, kind, value],
+);
 const text = readFileSync(DOC, 'utf8');
 const start = text.indexOf(START);
 const end = text.indexOf(END);
@@ -85,7 +179,7 @@ if (start < 0 || end < start) {
 const lineStart = text.lastIndexOf('\n', start) + 1;
 const indent = text.slice(lineStart, start);
 const next = await prettier.format(
-  `${text.slice(0, start)}${START}\n${render(rows, indent)}\n${indent}${text.slice(end)}`,
+  `${text.slice(0, start)}${START}\n${render(docRows, indent)}\n${indent}${text.slice(end)}`,
   {...(await prettier.resolveConfig(DOC)), filepath: DOC},
 );
 const kinds = await prettier.format(
