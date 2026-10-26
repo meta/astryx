@@ -18,6 +18,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 // The value of `scroll.delaysContentTouchesMs` (sourced there), its own
 // export so the press clocks read it without the rest of the table
 // (`architecture:component-style-authoring` INV6).
@@ -125,3 +127,15 @@ export const scroll = {
    */
   scrollToTopRate: 0.99035,
 } as const;
+
+/**
+ * Registers this table with the motion registry (motion/roles.ts). It lists
+ * no role: spec:AST-094 FR4 names none of its values, so each plays as
+ * measured. Nothing registers on import, and a second call does nothing.
+ */
+export function registerScrollTable(): void {
+  registerMotionTable('scroll', scroll, {
+    // Arbitration: who gets the touch, not how anything moves.
+    exclude: ['delaysContentTouchesMs'],
+  });
+}
