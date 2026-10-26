@@ -79,7 +79,13 @@ function start(host: GestureHost, watch: Watch): () => void {
   };
   const onScroll = (event: Event): void => {
     const scroller = scrollerOf(event);
-    if (scroller == null || !watch.scrollers.has(scroller)) {
+    // A recognizer's own scroll (a menu's edge autoscroll) is never the
+    // finger's, even with a finger resting inside.
+    if (
+      scroller == null ||
+      !watch.scrollers.has(scroller) ||
+      host.isOwnScroll(scroller)
+    ) {
       return;
     }
     watch.endedWhileDown.delete(scroller);
