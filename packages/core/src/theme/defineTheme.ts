@@ -71,7 +71,7 @@ import {
   fontWeightDefaults,
   typeScaleDefaults,
 } from './tokens.stylex';
-import {motionScaleOf, type MotionConfig} from './expandMotionRoles';
+import type {MotionScaleConfig} from './expandMotionScale';
 import type {RadiusScaleConfig} from './expandRadiusScale';
 import type {ColorScaleConfig} from './expandColorScale';
 import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
@@ -234,16 +234,8 @@ export interface DefineThemeInput {
    */
   typography?: TypographyConfig;
   /**
-   * Motion configuration.
-   *
-   * The duration scale computes duration min/max variants from base values
-   * and a scaling ratio: min = base × ratio, max = base / ratio. Give
-   * `fast`, `medium` and `ratio` together, or none of them.
-   *
-   * `springs`, `durations` and `curves` retune touch motion roles: the
-   * springs, durations and curves touch presentations play, each named for
-   * its use (`astryx docs motion` lists them with their defaults). A role the
-   * theme does not set keeps its measured default, and a spring must settle.
+   * Motion configuration. Computes duration min/max variants from
+   * base values and a scaling ratio: min = base × ratio, max = base / ratio.
    *
    * Explicit `tokens` overrides take precedence over motion-generated values.
    *
@@ -255,16 +247,9 @@ export interface DefineThemeInput {
    * //   Snappy:    { fast: 100, medium: 250, ratio: 0.75 }
    * //   Default:   { fast: 175, medium: 410, slow: 975, ratio: 0.75 }
    * //   Cinematic: { fast: 200, medium: 500, slow: 1200, ratio: 0.7 }
-   *
-   * // A softer sheet, and a longer navigation transition (it paces
-   * // completion callbacks):
-   * motion: {
-   *   springs: { 'springs.settle': { duration: 0.6, bounce: 0.1 } },
-   *   durations: { 'timing.stateChangeMs': 450 },
-   * }
    * ```
    */
-  motion?: MotionConfig;
+  motion?: MotionScaleConfig;
   /**
    * Radius configuration. Generates radius token overrides
    * from a base unit and multiplier.
@@ -577,8 +562,7 @@ export function defineTheme(input: DefineThemeInput): ResolvedDefinedTheme {
     typography: input.typography,
     color: input.color,
     radius: input.radius,
-    // Only the duration scale completes adaptation rules; roles are explicit.
-    motion: motionScaleOf(input.motion, `defineTheme("${input.name}").motion`),
+    motion: input.motion,
   };
   const seed = base
     ? {tokens: base.tokens, components: base.components}

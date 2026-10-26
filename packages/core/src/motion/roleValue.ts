@@ -5,9 +5,8 @@
  * @input A role id, or a role's kind and value
  * @output isMotionRoleId, motionRoleVariable and formatMotionRoleValue (a
  *   role value's CSS form), with the role kinds
- * @position The part of the motion roles a theme needs to write a role
- *   (theme/expandMotionRoles.ts): no registry and no parsing, so a theme user
- *   ships neither. roles.ts holds the registry and re-exports these.
+ * @position The value half of the internal motion roles: no registry and
+ *   no parsing. roles.ts holds the registry and re-exports these.
  *
  * SYNC: When modified, update /packages/core/src/motion/roles.test.ts.
  */
