@@ -805,6 +805,15 @@ export function createAnimator(
   let ownWillChange: string | null = null;
   /** The stylesheet's will-change when there is no inline value. */
   let sheetWillChange = '';
+  /**
+   * Whether sheetWillChange holds a read of the element's current style: it
+   * is read in the task after the element is attached, and again after each
+   * demotion, so a promotion (a drag's first move) reads no style in its
+   * own task.
+   */
+  let sheetWillChangeRead = false;
+  /** The pending read of sheetWillChange, cancelled with its element. */
+  let sheetReadTimer: ReturnType<typeof setTimeout> | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -1388,13 +1397,12 @@ export function createAnimator(
     if (ownWillChange == null) {
       ownWillChange = element.style.willChange;
       // Without an inline value, the stylesheet's reasons stay alongside the
-      // promotion's (read once, as the promotion starts).
-      sheetWillChange =
-        ownWillChange === ''
-          ? (element.ownerDocument.defaultView
-              ?.getComputedStyle(element)
-              .getPropertyValue('will-change') ?? '')
-          : '';
+      // promotion's. They were read in the task after the element was
+      // attached; a promotion that comes first (an element attached in this
+      // task that moves at once) reads them now.
+      if (ownWillChange === '' && !sheetWillChangeRead) {
+        readSheetWillChange(element);
+      }
     }
     const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
     const own = base === 'auto' ? '' : base;
@@ -1403,6 +1411,43 @@ export function createAnimator(
       .map(reason => reason.trim())
       .filter(reason => reason !== '' && !promoted.has(reason as Channel));
     element.style.willChange = [...reasons, ...promoted].join(', ');
+  };
+
+  /** Reads the element's own will-change while no promotion of ours is written. */
+  const readSheetWillChange = (element: HTMLElement) => {
+    sheetWillChange =
+      element.ownerDocument.defaultView
+        ?.getComputedStyle(element)
+        .getPropertyValue('will-change') ?? '';
+    sheetWillChangeRead = true;
+  };
+
+  /**
+   * Reads sheetWillChange in a task of its own, so a later promotion reads no
+   * style in its own task. Skipped while a promotion of ours is written,
+   * which the read would see; demote asks again. A pseudo-element's
+   * promotion is its own property, with nothing to read.
+   */
+  const readSheetWillChangeLater = () => {
+    cancelSheetWillChangeRead();
+    sheetWillChangeRead = false;
+    if (target == null || promotionProperty != null) {
+      return;
+    }
+    const element = target;
+    sheetReadTimer = setTimeout(() => {
+      sheetReadTimer = null;
+      if (target === element && promoted.size === 0) {
+        readSheetWillChange(element);
+      }
+    }, 0);
+  };
+
+  const cancelSheetWillChangeRead = () => {
+    if (sheetReadTimer != null) {
+      clearTimeout(sheetReadTimer);
+      sheetReadTimer = null;
+    }
   };
 
   /**
@@ -1459,6 +1504,8 @@ export function createAnimator(
     promoted.clear();
     if (target != null) {
       writePromotion(target);
+      // Its stylesheet may have changed its will-change since.
+      readSheetWillChangeLater();
     }
   };
 
@@ -2402,6 +2449,9 @@ export function createAnimator(
       }
       const held = heldIdentity;
       target = next;
+      // A new node: its own will-change is read again.
+      cancelSheetWillChangeRead();
+      sheetWillChangeRead = false;
       if (target == null) {
         return;
       }
@@ -2438,6 +2488,7 @@ export function createAnimator(
         }
       }
       flushReleases();
+      readSheetWillChangeLater();
     },
 
     get(property, time = now()) {
@@ -2923,6 +2974,7 @@ export function createAnimator(
       retireTimers.clear();
       handBackBorrow();
       demote();
+      cancelSheetWillChangeRead();
       target = null;
     },
   };
