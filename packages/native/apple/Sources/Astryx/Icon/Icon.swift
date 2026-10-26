@@ -11,6 +11,7 @@ import SwiftUI
 /// Icon(.success, color: .success, label: "Completed")
 /// ```
 public struct Icon: View {
+  @Environment(\.astryxAvatarSide) private var avatarSide
   /// The contract the view draws, the same for both initializers.
   public let props: IconProps
   @Environment(\.astryx) private var astryx
@@ -43,6 +44,9 @@ public struct Icon: View {
           .modifier(IconTint(color: tint))
           .modifier(IconAccessibility(label: accessibilityLabel))
           .modifier(IconIdentifier(id: props.base.id))
+          // In an avatar's status slot a labeled icon names the status, as
+          // core reads the `label` of the element passed as `status`.
+          .preference(key: AvatarStatusLabelKey.self, value: avatarSide == nil ? nil : accessibilityLabel.map { AvatarStatusLabel(text: $0, isDot: false) })
       } else {
         // AST-082 FR17: a name nothing maps draws nothing, never a substitute.
         let _ = assertionFailure("Astryx has no icon named \"\(props.icon.rawValue)\"")

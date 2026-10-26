@@ -735,6 +735,50 @@ test.describe('frame evidence', () => {
     expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
   });
 
+  test('a waitForAnimation or watch.started() awaited inside a traced body stands down too, so the trace counts no Layout from it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    const watch = await watchAnimations(pop);
+    let started = 0;
+    let waited: {durationMs: number}[] = [];
+    let watched: {durationMs: number}[] = [];
+    const trace = await traceRendering(page, async () => {
+      started = await pop.evaluate(el => {
+        el.animate(
+          [
+            {transform: 'translateY(0px)', opacity: 1},
+            {transform: 'translateY(100px)', opacity: 0.5},
+          ],
+          {duration: 600},
+        );
+        return performance.timeOrigin + performance.now();
+      });
+      // Both poll until 450 ms of the curve has played, across the steady
+      // middle; a read of the page's animations each time would lay it out.
+      waited = await waitForAnimation(pop, {minProgressMs: 450});
+      watched = await watch.started({minProgressMs: 450});
+      await page.waitForTimeout(200);
+    });
+    expect(countBetween(trace, started + 100, started + 500).Layout ?? 0).toBe(
+      0,
+    );
+    // Each still answered with the animation once 450 ms of it had played.
+    expect(waited.map(a => a.durationMs)).toEqual([600]);
+    expect(watched.map(a => a.durationMs)).toEqual([600]);
+    expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
+  });
+
   test('a waitForRest awaited inside a traced body waits for an animation the action starts two frames later', async ({
     page,
     browserName,
@@ -981,7 +1025,7 @@ test.describe('frame evidence', () => {
     expect(await readLongTasks(page, block)).toEqual([]);
   });
 
-  test("a harness read inside a trace is not the page's long task, while page script an evaluate sets off is", async ({
+  test("a harness read inside a trace is not the page's long task, while a test's own evaluate is, whether it calls the page directly or sets it off", async ({
     page,
     browserName,
   }) => {
@@ -1007,16 +1051,32 @@ test.describe('frame evidence', () => {
         }
       }),
     );
+    // Page code a test can call directly, as through a story's own API.
+    await page.evaluate(() => {
+      (window as unknown as {pageWork: (ms: number) => void}).pageWork = (
+        ms: number,
+      ) => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) {
+          // spin
+        }
+      };
+    });
     await frames(page, 3);
     const now = () =>
       page.evaluate(() => performance.timeOrigin + performance.now());
     const read = {from: 0, to: 0};
     const click = {from: 0, to: 0};
+    const direct = {from: 0, to: 0};
     let timer = {from: 0, to: 0};
     const trace = await traceRendering(page, async () => {
       read.from = await now();
       await waitForAnimation(page.locator('#list'));
       read.to = await now();
+      // On a slow machine each frame of 1,200 running rows is a long task of
+      // the page's own; the windows below hold only their own work.
+      await page.evaluate(() => document.getElementById('list')?.remove());
+      await frames(page, 2);
       // The page's own task: a timer that spins 60 ms.
       timer = await page.evaluate(
         () =>
@@ -1035,17 +1095,28 @@ test.describe('frame evidence', () => {
       click.from = await now();
       await slow.evaluate(el => (el as HTMLElement).click());
       click.to = await now();
+      // Page code a test's evaluate calls directly: 60 ms of the page's work.
+      direct.from = await now();
+      await page.evaluate(() =>
+        (window as unknown as {pageWork: (ms: number) => void}).pageWork(60),
+      );
+      direct.to = await now();
     });
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
+    // The read itself is set apart. The rows' frames around it may be long
+    // tasks too, the page's own: they stay in longTasks.
     expect(trace.devtoolsTasks.some(within(read))).toBe(true);
-    expect(trace.longTasks.filter(within(read))).toEqual([]);
     expect(
       trace.longTasks.some(t => within(timer)(t) && t.durationMs >= 55),
     ).toBe(true);
     expect(
       trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
     ).toBe(true);
+    expect(
+      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
+    ).toBe(true);
+    expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });
 
@@ -1853,6 +1924,121 @@ test.describe('animation state', () => {
     ).toEqual([true, true]);
   });
 
+  test('a wait answers with the animation the action started, not one that finished before it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const frames = [{opacity: 0.2}, {opacity: 1}];
+    // The recorder runs and is armed from here.
+    await waitForRest(box);
+    // A short one runs and ends; then the action starts a longer one, still
+    // pending when the wait first looks.
+    await box.evaluate(
+      (el, keyframes) => el.animate(keyframes, {duration: 40}).finished,
+      frames,
+    );
+    await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 1000});
+    }, frames);
+    const [found] = await waitForAnimation(box);
+    expect(found.durationMs).toBe(1000);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('a scroll-timeline animation in scope does not hold up a wait', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const scroller = page.locator('#scroller');
+    await waitForRest(scroller);
+    // A row driven by its scroller's timeline (it moves only on scroll), and
+    // a short document animation that ends.
+    await scroller.evaluate(el => {
+      const [row, other] = [...el.children] as HTMLElement[];
+      row.animate([{opacity: 0.5}, {opacity: 1}], {
+        timeline: new ScrollTimeline({source: el}),
+      });
+      // Scrolled to its end, the scroll-driven one has finished too: it is
+      // not a finished curve either.
+      el.scrollTop = el.scrollHeight;
+      return other.animate([{opacity: 0.2}, {opacity: 1}], {duration: 40})
+        .finished;
+    });
+    const [found] = await waitForAnimation(scroller, {timeout: 2000});
+    expect(found.durationMs).toBe(40);
+    expect(found.finishedAt).not.toBeNull();
+  });
+
+  test('a watch taken right after a style change does not report that change', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    // The step: a transition the next style read creates.
+    await box.evaluate(el => {
+      el.style.transition = 'opacity 300ms linear';
+      el.style.opacity = '0.5';
+    });
+    const watch = await watchAnimations(box);
+    await expect(watch.started({timeout: 200})).rejects.toThrow(
+      /waitForAnimation/,
+    );
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('an exit whose element the page removes at its end is still reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const wrap = document.createElement('div');
+      wrap.id = 'wrap';
+      const leaf = document.createElement('div');
+      leaf.id = 'leaf';
+      leaf.style.cssText = 'width:20px;height:20px;background:#c33';
+      wrap.append(leaf);
+      document.body.append(wrap);
+    });
+    const wrap = page.locator('#wrap');
+    const watch = await watchAnimations(wrap);
+    await page.evaluate(() => {
+      const leaf = document.getElementById('leaf') as HTMLElement;
+      const exit = leaf.animate([{opacity: 1}, {opacity: 0}], {duration: 60});
+      exit.finished.then(() => leaf.remove());
+    });
+    await expect
+      .poll(() => page.evaluate(() => document.getElementById('leaf') == null))
+      .toBe(true);
+    const [exit] = await watch.started();
+    expect(exit.durationMs).toBe(60);
+    expect(exit.finishedAt).not.toBeNull();
+  });
+
+  test('a wait on an element no longer in the document rejects at its own timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const gone = document.createElement('div');
+      gone.id = 'gone';
+      document.body.append(gone);
+    });
+    const gone = page.locator('#gone');
+    const watch = await watchAnimations(gone);
+    await page.evaluate(() => document.getElementById('gone')?.remove());
+    for (const wait of [
+      () => watch.started({timeout: 300}),
+      () => waitForAnimation(gone, {timeout: 300}),
+      () => waitForRest(gone, {timeout: 300}),
+    ]) {
+      const startedAt = Date.now();
+      await expect(wait()).rejects.toThrow(/not in the document/);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
@@ -2204,6 +2390,34 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     for (const gap of gaps(1)) {
       expect(gap).toBeGreaterThan(2 * (1000 / 60));
     }
+  });
+
+  test("the harness's own waits run on the real timers: a frozen timer gate holds neither blockMainThread's block nor sampleRects", async ({
+    page,
+  }) => {
+    await fixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 1_500, easing: 'linear'},
+      );
+    });
+    await freezeTimers(page);
+    // Settled, or still held after 5 s.
+    const within = (work: Promise<unknown>) =>
+      Promise.race([
+        work.then(() => 'settled'),
+        new Promise<string>(resolve =>
+          setTimeout(() => resolve('held'), 5_000),
+        ),
+      ]);
+    expect(
+      await within(blockMainThread(page, 100, {during: box, timeout: 2_000})),
+    ).toBe('settled');
+    expect(await within(sampleRects(box, 200))).toBe('settled');
+    await thawTimers(page);
   });
 
   test('the timer gate holds a component timer until the filmstrip is done', async ({

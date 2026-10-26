@@ -30,7 +30,7 @@ import Testing
     ("# *", ""),
   ]
   for (name, expected) in cases {
-    #expect(Avatar.initials(from: name) == expected, "\(name)")
+    #expect(Avatar<EmptyView>.initials(from: name) == expected, "\(name)")
   }
 }
 
@@ -69,12 +69,12 @@ import Testing
 
 @MainActor
 @Test func namedSizesDrawCoresPointSizes() {
-  #expect(Avatar.points(for: .xsm) == 20)
-  #expect(Avatar.points(for: .sm) == 24)
-  #expect(Avatar.points(for: .md) == 36)
-  #expect(Avatar.points(for: .lg) == 48)
-  #expect(Avatar.points(for: .xl) == 128)
-  #expect(Avatar.side(for: .md, textScale: 1) == 36)
+  #expect(Avatar<EmptyView>.points(for: .xsm) == 20)
+  #expect(Avatar<EmptyView>.points(for: .sm) == 24)
+  #expect(Avatar<EmptyView>.points(for: .md) == 36)
+  #expect(Avatar<EmptyView>.points(for: .lg) == 48)
+  #expect(Avatar<EmptyView>.points(for: .xl) == 128)
+  #expect(Avatar<EmptyView>.side(for: .md, textScale: 1) == 36)
   let drawn = Pixels(Avatar("Ada", size: .lg).fixedSize())
   #expect(drawn.width == 48 && drawn.height == 48)
 }
@@ -109,7 +109,7 @@ import Testing
 @Test func aLinkOrButtonAvatarDrawsTheSameAsAStaticOne() {
   let still = Pixels(Avatar("Ada Lovelace", size: .sm).fixedSize())
   let link = Pixels(Avatar("Ada Lovelace", size: .sm, href: "https://example.com/ada").fixedSize())
-  let button = Pixels(Avatar("Ada Lovelace", size: .sm) {}.fixedSize())
+  let button = Pixels(Avatar("Ada Lovelace", size: .sm, onClick: {}).fixedSize())
   #expect(link.width == still.width && link.height == still.height)
   #expect(button.width == still.width && button.height == still.height)
   #expect(close(link.at(12, 2), still.at(12, 2)))
@@ -131,19 +131,19 @@ import Testing
   #expect(Avatar("Ada", onClick: {}).tap == .button)
   #expect(Avatar("Ada", href: "https://example.com", onClick: {}).tap == .link)
   #expect(Avatar("Ada", href: "not a url", onClick: {}).tap == .button)
-  #expect(Avatar.addedTraits(tap: .none, isNamed: true) == .isImage)
+  #expect(Avatar<EmptyView>.addedTraits(tap: .none, isNamed: true) == .isImage)
   // A link avatar is a link, not the button SwiftUI reports for `Link`.
-  #expect(Avatar.addedTraits(tap: .link, isNamed: true) == .isLink)
-  #expect(Avatar.removedTraits(tap: .link, isNamed: true) == .isButton)
-  #expect(Avatar.removedTraits(tap: .button, isNamed: true) == [])
-  #expect(Avatar.addedTraits(tap: .button, isNamed: true) == [])
+  #expect(Avatar<EmptyView>.addedTraits(tap: .link, isNamed: true) == .isLink)
+  #expect(Avatar<EmptyView>.removedTraits(tap: .link, isNamed: true) == .isButton)
+  #expect(Avatar<EmptyView>.removedTraits(tap: .button, isNamed: true) == [])
+  #expect(Avatar<EmptyView>.addedTraits(tap: .button, isNamed: true) == [])
 }
 
 @Test func aLinkOrButtonAvatarWithoutANameIsWarnedAbout() {
-  #expect(Avatar.needsNameWarning(tap: .button, isNamed: false))
-  #expect(Avatar.needsNameWarning(tap: .link, isNamed: false))
-  #expect(!Avatar.needsNameWarning(tap: .button, isNamed: true))
-  #expect(!Avatar.needsNameWarning(tap: .none, isNamed: false))
+  #expect(Avatar<EmptyView>.needsNameWarning(tap: .button, isNamed: false))
+  #expect(Avatar<EmptyView>.needsNameWarning(tap: .link, isNamed: false))
+  #expect(!Avatar<EmptyView>.needsNameWarning(tap: .button, isNamed: true))
+  #expect(!Avatar<EmptyView>.needsNameWarning(tap: .none, isNamed: false))
 }
 
 @MainActor
@@ -152,9 +152,9 @@ import Testing
   let larger = Pixels(Avatar("Ada Lovelace", size: .md).fixedSize(), typeSize: .xxLarge)
   let largest = Pixels(Avatar("Ada Lovelace", size: .md).fixedSize(), typeSize: .accessibility5)
   #expect(large.width == 36)
-  #expect(larger.width == Int(Avatar.side(for: .md, textScale: 1.23)))
-  #expect(largest.width == Int((36 * Avatar.maximumTextScale).rounded()))
-  #expect(Avatar.side(for: .xl, textScale: 0.82) == 128)
+  #expect(larger.width == Int(Avatar<EmptyView>.side(for: .md, textScale: 1.23)))
+  #expect(largest.width == Int((36 * Avatar<EmptyView>.maximumTextScale).rounded()))
+  #expect(Avatar<EmptyView>.side(for: .xl, textScale: 0.82) == 128)
 }
 
 @MainActor
@@ -174,11 +174,11 @@ import Testing
 }
 
 @Test func aWebPathIsAnHrefTheAppCannotOpen() {
-  #expect(Avatar.isUnusableHref("/people/ada"))
-  #expect(Avatar.isUnusableHref("not a url"))
-  #expect(!Avatar.isUnusableHref("https://example.com/ada"))
-  #expect(!Avatar.isUnusableHref(""))
-  #expect(!Avatar.isUnusableHref(nil))
+  #expect(Avatar<EmptyView>.isUnusableHref("/people/ada"))
+  #expect(Avatar<EmptyView>.isUnusableHref("not a url"))
+  #expect(!Avatar<EmptyView>.isUnusableHref("https://example.com/ada"))
+  #expect(!Avatar<EmptyView>.isUnusableHref(""))
+  #expect(!Avatar<EmptyView>.isUnusableHref(nil))
 }
 
 @MainActor
@@ -211,12 +211,12 @@ private func onWhite(_ color: Color) -> [Int] {
 @Test func aStaticAvatarIsATabStopAndOpensOnATapAndAControlKeepsBoth() {
   // Core's `auto` touch resolves from focus: a static avatar opens on a tap,
   // a control keeps its tap.
-  #expect(Avatar.tooltipFocus(.none) == .tabStop)
-  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar.tooltipFocus(.none)) == .tap)
-  #expect(Avatar.tooltipFocus(.button) == .control)
-  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar.tooltipFocus(.button)) == .none)
-  #expect(Avatar.tooltipFocus(.link) == .control)
-  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar.tooltipFocus(.link)) == .none)
+  #expect(Avatar<EmptyView>.tooltipFocus(.none) == .tabStop)
+  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar<EmptyView>.tooltipFocus(.none)) == .tap)
+  #expect(Avatar<EmptyView>.tooltipFocus(.button) == .control)
+  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar<EmptyView>.tooltipFocus(.button)) == .none)
+  #expect(Avatar<EmptyView>.tooltipFocus(.link) == .control)
+  #expect(TooltipPresenter.resolvedTouch(.auto, focus: Avatar<EmptyView>.tooltipFocus(.link)) == .none)
 }
 
 @MainActor
@@ -232,11 +232,11 @@ private func onWhite(_ color: Color) -> [Int] {
   // xsm, sm, and md grow their tap area to 44 points; a static avatar with
   // no tooltip takes no taps and adds nothing.
   for side in [CGFloat(20), 24, 36] {
-    let target = Avatar.tapTargetSide(side, takesTaps: true)
-    #expect(target + 2 * Avatar.tapOutset(side: target) == 44)
+    let target = Avatar<EmptyView>.tapTargetSide(side, takesTaps: true)
+    #expect(target + 2 * Avatar<EmptyView>.tapOutset(side: target) == 44)
   }
-  #expect(Avatar.tapOutset(side: Avatar.tapTargetSide(20, takesTaps: false)) == 0)
-  #expect(Avatar.tapOutset(side: 128) == 0)
+  #expect(Avatar<EmptyView>.tapOutset(side: Avatar<EmptyView>.tapTargetSide(20, takesTaps: false)) == 0)
+  #expect(Avatar<EmptyView>.tapOutset(side: 128) == 0)
 }
 
 
