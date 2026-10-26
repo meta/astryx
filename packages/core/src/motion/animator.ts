@@ -1186,8 +1186,15 @@ export function createAnimator(
       // borrow, whatever it does itself (moves nothing, springs after a
       // preference or pointer change), so the dip still hands the
       // stylesheet's opacity back when it ends.
+      // A borrow exists only while its dip runs: a call that found the
+      // element already invisible (a stylesheet opacity of 0) dips nothing
+      // and borrows nothing.
       borrowedOpacity =
-        borrowed ?? (targets.opacity == null ? previousBorrow : null);
+        borrowed != null && next.opacity != null
+          ? borrowed
+          : targets.opacity == null
+            ? previousBorrow
+            : null;
       return makeHandle(owner, changed, finished, time);
     },
 
@@ -1240,6 +1247,24 @@ export function createAnimator(
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
+      }
+      // A finished fade takes the travel waiting for it along, at the same
+      // instant: a pending jump never lands later, in view.
+      if (changed.includes('opacity')) {
+        for (const property of TRAVEL) {
+          const segment = segments.get(property);
+          if (
+            list.includes(property) ||
+            segment?.steps !== true ||
+            time >= segment.start + segment.duration
+          ) {
+            continue;
+          }
+          interrupt(property, time);
+          segments.delete(property);
+          resting[property] = segment.target;
+          changed.push(property);
+        }
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {
