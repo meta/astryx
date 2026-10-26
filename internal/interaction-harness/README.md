@@ -123,8 +123,9 @@ created in the frame the page looks is not on the compositor yet. The `verdict` 
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
-screencast's intervals (two dropped frames), and at least 90% of the window's
-whole intervals presenting a new position (one miss is always allowed). Pass
+screencast's intervals (two dropped frames), and at least 90% of the frames it
+delivered in the judged part presenting a new position (one miss is always
+allowed; a frame it did not deliver is a gap, for the stall check). Pass
 `maxMedianFrameMs` (20 at 60 Hz) only in a proof that claims display rate.
 `verdict.failures` names each miss with its numbers, and `summary` carries the
 raw numbers for the report. Frames are judged in presentation order: a loaded
@@ -155,7 +156,8 @@ compositor's own frames: the frames it presented there count as presented
 a stall as before. A gap that opens or closes the judged part, or holds a
 delivered frame that did not move, is judged from the screencast, so a
 frozen element fails whatever else the compositor draws (a rAF animation's
-block presents no compositor frame at all). WebKit has no such trace:
+block presents no compositor frame at all). With the record, the 90% counts the
+compositor's frames in the judged part. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
