@@ -496,16 +496,16 @@ describe('usePressTracker', () => {
     hasSingle: boolean;
     onEvent: (event: ControlEvent | 'highlight' | 'unhighlight') => void;
   }) {
-    const outer = useRef<HTMLDivElement>(null);
-    const inner = useRef<HTMLButtonElement>(null);
+    const outerRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLButtonElement>(null);
     const double = useGestureRecognizer(
-      outer,
+      outerRef,
       () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
       undefined,
       {isEnabled: isDoubleEnabled},
     );
     const single = useGestureRecognizer(
-      outer,
+      outerRef,
       () => new TapGestureRecognizer(),
       undefined,
       {isEnabled: hasSingle},
@@ -513,14 +513,14 @@ describe('usePressTracker', () => {
     useEffect(() => {
       single.requireToFail(double);
     }, [single, double]);
-    usePressTracker(inner, {
+    usePressTracker(innerRef, {
       onControlEvent: onEvent,
       onHighlightChange: isHighlighted =>
         onEvent(isHighlighted ? 'highlight' : 'unhighlight'),
     });
     return (
-      <div ref={outer}>
-        <button data-testid="press" ref={inner} type="button" />
+      <div ref={outerRef}>
+        <button data-testid="press" ref={innerRef} type="button" />
       </div>
     );
   }
