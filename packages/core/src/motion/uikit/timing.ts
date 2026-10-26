@@ -92,9 +92,9 @@ export const reducedMotionCrossFade = {
    * The Reduced Motion cross-fade, in ms, on `curves.move`: under
    * Reduce Motion an entrance, exit, presentation switch or state change
    * becomes an opacity-only cross-fade of this length on a coarse pointer
-   * (design:reduced-motion DR2 caps it at 200 ms; UIKit's own navigation
-   * cross-fade, measured below, runs 0.5 s). Not a theme role: no theme
-   * lengthens it (DR4).
+   * (design:reduced-motion DR2 caps it at 200 ms, by owner decision DEC-1
+   * of 2026-10-24, departing from UIKit's own navigation cross-fade,
+   * measured below at 0.5 s). Not a theme role: no theme lengthens it (DR4).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiaccessibility/preferscrossfadetransitions
    *   (the setting)
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
