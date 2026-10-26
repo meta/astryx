@@ -16,11 +16,7 @@ export type {
   GestureClock,
 } from './GestureArena';
 export {GestureHost, getGestureHost} from './GestureHost';
-export type {
-  AttachOptions,
-  DelegatedConsumerType,
-  GestureHostOptions,
-} from './GestureHost';
+export type {AttachOptions, GestureHostOptions} from './GestureHost';
 export {
   GestureRecognizer,
   isActive,
