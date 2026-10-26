@@ -2236,10 +2236,14 @@ export function createAnimator(
       const time = playOptions.at ?? now();
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
-      for (const [key, curve] of Object.entries(curves) as [
-        MotionProperty | 'scale',
-        MotionCurve | undefined,
-      ][]) {
+      // `scale` first, so an explicit `scaleX` or `scaleY` beside it wins.
+      const entries = (
+        Object.entries(curves) as [
+          MotionProperty | 'scale',
+          MotionCurve | undefined,
+        ][]
+      ).sort(([a], [b]) => Number(b === 'scale') - Number(a === 'scale'));
+      for (const [key, curve] of entries) {
         if (curve == null) {
           continue;
         }

@@ -2127,6 +2127,21 @@ describe('play: any closed-form curve', () => {
     expect(animator.getVelocity('x')).toBeCloseTo(300, 9);
   });
 
+  it('lets an explicit axis win over scale, in either order', () => {
+    const {animator} = setup();
+    const flat = (value: number) => ({
+      duration: 0,
+      at: () => value,
+      velocity: () => 0,
+    });
+    animator.play({scaleY: flat(0.5), scale: flat(2)});
+    expect(animator.get('scaleX')).toBe(2);
+    expect(animator.get('scaleY')).toBe(0.5);
+    animator.play({scale: flat(3), scaleX: flat(0.25)});
+    expect(animator.get('scaleX')).toBe(0.25);
+    expect(animator.get('scaleY')).toBe(3);
+  });
+
   it('rejects a curve without a finite duration', () => {
     const {animator} = setup();
     expect(() =>
