@@ -947,6 +947,13 @@ export async function watchAnimations(
  * It judges curves and presented values, not `playState`: an animation that
  * holds its end value (a run of identical final keyframes kept so a later
  * interruption can read it) still reports `running` while nothing moves.
+ *
+ * While a rendering trace runs (`traceRendering`), it stands down as the
+ * animation recorder does: a per-frame callback would make every frame a
+ * main-thread frame, which the trace counts. It then waits on timers for the
+ * scheduled ends of the curves on the element instead, reading no style, so
+ * motion that no animation drives (a script writing styles) is not seen until
+ * the trace ends.
  */
 export async function waitForRest(
   locator: Locator,
@@ -979,8 +986,60 @@ export async function waitForRest(
               __harnessTimerGate?: {frame: typeof requestAnimationFrame};
             }
           ).__harnessTimerGate?.frame ?? requestAnimationFrame;
-        let last = read();
+        // Set by traceRendering while it traces (see the recorder above).
+        const tracing = () =>
+          (window as unknown as {__harnessRenderingTrace?: boolean})
+            .__harnessRenderingTrace === true;
+        const settle = () => {
+          // Later waits count animations from here.
+          (
+            window as unknown as {__harnessAnimations?: {arm: () => number}}
+          ).__harnessAnimations?.arm();
+          resolve();
+        };
+        let last = '';
         let still = 0;
+        const frames = () => {
+          last = read();
+          still = 0;
+          frame(tick);
+        };
+        // While traced: one look at the animations, then a timer to the latest
+        // scheduled curve end. One not started yet is looked at again a frame
+        // later; a trace that has ended hands over to the per-frame check.
+        const scheduled = () => {
+          let wait = 0;
+          for (const a of element.getAnimations({subtree: true})) {
+            if (
+              a.pending ||
+              (a.playState === 'running' && a.startTime == null)
+            ) {
+              wait = Math.max(wait, 16);
+            } else if (a.playState === 'running') {
+              const left =
+                (curveEnd(a) - Number(a.currentTime ?? 0)) /
+                Math.abs(a.playbackRate || 1);
+              wait = Math.max(wait, left);
+            }
+          }
+          if (wait <= 0) {
+            settle();
+            return;
+          }
+          const room = deadline - performance.now();
+          setTimeout(
+            () => {
+              if (performance.now() > deadline) {
+                reject(new Error('waitForRest: still moving at the deadline'));
+              } else if (tracing()) {
+                scheduled();
+              } else {
+                frames();
+              }
+            },
+            Math.min(wait, Math.max(0, room)) + 1,
+          );
+        };
         const tick = () => {
           const now = read();
           const moving = element
@@ -994,18 +1053,20 @@ export async function waitForRest(
           still = !moving && now === last ? still + 1 : 0;
           last = now;
           if (still >= need) {
-            // Later waits count animations from here.
-            (
-              window as unknown as {__harnessAnimations?: {arm: () => number}}
-            ).__harnessAnimations?.arm();
-            resolve();
+            settle();
           } else if (performance.now() > deadline) {
             reject(new Error(`waitForRest: still moving (${now})`));
+          } else if (tracing()) {
+            scheduled();
           } else {
             frame(tick);
           }
         };
-        frame(tick);
+        if (tracing()) {
+          scheduled();
+        } else {
+          frames();
+        }
       }),
     {ms: timeout, need: frames},
   );
