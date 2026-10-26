@@ -766,6 +766,8 @@ export function createAnimator(
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
   let ownWillChange: string | null = null;
+  /** The stylesheet's will-change when there is no inline value. */
+  let sheetWillChange = '';
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -1346,9 +1348,24 @@ export function createAnimator(
       ownWillChange = null;
       return;
     }
-    ownWillChange ??= element.style.willChange;
-    const own = ownWillChange === 'auto' ? '' : ownWillChange;
-    element.style.willChange = own === '' ? list : `${own}, ${list}`;
+    if (ownWillChange == null) {
+      ownWillChange = element.style.willChange;
+      // Without an inline value, the stylesheet's reasons stay alongside the
+      // promotion's (read once, as the promotion starts).
+      sheetWillChange =
+        ownWillChange === ''
+          ? (element.ownerDocument.defaultView
+              ?.getComputedStyle(element)
+              .getPropertyValue('will-change') ?? '')
+          : '';
+    }
+    const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
+    const own = base === 'auto' ? '' : base;
+    const reasons = own
+      .split(',')
+      .map(reason => reason.trim())
+      .filter(reason => reason !== '' && !promoted.has(reason as Channel));
+    element.style.willChange = [...reasons, ...promoted].join(', ');
   };
 
   /**
@@ -1591,6 +1608,19 @@ export function createAnimator(
       group.animations.some(animation => animation.playState === 'finished')
     ) {
       resolveGroup(group, group.provisional);
+      return;
+    }
+    // Paused before its first frame (a harness holding it, a page pausing
+    // every animation): no start yet, and neither `ready` nor the first frame
+    // will look again, so keep looking each frame until it is resumed (its
+    // start is set) or finished (its own clock).
+    if (
+      group.animations.some(
+        animation =>
+          animation.playState === 'paused' && animation.startTime == null,
+      )
+    ) {
+      requestFrame?.(() => syncGroup(group));
     }
   };
 
@@ -2074,6 +2104,46 @@ export function createAnimator(
     }
   };
 
+  /**
+   * A call that sets a value still waiting to land takes it over: the earlier
+   * move never lands, and its call settles interrupted. Once nothing waiting
+   * is left, a call that names its own opacity replaces an earlier fade back
+   * in or restore too, so a caught dismissal fades straight back up instead
+   * of dipping. Whatever still waits is carried by the new plan.
+   */
+  const takeOverLandings = (
+    properties: ReadonlyArray<MotionProperty>,
+    namesOpacity: boolean,
+  ) => {
+    for (const property of properties) {
+      if (property !== 'opacity') {
+        cancelLanding(property);
+      }
+    }
+    if (!namesOpacity) {
+      return;
+    }
+    for (const landing of [...landings]) {
+      if (landing.values.size > 0) {
+        continue;
+      }
+      endLanding(landing);
+      if (
+        landing.fadeIn?.isBorrowed === true ||
+        landing.restoreIsBorrowed === true
+      ) {
+        // The call's own opacity owns it now, not the stylesheet's.
+        borrowedOpacity = null;
+      }
+      for (const owner of [landing.owner, ...landing.carried]) {
+        carriedOwners.delete(owner);
+        if (!owner.settled) {
+          settle(owner, false);
+        }
+      }
+    }
+  };
+
   /** What the Reduce Motion planner reads of this animator. */
   const planView: ReducedMotionView = {
     valueAt,
@@ -2106,6 +2176,7 @@ export function createAnimator(
     fade: boolean,
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
+    takeOverLandings(properties, targets.opacity != null);
     const plan = planReducedMotion(
       planView,
       time,
