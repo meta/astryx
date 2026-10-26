@@ -53,14 +53,16 @@ if (engine == null) {
 const args = process.argv.slice(2);
 // Where the container sees the host's shader cache (see the header).
 const containerShaderCache = '/astryx-shader-cache';
-const shaderCache =
-  process.env.ASTRYX_WEBKIT_SHADER_CACHE ??
-  path.join(
-    os.homedir(),
-    '.cache',
-    'astryx-webkit-shaders',
-    image.replace(/[^\w.-]+/g, '_'),
-  );
+// Resolved to an absolute path: a bare relative value would be mounted as a
+// named volume rather than a host directory. An empty value means the default.
+const shaderCache = process.env.ASTRYX_WEBKIT_SHADER_CACHE
+  ? path.resolve(process.env.ASTRYX_WEBKIT_SHADER_CACHE)
+  : path.join(
+      os.homedir(),
+      '.cache',
+      'astryx-webkit-shaders',
+      image.replace(/[^\w.-]+/g, '_'),
+    );
 fs.mkdirSync(shaderCache, {recursive: true});
 // The harness self-test reads this marker inside the container.
 fs.writeFileSync(path.join(shaderCache, 'ASTRYX-SHADER-CACHE'), `${image}\n`);
