@@ -2,11 +2,11 @@
 
 /**
  * @file contextMenuPressCurve.ts
- * @input The context-menu constants (motion roles a theme may retune) and
+ * @input The context-menu constants and
  *   the motion foundation's spring toward a moving target
  * @output Exports pressFeedbackTarget (the size UIKit asks the press copy for
  *   at a moment of the press), PRESS_FEEDBACK_START_MS, pressFeedbackMotion
- *   (the feedback's spring, onset and latency under an element's theme) and
+ *   (the feedback's spring, onset and latency) and
  *   pressFeedbackCurve (the size it shows, as a PressFeedbackCurve the
  *   compositor animator plays)
  * @position The press feedback's curve, for ContextMenu's touch invocation
@@ -19,10 +19,8 @@
  * (`feedbackSpring`), shown `feedbackLatencyMs` after UIKit starts it. These
  * are pure functions of the constants; the curve is closed-form, so the whole
  * held press can be computed when the finger lands and played on the
- * compositor. The spring, the onset and the latency are motion roles: a
- * theme can retune them (`pressFeedbackMotion` reads them for an element).
- * The commit and the menu's moment decide who gets the touch, so they are
- * not.
+ * compositor. None of them is a motion role: touch motion stays internal,
+ * so no theme retunes them, and `pressFeedbackMotion` reads the table's.
  *
  * SYNC: When modified, update
  * /packages/core/src/ContextMenu/contextMenuPressCurve.test.ts
@@ -55,7 +53,7 @@ export interface PressFeedbackMotion {
   readonly latencyMs: number;
 }
 
-/** The table's motion (UIKit's), when no theme retunes it. */
+/** The table's motion (UIKit's). */
 const TABLE_MOTION: PressFeedbackMotion = {
   spring: feedbackSpring,
   onsetMs: feedbackOnsetMs,
@@ -63,10 +61,10 @@ const TABLE_MOTION: PressFeedbackMotion = {
 };
 
 /**
- * The press feedback's motion under `element`'s theme: the spring and the
- * latency are roles a theme sets with `defineTheme({motion})`, or the
- * table's. The onset is not a role: core's press machine decides when a press
- * is believed, so the curve keeps the measured onset it starts from.
+ * The press feedback's motion for `element`: the table's spring and latency,
+ * as its registry resolves them (no ContextMenu value is a motion role, so a
+ * theme sets none). The onset is the measured one: core's press machine
+ * decides when a press is believed.
  */
 export function pressFeedbackMotion(
   element: Element | null | undefined,
@@ -130,7 +128,7 @@ export function pressFeedbackCurve({
 }: {
   from?: number;
   velocity?: number;
-  /** A theme's motion (`pressFeedbackMotion`); the table's by default. */
+  /** The motion to play (`pressFeedbackMotion`); the table's by default. */
   motion?: PressFeedbackMotion;
 } = {}): PressFeedbackCurve {
   const {onsetMs} = motion;

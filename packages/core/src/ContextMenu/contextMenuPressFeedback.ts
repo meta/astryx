@@ -116,8 +116,8 @@ export function useContextMenuPressFeedback(
     if (element == null) {
       return null;
     }
-    // The feedback's springs are motion roles a theme may retune: register
-    // their tables before the first motion (idempotent).
+    // The feedback's springs resolve through their tables (none is a motion
+    // role): register them before the first motion (idempotent).
     registerContextMenuTable();
     registerSpringsTable();
     if (animatorRef.current?.element !== element) {
@@ -155,8 +155,8 @@ export function useContextMenuPressFeedback(
         return;
       }
       isGrownRef.current = true;
-      // The spring and the latency are motion roles: the trigger's theme may
-      // retune them. `time` is the onset (the press machine's "on").
+      // The table's spring and latency. `time` is the onset (the press
+      // machine's "on").
       const motion = pressFeedbackMotion(animator.element);
       const at = time + motion.latencyMs;
       animator.play(
