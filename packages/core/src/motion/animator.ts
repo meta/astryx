@@ -1039,15 +1039,22 @@ export function createAnimator(
         const fadeTo = borrowed ?? opacityTo;
         const entering = fadeTo > opacityNow + 1e-6;
         const leaving = fadeTo < opacityNow - 1e-6;
+        // Travel lands only while the element is invisible: at once when it
+        // already is, at the end of a fade out to 0, and otherwise at the
+        // bottom of a dip (DR2), so an overlapping call never moves it while
+        // it shows.
+        const isInvisible = opacityNow <= 1e-6;
+        const fadesOut = fadeTo <= 1e-6;
+        const dips = travels && !isInvisible && !fadesOut;
         for (const property of properties) {
           if (!TRAVEL.includes(property)) {
             continue;
           }
           const from = valueAt(property, time);
           const toValue = targets[property] as number;
-          if (instant || entering || from === toValue) {
+          if (instant || isInvisible || from === toValue) {
             next[property] = null; // in place at once (and fade in)
-          } else if (leaving) {
+          } else if (fadesOut) {
             next[property] = jumpSegment(owner, time, from, toValue, fade); // fade out, then move
           } else {
             next[property] = jumpSegment(owner, time, from, toValue, fade / 2); // dip
@@ -1057,7 +1064,7 @@ export function createAnimator(
           if (targets.opacity != null) {
             next.opacity = null;
           }
-        } else if (entering || leaving) {
+        } else if (!dips && (entering || leaving)) {
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},
             {at: fade, value: opacityTo},

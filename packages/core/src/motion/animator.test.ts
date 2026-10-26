@@ -512,6 +512,21 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a move that overlaps a running fade lands only once the element is invisible', async () => {
+    const {animator} = reduced();
+    animator.set({opacity: 0});
+    animator.animate({opacity: 1}, {spring: springs.navigationPush});
+    await advance(fade / 3);
+    const start = clock;
+    expect(animator.get('opacity')).toBeGreaterThan(0.1);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    // Still where it was while it shows; it moves at the bottom of the dip.
+    expect(animator.get('x', start + fade / 2 - 1)).toBe(0);
+    expect(animator.get('opacity', start + fade / 2)).toBeCloseTo(0, 9);
+    expect(animator.get('x', start + fade / 2)).toBe(100);
+    expect(animator.get('opacity', start + fade)).toBeCloseTo(1, 9);
+  });
+
   it('a stop during a dip finishes the fade instead of freezing it', async () => {
     const {animator} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
