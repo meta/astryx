@@ -1202,6 +1202,22 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(opacityOnly()).toBe(true);
   });
 
+  it('a landing a busy main thread runs late still ends the dip on time', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(1000);
+    // The task that lands it runs 80 ms late (the page's clock is ahead
+    // of the timer when it fires).
+    clock += fade / 2 + 80;
+    await vi.advanceTimersByTimeAsync(fade / 2);
+    // Landed while transparent, never shown in the wrong place.
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeCloseTo(0, 9);
+    // The fade back in takes what is left: the dip ends when it was due.
+    expect(animator.get('opacity', 1000 + fade)).toBe(1);
+    expect(opacityOnly()).toBe(true);
+  });
+
   it('a busy main thread keeps the element transparent longer, never in the wrong place', async () => {
     const {animator} = reduced();
     const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
