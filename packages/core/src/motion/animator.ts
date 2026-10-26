@@ -402,6 +402,8 @@ interface Segment {
   readonly jumps: ReadonlyArray<number>;
   /** Constant between jumps: sampled at its jumps only. */
   readonly steps?: true;
+  /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
+  readonly isFade?: true;
   readonly owner: HandleState;
   /** The call's start group while its start waits for the commit. */
   group?: StartGroup;
@@ -1829,6 +1831,7 @@ export function createAnimator(
         1000,
       jumps,
       owner,
+      isFade: true,
     };
   };
 
@@ -2485,18 +2488,29 @@ export function createAnimator(
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
+      const wasBorrowed = borrowedOpacity != null;
       for (const property of list) {
         cancelLanding(property);
-        if (!segments.has(property)) {
+        const segment = segments.get(property);
+        if (segment == null) {
           continue;
         }
-        const value = valueAt(property, time);
+        // A Reduce Motion fade is never left half done: it finishes, and a
+        // dip on the stylesheet's opacity hands that opacity back.
+        const value = !segment.isFade
+          ? valueAt(property, time)
+          : wasBorrowed
+            ? IDENTITY.opacity
+            : segment.target;
         interrupt(property, time);
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
       }
       commit(changed, time);
+      if (wasBorrowed && changed.includes('opacity')) {
+        target?.style.removeProperty('opacity');
+      }
     },
 
     rebase(deltas, rebaseOptions = {}) {
