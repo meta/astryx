@@ -79,6 +79,13 @@ the same and returns a detach function.
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges` including `leading` / `trailing` (resolved against the writing direction); fails as soon as the touch lands outside                                                                           |
 | `HoverGestureRecognizer`         | `UIHoverGestureRecognizer`         | continuous | a mouse or a hovering pen; silent for fingers                                                                                                                                                         |
 
+A recognizer created with `claimsTouches: false` is a watcher (a tab bar
+that minimizes while the page scrolls): it never claims, so its element gets
+only passive listeners and a scroll never waits for it; it prevents no other
+recognizer and none prevents it; and it follows a touch the browser takes
+for a scroll to the lift. Attach it with `manageStyle: false` to leave the
+element's `touch-action` alone.
+
 Every recognizer also has UIKit's switches: `isEnabled` (use `setEnabled`;
 turning it off mid-gesture cancels), `cancelsTouchesInView` (default true),
 `delaysTouchesBegan` (default false), `delaysTouchesEnded` (default true),
@@ -206,15 +213,16 @@ presses nothing.
   stays in force, as the intersection of both. It is set inline on attach
   and restored on detach (opt out with `manageStyle: false`):
 
-  | Recognizers on the element                   | `touch-action`      |
-  | -------------------------------------------- | ------------------- |
-  | tap, long press                              | `manipulation`      |
-  | horizontal pan or swipe, horizontal edge pan | `pan-y pinch-zoom`  |
-  | vertical pan or swipe                        | `pan-x pinch-zoom`  |
-  | one-way pan, pan with `scrollEdge`           | left as is (`auto`) |
-  | free pan                                     | `pinch-zoom`        |
-  | pinch or rotation                            | `pan-x pan-y`       |
-  | pinch or rotation together with a free pan   | `none`              |
+  | Recognizers on the element                        | `touch-action`      |
+  | ------------------------------------------------- | ------------------- |
+  | tap, long press                                   | `manipulation`      |
+  | horizontal pan or swipe, horizontal edge pan      | `pan-y pinch-zoom`  |
+  | vertical pan or swipe                             | `pan-x pinch-zoom`  |
+  | one-way pan, pan with `scrollEdge`                | left as is (`auto`) |
+  | free pan                                          | `pinch-zoom`        |
+  | pinch or rotation                                 | `pan-x pan-y`       |
+  | pinch or rotation together with a free pan        | `none`              |
+  | a watcher (`claimsTouches: false`), any direction | left as is (`auto`) |
 
   A one-way pan leaves the browser its own axis too: a toast dragged away
   from its edge scrolls the page. It claims its direction by cancelling
