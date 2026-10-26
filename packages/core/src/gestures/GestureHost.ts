@@ -160,6 +160,20 @@ const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
  * blocking `touchmove` listener that stops the browser's pan. A tap claims
  * only at the lift (it fails once the finger travels), so it needs none.
  */
+/**
+ * Run `task` once the next frame has painted, when styles are clean: a
+ * computed-style read there costs no recalc.
+ */
+function afterPaint(view: Window | null, task: () => void): void {
+  if (view != null && typeof view.requestAnimationFrame === 'function') {
+    view.requestAnimationFrame(() => {
+      view.setTimeout(task, 0);
+    });
+  } else {
+    setTimeout(task, 0);
+  }
+}
+
 function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
   return (
     recognizer.claimsTouches &&
@@ -218,6 +232,9 @@ export class GestureHost {
   readonly arena: GestureArena;
   private readonly doc: Document;
   private readonly registry = new Map<Element, Registration>();
+  /** Elements whose caller touch-action waits for a read after paint. */
+  private readonly pendingCallerReads = new Set<HTMLElement>();
+  private isCallerReadScheduled = false;
   /** The selection lock each contact holds, by host contact id. */
   private readonly lockedBy = new Map<number, () => void>();
   /** Touch.identifier → arena id, for live fingers. */
@@ -468,10 +485,21 @@ export class GestureHost {
       let value = style[key];
       if (value != null && key === 'touchAction') {
         // A caller's explicit value (a trigger's own `touch-action: none`)
-        // stays in force: the host writes what both allow.
-        registration.callerTouchAction ??=
-          this.doc.defaultView?.getComputedStyle(element).touchAction || 'auto';
-        value = intersectTouchAction(value, registration.callerTouchAction);
+        // stays in force: the host writes what both allow. An inline value
+        // is the style's own, read with no recalc; a stylesheet's needs a
+        // computed read, which waits until the frame has painted, never
+        // inside an attach (a forced style recalc over whatever just
+        // mounted). Until then the host's own value stands.
+        const callerInline = registration.savedStyle.has(property)
+          ? (registration.savedStyle.get(property) ?? '')
+          : element.style.getPropertyValue(property);
+        const caller =
+          callerInline !== '' ? callerInline : registration.callerTouchAction;
+        if (caller != null) {
+          value = intersectTouchAction(value, caller);
+        } else {
+          this.readCallerTouchActionAfterPaint(element);
+        }
       }
       if (value != null) {
         if (!registration.savedStyle.has(property)) {
@@ -491,6 +519,45 @@ export class GestureHost {
         }
       }
     }
+  }
+
+  /**
+   * Read the touch-action a caller's stylesheet gives `element`, once the
+   * frame has painted and styles are clean, then write what both allow.
+   * Batched: the host's own values come off every pending element first, so
+   * one style read serves them all, and the writes follow the reads.
+   */
+  private readCallerTouchActionAfterPaint(element: HTMLElement): void {
+    this.pendingCallerReads.add(element);
+    if (this.isCallerReadScheduled) {
+      return;
+    }
+    this.isCallerReadScheduled = true;
+    afterPaint(this.doc.defaultView, () => {
+      this.isCallerReadScheduled = false;
+      const pending: [HTMLElement, Registration][] = [];
+      for (const candidate of this.pendingCallerReads) {
+        const registration = this.registry.get(candidate);
+        if (registration != null && registration.callerTouchAction == null) {
+          pending.push([candidate, registration]);
+        }
+      }
+      this.pendingCallerReads.clear();
+      for (const [candidate, registration] of pending) {
+        if (registration.savedStyle.has('touch-action')) {
+          registration.savedStyle.delete('touch-action');
+          candidate.style.removeProperty('touch-action');
+        }
+      }
+      const view = this.doc.defaultView;
+      for (const [candidate, registration] of pending) {
+        registration.callerTouchAction =
+          view?.getComputedStyle(candidate).touchAction || 'auto';
+      }
+      for (const [candidate, registration] of pending) {
+        this.applyStyle(candidate, registration);
+      }
+    });
   }
 
   private cleanup(element: Element, registration: Registration): void {
