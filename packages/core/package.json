@@ -769,6 +769,51 @@
       "types": "./dist/Typeahead/utils.d.ts",
       "default": "./dist/Typeahead/utils.js"
     },
+    "./CodeBlock/languages/dockerfile": {
+      "source": "./src/CodeBlock/languages/dockerfile.ts",
+      "types": "./dist/CodeBlock/languages/dockerfile.d.ts",
+      "default": "./dist/CodeBlock/languages/dockerfile.js"
+    },
+    "./CodeBlock/languages/graphql": {
+      "source": "./src/CodeBlock/languages/graphql.ts",
+      "types": "./dist/CodeBlock/languages/graphql.d.ts",
+      "default": "./dist/CodeBlock/languages/graphql.js"
+    },
+    "./CodeBlock/languages/java": {
+      "source": "./src/CodeBlock/languages/java.ts",
+      "types": "./dist/CodeBlock/languages/java.d.ts",
+      "default": "./dist/CodeBlock/languages/java.js"
+    },
+    "./CodeBlock/languages/lua": {
+      "source": "./src/CodeBlock/languages/lua.ts",
+      "types": "./dist/CodeBlock/languages/lua.d.ts",
+      "default": "./dist/CodeBlock/languages/lua.js"
+    },
+    "./CodeBlock/languages/objective-c": {
+      "source": "./src/CodeBlock/languages/objective-c.ts",
+      "types": "./dist/CodeBlock/languages/objective-c.d.ts",
+      "default": "./dist/CodeBlock/languages/objective-c.js"
+    },
+    "./CodeBlock/languages/powershell": {
+      "source": "./src/CodeBlock/languages/powershell.ts",
+      "types": "./dist/CodeBlock/languages/powershell.d.ts",
+      "default": "./dist/CodeBlock/languages/powershell.js"
+    },
+    "./CodeBlock/languages/ruby": {
+      "source": "./src/CodeBlock/languages/ruby.ts",
+      "types": "./dist/CodeBlock/languages/ruby.d.ts",
+      "default": "./dist/CodeBlock/languages/ruby.js"
+    },
+    "./CodeBlock/languages/thrift": {
+      "source": "./src/CodeBlock/languages/thrift.ts",
+      "types": "./dist/CodeBlock/languages/thrift.d.ts",
+      "default": "./dist/CodeBlock/languages/thrift.js"
+    },
+    "./CodeBlock/languages/toml": {
+      "source": "./src/CodeBlock/languages/toml.ts",
+      "types": "./dist/CodeBlock/languages/toml.d.ts",
+      "default": "./dist/CodeBlock/languages/toml.js"
+    },
     "./Markdown/remark": {
       "source": "./src/Markdown/remark.ts",
       "types": "./dist/Markdown/remark.d.ts",

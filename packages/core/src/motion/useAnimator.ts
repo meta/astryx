@@ -38,7 +38,7 @@ export interface UseAnimatorResult {
  *
  * @example
  * ```
- * // Once, at module scope, so the springs that are motion roles resolve:
+ * // Once, at module scope, so the springs are registered as their roles:
  * registerSpringsTable();
  *
  * const {ref, animator} = useAnimator();

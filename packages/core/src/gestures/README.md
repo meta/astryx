@@ -453,10 +453,9 @@ Styles switch on the same conditions by writing the same query as a StyleX
 media key (`'@media (pointer: coarse)'`, and the compact-touch query spelled
 exactly as `COMPACT_TOUCH_QUERY`, which a test enforces), so the first paint
 is right. Behaviour reads
-`useTouchPresentation()` (SSR-safe), a decision taken once reads
-`readTouchPresentation()`, and a component with no interaction to infer
-from reads `useMotionPresentation()`: UIKit timings under a finger, theme
-tokens under a mouse.
+`useTouchPresentation()` (SSR-safe), a component with no interaction to
+infer from included (UIKit timings under a finger, its own motion under a
+mouse), and a decision taken once reads `readTouchPresentation()`.
 
 ## Known limits
 
