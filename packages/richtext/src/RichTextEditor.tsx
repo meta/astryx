@@ -76,6 +76,7 @@ import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
 import {type Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
@@ -442,6 +443,14 @@ export interface RichTextEditorProps extends Omit<
    * serializable props.
    */
   markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /** Whether to automatically focus the editor on mount. @default false */
   hasAutoFocus?: boolean;
   /**
@@ -515,6 +524,7 @@ export const RichTextEditor = function RichTextEditor({
   hasMarkdownShortcuts = true,
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
+  codeLanguages,
   hasAutoFocus = false,
   tabEscapeHint: tabEscapeHintFromProps,
   maxLength,
@@ -705,8 +715,8 @@ export const RichTextEditor = function RichTextEditor({
                 hasHorizontalScroll
               />
               <TableColumnFloorPlugin />
-              <CodeBlockHeaderPlugin />
-              <CodeSyntaxPlugin />
+              <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+              <CodeSyntaxPlugin codeLanguages={codeLanguages} />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
