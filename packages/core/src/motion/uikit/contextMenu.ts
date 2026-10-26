@@ -176,6 +176,72 @@ export const contextMenu = {
    *   0.6 s; a press lifted at 0.25 s does not grow either
    */
   reducedMotionFeedback: false,
+  lift: {
+    /**
+     * When the menu shows, the preview grows to this factor at most.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026: a 60 × 60 pt icon
+     *   lifts to 69 × 69 (1.15)
+     */
+    maxScale: 1.15,
+    /**
+     * Below \`maxScale\`, the preview grows by this many points on its larger
+     * side.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026: a 200 × 120 pt
+     *   card lifts to 226 × 135.67 (1.13)
+     * @source GUESS — the larger side (only landscape-shaped previews were
+     *   measured)
+     * @measure M-CM9
+     */
+    scaleUpPoints: 26,
+    /**
+     * UIKit keeps the lifted preview this far from the screen's sides,
+     * shrinking it if it must. Astryx applies the layer runtime's gutter
+     * (spec:AST-059), the same 16 px at the sides; kept for the parity record
+     * and the geometry tests.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026: a full-width
+     *   402 × 60 pt row lifts to 370 × 55.33, centered; a card at x 4 lifts to
+     *   x 16, one at x 198 to a right edge at 386
+     */
+    screenInset: 16,
+    /**
+     * UIKit keeps the lifted preview this far inside the safe area's top and
+     * bottom. Astryx applies the layer runtime's gutter instead (spec:AST-059:
+     * the larger of 16 px and the safe area, plus an app's bar), up to 20 px
+     * less clearance near a notch; kept for the parity record and the
+     * geometry tests.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter frames, Oct 23 2026: clamped to
+     *   y 82…820 (the safe area 62…840, less 20); a card at y 70 lifts to
+     *   y 82, one at y 700 to a bottom at 820
+     */
+    verticalMargin: 20,
+    /**
+     * The gap between the lifted preview and its menu. The menu goes below
+     * the preview when it fits above the bottom limit (the gutter),
+     * else above; it is centered on the preview, or flush with its edge when
+     * the preview is held against a side.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, settled platter and menu frames for cards at the top,
+     *   middle, bottom and both sides, Oct 23 2026: 16 pt either side; the
+     *   middle card's menu went below, the bottom card's above
+     */
+    menuGap: 16,
+    /**
+     * The menu's entrance and the copy's shadow fade move on this spring; the
+     * preview's growth and the backdrop's fade take `springs.contextMenuLift`
+     * (0.32, 0.8: fitted to the backdrop's alpha, rms 0.0004, and to the
+     * preview's width, 0.05 pt).
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, per-frame morph and platter layers, Oct 23 2026: the
+     *   menu content's opacity, blur and scale, the morph container's centre
+     *   and the preview shadow's opacity each fit (0.30, 0.80), rms ≤ 0.001;
+     *   the issued UIViewSpringAnimationBehaviorSettings are (0.8, 0.3)
+     */
+    morphSpring: {response: 0.3, dampingRatio: 0.8},
+  },
 } as const;
 
 /**

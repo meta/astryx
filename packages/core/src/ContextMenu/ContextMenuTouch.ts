@@ -6,8 +6,9 @@
  * @file ContextMenuTouch.ts
  * @input ContextMenu's touch modules
  * @output ContextMenu's touch layer, its one import site: the press
- *   recognizer (contextMenuPress.ts) and the press feedback
- *   (contextMenuPressFeedback.ts)
+ *   recognizer (contextMenuPress.ts), the press feedback
+ *   (contextMenuPressFeedback.ts) and the lift presentation
+ *   (ContextMenuLift.tsx, contextMenuLiftGeometry.ts)
  * @position ContextMenuTouchLayer.tsx, which ContextMenu loads on demand
  *   under the touch model, imports its touch behaviour from here only; the
  *   mouse and keyboard paths stay in ContextMenu.tsx
@@ -17,3 +18,9 @@
 
 export {ContextMenuPressRecognizer} from './contextMenuPress';
 export {useContextMenuPressFeedback} from './contextMenuPressFeedback';
+export {
+  useContextMenuLift,
+  type ContextMenuLift,
+  type ContextMenuLiftResult,
+} from './ContextMenuLift';
+export {menuPlacement, type MenuPlacement} from './contextMenuLiftGeometry';

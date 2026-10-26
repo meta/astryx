@@ -6,10 +6,11 @@
  * @file contextMenuPressFeedback.ts
  * @input The press feedback's curve (contextMenuPressCurve.ts), the
  *   context-menu constants, the compositor animator, the trigger element and
- *   the press state core's one press machine writes on it
- *   (utils/pressFeedback.ts, `data-astryx-press`)
- * @output Exports useContextMenuPressFeedback (hold and release, from
- *   ContextMenu's menu; the growth itself follows the press machine)
+ *   the press paint core's one press machine gives it (utils/pressFeedback.ts,
+ *   `subscribePressPaint`: one shared registry, no observer per trigger)
+ * @output Exports useContextMenuPressFeedback (hold and release from
+ *   ContextMenu's menu, and end when the lift takes over; the growth
+ *   itself follows the press machine)
  * @position The press feedback of ContextMenu's touch invocation
  *   (pressFeedback.ts believes the press, contextMenuPress.ts opens the menu;
  *   this shows it)
@@ -45,7 +46,11 @@
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {PRESSED_ATTRIBUTE, type pressableProps} from '../utils/pressFeedback';
+import {
+  PRESSED_ATTRIBUTE,
+  subscribePressPaint,
+  type pressableProps,
+} from '../utils/pressFeedback';
 import {createAnimator, type Animator} from '../motion/animator';
 import {resolveMotion} from '../motion/resolveMotion';
 import {registerSpringsTable, springs} from '../motion/uikit/springs';
@@ -71,6 +76,12 @@ export interface ContextMenuPressFeedback {
    * box, so a trigger still growing would carry the open menu with it.
    */
   hold(): void;
+  /**
+   * The lift takes over: the feedback lets go of the trigger at once (its
+   * scale and compositing layer), and the lift grows it on from the rect the
+   * press left.
+   */
+  end(): void;
 }
 
 /**
@@ -206,17 +217,33 @@ export function useContextMenuPressFeedback(
     }
   }, []);
 
-  // Follow the press machine's state on the trigger: grow from its "on",
-  // spring back when the press ends with no menu.
+  const end = useCallback(() => {
+    const animator = animatorRef.current;
+    if (animator == null || !isGrownRef.current) {
+      return;
+    }
+    isGrownRef.current = false;
+    // Let go of the trigger at once, its compositing layer included: the
+    // lift's own motion has it to itself from here (a new press makes a new
+    // animator).
+    const element = animator.element;
+    animatorRef.current = null;
+    animator.dispose();
+    element?.style.removeProperty('scale');
+  }, []);
+
+  // Follow the press machine's paint on the trigger: grow from its "on",
+  // spring back when the press ends with no menu. One registry serves every
+  // surface (no observer or listener per trigger).
   useEffect(() => {
     void triggerKey;
     const element = triggerRef.current;
-    if (element == null || typeof MutationObserver === 'undefined') {
+    if (element == null) {
       return;
     }
     let isPressed = element.getAttribute(PRESSED_ATTRIBUTE) === 'on';
-    const observer = new MutationObserver(() => {
-      const next = element.getAttribute(PRESSED_ATTRIBUTE) === 'on';
+    return subscribePressPaint(element, paint => {
+      const next = paint === 'on';
       if (next === isPressed) {
         return;
       }
@@ -227,12 +254,7 @@ export function useContextMenuPressFeedback(
         fail(performance.now());
       }
     });
-    observer.observe(element, {
-      attributes: true,
-      attributeFilter: [PRESSED_ATTRIBUTE],
-    });
-    return () => observer.disconnect();
   }, [triggerRef, triggerKey, start, fail]);
 
-  return {pressable, release, hold};
+  return {pressable, release, hold, end};
 }

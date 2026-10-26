@@ -14,14 +14,13 @@
  *   click; an early lift opens nothing and the card springs back; a second
  *   finger before the commit opens nothing and the card springs back; a
  *   drift within the tolerance still opens, past it on one axis (or a drag
- *   after the commit) opens nothing; the menu's anchor sits under the
- *   finger, on screen and as laid out, while the trigger is grown, and the
- *   menu stays put; the press feedback's presented scale
+ *   after the commit) opens nothing; the press feedback's presented scale
  *   follows UIKit's measured frames; it keeps advancing every frame through a
  *   blocked main thread; it does no Layout or Paint; the page does not scroll
  *   under the held finger; a storyboard of the press
  * @position Interaction specs of packages/core/src/ContextMenu (the
- *   BottomSheetDetent spec is the exemplar)
+ *   BottomSheetDetent spec is the exemplar); where the menu then shows is
+ *   ContextMenuLift.interaction.browser.spec.ts's
  */
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
@@ -264,7 +263,23 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   const start = await touchStartedAt(page);
   const shown = await menuShownAt(page);
   expect(scales).toEqual([1, 1, 1]);
-  expect(await trigger.evaluate(el => el.getAnimations().length)).toBe(0);
+  // No growth played on it (the lift's own entrance only fades, under Reduce
+  // Motion).
+  expect(
+    await trigger.evaluate(
+      el =>
+        el
+          .getAnimations()
+          .filter(
+            animation =>
+              new Set(
+                (animation.effect as KeyframeEffect | null)
+                  ?.getKeyframes()
+                  .map(frame => String(frame.scale)),
+              ).size > 1,
+          ).length,
+    ),
+  ).toBe(0);
   expect(shown, 'the menu never showed').not.toBeNull();
   const after = (shown as number) - start;
   // The touch's stamp and the page clock are each coarsened (0.1 ms).
@@ -389,69 +404,6 @@ test('the lift after the menu shows keeps it open and sends no click', async ({
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   const log = await readInputLog(page);
   expect(log.filter(record => record.type === 'click')).toEqual([]);
-});
-
-test('the menu’s anchor sits under the finger, on screen and as laid out, while the trigger is grown, and the menu stays put', async ({
-  page,
-}) => {
-  const {driver, trigger} = await openTouchStory(page);
-  const box = await trigger.boundingBox();
-  if (box == null) {
-    throw new Error('no trigger');
-  }
-  const menu = page.getByRole('menu', {name: 'Photo actions'});
-  // The cursor anchor (the trigger's last child), on screen and as laid out
-  // (engines differ on which one anchor positioning reads), and the menu.
-  const read = async () =>
-    trigger.evaluate(el => {
-      const anchor = el.lastElementChild as HTMLElement | null;
-      const box = el.getBoundingClientRect();
-      const host = el as HTMLElement;
-      const left = box.left + (box.width - host.offsetWidth) / 2;
-      const top = box.top + (box.height - host.offsetHeight) / 2;
-      const onScreen = anchor?.getBoundingClientRect();
-      const list = document
-        .querySelector('[role="menu"]')
-        ?.getBoundingClientRect();
-      return {
-        onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
-        laidOut:
-          anchor == null
-            ? null
-            : {
-                x: left + host.clientLeft + anchor.offsetLeft,
-                y: top + host.clientTop + anchor.offsetTop,
-              },
-        menu: list == null ? null : {x: list.x, y: list.y},
-      };
-    });
-  // The middle of the card and near its far corner, where an anchor placed
-  // in the grown trigger's scaled coordinates would land furthest off.
-  for (const [fx, fy] of [
-    [0.5, 0.5],
-    [0.9, 0.85],
-  ] as const) {
-    const p = {
-      x: Math.round(box.x + box.width * fx),
-      y: Math.round(box.y + box.height * fy),
-    };
-    await driver.play(hold(p, menuDisplayMs + 100));
-    await expect(menu).toBeVisible();
-    const first = await read();
-    await page.waitForTimeout(400);
-    const later = await read();
-    await page.keyboard.press('Escape');
-    await expect(menu).toBeHidden();
-    // Let the trigger return to its size before the next press.
-    await page.waitForTimeout(1200);
-    const detail = JSON.stringify({p, first, later});
-    expect(first.onScreen?.x, detail).toBeCloseTo(p.x, 0);
-    expect(first.onScreen?.y, detail).toBeCloseTo(p.y, 0);
-    expect(first.laidOut?.x, detail).toBeCloseTo(p.x, 0);
-    expect(first.laidOut?.y, detail).toBeCloseTo(p.y, 0);
-    expect(later.menu?.x, detail).toBeCloseTo(first.menu?.x ?? NaN, 0);
-    expect(later.menu?.y, detail).toBeCloseTo(first.menu?.y ?? NaN, 0);
-  }
 });
 
 test('a drag past the tolerance after the commit opens nothing', async ({

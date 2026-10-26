@@ -12,6 +12,7 @@
 import type {MotionRoleKind} from './roles';
 
 export const MOTION_ROLE_KINDS: Readonly<Record<string, MotionRoleKind>> = {
+  'contextMenu.lift.morphSpring': 'spring',
   'contextMenu.press.feedbackLatencyMs': 'duration',
   'contextMenu.press.feedbackSpring': 'spring',
   'contextMenu.press.returnLatencyMs': 'duration',

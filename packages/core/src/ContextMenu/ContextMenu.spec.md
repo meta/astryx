@@ -204,16 +204,17 @@ anchor is positioning infrastructure rather than consumer anatomy.
 
 ## Verification map
 
-| Contract            | Verification                                                                                      | Representative states                               | Mutation or failure expectation                                                                    | Audit section                |
-| ------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------- |
-| FR1, FR4            | `ContextMenu.test.tsx` pointer, long-press, bottom-sheet, adaptive, compound, and drill-in suites | Pointer data/compound and touch data/compound       | Collapsing presentation-specific parts or content owners fails structure, role, or behavior tests. | `audit:ContextMenu/anatomy`  |
-| FR2                 | ContextMenu target tests, source inspection, and theming target inventories                       | Pointer and touch menu surfaces                     | Moving `context-menu` to the trigger or removing it from a painted branch fails evidence.          | `audit:ContextMenu/theming`  |
-| FR3                 | ContextMenu, DropdownMenu, BottomSheet, and List owner tests                                      | Pointer rows, touch frame, touch list/rows          | A composed part loses its owner target or is documented as a new ContextMenu target.               | `audit:ContextMenu/theming`  |
-| Layer relationships | `ContextMenu.test.tsx` nested-layer case and current layer/dismissal architecture records         | Outside click, Escape, nested context layers, sheet | A Pointer menu bypassing the shared stack or dismissing with its nested child fails.               | `audit:ContextMenu/behavior` |
-| FR5                 | `ContextMenu.test.tsx` press model case; `module:DropdownMenu/useMenuPress` map                   | Finger slide across rows, stray click               | A row acting on the press row or the stray click fails.                                            | `audit:ContextMenu/behavior` |
-| FR6                 | `ContextMenu.test.tsx` keyboard case; shared `useListFocus` and `useTypeahead` suites             | wrap at both ends                                   | Clamping arrows fail.                                                                              | `audit:ContextMenu/behavior` |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                     | Canonical anatomy and current target                | Missing, extra, prefixed, stale, or unclassified mappings fail repository validation.              | `audit:ContextMenu/theming`  |
-| FR6, AR1            | `ContextMenu.test.tsx` "inline trigger (triggerAs)" suite                                         | `span` in a paragraph, default `div`                | A block trigger inside prose, or a lost invocation path, fails.                                    | `audit:ContextMenu/behavior` |
+| Contract            | Verification                                                                                        | Representative states                               | Mutation or failure expectation                                                                                                      | Audit section                |
+| ------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| FR1, FR4            | `ContextMenu.test.tsx` pointer, long-press, bottom-sheet, adaptive, compound, and drill-in suites   | Pointer data/compound and touch data/compound       | Collapsing presentation-specific parts or content owners fails structure, role, or behavior tests.                                   | `audit:ContextMenu/anatomy`  |
+| FR2                 | ContextMenu target tests, source inspection, and theming target inventories                         | Pointer and touch menu surfaces                     | Moving `context-menu` to the trigger or removing it from a painted branch fails evidence.                                            | `audit:ContextMenu/theming`  |
+| FR3                 | ContextMenu, DropdownMenu, BottomSheet, and List owner tests                                        | Pointer rows, touch frame, touch list/rows          | A composed part loses its owner target or is documented as a new ContextMenu target.                                                 | `audit:ContextMenu/theming`  |
+| Layer relationships | `ContextMenu.test.tsx` nested-layer case and current layer/dismissal architecture records           | Outside click, Escape, nested context layers, sheet | A Pointer menu bypassing the shared stack or dismissing with its nested child fails.                                                 | `audit:ContextMenu/behavior` |
+| FR5                 | `ContextMenu.test.tsx` press model case; `module:DropdownMenu/useMenuPress` map                     | Finger slide across rows, stray click               | A row acting on the press row or the stray click fails.                                                                              | `audit:ContextMenu/behavior` |
+| FR6                 | `ContextMenu.test.tsx` keyboard case; shared `useListFocus` and `useTypeahead` suites               | wrap at both ends                                   | Clamping arrows fail.                                                                                                                | `audit:ContextMenu/behavior` |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                       | Canonical anatomy and current target                | Missing, extra, prefixed, stale, or unclassified mappings fail repository validation.                                                | `audit:ContextMenu/theming`  |
+| FR6, AR1            | `ContextMenu.test.tsx` "inline trigger (triggerAs)" suite                                           | `span` in a paragraph, default `div`                | A block trigger inside prose, or a lost invocation path, fails.                                                                      | `audit:ContextMenu/behavior` |
+| DEC-2               | `ContextMenuLift.interaction.browser.spec.ts` element-count case; `ContextMenu.test.tsx` lift suite | Touch story at rest and lifted, fine and coarse     | A lift element at rest, a copy of the trigger, or an open count beyond the layer, the shadow, the anchor and the placeholder, fails. | `audit:ContextMenu/anatomy`  |
 
 ## Decision log
 
@@ -235,6 +236,43 @@ Rejected: styling a block `div` as inline because it remains invalid inside a
 
 Rejected: `display: contents` because a box-less wrapper has no rect for pointer
 or keyboard anchoring.
+
+### DEC-2 — The lift adds four elements while open, each with one job
+
+**Reference:** `component:ContextMenu/DEC-2`
+
+**Status:** proposed; pending owner review.
+
+Under a finger, a touch-opened menu on a block trigger lifts the trigger
+itself above the tinted page (`spec:AST-094` FR33), through the lift module
+(`packages/core/src/lift/`). While the menu is up, the page has four
+elements more than under a fine pointer, within the open-layer allowance of
+`spec:AST-017` FR60 and DEC-29, and each has one job:
+
+- the lift layer covers the viewport from the top layer, takes the page's
+  touches and paints the tint as its `::backdrop`;
+- the shadow, a box in the layer, follows the trigger's lift as one
+  compositor animation (an animated `::backdrop` of the trigger restyles
+  and lays out the page on every frame);
+- an empty box in the layer, at the lifted rect, is what the menu is placed
+  against (anchor positioning follows transforms, so the trigger's own cursor
+  anchor would move with the lifted trigger);
+- an empty placeholder after the trigger holds the trigger's spot, so the
+  page does not move while the trigger is in the top layer.
+
+None of the four is themeable or part of the anatomy, none is mounted at rest, and no content is mounted
+twice: the trigger lifts itself, with no copy. The presentation hold's shield
+joins while the lift grows, and the layer runtime's exit copy while the menu
+closes.
+
+Element counts (`document.body.querySelectorAll('*').length`, story
+`core-contextmenu--touch-long-press`, Chromium and WebKit): fine pointer 138
+at rest and 138 open; coarse pointer 138 at rest and 142 lifted, whatever the
+trigger holds.
+
+Rejected: a copy of the trigger above the tint, because it mounts the
+trigger's content twice and its count grows with the trigger (a list row's
+8 to 15 elements).
 
 ## Open questions
 

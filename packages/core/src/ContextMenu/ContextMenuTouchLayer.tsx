@@ -7,7 +7,8 @@
  * @input ContextMenu's touch layer (ContextMenuTouch.ts), the gesture
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
- *   recognizer and press feedback while ContextMenu is under the touch model
+ *   recognizer, its press feedback and the lift presentation while
+ *   ContextMenu is under the touch model
  * @position Loaded on demand by ContextMenu (lazyContextMenuTouchLayer.ts),
  *   only while the touch model applies, so a fine-pointer page never loads the
  *   touch code
@@ -20,15 +21,37 @@ import {playHaptic, useGestureRecognizer} from '../gestures';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {
   ContextMenuPressRecognizer,
+  menuPlacement,
+  useContextMenuLift,
   useContextMenuPressFeedback,
+  type ContextMenuLift,
+  type ContextMenuLiftResult,
+  type MenuPlacement,
 } from './ContextMenuTouch';
+
+/** Where the lifted menu sits, and its gap from the lifted preview, in px. */
+export interface LiftedMenuPlacement extends MenuPlacement {
+  readonly gap: number;
+}
 
 /** What ContextMenu reaches of a mounted touch layer. */
 export interface ContextMenuTouchHandle {
   /** The menu the press opened closed: the trigger springs back. */
   release(): void;
+  /** The trigger stops growing at once: the lift takes it from here. */
+  end(): void;
   /** Whether the recognizer is timing a finger on the trigger. */
   isTracking(): boolean;
+  /**
+   * The lift presentation (ContextMenuLift.tsx): the trigger lifted above
+   * the tint, and the menu's entrance and exit beside it.
+   */
+  readonly presentation: ContextMenuLift;
+  /** Where the lifted menu sits for its rendered height (contextMenu.lift). */
+  placeMenu(
+    lifted: ContextMenuLiftResult,
+    menuHeight: number,
+  ): LiftedMenuPlacement;
 }
 
 export interface ContextMenuTouchLayerProps {
@@ -41,6 +64,8 @@ export interface ContextMenuTouchLayerProps {
   onHandleChange: (handle: ContextMenuTouchHandle | null) => void;
   /** Open the menu at a client point (where the finger landed). */
   onOpen: (point: {x: number; y: number}) => void;
+  /** A finger lifted on the lift's tint: the menu closes. */
+  onBackdropTap: () => void;
 }
 
 /**
@@ -62,8 +87,14 @@ export function ContextMenuTouchLayer({
   triggerKey,
   onHandleChange,
   onOpen,
+  onBackdropTap,
 }: ContextMenuTouchLayerProps): null {
   const feedback = useContextMenuPressFeedback(triggerRef, isShown, triggerKey);
+  // The lift presentation: ContextMenu decides when a press lifts the
+  // trigger, and drives it through the handle.
+  const lift = useContextMenuLift(triggerRef, {onBackdropTap});
+  const liftRef = useRef(lift);
+  liftRef.current = lift;
   const feedbackRef = useRef(feedback);
   feedbackRef.current = feedback;
   const onOpenRef = useRef(onOpen);
@@ -114,6 +145,14 @@ export function ContextMenuTouchLayer({
   useEffect(() => {
     onHandleChange({
       release: () => feedbackRef.current.release(),
+      end: () => feedbackRef.current.end(),
+      get presentation() {
+        return liftRef.current;
+      },
+      placeMenu: (lifted, menuHeight) => ({
+        ...menuPlacement(lifted.lifted, menuHeight, lifted.viewport),
+        gap: contextMenu.lift.menuGap,
+      }),
       isTracking: () => recognizer.numberOfTouches > 0,
     });
     return () => onHandleChange(null);
