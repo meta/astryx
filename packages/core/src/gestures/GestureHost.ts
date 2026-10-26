@@ -594,6 +594,7 @@ export class GestureHost {
     id: number,
     recognizers: ReadonlyArray<GestureRecognizer>,
     target: EventTarget | null,
+    pointerType: PointerKind,
   ): void {
     // Each recognizer whose hold does something brings its lock; the host
     // never imports one (a component without such a hold does not bundle
@@ -603,9 +604,11 @@ export class GestureHost {
       const lock = recognizer.selectionLock;
       if (
         lock != null &&
-        // Only a recognizer that would take this touch locks for it.
+        // Only a recognizer that would take this contact locks for it: a
+        // pen is checked against pen acceptance, a finger against touch.
         recognizer.isEnabled &&
-        recognizer.acceptsTouchInput &&
+        (recognizer.allowedPointerTypes == null ||
+          recognizer.allowedPointerTypes.has(pointerType)) &&
         recognizer.view instanceof Element
       ) {
         const elements = byLock.get(lock) ?? new Set<Element>();
@@ -667,7 +670,7 @@ export class GestureHost {
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
       if (locksSelectionFor('touch', this.doc.defaultView)) {
-        this.lockSelection(id, recognizers, target);
+        this.lockSelection(id, recognizers, target, 'touch');
       }
       this.watchTarget(touch.identifier, target);
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
@@ -1032,7 +1035,7 @@ export class GestureHost {
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
     if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
-      this.lockSelection(id, recognizers, event.target);
+      this.lockSelection(id, recognizers, event.target, event.pointerType);
     }
     this.arena.began([
       {
