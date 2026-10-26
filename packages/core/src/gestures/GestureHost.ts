@@ -292,7 +292,9 @@ export class GestureHost {
     null;
   /** The last scroll a finger drove, and when. */
   /** Scrollers a recognizer is scrolling itself this frame (ownScroll). */
-  private readonly ownedScrolls = new Set<Node>();
+  private readonly ownedScrolls = new Map<Node, number>();
+  /** Numbers each ownScroll call: only the newest one's timer clears it. */
+  private ownScrollCalls = 0;
   private lastScroll: {readonly scroller: Node; readonly time: number} | null =
     null;
   private nextId = 1;
@@ -1549,14 +1551,18 @@ export class GestureHost {
    * reports itself through pointercancel or touchcancel.
    */
   ownScroll(scroller: Node): void {
-    this.ownedScrolls.add(scroller);
+    const call = ++this.ownScrollCalls;
+    this.ownedScrolls.set(scroller, call);
     const view = this.doc.defaultView;
     if (view == null) {
       return;
     }
     view.requestAnimationFrame(() => {
       view.requestAnimationFrame(() => {
-        this.ownedScrolls.delete(scroller);
+        // A newer call keeps it until its own frame has passed.
+        if (this.ownedScrolls.get(scroller) === call) {
+          this.ownedScrolls.delete(scroller);
+        }
       });
     });
   }
