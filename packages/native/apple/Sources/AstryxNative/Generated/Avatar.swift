@@ -68,6 +68,7 @@ public struct AvatarNode: Decodable, Equatable, Sendable {
     public var alt: String?
     public var size: AvatarSize?
     public var shape: AvatarShape?
+    public var status: [AstryxNode]?
     public var tooltip: AvatarTooltip?
     public var href: String?
   }
@@ -132,6 +133,7 @@ public struct AvatarNode: Decodable, Equatable, Sendable {
     public var alt: String?
     public var size: AvatarSize?
     public var shape: AvatarShape?
+    public var status: [AstryxNode]?
     public var tooltip: AvatarTooltip?
     public var href: String?
   }
