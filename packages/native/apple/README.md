@@ -32,6 +32,7 @@ apple/
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
 │   │   ├── TextInput/     # TextInput
+│   │   ├── Thumbnail/     # Thumbnail, Thumbnail.spec.md
 │   │   ├── Card/          # Card
 │   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
