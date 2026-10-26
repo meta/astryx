@@ -21,6 +21,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
  */
 export function useIsUnmountedRef(): {readonly current: boolean} {
   const isUnmountedRef = useRef(false);
+  // Syncs the flag with the component's mount.
   useIsomorphicLayoutEffect(() => {
     isUnmountedRef.current = false;
     return () => {
@@ -47,6 +48,7 @@ export function useAttachment(
     release: () => void;
   } | null>(null);
 
+  // Syncs the attachment with the DOM node `ref` holds after this commit.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     const current = attachmentRef.current;
@@ -58,6 +60,7 @@ export function useAttachment(
       element == null ? null : {element, key, release: attach(element)};
   });
 
+  // Releases the attachment at unmount.
   useIsomorphicLayoutEffect(
     () => () => {
       attachmentRef.current?.release();

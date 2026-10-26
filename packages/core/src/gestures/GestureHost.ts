@@ -213,24 +213,22 @@ const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
 };
 
 /**
- * Whether a recognizer can take a touch while it moves, and so needs the
- * blocking `touchmove` listener that stops the browser's pan. A tap claims
- * only at the lift (it fails once the finger travels), so it needs none.
+ * Run `task` in the next frame, before it paints: a read there styles what
+ * the frame must style anyway, and its writes are what the frame shows.
  */
-/**
- * Run `task` once the next frame has painted, when styles are clean: a
- * computed-style read there costs no recalc.
- */
-function afterPaint(view: Window | null, task: () => void): void {
+function inNextFrame(view: Window | null, task: () => void): void {
   if (view != null && typeof view.requestAnimationFrame === 'function') {
-    view.requestAnimationFrame(() => {
-      view.setTimeout(task, 0);
-    });
+    view.requestAnimationFrame(task);
   } else {
     setTimeout(task, 0);
   }
 }
 
+/**
+ * Whether a recognizer can take a touch while it moves, and so needs the
+ * blocking `touchmove` listener that stops the browser's pan. A tap claims
+ * only at the lift (it fails once the finger travels), so it needs none.
+ */
 function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
   return (
     recognizer.claimsTouches &&
@@ -840,12 +838,13 @@ export class GestureHost {
       const property = STYLE_PROPERTIES[key];
       let value = style[key];
       if (value != null && key === 'touchAction') {
-        // A caller's explicit value (a trigger's own `touch-action: none`)
-        // stays in force: the host writes what both allow. An inline value
-        // is the style's own, read with no recalc; a stylesheet's needs a
-        // computed read, which waits until the frame has painted, never
-        // inside an attach (a forced style recalc over whatever just
-        // mounted). Until then the host's own value stands.
+        // The author's value (a trigger's own `touch-action: none`) stays in
+        // force: the host writes what both allow, never wider (spec:AST-094
+        // FR18, DEC-8). An inline value is the style's own, read with no
+        // recalc. A stylesheet's needs a computed read, which waits for the
+        // next frame, before its paint, never inside an attach (a forced
+        // recalc over whatever just mounted); until then the host writes
+        // nothing, so the author's value stands.
         const callerInline = registration.savedStyle.has(property)
           ? (registration.savedStyle.get(property) ?? '')
           : element.style.getPropertyValue(property);
@@ -854,7 +853,8 @@ export class GestureHost {
         if (caller != null) {
           value = intersectTouchAction(value, caller);
         } else {
-          this.readCallerTouchActionAfterPaint(element);
+          this.readCallerTouchActionInNextFrame(element);
+          continue;
         }
       }
       if (value != null) {
@@ -878,18 +878,19 @@ export class GestureHost {
   }
 
   /**
-   * Read the touch-action a caller's stylesheet gives `element`, once the
-   * frame has painted and styles are clean, then write what both allow.
-   * Batched: the host's own values come off every pending element first, so
-   * one style read serves them all, and the writes follow the reads.
+   * Read the touch-action an author's stylesheet gives `element` in the next
+   * frame, before it paints, then write what both allow. Batched: one style
+   * read serves every pending element, and the writes follow the reads. The
+   * host has written no touch-action on them yet, so the read is the
+   * author's own value.
    */
-  private readCallerTouchActionAfterPaint(element: HTMLElement): void {
+  private readCallerTouchActionInNextFrame(element: HTMLElement): void {
     this.pendingCallerReads.add(element);
     if (this.isCallerReadScheduled) {
       return;
     }
     this.isCallerReadScheduled = true;
-    afterPaint(this.doc.defaultView, () => {
+    inNextFrame(this.doc.defaultView, () => {
       this.isCallerReadScheduled = false;
       const pending: [HTMLElement, Registration][] = [];
       for (const candidate of this.pendingCallerReads) {
@@ -899,12 +900,6 @@ export class GestureHost {
         }
       }
       this.pendingCallerReads.clear();
-      for (const [candidate, registration] of pending) {
-        if (registration.savedStyle.has('touch-action')) {
-          registration.savedStyle.delete('touch-action');
-          candidate.style.removeProperty('touch-action');
-        }
-      }
       const view = this.doc.defaultView;
       for (const [candidate, registration] of pending) {
         registration.callerTouchAction =

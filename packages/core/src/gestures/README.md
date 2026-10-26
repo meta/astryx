@@ -455,8 +455,9 @@ light impact only when a real tap toggles an `<input type="checkbox"
 switch>`, and WebKit requires a trusted event for it. `attachTapHaptic(label)`
 puts a hidden switch inside a label the control renders as its tap target,
 so every real tap on it plays that impact; focus the activation gives the
-switch goes straight back, and a label that already labels another control
-gets no switch. Nothing can play a haptic later
+switch goes straight back. A label tied to its control by `for`, or whose
+control is itself a switch, gets no switch; a label wrapping its own control
+gets one, which hands each tap on to that control. Nothing can play a haptic later
 from script, so mid-drag haptics (detent snaps, picker ticks) are not
 possible in iOS Safari.
 
