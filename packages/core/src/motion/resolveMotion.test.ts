@@ -74,34 +74,28 @@ describe('a table nothing registered', () => {
 describe('resolveMotion', () => {
   it("takes the theme scope's value for a spring, a curve and a duration", () => {
     const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+      '--motion-springs-settle': '0.8s 0.3',
       '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
-      '--motion-navigation-transition-ms': '300ms',
+      '--motion-timing-state-change-ms': '300ms',
     });
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+    expect(resolveMotion(child, springs.settle)).toEqual({
       duration: 0.8,
       bounce: 0.3,
     });
     expect(resolveMotion(child, timing.curves.move)).toEqual([0.4, 0, 0.2, 1]);
-    expect(resolveMotion(child, navigation, 'transitionMs')).toBe(300);
+    expect(resolveMotion(child, timing, 'stateChangeMs')).toBe(300);
   });
 
   it("falls back to the table's value when the variable is empty, malformed or unreadable", () => {
     const {child} = themed('plain', {
-      '--motion-springs-navigation-push': 'bouncy',
+      '--motion-springs-quick-change': 'bouncy',
     });
-    expect(resolveMotion(child, springs.sheetPresent)).toBe(
-      springs.sheetPresent,
-    );
-    expect(resolveMotion(child, springs.navigationPush)).toBe(
-      springs.navigationPush,
-    );
-    expect(resolveMotion(null, springs.sheetPresent)).toBe(
-      springs.sheetPresent,
-    );
+    expect(resolveMotion(child, springs.settle)).toBe(springs.settle);
+    expect(resolveMotion(child, springs.quickChange)).toBe(springs.quickChange);
+    expect(resolveMotion(null, springs.settle)).toBe(springs.settle);
     const detached = document.createElement('div');
-    expect(resolveMotion(detached, navigation, 'transitionMs')).toBe(
-      navigation.transitionMs,
+    expect(resolveMotion(detached, timing, 'stateChangeMs')).toBe(
+      timing.stateChangeMs,
     );
   });
 
@@ -109,6 +103,13 @@ describe('resolveMotion', () => {
     const {child} = themed('soft', {});
     const inline = {response: 0.4, dampingRatio: 0.9};
     expect(resolveMotion(child, inline)).toBe(inline);
+    // A component's measured value is internal: no theme variable reaches it.
+    expect(resolveMotion(child, springs.sheetPresent)).toBe(
+      springs.sheetPresent,
+    );
+    expect(resolveMotion(child, navigation, 'transitionMs')).toBe(
+      navigation.transitionMs,
+    );
     expect(resolveMotion(child, timing.press, 'scrollBrakeMs')).toBe(
       timing.press.scrollBrakeMs,
     );
@@ -117,16 +118,16 @@ describe('resolveMotion', () => {
 
   it('reads each scope once, until its theme attribute changes', async () => {
     const {scope, child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+      '--motion-springs-settle': '0.8s 0.3',
     });
-    resolveMotion(child, springs.sheetPresent);
-    resolveMotion(scope, springs.sheetPresent);
+    resolveMotion(child, springs.settle);
+    resolveMotion(scope, springs.settle);
     expect(reads).toBe(1);
 
-    variables.set(scope, {'--motion-springs-sheet-present': '0.4s 0'});
+    variables.set(scope, {'--motion-springs-settle': '0.4s 0'});
     scope.setAttribute('data-astryx-theme', 'brisk');
     await Promise.resolve();
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+    expect(resolveMotion(child, springs.settle)).toEqual({
       duration: 0.4,
       bounce: 0,
     });
@@ -140,13 +141,13 @@ describe('the animator under a theme', () => {
     const Observer = vi.fn();
     vi.stubGlobal('MutationObserver', Observer);
     const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+      '--motion-springs-settle': '0.8s 0.3',
     });
-    resolveMotion(child, springs.sheetPresent);
-    resolveMotion(child, springs.sheetPresent);
+    resolveMotion(child, springs.settle);
+    resolveMotion(child, springs.settle);
     expect(reads).toBe(1);
     await Promise.resolve();
-    resolveMotion(child, springs.sheetPresent);
+    resolveMotion(child, springs.settle);
     expect(reads).toBe(2);
     expect(listen).not.toHaveBeenCalled();
     expect(Observer).not.toHaveBeenCalled();
@@ -155,16 +156,16 @@ describe('the animator under a theme', () => {
 
   it('sees a theme switched earlier in the same task', () => {
     const {scope, child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+      '--motion-springs-settle': '0.8s 0.3',
     });
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+    expect(resolveMotion(child, springs.settle)).toEqual({
       duration: 0.8,
       bounce: 0.3,
     });
     // Same task: the observer's callback has not run yet.
     scope.setAttribute('data-astryx-theme', 'firm');
-    variables.set(scope, {'--motion-springs-sheet-present': '0.4s 0'});
-    expect(resolveMotion(child, springs.sheetPresent)).toEqual({
+    variables.set(scope, {'--motion-springs-settle': '0.4s 0'});
+    expect(resolveMotion(child, springs.settle)).toEqual({
       duration: 0.4,
       bounce: 0,
     });
@@ -172,16 +173,16 @@ describe('the animator under a theme', () => {
 
   it('plays the spring its theme sets for a table spring', () => {
     const {child} = themed('soft', {
-      '--motion-springs-sheet-present': '0.8s 0.3',
+      '--motion-springs-settle': '0.8s 0.3',
     });
     const animator = createAnimator(child, {now: () => 0});
     animator.set({y: 300});
-    animator.animate({y: 0}, {spring: springs.sheetPresent}, {at: 0});
+    animator.animate({y: 0}, {spring: springs.settle}, {at: 0});
     const expected = solveSpring(toSpring({duration: 0.8, bounce: 0.3}), {
       from: 300,
       to: 0,
     });
-    const table = solveSpring(toSpring(springs.sheetPresent), {
+    const table = solveSpring(toSpring(springs.settle), {
       from: 300,
       to: 0,
     });

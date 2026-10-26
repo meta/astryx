@@ -38,23 +38,22 @@ under the same rules.
 
 ## Theme
 
-Every spring, duration (a key ending in `Ms`) and curve of a table that calls
-`registerMotionTable` is a motion role named for its use (`spec:AST-094` FR4):
-its table path, such as `springs.sheetPresent`, unless the table renames it,
-as the shared tables do (`springs.settle`, `timing.curves.move`). A theme
-retunes a role
-with `defineTheme({motion: {springs, durations, curves}})`, which writes the
-role's CSS variable (`--motion-springs-sheet-present: 0.6s 0.1`) only for the
-roles it sets; the table's value stays the default. A table's values become
-roles once its `register<Name>Table()` has run: the animator registers the
-Reduce Motion fade's curve and a coast the scroll table, and code that plays springs calls
-`registerSpringsTable()` before its first motion, or its springs play the
-table's values whatever the theme sets. The animator resolves each table
-spring and curve it is handed when the motion starts; code that times
-something itself calls `resolveMotion(element, timing.press, 'highlightOutMs')`.
-Gesture thresholds and the timings that decide who gets a touch are not roles
-(`exclude`). `pnpm generate:motion-roles` regenerates the role table in the
-motion docs.
+The motion roles are the springs, durations and curves `spec:AST-094` FR4
+names for their use (`springs.settle`, `timing.stateChangeMs`,
+`timing.curves.move`, …): a shared table lists them when it registers
+(`roles`), and every other value, a component's measured spring included, is
+an internal constant no theme reaches. A theme retunes a role with
+`defineTheme({motion: {springs, durations, curves}})`, which writes the role's
+CSS variable (`--motion-springs-settle: 0.6s 0.1`) only for the roles it
+sets; the table's value stays the default. A table's roles exist once its
+`register<Name>Table()` has run: the animator registers the Reduce Motion
+fade's curve, and code that plays the shared springs calls
+`registerSpringsTable()` before its first motion, or they play the table's
+values whatever the theme sets. The animator resolves each role it is handed
+when the motion starts; code that times something itself calls
+`resolveMotion(element, timing, 'stateChangeMs')`. Gesture thresholds and the
+timings that decide who gets a touch are not roles. `pnpm generate:motion-roles`
+regenerates the role table in the motion docs.
 
 ## Animator
 
@@ -68,9 +67,9 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 registerSpringsTable();
 
 const animator = createAnimator(sheet);
-// The animator plays a table spring's motion role, which a theme may retune
-// (spec:AST-094 FR4); math on a spring reads the role with resolveMotion.
-const spring = springs.sheetDetent;
+// The animator plays a motion role as the theme sets it (spec:AST-094 FR4);
+// math on a spring reads the role with resolveMotion.
+const spring = springs.settle;
 
 // A drag writes one style per frame and never renders:
 animator.set({y: offset});
@@ -88,7 +87,7 @@ animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, ma
 
 // Any closed-form curve, here a press that keeps deepening: the target
 // scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.contextMenuLift)), {
+const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
   from: 1,
   target: 1,
   slope: -0.16,
@@ -208,7 +207,7 @@ Chromium and WebKit on the phone profile.
   end.
 - A dialog's `::backdrop` follows the curve when seeked and holds its end
   state.
-- A theme that retunes `springs.sheetPresent` changes the curve the engine
+- A theme that retunes `springs.settle` changes the curve the engine
   plays for an element in its scope, and only there.
 
 ```

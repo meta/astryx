@@ -241,5 +241,7 @@ const reducedMotionCrossFadeRoles = {curves: {move}};
  * table (the animator, reducedMotionFade()). The fade's length is not a role.
  */
 export function registerReducedMotionCrossFade(): void {
-  registerMotionTable('timing', reducedMotionCrossFadeRoles);
+  registerMotionTable('timing', reducedMotionCrossFadeRoles, {
+    roles: ['curves.move'],
+  });
 }
