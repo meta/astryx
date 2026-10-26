@@ -558,12 +558,9 @@ export class GestureArena {
       this.apply(recognizer, 'cancelled');
       return;
     }
-    const wasWaiting = internals(recognizer).pending != null;
     internals(recognizer).pending = null;
+    // apply() gives back any claim it held (releaseClaim), waiting or not.
     this.apply(recognizer, 'failed');
-    if (wasWaiting) {
-      this.releaseClaim(recognizer);
-    }
     this.reviewPending();
   }
 
