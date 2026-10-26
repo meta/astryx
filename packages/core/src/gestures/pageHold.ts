@@ -108,6 +108,21 @@ function createHolds(doc: Document): PageHolds {
     },
     onTouchStart: event => {
       const fingers = fingersOf(event);
+      const current = holds.touch;
+      // Only a finger already down keeps its record: a new touch that reuses
+      // the identifier starts afresh.
+      if (
+        current?.id != null &&
+        fingers.some(finger => finger.identifier === current.id) &&
+        !Array.from(event.changedTouches).some(
+          finger => finger.identifier === current.id,
+        )
+      ) {
+        // A second finger joins the held one: nothing is cancelled while two
+        // are down (a pinch), and the first keeps its verdict for the rest
+        // of its touch once it is alone again.
+        return;
+      }
       const finger = fingers[0];
       holds.touch =
         fingers.length === 1 && finger != null

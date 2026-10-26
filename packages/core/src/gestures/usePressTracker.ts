@@ -68,6 +68,8 @@ export function usePressTracker(
   // One tracker for the component's life, reading its profile through the
   // options ref: a profile change never rebuilds it, so a press in progress
   // survives it (the change applies from the tracker's next read).
+  // `keepsTouch` is the exception, fixed when the tracker is created: it
+  // decides whether the host gives the element a blocking touchmove.
   const [tracker] = useState(
     () =>
       new PressTracker({

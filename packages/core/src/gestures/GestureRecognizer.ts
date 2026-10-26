@@ -88,7 +88,8 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * recognizes. `false` makes a watcher (a tab bar that minimizes while the
    * page scrolls): it never claims, so it gets only passive listeners and
    * never delays a scroll; it prevents no other recognizer and none prevents
-   * it; and it keeps tracking a touch the browser takes for a scroll,
+   * it (`spec:AST-094` FR15); it cancels no press or click under it; and it
+   * keeps tracking a touch the browser takes for a scroll,
    * reporting through the native scroll and ending at the lift.
    * @default true
    */

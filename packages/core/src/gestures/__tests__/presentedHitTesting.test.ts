@@ -233,6 +233,51 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     ).toMatchObject({top: 310, bottom: 350});
   });
 
+  it("keeps a blocking touchmove on the document only while an element a claiming recognizer lives in is moving: Safari honours one only when registered before the touch, on the engine's own target (spec:AST-094 FR19)", () => {
+    document.body.innerHTML =
+      '<div id="moving"><div id="body"></div></div><div id="still"></div>';
+    const moving = document.getElementById('moving') as HTMLElement;
+    const body = document.getElementById('body') as HTMLElement;
+    const still = document.getElementById('still') as HTMLElement;
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    const blocking = (calls: unknown[][]) =>
+      calls.filter(
+        ([type, , options]) =>
+          type === 'touchmove' &&
+          typeof options === 'object' &&
+          options != null &&
+          (options as AddEventListenerOptions).passive === false,
+      ).length;
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    cleanups.push(
+      gestures.attach(body, new PanGestureRecognizer({direction: 'down'})),
+      gestures.attach(still, new TapGestureRecognizer()),
+    );
+    expect(blocking(add.mock.calls)).toBe(0);
+    // A tap target moving claims nothing while the finger moves: no listener.
+    const stopStill = registerPresentedOffset(still, {
+      offset: () => ({x: 0, y: 30}),
+      resolve: () => {},
+    });
+    expect(blocking(add.mock.calls)).toBe(0);
+    stopStill();
+    // The sheet the pan lives in moves: the document blocks until it stops.
+    const stop = registerPresentedOffset(moving, {
+      offset: () => ({x: 0, y: 40}),
+      resolve: () => {},
+    });
+    expect(blocking(add.mock.calls)).toBe(1);
+    stop();
+    expect(
+      remove.mock.calls.filter(([type]) => type === 'touchmove').length,
+    ).toBeGreaterThan(0);
+    expect(blocking(add.mock.calls)).toBe(1);
+  });
+
   it('changes nothing with the gate off or nothing moving', () => {
     mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
     const off = host('never');
