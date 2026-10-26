@@ -117,9 +117,9 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     .info()
     .annotations.push({type: 'busy window', description: proof.summary});
   expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
-  // The harness's verdict: display rate, no stall over two dropped frames,
-  // nearly every expected frame moved (what a loaded runner still meets and a
-  // main-thread animation never does).
+  // The harness's verdict: no stall over two dropped frames, and nearly
+  // every expected frame moved (what a loaded runner still meets and a
+  // main-thread animation never does). It sets no display-rate bound.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
   // And it is the spring: placing each frame inside the block on the
@@ -246,6 +246,63 @@ test('a frame painted before the compositor has the curve shows the element wher
   expect(result.presentX).toBeCloseTo(0, 1);
   expect(result.onScreen).toBeGreaterThan(20);
   expect(Math.abs(result.retargetX - result.onScreen)).toBeLessThan(1);
+});
+
+test('under Reduce Motion, a dip a busy main thread lands late still ends within its 200 ms cross-fade', async ({
+  page,
+}) => {
+  // design:reduced-motion DR2 on a touch screen: the move dips (fades out,
+  // lands while transparent, fades back in) in 200 ms or less, opacity only.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await open(page);
+  const read = await page.evaluate(async travel => {
+    const box = document.getElementById('box') as HTMLElement;
+    const handle = window.animator.animate(
+      {x: travel},
+      {spring: Motion.springs.navigationPush},
+    );
+    const start = await handle.started;
+    // The main thread is busy from 60 to 180 ms into the dip, so the task
+    // that lands it (due at 100 ms) runs 80 ms late.
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 60 - performance.now())),
+    );
+    while (performance.now() < start + 180) {
+      // the main thread is busy
+    }
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 230 - performance.now())),
+    );
+    const style = getComputedStyle(box);
+    return {
+      at: performance.now() - start,
+      opacity: Number(style.opacity),
+      translate: style.translate,
+      animated: box
+        .getAnimations()
+        .flatMap(animation =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .flatMap(frame =>
+              Object.keys(frame).filter(
+                key =>
+                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                    key,
+                  ),
+              ),
+            ),
+        ),
+    };
+  }, TRAVEL);
+  test.info().annotations.push({
+    type: '30 ms after the cross-fade was due to end',
+    description: JSON.stringify(read),
+  });
+  // Landed, and fully back in by then: the late landing did not stretch it.
+  expect(read.translate).toBe(`${TRAVEL}px`);
+  expect(read.opacity).toBeCloseTo(1, 2);
+  // Opacity only: the travel is never animated.
+  expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
 test('a spring started right before a block plays in full after it', async ({
