@@ -115,8 +115,8 @@
  *   call that lands too carries a landing still waiting (two calls in one
  *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
- * No call option and no theme value lengthens the fade or keeps travel (DR4):
- * the fade's length is not a theme role.
+ * No call option and no role value lengthens the fade or keeps travel (DR4):
+ * the fade's length is not a role.
  *
  * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
  * decay only ever continues the velocity a finger handed it on release
@@ -125,14 +125,14 @@
  * transition. A spring a component starts on release toward a target it
  * picks (a detent, a page) is a transition, and cross-fades (DR2).
  *
- * Theme: a spring or curve from a registered motion table plays the value
- * the element's theme sets for that role, or the table's value when it sets
- * none (resolveMotion.ts): `springs.sheetPresent` once
- * `registerSpringsTable()` has run, `scroll.bounce` (a coast registers the
- * scroll table), the Reduce Motion fade's curve (the animator registers that
- * role alone). A table never registered plays its own values, and the
- * fade's length is not a role. It is read once, when the motion starts, from
- * the theme scope's computed style: no layout, and the start, the promotion
+ * Roles: a spring or curve that is one of a registered table's motion roles
+ * plays the value its CSS variable carries on the element's scope, or the
+ * table's value when none is set (resolveMotion.ts; nothing public sets one
+ * while touch motion stays internal): `springs.settle` once
+ * `registerSpringsTable()` has run, the Reduce Motion fade's curve (the
+ * animator registers that role alone). Every other value, and a table never
+ * registered, plays its own value, and the fade's length is not a role. A
+ * role is read once, when the motion starts, from the scope's computed style: no layout, and the start, the promotion
  * and the browser-set start time are unchanged. A spring written inline at the
  * call site is played as given.
  *
@@ -146,7 +146,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
  * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
- * - /packages/core/src/motion/resolveMotion.ts (the theme roles it resolves)
+ * - /packages/core/src/motion/resolveMotion.ts (the roles it resolves)
  * - /packages/core/src/motion/README.md
  */
 
@@ -462,6 +462,11 @@ interface Landing {
   } | null;
   /** The opacity written with the landing (an exit by role). */
   restore: number | null;
+  /**
+   * The restore returns to the stylesheet's opacity (an exit by role on a
+   * surface no call owns opacity on): the stylesheet owns it again.
+   */
+  restoreIsBorrowed?: boolean;
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
@@ -1693,7 +1698,7 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // A table spring takes its theme's value, read once here, at the start.
+    // A role takes its scope's value, read once here, at the start.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
@@ -1782,8 +1787,9 @@ export function createAnimator(
       if (property === 'opacity') {
         endLanding(landing);
         landNow(landing);
-      } else {
-        landing.values.delete(property);
+      } else if (landing.values.delete(property) && !landing.owner.settled) {
+        // Set or stopped before it landed: the call did not finish.
+        settle(landing.owner, false);
       }
     }
   };
@@ -1915,10 +1921,15 @@ export function createAnimator(
       end = time + ms;
     } else if (landing.restore != null) {
       segments.delete('opacity');
-      resting.opacity = landing.restore;
+      resting.opacity =
+        landing.restoreIsBorrowed === true ? IDENTITY.opacity : landing.restore;
       changed.push('opacity');
     }
     commit(changed, time);
+    if (landing.restoreIsBorrowed === true) {
+      // The stylesheet owns its opacity again.
+      target?.style.removeProperty('opacity');
+    }
     if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
       // again once the fade ends (releaseIdentity).
@@ -1986,15 +1997,30 @@ export function createAnimator(
     let fadeFrom = opacityNow;
     let fadeTo = opacityTo;
     let restore: number | null = null;
+    // A fade by role on a surface no call owns opacity on starts from, or
+    // returns to, the element's own (stylesheet) opacity, as a dip does.
+    const roleBorrow =
+      role != null &&
+      !named &&
+      borrowedOpacity == null &&
+      !segments.has('opacity') &&
+      resting.opacity === IDENTITY.opacity
+        ? ownOpacity()
+        : null;
     if (!entering && !leaving && role === 'entrance') {
       entering = true;
       fadeFrom = 0;
+      fadeTo = roleBorrow ?? opacityTo;
     } else if (!entering && !leaving && role === 'exit') {
       leaving = true;
+      fadeFrom = roleBorrow ?? opacityNow;
       fadeTo = 0;
-      restore = opacityTo;
+      restore = roleBorrow ?? opacityTo;
     }
-    // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
+    // A move still waiting to land (an earlier dip's) lands at this call's
+    // invisible moment, never while the element shows.
+    const pending = landings.size > 0;
+    // Not a role: nothing lengthens it (design:reduced-motion DR4).
     const ms = reducedMotionCrossFade.durationMs;
     for (const property of properties) {
       if (TRAVEL.includes(property)) {
@@ -2007,15 +2033,23 @@ export function createAnimator(
         holds[property] = valueAt(property, time);
         values.set(property, targets[property] as number);
       }
-      return {at, values, fadeIn, restore};
+      return {
+        at,
+        values,
+        fadeIn,
+        restore,
+        ...(roleBorrow != null && restore != null
+          ? {restoreIsBorrowed: true}
+          : {}),
+      };
     };
-    if (entering) {
+    if (entering && !pending) {
       // Lands at once (the travel is null above) and fades in.
       next.opacity = fadeSegment(owner, time, [
         {at: 0, value: fadeFrom},
         {at: ms, value: fadeTo},
       ]);
-      return {next, holds, landing: null};
+      return {next, holds, landing: null, borrowed: roleBorrow};
     }
     if (leaving) {
       // Fades out in place, then lands.
@@ -2027,10 +2061,12 @@ export function createAnimator(
         next,
         holds,
         landing:
-          travel.length > 0 || restore != null ? landsLater(ms, null) : null,
+          travel.length > 0 || restore != null || pending
+            ? landsLater(ms, null)
+            : null,
       };
     }
-    if (travel.length > 0) {
+    if (travel.length > 0 || pending) {
       // A dip: fades out, lands while transparent, fades back in. When no
       // call owns opacity it starts from and returns to the element's own
       // (stylesheet) opacity, not the model's 1.
@@ -2043,8 +2079,15 @@ export function createAnimator(
         (priorBorrow == null &&
           (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
+      // It opens at the opacity on screen: an earlier dip's, when one is
+      // still running, else the borrowed stylesheet value.
       next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: borrowed ?? opacityNow},
+        {
+          at: 0,
+          value: segments.has('opacity')
+            ? opacityNow
+            : (borrowed ?? opacityNow),
+        },
         {at: ms / 2, value: 0},
       ]);
       return {
@@ -2404,6 +2447,8 @@ export function createAnimator(
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
       const wasBorrowed = borrowedOpacity != null;
+      // Read before the landings go: a dip's fade back in, an exit's restore.
+      const heading = opacityHeading();
       for (const property of list) {
         cancelLanding(property);
         const segment = segments.get(property);
@@ -2416,7 +2461,7 @@ export function createAnimator(
           ? valueAt(property, time)
           : wasBorrowed
             ? IDENTITY.opacity
-            : segment.target;
+            : heading;
         interrupt(property, time);
         segments.delete(property);
         resting[property] = value;
