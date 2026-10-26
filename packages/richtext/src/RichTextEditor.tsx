@@ -226,7 +226,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 });
 

@@ -38,8 +38,8 @@
  * timer callback came late, and a test drives the whole machine with explicit
  * timestamps and no real time at all.
  *
- * SYNC: When modified, update GestureRecognizer.ts, GestureHost.ts,
- * GestureArena.test.ts and README.md.
+ * SYNC: When modified, update GestureRecognizer.ts and
+ * __tests__/arena.test.ts.
  */
 
 import {

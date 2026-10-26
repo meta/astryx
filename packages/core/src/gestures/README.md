@@ -239,6 +239,14 @@ warning, so two writers never fight over the paint. Pass another
   such a press tracker paints a finger's press and does nothing else: it
   reports no control event, keeps nothing from the browser, which still
   pans, and takes no mouse or pen press.
+  Even where it is coarse, the host listens only while something enabled
+  could take a touch: a disabled recognizer or consumer registers nothing
+  (FR24), and after a consumer's `isEnabled()` changes, `host.update(element)`
+  re-syncs. So a component that activates through a recognizer (a tap that
+  pages, a press that opens) also activates from the browser's own `click`
+  where the pointer is fine, and a mouse, a trackpad and the keyboard keep
+  working; its tests declare a phone's pointer for the touch path
+  (`coarsePrimaryPointer()` in `__tests__/pointerQuery.ts`).
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
@@ -297,9 +305,11 @@ warning, so two writers never fight over the paint. Pass another
   as a held stepper; never plain buttons, links, cards or list cells) gets
   one: once its press is delivered its finger's moves are cancelled, so the
   browser's pan never takes the held control (UIKit's
-  `touchesShouldCancel(in:)` is false for a tracking control). A scroll that
-  starts on such a control waits on the main thread; a move before the
-  press is delivered still scrolls. The listener the host
+  `touchesShouldCancel(in:)` is false for a tracking control). Where the
+  pointer is coarse its element also gets `touch-action: manipulation`, as a
+  tap recognizer's does (`spec:AST-094` FR18), so taps in quick succession
+  never zoom. A scroll that starts on such a control waits on the main
+  thread; a move before the press is delivered still scrolls. The listener the host
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can
   claim while it moves.

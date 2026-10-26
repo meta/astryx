@@ -145,6 +145,8 @@ function mount(html: string): Record<string, HTMLElement> {
 
 beforeEach(() => {
   clock = new ManualClock();
+  // A phone by default: the shared host follows (pointer: coarse), which a
+  // test can turn fine with pointerQuery.
   host = new GestureHost(document, {clock});
   detachers = [];
   restorePointer = coarsePrimaryPointer();
@@ -166,6 +168,85 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
+  it('registers no document listener for a disabled consumer until it is enabled (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    // The document is shared: give its methods back after this test.
+    detachers.push(() => {
+      added.mockRestore();
+      removed.mockRestore();
+    });
+    added.mockClear();
+    removed.mockClear();
+    const types = (spy: typeof added) =>
+      spy.mock.calls
+        .map(call => call[0])
+        .filter(t => /^(touch|pointer)/.test(t));
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    let enabled = false;
+    const consumer = new RecordingConsumer();
+    Object.assign(consumer, {isEnabled: () => enabled});
+    const detach = coarse.attachConsumer(box, consumer);
+    expect(types(added)).toEqual([]);
+    enabled = true;
+    coarse.update(box);
+    expect(types(added)).toContain('touchstart');
+    enabled = false;
+    coarse.update(box);
+    expect(types(removed)).toContain('touchstart');
+    detach();
+  });
+
+  it('registers no document listener where the primary pointer is fine, or while nothing enabled is attached (spec:AST-094 FR19, FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    // The document is shared: give its methods back after this test.
+    detachers.push(() => {
+      added.mockRestore();
+      removed.mockRestore();
+    });
+    added.mockClear();
+    removed.mockClear();
+    const types = (spy: typeof added) =>
+      spy.mock.calls
+        .map(call => call[0])
+        .filter(t => /^(touch|pointer)/.test(t));
+    // A fine primary pointer: nothing is registered, an element's touchmove
+    // listener included.
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const detachFine = fine.attach(box, new PanGestureRecognizer());
+    expect(types(added)).toEqual([]);
+    expect(boxAdded).not.toHaveBeenCalled();
+    detachFine();
+    // A coarse one, with only a disabled recognizer: still nothing.
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    const pan = new PanGestureRecognizer({isEnabled: false});
+    const detach = coarse.attach(box, pan);
+    expect(types(added)).toEqual([]);
+    expect(boxAdded).not.toHaveBeenCalled();
+    // Enabling it registers the listeners; disabling removes them.
+    pan.setEnabled(true);
+    expect(types(added)).toContain('touchstart');
+    expect(boxAdded).toHaveBeenCalledWith('touchmove', expect.any(Function), {
+      passive: false,
+    });
+    pan.setEnabled(false);
+    expect(types(removed)).toContain('touchstart');
+    detach();
+  });
+
   it('sets touch-action on attach and restores it on detach; the long-press styles wait for a held press', () => {
     const {box} = mount('<div id="box" style="color: red"></div>');
     const set = vi.spyOn(box.style, 'setProperty');
@@ -1293,6 +1374,33 @@ describe('GestureHost', () => {
     touch('touchstart', off, [one], [one], 300);
     expect(off.style.getPropertyValue('user-select')).toBe('');
     touch('touchend', off, [one], [], 400);
+  });
+
+  it('writes touch-action: manipulation for a kept-press control where the primary pointer is coarse, so rapid taps never zoom, and nothing where it is fine (spec:AST-094 FR18, FR19)', () => {
+    const pointer = pointerQuery(true);
+    detachers.push(pointer.restore);
+    const {stepper, row} = mount(
+      '<div><div id="stepper">+</div><div id="row">Row</div></div>',
+    );
+    // jsdom drops touch-action, so the writes are observed.
+    const set = vi.spyOn(stepper.style, 'setProperty');
+    const remove = vi.spyOn(stepper.style, 'removeProperty');
+    const rowSet = vi.spyOn(row.style, 'setProperty');
+    detachers.push(
+      host.attachConsumer(
+        stepper,
+        new PressTracker({getBounds: () => null, keepsTouch: true}),
+      ),
+    );
+    detachers.push(
+      host.attachConsumer(row, new PressTracker({getBounds: () => null})),
+    );
+    expect(set).toHaveBeenCalledWith('touch-action', 'manipulation');
+    // A press tracker that keeps no touch writes nothing.
+    expect(rowSet).not.toHaveBeenCalledWith('touch-action', expect.anything());
+    // Where the pointer turns fine, the browser's own value comes back (FR19).
+    pointer.set(false);
+    expect(remove).toHaveBeenCalledWith('touch-action');
   });
 
   it("calls a press tracker's own selection lock for each finger's press, a stepper's hold-repeat, and nowhere else (spec:AST-094 FR41)", () => {

@@ -62,6 +62,12 @@ interface ChainEntry {
   readonly isRtl: boolean;
   readonly stopsX: boolean;
   readonly stopsY: boolean;
+  /**
+   * The scroller sits beyond a `position: fixed` ancestor of the touch: it
+   * still scrolls under the finger, but it does not carry the touched
+   * element, so the element is not inside a scroll view (spec:AST-094 FR11).
+   */
+  readonly isBeyondFixed: boolean;
 }
 
 const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
@@ -103,6 +109,7 @@ function buildChain(target: Element): Chain {
   let allowX = true;
   let allowY = true;
   let reachedRoot = false;
+  let isBeyondFixed = false;
   for (
     let node: Node | null = target;
     node != null;
@@ -134,10 +141,14 @@ function buildChain(target: Element): Chain {
         isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
+        isBeyondFixed,
       });
     }
     if (isRoot) {
       break;
+    }
+    if (style.position === 'fixed') {
+      isBeyondFixed = true;
     }
   }
   if (!reachedRoot && root instanceof Element) {
@@ -148,6 +159,7 @@ function buildChain(target: Element): Chain {
       isRtl: false,
       stopsX: false,
       stopsY: false,
+      isBeyondFixed,
     });
   }
   return {entries: chain, allowsPan: allowX || allowY};
@@ -254,12 +266,13 @@ export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
     get isInsideScroller(): boolean {
       return getChain().some(
         entry =>
-          (entry.y &&
+          !entry.isBeyondFixed &&
+          ((entry.y &&
             entry.element.scrollHeight - entry.element.clientHeight >
               EDGE_TOLERANCE) ||
-          (entry.x &&
-            entry.element.scrollWidth - entry.element.clientWidth >
-              EDGE_TOLERANCE),
+            (entry.x &&
+              entry.element.scrollWidth - entry.element.clientWidth >
+                EDGE_TOLERANCE)),
       );
     },
   };

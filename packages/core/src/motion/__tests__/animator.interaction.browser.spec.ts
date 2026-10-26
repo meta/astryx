@@ -12,7 +12,7 @@
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
- *   the curve and holds its end state; a theme that retunes a table spring
+ *   the curve and holds its end state; a role variable set on a scope
  *   changes the curve the engine plays
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
@@ -375,16 +375,16 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   expect(result.worstOpacity).toBeLessThan(0.003);
 });
 
-test('a theme that retunes a table spring changes the curve the engine plays', async ({
+test('a role variable set on a scope changes the curve the engine plays', async ({
   page,
 }) => {
-  // The theme writes the role's variable on its scope, as defineTheme's CSS
-  // does; the box outside the scope keeps the table's spring.
+  // A scope sets the role's variable (no public API writes one while touch
+  // motion stays internal); the box outside the scope keeps the table's spring.
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
   .box { position: absolute; top: 40px; width: 48px; height: 48px; background: #36c; }
-  @scope ([data-astryx-theme="soft"]) { :scope { --motion-springs-sheet-present: 0.8s 0.3; } }
+  @scope ([data-astryx-theme="soft"]) { :scope { --motion-springs-settle: 0.8s 0.3; } }
 </style>
 <div class="box" id="plain" style="left: 0"></div>
 <div data-astryx-theme="soft"><div class="box" id="themed" style="left: 80px"></div></div>
@@ -394,19 +394,16 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
   );
   await page.goto('http://motion.test/');
   const result = await page.evaluate(async () => {
-    // A theme retunes only a registered table's roles: register it as a
-    // touch module would, and fail loudly if the role is not there.
+    // Only a registered table's roles resolve: register it as a touch
+    // module would, and fail loudly if the role is not there.
     Motion.registerSpringsTable();
-    if (
-      Motion.motionRoleOf(Motion.springs.sheetPresent)?.id !==
-      'springs.sheetPresent'
-    ) {
+    if (Motion.motionRoleOf(Motion.springs.settle)?.id !== 'springs.settle') {
       throw new Error(
-        'springs.sheetPresent is not a registered role: call registerSpringsTable() first',
+        'springs.settle is not a registered role: call registerSpringsTable() first',
       );
     }
     const curves = {
-      plain: Motion.solveSpring(Motion.toSpring(Motion.springs.sheetPresent), {
+      plain: Motion.solveSpring(Motion.toSpring(Motion.springs.settle), {
         from: 300,
         to: 0,
       }),
@@ -423,10 +420,7 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
       const element = document.getElementById(id) as HTMLElement;
       const animator = Motion.createAnimator(element);
       animator.set({y: 300});
-      const handle = animator.animate(
-        {y: 0},
-        {spring: Motion.springs.sheetPresent},
-      );
+      const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
       const animations = element.getAnimations();
       for (const a of animations) {
