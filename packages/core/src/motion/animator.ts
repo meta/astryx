@@ -117,10 +117,10 @@
  *   release on any pointer (`touchRelease`), it becomes (DR2) an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
  *   on `timing.curves.move`:
- *   - entering (opacity rises in the same call, or `crossfadeAs:
+ *   - entering (opacity rises from 0 in the same call, or `crossfadeAs:
  *     'entrance'`): lands in its new place at once and fades in;
- *   - leaving (opacity falls, or `crossfadeAs: 'exit'`): fades out in place,
- *     then lands;
+ *   - leaving (opacity falls to 0, or `crossfadeAs: 'exit'`): fades out in
+ *     place, then lands;
  *   - an opacity change alone: fades to its value;
  *   - otherwise: dips (fades out, lands, fades back in);
  *   travel lands with a plain style write while the element is transparent,
@@ -139,8 +139,8 @@
  * transition. A curve marked `isTransition` (coast()'s spring back from past
  * an edge), like a spring a component starts on release toward a target it
  * picks (a detent, a page), is a transition: it plays through the Reduce
- * Motion policy above, a cross-fade on a coarse pointer and at once
- * elsewhere (DR2, DR3).
+ * Motion policy above, a cross-fade on a coarse pointer or after a touch
+ * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
  * resolveMotion.ts, which names the motion role it plays (`springs.settle`
@@ -173,11 +173,7 @@ import {
   reducedMotionCrossFade,
   registerReducedMotionCrossFade,
 } from './uikit/timing';
-import {
-  planReducedMotion,
-  TRAVEL_PROPERTIES,
-  type ReducedMotionView,
-} from './reducedMotionPlan';
+import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
 
 /**
  * A value the animator can drive.
@@ -419,12 +415,14 @@ export interface Animator {
    * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
    * past an edge) is a transition and plays through the Reduce Motion
    * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
-   * is a transition too: play it with `play` or `animate`. Only a surface
-   * that coasts imports the coast math and the scroll table.
+   * is a transition too: play it with `play` or `animate`. Pass
+   * `touchRelease` when a touch drag's release starts it, so a spring back
+   * cross-fades on any pointer (DR2). Only a surface that coasts imports the
+   * coast math and the scroll table.
    */
   decay(
     curves: Partial<Record<'x' | 'y', MotionCurve>>,
-    options?: Pick<AnimateOptions, 'at'>,
+    options?: Pick<AnimateOptions, 'at' | 'touchRelease'>,
   ): MotionHandle;
   /**
    * Moves properties by the given amounts at once, as when a layout shift
@@ -538,6 +536,8 @@ interface Landing {
   restoreIsBorrowed?: boolean;
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
+  /** Whose move each value is: a carried value keeps its own call. */
+  readonly owners: Map<MotionProperty, HandleState>;
   timer: ReturnType<typeof setTimeout> | null;
   /** When it is due on the document timeline, once the call has started. */
   due: number | null;
@@ -548,7 +548,10 @@ interface ReducedPlan {
   readonly next: Partial<Record<MotionProperty, Segment | null>>;
   /** Values that stay where they are until the landing writes them. */
   readonly holds: Partial<Record<MotionProperty, number>>;
-  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried' | 'due'> | null;
+  readonly landing: Omit<
+    Landing,
+    'owner' | 'timer' | 'carried' | 'owners' | 'due'
+  > | null;
   /** The stylesheet opacity a dip borrowed (no call owns opacity). */
   readonly borrowed?: number | null;
 }
@@ -641,8 +644,6 @@ const RETIRE_RECHECK_MS = 100;
 
 /** How long an element stays promoted after its last motion, ms. */
 export const PROMOTION_LINGER_MS = 500;
-
-const TRAVEL = TRAVEL_PROPERTIES;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
@@ -875,6 +876,8 @@ export function createAnimator(
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
   let ownWillChange: string | null = null;
+  /** The stylesheet's will-change when there is no inline value. */
+  let sheetWillChange = '';
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -1485,9 +1488,24 @@ export function createAnimator(
       ownWillChange = null;
       return;
     }
-    ownWillChange ??= element.style.willChange;
-    const own = ownWillChange === 'auto' ? '' : ownWillChange;
-    element.style.willChange = own === '' ? list : `${own}, ${list}`;
+    if (ownWillChange == null) {
+      ownWillChange = element.style.willChange;
+      // Without an inline value, the stylesheet's reasons stay alongside the
+      // promotion's (read once, as the promotion starts).
+      sheetWillChange =
+        ownWillChange === ''
+          ? (element.ownerDocument.defaultView
+              ?.getComputedStyle(element)
+              .getPropertyValue('will-change') ?? '')
+          : '';
+    }
+    const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
+    const own = base === 'auto' ? '' : base;
+    const reasons = own
+      .split(',')
+      .map(reason => reason.trim())
+      .filter(reason => reason !== '' && !promoted.has(reason as Channel));
+    element.style.willChange = [...reasons, ...promoted].join(', ');
   };
 
   /**
@@ -1810,6 +1828,19 @@ export function createAnimator(
       group.animations.some(animation => animation.playState === 'finished')
     ) {
       resolveGroup(group, group.provisional);
+      return;
+    }
+    // No start yet (paused before its first frame by a harness or a page,
+    // or resumed with play() and still pending): neither `ready` nor the
+    // first frame will look again, so keep looking each frame until the call
+    // has a start, or its animations finish (its own clock) or are cancelled.
+    if (
+      group.animations.some(
+        animation =>
+          animation.startTime == null && animation.playState !== 'idle',
+      )
+    ) {
+      requestFrame?.(() => syncGroup(group));
     }
   };
 
@@ -2001,8 +2032,23 @@ export function createAnimator(
         }
         return animator.animate(to, {...transition, spring}, retargetOptions);
       },
+      // The call's own curves, and its travel still waiting to land under
+      // Reduce Motion: a catch freezes both where they are on screen
+      // (AST-094 FR6), travel first so the fade's landing no longer carries
+      // it, as `animator.stop()` does.
       stop: () =>
-        animator.stop(properties.filter(p => segments.get(p)?.owner === owner)),
+        animator.stop(
+          PROPERTIES.filter(
+            p =>
+              properties.includes(p) &&
+              (segments.get(p)?.owner === owner ||
+                [...landings].some(
+                  landing =>
+                    landing.values.has(p) &&
+                    (landing.owners.get(p) ?? landing.owner) === owner,
+                )),
+          ),
+        ),
     };
     return handle;
   };
@@ -2192,9 +2238,14 @@ export function createAnimator(
       if (property === 'opacity') {
         endLanding(landing);
         landNow(landing);
-      } else if (landing.values.delete(property) && !landing.owner.settled) {
-        // Set or stopped before it landed: the call did not finish.
-        settle(landing.owner, false);
+      } else if (landing.values.delete(property)) {
+        // Set or stopped before it landed: the call whose move it was did
+        // not finish (a carried value is an earlier call's).
+        const moved = landing.owners.get(property) ?? landing.owner;
+        landing.owners.delete(property);
+        if (!moved.settled) {
+          settle(moved, false);
+        }
       }
     }
   };
@@ -2226,12 +2277,18 @@ export function createAnimator(
   const adoptLandings = (
     plan: NonNullable<ReducedPlan['landing']>,
     properties: ReadonlyArray<MotionProperty>,
-  ): HandleState[] => {
+  ): {carried: HandleState[]; owners: Map<MotionProperty, HandleState>} => {
     const carried: HandleState[] = [];
+    const owners = new Map<MotionProperty, HandleState>();
     for (const landing of [...landings]) {
       for (const [property, value] of landing.values) {
+        const moved = landing.owners.get(property) ?? landing.owner;
         if (!properties.includes(property) && !plan.values.has(property)) {
           plan.values.set(property, value);
+          owners.set(property, moved);
+        } else if (!moved.settled) {
+          // This call takes the property over: the earlier move never lands.
+          settle(moved, false);
         }
       }
       carried.push(landing.owner, ...landing.carried);
@@ -2240,7 +2297,7 @@ export function createAnimator(
     for (const owner of carried) {
       carriedOwners.add(owner);
     }
-    return carried;
+    return {carried, owners};
   };
 
   /** Where opacity is heading: past a waiting landing's fade back in. */
@@ -2268,9 +2325,20 @@ export function createAnimator(
     owner: HandleState,
     started: Promise<number>,
     plan: NonNullable<ReducedPlan['landing']>,
-    carried: HandleState[],
+    adopted: ReturnType<typeof adoptLandings> | null,
   ) => {
-    const landing: Landing = {...plan, owner, carried, timer: null, due: null};
+    const owners = new Map<MotionProperty, HandleState>();
+    for (const property of plan.values.keys()) {
+      owners.set(property, adopted?.owners.get(property) ?? owner);
+    }
+    const landing: Landing = {
+      ...plan,
+      owner,
+      carried: adopted?.carried ?? [],
+      owners,
+      timer: null,
+      due: null,
+    };
     landings.add(landing);
     // The handle settles when the landing (and its fade back in) is done.
     if (owner.timer != null) {
@@ -2364,10 +2432,76 @@ export function createAnimator(
     }
   };
 
+  /**
+   * A call that sets a value still waiting to land takes it over: the earlier
+   * move never lands, and its call settles interrupted. Once nothing waiting
+   * is left, a call that names its own opacity replaces an earlier fade back
+   * in or restore too, so a caught dismissal fades straight back up instead
+   * of dipping. Whatever still waits is carried by the new plan.
+   */
+  const takeOverLandings = (
+    properties: ReadonlyArray<MotionProperty>,
+    namesOpacity: boolean,
+  ) => {
+    for (const property of properties) {
+      if (property !== 'opacity') {
+        cancelLanding(property);
+      }
+    }
+    if (!namesOpacity) {
+      // A dip left with nothing to land (a move taken back) fades straight
+      // back in from where it is, rather than finishing its dip.
+      for (const landing of [...landings]) {
+        if (landing.values.size === 0 && landing.fadeIn != null) {
+          endLanding(landing);
+          land(landing);
+        }
+      }
+      return;
+    }
+    for (const landing of [...landings]) {
+      // A waiting call that named its own opacity loses it to this call: it
+      // never reaches that opacity, so it settles interrupted even though its
+      // travel still lands.
+      for (const owner of [landing.owner, ...landing.carried]) {
+        if (namedOpacity.has(owner) && !owner.settled) {
+          settle(owner, false);
+        }
+      }
+      if (landing.values.size > 0) {
+        continue;
+      }
+      endLanding(landing);
+      if (
+        landing.fadeIn?.isBorrowed === true ||
+        landing.restoreIsBorrowed === true
+      ) {
+        // The call's own opacity owns it now, not the stylesheet's.
+        borrowedOpacity = null;
+      }
+      for (const owner of [landing.owner, ...landing.carried]) {
+        carriedOwners.delete(owner);
+        if (!owner.settled) {
+          settle(owner, false);
+        }
+      }
+    }
+  };
+
+  /** Reduce Motion calls that named their own opacity. */
+  const namedOpacity = new WeakSet<HandleState>();
+
+  /**
+   * Where opacity was heading before a call took the waiting landings over:
+   * an entrance by role that catches an exit fades back to what the exit
+   * would have restored.
+   */
+  let headingBeforeTakeOver: number | null = null;
+
   /** What the Reduce Motion planner reads of this animator. */
   const planView: ReducedMotionView = {
     valueAt,
-    opacityHeading: () => opacityHeading(),
+    opacityHeading: () => headingBeforeTakeOver ?? opacityHeading(),
     ownOpacity: () => ownOpacity(),
     writesOwnOpacity: () => writesOwnOpacity(),
     get borrowedOpacity() {
@@ -2396,14 +2530,19 @@ export function createAnimator(
     fade: boolean,
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
-    const plan = planReducedMotion(
-      planView,
-      time,
-      targets,
-      properties,
-      fade,
-      role,
-    );
+    const heading = opacityHeading();
+    // An entrance or an exit by role drives the opacity as a named one does.
+    takeOverLandings(properties, targets.opacity != null || role != null);
+    if (targets.opacity != null) {
+      namedOpacity.add(owner);
+    }
+    headingBeforeTakeOver = heading;
+    let plan: ReturnType<typeof planReducedMotion>;
+    try {
+      plan = planReducedMotion(planView, time, targets, properties, fade, role);
+    } finally {
+      headingBeforeTakeOver = null;
+    }
     const next: Partial<Record<MotionProperty, Segment | null>> = {};
     for (const property of plan.atOnce) {
       next[property] = null;
@@ -2651,10 +2790,10 @@ export function createAnimator(
         animateOptions.at,
         animateOptions.start,
       );
-      const carried =
+      const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
-          : [];
+          : null;
       const changed: MotionProperty[] = [];
       for (const [property, segment] of Object.entries(next) as [
         MotionProperty,
@@ -2687,7 +2826,7 @@ export function createAnimator(
       }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
-        scheduleLanding(owner, handle.started, plan.landing, carried);
+        scheduleLanding(owner, handle.started, plan.landing, adopted);
       }
       return handle;
     },
@@ -2770,10 +2909,10 @@ export function createAnimator(
         playOptions.at,
         playOptions.start,
       );
-      const carried =
+      const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
-          : [];
+          : null;
       const changed: MotionProperty[] = [];
       for (const [property, segment] of Object.entries(next) as [
         MotionProperty,
@@ -2806,7 +2945,7 @@ export function createAnimator(
       }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
-        scheduleLanding(owner, handle.started, plan.landing, carried);
+        scheduleLanding(owner, handle.started, plan.landing, adopted);
       }
       return handle;
     },
@@ -2827,7 +2966,10 @@ export function createAnimator(
       }
       const transitioned =
         Object.keys(transitions).length > 0
-          ? animator.animate(transitions, REDUCED_TRANSITION, {at: time})
+          ? animator.animate(transitions, REDUCED_TRANSITION, {
+              at: time,
+              touchRelease: decayOptions.touchRelease,
+            })
           : null;
       const {owner, finished} = newOwner();
       // Momentum moves the translate axes only (DR2's throw exception).
