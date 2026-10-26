@@ -121,7 +121,11 @@ function touchActionFromData(): () => void {
     .spyOn(window, 'getComputedStyle')
     .mockImplementation((element: Element, pseudo?: string | null) => {
       const style = original(element, pseudo);
-      const touchAction = element.getAttribute('data-touch-action');
+      // The author's rule outranks the host's zero-specificity rule, which
+      // applies where the author sets nothing.
+      const touchAction =
+        element.getAttribute('data-touch-action') ??
+        element.getAttribute('data-astryx-touch-action');
       if (touchAction == null) {
         return style;
       }
@@ -143,6 +147,17 @@ function touchActionFromData(): () => void {
       });
     });
   return () => spy.mockRestore();
+}
+
+/** The host's touch-action rules in a document or shadow root. */
+function hostRules(root: Document | ShadowRoot): string {
+  const adopted = (root.adoptedStyleSheets ?? []).flatMap(sheet =>
+    [...sheet.cssRules].map(rule => rule.cssText),
+  );
+  const styles = [...root.querySelectorAll('style')].map(
+    style => style.textContent ?? '',
+  );
+  return [...adopted, ...styles].join('\n');
 }
 
 function mount(html: string): Record<string, HTMLElement> {
@@ -264,15 +279,8 @@ describe('GestureHost', () => {
   });
 
   it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
-    // The author's value is read in the next frame (FR18): fake the frame.
-    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
-    detachers.push(() => vi.useRealTimers());
-    // jsdom drops touch-action from the style, so the writes are observed.
     const {box} = mount('<div id="box"></div>');
-    const set = vi.spyOn(box.style, 'setProperty');
-    const remove = vi.spyOn(box.style, 'removeProperty');
-    const writes = () =>
-      set.mock.calls.filter(call => call[0] === 'touch-action').length;
+    const mark = () => box.getAttribute('data-astryx-touch-action');
     let coarse = false;
     const host2 = new GestureHost(document, {
       clock,
@@ -280,20 +288,17 @@ describe('GestureHost', () => {
     });
     const pan = new PanGestureRecognizer({direction: 'horizontal'});
     const detach = host2.attach(box, pan);
-    expect(writes()).toBe(0);
+    expect(mark()).toBeNull();
     coarse = true;
     host2.update(box);
-    vi.advanceTimersByTime(16);
-    expect(set).toHaveBeenLastCalledWith('touch-action', 'pan-y pinch-zoom');
+    expect(mark()).toBe('pan-y pinch-zoom');
     pan.setEnabled(false);
-    expect(remove).toHaveBeenCalledWith('touch-action');
+    expect(mark()).toBeNull();
     pan.setEnabled(true);
-    expect(writes()).toBe(2);
+    expect(mark()).toBe('pan-y pinch-zoom');
     coarse = false;
     host2.update(box);
-    expect(remove.mock.calls.filter(c => c[0] === 'touch-action').length).toBe(
-      2,
-    );
+    expect(mark()).toBeNull();
     detach();
   });
 
@@ -960,18 +965,106 @@ describe('GestureHost', () => {
           new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
         ),
       );
-      // A stylesheet's value is read in the next frame (see below).
       vi.advanceTimersByTime(16);
-      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
-      // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
-      expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+      // manipulation (the hold's) with none, and pan-y pinch-zoom (the
+      // pan's) with pan-y, allow the caller's own: its rule stays in force.
+      expect(window.getComputedStyle(trigger).touchAction).toBe('none');
+      expect(window.getComputedStyle(strip).touchAction).toBe('pan-y');
+      expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
+      expect(setStrip).not.toHaveBeenCalledWith(
+        'touch-action',
+        expect.anything(),
+      );
     } finally {
       restore();
       vi.useRealTimers();
     }
   });
 
-  it("never writes a touch-action wider than the author's, at any frame: a stylesheet's value is read in the first frame and nothing is written before it (spec:AST-094 FR18, DEC-8)", () => {
+  it('marks an element with its derived touch-action as it attaches, under a rule any author rule outranks, with no inline write and no style read (spec:AST-094 FR18, DEC-8)', () => {
+    const restore = touchActionFromData();
+    try {
+      const {box} = mount('<div id="box"></div>');
+      const set = vi.spyOn(box.style, 'setProperty');
+      const read = vi.mocked(window.getComputedStyle);
+      read.mockClear();
+      detachers.push(
+        host.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+      );
+      expect(box.getAttribute('data-astryx-touch-action')).toBe(
+        'pan-y pinch-zoom',
+      );
+      expect(hostRules(document)).toContain(
+        ':where([data-astryx-touch-action="pan-y pinch-zoom"])',
+      );
+      expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps an author rule in force from the first frame, and writes the intersection inline only where it is narrower than the author's (spec:AST-094 FR18)", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    const restore = touchActionFromData();
+    try {
+      const {both, strip} = mount(
+        '<div id="both" data-touch-action="pan-x pan-y"></div><div id="strip" data-touch-action="pan-y"></div>',
+      );
+      const setBoth = vi.spyOn(both.style, 'setProperty');
+      const setStrip = vi.spyOn(strip.style, 'setProperty');
+      detachers.push(
+        host.attach(both, new PanGestureRecognizer({direction: 'horizontal'})),
+        host.attach(strip, new PanGestureRecognizer({direction: 'horizontal'})),
+      );
+      // Before the host reads anything, the author's value stands.
+      expect(both.getAttribute('data-astryx-touch-action')).toBe(
+        'pan-y pinch-zoom',
+      );
+      expect(window.getComputedStyle(both).touchAction).toBe('pan-x pan-y');
+      expect(setBoth).not.toHaveBeenCalledWith(
+        'touch-action',
+        expect.anything(),
+      );
+      vi.advanceTimersByTime(16);
+      // pan-y pinch-zoom with pan-x pan-y allows pan-y: narrower than the
+      // author's, so it is written.
+      expect(setBoth).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+      // With pan-y it is the author's own value: nothing to write.
+      expect(setStrip).not.toHaveBeenCalledWith(
+        'touch-action',
+        expect.anything(),
+      );
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('removes the mark when the last recognizer detaches', () => {
+    const {box} = mount('<div id="box"></div>');
+    const detach = host.attach(
+      box,
+      new PanGestureRecognizer({direction: 'horizontal'}),
+    );
+    expect(box.hasAttribute('data-astryx-touch-action')).toBe(true);
+    detach();
+    expect(box.hasAttribute('data-astryx-touch-action')).toBe(false);
+  });
+
+  it('adds the rule to the shadow root an element is in', () => {
+    const {box} = mount('<div id="box"></div>');
+    const shadow = box.attachShadow({mode: 'open'});
+    const inner = document.createElement('div');
+    shadow.append(inner);
+    detachers.push(host.attach(inner, new LongPressGestureRecognizer()));
+    expect(inner.getAttribute('data-astryx-touch-action')).toBe('manipulation');
+    expect(hostRules(shadow)).toContain(
+      ':where([data-astryx-touch-action="manipulation"])',
+    );
+  });
+
+  it("is never wider than the author's touch-action, at any frame (spec:AST-094 FR18, DEC-8)", () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
     try {
@@ -979,44 +1072,33 @@ describe('GestureHost', () => {
         '<div id="trigger" data-touch-action="none"></div>',
       );
       const set = vi.spyOn(trigger.style, 'setProperty');
-      const touchActions = () =>
-        set.mock.calls.filter(([name]) => name === 'touch-action');
       detachers.push(
         host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
       );
-      // Until the frame reads the author's value the host writes nothing,
-      // so the author's `none` stands, never the wider `manipulation`.
-      expect(touchActions()).toEqual([]);
-      // The frame's callback, before its paint: the read, then the write.
+      // The author's none outranks the host's manipulation from the attach
+      // on, and the read finds nothing to narrow.
+      expect(window.getComputedStyle(trigger).touchAction).toBe('none');
       vi.advanceTimersByTime(16);
-      expect(touchActions()).toEqual([['touch-action', 'none']]);
+      expect(window.getComputedStyle(trigger).touchAction).toBe('none');
+      expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
     } finally {
       restore();
       vi.useRealTimers();
     }
   });
 
-  it('gives an element attached while on screen its touch-action at the next frame', () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+  it('gives an element attached while on screen its touch-action in the attach itself', () => {
     const restore = touchActionFromData();
     try {
       const {box} = mount('<div id="box"></div>');
-      const set = vi.spyOn(box.style, 'setProperty');
-      const touchActions = () =>
-        set.mock.calls.filter(([name]) => name === 'touch-action');
       detachers.push(host.attach(box, new TapGestureRecognizer({name: 'tap'})));
-      // No author value is known without a style read, so nothing is
-      // written in the attach itself; the frame writes the derived value.
-      expect(touchActions()).toEqual([]);
-      vi.advanceTimersByTime(16);
-      expect(touchActions()).toEqual([['touch-action', 'manipulation']]);
+      expect(window.getComputedStyle(box).touchAction).toBe('manipulation');
     } finally {
       restore();
-      vi.useRealTimers();
     }
   });
 
-  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's in the next frame", () => {
+  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's is read in the next frame", () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
     try {
@@ -1043,14 +1125,11 @@ describe('GestureHost', () => {
       expect(read).not.toHaveBeenCalled();
       // The caller's inline value: pan-y pinch-zoom ∩ pan-y, at once.
       expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
-      // A stylesheet's value: nothing until the next frame reads it, then
-      // what both allow.
-      expect(
-        set.mock.calls.filter(([name]) => name === 'touch-action'),
-      ).toEqual([]);
+      // A stylesheet's value: read once in the next frame, where none is
+      // already no wider than both allow.
       vi.advanceTimersByTime(16);
-      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
       expect(read).toHaveBeenCalledTimes(1);
+      expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
     } finally {
       restore();
       vi.useRealTimers();
