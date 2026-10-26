@@ -397,16 +397,22 @@ describe('PanGestureRecognizer', () => {
     ]);
   });
 
-  it('claims nothing before it begins at 10 pt: a 5–9 pt drag leaves the touch to the browser (spec:AST-094 FR17, FR19)', () => {
+  it('claims nothing before it begins at 10 pt: a 5–9 pt drag leaves the touch to the browser (spec:AST-094 FR17)', () => {
     const h = createHarness();
     const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
     const finger = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
-    finger.move(0, 91, 16);
-    expect(pan.state).toBe('possible');
-    expect(h.arena.isClaimed(1)).toBe(false);
-    finger.move(0, 90, 32);
+    for (const [y, time] of [
+      [95, 16],
+      [93, 32],
+      [91, 48],
+    ] as const) {
+      finger.move(0, y, time);
+      expect(pan.state).toBe('possible');
+      expect(h.claims).toEqual([]);
+    }
+    finger.move(0, 90, 64);
     expect(pan.state).toBe('began');
-    expect(h.arena.isClaimed(1)).toBe(true);
-    finger.up(48);
+    expect(h.claims).toEqual([1]);
+    finger.up(80);
   });
 });

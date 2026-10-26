@@ -161,9 +161,23 @@ describe('PressTracker cell profile', () => {
     return {events, highlights, tracker, h: createHarness()};
   }
 
-  it('waits the content-touch delay even outside a scroller', () => {
+  it('highlights at once outside a scroller: the delay applies only inside one (AST-094 FR11)', () => {
     const {highlights, tracker, h} = cell();
     h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    expect(highlights).toEqual([true]);
+    vi.advanceTimersByTime(DELAY);
+    expect(highlights).toEqual([true]);
+    h.finger(1).up(DELAY + 40);
+    expect(highlights).toEqual([true, false]);
+  });
+
+  it('waits the content-touch delay inside a scroller', () => {
+    const {highlights, tracker, h} = cell();
+    h.finger(1).down(150, 120, 0, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: scrollProbe(() => true, true),
+    });
     expect(highlights).toEqual([]);
     vi.advanceTimersByTime(DELAY);
     expect(highlights).toEqual([true]);
