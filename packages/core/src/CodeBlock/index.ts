@@ -13,6 +13,13 @@
 
 export {CodeBlock} from './CodeBlock';
 export type {CodeBlockProps} from './CodeBlock';
+export {createCodeLanguage} from './grammar';
+export type {
+  CodeLanguage,
+  CodeLanguageToken,
+  CodeLanguageTokenize,
+  CreateCodeLanguageOptions,
+} from './grammar';
 
 export {Code} from '../Code';
 export type {CodeProps, CodeColor, CodeSize} from '../Code';
