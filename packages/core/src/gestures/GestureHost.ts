@@ -65,7 +65,7 @@
  *   restored when they detach.
  * - While a finger or a pen is down, text selection and the touch callout
  *   are off only where the hold does something (`spec:AST-094` FR41): on the
- *   elements of recognizers with `preventsTextSelection`, and on a non-text
+ *   elements of recognizers that bring a `selectionLock`, and on a non-text
  *   input under the finger inside them (WebKit's own style makes every
  *   input selectable); restored when the contact ends. Only where the
  *   primary pointer is coarse: a mouse never takes this lock, nor a finger
@@ -117,10 +117,9 @@ import {
   type GestureArenaOptions,
   type GestureClock,
 } from './GestureArena';
-import type {GestureRecognizer} from './GestureRecognizer';
+import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import {HAPTIC_SWITCH_ATTRIBUTE} from './haptics';
 import {HoverGestureRecognizer} from './HoverGestureRecognizer';
-import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 import {PanGestureRecognizer} from './PanGestureRecognizer';
 import {TapGestureRecognizer} from './TapGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
@@ -139,7 +138,7 @@ import type {
 } from './types';
 import {internals} from './recognizerInternals';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
-import {lockSelection, locksSelectionFor} from './selectionLock';
+import {locksSelectionFor} from './selectionLock';
 
 interface Registration {
   readonly recognizers: GestureRecognizer[];
@@ -202,10 +201,13 @@ export interface AttachOptions {
   manageStyle?: boolean;
   /**
    * The recognizer, or the press tracker, reads each event's pointer itself,
-   * as `spec:AST-057`'s row swipe does and a stepper held with a mouse does,
    * so it attaches even where the primary pointer is fine: the host installs
-   * what it needs there, styles its element and raises no warning. Everything
-   * else stays inactive there. @default false
+   * what it needs there, styles its element and raises no warning. A
+   * recognizer does so as `spec:AST-057`'s row swipe does; a press tracker
+   * paints press feedback (an FR19 exception for press feedback only,
+   * pending in `spec:AST-094`'s amendment), and its press there never keeps
+   * its touch from the browser, which still pans. Everything else stays
+   * inactive there. @default false
    */
   perEventPointer?: boolean;
 }
@@ -696,7 +698,10 @@ export class GestureHost {
     return this.isCoarse || this.perEventRecognizers.has(recognizer);
   }
 
-  /** Whether a press consumer takes input now (FR19; its per-event opt-in). */
+  /**
+   * Whether a press consumer takes input now (FR19; its per-event opt-in,
+   * an FR19 exception for press feedback pending in AST-094's amendment).
+   */
   private isConsumerActive(consumer: TouchConsumer): boolean {
     return this.isCoarse || this.perEventConsumers.has(consumer);
   }
@@ -721,8 +726,9 @@ export class GestureHost {
         recognizer =>
           this.isActive(recognizer) && claimsWhileMoving(recognizer),
       ) ||
-      (registration.consumer?.keepsTouch != null &&
-        this.isConsumerActive(registration.consumer));
+      // A kept press holds its touch only where the pointer is coarse; a
+      // per-event tracker elsewhere gives press feedback only (FR19).
+      (registration.consumer?.keepsTouch != null && this.isCoarse);
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -996,8 +1002,8 @@ export class GestureHost {
   /**
    * Turn text selection and the touch callout off, for as long as this
    * finger or pen is down, only on the elements whose hold does something:
-   * a long press's (a menu, a hold-repeat) and those of recognizers that ask
-   * (`preventsTextSelection`, a slider's thumb or a switch's drag). Anything whose hold does nothing, a
+   * a long press's (a menu, a hold-repeat) and those of recognizers created
+   * with a `selectionLock` (a slider's thumb, a switch's drag). Anything whose hold does nothing, a
    * press-tracked control or row included, keeps the browser's long-press
    * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
    * lock only where the primary pointer is coarse (locksSelectionFor), so
@@ -1008,23 +1014,33 @@ export class GestureHost {
     recognizers: ReadonlyArray<GestureRecognizer>,
     target: EventTarget | null,
   ): void {
-    const elements = new Set<Element>();
+    // Each recognizer whose hold does something brings its lock; the host
+    // never imports one (a component without such a hold does not bundle
+    // it).
+    const byLock = new Map<SelectionLock, Set<Element>>();
     for (const recognizer of recognizers) {
+      const lock = recognizer.selectionLock;
       if (
-        // A long press (a menu, a hold-repeat) or a recognizer that asks: a
-        // hold that does something.
-        (recognizer.preventsTextSelection ||
-          recognizer instanceof LongPressGestureRecognizer) &&
+        lock != null &&
         // Only a recognizer that would take this touch locks for it.
         recognizer.isEnabled &&
         internals(recognizer).acceptsTouchInput &&
         recognizer.view instanceof Element
       ) {
+        const elements = byLock.get(lock) ?? new Set<Element>();
         elements.add(recognizer.view);
+        byLock.set(lock, elements);
       }
     }
-    if (elements.size > 0) {
-      this.lockedBy.set(id, lockSelection(elements, target));
+    if (byLock.size > 0) {
+      const undo = [...byLock].map(([lock, elements]) =>
+        lock(elements, target),
+      );
+      this.lockedBy.set(id, () => {
+        for (const release of undo) {
+          release();
+        }
+      });
     }
   }
 
@@ -1103,7 +1119,8 @@ export class GestureHost {
       this.watchTarget(
         touch.identifier,
         target,
-        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
+        recognizers.some(claimsWhileMoving) ||
+          (this.isCoarse && consumer?.keepsTouch != null),
       );
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target});
@@ -1252,7 +1269,7 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          this.arena.consumerOf(id)?.keepsTouch?.() === true)
+          (this.isCoarse && this.arena.consumerOf(id)?.keepsTouch?.() === true))
       ) {
         event.preventDefault();
         return;

@@ -227,12 +227,15 @@ warning, so two writers never fight over the paint. Pass another
   flight and removes it all. A development warning names the first attach
   under a fine pointer: attach touch work under a touch presentation. The
   one carve-out is a recognizer or press tracker that reads each event's
-  pointer itself, as `spec:AST-057`'s row swipe does, or a stepper whose
-  held press repeats the same under a mouse: attached with
+  pointer itself, as `spec:AST-057`'s row swipe does, or a press tracker that
+  paints press feedback (an FR19 exception for press feedback only, pending
+  in `spec:AST-094`'s amendment): attached with
   `perEventPointer: true` (an option of `attach`, `attachConsumer`,
   `useGestureRecognizer` and `usePressTracker`), it gets the host's
   listeners, its deliveries and its own element's style on any pointer,
-  with no warning, while everything else beside it stays inactive.
+  with no warning, while everything else beside it stays inactive. There
+  such a press tracker's press never keeps its touch from the browser,
+  which still pans.
 - **`touch-action`.** Each element gets the intersection of what its
   recognizers leave the browser, and never more than the element's own
   value allows: a caller's explicit `touch-action` (a trigger's `none`)
@@ -260,9 +263,12 @@ warning, so two writers never fight over the paint. Pass another
 
   While a finger or a pen is down, the host turns them off too only where
   the hold does something (`spec:AST-094` FR41): on the element of a
-  recognizer with `preventsTextSelection` (a slider's thumb, a segmented
+  recognizer created with a `selectionLock` (pass `lockSelection`; a
+  slider's thumb, a segmented
   control's or a switch's drag) that would take the touch (enabled, and
-  accepting its pointer), restored when the contact ends. A press-tracked
+  accepting its pointer), restored when the contact ends. The host calls
+  the recognizer's lock and never imports one, so a component with no such
+  hold does not bundle it. A press-tracked
   control or row whose hold does nothing, and the document press
   controller's surfaces (`usePressFeedback` rows), keep the browser's
   long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the
