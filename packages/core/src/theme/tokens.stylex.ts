@@ -56,16 +56,45 @@ export const colorDefaults = {
   '--color-background-inverted': 'light-dark(#0A1317, #FFFFFF)',
   '--color-background-error-inverted': 'light-dark(#AA071E, #E3193B)',
 
-  // Status/Sentiment
+  // Status fills (architecture:theme-tokens INV11). Each `--color-<status>` is
+  // the strong status fill, and `--color-on-<status>` is content on it at
+  // 4.5:1 or more. `-muted` is the pale fill, with `--color-on-<status>-muted`.
+  // Info is independent of the accent.
+  '--color-info': 'light-dark(#0064E0, #0064E0)',
+  '--color-info-muted': 'light-dark(#0082FB33, #0082FB3F)',
+  '--color-on-info': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-success': 'light-dark(#0D8626, #0D8626)',
   '--color-success-muted': 'light-dark(#0B991F33, #0B991F3F)',
   '--color-on-success': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-error': 'light-dark(#E3193B, #F5394F)',
   '--color-error-muted': 'light-dark(#E3193B33, #F5394F3F)',
-  '--color-on-error': 'light-dark(#FFFFFF, #FFFFFF)',
+  // Dark error is light enough that white misses 4.5:1, so its content is dark.
+  '--color-on-error': 'light-dark(#FFFFFF, #0A1317)',
   '--color-warning': 'light-dark(#E9AF08, #F2C00B)',
   '--color-warning-muted': 'light-dark(#E2A40033, #E2A4003F)',
   '--color-on-warning': 'light-dark(#0A1317, #0A1317)',
+
+  // Status text on the default page and card surfaces, 4.5:1 or more.
+  '--color-text-info': 'var(--color-text-blue)',
+  '--color-text-success': 'var(--color-text-green)',
+  '--color-text-warning': 'var(--color-text-yellow)',
+  '--color-text-error': 'var(--color-text-red)',
+
+  // Status icons and borders on those surfaces follow the text role.
+  '--color-icon-info': 'var(--color-text-info)',
+  '--color-icon-success': 'var(--color-text-success)',
+  '--color-icon-warning': 'var(--color-text-warning)',
+  '--color-icon-error': 'var(--color-text-error)',
+  '--color-border-info': 'var(--color-text-info)',
+  '--color-border-success': 'var(--color-text-success)',
+  '--color-border-warning': 'var(--color-text-warning)',
+  '--color-border-error': 'var(--color-text-error)',
+
+  // Content on pale status fills.
+  '--color-on-info-muted': 'var(--color-text-blue)',
+  '--color-on-success-muted': 'var(--color-text-green)',
+  '--color-on-warning-muted': 'var(--color-text-yellow)',
+  '--color-on-error-muted': 'var(--color-text-red)',
 
   // Border
   '--color-border': 'light-dark(#05365919, #F2F4F619)',
