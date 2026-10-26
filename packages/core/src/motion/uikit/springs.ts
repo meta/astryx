@@ -6,7 +6,7 @@
  * @output Exports `springs`, every UIKit / SwiftUI interaction spring the
  *   touch presentations use, each in the vocabulary of its source
  *   (SpringDescription: duration/bounce, response/dampingRatio or
- *   mass/stiffness/damping; `toSpring` normalizes)
+ *   mass/stiffness/damping; a reader normalizes them to one form)
  * @position The springs domain of the UIKit constants table (motion/uikit)
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
@@ -29,7 +29,7 @@
 import {registerMotionTable} from '../roles';
 
 /**
- * UIKit's default spring (see `springs.uikitDefault` for its sources), shared
+ * UIKit's default spring (see `springs.viewChange` for its sources), shared
  * by the system transitions measured to run on it.
  */
 const UIKIT_DEFAULT_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
@@ -68,42 +68,42 @@ export const springs = {
    * `.spring(duration:bounce:)` defaults.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/smooth(duration:extrabounce:)
    */
-  smooth: {duration: 0.5, bounce: 0},
+  settle: {duration: 0.5, bounce: 0},
   /**
    * SwiftUI `.snappy`: "small amount of bounce", base bounce 0.15.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/snappy(duration:extrabounce:)
    */
-  snappy: {duration: 0.5, bounce: 0.15},
+  quickChange: {duration: 0.5, bounce: 0.15},
   /**
    * SwiftUI `.bouncy`: base bounce 0.3.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/bouncy(duration:extrabounce:)
    */
-  bouncy: {duration: 0.5, bounce: 0.3},
+  emphasis: {duration: 0.5, bounce: 0.3},
   /**
    * SwiftUI `interactiveSpring()` defaults: for a value that tracks a finger.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/interactivespring(response:dampingfraction:blendduration:)
    */
-  interactive: {response: 0.15, dampingRatio: 0.86},
+  fingerTracking: {response: 0.15, dampingRatio: 0.86},
   /**
    * SwiftUI `Animation.default` since iOS 17 (what `withAnimation` uses).
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/default
    */
-  swiftUIDefault: {response: 0.55, dampingRatio: 1},
+  stateChange: {response: 0.55, dampingRatio: 1},
   /**
    * SwiftUI `.spring(response:dampingFraction:blendDuration:)` defaults.
    * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/spring(response:dampingfraction:blendduration:)
    */
-  swiftUISpring: {response: 0.5, dampingRatio: 0.825},
+  directChange: {response: 0.5, dampingRatio: 0.825},
   /**
    * UIKit `UIView.animate(springDuration:bounce:…)` defaults (iOS 17).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uiview/animate(springduration:bounce:initialspringvelocity:delay:options:animations:completion:)
    */
-  uikitSpringDuration: {duration: 0.5, bounce: 0},
+  timedChange: {duration: 0.5, bounce: 0},
   /**
    * UIKit's default spring, `UISpringTimingParameters()`: Apple documents
    * its damping ratio as 4.56, which is exactly 500 ÷ (2·√(3·1000)).
    * Overdamped on paper; Core Animation treats overdamping as critical
-   * unless told otherwise, which `toSpring` mirrors: in effect a critically
+   * unless told otherwise, so in effect it is a critically
    * damped spring with ω₀ = 18.26 rad/s (response 0.344 s) that settles in
    * 0.506 s. The keyboard does not use it (see `keyboard`).
    * @source apple-docs https://developer.apple.com/documentation/uikit/uispringtimingparameters/init() (damping ratio 4.56)
@@ -114,7 +114,7 @@ export const springs = {
    *   `UIView.animate` with curve 7 outside the keyboard is this spring with
    *   its duration forced to 0.5 s
    */
-  uikitDefault: {...UIKIT_DEFAULT_SPRING},
+  viewChange: {...UIKIT_DEFAULT_SPRING},
 
   // ---------------------------------------------------------------------
   // Navigation (UINavigationController)
@@ -251,6 +251,44 @@ export const springs = {
    */
   menuClose: {...MENU_CLOSE_SPRING},
   /**
+   * A sub-menu opening in place (its row tapped on a phone): a card laid over
+   * the parent's rows from the tapped row grows down to fit the sub-menu, the
+   * menu's box with it, and the parent's rows recede, on this spring
+   * (spec:AST-094 FR34).
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, a pull-down button at y 150 whose menu opens downward
+   *   (Alpha, Beta, Sort By ▸ (Name, Date, Size), Delete), every menu label,
+   *   image and view read per 60 Hz tick, Oct 24 2026 (t from the tap-down;
+   *   the lift at 60 ms): the menu's box kept its top and grew 188 → 190.9
+   *   (106 ms), 198.1 (123), 218.1 (156), 238.5 (189), 255.6 (223), 268.2
+   *   (256), 276.7 (289), 282.1 (324), 285.2 (359), 286.8 (389), 287.6 (424),
+   *   settling at 287.2; the parent rows' opacity followed it (1 → 0.5 by 389
+   *   ms). UIKit's own spring for it, logged as the
+   *   `UIViewSpringAnimationBehavior` it starts a few ms after the lift on
+   *   every sub-menu row (four captures): damping ratio 0.85, response 0.4 s.
+   *   It fits the box's eleven frames to 0.12 pt rms of the 99 pt travel
+   *   (start 89.5 ms), as a free single-spring fit does (0.86, 0.395)
+   */
+  subMenuOpen: {response: 0.4, dampingRatio: 0.85},
+  /**
+   * Back out of a sub-menu (its header tapped): the card shrinks back up into
+   * the row, the menu's box with it, and the parent's rows come back, on this
+   * spring (spec:AST-094 FR34).
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, the same menu and readings, Oct 24 2026 (t from the
+   *   tap-down; the lift at 60 ms): the box 287.2 → 284.3 (128 ms), 268.7
+   *   (160), 249.9 (195), 233 (228), 219.6 (260), 209.6 (296), 202.5 (329),
+   *   197.6 (361), 194.3 (395), 192.1 (428), 189.7 (494), 188 (628); the
+   *   parent rows' opacity 0.5 → 0.59 (160), 0.69 (195), 0.77 (228), 0.84
+   *   (260), 0.89 (296), 0.93 (329), 0.95 (361), 0.97 (395), 0.99 (461), 1
+   *   (527). UIKit's own spring for it, logged as the
+   *   `UIViewSpringAnimationBehavior` it starts on every header back (three
+   *   captures): damping ratio 1, response 0.4 s. It fits the box's twelve
+   *   frames to 0.28 pt rms of the 99 pt travel (start 111 ms), the opacity to
+   *   0.0055 rms
+   */
+  subMenuBack: {response: 0.4, dampingRatio: 1},
+  /**
    * Context menu (UIContextMenuInteraction): the preview lifting once the
    * long press commits.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
@@ -265,9 +303,9 @@ export const springs = {
   contextMenuDismiss: {...MENU_CLOSE_SPRING},
   /**
    * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot. The measured UIKit record only: under Reduce Motion
-   * nothing springs in Astryx (design:reduced-motion DR1), so no component
-   * plays it, and it is not a theme motion role (DR4).
+   * slower, no overshoot. A reference reading only: under reduced motion a
+   * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
+   * spring (`spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026

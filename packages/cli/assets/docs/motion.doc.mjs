@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'Touch motion has a table of springs, durations and curves measured on iPhone and iPad. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.easeInOut`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. No shipped component reads these roles yet.',
+          text: 'Touch motion has a table of springs, durations and curves, each read from UIKit on the iOS simulator or taken from Apple documentation. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A value in `motion.durations` applies to its role and takes precedence for it; the `fast`/`medium` duration scale sets the duration tokens a CSS transition reads and never changes a touch motion role. A motion reads its roles as it starts, so a theme change applies from the next motion.',
         },
         {
           type: 'code',
@@ -343,6 +343,18 @@ const calmTheme = defineTheme({
               '0.55s 0',
             ],
             [
+              'springs.subMenuBack',
+              '--motion-springs-sub-menu-back',
+              'spring',
+              '0.4s 0',
+            ],
+            [
+              'springs.subMenuOpen',
+              '--motion-springs-sub-menu-open',
+              'spring',
+              '0.4s 0.15',
+            ],
+            [
               'springs.switchThumbMove',
               '--motion-springs-switch-thumb-move',
               'spring',
@@ -413,6 +425,12 @@ const calmTheme = defineTheme({
               '--motion-timing-press-highlight-in-ms',
               'duration',
               '0ms',
+            ],
+            [
+              'timing.press.highlightOutCurve',
+              '--motion-timing-press-highlight-out-curve',
+              'curve',
+              'cubic-bezier(0, 0, 0.2, 1)',
             ],
             [
               'timing.press.highlightOutMs',
