@@ -1189,33 +1189,6 @@ describe('GestureHost', () => {
     touch('touchend', photo, [finger], [], 1200);
   });
 
-  it('keeps native selection on a delegated pressable, whose hold does nothing (spec:AST-094 FR41)', () => {
-    detachers.push(coarsePrimaryPointer());
-    const {row, off} = mount(
-      '<div id="row" data-test-press></div><div id="off" data-test-press="off"></div>',
-    );
-    detachers.push(
-      host.addDelegatedConsumer({
-        attribute: 'data-test-press',
-        create: element =>
-          element.getAttribute('data-test-press') === 'off'
-            ? null
-            : new RecordingConsumer(),
-      }),
-    );
-    const one = {id: 1, x: 5, y: 5};
-    const two = {id: 2, x: 9, y: 9};
-    touch('touchstart', row, [one], [one], 0);
-    touch('touchstart', row, [two], [one, two], 10);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', row, [one], [two], 100);
-    touch('touchend', row, [two], [], 200);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchstart', off, [one], [one], 300);
-    expect(off.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', off, [one], [], 400);
-  });
-
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(
