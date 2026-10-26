@@ -60,6 +60,13 @@ afterEach(() => {
 });
 
 describe('useFingerScroll', () => {
+  it('is internal: the gestures barrel exports neither the hook nor the watch', async () => {
+    const gestures: Record<string, unknown> = await import('../index');
+    expect(gestures).not.toHaveProperty('useFingerScroll');
+    expect(gestures).not.toHaveProperty('isFingerScroll');
+    expect(gestures).not.toHaveProperty('watchFingerScrolls');
+  });
+
   it("reads a finger's scroll until the scroller's scrollend, and the program's as false", () => {
     const {getByTestId} = render(<List />);
     const list = getByTestId('list');

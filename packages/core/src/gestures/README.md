@@ -58,8 +58,9 @@ function Sheet() {
   rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
   `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
   calls neither `onHighlightChange` nor `onControlEvent`.
-- `useFingerScroll(scroller)` (proposed; pending owner review) returns a
-  reader, `true` while the scroller's scroll is a finger's: from a scroll
+- `useFingerScroll(scroller)`, an internal piece of the touch module with
+  no public API (not in the gestures barrel; a scroll-driven component
+  imports its module, so it ships only where used), returns a reader, `true` while the scroller's scroll is a finger's: from a scroll
   while a finger that landed inside it is down, until its `scrollend` (the
   momentum is still the finger's), or, where the browser fires none (mobile
   Safari before 26), until its scroll events go quiet. Pass a ref, or the
