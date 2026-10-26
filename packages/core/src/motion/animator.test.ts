@@ -2258,7 +2258,7 @@ describe('decay: momentum curves (a coast)', () => {
   });
 
   it('plays any curve as given, and a zero-length one rests at its value', async () => {
-    const {animator, element} = setup();
+    const {animator} = setup();
     const linear = {
       duration: 0.5,
       at: (t: number) => 200 * t,
