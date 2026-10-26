@@ -821,9 +821,10 @@ export interface ActiveAnimation {
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
  *
- * A run going backward is read when it was reversed before it started; the
+ * A run going backward is read when it was reversed before it started. The
  * recorder keeps one entry per `Animation` object, so an animation reversed
- * or replayed mid-run is reported as its first run.
+ * or replayed mid-run is misread: a watch taken before the reversal rejects,
+ * and an unwatched wait returns at once with a curve dated before it.
  */
 export async function waitForAnimation(
   locator: Locator,
@@ -923,12 +924,16 @@ export async function waitForAnimation(
         const recorded = recorder.log.filter(
           e => e.seenAt >= after && inside(e.animation),
         );
-        // Running: since the watch, or (without one) any on the element.
-        const running = (
+        // Running: since the watch, or (without one) any on the element. A
+        // pending one (no start time yet) counts too: the action's animation
+        // may still be pending at the first look, and an earlier one that
+        // finished must not answer for it.
+        const live = (
           watchedFrom == null
             ? element.getAnimations({subtree: true})
             : recorded.filter(e => e.finishedAt == null).map(e => e.animation)
-        ).filter(a => a.playState === 'running' && a.startTime != null);
+        ).filter(a => a.playState === 'running');
+        const running = live.filter(a => a.startTime != null);
         // Progress along the curve, on the timeline: a delay presents nothing
         // (going backward, the end delay plays first), a run going backward
         // (`reverse()`) progresses from its end, and a faster rate presents
@@ -947,7 +952,7 @@ export async function waitForAnimation(
         if (progressed.length > 0) {
           return progressed.map(a => describe(a, null, null));
         }
-        if (running.length > 0) {
+        if (live.length > 0) {
           return [];
         }
         // Finished: by its finish event, or by its state when the event has not
