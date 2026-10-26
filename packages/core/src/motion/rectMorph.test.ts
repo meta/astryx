@@ -669,6 +669,37 @@ describe('createRectMorph', () => {
     expectRect(morph.presentedRect()!, SQUARE, 0.01);
   });
 
+  it('a second dismissal on the copy in flight keeps the copy and continues from its rect', async () => {
+    // A dismissal continues the dismissal in flight, so a caller that hands
+    // the same copy again (a retargeted shrink) keeps it: its release runs
+    // once, when the dismissal that is still running ends.
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, SPRING);
+    await settle(progressCurve(SPRING).duration * 1000 + 50);
+    const released: HTMLElement[] = [];
+    const release = (target: HTMLElement) => {
+      released.push(target);
+      target.remove();
+    };
+    const copy = copyOf(element);
+    morph.dismiss(path, BOUNCY, {target: copy, release});
+    clock += 60;
+    await vi.advanceTimersByTimeAsync(60);
+    const onScreen = morph.presentedRect()!;
+
+    const again = morph.dismiss(path, SPRING, {target: copy, release});
+    expect(copy.isConnected).toBe(true);
+    expect(released).toEqual([]);
+    expect(live(copy, 'scale').length).toBe(1);
+    expectRect(morph.presentedRect()!, onScreen, 0.01);
+
+    await settle(progressCurve(SPRING).duration * 1000 + 50);
+    expect(await again.finished).toBe(true);
+    expect(released).toEqual([copy]);
+    expect(copy.isConnected).toBe(false);
+  });
+
   it('a dismissal during the present starts from the rect on screen, with its velocity', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});

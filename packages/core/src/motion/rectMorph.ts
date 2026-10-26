@@ -513,12 +513,10 @@ export function createRectMorph(
         : null),
   });
 
-  // The springs are resolved against the element that plays them: a
-  // registered table's leaf is a motion role, so the morph plays the value
-  // that role resolves to rather than the table's raw one. Nothing writes a
-  // role variable yet, so today the two agree; the morph is ready for the
-  // day they differ. A table nothing registered keeps its own value, so a
-  // caller's bare spring is unaffected.
+  // The springs go through `resolveMotion` on the element that plays them.
+  // While the touch motion roles stay internal (spec:AST-094 DEC-11), a role
+  // resolves to its table value and reads no style, so the morph plays the
+  // table's spring as given, and a caller's bare spring likewise.
   const curvesFor = (
     on: Element,
     path: MorphPath,
@@ -586,7 +584,16 @@ export function createRectMorph(
     const velocity =
       play.velocity ??
       presentedProgressVelocity(from.animator, channelsOf(back), at);
-    endExit();
+    // The same copy handed again continues on it: it keeps its animator, and
+    // its release runs once, when the dismissal still running ends. Any other
+    // target ends the dismissal in flight first.
+    const continuing =
+      exiting != null && exiting.target === target ? exiting : null;
+    if (continuing != null) {
+      exiting = null;
+    } else {
+      endExit();
+    }
     presenting = null;
     const onElement = target === element;
     if (onElement) {
@@ -596,7 +603,9 @@ export function createRectMorph(
       // The element is hidden as it closes: leave it as laid out.
       restoreElement();
     }
-    const closing = onElement ? animator : createAnimator(target, options);
+    const closing = onElement
+      ? animator
+      : (continuing?.animator ?? createAnimator(target, options));
     target.style.setProperty('transform-origin', '0px 0px');
     // The copy starts as the element shows now, whatever its clone kept.
     closing.set(startValues(back, opacity));
