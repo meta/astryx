@@ -19,7 +19,7 @@
  * takes the two-finger gesture for this element only.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_PINCH} from '../motion/uikit/gestures';
 import {centroid, distance} from './geometry';
 import {
   GestureRecognizer,
@@ -43,8 +43,7 @@ export class PinchGestureRecognizer extends GestureRecognizer {
 
   constructor(options: PinchGestureRecognizerOptions = {}) {
     super(options);
-    this.hysteresis =
-      options.hysteresis ?? UIKIT_GESTURES.pinch.hysteresis.value;
+    this.hysteresis = options.hysteresis ?? UIKIT_PINCH.hysteresis.value;
   }
 
   /** Current span over the span the fingers started at. */

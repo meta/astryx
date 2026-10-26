@@ -39,6 +39,28 @@ describe('PressTracker', () => {
     vi.useRealTimers();
   });
 
+  it('a keepsTouch tracker keeps only the touch whose press it delivered: a quick tap leaves the next touch free until its own press (spec:AST-094 FR19)', () => {
+    const tracker = new PressTracker({
+      getBounds: () => BOUNDS,
+      keepsTouch: true,
+      highlightDelay: 'always',
+    });
+    const h = createHarness();
+    // A tap quicker than the delay: the press shows at the lift, for a flash.
+    h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    expect(tracker.keepsTouch?.(1)).toBe(false);
+    h.finger(1).up(DELAY / 2);
+    expect(tracker.keepsTouch?.(1)).toBe(false);
+    // The next touch is not kept from its first move: its press waits for
+    // the delay, so a scroll that starts on the control is the browser's.
+    h.finger(2).down(150, 120, DELAY, {recognizers: [], consumer: tracker});
+    expect(tracker.keepsTouch?.(2)).toBe(false);
+    vi.advanceTimersByTime(DELAY);
+    expect(tracker.keepsTouch?.(2)).toBe(true);
+    h.finger(2).up(DELAY * 3);
+    expect(tracker.keepsTouch?.(2)).toBe(false);
+  });
+
   it('highlights in the same frame outside a scroller and acts on touch up inside', () => {
     const {events, highlights, tracker, h} = setup();
     h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
@@ -161,9 +183,23 @@ describe('PressTracker cell profile', () => {
     return {events, highlights, tracker, h: createHarness()};
   }
 
-  it('waits the content-touch delay even outside a scroller', () => {
+  it('highlights at once outside a scroller: the delay applies only inside one (AST-094 FR11)', () => {
     const {highlights, tracker, h} = cell();
     h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    expect(highlights).toEqual([true]);
+    vi.advanceTimersByTime(DELAY);
+    expect(highlights).toEqual([true]);
+    h.finger(1).up(DELAY + 40);
+    expect(highlights).toEqual([true, false]);
+  });
+
+  it('waits the content-touch delay inside a scroller', () => {
+    const {highlights, tracker, h} = cell();
+    h.finger(1).down(150, 120, 0, {
+      recognizers: [],
+      consumer: tracker,
+      scroll: scrollProbe(() => true, true),
+    });
     expect(highlights).toEqual([]);
     vi.advanceTimersByTime(DELAY);
     expect(highlights).toEqual([true]);

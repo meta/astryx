@@ -13,7 +13,7 @@
  * screen coordinates as in UIKit; `velocity` is radians per second.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_ROTATION} from '../motion/uikit/gestures';
 import {angleBetween, centroid, unwrapAngle} from './geometry';
 import {
   GestureRecognizer,
@@ -37,8 +37,7 @@ export class RotationGestureRecognizer extends GestureRecognizer {
 
   constructor(options: RotationGestureRecognizerOptions = {}) {
     super(options);
-    this.hysteresis =
-      options.hysteresis ?? UIKIT_GESTURES.rotation.hysteresis.value;
+    this.hysteresis = options.hysteresis ?? UIKIT_ROTATION.hysteresis.value;
   }
 
   /** Radians turned since the fingers landed (or since the last set). */

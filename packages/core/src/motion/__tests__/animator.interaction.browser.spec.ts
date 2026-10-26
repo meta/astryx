@@ -12,8 +12,8 @@
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
- *   the curve and holds its end state; a theme that retunes a table spring
- *   changes the curve the engine plays
+ *   the curve and holds its end state; a role variable set on a scope
+ *   changes nothing while touch motion stays internal (DEC-11)
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
  */
@@ -115,9 +115,9 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     .info()
     .annotations.push({type: 'busy window', description: proof.summary});
   expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
-  // The harness's verdict: display rate, no stall over two dropped frames,
-  // nearly every expected frame moved (what a loaded runner still meets and a
-  // main-thread animation never does).
+  // The harness's verdict: no stall over two dropped frames, and nearly
+  // every expected frame moved (what a loaded runner still meets and a
+  // main-thread animation never does). It sets no display-rate bound.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
   // And it is the spring: placing each frame inside the block on the
@@ -194,6 +194,63 @@ test('a spring that ends inside the block keeps showing its end state', async ({
   for (const x of xs.slice(landed)) {
     expect(x).toBeGreaterThanOrEqual(TRAVEL - 1);
   }
+});
+
+test('under Reduce Motion, a dip a busy main thread lands late still ends within its 200 ms cross-fade', async ({
+  page,
+}) => {
+  // design:reduced-motion DR2 on a touch screen: the move dips (fades out,
+  // lands while transparent, fades back in) in 200 ms or less, opacity only.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await open(page);
+  const read = await page.evaluate(async travel => {
+    const box = document.getElementById('box') as HTMLElement;
+    const handle = window.animator.animate(
+      {x: travel},
+      {spring: Motion.springs.navigationPush},
+    );
+    const start = await handle.started;
+    // The main thread is busy from 60 to 180 ms into the dip, so the task
+    // that lands it (due at 100 ms) runs 80 ms late.
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 60 - performance.now())),
+    );
+    while (performance.now() < start + 180) {
+      // the main thread is busy
+    }
+    await new Promise(resolve =>
+      setTimeout(resolve, Math.max(0, start + 230 - performance.now())),
+    );
+    const style = getComputedStyle(box);
+    return {
+      at: performance.now() - start,
+      opacity: Number(style.opacity),
+      translate: style.translate,
+      animated: box
+        .getAnimations()
+        .flatMap(animation =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .flatMap(frame =>
+              Object.keys(frame).filter(
+                key =>
+                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                    key,
+                  ),
+              ),
+            ),
+        ),
+    };
+  }, TRAVEL);
+  test.info().annotations.push({
+    type: '30 ms after the cross-fade was due to end',
+    description: JSON.stringify(read),
+  });
+  // Landed, and fully back in by then: the late landing did not stretch it.
+  expect(read.translate).toBe(`${TRAVEL}px`);
+  expect(read.opacity).toBeCloseTo(1, 2);
+  // Opacity only: the travel is never animated.
+  expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
 test('a spring started right before a block plays in full after it', async ({
@@ -318,16 +375,17 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   expect(result.worstOpacity).toBeLessThan(0.003);
 });
 
-test('a theme that retunes a table spring changes the curve the engine plays', async ({
+test('a role variable set on a scope changes nothing while touch motion stays internal', async ({
   page,
 }) => {
-  // The theme writes the role's variable on its scope, as defineTheme's CSS
-  // does; the box outside the scope keeps the table's spring.
+  // A page's own style sets the role's variable on a scope; touch motion
+  // stays internal (spec:AST-094 DEC-11), so both boxes play the table's
+  // spring.
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
   .box { position: absolute; top: 40px; width: 48px; height: 48px; background: #36c; }
-  @scope ([data-astryx-theme="soft"]) { :scope { --motion-springs-sheet-present: 0.8s 0.3; } }
+  @scope ([data-astryx-theme="soft"]) { :scope { --motion-springs-settle: 0.8s 0.3; } }
 </style>
 <div class="box" id="plain" style="left: 0"></div>
 <div data-astryx-theme="soft"><div class="box" id="themed" style="left: 80px"></div></div>
@@ -337,39 +395,30 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
   );
   await page.goto('http://motion.test/');
   const result = await page.evaluate(async () => {
-    // A theme retunes only a registered table's roles: register it as a
-    // touch module would, and fail loudly if the role is not there.
+    // Only a registered table's roles resolve: register it as a touch
+    // module would, and fail loudly if the role is not there.
     Motion.registerSpringsTable();
-    if (
-      Motion.motionRoleOf(Motion.springs.sheetPresent)?.id !==
-      'springs.sheetPresent'
-    ) {
+    if (Motion.motionRoleOf(Motion.springs.settle)?.id !== 'springs.settle') {
       throw new Error(
-        'springs.sheetPresent is not a registered role: call registerSpringsTable() first',
+        'springs.settle is not a registered role: call registerSpringsTable() first',
       );
     }
     const curves = {
-      plain: Motion.solveSpring(Motion.toSpring(Motion.springs.sheetPresent), {
+      plain: Motion.solveSpring(Motion.toSpring(Motion.springs.settle), {
         from: 300,
         to: 0,
       }),
-      themed: Motion.solveSpring(
-        Motion.toSpring({duration: 0.8, bounce: 0.3}),
-        {
-          from: 300,
-          to: 0,
-        },
-      ),
+      themed: Motion.solveSpring(Motion.toSpring(Motion.springs.settle), {
+        from: 300,
+        to: 0,
+      }),
     };
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
       const element = document.getElementById(id) as HTMLElement;
       const animator = Motion.createAnimator(element);
       animator.set({y: 300});
-      const handle = animator.animate(
-        {y: 0},
-        {spring: Motion.springs.sheetPresent},
-      );
+      const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
       const animations = element.getAnimations();
       for (const a of animations) {
@@ -394,12 +443,12 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
     type: 'themed spring',
     description: JSON.stringify(result),
   });
-  // Each box plays its own spring: the themed one overshoots, the table's
-  // (critically damped) does not.
+  // Both boxes play the table's (critically damped) spring: neither
+  // overshoots.
   expect(result.plain.worst).toBeLessThan(0.06);
   expect(result.themed.worst).toBeLessThan(0.06);
-  expect(result.themed.lowest).toBeLessThan(-10);
   expect(result.plain.lowest).toBeGreaterThan(-0.5);
+  expect(result.themed.lowest).toBeGreaterThan(-0.5);
 });
 
 test('a finished animation leaves the element once the curve ends', async ({

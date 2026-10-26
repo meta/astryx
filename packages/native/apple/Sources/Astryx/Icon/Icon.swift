@@ -85,9 +85,10 @@ public struct Icon: View {
     case .secondary, .tertiary: tokens.color.iconSecondary
     case .disabled: tokens.color.iconDisabled
     case .accent: tokens.color.accent
-    case .success: tokens.color.success
-    case .error: tokens.color.error
-    case .warning: tokens.color.warning
+    case .info: tokens.color.iconInfo
+    case .success: tokens.color.iconSuccess
+    case .error: tokens.color.iconError
+    case .warning: tokens.color.iconWarning
     case .inherit: nil
     }
   }

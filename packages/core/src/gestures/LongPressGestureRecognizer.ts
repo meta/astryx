@@ -20,7 +20,7 @@
  * a blocked main thread delays the callback, not the moment it reports.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
 import {lockSelection} from './selectionLock';
 import {travel} from './geometry';
 import {
@@ -48,20 +48,33 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
   numberOfTouchesRequired: number;
 
   private tapsDone = 0;
+  /** The taps phase's current tap: when it landed and its most fingers. */
+  private tapStartedAt: number | null = null;
+  private tapMostTouches = 0;
   private isPressTimerArmed = false;
   /** When the gesture began, on the event clock. */
   beganAt: number | null = null;
 
   constructor(options: LongPressGestureRecognizerOptions = {}) {
     // A long press's hold does something (a menu, a hold-repeat): it locks
-    // selection for its press (spec:AST-094 FR41).
-    super({...options, selectionLock: options.selectionLock ?? lockSelection});
+    // selection for its press (spec:AST-094 FR41). One at 0 ms recognizes at
+    // touch-down and has no hold, so it brings none, nor does one told null:
+    // there the browser keeps its native long press.
+    super({
+      ...options,
+      selectionLock:
+        options.selectionLock !== undefined
+          ? options.selectionLock
+          : (options.minimumPressDuration ??
+                UIKIT_LONG_PRESS.minimumPressDuration.value) > 0
+            ? lockSelection
+            : null,
+    });
     this.minimumPressDuration =
       options.minimumPressDuration ??
-      UIKIT_GESTURES.longPress.minimumPressDuration.value;
+      UIKIT_LONG_PRESS.minimumPressDuration.value;
     this.allowableMovement =
-      options.allowableMovement ??
-      UIKIT_GESTURES.longPress.allowableMovement.value;
+      options.allowableMovement ?? UIKIT_LONG_PRESS.allowableMovement.value;
     this.numberOfTapsRequired = options.numberOfTapsRequired ?? 0;
     this.numberOfTouchesRequired = options.numberOfTouchesRequired ?? 1;
   }
@@ -93,6 +106,10 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     if (this.tapsDone > 0) {
       // The next tap (or the press) landed in time.
       this.clearTimer();
+    }
+    if (this.tapsDone < this.numberOfTapsRequired) {
+      this.tapStartedAt ??= event.time;
+      this.tapMostTouches = Math.max(this.tapMostTouches, this.numberOfTouches);
     }
     if (
       this.numberOfTouches === this.numberOfTouchesRequired &&
@@ -147,10 +164,26 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
     if (this.numberOfTouches - touches.length > 0) {
       return;
     }
-    // A completed tap of the taps phase.
+    // A completed tap of the taps phase: quick, and with the press's finger
+    // count, as a tap recognizer's would be. GUESS: its hold limit and
+    // interval are the tap recognizer's (UIKit's measured
+    // `maximumTapDuration` and `maximumIntervalBetweenTaps`), until
+    // measurement M-G20 (motion/MEASUREMENTS.md) reads
+    // UILongPressGestureRecognizer's own.
+    const heldFor = event.time - (this.tapStartedAt ?? event.time);
+    const fingers = this.tapMostTouches;
+    this.tapStartedAt = null;
+    this.tapMostTouches = 0;
+    if (
+      heldFor > UIKIT_TAP.maximumTapDuration.value ||
+      fingers !== this.numberOfTouchesRequired
+    ) {
+      this.setState('failed');
+      return;
+    }
     this.tapsDone += 1;
     this.setTimer(
-      event.time + UIKIT_GESTURES.tap.maximumIntervalBetweenTaps.value,
+      event.time + UIKIT_TAP.maximumIntervalBetweenTaps.value,
       () => {
         this.setState('failed');
       },
@@ -159,6 +192,8 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
 
   protected override reset(): void {
     this.tapsDone = 0;
+    this.tapStartedAt = null;
+    this.tapMostTouches = 0;
     this.isPressTimerArmed = false;
     this.beganAt = null;
   }

@@ -1,6 +1,6 @@
 ---
-schema_version: 5
-template_version: 8
+schema_version: 3
+template_version: 7
 kind: component
 id: component:swift/Avatar
 platform_of: component:Avatar

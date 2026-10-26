@@ -27,6 +27,7 @@ const {
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = require('../../scripts/component-packages.cjs');
+const { isComponentSpecRecordPath } = require('./knowledge-paths.cjs');
 
 const args = process.argv.slice(2);
 const getArg = (name) => {
@@ -714,6 +715,9 @@ function analyze() {
     for (const file of changedFiles) {
       if (!file.startsWith(prefix)) continue;
       changedPackages.add(pkg.name);
+      // A component's knowledge record (`<Name>.spec.md`) is never rendered,
+      // so changing it alone owns no browser audit of that component.
+      if (isComponentSpecRecordPath(file)) continue;
 
       const relativePath = file.replace(prefix, '');
       const componentName =

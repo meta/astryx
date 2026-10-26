@@ -31,12 +31,7 @@ import {
   generateTypeScaleComponents,
   type TypeScaleConfig,
 } from './expandTypeScale';
-import {expandMotionScale} from './expandMotionScale';
-import {
-  expandMotionRoles,
-  motionScaleOf,
-  type MotionConfig,
-} from './expandMotionRoles';
+import {expandMotionScale, type MotionScaleConfig} from './expandMotionScale';
 import {expandRadiusScale, type RadiusScaleConfig} from './expandRadiusScale';
 import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
 import {deepMergeComponents} from './mergeComponents';
@@ -59,8 +54,8 @@ export interface ThemeValuesInput {
   color?: ColorScaleConfig;
   /** Radius scale configuration. */
   radius?: RadiusScaleConfig;
-  /** Motion: the duration scale and the motion roles a theme retunes. */
-  motion?: MotionConfig;
+  /** Motion scale configuration. */
+  motion?: MotionScaleConfig;
   /** Syntax highlighting theme. */
   syntax?: SyntaxThemeDefinition;
   /** Explicit token overrides — highest precedence. */
@@ -298,13 +293,9 @@ export function resolveThemeValues(
     Object.assign(tokens, expandRadiusScale(input.radius));
   }
 
-  // 4. Motion-generated tokens: the duration scale, then the motion roles
+  // 4. Motion-generated tokens
   if (input.motion) {
-    const scale = motionScaleOf(input.motion, 'motion');
-    if (scale) {
-      Object.assign(tokens, expandMotionScale(scale));
-    }
-    Object.assign(tokens, expandMotionRoles(input.motion, 'motion'));
+    Object.assign(tokens, expandMotionScale(input.motion));
   }
 
   // 5. Font family tokens
