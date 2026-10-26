@@ -125,8 +125,9 @@ await handle.finished; // true if it ran to the end, false if interrupted
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the
-  dialog opens, so a presentation `set`s its starting value in the task that
-  opens it.
+  dialog opens, so a presentation `set`s its starting value right after
+  `showModal()`, in the same task (a `set` before it lands on the backdrop
+  the open replaces).
 
 ### How it stays on the compositor
 
