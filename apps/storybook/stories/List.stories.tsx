@@ -968,8 +968,9 @@ export const Reorderable: Story = {
           'your finger and a line marks where it will land, and the rows ' +
           'rearrange on release. A mouse drags a handle at once, the same ' +
           'way. Or activate a handle (click it, or press Space ' +
-          'or Enter) to turn on reorder mode for its row: each arrow key ' +
-          'moves it a place, and Escape ends the mode.',
+          'or Enter) to turn on reorder mode for its row: each arrow key, or ' +
+          'each move in the hint below the handle, moves it a place, and ' +
+          'Escape or Done ends the mode.',
       },
     },
   },
@@ -1067,8 +1068,8 @@ export const ReorderFromYourUI: Story = {
         story:
           'The object’s `start(key)` turns on reorder mode for a row from ' +
           'your own UI, here a button and the list’s context menu: the ' +
-          'focus moves to the row’s handle, and its arrow keys and Escape ' +
-          'work as they do from the handle.',
+          'focus moves to the row’s handle, and its arrow keys, hint and ' +
+          'Done work as they do from the handle.',
       },
     },
   },
