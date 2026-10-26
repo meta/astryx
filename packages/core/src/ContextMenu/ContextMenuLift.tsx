@@ -4,7 +4,7 @@
 
 /**
  * @file ContextMenuLift.tsx
- * @input The trigger element, the lift module (lift/), the context-menu
+ * @input The trigger element, the lift module (liftFromTrigger/), the context-menu
  *   constants and springs, the app's declared layer inset (LayerProvider)
  * @output Exports useContextMenuLift: lift() / drop() to show UIKit's lifted
  *   preview over a tinted backdrop and to return it to its place, and the
@@ -20,7 +20,7 @@
  * When the menu closes, the view returns to its place while the backdrop and
  * the shadow clear.
  *
- * The lift module (lift/lift.ts) plays it: the trigger itself lifts into the
+ * The lift module (liftFromTrigger/liftFromTrigger.ts) plays it: the trigger itself lifts into the
  * top layer, with one placeholder holding its spot, and nothing of the lift
  * is in the DOM at rest. ContextMenu supplies UIKit's numbers: the scale rule
  * (`contextMenu.lift`), its measured springs (internal: touch motion has no
@@ -36,8 +36,11 @@
 
 import {use, useMemo, useRef, type RefObject} from 'react';
 import {LayerContext, type LayerInset} from '../Layer/LayerContext';
-import type {LiftMotion, LiftResult} from '../lift/lift';
-import {useLift} from '../lift/useLift';
+import type {
+  LiftFromTriggerMotion,
+  LiftFromTriggerResult,
+} from '../liftFromTrigger/liftFromTrigger';
+import {useLiftFromTrigger} from '../liftFromTrigger/useLiftFromTrigger';
 import type {MorphRect} from '../motion/rectMorph';
 import {
   contextMenu,
@@ -53,7 +56,7 @@ const LIFT = contextMenu.lift;
  * fades on `morphSpring`, the preview returns on `morphSpring` while the tint
  * clears on `springs.contextMenuDismiss`.
  */
-const MOTION: LiftMotion = {
+const MOTION: LiftFromTriggerMotion = {
   lift: springs.contextMenuLift,
   drop: LIFT.morphSpring,
   clear: springs.contextMenuDismiss,
@@ -64,7 +67,7 @@ const MOTION: LiftMotion = {
 };
 
 /** Where a lift landed: the view's box, the preview's, and the viewport. */
-export type ContextMenuLiftResult = LiftResult;
+export type ContextMenuLiftResult = LiftFromTriggerResult;
 
 export interface ContextMenuLift {
   /**
@@ -93,7 +96,7 @@ export function useContextMenuLift(
     onBackdropTap?: () => void;
   } = {},
 ): ContextMenuLift {
-  const lift = useLift();
+  const lift = useLiftFromTrigger();
   const onBackdropTapRef = useRef(onBackdropTap);
   onBackdropTapRef.current = onBackdropTap;
   // The app's declared inset (LayerProvider), which the gutter adds.

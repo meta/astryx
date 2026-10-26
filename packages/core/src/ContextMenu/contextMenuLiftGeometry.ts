@@ -3,7 +3,7 @@
 /**
  * @file contextMenuLiftGeometry.ts
  * @input The context-menu constants and the lift module's geometry
- *   (lift/liftGeometry.ts)
+ *   (liftFromTrigger/liftFromTriggerGeometry.ts)
  * @output Exports liftScale, liftedBox and menuPlacement: where UIKit's
  *   lifted preview lands when the menu shows, and where the menu sits
  *   against it, with UIKit's numbers
@@ -25,13 +25,13 @@
  */
 
 import {
-  liftedRect,
-  liftScale as liftScaleBy,
+  liftFromTriggerRect as liftedRect,
+  liftFromTriggerScale as liftScaleBy,
   surfacePlacement,
-  type LiftGutter,
-  type LiftViewport,
+  type LiftFromTriggerGutter as LiftGutter,
+  type LiftFromTriggerViewport as LiftViewport,
   type SurfacePlacement,
-} from '../lift/liftGeometry';
+} from '../liftFromTrigger/liftFromTriggerGeometry';
 import type {MorphRect} from '../motion/rectMorph';
 import {contextMenu} from '../motion/uikit/contextMenu';
 

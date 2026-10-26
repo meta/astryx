@@ -42,7 +42,7 @@ vi.mock('./ContextMenuLift', async importOriginal => {
   return importOriginal();
 });
 
-vi.mock('../lift/lift', async importOriginal => {
+vi.mock('../liftFromTrigger/liftFromTrigger', async importOriginal => {
   liftModules.liftModule += 1;
   return importOriginal();
 });
@@ -57,7 +57,7 @@ vi.mock('../motion/animator', async importOriginal => {
   return importOriginal();
 });
 
-vi.mock('../Layer/presentationHold', async importOriginal => {
+vi.mock('../Layer/inputHold', async importOriginal => {
   liftModules.hold += 1;
   return importOriginal();
 });

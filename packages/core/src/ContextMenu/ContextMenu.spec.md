@@ -245,7 +245,7 @@ or keyboard anchoring.
 
 Under a finger, a touch-opened menu on a block trigger lifts the trigger
 itself above the tinted page (`spec:AST-094` FR33), through the lift module
-(`packages/core/src/lift/`). While the menu is up, the page has four
+(`packages/core/src/liftFromTrigger/`). While the menu is up, the page has four
 elements more than under a fine pointer, within the open-layer allowance of
 `spec:AST-017` FR60 and DEC-29, and each has one job:
 
