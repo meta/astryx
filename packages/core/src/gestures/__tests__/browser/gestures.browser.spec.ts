@@ -8,7 +8,7 @@
  * @output Browser proof of the negotiation the unit tests cannot see:
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
- *   with no ghost click, scroll handoff at the content's edge, pinch-zoom
+ *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
  *   left to the browser, a second finger that never breaks the first, and
  *   timing taken from event timestamps under a blocked main thread
  * @position Browser tests of packages/core/src/gestures (see
@@ -30,7 +30,6 @@ interface Entry {
   x?: number;
   y?: number;
   scale?: number;
-  handoff?: boolean;
   beganAt?: number | null;
   startedAt?: number;
 }
@@ -308,8 +307,9 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       .filter(entry => entry.type === 'touchmove' && entry.passive === false)
       .map(entry => entry.id),
   );
-  // Pans (the cards' too), a long press, a pinch and the sheet's pan can take
-  // a moving touch; a tap-only element and a press consumer never wait.
+  // Pans (the cards' and the switch's drag too), a long press, a pinch and
+  // the sheet's pan can take a moving touch; a tap-only element and a press
+  // consumer never wait.
   expect(new Set(blocking)).toEqual(
     new Set([
       'hpan',
@@ -317,6 +317,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'pinchable',
       'sheetBody',
       'slider',
+      'switchRow',
       'card',
       'cardLate',
     ]),
@@ -417,7 +418,7 @@ test('a one-way overlay pan keeps its direction from the page, and leaves the ot
   expect(states(await log(page), 'card')).toEqual(['failed', 'possible']);
 });
 
-test('a held finger turns text selection off on a press-tracked control and on a pan that asks, until it lifts; a mouse and other pans keep it', async ({
+test('a held finger turns text selection off only where the hold does something (a pan that asks), until it lifts; a press-tracked control, a mouse and other pans keep native selection (spec:AST-094 FR41)', async ({
   page,
   browserName,
 }) => {
@@ -445,7 +446,9 @@ test('a held finger turns text selection off on a press-tracked control and on a
   // The engine's own value otherwise: Chromium computes `auto`, WebKit `text`.
   const free = held.hpan[0];
   expect(free).not.toBe('none');
-  expect(held.passive).toEqual([free, 'none', free]);
+  // A control whose hold does nothing keeps the browser's long-press
+  // selection.
+  expect(held.passive).toEqual([free, free, free]);
   expect(held.slider).toEqual([free, 'none', free]);
   expect(held.hpan).toEqual([free, free, free]);
 
@@ -457,28 +460,86 @@ test('a held finger turns text selection off on a press-tracked control and on a
   expect(withMouse).toBe(free);
 });
 
-test('a held finger on a checkbox inside a press-tracked row turns its selection off too: WebKit makes every input selectable', async ({
+test('a held finger on a checkbox inside an element whose hold does something turns its selection off too, as WebKit makes every input selectable; inside a press-tracked row it stays native (spec:AST-094 FR41)', async ({
   page,
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  const selection = async () =>
-    page.evaluate(() => {
-      const style = getComputedStyle(
-        document.getElementById('check') ?? document.body,
-      );
-      return (
-        style.getPropertyValue('-webkit-user-select') ||
-        style.getPropertyValue('user-select')
-      );
-    });
-  await page.locator('#check').scrollIntoViewIfNeeded();
-  const at = await center(page, 'check');
-  const before = await selection();
+  const heldSelection = async (id: string) => {
+    const selection = async () =>
+      page.evaluate(target => {
+        const style = getComputedStyle(
+          document.getElementById(target) ?? document.body,
+        );
+        return (
+          style.getPropertyValue('-webkit-user-select') ||
+          style.getPropertyValue('user-select')
+        );
+      }, id);
+    await page.locator(`#${id}`).scrollIntoViewIfNeeded();
+    const at = await center(page, id);
+    const before = await selection();
+    await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+    const during = await selection();
+    await driver.play([{t: 0, down: []}]);
+    return [before, during, await selection()];
+  };
+  const locked = await heldSelection('switchInput');
+  expect(locked).toEqual([locked[0], 'none', locked[0]]);
+  const native = await heldSelection('check');
+  expect(native).toEqual([native[0], native[0], native[0]]);
+});
+
+test('a scroll the page makes under a still finger keeps the touch and its tap', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.locator('#feed').scrollIntoViewIfNeeded();
+  const at = await center(page, 'feedRow');
+  await clearLog(page);
   await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
-  const during = await selection();
+  // The page scrolls the feed under the resting finger (scrollIntoView, a
+  // pinned transcript): the finger never travelled, so the touch stays.
+  await page.evaluate(() => {
+    const feed = document.getElementById('feed');
+    if (feed != null) {
+      feed.scrollTop += 6;
+    }
+  });
+  await page.evaluate(async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
   await driver.play([{t: 0, down: []}]);
-  expect([before, during, await selection()]).toEqual([before, 'none', before]);
+  expect(states(await log(page), 'feedTap')).toEqual(['ended', 'possible']);
+});
+
+test('a drag that scrolls the feed natively is the browser’s: no tap', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await open(page, browserName);
+  await page.locator('#feed').scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const feed = document.getElementById('feed');
+    if (feed != null) {
+      feed.scrollTop = 0;
+    }
+  });
+  const start = await center(page, 'feedRow');
+  await clearLog(page);
+  await driver.play(drag(start, {x: start.x, y: start.y - 60}, 30));
+  const scrolled = await page.evaluate(
+    () => document.getElementById('feed')?.scrollTop ?? 0,
+  );
+  expect(scrolled).toBeGreaterThan(20);
+  expect(states(await log(page), 'feedTap')).not.toContain('ended');
 });
 
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
@@ -500,7 +561,7 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   );
 });
 
-test('scroll handoff: at the top the pull is the sheet’s at once', async ({
+test('scroll edge: at the top the pull is the sheet’s at once', async ({
   page,
   browserName,
 }) => {
@@ -510,14 +571,13 @@ test('scroll handoff: at the top the pull is the sheet’s at once', async ({
   const entries = await log(page);
   const sheet = entries.filter(entry => entry.name === 'sheet');
   expect(sheet[0]?.state).toBe('began');
-  expect(sheet[0]?.handoff).toBe(false);
   expect(
     sheet.filter(entry => entry.state === 'changed').at(-1)?.y,
   ).toBeCloseTo(96 - 10, 0);
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test('scroll handoff: mid-content the browser scrolls first and the sheet takes the rest', async ({
+test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({
   page,
   browserName,
 }) => {
@@ -534,14 +594,10 @@ test('scroll handoff: mid-content the browser scrolls first and the sheet takes 
   await driver.play(drag(start, {x: start.x, y: start.y + 200}, 25));
   const entries = await log(page);
   const sheet = entries.filter(entry => entry.name === 'sheet');
+  // The content takes the whole drag: it scrolls to its top, and the travel
+  // past that point never becomes the sheet's.
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
-  expect(sheet[0]?.state).toBe('began');
-  expect(sheet[0]?.handoff).toBe(true);
-  // The content took the first 60 px (and the browser its touch slop); the
-  // sheet got the rest of the finger's travel.
-  const final = sheet.filter(entry => entry.state === 'changed').at(-1)?.y ?? 0;
-  expect(final).toBeGreaterThan(200 - 60 - 24);
-  expect(final).toBeLessThanOrEqual(200 - 60 + 1);
+  expect(sheet.some(entry => entry.state === 'began')).toBe(false);
 });
 
 /** Two fingers that land one after the other and spread apart. */

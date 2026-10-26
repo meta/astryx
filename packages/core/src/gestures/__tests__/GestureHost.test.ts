@@ -1069,7 +1069,7 @@ describe('GestureHost', () => {
     touch('touchend', slider, [finger], [], 40);
   });
 
-  it('turns text selection off on a press-tracked element while a finger is down, and restores it', () => {
+  it('keeps native long-press selection on a press-tracked element whose hold does nothing (spec:AST-094 FR41)', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, text} = mount(
       '<div id="row" style="user-select: text"><span id="text">Row</span></div>',
@@ -1077,12 +1077,27 @@ describe('GestureHost', () => {
     detachers.push(host.attachConsumer(row, new RecordingConsumer()));
     const finger = {id: 1, x: 5, y: 5};
     touch('touchstart', text, [finger], [finger], 0);
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    expect(row.style.getPropertyValue('user-select')).toBe('text');
     touch('touchend', text, [finger], [], 600);
     expect(row.style.getPropertyValue('user-select')).toBe('text');
   });
 
-  it('locks a delegated pressable only when it takes the touch, and holds the lock until the last finger lifts', () => {
+  it('turns text selection and the callout off while a finger holds an element whose hold opens a menu (spec:AST-094 FR41)', () => {
+    detachers.push(coarsePrimaryPointer());
+    const {trigger} = mount(
+      '<div id="trigger" style="user-select: text">Hold for the menu</div>',
+    );
+    detachers.push(
+      host.attach(trigger, new LongPressGestureRecognizer({name: 'menu'})),
+    );
+    const inline = () => trigger.style.getPropertyValue('user-select');
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', trigger, [finger], [finger], 0);
+    expect(inline()).toBe('none');
+    touch('touchend', trigger, [finger], [], 600);
+  });
+
+  it('keeps native selection on a delegated pressable, whose hold does nothing (spec:AST-094 FR41)', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, off} = mount(
       '<div id="row" data-test-press></div><div id="off" data-test-press="off"></div>',
@@ -1100,8 +1115,8 @@ describe('GestureHost', () => {
     const two = {id: 2, x: 9, y: 9};
     touch('touchstart', row, [one], [one], 0);
     touch('touchstart', row, [two], [one, two], 10);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
     touch('touchend', row, [one], [two], 100);
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
     touch('touchend', row, [two], [], 200);
     expect(row.style.getPropertyValue('user-select')).toBe('');
     touch('touchstart', off, [one], [one], 300);
@@ -1109,7 +1124,7 @@ describe('GestureHost', () => {
     touch('touchend', off, [one], [], 400);
   });
 
-  it('on a coarse primary pointer, keeps selection for a mouse and a pan that does not ask, and locks a pan that asks and a pen', () => {
+  it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(
       '<div id="row"></div><div id="sheet"></div><div id="slider"></div>',
@@ -1134,14 +1149,15 @@ describe('GestureHost', () => {
     });
     expect(row.style.getPropertyValue('user-select')).toBe('');
     pointer('pointerup', row, {pointerType: 'mouse', ...at, time: 50});
-    // A pen on a touch device (an iPad's pencil) locks.
+    // A pen on a touch device (an iPad's pencil) on a row whose hold does
+    // nothing keeps native selection too (spec:AST-094 FR41).
     pointer('pointerdown', row, {
       pointerType: 'pen',
       ...at,
       buttons: 1,
       time: 100,
     });
-    expect(row.style.getPropertyValue('user-select')).toBe('none');
+    expect(row.style.getPropertyValue('user-select')).toBe('');
     pointer('pointerup', row, {pointerType: 'pen', ...at, time: 150});
     expect(row.style.getPropertyValue('user-select')).toBe('');
 
@@ -1194,7 +1210,16 @@ describe('GestureHost', () => {
     const {row, check, field} = mount(
       '<div id="row"><input id="check" type="checkbox"><input id="field"></div>',
     );
-    detachers.push(host.attachConsumer(row, new RecordingConsumer()));
+    // A switch's drag: a hold that does something.
+    detachers.push(
+      host.attach(
+        row,
+        new PanGestureRecognizer({
+          direction: 'horizontal',
+          preventsTextSelection: true,
+        }),
+      ),
+    );
     const finger = {id: 1, x: 5, y: 5};
     touch('touchstart', check, [finger], [finger], 0);
     expect(check.style.getPropertyValue('user-select')).toBe('none');
