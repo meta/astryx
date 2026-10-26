@@ -5,7 +5,8 @@
  * @input Uses document.styleSheets (populated by StyleX runtime injection) and
  *   the press machine's release clock (utils/pressGesture.ts)
  * @output Exports rulesDeclaredFor, rulesWithSelector, hasPressedArm,
- *   declaresPressedOverlay, readsPressStrength and hasReleaseFade test helpers
+ *   declaresPressedOverlay, readsPressStrength, afterPaintsPress,
+ *   pressArmsShadowedByDefault and hasReleaseFade test helpers
  * @position Shared test helper for asserting a control paints a pressed state
  *
  * jsdom does not compute `:active` (there is no real pointer), so a component
@@ -118,6 +119,47 @@ export function readsPressStrength(el: Element, arm = FADING_ARM): boolean {
       rule.includes(`var(${PRESS_PAINT}`) ||
       (rule.includes(PRESSED_TOKEN) && rule.includes(PRESS_STRENGTH)),
   );
+}
+
+/**
+ * Does the element's `::after` paint the press the controller writes as its
+ * image while `arm` matches (`var(--_press-paint-image)`), with the layer's
+ * own colour yielding to it (`transparent`) on the same arm? A card's overlay
+ * layer paints this way; `arm` defaults to the release's.
+ */
+export function afterPaintsPress(el: Element, arm = FADING_ARM): boolean {
+  const rules = rulesWithSelector(el, arm).filter(rule =>
+    rule.slice(0, rule.indexOf('{')).includes('::after'),
+  );
+  return (
+    rules.some(rule =>
+      /background-image:\s*var\(--_press-paint-image\)/.test(rule),
+    ) && rules.some(rule => /background-color:\s*transparent/.test(rule))
+  );
+}
+
+/**
+ * The custom properties the element sets on a `data-astryx-press` arm that it
+ * also declares without that attribute (unconditionally, or on a pseudo-class
+ * or media arm). A layered stylesheet emits such a property's other
+ * declarations outside the priority layers its attribute arms land in, and
+ * those win whatever the arm's specificity, so the press never applies. An
+ * element passes when this is empty.
+ */
+export function pressArmsShadowedByDefault(el: Element): string[] {
+  const keyedOnPress = (rule: string) =>
+    rule.slice(0, rule.indexOf('{')).includes('[data-astryx-press');
+  const declared = (rule: string) =>
+    Array.from(rule.slice(rule.indexOf('{')).matchAll(/(--[\w-]+)\s*:/g)).map(
+      match => match[1],
+    );
+  const rules = rulesDeclaredFor(el);
+  const elsewhere = new Set(
+    rules.filter(rule => !keyedOnPress(rule)).flatMap(declared),
+  );
+  return Array.from(
+    new Set(rules.filter(keyedOnPress).flatMap(declared)),
+  ).filter(name => elsewhere.has(name));
 }
 
 /**

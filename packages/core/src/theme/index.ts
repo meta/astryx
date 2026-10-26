@@ -49,10 +49,13 @@ export type {
 
 // Ordered environment-conditioned theme adaptations
 export {
+  DEFAULT_COMPACT_DEFINITION,
   DEFAULT_WIDTH_BREAKPOINTS,
   WIDTH_BREAKPOINT_NAMES,
+  compactDefinition,
 } from './themeAdaptations';
 export type {
+  CompactDefinition,
   WidthBreakpointName,
   WidthBreakpoints,
   ThemeAdaptations,

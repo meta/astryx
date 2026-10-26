@@ -7,7 +7,7 @@ export const doc = {
   name: 'Code — Snippet',
   displayName: 'Code — Snippet',
   description:
-    'Short terminal commands with a copy button and no line numbers. Use for install instructions or one-liner commands that readers will paste directly.',
+    'Short terminal commands with no header: the copy button sits in its own column beside the code, so a one-line command reads as a single row and a long line ends before the button instead of running under it. Use for install instructions or one-liner commands that readers will paste directly.',
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['CodeBlock', 'Stack'],

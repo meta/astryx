@@ -18,6 +18,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -101,6 +102,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
@@ -1087,7 +1089,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   description,
   isOptional = false,
   isRequired = false,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isReadOnly = false,
   disabledMessage,
   options,
@@ -1136,6 +1138,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   'aria-describedby': ariaDescribedByProp,
   ...restProps
 }: MultiSelectorProps<T>) {
+  const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('MultiSelector', restProps, {
     containerXstyle,
     containerClassName,
@@ -1187,7 +1192,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
-  const inputGroup = useInputGroup();
 
   const [searchQuery, setSearchQuery] = useState('');
   // A typed query shows the search row's clear (✕) button, which becomes

@@ -6,8 +6,8 @@ id: component:BottomSheet
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: imdreamrunner
-approved_at: 2026-10-21
+approved_by: cixzhang
+approved_at: 2026-10-24
 owners: [cixzhang]
 review_triggers: [theming, layout, public-api]
 verified_by:
@@ -30,7 +30,7 @@ architecture:
     architecture:layer-runtime,
   ]
 contributing: []
-system_specs: [spec:AST-025]
+system_specs: [spec:AST-025, spec:AST-099]
 ---
 
 # BottomSheet component contract
@@ -116,7 +116,22 @@ in `BottomSheet.doc.mjs`.
 
 ### Performance and resources
 
-- No new performance or resource rule is introduced.
+- Element jobs (`architecture:component-style-authoring` INV7; the
+  open-layer allowance of `spec:AST-017` FR60, DEC-29). An open sheet's frame
+  has these elements, each with one job:
+  - the dialog carries the sheet's dialog role, and modality and the top
+    layer when the sheet is modal;
+  - the positioner holds the panel at the block end;
+  - the panel paints the `bottom-sheet` target;
+  - the grabber bar is the drag handle, and its pill draws the handle;
+  - the body is the scroll area;
+  - the content box carries the padding and is the observed content box (FR3);
+  - the edge tint gives iOS Safari's toolbar the sheet's color.
+- Fewer is preferred: the pill and the edge tint are decoration that should
+  move to pseudo-elements, and the positioner should merge into the panel;
+  each is an open gap.
+- Elements a presenting component adds beyond this frame are its own to
+  justify.
 
 ## Accessibility contract
 
@@ -177,6 +192,7 @@ a decision that they must remain unthemeable.
   and records that sheets retain local scrim and swipe behavior.
 - `spec:AST-025` owns effective scroll measurement, overflow and containment,
   automatic keyboard-owner selection, and focus continuity.
+- BottomSheet's on-screen keyboard behavior is owned by `spec:AST-099`.
 - `family:overlay-dismissal` owns shared Escape and platform-close ordering. A
   standalone BottomSheet registers with the shared stack while it is presented;
   a switcher-hosted sheet is covered by BottomSheetSwitcher's registration.
@@ -190,6 +206,7 @@ a decision that they must remain unthemeable.
 | FR3, AR1–AR2        | `BottomSheetKeyboard.test.tsx`; `BottomSheetKeyboard.a11y.browser.spec.ts`; open Storybook stories | fitting/overflow, plain text, usable/unusable/dynamic descendants, focus | Missing/duplicate keyboard access, stale ownership, focus movement, or broken content-box layout fails. | `audit:BottomSheet/accessibility` |
 | Layout evidence     | `BottomSheetPanel.test.tsx`                                                                        | Floating Handle and scrolling Content area                               | Reordering or merging the stable parts fails existing panel structure and style assertions.             | `audit:BottomSheet/anatomy`       |
 | FR4                 | `BottomSheetPanel.test.tsx` container padding tests; `derivedVarRegistry.test.ts`                  | default, `padding` prop, theme `padding`, lone padded Section child      | The published inset differs from the applied padding, or a lone padded Section changes geometry.        | `audit:BottomSheet/anatomy`       |
+| Element jobs        | Open-sheet element count test against the named job list                                           | modal and non-modal sheet, scrim and no scrim                            | An element in the open sheet's frame with no named job, or a named job with no element                  |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                      | Canonical anatomy and current target inventory                           | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.              | `audit:BottomSheet/theming`       |
 
 Existing tests directly assert the Sheet panel target, Content area placement,

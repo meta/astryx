@@ -25,6 +25,7 @@ import {LayoutDividerContext} from './LayoutDividerContext';
 import {stack} from '../Stack/stack.stylex';
 import {stackItem} from '../Stack/stackItem.stylex';
 import {mergeProps} from '../utils';
+import {layoutFooterMarker, layoutHeaderMarker} from './layoutEdges.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -101,6 +102,23 @@ const styles = stylex.create({
   middle: {
     flex: 1,
     minHeight: 0,
+    // A LayoutHeader without a divider right before this row, or a
+    // LayoutFooter without one right after it, removes the matching inner
+    // padding of LayoutContent (it reads these, falling back to its padding).
+    // Sibling relations on this row only: a `:has()` on the layout followed
+    // by `*` restyles everything inside it on any change. Unset otherwise, so
+    // a nested Layout's content inherits an outer row's value, as the
+    // ancestor rule this replaces matched any enclosing layout.
+    '--_layout-flush-block-start': {
+      default: null,
+      [stylex.when.siblingBefore(':not([data-divider])', layoutHeaderMarker)]:
+        '0px',
+    },
+    '--_layout-flush-block-end': {
+      default: null,
+      [stylex.when.siblingAfter(':not([data-divider])', layoutFooterMarker)]:
+        '0px',
+    },
   },
   middleQuery: {
     containerType: {

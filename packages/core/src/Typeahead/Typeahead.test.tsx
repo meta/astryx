@@ -1613,6 +1613,86 @@ describe('BaseTypeahead popover after selection', () => {
 });
 
 describe('Typeahead edit mode', () => {
+  // iOS raises the software keyboard only for a focus made while the browser
+  // still dispatches the person's tap, so the focus must not wait for a frame.
+  it.each([
+    ['the token', () => screen.getByText(fruits[0].label)],
+    [
+      'the field around it',
+      () => screen.getByText(fruits[0].label).closest('div')!,
+    ],
+  ])(
+    'focuses the input with the label selected inside the tap on %s',
+    (_name, target) => {
+      const onChangeQuery = vi.fn();
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={fruits[0]}
+          onChange={vi.fn()}
+          onChangeQuery={onChangeQuery}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('combobox');
+      // The event the browser is dispatching when focus() runs.
+      const focusedDuring: (string | undefined)[] = [];
+      // An own property: some test setups make `focus` an accessor on the
+      // prototype, which a plain assignment cannot shadow.
+      const focus = HTMLElement.prototype.focus;
+      Object.defineProperty(input, 'focus', {
+        configurable: true,
+        value(options?: FocusOptions) {
+          focusedDuring.push(window.event?.type);
+          focus.call(input, options);
+        },
+      });
+
+      fireEvent.click(target());
+
+      // No frame has run: the focus, the text and its selection are all in
+      // place by the time the tap's own dispatch returns.
+      expect(input).toHaveFocus();
+      expect(input.value).toBe(fruits[0].label);
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe(fruits[0].label.length);
+      expect(focusedDuring.length).toBeGreaterThan(0);
+      expect(focusedDuring.every(type => type === 'click')).toBe(true);
+      expect(onChangeQuery).toHaveBeenLastCalledWith(fruits[0].label);
+    },
+  );
+
+  // The base sees the label as its query by the time the focus lands, so a
+  // hasEntriesOnFocus field searches the label instead of opening its
+  // bootstrap entries, and Enter cannot commit a bootstrap item.
+  it('with hasEntriesOnFocus, editing the value searches its label instead of opening the bootstrap entries', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={fruits[3]}
+        onChange={onChange}
+        hasEntriesOnFocus
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>('combobox');
+
+    fireEvent.click(screen.getByText(fruits[3].label));
+
+    expect(input).toHaveFocus();
+    expect(input.value).toBe(fruits[3].label);
+    // Let any bootstrap or search settle (debounceMs is 0).
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+
+    // Apple is the first bootstrap entry, which the label does not match.
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).not.toHaveBeenCalledWith(fruits[0]);
+  });
+
   it('enters edit mode on token container click', () => {
     const onChange = vi.fn();
     render(
@@ -1949,7 +2029,7 @@ describe('BaseTypeahead paste behavior', () => {
 
       scrollIntoView.mockClear();
       const options = screen.getAllByRole('option', {hidden: true});
-      fireEvent.mouseEnter(options[1]);
+      fireEvent.mouseMove(options[1]);
 
       expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id);
       expect(scrollIntoView).not.toHaveBeenCalled();
@@ -1960,6 +2040,39 @@ describe('BaseTypeahead paste behavior', () => {
       delete (HTMLElement.prototype as unknown as {scrollIntoView?: unknown})
         .scrollIntoView;
     }
+  });
+});
+
+describe('BaseTypeahead highlight under a resting pointer', () => {
+  it('keeps the keyboard highlight when an option appears under the pointer, and follows pointer movement', async () => {
+    // A menu that opens or reflows under a pointer the user is not moving
+    // fires mouseenter on the option that lands beneath it. Taking the
+    // highlight from that would make Enter pick an option the user never
+    // pointed at; only real pointer movement moves the highlight.
+    const user = userEvent.setup();
+    render(
+      <BaseTypeahead
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    await user.click(input);
+    await user.paste('e'); // matches Cherry, Date, Elderberry
+    await waitFor(() => {
+      expect(screen.getByRole('listbox', {hidden: true})).toBeInTheDocument();
+    });
+    const options = screen.getAllByRole('option', {hidden: true});
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
+
+    fireEvent.mouseEnter(options[2]);
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
+
+    fireEvent.mouseMove(options[2]);
+    expect(input.getAttribute('aria-activedescendant')).toBe(options[2].id);
   });
 });
 

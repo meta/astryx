@@ -19,6 +19,7 @@ import {
 } from '../__tests__/pressState';
 import * as stylex from '@stylexjs/stylex';
 import {Slider} from './Slider';
+import {FormLayout} from '../FormLayout';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
   __resetInteractionModalityForTest,
@@ -1327,6 +1328,177 @@ describe('Slider', () => {
       expect(isRinged(thumbs[1])).toBe(true);
       expect(isRinged(thumbs[0])).toBe(false);
     });
+  });
+});
+
+describe('one pointer per drag', () => {
+  // valueDisplay="none" keeps the thumb a direct child of the track, so the
+  // mocked rect lands on it: 200 px wide, thumbs travel 10 px (0) to 190 px
+  // (100), value = (x - 10) / 1.8.
+  function ControlledSlider({
+    id,
+    onChangeEnd,
+  }: {
+    id: string;
+    onChangeEnd?: (value: number) => void;
+  }) {
+    const [value, setValue] = useState(50);
+    return (
+      <Slider
+        label={id}
+        value={value}
+        min={0}
+        max={100}
+        valueDisplay="none"
+        onChange={setValue}
+        onChangeEnd={onChangeEnd}
+      />
+    );
+  }
+
+  function trackOf(thumb: HTMLElement): HTMLElement {
+    const track = thumb.parentElement!;
+    track.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 20,
+      width: 200,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    return track;
+  }
+
+  it('ignores a second finger that lands, moves or lifts during a drag', () => {
+    const onChangeEnd = vi.fn();
+    render(<ControlledSlider id="Volume" onChangeEnd={onChangeEnd} />);
+    const thumb = screen.getByRole('slider');
+    const track = trackOf(thumb);
+
+    fireEvent.pointerDown(track, {clientX: 100, clientY: 10, pointerId: 1});
+    fireEvent.pointerDown(track, {clientX: 28, clientY: 10, pointerId: 2});
+    expect(thumb).toHaveAttribute('aria-valuenow', '50');
+
+    fireEvent.pointerMove(track, {clientX: 136, clientY: 10, pointerId: 1});
+    fireEvent.pointerMove(track, {clientX: 46, clientY: 10, pointerId: 2});
+    expect(thumb).toHaveAttribute('aria-valuenow', '70');
+
+    // The second finger lifting does not end the first finger's drag.
+    fireEvent.pointerUp(track, {clientX: 46, clientY: 10, pointerId: 2});
+    expect(onChangeEnd).not.toHaveBeenCalled();
+    expect(declaresPressedOverlay(thumb)).toBe(true);
+
+    fireEvent.pointerMove(track, {clientX: 154, clientY: 10, pointerId: 1});
+    fireEvent.pointerUp(track, {clientX: 154, clientY: 10, pointerId: 1});
+    expect(thumb).toHaveAttribute('aria-valuenow', '80');
+    expect(onChangeEnd).toHaveBeenCalledOnce();
+    expect(onChangeEnd).toHaveBeenCalledWith(80);
+    expect(declaresPressedOverlay(thumb)).toBe(false);
+  });
+
+  it('ends the drag when its pointer capture is lost without an up', () => {
+    const onChangeEnd = vi.fn();
+    render(<ControlledSlider id="Volume" onChangeEnd={onChangeEnd} />);
+    const thumb = screen.getByRole('slider');
+    const track = trackOf(thumb);
+
+    fireEvent.pointerDown(track, {clientX: 136, clientY: 10, pointerId: 1});
+    fireEvent.lostPointerCapture(track, {pointerId: 1});
+    expect(onChangeEnd).toHaveBeenCalledOnce();
+    expect(onChangeEnd).toHaveBeenCalledWith(70);
+    expect(declaresPressedOverlay(thumb)).toBe(false);
+
+    // The slider answers the next press.
+    fireEvent.pointerDown(track, {clientX: 28, clientY: 10, pointerId: 3});
+    expect(thumb).toHaveAttribute('aria-valuenow', '10');
+  });
+
+  it('ends the drag when its control node is replaced mid-drag and the capture is lost', () => {
+    // A FormLayout direction change re-renders the field in another layout,
+    // replacing the control node while the drag holds it. The browser then
+    // fires lostpointercapture at the document, not at the removed node.
+    const onChangeEnd = vi.fn();
+    function InLayout({
+      direction,
+    }: {
+      direction: 'vertical' | 'horizontal-labels';
+    }) {
+      return (
+        <FormLayout direction={direction}>
+          <ControlledSlider id="Volume" onChangeEnd={onChangeEnd} />
+        </FormLayout>
+      );
+    }
+    const {rerender} = render(<InLayout direction="vertical" />);
+    const before = trackOf(screen.getByRole('slider'));
+    fireEvent.pointerDown(before, {clientX: 136, clientY: 10, pointerId: 1});
+
+    rerender(<InLayout direction="horizontal-labels" />);
+    fireEvent.lostPointerCapture(document, {pointerId: 1});
+    expect(onChangeEnd).toHaveBeenCalledOnce();
+
+    // The slider answers the next press on whichever node it renders now.
+    const thumb = screen.getByRole('slider');
+    const after = trackOf(thumb);
+    fireEvent.pointerDown(after, {clientX: 28, clientY: 10, pointerId: 3});
+    expect(thumb).toHaveAttribute('aria-valuenow', '10');
+  });
+
+  it('holds a document listener only while a drag is in progress', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    const lostCapture = (spy: typeof add) =>
+      spy.mock.calls.filter(([type]) => type === 'lostpointercapture');
+    const {unmount} = render(<ControlledSlider id="Volume" />);
+    const track = trackOf(screen.getByRole('slider'));
+    // Idle: no document listener.
+    expect(lostCapture(add)).toHaveLength(0);
+
+    fireEvent.pointerDown(track, {clientX: 136, clientY: 10, pointerId: 1});
+    expect(lostCapture(add)).toHaveLength(1);
+    const listener = lostCapture(add)[0][1];
+    fireEvent.pointerUp(track, {clientX: 136, clientY: 10, pointerId: 1});
+    expect(lostCapture(remove).map(([, fn]) => fn)).toEqual([listener]);
+
+    // A slider unmounted mid-drag removes its listener too.
+    fireEvent.pointerDown(track, {clientX: 28, clientY: 10, pointerId: 2});
+    const second = lostCapture(add)[1][1];
+    unmount();
+    expect(lostCapture(remove).map(([, fn]) => fn)).toEqual([listener, second]);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('lets two fingers drag two sliders at once', () => {
+    render(
+      <>
+        <ControlledSlider id="Treble" />
+        <ControlledSlider id="Bass" />
+      </>,
+    );
+    const treble = screen.getByRole('slider', {name: 'Treble'});
+    const bass = screen.getByRole('slider', {name: 'Bass'});
+    const trebleTrack = trackOf(treble);
+    const bassTrack = trackOf(bass);
+
+    fireEvent.pointerDown(trebleTrack, {
+      clientX: 100,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerDown(bassTrack, {clientX: 100, clientY: 10, pointerId: 2});
+    fireEvent.pointerMove(trebleTrack, {
+      clientX: 154,
+      clientY: 10,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(bassTrack, {clientX: 28, clientY: 10, pointerId: 2});
+
+    expect(treble).toHaveAttribute('aria-valuenow', '80');
+    expect(bass).toHaveAttribute('aria-valuenow', '10');
   });
 });
 

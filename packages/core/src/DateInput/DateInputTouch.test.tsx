@@ -2540,6 +2540,15 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     );
   });
 
+  it('leaves a two-finger pinch to the page over the wheels', () => {
+    // `pan-y` alone also refuses the browser's pinch-zoom over the wheel, so
+    // the page could not be zoomed over an open picker. The real-engine proof
+    // is WheelPinchZoom.a11y.chromium.spec.ts; jsdom computes no touch-action.
+    expect(declarations(read('Wheel.tsx'), 'scroller')).toContain(
+      "touchAction: 'pan-y pinch-zoom'",
+    );
+  });
+
   it('guards the scroll-driven falloff behind @supports', () => {
     const source = read('Wheel.tsx');
     // Without the guard, a browser that does not understand animation-timeline

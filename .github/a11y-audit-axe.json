@@ -1,0 +1,25 @@
+{
+  "$comment": "How a \"[Component Audit] <Name>:\" pull request's own axe pass deviates from the default, which audits the component's stories with `--components <Name>`, writes pr-a11y-evidence/<kebab>-a11y-report.json, and requires a non-empty <kebab>-audit-evidence/ folder (top level or under test-results/) when the audit runs a spec. Read by .github/scripts/a11y-pr-contracts.mjs. Add an entry only when an audit needs a different component set, an open-state story or readiness selector, an environment variable, or a different evidence folder.",
+  "CheckboxList": {
+    "components": ["CheckboxList", "CheckboxListItem"],
+    "report": "checkbox-list"
+  },
+  "CheckboxListItem": {
+    "components": ["CheckboxList", "CheckboxListItem"],
+    "report": "checkbox-list"
+  },
+  "ChatMessageList": {"evidence": null},
+  "ChatMessageMetadata": {"evidence": null},
+  "ChatTokenizedText": {
+    "env": {"ASTRYX_AUDIT_BASELINE_HEAD": "a7c6c7ecdf6b422df331124e8f6fc6d33cf1bd63"}
+  },
+  "ContextMenuItem": {"readySelector": "[role=\"menu\"]", "evidence": null},
+  "DateInput": {
+    "stories": ["core-dateinput--open-calendar-audit"],
+    "readySelector": "[role=\"dialog\"]"
+  },
+  "DropdownMenuDivider": {"readySelector": "[role=\"menu\"]"},
+  "DropdownMenuGroup": {"readySelector": "[role=\"menu\"]"},
+  "DropdownMenuItem": {"readySelector": "[role=\"menu\"]"},
+  "DropdownMenuSubMenu": {"evidence": "dropdown-menu-submenu-audit-evidence"}
+}

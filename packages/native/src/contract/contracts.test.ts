@@ -14,6 +14,7 @@ import {
   generateTypeScript,
 } from './index.js';
 import type {ComponentContract} from './types.js';
+import {BUILTIN_ICON_NAMES} from '../icons/defaults.js';
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -51,6 +52,20 @@ describe('native contracts', () => {
     expect(selector!.core).not.toHaveProperty('controlXstyle');
   });
 
+  it('moves a prop only some native platforms carry out of the core and onto those platforms', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const switchContract = contracts.find(
+      contract => contract.name === 'Switch',
+    )!;
+    for (const name of ['labelPosition', 'labelSpacing']) {
+      expect(switchContract.core).not.toHaveProperty(name);
+      expect(switchContract.platforms.android).toHaveProperty(name);
+      expect(switchContract.platforms.windows).toHaveProperty(name);
+      expect(switchContract.platforms.ios ?? {}).not.toHaveProperty(name);
+      expect(switchContract.platforms.macos ?? {}).not.toHaveProperty(name);
+    }
+  });
+
   it('keeps value callbacks, typed text slots, and number sets in the core', async () => {
     const {contracts} = await buildContracts(loadCoreDoc);
     const byName = new Map(
@@ -68,6 +83,16 @@ describe('native contracts', () => {
       kind: 'fn',
       args: [],
     });
+    // AST-082 FR4: Button `width` projects the web's size value to the two
+    // values every platform supports; other widths stay on the web.
+    expect(byName.get('Button')!.core.width?.type).toEqual({
+      kind: 'enum',
+      values: ['content', 'fill'],
+    });
+    expect(byName.get('Button')!.projections?.width).toEqual({
+      content: 'auto',
+      fill: '100%',
+    });
     expect(byName.get('Heading')!.core.children?.type).toEqual({
       kind: 'string',
     });
@@ -83,6 +108,32 @@ describe('native contracts', () => {
     expect(byName.get('Badge')!.webOnly.map(prop => prop.name)).toContain(
       'icon',
     );
+  });
+
+  it('gives Icon a typed icon slot drawn from the shared icon names', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const icon = contracts.find(contract => contract.name === 'Icon');
+    expect(icon).toBeDefined();
+    expect(icon!.core.icon).toMatchObject({type: {kind: 'icon'}});
+    expect(icon!.core.icon.optional).toBe(false);
+    expect(Object.keys(icon!.core)).toEqual(['icon', 'color', 'size', 'label']);
+    expect(icon!.webOnly.map(prop => prop.name)).toEqual(['xstyle']);
+
+    const swift = generateSwift(contracts);
+    expect(swift['Icon.swift']).toContain('public var icon: IconName');
+    const iconName = swift['IconName.swift'];
+    for (const name of BUILTIN_ICON_NAMES) {
+      expect(iconName).toContain(
+        `public static let ${name}: IconName = "${name}"`,
+      );
+    }
+    expect(iconName).toContain('ExpressibleByStringLiteral');
+
+    const types = generateTypeScript(contracts);
+    expect(types['core.d.ts']).toContain(
+      "export type IconName = 'close' | 'chevronDown'",
+    );
+    expect(types['core.d.ts']).toContain('icon: IconName;');
   });
 
   it('reports naming and portability errors', () => {

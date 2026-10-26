@@ -718,6 +718,264 @@ export const NearFullTokenRowRTL: Story = {
   name: 'Near-full Token Row (RTL)',
 };
 
+const tokenRowGuardFilters: PowerSearchFilter[] = [
+  {field: 'status', operator: 'is', value: {type: 'enum', value: 'open'}},
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'title',
+    operator: 'contains',
+    value: {type: 'string', value: 'release notes'},
+  },
+];
+
+const settleFrames = () =>
+  new Promise<void>(resolve =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
+/** Resolves once fonts are ready and the clear-all lane has published its reserve. */
+async function waitForTokenRow(wrapper: HTMLElement) {
+  await document.fonts.ready;
+  const deadline = performance.now() + 2000;
+  while (
+    wrapper.style.getPropertyValue('--_tokenizer-end-lane-reserve') === ''
+  ) {
+    if (performance.now() >= deadline) {
+      throw new Error('Clear-all lane reserve was not measured');
+    }
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  }
+  await settleFrames();
+}
+
+function tokenRowParts(canvasElement: HTMLElement) {
+  const wrapper = canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+  const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+  const tokens = [
+    ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+  ];
+  if (!wrapper || !input || tokens.length !== tokenRowGuardFilters.length) {
+    throw new Error('Token-row fixture did not render as expected');
+  }
+  return {wrapper, input, tokens};
+}
+
+/**
+ * Default filters fill more than half of the field, and the search input
+ * stays beside them: no token paints over it, and pressing the input's
+ * center reaches the input rather than a token.
+ */
+export const DefaultFiltersBesideSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters);
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Default filters beside the search input',
+  play: async ({canvasElement}) => {
+    const {wrapper, input, tokens} = tokenRowParts(canvasElement);
+    await waitForTokenRow(wrapper);
+
+    const field = wrapper.getBoundingClientRect();
+    const tokenRects = tokens.map(token => token.getBoundingClientRect());
+    if (new Set(tokenRects.map(rect => Math.round(rect.top))).size !== 1) {
+      throw new Error('Fixture tokens no longer share one row');
+    }
+    // Fail closed if the fixture stops covering the field's middle, where a
+    // test or a person would naturally press the search input.
+    const fieldCenter = field.left + field.width / 2;
+    const tokenEnd = Math.max(...tokenRects.map(rect => rect.right));
+    const tokenStart = Math.min(...tokenRects.map(rect => rect.left));
+    if (getComputedStyle(wrapper).direction === 'rtl') {
+      if (tokenStart > fieldCenter) {
+        throw new Error('Fixture tokens no longer reach the field center');
+      }
+    } else if (tokenEnd < fieldCenter) {
+      throw new Error('Fixture tokens no longer reach the field center');
+    }
+
+    const inputRect = input.getBoundingClientRect();
+    if (inputRect.width <= 0) {
+      throw new Error('The search input has no pointer hit target');
+    }
+    tokens.forEach((token, index) => {
+      const rect = tokenRects[index];
+      const overlapX =
+        Math.min(rect.right, inputRect.right) -
+        Math.max(rect.left, inputRect.left);
+      const overlapY =
+        Math.min(rect.bottom, inputRect.bottom) -
+        Math.max(rect.top, inputRect.top);
+      if (overlapX > 0.5 && overlapY > 0.5) {
+        throw new Error(
+          `Token "${token.textContent ?? ''}" covers ${overlapX.toFixed(2)}px of the search input`,
+        );
+      }
+    });
+    const hit = document.elementFromPoint(
+      inputRect.left + inputRect.width / 2,
+      inputRect.top + inputRect.height / 2,
+    );
+    if (hit !== input) {
+      throw new Error(
+        `The search input's center is hit-tested as ${hit?.tagName ?? 'nothing'}${hit?.getAttribute('aria-label') ? ` "${hit.getAttribute('aria-label')}"` : ''}`,
+      );
+    }
+    hit.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    if (document.activeElement !== input) {
+      throw new Error('Pressing the search input did not focus it');
+    }
+    input.blur();
+  },
+};
+
+export const DefaultFiltersBesideSearchRTL: Story = {
+  ...DefaultFiltersBesideSearch,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'Default filters beside the search input (RTL)',
+};
+
+/**
+ * An app that compiles its own StyleX can emit the same atomic class as the
+ * search input's resting styles, unlayered, so it outranks the input's
+ * layered empty-query styles. Whichever single resting declaration wins that
+ * way, the empty input stays on the token row: the field never grows a
+ * blank row under its filters.
+ */
+export const TokenRowWhenRestingStylesWin: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters.slice(0, 2));
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Token row when resting styles win',
+  play: async ({canvasElement}) => {
+    const wrapper =
+      canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const tokens = [
+      ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+    ];
+    if (!wrapper || !input || tokens.length !== 2) {
+      throw new Error('Token-row fixture did not render as expected');
+    }
+    await waitForTokenRow(wrapper);
+    if (!input.matches(':placeholder-shown')) {
+      throw new Error(
+        'The empty search input does not match :placeholder-shown',
+      );
+    }
+
+    // The input's own atomic rules, split into resting and empty-query ones.
+    const ownClasses = new Set(input.classList);
+    const resting: Array<{className: string; property: string; value: string}> =
+      [];
+    const emptyQueryProperties = new Set<string>();
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of rules) {
+        if (rule instanceof CSSLayerBlockRule) {
+          visit(rule.cssRules);
+          continue;
+        }
+        if (!(rule instanceof CSSStyleRule)) {
+          continue;
+        }
+        for (const selector of rule.selectorText.split(',')) {
+          const match = /^\.([\w-]+)((?::[\w-]+(?:\([^)]*\))?)*)$/.exec(
+            selector.trim(),
+          );
+          if (!match || !ownClasses.has(match[1])) {
+            continue;
+          }
+          const pseudo = match[2].replace(/:not\(#\\#\)/g, '');
+          for (const property of rule.style) {
+            if (pseudo === '') {
+              resting.push({
+                className: match[1],
+                property,
+                value: rule.style.getPropertyValue(property),
+              });
+            } else if (pseudo.includes(':placeholder-shown')) {
+              emptyQueryProperties.add(property);
+            }
+          }
+        }
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try {
+        visit(sheet.cssRules);
+      } catch {
+        // A cross-origin sheet cannot style the input's own classes.
+      }
+    }
+    const contested = resting.filter(({property}) =>
+      emptyQueryProperties.has(property),
+    );
+    // Fail closed: with no resting declaration that an empty-query rule
+    // overrides, the loop below would prove nothing.
+    if (contested.length === 0) {
+      throw new Error(
+        'No resting declaration of the search input has an empty-query override',
+      );
+    }
+
+    const restingHeight = wrapper.getBoundingClientRect().height;
+    const override = document.createElement('style');
+    document.head.append(override);
+    try {
+      for (const {className, property, value} of contested) {
+        override.textContent = `.${CSS.escape(className)}{${property}:${value} !important}`;
+        await settleFrames();
+        const height = wrapper.getBoundingClientRect().height;
+        const inputRect = input.getBoundingClientRect();
+        const row = tokens[tokens.length - 1].getBoundingClientRect();
+        const inputMiddle = inputRect.top + inputRect.height / 2;
+        if (inputMiddle < row.top || inputMiddle > row.bottom) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the empty search input left the token row (input middle ${inputMiddle.toFixed(2)}, row ${row.top.toFixed(2)}-${row.bottom.toFixed(2)})`,
+          );
+        }
+        if (height > restingHeight + 0.5) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the field grew from ${restingHeight.toFixed(2)} to ${height.toFixed(2)}`,
+          );
+        }
+      }
+    } finally {
+      override.remove();
+    }
+  },
+};
+
 export const FullFeatured: Story = {
   render: args => {
     const [filters, setFilters] = useState<PowerSearchFilter[]>([]);

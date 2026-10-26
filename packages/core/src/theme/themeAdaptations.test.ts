@@ -9,8 +9,10 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  DEFAULT_COMPACT_DEFINITION,
   DEFAULT_WIDTH_BREAKPOINTS,
   WIDTH_BREAKPOINT_NAMES,
+  compactDefinition,
   defineTheme,
   generateAdaptationCSS,
   generateThemeCSS,
@@ -100,6 +102,41 @@ describe('width breakpoint metadata', () => {
         } as unknown as DefineThemeInput['adaptations'],
       }),
     ).toThrow(message);
+  });
+});
+
+describe('compact definition (spec:AST-012 FR9)', () => {
+  it('is width below md or height below 500 at the default points', () => {
+    expect(DEFAULT_COMPACT_DEFINITION).toEqual({
+      widthBelow: 768,
+      heightBelow: 500,
+      query: '(width < 768px), (height < 500px)',
+      coarsePointerQuery:
+        '(width < 768px) and (pointer: coarse), (height < 500px) and (pointer: coarse)',
+    });
+    expect(compactDefinition()).toEqual(DEFAULT_COMPACT_DEFINITION);
+  });
+
+  it("follows a theme's effective md point and keeps the height edge", () => {
+    const theme = defineTheme({
+      name: 'wide-md',
+      adaptations: {widthBreakpoints: {md: 800, lg: 1100}},
+    });
+    const points = theme.__adaptations?.widthBreakpoints;
+    if (points == null) {
+      throw new Error('theme has no effective width breakpoints');
+    }
+    expect(compactDefinition(points)).toEqual({
+      widthBelow: 800,
+      heightBelow: 500,
+      query: '(width < 800px), (height < 500px)',
+      coarsePointerQuery:
+        '(width < 800px) and (pointer: coarse), (height < 500px) and (pointer: coarse)',
+    });
+  });
+
+  it('is frozen, so no caller can change the shared definition', () => {
+    expect(Object.isFrozen(DEFAULT_COMPACT_DEFINITION)).toBe(true);
   });
 });
 
