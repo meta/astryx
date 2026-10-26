@@ -2,9 +2,10 @@
 
 /**
  * @file GestureHost.bundle.test.ts
- * @input GestureHost.ts and PressTracker.ts, bundled and minified by esbuild
- * @output The gesture host and the press tracker carry only the UIKit gesture
- *   groups they read, never the whole table
+ * @input GestureHost.ts, PressTracker.ts and usePressTracker.ts, bundled and
+ *   minified by esbuild
+ * @output The gesture host, the press tracker and its hook carry only the
+ *   UIKit gesture groups they read, never the whole table
  *   (architecture:component-style-authoring INV6)
  * @position Bundle evidence for packages/core/src/gestures: every recognizer
  *   and press tracker attaches through the host, so what it imports ships
@@ -79,9 +80,9 @@ describe('the gesture host bundle', () => {
   });
 });
 
-describe('the press tracker bundle', () => {
+describe.each(['PressTracker', 'usePressTracker'])('the %s bundle', name => {
   // NumberInput's stepper and every control reach the press tracker.
-  const text = bundle('PressTracker');
+  const text = bundle(name);
 
   it('carries the press, pan and control groups it reads', () => {
     expect(text).toContain('scrollBrake:');
