@@ -277,6 +277,31 @@ describe('GestureHost', () => {
     expect(press.numberOfTouches).toBe(0);
   });
 
+  it("keeps a recognizer's own-scroll exemption until the newest call's frame has passed, so an autoscroll every frame keeps its finger (spec:AST-094 FR30)", async () => {
+    const {list} = mount('<div id="list"><div id="row"></div></div>');
+    scrollable(list, {scrollHeight: 1000, clientHeight: 200});
+    const row = document.getElementById('row')!;
+    const press = new LongPressGestureRecognizer({
+      name: 'press',
+      allowableMovement: 100,
+    });
+    detachers.push(host.attach(row, press));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [finger], [finger], 0);
+    const moved = {...finger, y: 40};
+    touch('touchmove', row, [moved], [moved], 16);
+    const frame = async () =>
+      new Promise(resolve => requestAnimationFrame(resolve));
+    // An edge autoscroll writes every frame, announcing each write.
+    host.ownScroll(list);
+    await frame();
+    host.ownScroll(list);
+    await frame();
+    // The first call's frame has passed, the newest one's has not.
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(1);
+  });
+
   it('watches the pointer kind only while something is attached (spec:AST-094 FR24)', () => {
     const {box} = mount('<div id="box"></div>');
     const add = vi.fn();
