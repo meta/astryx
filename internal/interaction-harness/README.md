@@ -9,9 +9,10 @@ a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 
 The harness proves its own instruments in
-[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
-every positive check has a negative control beside it (a rAF animation that
-freezes under a blocked main thread).
+[`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
+The busy-main-thread proof has a negative control beside its positive check
+(a rAF animation that freezes under a blocked main thread); other self-tests
+check an instrument against a known answer.
 
 ## Running
 

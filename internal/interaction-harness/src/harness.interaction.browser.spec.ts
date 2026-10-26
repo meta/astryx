@@ -3,8 +3,9 @@
 /**
  * @file harness.interaction.browser.spec.ts
  * @input Fixture pages written inline (no Storybook), real Chromium/WebKit
- * @output Proof that each harness instrument measures what it claims, with a
- *   negative control beside every positive one: scripted timestamps reach the
+ * @output Proof that each harness instrument measures what it claims (the
+ *   busy-main-thread proof with a negative control beside its positive
+ *   check): scripted timestamps reach the
  *   page; a flick flings natively (Chromium); a second finger and a pinch
  *   arrive as distinct pointers; the screencast shows a compositor animation
  *   advancing through a blocked main thread while a rAF animation freezes;

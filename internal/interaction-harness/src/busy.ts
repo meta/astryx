@@ -453,8 +453,9 @@ export function busyWindowProof(
   // before and after them are the stall check's). After an on-screen start
   // they count from the on-screen frame, which `changes` leaves out, so the
   // frames credited as skipped after it are judged too. A part that moved
-  // nothing, or delivered nothing, is judged against its span, so a frozen
-  // animation misses here too.
+  // nothing, or delivered fewer than `minJudgedFrames` frames, is judged
+  // against its span, so a frozen animation misses here too (one late frame
+  // from before the block is not 1/1 moved).
   const deliveredFrames = tracked.filter(
     f =>
       f.box != null &&
@@ -469,7 +470,7 @@ export function busyWindowProof(
               compositorFrameMs,
           ) + (onScreenFrom == null ? 1 : 0)
         : expectedFrames
-      : deliveredFrames === 0
+      : deliveredFrames < minJudgedFrames
         ? expectedFrames
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
