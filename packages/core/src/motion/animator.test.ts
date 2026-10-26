@@ -42,9 +42,12 @@ interface Recorded {
   cancelled: boolean;
   /** A sampler holding it (the interaction harness pauses to seek). */
   paused: boolean;
-  readonly playState: 'idle' | 'paused' | 'running';
+  /** Finished from outside (a sampler's `finish()`), keeping its start. */
+  finished: boolean;
+  readonly playState: 'idle' | 'paused' | 'running' | 'finished';
   ready: Promise<Recorded>;
   commit(at: number): void;
+  finish(): void;
   cancel(): void;
 }
 
@@ -100,8 +103,15 @@ beforeEach(() => {
       createdAt: clock,
       cancelled: false,
       paused: false,
+      finished: false,
       get playState() {
-        return this.cancelled ? 'idle' : this.paused ? 'paused' : 'running';
+        return this.cancelled
+          ? 'idle'
+          : this.finished
+            ? 'finished'
+            : this.paused
+              ? 'paused'
+              : 'running';
       },
       ready,
       commit(at) {
@@ -109,6 +119,9 @@ beforeEach(() => {
           start = at;
         }
         resolveReady(this);
+      },
+      finish() {
+        this.finished = true;
       },
       cancel() {
         this.cancelled = true;
@@ -510,6 +523,25 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     await commitFrame(1300);
     expect(animator.get('x', 1400)).toBeCloseTo(curve.value(0.1), 9);
     expect(animator.get('y', 1400)).toBeCloseTo(curve.value(0.1), 9);
+  });
+  it('an explicit clock after a waiting call was finished from outside keeps that clock, with no lead-in', async () => {
+    // A sampler holds a call from rest before the browser starts it, then
+    // finishes it (the interaction harness's release with finish): the call
+    // never gets a start time. A call on an explicit clock that follows plays
+    // from that clock instead of waiting on the finished call's start.
+    const {animator} = setup();
+    animator.animate({opacity: 0}, {spring: springs.settle});
+    const [held] = live('opacity');
+    expect(held.startTime).toBeNull();
+    held.paused = true;
+    held.finish();
+    clock += 9;
+    const at = clock - 4;
+    animator.animate({opacity: 1}, {spring: springs.settle}, {at});
+    const fade = recorded.filter(a => !a.cancelled && a !== held).at(-1);
+    expect(fade?.startTime).toBe(at);
+    // The curve moves from its first keyframe: no hold before it.
+    expect(fade?.keyframes[1].opacity).not.toBe(fade?.keyframes[0].opacity);
   });
 });
 
@@ -1166,6 +1198,22 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBeCloseTo(0, 9);
     expect(animator.get('opacity', clock + fade / 4)).toBeCloseTo(ease(0.5), 9);
     expect(live('translate')).toHaveLength(0);
+    expect(opacityOnly()).toBe(true);
+  });
+
+  it('a landing a busy main thread runs late still ends the dip on time', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(1000);
+    // The task that lands it runs 80 ms late (the page's clock is ahead
+    // of the timer when it fires).
+    clock += fade / 2 + 80;
+    await vi.advanceTimersByTimeAsync(fade / 2);
+    // Landed while transparent, never shown in the wrong place.
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeCloseTo(0, 9);
+    // The fade back in takes what is left: the dip ends when it was due.
+    expect(animator.get('opacity', 1000 + fade)).toBe(1);
     expect(opacityOnly()).toBe(true);
   });
 

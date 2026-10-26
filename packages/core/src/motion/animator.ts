@@ -431,6 +431,8 @@ interface Landing {
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
+  /** When it is due on the document timeline, once the call has started. */
+  due: number | null;
 }
 
 /** What Reduced Motion makes of a call: its segments, and any landing. */
@@ -438,7 +440,7 @@ interface ReducedPlan {
   readonly next: Partial<Record<MotionProperty, Segment | null>>;
   /** Values that stay where they are until the landing writes them. */
   readonly holds: Partial<Record<MotionProperty, number>>;
-  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried'> | null;
+  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried' | 'due'> | null;
   /** The stylesheet opacity a dip borrowed (no call owns opacity). */
   readonly borrowed?: number | null;
 }
@@ -1412,6 +1414,20 @@ export function createAnimator(
         return;
       }
     }
+    // Finished from outside before the browser started it (a sampler's
+    // finish() on a held animation): nothing is left to wait on, so the call
+    // keeps its own clock, and a later call on an explicit clock does not
+    // join it and wait for a start that never comes.
+    if (
+      group.animations.length > 0 &&
+      group.animations.every(
+        animation =>
+          animation.playState === 'finished' || animation.playState === 'idle',
+      ) &&
+      group.animations.some(animation => animation.playState === 'finished')
+    ) {
+      resolveGroup(group, group.provisional);
+    }
   };
 
   /** Reads the start of every call whose first frame has been committed. */
@@ -1736,7 +1752,7 @@ export function createAnimator(
     plan: NonNullable<ReducedPlan['landing']>,
     carried: HandleState[],
   ) => {
-    const landing: Landing = {...plan, owner, carried, timer: null};
+    const landing: Landing = {...plan, owner, carried, timer: null, due: null};
     landings.add(landing);
     // The handle settles when the landing (and its fade back in) is done.
     if (owner.timer != null) {
@@ -1747,17 +1763,21 @@ export function createAnimator(
       if (!landings.has(landing)) {
         return;
       }
+      landing.due = start + landing.at;
       landing.timer = setTimeout(
         () => land(landing),
-        Math.max(0, start + landing.at - now()),
+        Math.max(0, landing.due - now()),
       );
     });
   };
 
   /**
    * Writes the travel while the element is transparent: a plain style write,
-   * never an animation. A busy main thread only keeps it transparent longer.
-   * In a dip the fade back in starts from here.
+   * never an animation (DR2: opacity only), so it is never shown in the wrong
+   * place. In a dip the fade back in starts from here and takes what is left
+   * of the cross-fade, so the dip ends when it was due even when a busy main
+   * thread runs this timer late; past the whole fade back in (over 100 ms
+   * late) the element appears at once where it landed.
    */
   const land = (landing: Landing) => {
     landings.delete(landing);
@@ -1771,15 +1791,21 @@ export function createAnimator(
     }
     let end = time;
     if (landing.fadeIn != null) {
+      // The fade back in takes what is left of the cross-fade: a timer that
+      // a busy main thread runs late shortens it, so the dip still ends
+      // when it was due (design:reduced-motion DR2, 200 ms or less), and the
+      // element is never shown before it lands.
+      const late = landing.due == null ? 0 : Math.max(0, time - landing.due);
+      const ms = Math.max(1, landing.fadeIn.ms - late);
       segments.set(
         'opacity',
         fadeSegment(landing.owner, time, [
           {at: 0, value: valueAt('opacity', time)},
-          {at: landing.fadeIn.ms, value: landing.fadeIn.to},
+          {at: ms, value: landing.fadeIn.to},
         ]),
       );
       changed.push('opacity');
-      end = time + landing.fadeIn.ms;
+      end = time + ms;
     } else if (landing.restore != null) {
       segments.delete('opacity');
       resting.opacity = landing.restore;
