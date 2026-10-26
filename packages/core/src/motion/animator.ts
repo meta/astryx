@@ -97,7 +97,9 @@
  *
  * Reduced Motion (design:reduced-motion): with `prefers-reduced-motion:
  * reduce`, every `animate` and `play` (travel or opacity, on a spring or any
- * curve) is replaced, and nothing moves, scales or springs:
+ * curve) is replaced, and nothing moves, scales or springs. The planner
+ * (reducedMotionPlan.ts) decides what each call becomes; the animator
+ * applies the plan and runs its landings:
  * - on a coarse primary pointer, or for a call started by a touch drag's
  *   release on any pointer (`touchRelease`), it becomes (DR2) an
  *   opacity-only cross-fade of `timing.reducedMotionCrossFadeMs` (200 ms)
@@ -136,12 +138,18 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
+ * - /packages/core/src/motion/reducedMotionPlan.ts (the Reduce Motion plan)
  * - /packages/core/src/motion/README.md
  */
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {reducedMotionCrossFade} from './uikit/timing';
+import {
+  planReducedMotion,
+  TRAVEL_PROPERTIES,
+  type ReducedMotionView,
+} from './reducedMotionPlan';
 
 /**
  * A value the animator can drive.
@@ -523,13 +531,7 @@ const RETIRE_RECHECK_MS = 100;
 /** How long an element stays promoted after its last motion, ms. */
 export const PROMOTION_LINGER_MS = 500;
 
-const TRAVEL: ReadonlyArray<MotionProperty> = [
-  'x',
-  'y',
-  'rotate',
-  'scaleX',
-  'scaleY',
-];
+const TRAVEL = TRAVEL_PROPERTIES;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
@@ -2032,10 +2034,29 @@ export function createAnimator(
     }
   };
 
+  /** What the Reduce Motion planner reads of this animator. */
+  const planView: ReducedMotionView = {
+    valueAt,
+    opacityHeading: () => opacityHeading(),
+    ownOpacity: () => ownOpacity(),
+    writesOwnOpacity: () => writesOwnOpacity(),
+    get borrowedOpacity() {
+      return borrowedOpacity;
+    },
+    get hasOpacityCurve() {
+      return segments.has('opacity');
+    },
+    get restingOpacity() {
+      return resting.opacity;
+    },
+    get hasPendingLanding() {
+      return landings.size > 0;
+    },
+  };
+
   /**
-   * Reduced Motion (see the file header): with `fade`, an opacity-only
-   * cross-fade whose travel lands while the element is transparent; without,
-   * everything at once.
+   * Reduced Motion (see the file header): the planner's plan
+   * (reducedMotionPlan.ts) as this call's segments.
    */
   const reducedMotion = (
     owner: HandleState,
@@ -2045,149 +2066,27 @@ export function createAnimator(
     fade: boolean,
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
-    const next: Partial<Record<MotionProperty, Segment | null>> = {};
-    const holds: Partial<Record<MotionProperty, number>> = {};
-    if (!fade) {
-      for (const property of properties) {
-        next[property] = null;
-      }
-      return {next, holds, landing: null};
-    }
-    const opacityNow = valueAt('opacity', time);
-    // A fade the call does not name keeps going where it was heading.
-    const opacityTo = targets.opacity ?? opacityHeading();
-    const travel = properties.filter(
-      property =>
-        TRAVEL.includes(property) &&
-        Math.abs((targets[property] as number) - valueAt(property, time)) >
-          1e-9,
+    const plan = planReducedMotion(
+      planView,
+      time,
+      targets,
+      properties,
+      fade,
+      role,
     );
-    // Only the call's own opacity (or its role) makes it an entrance or an
-    // exit: a fade it does not name, such as a dip still running, does not.
-    const named = targets.opacity != null;
-    let entering = named && opacityTo > opacityNow + 1e-6;
-    let leaving = named && opacityTo < opacityNow - 1e-6;
-    let fadeFrom = opacityNow;
-    let fadeTo = opacityTo;
-    let restore: number | null = null;
-    // A fade by role on a surface no call owns opacity on starts from, or
-    // returns to, the element's own (stylesheet) opacity, as a dip does.
-    const roleBorrow =
-      role != null &&
-      !named &&
-      borrowedOpacity == null &&
-      !segments.has('opacity') &&
-      resting.opacity === IDENTITY.opacity &&
-      !writesOwnOpacity()
-        ? ownOpacity()
-        : null;
-    if (!entering && !leaving && role === 'entrance') {
-      entering = true;
-      fadeFrom = 0;
-      fadeTo = roleBorrow ?? opacityTo;
-    } else if (!entering && !leaving && role === 'exit') {
-      leaving = true;
-      fadeFrom = roleBorrow ?? opacityNow;
-      fadeTo = 0;
-      restore = roleBorrow ?? opacityTo;
+    const next: Partial<Record<MotionProperty, Segment | null>> = {};
+    for (const property of plan.atOnce) {
+      next[property] = null;
     }
-    // A move still waiting to land (an earlier dip's) lands at this call's
-    // invisible moment, never while the element shows.
-    const pending = landings.size > 0;
-    // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
-    const ms = reducedMotionCrossFade.durationMs;
-    for (const property of properties) {
-      if (TRAVEL.includes(property)) {
-        next[property] = null;
-      }
+    if (plan.opacityFade != null) {
+      next.opacity = fadeSegment(owner, time, plan.opacityFade);
     }
-    const landsLater = (at: number, fadeIn: Landing['fadeIn']) => {
-      const values = new Map<MotionProperty, number>();
-      for (const property of travel) {
-        holds[property] = valueAt(property, time);
-        values.set(property, targets[property] as number);
-      }
-      return {
-        at,
-        values,
-        fadeIn,
-        restore,
-        ...(roleBorrow != null && restore != null
-          ? {restoreIsBorrowed: true}
-          : {}),
-      };
+    return {
+      next,
+      holds: plan.holds,
+      landing: plan.landing,
+      borrowed: plan.borrowed,
     };
-    if (entering && !pending) {
-      // Lands at once (the travel is null above) and fades in.
-      next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: fadeFrom},
-        {at: ms, value: fadeTo},
-      ]);
-      return {next, holds, landing: null, borrowed: roleBorrow};
-    }
-    if (leaving) {
-      // Fades out in place, then lands.
-      next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: fadeFrom},
-        {at: ms, value: fadeTo},
-      ]);
-      return {
-        next,
-        holds,
-        landing:
-          travel.length > 0 || restore != null || pending
-            ? landsLater(ms, null)
-            : null,
-      };
-    }
-    if (travel.length > 0 || pending) {
-      // A dip: fades out, lands while transparent, fades back in. When no
-      // call owns opacity it starts from and returns to the element's own
-      // (stylesheet) opacity, not the model's 1.
-      // A dip still running on borrowed opacity (its fade out or back in)
-      // lends the same borrow to the next one: overlapping dips never pin
-      // the stylesheet's value inline.
-      const priorBorrow = borrowedOpacity;
-      // An opacity the animator left inline (a `set` over a stylesheet that
-      // hides or dims the element) is owned too: a dip returns to it.
-      const ownsOpacity =
-        named ||
-        (priorBorrow == null &&
-          (segments.has('opacity') ||
-            resting.opacity !== IDENTITY.opacity ||
-            writesOwnOpacity()));
-      const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
-      if (borrowed != null && borrowed <= 1e-6) {
-        // A stylesheet that hides the element lends nothing: invisible, the
-        // move lands at once (the travel is null above), with no dip.
-        return {next, holds, landing: null};
-      }
-      // It opens at the opacity on screen: an earlier dip's, when one is
-      // still running, else the borrowed stylesheet value.
-      next.opacity = fadeSegment(owner, time, [
-        {
-          at: 0,
-          value: segments.has('opacity')
-            ? opacityNow
-            : (borrowed ?? opacityNow),
-        },
-        {at: ms / 2, value: 0},
-      ]);
-      return {
-        next,
-        holds,
-        landing: landsLater(ms / 2, {
-          to: borrowed ?? opacityTo,
-          ms: ms / 2,
-          isBorrowed: borrowed != null,
-        }),
-        borrowed,
-      };
-    }
-    if ('opacity' in targets) {
-      next.opacity = null;
-    }
-    return {next, holds, landing: null};
   };
 
   const animator: Animator = {

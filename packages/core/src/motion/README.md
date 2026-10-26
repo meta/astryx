@@ -11,22 +11,23 @@ so each keeps its measured value; no shipped component reads the roles yet.
 
 ## Files
 
-| File                  | What it is                                                                                                              |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `uikit/`              | THE constants table: every spring, duration, deceleration rate, rubber-band constant and curve, with its source.        |
-| `uikit/springs.ts`    | Interaction springs (navigation, sheets, alerts, menus, controls, keyboard, banners) and the SwiftUI / UIKit presets.   |
-| `uikit/scroll.ts`     | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.       |
-| `uikit/timing.ts`     | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.      |
-| `uikit/navigation.ts` | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                |
-| `uikit/gestures.ts`   | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc). |
-| `MEASUREMENTS.md`     | The UIKit reference captures each unconfirmed value still needs.                                                        |
-| `spring.ts`           | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.           |
-| `decay.ts`            | UIScrollView's momentum coast.                                                                                          |
-| `coast.ts`            | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                   |
-| `rubberBand.ts`       | UIScrollView's resistance past an edge, and its inverse.                                                                |
-| `projection.ts`       | Release targets: the rest point nearest the projected coast; paging.                                                    |
-| `bezier.ts`           | Cubic-bézier timing functions (Core Animation's named curves).                                                          |
-| `animator.ts`         | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.      |
+| File                   | What it is                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `uikit/`               | THE constants table: every spring, duration, deceleration rate, rubber-band constant and curve, with its source.           |
+| `uikit/springs.ts`     | Interaction springs (navigation, sheets, alerts, menus, controls, keyboard, banners) and the SwiftUI / UIKit presets.      |
+| `uikit/scroll.ts`      | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.          |
+| `uikit/timing.ts`      | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.         |
+| `uikit/navigation.ts`  | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                   |
+| `uikit/gestures.ts`    | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).    |
+| `MEASUREMENTS.md`      | The UIKit reference captures each unconfirmed value still needs.                                                           |
+| `spring.ts`            | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.              |
+| `decay.ts`             | UIScrollView's momentum coast.                                                                                             |
+| `coast.ts`             | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                      |
+| `rubberBand.ts`        | UIScrollView's resistance past an edge, and its inverse.                                                                   |
+| `projection.ts`        | Release targets: the rest point nearest the projected coast; paging.                                                       |
+| `bezier.ts`            | Cubic-bézier timing functions (Core Animation's named curves).                                                             |
+| `animator.ts`          | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.         |
+| `reducedMotionPlan.ts` | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once. |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
 menu's timeline) live in a domain file per component, `uikit/<component>.ts`,
