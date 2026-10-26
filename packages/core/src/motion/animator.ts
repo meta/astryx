@@ -1139,6 +1139,16 @@ export function createAnimator(
   };
 
   /**
+   * Whether the animator holds an opacity of its own on the element: an inline
+   * value it wrote, or a pseudo-element's holding animation (a `set` over a
+   * stylesheet that hides or dims it). A dip returns to that value.
+   */
+  const writesOwnOpacity = (): boolean =>
+    pseudoElement == null
+      ? (target?.style.getPropertyValue('opacity') ?? '') !== ''
+      : running.has('opacity');
+
+  /**
    * Gives the element's opacity back to its stylesheet: an element's inline
    * value goes; a pseudo-element, which has no inline style, loses the
    * animation holding its value.
@@ -2054,8 +2064,7 @@ export function createAnimator(
       borrowedOpacity == null &&
       !segments.has('opacity') &&
       resting.opacity === IDENTITY.opacity &&
-      (pseudoElement != null ||
-        (target?.style.getPropertyValue('opacity') ?? '') === '')
+      !writesOwnOpacity()
         ? ownOpacity()
         : null;
     if (!entering && !leaving && role === 'entrance') {
@@ -2132,9 +2141,13 @@ export function createAnimator(
         (priorBorrow == null &&
           (segments.has('opacity') ||
             resting.opacity !== IDENTITY.opacity ||
-            (pseudoElement == null &&
-              (target?.style.getPropertyValue('opacity') ?? '') !== '')));
+            writesOwnOpacity()));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
+      if (borrowed != null && borrowed <= 1e-6) {
+        // A stylesheet that hides the element lends nothing: invisible, the
+        // move lands at once (the travel is null above), with no dip.
+        return {next, holds, landing: null};
+      }
       // It opens at the opacity on screen: an earlier dip's, when one is
       // still running, else the borrowed stylesheet value.
       next.opacity = fadeSegment(owner, time, [
@@ -2522,6 +2535,24 @@ export function createAnimator(
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
+      }
+      // A finished fade takes the travel waiting for it along, at the same
+      // instant: a pending jump never lands later, in view.
+      if (changed.includes('opacity')) {
+        for (const property of TRAVEL) {
+          const segment = segments.get(property);
+          if (
+            list.includes(property) ||
+            segment?.steps !== true ||
+            time >= segment.start + segment.duration
+          ) {
+            continue;
+          }
+          interrupt(property, time);
+          segments.delete(property);
+          resting[property] = segment.target;
+          changed.push(property);
+        }
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {

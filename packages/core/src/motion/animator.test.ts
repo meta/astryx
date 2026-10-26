@@ -1407,6 +1407,33 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(element.style.opacity).toBe('1');
   });
 
+  it('borrows nothing from a hidden element, so a later move still dips once it shows', async () => {
+    const {animator} = reduced();
+    stylesheet = {opacity: '0'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    // Invisible: the move lands at once, with no dip.
+    expect(animator.get('x')).toBe(100);
+    await advance(fade + END_HOLD_MS + 1);
+    stylesheet = {opacity: '1'};
+    animator.animate({x: 200}, {spring: springs.navigationPush});
+    const start = clock;
+    for (let t = start; t <= start + fade; t += 2) {
+      if (animator.get('x', t) !== 100) {
+        expect(animator.get('opacity', t)).toBeCloseTo(0, 6);
+        break;
+      }
+    }
+  });
+
+  it("a stop that finishes a dip's fade lands the move with it, never later in view", async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    animator.stop(['opacity']);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
@@ -1623,6 +1650,31 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       // keeps its own.
       expect(live('opacity')).toEqual([]);
       expect(element.style.opacity).toBe('0.5');
+    }
+  });
+
+  it('a pseudo-element shown over a hiding stylesheet keeps its own opacity through a move', async () => {
+    for (const role of [undefined, 'entrance'] as const) {
+      const {animator} = setup({
+        reduced: true,
+        coarse: true,
+        pseudoElement: '::backdrop',
+      });
+      pseudoStylesheet = {opacity: '0'};
+      animator.set({opacity: 1});
+      animator.animate(
+        {x: 100},
+        {spring: springs.navigationPush},
+        role == null ? {} : {crossfadeAs: role},
+      );
+      await commitFrame(clock);
+      for (let step = 0; step < 8; step++) {
+        await advance(fade / 4);
+      }
+      expect(animator.get('x')).toBe(100);
+      expect(animator.get('opacity')).toBe(1);
+      const [held] = live('opacity');
+      expect(Number(held.keyframes.at(-1)?.opacity)).toBe(1);
     }
   });
 
