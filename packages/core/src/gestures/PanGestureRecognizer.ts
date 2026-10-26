@@ -29,9 +29,10 @@
  *   scroll for that movement — the finger landed at the edge and pulls away
  *   from it. The browser has not committed yet, so beginning claims the
  *   touch and the browser never scrolls.
- * - A drag that began as a scroll stays the content's for its whole length
- *   (spec:AST-094 FR14), and a pan claims its touch only as it begins, at
- *   UIKit's 10 pt, before the browser commits to a scroll (FR17, FR19).
+ *
+ * Who gets the drag is decided once, when it begins: a drag that began as
+ * the browser's scroll stays the browser's to the lift and rubber-bands at
+ * the content's edge, as a UIKit scroll view keeps it (`spec:AST-094` FR14).
  */
 
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
@@ -106,7 +107,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** Translation since touch-down, before `setTranslation` offsets. */
   private raw: Point = ZERO;
   private offset: Point = ZERO;
-  private virtual: Point = ZERO;
 
   constructor(options: PanGestureRecognizerOptions = {}) {
     super(options);
@@ -126,11 +126,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * movement since touch-down while it is still possible.
    */
   translation(): Point {
-    const value = {
+    return this.locked({
       x: this.raw.x + this.offset.x,
       y: this.raw.y + this.offset.y,
-    };
-    return this.locked(value);
+    });
   }
 
   /**
@@ -208,6 +207,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
       isActive(this.state) &&
       this.numberOfTouches >= this.maximumNumberOfTouches
     ) {
+      // A moving pan keeps its fingers: an extra one never fails it.
       return false;
     }
     return super.acceptsTouch(touch);
@@ -222,7 +222,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
       this.adjust = ZERO;
       this.raw = ZERO;
       this.offset = ZERO;
-      this.virtual = this.origin;
       this.tracker.reset();
       this.tracker.add(this.origin.x, this.origin.y, event.time);
     } else {
@@ -278,7 +277,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.adjust = ZERO;
     this.raw = ZERO;
     this.offset = ZERO;
-    this.virtual = ZERO;
     this.releaseTime = undefined;
     this.tracker.reset();
   }
@@ -329,9 +327,8 @@ export class PanGestureRecognizer extends GestureRecognizer {
       return;
     }
     if (this.scrollEdge && this.nativeCanScroll(moved.x, moved.y)) {
-      // The content under the finger still scrolls this way: it is a
-      // scroll, and the drag stays the content's for its whole length
-      // (spec:AST-094 FR14).
+      // The content under the finger still scrolls this way: it is a scroll,
+      // the browser's to the lift (FR14).
       this.setState('failed');
       return;
     }
@@ -377,7 +374,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     };
     // UIKit's filter runs once per event.
     this.tracker.add(virtual.x, virtual.y, time);
-    this.virtual = virtual;
     this.raw = {x: virtual.x - this.origin.x, y: virtual.y - this.origin.y};
   }
 
