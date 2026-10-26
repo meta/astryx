@@ -12,11 +12,13 @@
 
 import {act, render} from '@testing-library/react';
 import {StrictMode, useEffect, useRef} from 'react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
+import {coarsePrimaryPointer} from './harness';
 
 function touch(
   type: string,
@@ -60,6 +62,15 @@ function Draggable({
   onRecognizer?.(pan);
   return <div data-testid="surface" ref={ref} />;
 }
+
+// A phone: the document's host listens only where the pointer is coarse.
+let restorePointer: () => void = () => {};
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
+});
 
 describe('useGestureRecognizer', () => {
   afterEach(() => {
@@ -115,11 +126,18 @@ describe('useGestureRecognizer', () => {
 
   it('cancels a gesture in flight when it is disabled, without calling the listener from the effect', () => {
     const states: string[] = [];
+    // A listener of the recognizer's own, outside the hook, hears the cancel.
+    const heard: string[] = [];
     let pan: PanGestureRecognizer | null = null;
     const {getByTestId, rerender} = render(
       <Draggable
         onPan={r => states.push(r.state)}
-        onRecognizer={r => (pan = r)}
+        onRecognizer={r => {
+          if (pan == null) {
+            pan = r;
+            r.addListener(current => heard.push(current.state));
+          }
+        }}
       />,
     );
     const surface = getByTestId('surface');
@@ -130,7 +148,10 @@ describe('useGestureRecognizer', () => {
         <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
       );
     });
-    expect(pan!.state).toBe('cancelled');
+    // Disabling cancels the gesture; its attachment then goes (FR24), which
+    // leaves the recognizer at rest. The hook reports nothing from the effect.
+    expect(heard).toContain('cancelled');
+    expect(pan!.state).not.toBe('changed');
     expect(states).toEqual(['began']);
     touch('touchend', surface, {id: 3, x: 30, y: 0}, 32, true);
     expect(states).toEqual(['began']);
@@ -213,6 +234,33 @@ describe('useGestureRecognizer', () => {
     // recognizes in that same arena pass: its caller hears nothing from it.
     rerender(<Taps isDoubleEnabled={false} />);
     expect(onSingle).not.toHaveBeenCalled();
+  });
+
+  it('attaches nothing while disabled: no touch-action, no gesture (FR24)', () => {
+    const states: string[] = [];
+    const {getByTestId, rerender} = render(
+      <Draggable onPan={r => states.push(r.state)} />,
+    );
+    const surface = getByTestId('surface');
+    const remove = vi.spyOn(surface.style, 'removeProperty');
+    act(() => {
+      rerender(
+        <Draggable onPan={r => states.push(r.state)} isEnabled={false} />,
+      );
+    });
+    // Disabling detaches: the host gives the element its touch-action back.
+    expect(remove).toHaveBeenCalledWith('touch-action');
+    touch('touchstart', surface, {id: 6, x: 0, y: 0}, 0);
+    touch('touchmove', surface, {id: 6, x: 30, y: 0}, 16);
+    touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+    expect(states).toEqual([]);
+    act(() => {
+      rerender(<Draggable onPan={r => states.push(r.state)} />);
+    });
+    touch('touchstart', surface, {id: 8, x: 0, y: 0}, 100);
+    touch('touchmove', surface, {id: 8, x: 30, y: 0}, 116);
+    expect(states).toContain('began');
+    touch('touchend', surface, {id: 8, x: 30, y: 0}, 132, true);
   });
 
   it('detaches on unmount', () => {
@@ -331,6 +379,21 @@ describe('usePressTracker', () => {
     touch('touchstart', button, {id: 8, x: 1, y: 1}, 0);
     touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
     expect(events).toEqual([]);
+  });
+
+  it('presses nothing for a touch that brakes a scroll', () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId} = render(
+      <Button onEvent={event => events.push(event)} />,
+    );
+    const button = getByTestId('button');
+    const brake = vi
+      .spyOn(getGestureHost(document), 'isScrollBraking')
+      .mockReturnValue(true);
+    touch('touchstart', button, {id: 7, x: 1, y: 1}, 0);
+    touch('touchend', button, {id: 7, x: 1, y: 1}, 50, true);
+    expect(events).toEqual([]);
+    brake.mockRestore();
   });
 });
 

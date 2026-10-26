@@ -3,6 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Badge} from './Badge';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Badge', () => {
   it('renders with default variant', () => {
@@ -108,5 +109,17 @@ describe('Badge', () => {
     const root = container.firstElementChild!;
     expect(root.className).toContain('astryx-badge');
     expect(root).toHaveAttribute('data-variant', 'success');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('Badge forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<Badge variant="error" label="Failed" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

@@ -48,6 +48,9 @@ describe('Icon', () => {
     rerender(<Icon icon={TestIcon} color="accent" data-testid="icon" />);
     expect(screen.getByTestId('icon')).toBeInTheDocument();
 
+    rerender(<Icon icon={TestIcon} color="info" data-testid="icon" />);
+    expect(screen.getByTestId('icon')).toBeInTheDocument();
+
     rerender(<Icon icon={TestIcon} color="success" data-testid="icon" />);
     expect(screen.getByTestId('icon')).toBeInTheDocument();
 

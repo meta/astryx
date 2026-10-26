@@ -93,12 +93,28 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     [recognizer, isUnmountedRef],
   );
 
-  // Detaching (a replaced node, unmount, a `manageStyle` change) cancels a
-  // gesture in progress from a layout effect: that cancel reaches no caller
-  // callback (react-component-runtime INV2, INV3).
+  // The isEnabled sync runs first, under the guard, so disabling cancels a
+  // gesture in flight before its attachment goes.
+  useIsomorphicLayoutEffect(() => {
+    syncingDepth += 1;
+    try {
+      recognizer.setEnabled(isEnabled);
+    } finally {
+      syncingDepth -= 1;
+    }
+  }, [recognizer, isEnabled]);
+
+  // A disabled gesture is not attached at all: no listener and no
+  // `touch-action` of its own on the element (spec:AST-094 FR24). A replaced
+  // node is released and the new one attached; detaching cancels a gesture in
+  // progress from a layout effect, and that cancel reaches no caller callback
+  // (react-component-runtime INV2, INV3).
   useAttachment(
     ref,
     element => {
+      if (!isEnabled) {
+        return () => {};
+      }
       const detach = getGestureHost(element.ownerDocument).attach(
         element,
         recognizer,
@@ -113,17 +129,8 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
         }
       };
     },
-    manageStyle,
+    `${manageStyle}:${isEnabled}`,
   );
-
-  useIsomorphicLayoutEffect(() => {
-    syncingDepth += 1;
-    try {
-      recognizer.setEnabled(isEnabled);
-    } finally {
-      syncingDepth -= 1;
-    }
-  }, [recognizer, isEnabled]);
 
   return recognizer;
 }

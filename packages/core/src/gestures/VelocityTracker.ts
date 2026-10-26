@@ -34,7 +34,7 @@
  * SYNC: When modified, update VelocityTracker.test.ts.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_VELOCITY} from '../motion/uikit/gestures';
 import type {Point, TouchSample} from './types';
 
 export interface VelocityTrackerOptions {
@@ -46,8 +46,8 @@ export interface VelocityTrackerOptions {
 }
 
 const ZERO: Point = {x: 0, y: 0};
-const PAN_CURRENT_WEIGHT = UIKIT_GESTURES.velocity.currentWeight.value;
-const SCROLL_CURRENT_WEIGHT = UIKIT_GESTURES.velocity.scrollReleaseWeight.value;
+const PAN_CURRENT_WEIGHT = UIKIT_VELOCITY.currentWeight.value;
+const SCROLL_CURRENT_WEIGHT = UIKIT_VELOCITY.scrollReleaseWeight.value;
 
 function blend(weight: number, current: Point, previous: Point): Point {
   return {
@@ -72,8 +72,7 @@ export class VelocityTracker {
   private previousPan: Point = ZERO;
 
   constructor(options: VelocityTrackerOptions = {}) {
-    this.stillness =
-      options.stillness ?? UIKIT_GESTURES.velocity.stillness.value;
+    this.stillness = options.stillness ?? UIKIT_VELOCITY.stillness.value;
   }
 
   /** Forget every sample (a new gesture). */

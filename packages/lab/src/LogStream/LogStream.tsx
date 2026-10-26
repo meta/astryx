@@ -233,14 +233,12 @@ const styles = stylex.create({
   },
   levelInfo: {color: colorVars['--color-text-secondary']},
   levelDebug: {color: colorVars['--color-text-disabled']},
-  // Token amber/red are tuned for fills; as small text they miss 4.5:1.
-  // light-dark() darkens the amber in light mode and lifts the red in dark
-  // mode, both derived from the tokens.
+  // Plain-surface warning/error labels use the dedicated foreground roles.
   levelWarn: {
-    color: `light-dark(color-mix(in srgb, ${colorVars['--color-warning']} 58%, black), ${colorVars['--color-warning']})`,
+    color: colorVars['--color-text-warning'],
   },
   levelError: {
-    color: `light-dark(${colorVars['--color-error']}, color-mix(in srgb, ${colorVars['--color-error']} 82%, white))`,
+    color: colorVars['--color-text-error'],
   },
   levelInfoTerminal: {color: TERM.text},
   levelDebugTerminal: {color: TERM.textDim},
