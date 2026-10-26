@@ -9,11 +9,14 @@
  * @input Git name-status rows on stdin and --registry <trusted-base registry>.
  * @output GitHub job outputs for component, RTL, and fail-closed full-audit scope;
  *   empty or unmatched input always selects the full audits.
- * @position Loaded with its registry from the pull request's trusted base ref.
+ * @position Loaded with its registry and knowledge-paths.cjs from the pull
+ *   request's trusted base ref.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+// Loaded beside this file from the same trusted base ref.
+const {isComponentSpecRecordPath} = require('./knowledge-paths.cjs');
 
 function changedPathsFromNameStatus(input) {
   return input
@@ -25,8 +28,11 @@ function changedPathsFromNameStatus(input) {
 
 function classifyComponentAuditScope(paths, componentPackages) {
   const sourceRoots = componentPackages.map(pkg => `${pkg.src}/`);
+  // A component's knowledge record (`<Name>.spec.md`) is never rendered, so
+  // neither browser audit can observe it, as the PR analysis also holds.
+  const isComponentRecord = file => isComponentSpecRecordPath(file);
   const isComponentSource = file =>
-    sourceRoots.some(root => file.startsWith(root));
+    sourceRoots.some(root => file.startsWith(root)) && !isComponentRecord(file);
   const isStory = file => file.startsWith('apps/storybook/stories/');
   const isAccessibilitySurface = file =>
     file.startsWith('internal/a11y-spec/') ||
@@ -40,6 +46,7 @@ function classifyComponentAuditScope(paths, componentPackages) {
   // These are positively owned surfaces that neither component browser audit
   // can observe. Keep this list narrow: unmatched paths still fail closed.
   const isKnownNonComponentSurface = file =>
+    isComponentRecord(file) ||
     file.startsWith('.changeset/') ||
     file.startsWith('apps/sandbox/') ||
     file.startsWith('packages/cli/') ||

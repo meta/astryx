@@ -153,6 +153,15 @@ export function usePressTracker(
     attachment,
   );
 
+  // The enabled state can change with any render: the host listens only
+  // while an enabled control is attached (spec:AST-094 FR24).
+  useIsomorphicLayoutEffect(() => {
+    const element = refRef.current.current;
+    if (element != null) {
+      getGestureHost(element.ownerDocument).update(element);
+    }
+  });
+
   return tracker;
 }
 
