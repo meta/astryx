@@ -44,7 +44,7 @@
  * swallows for a touch a recognizer took.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
 import {timing} from '../motion/uikit/timing';
 import {travel} from './geometry';
 import type {GestureRecognizer} from './GestureRecognizer';
@@ -104,7 +104,7 @@ export interface PressTrackerOptions {
   isBraking?: (touch: GestureTouch) => boolean;
 }
 
-const PRESS = UIKIT_GESTURES.press;
+const PRESS = UIKIT_PRESS;
 
 export type PressHighlightDelay = 'inScrollers' | 'always' | 'never';
 
@@ -136,7 +136,7 @@ export const PRESS_PROFILES = {
    */
   cell: {
     highlightDelay: 'inScrollers',
-    cancelTravel: UIKIT_GESTURES.pan.hysteresis.value,
+    cancelTravel: UIKIT_PAN.hysteresis.value,
     quickTapFlash: 0,
     releaseMs: timing.press.highlightOutMs,
   },
@@ -170,8 +170,7 @@ export class PressTracker implements TouchConsumer {
   constructor(options: PressTrackerOptions) {
     this.options = options;
     this.trackingExpansion =
-      options.trackingExpansion ??
-      UIKIT_GESTURES.control.trackingExpansion.value;
+      options.trackingExpansion ?? UIKIT_CONTROL.trackingExpansion.value;
   }
 
   /**
