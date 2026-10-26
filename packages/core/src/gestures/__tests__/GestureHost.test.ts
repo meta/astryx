@@ -168,6 +168,36 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
+  it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
+    // jsdom drops touch-action from the style, so the writes are observed.
+    const {box} = mount('<div id="box"></div>');
+    const set = vi.spyOn(box.style, 'setProperty');
+    const remove = vi.spyOn(box.style, 'removeProperty');
+    const writes = () =>
+      set.mock.calls.filter(call => call[0] === 'touch-action').length;
+    let coarse = false;
+    const host2 = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => coarse,
+    });
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const detach = host2.attach(box, pan);
+    expect(writes()).toBe(0);
+    coarse = true;
+    host2.update(box);
+    expect(set).toHaveBeenLastCalledWith('touch-action', 'pan-y pinch-zoom');
+    pan.setEnabled(false);
+    expect(remove).toHaveBeenCalledWith('touch-action');
+    pan.setEnabled(true);
+    expect(writes()).toBe(2);
+    coarse = false;
+    host2.update(box);
+    expect(remove.mock.calls.filter(c => c[0] === 'touch-action').length).toBe(
+      2,
+    );
+    detach();
+  });
+
   it('registers no document listener for a disabled consumer until it is enabled (spec:AST-094 FR24)', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(document, 'addEventListener');
@@ -1347,33 +1377,6 @@ describe('GestureHost', () => {
     expect(set).not.toHaveBeenCalledWith('-webkit-touch-callout', 'none');
     expect(photo.style.getPropertyValue('user-select')).toBe('text');
     touch('touchend', photo, [finger], [], 1200);
-  });
-
-  it('keeps native selection on a delegated pressable, whose hold does nothing (spec:AST-094 FR41)', () => {
-    detachers.push(coarsePrimaryPointer());
-    const {row, off} = mount(
-      '<div id="row" data-test-press></div><div id="off" data-test-press="off"></div>',
-    );
-    detachers.push(
-      host.addDelegatedConsumer({
-        attribute: 'data-test-press',
-        create: element =>
-          element.getAttribute('data-test-press') === 'off'
-            ? null
-            : new RecordingConsumer(),
-      }),
-    );
-    const one = {id: 1, x: 5, y: 5};
-    const two = {id: 2, x: 9, y: 9};
-    touch('touchstart', row, [one], [one], 0);
-    touch('touchstart', row, [two], [one, two], 10);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', row, [one], [two], 100);
-    touch('touchend', row, [two], [], 200);
-    expect(row.style.getPropertyValue('user-select')).toBe('');
-    touch('touchstart', off, [one], [one], 300);
-    expect(off.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', off, [one], [], 400);
   });
 
   it('writes touch-action: manipulation for a kept-press control where the primary pointer is coarse, so rapid taps never zoom, and nothing where it is fine (spec:AST-094 FR18, FR19)', () => {

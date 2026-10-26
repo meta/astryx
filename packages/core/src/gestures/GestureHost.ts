@@ -3,10 +3,9 @@
 /**
  * @file GestureHost.ts
  * @input DOM touch, pointer, click, contextmenu, scroll and focus events of
- *   one document; elements with recognizers and consumers attached, and
- *   consumer types found by attribute
- * @output Exports GestureHost (the DOM side of the gesture system),
- *   getGestureHost (one host per document) and the delegated consumer type
+ *   one document; elements with recognizers and consumers attached
+ * @output Exports GestureHost (the DOM side of the gesture system) and
+ *   getGestureHost (one host per document)
  * @position Browser adapter of packages/core/src/gestures: turns real events
  *   into GestureArena input, and carries out what the arena decides
  *
@@ -217,21 +216,6 @@ export interface AttachOptions {
   perEventPointer?: boolean;
 }
 
-/**
- * A kind of view-level consumer found by attribute instead of attached to
- * each element.
- */
-export interface DelegatedConsumerType {
-  /** Marks an element as this kind of consumer. */
-  readonly attribute: string;
-  /**
-   * The consumer for one contact on `element`, or null for none (a disabled
-   * control). The innermost marked element decides, even with null: a press
-   * on a disabled button does not light the row around it.
-   */
-  create(element: Element, pointerType: PointerKind): TouchConsumer | null;
-}
-
 const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
   touchAction: 'touch-action',
   WebkitTouchCallout: '-webkit-touch-callout',
@@ -302,7 +286,6 @@ export class GestureHost {
   readonly arena: GestureArena;
   private readonly doc: Document;
   private readonly registry = new Map<Element, Registration>();
-  private readonly delegated = new Set<DelegatedConsumerType>();
   /** The selection lock each contact holds, by host contact id. */
   private readonly lockedBy = new Map<number, () => void>();
   /** Touch.identifier → arena id, for live fingers. */
@@ -517,23 +500,6 @@ export class GestureHost {
   }
 
   /**
-   * Find consumers of a kind by attribute, one instance per contact. Returns
-   * the function that stops it.
-   */
-  addDelegatedConsumer(type: DelegatedConsumerType): () => void {
-    this.delegated.add(type);
-    this.watchPointer();
-    if (!this.isCoarse) {
-      this.warnFinePointer();
-    }
-    this.syncListeners();
-    return () => {
-      this.delegated.delete(type);
-      this.uninstallIfIdle();
-    };
-  }
-
-  /**
    * Hold the page still under a finger until the returned release runs. A
    * one-finger pan that `decide` says would scroll the page, and that no
    * recognizer owns, is cancelled for the rest of its touch; a second finger
@@ -604,6 +570,10 @@ export class GestureHost {
    * recognizers' options or its consumer's enabled state changed.
    */
   update(element: Element): void {
+    if (!this.followsPointer) {
+      // A read passed in (a test's) is not followed: an update reads it again.
+      this.isCoarse = this.isPrimaryPointerCoarse();
+    }
     const registration = this.registry.get(element);
     if (registration != null) {
       this.refresh(element, registration);
@@ -774,8 +744,9 @@ export class GestureHost {
   private applyStyle(element: HTMLElement, registration: Registration): void {
     // Where the primary pointer is fine, the browser's own styles, but a
     // perEventPointer recognizer's (FR19).
-    const active = registration.recognizers.filter(recognizer =>
-      this.isActive(recognizer),
+    // A disabled recognizer leaves the browser everything (FR24).
+    const active = registration.recognizers.filter(
+      recognizer => recognizer.isEnabled && this.isActive(recognizer),
     );
     let style: GestureHostStyle =
       active.length > 0 ? gestureHostStyle(active) : {};
@@ -841,7 +812,7 @@ export class GestureHost {
    * Listen only while something could take a touch now (`spec:AST-094`
    * FR19, FR24): an enabled recognizer or consumer that takes input (where
    * the primary pointer is coarse, or one attached with `perEventPointer`),
-   * a delegated consumer where it is coarse, or a finger-scroll watch.
+   * or a finger-scroll watch.
    * Otherwise no document listener is registered, so a desktop page and a
    * disabled control pay nothing.
    */
@@ -856,11 +827,7 @@ export class GestureHost {
   /** With nothing attached, stop listening and stop following the pointer. */
   private uninstallIfIdle(): void {
     this.syncListeners();
-    if (
-      this.registry.size === 0 &&
-      this.delegated.size === 0 &&
-      this.scrollWatchers.size === 0
-    ) {
+    if (this.registry.size === 0 && this.scrollWatchers.size === 0) {
       this.uninstall();
       this.stopWatchingPointer?.();
       this.stopWatchingPointer = null;
@@ -915,10 +882,7 @@ export class GestureHost {
     if (!this.needsInput()) {
       return false;
     }
-    if (
-      this.scrollWatchers.size > 0 ||
-      (this.isCoarse && this.delegated.size > 0)
-    ) {
+    if (this.scrollWatchers.size > 0) {
       return true;
     }
     for (const registration of this.registry.values()) {
@@ -1015,7 +979,7 @@ export class GestureHost {
   /**
    * The recognizers on the path from `target` to the document, innermost
    * first, and (for a contact) its consumer: the innermost element with an
-   * attached consumer or a delegated consumer type's attribute.
+   * attached consumer.
    */
   private participantsAt(
     target: unknown,
@@ -1074,17 +1038,6 @@ export class GestureHost {
         consumerElement = node;
         hasConsumerOwner = true;
         continue;
-      }
-      if (!this.isCoarse) {
-        continue;
-      }
-      for (const type of this.delegated) {
-        if (node.hasAttribute(type.attribute)) {
-          consumer = type.create(node, pointerType);
-          consumerElement = node;
-          hasConsumerOwner = true;
-          break;
-        }
       }
     }
     return {recognizers, consumer, consumerElement, hovers};

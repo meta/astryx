@@ -7,7 +7,7 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value.
+so each keeps its measured value; no shipped component reads the roles yet.
 
 ## Files
 
@@ -20,7 +20,7 @@ so each keeps its measured value.
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `roles.ts`                                       | Motion roles: each spring, duration and curve of a registered table, named by its path, and its CSS variable.                                                        |
-| `resolveMotion.ts`                               | A role's value under an element's theme, read once when a motion starts.                                                                                             |
+| `resolveMotion.ts`                               | A role's value: its table value while touch motion stays internal (`spec:AST-094` DEC-11).                                                                           |
 | `MEASUREMENTS.md`                                | The UIKit reference captures each unconfirmed value still needs.                                                                                                     |
 | `spring.ts`                                      | Closed-form damped spring, every Apple parameterization, settling duration, a spring chasing a moving target.                                                        |
 | `decay.ts`                                       | UIScrollView's momentum coast.                                                                                                                                       |
@@ -61,12 +61,13 @@ import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
 import {registerSpringsTable, springs} from '../motion/uikit';
 
-// Once, so the springs follow the theme's roles:
+// Once, so the springs are registered as their roles:
 registerSpringsTable();
 
 const animator = createAnimator(sheet);
-// The animator plays a motion role as the theme sets it (spec:AST-094 FR4);
-// math on a spring reads the role with resolveMotion.
+// The animator plays a motion role (spec:AST-094 FR4), its table value while
+// touch motion stays internal (DEC-11); math on a spring reads the role with
+// resolveMotion.
 const spring = springs.settle;
 
 // A drag writes one style per frame and never renders:
