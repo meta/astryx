@@ -2839,6 +2839,74 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     touch('touchend', stepper, [moved], [], 132);
   });
 
+  it("where the pointer is fine, an idle per-event press tracker leaves no document or window listener: they last only a finger's press (spec:AST-094 FR19)", async () => {
+    quietWarning();
+    const pointer = pointerQuery(false);
+    detachers.push(pointer.restore);
+    const {stepper} = mount('<div id="stepper"></div>');
+    const listening = new Set<string>();
+    const watch = (scope: Document | Window, name: string) => {
+      const addOriginal = scope.addEventListener.bind(scope);
+      const removeOriginal = scope.removeEventListener.bind(scope);
+      const add = vi
+        .spyOn(scope, 'addEventListener')
+        .mockImplementation(
+          (
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | AddEventListenerOptions,
+          ) => {
+            listening.add(`${name}:${type}`);
+            addOriginal(type, listener, options);
+          },
+        );
+      const remove = vi
+        .spyOn(scope, 'removeEventListener')
+        .mockImplementation(
+          (
+            type: string,
+            listener: EventListenerOrEventListenerObject,
+            options?: boolean | EventListenerOptions,
+          ) => {
+            listening.delete(`${name}:${type}`);
+            removeOriginal(type, listener, options);
+          },
+        );
+      detachers.push(() => {
+        add.mockRestore();
+        remove.mockRestore();
+      });
+    };
+    watch(document, 'document');
+    watch(window, 'window');
+    const highlights: boolean[] = [];
+    detachers.push(
+      host.attachConsumer(
+        stepper,
+        new PressTracker({
+          getBounds: () => ({left: 0, top: 0, right: 100, bottom: 100}),
+          onHighlightChange: value => highlights.push(value),
+        }),
+        {perEventPointer: true},
+      ),
+    );
+    const pageListeners = () =>
+      [...listening].filter(key => /:(touch|pointer|click)/.test(key));
+    // Attached and idle: nothing on the document or the window, even beside
+    // a finger-scroll watch.
+    expect(pageListeners()).toEqual([]);
+    detachers.push(watchFingerScrolls(host, document));
+    expect(pageListeners()).toEqual([]);
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', stepper, [finger], [finger], 0);
+    // The press is painted, and the host listens for this press only.
+    expect(highlights).toContain(true);
+    expect(pageListeners().length).toBeGreaterThan(0);
+    touch('touchend', stepper, [finger], [], 40);
+    await Promise.resolve();
+    expect(pageListeners()).toEqual([]);
+  });
+
   it('keeps it working when the pointer turns fine, as the rest comes down', () => {
     quietWarning();
     const pointer = pointerQuery(true);

@@ -51,6 +51,9 @@ on the view the tooltip describes.
   focusable), `control` (the view is a control that takes focus already), or
   `tabStop` (a static view is made a tab stop while it has words, as core gives
   a static element with a tooltip a tab stop).
+  `inside` marks a view that holds controls of its own, such as a thumbnail's
+  open and remove buttons, and carries whether one of them has focus: focus
+  there shows the tooltip, as focus within core's tooltip wrapper does.
 - `touch` says what a direct tap does, as core's `touchTrigger`: `auto` (the
   default) opens the tooltip unless the view is a control, `tap` always opens
   it, and `none` never does.
