@@ -217,10 +217,17 @@ describe('GestureHost', () => {
     const {list} = mount('<div id="list"><div id="row"></div></div>');
     scrollable(list, {scrollHeight: 1000, clientHeight: 200});
     const row = document.getElementById('row')!;
-    const press = new LongPressGestureRecognizer({name: 'press'});
+    // Tolerant enough to keep tracking a finger that has travelled the
+    // press slop: only such a finger's touch can be the browser's pan.
+    const press = new LongPressGestureRecognizer({
+      name: 'press',
+      allowableMovement: 100,
+    });
     detachers.push(host.attach(row, press));
     const finger = {id: 1, x: 10, y: 10};
     touch('touchstart', row, [finger], [finger], 0);
+    const moved = {...finger, y: 40};
+    touch('touchmove', row, [moved], [moved], 16);
     host.ownScroll(list);
     list.dispatchEvent(new Event('scroll'));
     expect(press.numberOfTouches).toBe(1);
