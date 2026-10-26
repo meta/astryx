@@ -1108,7 +1108,13 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
-      if (pseudoElement != null) {
+      // A pseudo-element holds its resting value, unless the stylesheet
+      // takes it back now (a borrowed dip that has ended).
+      const handsBack =
+        channel === 'opacity' &&
+        borrowedOpacity != null &&
+        ![...landings].some(landing => landing.fadeIn?.isBorrowed === true);
+      if (pseudoElement != null && !handsBack) {
         hold(channel, now());
       }
       animation.cancel();
@@ -1125,15 +1131,28 @@ export function createAnimator(
       target == null
         ? NaN
         : Number.parseFloat(
-            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
+            view
+              ?.getComputedStyle(target, pseudoElement ?? null)
+              .getPropertyValue('opacity') ?? '',
           );
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
   };
 
   /**
-   * Ends a borrowed dip on the element it ran on: the stylesheet owns its
-   * opacity again (an unmount or a new element never keeps the borrow).
+   * Gives the element's opacity back to its stylesheet: an element's inline
+   * value goes; a pseudo-element, which has no inline style, loses the
+   * animation holding its value.
    */
+  const releaseOwnOpacity = () => {
+    if (pseudoElement == null) {
+      target?.style.removeProperty('opacity');
+      return;
+    }
+    const held = running.get('opacity');
+    running.delete('opacity');
+    held?.cancel();
+  };
+
   /**
    * Lands every Reduce Motion move still waiting, at once, on the current
    * element: its travel, and the opacity its fade was heading to (the
@@ -1176,10 +1195,14 @@ export function createAnimator(
     commit(changed, now());
     if (handedBack) {
       // The stylesheet owns its opacity again: no value stays inline.
-      target?.style.removeProperty('opacity');
+      releaseOwnOpacity();
     }
   };
 
+  /**
+   * Ends a borrowed dip on the element it ran on: the stylesheet owns its
+   * opacity again (an unmount or a new element never keeps the borrow).
+   */
   const handBackBorrow = () => {
     if (borrowedOpacity == null) {
       return;
@@ -1187,7 +1210,7 @@ export function createAnimator(
     borrowedOpacity = null;
     segments.delete('opacity');
     resting.opacity = IDENTITY.opacity;
-    target?.style.removeProperty('opacity');
+    releaseOwnOpacity();
   };
 
   /**
@@ -1197,7 +1220,7 @@ export function createAnimator(
    * is written and again when a motion ends.
    */
   const releaseIdentity = (channel: Channel) => {
-    if (target == null || pseudoElement != null || running.has(channel)) {
+    if (target == null || running.has(channel)) {
       return;
     }
     if (channel === 'opacity' && borrowedOpacity != null) {
@@ -1209,7 +1232,10 @@ export function createAnimator(
       borrowedOpacity = null;
       segments.delete('opacity');
       resting.opacity = IDENTITY.opacity;
-      target.style.removeProperty('opacity');
+      releaseOwnOpacity();
+      return;
+    }
+    if (pseudoElement != null) {
       return;
     }
     if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
@@ -1951,7 +1977,7 @@ export function createAnimator(
     commit(changed, time);
     if (landing.restoreIsBorrowed === true) {
       // The stylesheet owns its opacity again.
-      target?.style.removeProperty('opacity');
+      releaseOwnOpacity();
     }
     if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
@@ -2028,7 +2054,8 @@ export function createAnimator(
       borrowedOpacity == null &&
       !segments.has('opacity') &&
       resting.opacity === IDENTITY.opacity &&
-      (target?.style.getPropertyValue('opacity') ?? '') === ''
+      (pseudoElement != null ||
+        (target?.style.getPropertyValue('opacity') ?? '') === '')
         ? ownOpacity()
         : null;
     if (!entering && !leaving && role === 'entrance') {
@@ -2105,7 +2132,8 @@ export function createAnimator(
         (priorBorrow == null &&
           (segments.has('opacity') ||
             resting.opacity !== IDENTITY.opacity ||
-            (target?.style.getPropertyValue('opacity') ?? '') !== ''));
+            (pseudoElement == null &&
+              (target?.style.getPropertyValue('opacity') ?? '') !== '')));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
       // It opens at the opacity on screen: an earlier dip's, when one is
       // still running, else the borrowed stylesheet value.
@@ -2203,7 +2231,7 @@ export function createAnimator(
         // stylesheet) stays in the model through any attach, so a pending
         // move still lands while the element is invisible; only the
         // outgoing element gets its stylesheet's opacity back.
-        target?.style.removeProperty('opacity');
+        releaseOwnOpacity();
       }
       target = next;
       if (target == null) {
@@ -2497,7 +2525,7 @@ export function createAnimator(
       }
       commit(changed, time);
       if (wasBorrowed && changed.includes('opacity')) {
-        target?.style.removeProperty('opacity');
+        releaseOwnOpacity();
       }
     },
 

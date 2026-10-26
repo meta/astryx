@@ -64,18 +64,23 @@ const requestFrame = (callback: () => void) => {
  * properties, so the page is modeled here).
  */
 let stylesheet: Record<string, string> = {};
+/** The stylesheet's values for a pseudo-element of the element. */
+let pseudoStylesheet: Record<string, string> = {};
 
 beforeEach(() => {
   clock = 1000;
   recorded = [];
   frameQueue = [];
   stylesheet = {};
+  pseudoStylesheet = {};
   vi.spyOn(window, 'getComputedStyle').mockImplementation(
-    element =>
+    (element, pseudo) =>
       ({
         getPropertyValue: (property: string) =>
-          (element as HTMLElement).style.getPropertyValue(property) ||
-          (stylesheet[property] ?? ''),
+          pseudo != null
+            ? (pseudoStylesheet[property] ?? '')
+            : (element as HTMLElement).style.getPropertyValue(property) ||
+              (stylesheet[property] ?? ''),
       }) as unknown as CSSStyleDeclaration,
   );
   vi.useFakeTimers();
@@ -1592,6 +1597,33 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBeCloseTo(0.8, 9);
     expect(element.style.opacity).toBe('0.8');
     expect(element.style.translate).toBe('100px 0px');
+  });
+
+  it("a pseudo-element's dip borrows its own opacity and hands it back without touching the host", async () => {
+    for (const role of [undefined, 'exit'] as const) {
+      const {animator, element} = setup({
+        reduced: true,
+        coarse: true,
+        pseudoElement: '::before',
+      });
+      element.style.opacity = '0.5'; // the host's own, untouched
+      pseudoStylesheet = {opacity: '0.3'};
+      animator.animate(
+        {x: 100},
+        {spring: springs.navigationPush},
+        role == null ? {} : {crossfadeAs: role},
+      );
+      await commitFrame(clock);
+      const [fadeLayer] = live('opacity');
+      const values = fadeLayer.keyframes.map(k => Number(k.opacity));
+      expect(Math.max(...values)).toBeCloseTo(0.3, 9);
+      await advance(fade * 2 + END_HOLD_MS + 1);
+      expect(animator.get('x')).toBe(100);
+      // The pseudo-element's stylesheet owns its opacity again; the host
+      // keeps its own.
+      expect(live('opacity')).toEqual([]);
+      expect(element.style.opacity).toBe('0.5');
+    }
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
