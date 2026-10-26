@@ -1167,6 +1167,12 @@ export async function waitForRest(
         const scheduled = () => {
           let wait = 0;
           for (const a of element.getAnimations({subtree: true})) {
+            // A scroll- or view-timeline animation moves only when something
+            // scrolls: it has no scheduled end to wait for (holdAnimations
+            // skips it the same way).
+            if (!(a.timeline instanceof DocumentTimeline)) {
+              continue;
+            }
             if (
               a.pending ||
               (a.playState === 'running' && a.startTime == null)
