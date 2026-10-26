@@ -1411,6 +1411,20 @@ export function createAnimator(
         return;
       }
     }
+    // Finished from outside before the browser started it (a sampler's
+    // finish() on a held animation): nothing is left to wait on, so the call
+    // keeps its own clock, and a later call on an explicit clock does not
+    // join it and wait for a start that never comes.
+    if (
+      group.animations.length > 0 &&
+      group.animations.every(
+        animation =>
+          animation.playState === 'finished' || animation.playState === 'idle',
+      ) &&
+      group.animations.some(animation => animation.playState === 'finished')
+    ) {
+      resolveGroup(group, group.provisional);
+    }
   };
 
   /** Reads the start of every call whose first frame has been committed. */
