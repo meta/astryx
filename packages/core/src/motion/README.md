@@ -109,9 +109,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
   travel. For motion the animator does not drive, `reducedMotionFade()`
   answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
-  A decay keeps its motion under Reduce Motion: momentum that continues a
-  throw is direct movement (DR2, DEC-2); a spring a component starts on
-  release toward a target it picks cross-fades.
+  A decay's momentum keeps its motion under Reduce Motion: momentum that
+  continues a throw is direct movement (DR2, DEC-2). A curve marked
+  `isTransition` (a coast's spring back from past an edge), like a spring a
+  component starts on release toward a target it picks, plays through the
+  Reduce Motion policy: a cross-fade on a coarse pointer, at once elsewhere.
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
