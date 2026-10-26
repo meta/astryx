@@ -85,7 +85,10 @@ export class RotationGestureRecognizer extends GestureRecognizer {
       this.lastAngle = this.initialAngle;
       this.rotationValue = 0;
       this.tracker.reset();
-      this.tracker.add(0, 0, event.time);
+      // The tracker follows the unwrapped angle itself, so setting
+      // `rotation` (UIKit's way to read it incrementally) never moves the
+      // velocity.
+      this.tracker.add(this.lastAngle, 0, event.time);
     }
   }
 
@@ -99,7 +102,9 @@ export class RotationGestureRecognizer extends GestureRecognizer {
     const [a, b] = this.trackedTouches;
     this.lastAngle = unwrapAngle(angleBetween(a, b), this.lastAngle);
     this.rotationValue = this.lastAngle - this.initialAngle;
-    this.tracker.add(this.rotationValue, 0, event.time);
+    // Every move of the fingers is a sample: an angle that holds while they
+    // move reads as no turn, so the velocity never goes stale.
+    this.tracker.add(this.lastAngle, 0, event.time, {isMotion: true});
     if (this.state === 'possible') {
       if (Math.abs(this.rotationValue) >= this.hysteresis) {
         this.setState('began');

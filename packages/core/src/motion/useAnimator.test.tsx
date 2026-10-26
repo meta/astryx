@@ -25,6 +25,13 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, 'animate');
 });
 
+/** A component that hands its animator out, for the unmount test. */
+function UnmountProbe({box}: {box: {current: Animator | null}}) {
+  const {ref, animator} = useAnimator();
+  box.current = animator;
+  return <div ref={ref} />;
+}
+
 describe('useAnimator', () => {
   it('keeps one animator and ref, and never re-renders while animating', () => {
     let renders = 0;
@@ -77,12 +84,7 @@ describe('useAnimator', () => {
     vi.useFakeTimers();
     try {
       const box: {current: Animator | null} = {current: null};
-      function Probe() {
-        const {ref, animator} = useAnimator();
-        box.current = animator;
-        return <div ref={ref} />;
-      }
-      const {unmount} = render(<Probe />);
+      const {unmount} = render(<UnmountProbe box={box} />);
       const animator = box.current!;
       const handle = animator.animate({x: 100}, {spring: springs.sheetPresent});
       let rested = false;
