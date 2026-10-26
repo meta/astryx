@@ -12,9 +12,9 @@
  *
  * With `fade` (a coarse primary pointer, or a touch drag's release), a call
  * becomes an opacity-only cross-fade whose travel lands while the element is
- * transparent: an entrance lands at once and fades in, an exit fades out in
- * place and then lands, and a call that only moves dips (fades out, lands,
- * fades back in). Without `fade`, everything lands at once. When no call owns
+ * transparent: an entrance from 0 lands at once and fades in, an exit to 0
+ * fades out in place and then lands, and any other call that moves dips
+ * (fades out, lands, fades back in). Without `fade`, everything lands at once. When no call owns
  * the opacity, a dip or a fade by role starts from and returns to the
  * element's own (stylesheet) opacity, which the plan reports as `borrowed`.
  * The planner is pure: it reads the animator only through
@@ -149,7 +149,9 @@ export function planReducedMotion(
       : null;
   if (!entering && !leaving && role === 'entrance') {
     entering = true;
-    fadeFrom = 0;
+    // From transparent, or from where a running fade (an exit caught
+    // midway) has it.
+    fadeFrom = view.hasOpacityCurve ? opacityNow : 0;
     fadeTo = roleBorrow ?? opacityTo;
   } else if (!entering && !leaving && role === 'exit') {
     leaving = true;
@@ -181,7 +183,11 @@ export function planReducedMotion(
         : {}),
     };
   };
-  if (entering && !pending) {
+  // Travel lands only while the element is transparent (DR1, DR2): an
+  // entrance that starts visible, or an exit that ends visible, dips instead
+  // when it has travel or a waiting landing to carry.
+  const carries = travel.length > 0 || pending;
+  if (entering && !pending && (!carries || fadeFrom <= 1e-6)) {
     // Lands at once (the travel is written at once) and fades in.
     return {
       atOnce,
@@ -194,7 +200,7 @@ export function planReducedMotion(
       borrowed: roleBorrow,
     };
   }
-  if (leaving) {
+  if (leaving && (!carries || fadeTo <= 1e-6)) {
     // Fades out in place, then lands.
     const opacityFade = [
       {at: 0, value: fadeFrom},
@@ -210,7 +216,7 @@ export function planReducedMotion(
           : null,
     };
   }
-  if (travel.length > 0 || pending) {
+  if (carries) {
     // A dip: fades out, lands while transparent, fades back in. When no
     // call owns opacity it starts from and returns to the element's own
     // (stylesheet) opacity, not the model's 1.
