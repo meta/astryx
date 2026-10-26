@@ -931,6 +931,7 @@ export class GestureHost {
     id: number,
     recognizers: ReadonlyArray<GestureRecognizer>,
     target: EventTarget | null,
+    pointerType: PointerKind,
     consumer: TouchConsumer | null,
     consumerElement: Element | null,
   ): void {
@@ -942,9 +943,11 @@ export class GestureHost {
       const lock = recognizer.selectionLock;
       if (
         lock != null &&
-        // Only a recognizer that would take this touch locks for it.
+        // Only a recognizer that would take this contact locks for it: a
+        // pen is checked against pen acceptance, a finger against touch.
         recognizer.isEnabled &&
-        internals(recognizer).acceptsTouchInput &&
+        (recognizer.allowedPointerTypes == null ||
+          recognizer.allowedPointerTypes.has(pointerType)) &&
         recognizer.view instanceof Element
       ) {
         const elements = byLock.get(lock) ?? new Set<Element>();
@@ -1043,7 +1046,14 @@ export class GestureHost {
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
       if (locksSelectionFor('touch', this.doc.defaultView)) {
-        this.lockSelection(id, recognizers, target, consumer, consumerElement);
+        this.lockSelection(
+          id,
+          recognizers,
+          target,
+          'touch',
+          consumer,
+          consumerElement,
+        );
       }
       this.watchTarget(
         touch.identifier,
@@ -1471,6 +1481,7 @@ export class GestureHost {
         id,
         recognizers,
         event.target,
+        event.pointerType,
         consumer,
         consumerElement,
       );
