@@ -720,6 +720,20 @@ export function createAnimator(
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
   };
 
+  /**
+   * Ends a borrowed dip on the element it ran on: the stylesheet owns its
+   * opacity again (an unmount or a new element never keeps the borrow).
+   */
+  const handBackBorrow = () => {
+    if (borrowedOpacity == null) {
+      return;
+    }
+    borrowedOpacity = null;
+    segments.delete('opacity');
+    resting.opacity = IDENTITY.opacity;
+    target?.style.removeProperty('opacity');
+  };
+
   const releaseIdentity = (channel: Channel) => {
     if (target == null || running.has(channel)) {
       return;
@@ -961,23 +975,12 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      handBackBorrow();
       target = next;
       if (target == null) {
         return;
       }
       const time = now();
-      // A borrowed dip that ended while detached hands the stylesheet's
-      // opacity back instead of writing the borrowed value inline.
-      const dip = segments.get('opacity');
-      if (
-        borrowedOpacity != null &&
-        (dip == null || time >= dip.start + dip.duration)
-      ) {
-        borrowedOpacity = null;
-        segments.delete('opacity');
-        resting.opacity = IDENTITY.opacity;
-        target.style.removeProperty('opacity');
-      }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
         const isDefault = properties.every(
@@ -1232,6 +1235,7 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      handBackBorrow();
       target = null;
     },
   };
