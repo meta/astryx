@@ -739,6 +739,11 @@ export function createAnimator(
       return;
     }
     if (channel === 'opacity' && borrowedOpacity != null) {
+      const dip = segments.get('opacity');
+      if (dip != null && now() < dip.start + dip.duration) {
+        // The dip is still running (a rebuild wrote its end value first).
+        return;
+      }
       // A dip on the stylesheet's opacity ended: the stylesheet owns it again.
       borrowedOpacity = null;
       segments.delete('opacity');
@@ -975,12 +980,10 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      if (next == null) {
-        handBackBorrow();
-      } else if (borrowedOpacity != null) {
-        // A new element takes over a running borrowed dip: the dip keeps
-        // running there, so a pending move still lands while it is
-        // invisible; the outgoing element gets its stylesheet's opacity back.
+      if (borrowedOpacity != null) {
+        // A running borrowed dip stays in the model through any attach, so a
+        // pending move still lands while the element is invisible; only the
+        // outgoing element gets its stylesheet's opacity back.
         target?.style.removeProperty('opacity');
       }
       target = next;
@@ -988,6 +991,17 @@ export function createAnimator(
         return;
       }
       const time = now();
+      // A borrowed dip that ended while detached hands the opacity back
+      // instead of writing the borrowed value inline.
+      const dip = segments.get('opacity');
+      if (
+        borrowedOpacity != null &&
+        (dip == null || time >= dip.start + dip.duration)
+      ) {
+        borrowedOpacity = null;
+        segments.delete('opacity');
+        resting.opacity = IDENTITY.opacity;
+      }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
         const isDefault = properties.every(
@@ -1044,10 +1058,14 @@ export function createAnimator(
       // returns to the element's own opacity, not the model's 1.
       // A dip already borrowing it does not make the call own it.
       const previousBorrow = borrowedOpacity;
+      // An opacity the animator left inline (a `set` over a stylesheet that
+      // hides or dims the element) is owned too: a dip returns to it.
       const ownsOpacity =
         targets.opacity != null ||
         (borrowedOpacity == null &&
-          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
+          (segments.has('opacity') ||
+            resting.opacity !== IDENTITY.opacity ||
+            (target?.style.getPropertyValue('opacity') ?? '') !== ''));
       const borrowed =
         reduce && !instant && travels && !ownsOpacity
           ? (borrowedOpacity ?? ownOpacity())

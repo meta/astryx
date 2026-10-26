@@ -636,6 +636,50 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     next.remove();
   });
 
+  it('a running dip survives any re-attach, so the move never passes in view', async () => {
+    const halfway = (
+      animator: ReturnType<typeof createAnimator>,
+      start: number,
+    ) => {
+      for (let t = start; t <= start + fade; t += 2) {
+        if (animator.get('x', t) !== 0) {
+          return animator.get('opacity', t);
+        }
+      }
+      return Number.NaN;
+    };
+    // Detached and re-attached to the same element, no stylesheet opacity.
+    const same = reduced();
+    same.animator.animate({x: 240}, {spring: springs.navigationPush});
+    const start = clock;
+    await advance(25);
+    same.animator.attach(null);
+    same.animator.attach(same.element);
+    expect(halfway(same.animator, start)).toBeCloseTo(0, 6);
+    // Handed to another element, no stylesheet opacity.
+    const other = reduced();
+    other.animator.animate({x: 240}, {spring: springs.navigationPush});
+    const start2 = clock;
+    await advance(25);
+    const next = document.createElement('div');
+    document.body.append(next);
+    other.animator.attach(next);
+    expect(halfway(other.animator, start2)).toBeCloseTo(0, 6);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(next.style.opacity).toBe('');
+    next.remove();
+  });
+
+  it('an opacity the animator wrote is owned: a dip returns to it, never to a hiding stylesheet', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0'};
+    animator.set({opacity: 1});
+    expect(element.style.opacity).toBe('1');
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + END_HOLD_MS + 1);
+    expect(element.style.opacity).toBe('1');
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
