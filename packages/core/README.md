@@ -165,15 +165,18 @@ The `tailwind-theme.css` import maps system tokens to Tailwind utilities via `@t
 
 Some useful mappings:
 
-| Tailwind class                                            | Astryx token                                      |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| `text-primary` / `text-secondary`                         | `--color-text-primary` / `--color-text-secondary` |
-| `bg-surface` / `bg-card` / `bg-body`                      | `--color-background-surface` / `card` / `body`    |
-| `border-border` / `border-strong`                         | `--color-border` / `--color-border-emphasized`    |
-| `bg-success` / `text-error` / `text-warning`              | Status tokens                                     |
-| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid` | Hue palette (×10 hues)                            |
-| `rounded-sm` / `rounded-md` / `rounded-lg`                | `--radius-inner` / `element` / `container`        |
-| `shadow-sm` / `shadow-md` / `shadow-lg`                   | `--shadow-low` / `med` / `high`                   |
+| Tailwind class                                               | Astryx token                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `text-primary` / `text-secondary`                            | `--color-text-primary` / `--color-text-secondary`                |
+| `bg-surface` / `bg-card` / `bg-body`                         | `--color-background-surface` / `card` / `body`                   |
+| `border-border` / `border-strong`                            | `--color-border` / `--color-border-emphasized`                   |
+| `bg-info` / `bg-success` / `bg-warning` / `bg-error`         | Strong status fills (`--color-<status>`)                         |
+| `text-on-info` / `bg-info-muted` / `text-on-info-muted`      | Strong-fill content, pale fill, pale-fill content                |
+| `text-success` / `text-warning` / `text-error` / `text-info` | Status text on the page (`--color-text-*`; also `text-status-*`) |
+| `border-success` / `border-warning` / `border-error`         | Status borders (`--color-border-*`)                              |
+| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid`    | Hue palette (×10 hues)                                           |
+| `rounded-sm` / `rounded-md` / `rounded-lg`                   | `--radius-inner` / `element` / `container`                       |
+| `shadow-sm` / `shadow-md` / `shadow-lg`                      | `--shadow-low` / `med` / `high`                                  |
 
 Spacing references `var(--spacing-1)` as the base unit, so `p-4` = 16px, matching Astryx's `--spacing-4`. Arbitrary values still work as an escape hatch: `bg-[var(--color-background-surface)]`.
 

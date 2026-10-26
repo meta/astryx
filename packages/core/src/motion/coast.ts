@@ -24,13 +24,7 @@
  * SYNC: When modified, update coast.test.ts.
  */
 
-import {
-  SETTLE_THRESHOLD,
-  type Animator,
-  type MotionCurve,
-  type MotionProperty,
-  type MotionValues,
-} from './animator';
+import {SETTLE_THRESHOLD, type Animator, type MotionCurve} from './animator';
 import {solveDecay} from './decay';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
@@ -40,10 +34,11 @@ export interface CoastOptions {
   /** Per-millisecond velocity factor; UIScrollView's normal rate by default. */
   rate?: number;
   /** Edges: a coast crossing one hands its velocity to `bounce`. */
-  bounds?: Partial<Record<MotionProperty, {min: number; max: number}>>;
+  bounds?: Partial<Record<'x' | 'y', {min: number; max: number}>>;
   /**
-   * The edge spring; `scroll.bounce` by default. A table spring plays its
-   * motion role under the animator's element (a theme may retune it).
+   * The edge spring; `scroll.bounce` by default, played as the table measures
+   * it. A spring that is a motion role plays its role's value under the
+   * animator's element (motion/roles.ts).
    */
   bounce?: SpringDescription;
   /**
@@ -68,8 +63,9 @@ function settling(
 }
 
 /**
- * The momentum curves of a release with `velocity` (units per second for
- * each property; `scale` sets both scales), for `animator.decay`.
+ * The momentum curves of a release with `velocity` (px per second on each
+ * translate axis), for `animator.decay`, which moves only `x` and `y`:
+ * momentum continues a finger's throw (design:reduced-motion DR2).
  *
  * @example
  * ```
@@ -80,20 +76,14 @@ function settling(
  */
 export function coast(
   animator: Animator,
-  velocity: MotionValues,
+  velocity: {readonly x?: number; readonly y?: number},
   options: CoastOptions = {},
-): Partial<Record<MotionProperty, MotionCurve>> {
-  const known = Object.keys(SETTLE_THRESHOLD) as MotionProperty[];
-  const velocities: Partial<Record<MotionProperty, number>> = {};
-  for (const [key, value] of Object.entries(velocity)) {
-    if (value == null || !Number.isFinite(value)) {
-      continue;
-    }
-    if (key === 'scale') {
-      velocities.scaleX ??= value;
-      velocities.scaleY ??= value;
-    } else if ((known as ReadonlyArray<string>).includes(key)) {
-      velocities[key as MotionProperty] = value;
+): Partial<Record<'x' | 'y', MotionCurve>> {
+  const velocities: Partial<Record<'x' | 'y', number>> = {};
+  for (const key of ['x', 'y'] as const) {
+    const value = velocity[key];
+    if (value != null && Number.isFinite(value)) {
+      velocities[key] = value;
     }
   }
   const rate = options.rate ?? scroll.decelerationRate.normal;
@@ -101,11 +91,8 @@ export function coast(
   const bounce = toSpring(
     resolveMotion(animator.element, options.bounce ?? scroll.bounce),
   );
-  const curves: Partial<Record<MotionProperty, MotionCurve>> = {};
-  for (const [key, v0] of Object.entries(velocities) as [
-    MotionProperty,
-    number,
-  ][]) {
+  const curves: Partial<Record<'x' | 'y', MotionCurve>> = {};
+  for (const [key, v0] of Object.entries(velocities) as ['x' | 'y', number][]) {
     const from = animator.get(key, options.at);
     const bounds = options.bounds?.[key];
     const threshold = SETTLE_THRESHOLD[key];

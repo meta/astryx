@@ -22,7 +22,7 @@
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
  * interpolation between keyframes is within a fraction of a pixel, and played
  * with `easing: linear`. The browser then runs them on its compositor: they
- * keep advancing every frame while JavaScript is busy (law M1).
+ * keep advancing every frame while JavaScript is busy (`spec:AST-094` FR5).
  *
  * Why keyframes and not one `linear()` easing: measured in Chromium, both
  * forms are composited and equally precise for the same samples, but WebKit's
@@ -38,8 +38,8 @@
  * The page never reads the DOM to know where something is: `get` and
  * `getVelocity` evaluate the curves at a time on the document timeline's
  * clock (`performance.now()` by default), so a finger can grab anything
- * mid-flight from the value on screen (M2), and a new target starts from the
- * current value with the current velocity (M3). A gesture's release velocity
+ * mid-flight from the value on screen, and a new target starts from the
+ * current value with the current velocity (`spec:AST-094` FR6). A gesture's release velocity
  * can be handed in explicitly instead.
  *
  * End state without a flicker frame: the element's inline style always holds
@@ -115,8 +115,8 @@
  *   call that lands too carries a landing still waiting (two calls in one
  *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
- * No call option and no theme value lengthens the fade or keeps travel (DR4):
- * the fade's length is not a theme role.
+ * No call option and no role value lengthens the fade or keeps travel (DR4):
+ * the fade's length is not a role.
  *
  * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
  * decay only ever continues the velocity a finger handed it on release
@@ -125,14 +125,14 @@
  * transition. A spring a component starts on release toward a target it
  * picks (a detent, a page) is a transition, and cross-fades (DR2).
  *
- * Theme: a spring or curve from a registered motion table plays the value
- * the element's theme sets for that role, or the table's value when it sets
- * none (resolveMotion.ts): `springs.sheetPresent` once
- * `registerSpringsTable()` has run, `scroll.bounce` (a coast registers the
- * scroll table), the Reduce Motion fade's curve (the animator registers that
- * role alone). A table never registered plays its own values, and the
- * fade's length is not a role. It is read once, when the motion starts, from
- * the theme scope's computed style: no layout, and the start, the promotion
+ * Roles: a spring or curve that is one of a registered table's motion roles
+ * plays the value its CSS variable carries on the element's scope, or the
+ * table's value when none is set (resolveMotion.ts; nothing public sets one
+ * while touch motion stays internal): `springs.settle` once
+ * `registerSpringsTable()` has run, the Reduce Motion fade's curve (the
+ * animator registers that role alone). Every other value, and a table never
+ * registered, plays its own value, and the fade's length is not a role. A
+ * role is read once, when the motion starts, from the scope's computed style: no layout, and the start, the promotion
  * and the browser-set start time are unchanged. A spring written inline at the
  * call site is played as given.
  *
@@ -146,7 +146,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
  * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
- * - /packages/core/src/motion/resolveMotion.ts (the theme roles it resolves)
+ * - /packages/core/src/motion/resolveMotion.ts (the roles it resolves)
  * - /packages/core/src/motion/README.md
  */
 
@@ -401,6 +401,8 @@ interface Segment {
   readonly jumps: ReadonlyArray<number>;
   /** Constant between jumps: sampled at its jumps only. */
   readonly steps?: true;
+  /** A Reduce Motion fade: an interruption finishes it instead of freezing it. */
+  readonly isFade?: true;
   readonly owner: HandleState;
   /** The call's start group while its start waits for the commit. */
   group?: StartGroup;
@@ -460,9 +462,16 @@ interface Landing {
   } | null;
   /** The opacity written with the landing (an exit by role). */
   restore: number | null;
+  /**
+   * The restore returns to the stylesheet's opacity (an exit by role on a
+   * surface no call owns opacity on): the stylesheet owns it again.
+   */
+  restoreIsBorrowed?: boolean;
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
+  /** When it is due on the document timeline, once the call has started. */
+  due: number | null;
 }
 
 /** What Reduced Motion makes of a call: its segments, and any landing. */
@@ -470,7 +479,9 @@ interface ReducedPlan {
   readonly next: Partial<Record<MotionProperty, Segment | null>>;
   /** Values that stay where they are until the landing writes them. */
   readonly holds: Partial<Record<MotionProperty, number>>;
-  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried'> | null;
+  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried' | 'due'> | null;
+  /** The stylesheet opacity a dip borrowed (no call owns opacity). */
+  readonly borrowed?: number | null;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -715,8 +726,9 @@ export function defaultIsCoarsePointer(): boolean {
  * @example
  * ```
  * const animator = createAnimator(sheet);
- * // finger lifts at 1200 px/s heading for the detent at 0:
- * animator.animate({y: 0}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+ * // finger lifts at 1200 px/s heading for the detent at 0 (a component
+ * // passes the spring of its motion role):
+ * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
  * // the finger lands again: where is it right now?
  * const y = animator.get('y', event.timeStamp);
  * animator.stop(['y']);
@@ -758,6 +770,8 @@ export function createAnimator(
   const pendingGroups = new Set<StartGroup>();
   /** atRest() calls still waiting; dispose settles them. */
   const restWaits = new Set<RestWait>();
+  /** A detach that settles as an unmount at the end of the task, unless an attach follows. */
+  let unmountQueued = false;
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -1131,6 +1145,7 @@ export function createAnimator(
       }
       animation.cancel();
       releaseIdentity(channel);
+      flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
   };
@@ -1158,6 +1173,10 @@ export function createAnimator(
       return;
     }
     if (channel === 'opacity' && borrowedOpacity != null) {
+      if ([...landings].some(landing => landing.fadeIn?.isBorrowed === true)) {
+        // At the bottom of the dip, before it lands and fades back in.
+        return;
+      }
       // A dip on the stylesheet's opacity ended: the stylesheet owns it again.
       borrowedOpacity = null;
       segments.delete('opacity');
@@ -1165,15 +1184,49 @@ export function createAnimator(
       target.style.removeProperty('opacity');
       return;
     }
-    const text = target.style.getPropertyValue(channel);
-    if (text !== IDENTITY_TEXT[channel]) {
+    if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
       return;
     }
-    target.style.removeProperty(channel);
-    const view = target.ownerDocument.defaultView;
-    const underneath = view?.getComputedStyle(target).getPropertyValue(channel);
-    if (underneath != null && !isIdentityText(channel, underneath)) {
-      target.style.setProperty(channel, text);
+    // Read with every other channel the same commit leaves at identity: one
+    // style read for the element, not one per channel (flushReleases).
+    releasing.add(channel);
+    if (!releaseQueued) {
+      releaseQueued = true;
+      queueMicrotask(flushReleases);
+    }
+  };
+
+  /** Channels left at identity whose stylesheet value is still to be read. */
+  const releasing = new Set<Channel>();
+  let releaseQueued = false;
+
+  /**
+   * Removes the identity values written since the last flush, reads the
+   * stylesheet once for all of them, and puts back the ones it would move:
+   * a single forced style read per element and commit, where a read per
+   * channel used to force one each.
+   */
+  const flushReleases = () => {
+    releaseQueued = false;
+    const element = target;
+    const channels = [...releasing].filter(
+      channel =>
+        !running.has(channel) &&
+        element?.style.getPropertyValue(channel) === IDENTITY_TEXT[channel],
+    );
+    releasing.clear();
+    if (element == null || channels.length === 0) {
+      return;
+    }
+    for (const channel of channels) {
+      element.style.removeProperty(channel);
+    }
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+    for (const channel of channels) {
+      const underneath = style?.getPropertyValue(channel);
+      if (underneath != null && !isIdentityText(channel, underneath)) {
+        element.style.setProperty(channel, IDENTITY_TEXT[channel]);
+      }
     }
   };
 
@@ -1293,14 +1346,18 @@ export function createAnimator(
       channels.add(CHANNEL_OF[property]);
     }
     if (at != null) {
-      // An explicit clock is the caller's, except the clock of a call from
-      // rest on these channels still waiting for the browser's start (a drop
-      // and the reorder that rebases it in the same task): the new call joins
-      // that call, and the browser's start moves both.
+      // An explicit clock is the caller's, except a clock no later than a
+      // call from rest on these channels still waiting for the browser's
+      // start (an event timestamp, such as a drop's, for the reorder that
+      // rebases it): the new call joins that call, and the browser's start
+      // moves both. A later clock is a later call, often a frame or more
+      // later while the browser has not started the first: it keeps its own
+      // clock, since joining would sample its curve from the earlier call's
+      // time and hold its first value for the gap.
       for (const channel of channels) {
         for (const property of CHANNELS[channel]) {
           const group = segments.get(property)?.group;
-          if (group != null && !group.resolved) {
+          if (group != null && !group.resolved && at <= group.provisional) {
             return group;
           }
         }
@@ -1438,12 +1495,50 @@ export function createAnimator(
         return;
       }
     }
+    // Finished from outside before the browser started it (a sampler's
+    // finish() on a held animation): nothing is left to wait on, so the call
+    // keeps its own clock, and a later call on an explicit clock does not
+    // join it and wait for a start that never comes.
+    if (
+      group.animations.length > 0 &&
+      group.animations.every(
+        animation =>
+          animation.playState === 'finished' || animation.playState === 'idle',
+      ) &&
+      group.animations.some(animation => animation.playState === 'finished')
+    ) {
+      resolveGroup(group, group.provisional);
+    }
   };
 
   /** Reads the start of every call whose first frame has been committed. */
   const syncPending = () => {
     for (const group of pendingGroups) {
       syncGroup(group);
+    }
+    syncFinished();
+  };
+
+  /**
+   * An animation finished from outside (a test utility's or devtools'
+   * `finish()`) shows its end state while the model still reads its curve:
+   * the curve ends now in the model too, so the next call starts from what
+   * is on screen.
+   */
+  const syncFinished = () => {
+    for (const [channel, animation] of running) {
+      if (animation.playState !== 'finished') {
+        continue;
+      }
+      const time = now();
+      for (const property of CHANNELS[channel]) {
+        const segment = segments.get(property);
+        if (segment == null || time >= segment.start + segment.duration) {
+          continue;
+        }
+        segments.delete(property);
+        resting[property] = segment.target;
+      }
     }
   };
 
@@ -1603,7 +1698,7 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // A table spring takes its theme's value, read once here, at the start.
+    // A role takes its scope's value, read once here, at the start.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
@@ -1657,6 +1752,7 @@ export function createAnimator(
         1000,
       jumps,
       owner,
+      isFade: true,
     };
   };
 
@@ -1673,6 +1769,7 @@ export function createAnimator(
     for (const channel of channels) {
       rebuild(channel, time);
     }
+    flushReleases();
   };
 
   /** Reduced Motion landings still waiting for the element to be transparent. */
@@ -1690,8 +1787,9 @@ export function createAnimator(
       if (property === 'opacity') {
         endLanding(landing);
         landNow(landing);
-      } else {
-        landing.values.delete(property);
+      } else if (landing.values.delete(property) && !landing.owner.settled) {
+        // Set or stopped before it landed: the call did not finish.
+        settle(landing.owner, false);
       }
     }
   };
@@ -1767,7 +1865,7 @@ export function createAnimator(
     plan: NonNullable<ReducedPlan['landing']>,
     carried: HandleState[],
   ) => {
-    const landing: Landing = {...plan, owner, carried, timer: null};
+    const landing: Landing = {...plan, owner, carried, timer: null, due: null};
     landings.add(landing);
     // The handle settles when the landing (and its fade back in) is done.
     if (owner.timer != null) {
@@ -1778,17 +1876,21 @@ export function createAnimator(
       if (!landings.has(landing)) {
         return;
       }
+      landing.due = start + landing.at;
       landing.timer = setTimeout(
         () => land(landing),
-        Math.max(0, start + landing.at - now()),
+        Math.max(0, landing.due - now()),
       );
     });
   };
 
   /**
    * Writes the travel while the element is transparent: a plain style write,
-   * never an animation. A busy main thread only keeps it transparent longer.
-   * In a dip the fade back in starts from here.
+   * never an animation (DR2: opacity only), so it is never shown in the wrong
+   * place. In a dip the fade back in starts from here and takes what is left
+   * of the cross-fade, so the dip ends when it was due even when a busy main
+   * thread runs this timer late; past the whole fade back in (over 100 ms
+   * late) the element appears at once where it landed.
    */
   const land = (landing: Landing) => {
     landings.delete(landing);
@@ -1802,21 +1904,32 @@ export function createAnimator(
     }
     let end = time;
     if (landing.fadeIn != null) {
+      // The fade back in takes what is left of the cross-fade: a timer that
+      // a busy main thread runs late shortens it, so the dip still ends
+      // when it was due (design:reduced-motion DR2, 200 ms or less), and the
+      // element is never shown before it lands.
+      const late = landing.due == null ? 0 : Math.max(0, time - landing.due);
+      const ms = Math.max(1, landing.fadeIn.ms - late);
       segments.set(
         'opacity',
         fadeSegment(landing.owner, time, [
           {at: 0, value: valueAt('opacity', time)},
-          {at: landing.fadeIn.ms, value: landing.fadeIn.to},
+          {at: ms, value: landing.fadeIn.to},
         ]),
       );
       changed.push('opacity');
-      end = time + landing.fadeIn.ms;
+      end = time + ms;
     } else if (landing.restore != null) {
       segments.delete('opacity');
-      resting.opacity = landing.restore;
+      resting.opacity =
+        landing.restoreIsBorrowed === true ? IDENTITY.opacity : landing.restore;
       changed.push('opacity');
     }
     commit(changed, time);
+    if (landing.restoreIsBorrowed === true) {
+      // The stylesheet owns its opacity again.
+      target?.style.removeProperty('opacity');
+    }
     if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
       // again once the fade ends (releaseIdentity).
@@ -1884,15 +1997,30 @@ export function createAnimator(
     let fadeFrom = opacityNow;
     let fadeTo = opacityTo;
     let restore: number | null = null;
+    // A fade by role on a surface no call owns opacity on starts from, or
+    // returns to, the element's own (stylesheet) opacity, as a dip does.
+    const roleBorrow =
+      role != null &&
+      !named &&
+      borrowedOpacity == null &&
+      !segments.has('opacity') &&
+      resting.opacity === IDENTITY.opacity
+        ? ownOpacity()
+        : null;
     if (!entering && !leaving && role === 'entrance') {
       entering = true;
       fadeFrom = 0;
+      fadeTo = roleBorrow ?? opacityTo;
     } else if (!entering && !leaving && role === 'exit') {
       leaving = true;
+      fadeFrom = roleBorrow ?? opacityNow;
       fadeTo = 0;
-      restore = opacityTo;
+      restore = roleBorrow ?? opacityTo;
     }
-    // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
+    // A move still waiting to land (an earlier dip's) lands at this call's
+    // invisible moment, never while the element shows.
+    const pending = landings.size > 0;
+    // Not a role: nothing lengthens it (design:reduced-motion DR4).
     const ms = reducedMotionCrossFade.durationMs;
     for (const property of properties) {
       if (TRAVEL.includes(property)) {
@@ -1905,15 +2033,23 @@ export function createAnimator(
         holds[property] = valueAt(property, time);
         values.set(property, targets[property] as number);
       }
-      return {at, values, fadeIn, restore};
+      return {
+        at,
+        values,
+        fadeIn,
+        restore,
+        ...(roleBorrow != null && restore != null
+          ? {restoreIsBorrowed: true}
+          : {}),
+      };
     };
-    if (entering) {
+    if (entering && !pending) {
       // Lands at once (the travel is null above) and fades in.
       next.opacity = fadeSegment(owner, time, [
         {at: 0, value: fadeFrom},
         {at: ms, value: fadeTo},
       ]);
-      return {next, holds, landing: null};
+      return {next, holds, landing: null, borrowed: roleBorrow};
     }
     if (leaving) {
       // Fades out in place, then lands.
@@ -1925,20 +2061,33 @@ export function createAnimator(
         next,
         holds,
         landing:
-          travel.length > 0 || restore != null ? landsLater(ms, null) : null,
+          travel.length > 0 || restore != null || pending
+            ? landsLater(ms, null)
+            : null,
       };
     }
-    if (travel.length > 0) {
+    if (travel.length > 0 || pending) {
       // A dip: fades out, lands while transparent, fades back in. When no
       // call owns opacity it starts from and returns to the element's own
       // (stylesheet) opacity, not the model's 1.
+      // A dip still running on borrowed opacity (its fade out or back in)
+      // lends the same borrow to the next one: overlapping dips never pin
+      // the stylesheet's value inline.
+      const priorBorrow = borrowedOpacity;
       const ownsOpacity =
         named ||
-        segments.has('opacity') ||
-        resting.opacity !== IDENTITY.opacity;
-      const borrowed = ownsOpacity ? null : ownOpacity();
+        (priorBorrow == null &&
+          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
+      const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
+      // It opens at the opacity on screen: an earlier dip's, when one is
+      // still running, else the borrowed stylesheet value.
       next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: borrowed ?? opacityNow},
+        {
+          at: 0,
+          value: segments.has('opacity')
+            ? opacityNow
+            : (borrowed ?? opacityNow),
+        },
         {at: ms / 2, value: 0},
       ]);
       return {
@@ -1949,6 +2098,7 @@ export function createAnimator(
           ms: ms / 2,
           isBorrowed: borrowed != null,
         }),
+        borrowed,
       };
     }
     if ('opacity' in targets) {
@@ -1977,17 +2127,59 @@ export function createAnimator(
       }
       demote();
       if (next == null) {
-        // Unmount: nothing is left to animate, so every handle settles as
-        // interrupted and no completion timer outlives the element, as in
-        // dispose() (architecture:react-component-runtime INV5).
-        const time = now();
-        for (const property of PROPERTIES) {
-          interrupt(property, time);
+        // A Reduce Motion move waiting to land lands now, in the model: a
+        // node that replaces this one (React's replacement order,
+        // architecture:react-component-runtime INV6) shows it where it ends,
+        // and its handles settle finished.
+        for (const landing of [...landings]) {
+          endLanding(landing);
+          for (const [property, value] of landing.values) {
+            segments.delete(property);
+            resting[property] = value;
+          }
+          if (landing.fadeIn != null || landing.restore != null) {
+            segments.delete('opacity');
+            resting.opacity =
+              landing.fadeIn?.isBorrowed === true
+                ? IDENTITY.opacity
+                : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
+          }
+          if (landing.fadeIn?.isBorrowed === true) {
+            borrowedOpacity = null;
+          }
+          for (const owner of [landing.owner, ...landing.carried]) {
+            carriedOwners.delete(owner);
+            if (!owner.settled) {
+              settle(owner, true);
+            }
+          }
         }
-        // Nothing moves any more: every atRest() wait settles.
-        for (const wait of [...restWaits]) {
-          wait.settle();
+        // Unmount, unless a node replaces this one in the same task (React's
+        // replacement order: attach(null), then the new node): nothing is
+        // left to animate, so at the end of the task every other handle
+        // settles as interrupted, every atRest() wait settles and no
+        // completion timer outlives the element, as in dispose()
+        // (architecture:react-component-runtime INV5). A replacement keeps
+        // them all: the motion goes on on the new node.
+        if (!unmountQueued) {
+          unmountQueued = true;
+          queueMicrotask(() => {
+            if (!unmountQueued) {
+              return;
+            }
+            unmountQueued = false;
+            const time = now();
+            for (const property of PROPERTIES) {
+              interrupt(property, time);
+            }
+            for (const wait of [...restWaits]) {
+              wait.settle();
+            }
+          });
         }
+      } else {
+        // A node in place of the one just detached: no unmount.
+        unmountQueued = false;
       }
       for (const animation of running.values()) {
         animation.cancel();
@@ -2011,6 +2203,7 @@ export function createAnimator(
           rebuild(channel, time);
         }
       }
+      flushReleases();
     },
 
     get(property, time = now()) {
@@ -2108,6 +2301,10 @@ export function createAnimator(
         }
       }
       commitCall(group, owner, changed, time);
+      if (plan?.borrowed != null) {
+        // The dip's own commit cleared it; the borrow lasts the dip.
+        borrowedOpacity = plan.borrowed;
+      }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
@@ -2202,6 +2399,10 @@ export function createAnimator(
         }
       }
       commitCall(group, owner, changed, time);
+      if (plan?.borrowed != null) {
+        // The dip's own commit cleared it; the borrow lasts the dip.
+        borrowedOpacity = plan.borrowed;
+      }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
@@ -2245,18 +2446,31 @@ export function createAnimator(
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
+      const wasBorrowed = borrowedOpacity != null;
+      // Read before the landings go: a dip's fade back in, an exit's restore.
+      const heading = opacityHeading();
       for (const property of list) {
         cancelLanding(property);
-        if (!segments.has(property)) {
+        const segment = segments.get(property);
+        if (segment == null) {
           continue;
         }
-        const value = valueAt(property, time);
+        // A Reduce Motion fade is never left half done: it finishes, and a
+        // dip on the stylesheet's opacity hands that opacity back.
+        const value = !segment.isFade
+          ? valueAt(property, time)
+          : wasBorrowed
+            ? IDENTITY.opacity
+            : heading;
         interrupt(property, time);
         segments.delete(property);
         resting[property] = value;
         changed.push(property);
       }
       commit(changed, time);
+      if (wasBorrowed && changed.includes('opacity')) {
+        target?.style.removeProperty('opacity');
+      }
     },
 
     rebase(deltas, rebaseOptions = {}) {

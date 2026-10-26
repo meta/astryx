@@ -302,10 +302,11 @@ export const springs = {
    */
   contextMenuDismiss: {...MENU_CLOSE_SPRING},
   /**
-   * Menus opening and closing under Reduce Motion: critically damped,
-   * slower, no overshoot. A reference reading only: under reduced motion a
-   * touch presentation follows `design:reduced-motion` DR2 and DR4, not this
-   * spring (`spec:AST-094` FR8).
+   * What UIKit plays for a menu with Reduce Motion on: critically damped,
+   * slower, no overshoot. A reference reading of UIKit only, never played:
+   * under reduced motion no core transition springs (`design:reduced-motion`
+   * DR1); a touch presentation cross-fades instead (DR2), and nothing opts
+   * out (DR4, `spec:AST-094` FR8).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
    *   hooked with Reduce Motion on (1.0, 0.4), Oct 23 2026
@@ -369,17 +370,17 @@ export const springs = {
 } as const;
 
 /**
- * Makes each spring, duration and curve above a motion role a theme may
- * retune (motion/roles.ts). Nothing registers on import: the touch code that
+ * Registers the springs, durations and curves above that spec:AST-094 FR4
+ * names as internal motion roles (motion/roles.ts). Nothing registers on import: the touch code that
  * animates with this table calls it once (it is idempotent), so a page that
  * never does ships no registry.
  */
 export function registerSpringsTable(): void {
   registerMotionTable('springs', springs, {
     // UIKit's menus under Reduce Motion: nothing springs under reduced
-    // motion (design:reduced-motion DR1), and no theme value may change a
+    // motion (design:reduced-motion DR1), and nothing may change a
     // reduced-motion animation (DR4). The keyboard's spring rides the
-    // keyboard's own motion and is not a theme role (spec:AST-094 FR4).
+    // keyboard's own motion and is not a role (spec:AST-094 FR4).
     exclude: ['menuReducedMotion', 'keyboard'],
     // The roles spec:AST-094 FR4 names for their use; the table keeps the
     // names of the sources the values come from.
@@ -393,5 +394,21 @@ export function registerSpringsTable(): void {
       swiftUIDefault: 'stateChange',
       swiftUISpring: 'directChange',
     },
+    // The motion roles: only the ones spec:AST-094 FR4 names. Every other
+    // spring here is a component's measured value, internal to it.
+    roles: [
+      'fingerTracking',
+      'emphasis',
+      'settle',
+      'quickChange',
+      'viewChange',
+      'timedChange',
+      'stateChange',
+      'directChange',
+      'menuOpen',
+      'menuClose',
+      'subMenuOpen',
+      'subMenuBack',
+    ],
   });
 }
