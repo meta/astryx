@@ -45,7 +45,13 @@ import {
   flatTokensToLines,
   SYNC_TOKENIZE_THRESHOLD,
 } from './tokenizer';
-import type {SyntaxToken, TokenLine} from './tokenizer';
+import type {CodeLanguageInput, SyntaxToken, TokenLine} from './tokenizer';
+import type {CodeLanguage} from './grammar';
+import {
+  isCustomCodeLanguage,
+  languageKey,
+  languageLabel as languageWord,
+} from './grammar';
 import {ensureHighlightStyles} from './highlightStyles';
 import {applyHighlightRangesChunked} from './highlightRanges';
 import {themeProps} from '../utils/themeProps';
@@ -541,7 +547,15 @@ function renderLines(
 export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   ref?: React.Ref<HTMLPreElement>;
   code: string;
-  language?: string;
+  /**
+   * The code's language: a built-in identifier such as `'rust'`, or a
+   * language value — a module imported on its own, such as `graphql` from
+   * `@astryxdesign/core/CodeBlock/languages/graphql`, or one made with
+   * `createCodeLanguage`. A string selects only a built-in grammar; the label
+   * shows the string, or the value's `name`.
+   * @default 'plaintext'
+   */
+  language?: string | CodeLanguage;
   title?: string;
   hasLanguageLabel?: boolean;
   hasLineNumbers?: boolean;
@@ -562,7 +576,7 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
    * has one, otherwise beside the code in the top inline-end corner, never
    * over it. It never creates a header, and activating it never collapses the
    * block. You own each control's label, state, and action; ghost `sm`
-   * IconButtons match Copy.
+   * IconButtons match Copy's size and variant.
    */
   endContent?: React.ReactNode;
   isWrapped?: boolean;
@@ -588,6 +602,11 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
    * @default 'card'
    */
   container?: 'card' | 'section';
+  /**
+   * Your own tokenizer; it wins over `language`'s grammar. The same function
+   * also makes a custom language: `createCodeLanguage({name, identifiers,
+   * tokenize})`.
+   */
   tokenizer?: (
     code: string,
     language: string,
@@ -633,27 +652,42 @@ function isSafari(): boolean {
  */
 function useTokenLines(
   code: string,
-  language: string,
+  language: CodeLanguageInput,
   customTokenizer?: CodeBlockProps['tokenizer'],
 ): TokenLine[] {
   const [asyncTokenResult, setAsyncTokenResult] = useState<{
     code: string;
-    language: string;
+    language: CodeLanguageInput;
     tokens: TokenLine[];
   } | null>(null);
 
   const syncTokens = useMemo(() => {
     if (customTokenizer) {
-      return flatTokensToLines(customTokenizer(code, language), code);
+      return flatTokensToLines(
+        customTokenizer(code, languageWord(language)),
+        code,
+      );
     }
-    if (code.length >= SYNC_TOKENIZE_THRESHOLD) {
+    // A custom language paints synchronously at any length, as `tokenizer`
+    // does, so the codemod's rewrite keeps the same first paint (FR13).
+    if (
+      code.length >= SYNC_TOKENIZE_THRESHOLD &&
+      !isCustomCodeLanguage(language)
+    ) {
       return null;
     }
     return tokenize(code, language);
   }, [code, language, customTokenizer]);
 
+  // Synchronizes long code with a scheduler-yielding tokenize task: it starts
+  // when the code, language, or tokenizer changes, and the
+  // cleanup aborts the previous one.
   useEffect(() => {
-    if (code.length < SYNC_TOKENIZE_THRESHOLD || customTokenizer) {
+    if (
+      code.length < SYNC_TOKENIZE_THRESHOLD ||
+      customTokenizer ||
+      isCustomCodeLanguage(language)
+    ) {
       return;
     }
 
@@ -988,14 +1022,18 @@ export function CodeBlock({
   // With the diff layer on, the label and viewport name say so: `diff` over
   // plaintext, `tsx diff` over a language — so a diff keeps its header,
   // collapse control, and a name that still matches a `diff` fence.
+  // A language value labels with its `name` and reflects its first
+  // identifier as `data-language`, so theme selectors keep matching (FR13).
+  const languageName = languageWord(language);
+  const languageAttr = languageKey(language);
   const languageLabel = !hasLanguageLabel
     ? null
     : isDiff
-      ? language === 'plaintext'
+      ? languageName === 'plaintext'
         ? 'diff'
-        : `${language} diff`
-      : language !== 'plaintext'
-        ? language
+        : `${languageName} diff`
+      : languageName !== 'plaintext'
+        ? languageName
         : null;
   const showHeader = title != null || languageLabel != null;
 
@@ -1071,7 +1109,11 @@ export function CodeBlock({
   const headerEl = showHeader ? (
     <div
       {...mergeProps(
-        themeProps('code-block-header', {size, language, container}),
+        themeProps('code-block-header', {
+          size,
+          language: languageAttr,
+          container,
+        }),
         stylex.props(
           styles.headerRow,
           hasLineNumbers ? styles.headerWithDivider : styles.headerCompact,
@@ -1104,7 +1146,7 @@ export function CodeBlock({
         )}>
         <span
           {...mergeProps(
-            themeProps('code-block-title', {size, language}),
+            themeProps('code-block-title', {size, language: languageAttr}),
             stylex.props(styles.headerTitle),
           )}>
           {canCollapse && (
@@ -1179,7 +1221,7 @@ export function CodeBlock({
     <pre
       ref={ref}
       {...mergeProps(
-        themeProps('code-block', {size, language, container}),
+        themeProps('code-block', {size, language: languageAttr, container}),
         stylex.props(
           styles.root,
           hasControls && !showHeader && styles.rootCorner,

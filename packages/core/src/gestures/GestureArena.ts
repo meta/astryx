@@ -162,6 +162,15 @@ export class GestureArena {
     return this.records.get(id)?.touch;
   }
 
+  /**
+   * The recognizers that took touch `id` when it began: each was enabled,
+   * accepted its pointer, and its `shouldReceiveTouch` agreed. Empty for a
+   * touch the arena does not track.
+   */
+  participantsOf(id: number): ReadonlyArray<GestureRecognizer> {
+    return this.records.get(id)?.participants ?? [];
+  }
+
   /** Every touch the arena tracks, lifted ones awaiting a decision included. */
   get touches(): ReadonlyArray<GestureTouch> {
     return [...this.records.values()].map(record => record.touch);
