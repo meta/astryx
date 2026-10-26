@@ -97,6 +97,9 @@
  *   (`detail === 0`) always pass.
  * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
  *   press never also opens the browser's menu.
+ * - When the app loses focus (a window blur, a hidden page), every touch in
+ *   flight is cancelled, as in UIKit; a finger the browser keeps alive lifts
+ *   on nothing: its `touchend` is cancelled (`spec:AST-094` FR28).
  *
  * SSR-safe: nothing touches `window` or `document` until something attaches.
  *
@@ -306,6 +309,12 @@ export class GestureHost {
   private readonly lockedBy = new Map<number, () => void>();
   /** Touch.identifier → arena id, for live fingers. */
   private readonly touchIds = new Map<number, number>();
+  /**
+   * Fingers cancelled because the app lost focus, kept until the browser
+   * ends them: a browser that keeps such a touch alive must not let its
+   * lift click (`spec:AST-094` FR28: nothing acts).
+   */
+  private readonly cancelledFingers = new Set<number>();
   /** Touch.identifier → the element the finger landed on. */
   private readonly touchTargets = new Map<number, EventTarget>();
   /** Finger targets with listeners of their own, and how many fingers each. */
@@ -359,7 +368,9 @@ export class GestureHost {
     null;
   /** The last scroll a finger drove, and when. */
   /** Scrollers a recognizer is scrolling itself this frame (ownScroll). */
-  private readonly ownedScrolls = new Set<Node>();
+  private readonly ownedScrolls = new Map<Node, number>();
+  /** Numbers each ownScroll call: only the newest one's timer clears it. */
+  private ownScrollCalls = 0;
   private lastScroll: {readonly scroller: Node; readonly time: number} | null =
     null;
   /** Predicates that hold a touch's target away from every participant. */
@@ -835,6 +846,8 @@ export class GestureHost {
       registration.hovers.length > 0 ||
       registration.consumer != null
     ) {
+      // What stays may take nothing (only disabled recognizers): FR24.
+      this.syncListeners();
       return;
     }
     if (registration.hasTouchMoveListener) {
@@ -1296,6 +1309,7 @@ export class GestureHost {
       }
       // A finger number still tracked here began again: the touch it named
       // ended where no listener of ours could hear it.
+      this.cancelledFingers.delete(touch.identifier);
       const previous = this.forgetFinger(touch.identifier);
       if (previous != null) {
         stale.push(previous);
@@ -1480,7 +1494,12 @@ export class GestureHost {
     this.dropFingersNotDown(event);
     const time = eventTime(event);
     const inputs: TouchInput[] = [];
+    let isRefused = false;
     for (const touch of touchesOf(event.changedTouches)) {
+      if (this.cancelledFingers.delete(touch.identifier)) {
+        isRefused = true;
+        continue;
+      }
       const id = this.forgetFinger(touch.identifier);
       if (id == null) {
         continue;
@@ -1491,11 +1510,9 @@ export class GestureHost {
     if (event.target instanceof Node) {
       this.lastTouch = {target: event.target, time};
     }
-    if (inputs.length === 0) {
-      return;
-    }
-    const dispositions = this.arena.ended(inputs);
-    if (needsSuppression(dispositions)) {
+    const dispositions =
+      inputs.length > 0 ? this.arena.ended(inputs) : new Map();
+    if (isRefused || needsSuppression(dispositions)) {
       if (event.cancelable) {
         event.preventDefault();
       }
@@ -1515,6 +1532,12 @@ export class GestureHost {
       listed.length > 0
         ? listed.map(touch => touch.identifier)
         : [...this.touchIds.keys()];
+    if (listed.length === 0) {
+      this.cancelledFingers.clear();
+    }
+    for (const identifier of identifiers) {
+      this.cancelledFingers.delete(identifier);
+    }
     const ids: number[] = [];
     for (const identifier of identifiers) {
       const id = this.forgetFinger(identifier);
@@ -1552,7 +1575,10 @@ export class GestureHost {
    * in this very event) ended where we could not see it.
    */
   private dropFingersNotDown(event: TouchEvent): void {
-    if (event.touches == null || this.touchIds.size === 0) {
+    if (
+      event.touches == null ||
+      (this.touchIds.size === 0 && this.cancelledFingers.size === 0)
+    ) {
       return;
     }
     const down = new Set<number>();
@@ -1561,6 +1587,11 @@ export class GestureHost {
     }
     for (const touch of touchesOf(event.changedTouches)) {
       down.add(touch.identifier);
+    }
+    for (const identifier of [...this.cancelledFingers]) {
+      if (!down.has(identifier)) {
+        this.cancelledFingers.delete(identifier);
+      }
     }
     const gone = [...this.touchIds.keys()].filter(
       identifier => !down.has(identifier),
@@ -2015,14 +2046,18 @@ export class GestureHost {
    * reports itself through pointercancel or touchcancel.
    */
   ownScroll(scroller: Node): void {
-    this.ownedScrolls.add(scroller);
+    const call = ++this.ownScrollCalls;
+    this.ownedScrolls.set(scroller, call);
     const view = this.doc.defaultView;
     if (view == null) {
       return;
     }
     view.requestAnimationFrame(() => {
       view.requestAnimationFrame(() => {
-        this.ownedScrolls.delete(scroller);
+        // A newer call keeps it until its own frame has passed.
+        if (this.ownedScrolls.get(scroller) === call) {
+          this.ownedScrolls.delete(scroller);
+        }
       });
     });
   }
@@ -2130,6 +2165,8 @@ export class GestureHost {
       this.unlockSelection(id);
     }
     for (const identifier of [...this.touchIds.keys()]) {
+      // The browser may keep the touch alive: its lift must not click.
+      this.cancelledFingers.add(identifier);
       const id = this.forgetFinger(identifier);
       if (id != null) {
         ids.push(id);
