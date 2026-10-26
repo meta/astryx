@@ -35,7 +35,7 @@
  * the content's edge, as a UIKit scroll view keeps it (`spec:AST-094` FR14).
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {centroid} from './geometry';
 import {
   ALL_NATIVE_TOUCH,
@@ -115,7 +115,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.minimumNumberOfTouches = options.minimumNumberOfTouches ?? 1;
     this.maximumNumberOfTouches =
       options.maximumNumberOfTouches ?? Number.POSITIVE_INFINITY;
-    this.hysteresis = options.hysteresis ?? UIKIT_GESTURES.pan.hysteresis.value;
+    this.hysteresis = options.hysteresis ?? UIKIT_PAN.hysteresis.value;
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
