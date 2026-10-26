@@ -17,7 +17,7 @@
  * recognized.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_SWIPE} from '../motion/uikit/gestures';
 import {centroid} from './geometry';
 import {
   GestureRecognizer,
@@ -38,7 +38,7 @@ export interface SwipeGestureRecognizerOptions extends GestureRecognizerOptions<
   maximumSecondaryMovement?: number;
 }
 
-const SWIPE = UIKIT_GESTURES.swipe;
+const SWIPE = UIKIT_SWIPE;
 
 export class SwipeGestureRecognizer extends GestureRecognizer {
   directions: ReadonlyArray<SwipeDirection>;
