@@ -81,7 +81,7 @@
  * SYNC: When modified, update GestureHost.test.ts and README.md.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_CLICK, UIKIT_PRESS} from '../motion/uikit/gestures';
 import {
   browserClock,
   GestureArena,
@@ -425,7 +425,7 @@ export class GestureHost {
    */
   isScrollBraking(
     node: Node,
-    window: number = UIKIT_GESTURES.press.scrollBrake.value,
+    window: number = UIKIT_PRESS.scrollBrake.value,
   ): boolean {
     const last = this.lastScroll;
     return (
@@ -1385,7 +1385,7 @@ export class GestureHost {
 
   private armSwallower(): void {
     this.swallowDeadline =
-      browserClock.now() + UIKIT_GESTURES.click.strayClickWindow.value;
+      browserClock.now() + UIKIT_CLICK.strayClickWindow.value;
   }
 
   private disarmSwallower(): void {
@@ -1454,7 +1454,7 @@ export class GestureHost {
     const last = this.lastTouch;
     if (
       last != null &&
-      time - last.time < UIKIT_GESTURES.press.momentumMemory.value &&
+      time - last.time < UIKIT_PRESS.momentumMemory.value &&
       scroller.contains(last.target)
     ) {
       this.lastScroll = {scroller, time};
@@ -1479,7 +1479,7 @@ export class GestureHost {
         // end, scroll anchoring) is the page's own: the touch, and the click
         // it earns, stay where they are.
         Math.hypot(touch.x - touch.startX, touch.y - touch.startY) >=
-          UIKIT_GESTURES.press.slop.value
+          UIKIT_PRESS.slop.value
       ) {
         taken.push(touch.id);
       }
