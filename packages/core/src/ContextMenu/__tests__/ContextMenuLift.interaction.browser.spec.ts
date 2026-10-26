@@ -851,7 +851,7 @@ test('a press during the close lands on the fading dim and, held past the closeâ
   });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(80);
-  // The close holds the layer (the layer runtime's presentation hold): a
+  // The close holds the layer (the layer runtime's input hold): a
   // shield in the top layer covers it until the hold ends.
   const heldState = async () =>
     page.evaluate(() => {
