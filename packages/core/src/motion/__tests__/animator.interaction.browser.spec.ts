@@ -12,7 +12,7 @@
  *   state; no Layout or Paint runs while it animates (Chromium trace); the
  *   engine plays the analytic curve when seeked; a finished animation leaves
  *   within a frame or two of the curve's end; a dialog's ::backdrop follows
- *   the curve and holds its end state; a theme that retunes a table spring
+ *   the curve and holds its end state; a role variable set on a scope
  *   changes the curve the engine plays
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
@@ -375,11 +375,11 @@ test('the engine plays the analytic curve, all channels on one clock', async ({
   expect(result.worstOpacity).toBeLessThan(0.003);
 });
 
-test('a theme that retunes a table spring changes the curve the engine plays', async ({
+test('a role variable set on a scope changes the curve the engine plays', async ({
   page,
 }) => {
-  // The theme writes the role's variable on its scope, as defineTheme's CSS
-  // does; the box outside the scope keeps the table's spring.
+  // A scope sets the role's variable (no public API writes one while touch
+  // motion stays internal); the box outside the scope keeps the table's spring.
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
@@ -394,8 +394,8 @@ test('a theme that retunes a table spring changes the curve the engine plays', a
   );
   await page.goto('http://motion.test/');
   const result = await page.evaluate(async () => {
-    // A theme retunes only a registered table's roles: register it as a
-    // touch module would, and fail loudly if the role is not there.
+    // Only a registered table's roles resolve: register it as a touch
+    // module would, and fail loudly if the role is not there.
     Motion.registerSpringsTable();
     if (Motion.motionRoleOf(Motion.springs.settle)?.id !== 'springs.settle') {
       throw new Error(

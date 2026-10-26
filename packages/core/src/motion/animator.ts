@@ -114,8 +114,8 @@
  *   call that lands too carries a landing still waiting (two calls in one
  *   frame land together), and a later opacity change lands it at once;
  * - on any other primary pointer (DR3) it completes at once.
- * No call option and no theme value lengthens the fade or keeps travel (DR4):
- * the fade's length is not a theme role.
+ * No call option and no role value lengthens the fade or keeps travel (DR4):
+ * the fade's length is not a role.
  *
  * Momentum under Reduce Motion (`design:reduced-motion` DR2, DEC-2): a
  * decay only ever continues the velocity a finger handed it on release
@@ -124,14 +124,14 @@
  * transition. A spring a component starts on release toward a target it
  * picks (a detent, a page) is a transition, and cross-fades (DR2).
  *
- * Theme: a spring or curve from a registered motion table plays the value
- * the element's theme sets for that role, or the table's value when it sets
- * none (resolveMotion.ts): `springs.sheetPresent` once
- * `registerSpringsTable()` has run, `scroll.bounce` (a coast registers the
- * scroll table), the Reduce Motion fade's curve (the animator registers that
- * role alone). A table never registered plays its own values, and the
- * fade's length is not a role. It is read once, when the motion starts, from
- * the theme scope's computed style: no layout, and the start, the promotion
+ * Roles: a spring or curve that is one of a registered table's motion roles
+ * plays the value its CSS variable carries on the element's scope, or the
+ * table's value when none is set (resolveMotion.ts; nothing public sets one
+ * while touch motion stays internal): `springs.settle` once
+ * `registerSpringsTable()` has run, the Reduce Motion fade's curve (the
+ * animator registers that role alone). Every other value, and a table never
+ * registered, plays its own value, and the fade's length is not a role. A
+ * role is read once, when the motion starts, from the scope's computed style: no layout, and the start, the promotion
  * and the browser-set start time are unchanged. A spring written inline at the
  * call site is played as given.
  *
@@ -145,7 +145,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animator.test.ts
  * - /packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts
- * - /packages/core/src/motion/resolveMotion.ts (the theme roles it resolves)
+ * - /packages/core/src/motion/resolveMotion.ts (the roles it resolves)
  * - /packages/core/src/motion/README.md
  */
 
@@ -1675,7 +1675,7 @@ export function createAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // A table spring takes its theme's value, read once here, at the start.
+    // A role takes its scope's value, read once here, at the start.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
@@ -1976,7 +1976,7 @@ export function createAnimator(
       fadeTo = 0;
       restore = opacityTo;
     }
-    // Not a theme role: no theme lengthens it (design:reduced-motion DR4).
+    // Not a role: nothing lengthens it (design:reduced-motion DR4).
     const ms = reducedMotionCrossFade.durationMs;
     for (const property of properties) {
       if (TRAVEL.includes(property)) {
