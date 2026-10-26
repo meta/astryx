@@ -9,9 +9,9 @@
  *   beside the animator: a raw Web Animations fade, a CSS transition
  *
  * Under Reduce Motion nothing moves, scales or springs. On a coarse primary
- * pointer (DR2), or for a change started by a touch drag's release on any
- * pointer (DR3), a change becomes an opacity-only cross-fade of
- * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.easeInOut`; on
+ * pointer, or for a change started by a touch drag's release on any pointer
+ * (DR2), a change becomes an opacity-only cross-fade of
+ * `timing.reducedMotionCrossFadeMs` (200 ms) on `timing.curves.move`; on
  * any other primary pointer it completes at once (DR3). No theme value or
  * call site lengthens the fade (DR4). The animator follows the same policy on
  * its own (animator.ts).
@@ -46,7 +46,10 @@
 
 import {defaultIsCoarsePointer, defaultPrefersReducedMotion} from './animator';
 import {resolveMotion} from './resolveMotion';
-import {registerTimingTable, timing} from './uikit/timing';
+import {
+  reducedMotionCrossFade,
+  registerReducedMotionCrossFade,
+} from './uikit/timing';
 
 /** Reduce Motion on a coarse primary pointer: an opacity-only cross-fade. */
 export const REDUCED_MOTION_FADE_QUERY =
@@ -76,7 +79,7 @@ export interface ReducedMotionFade {
 export function reducedMotionFade(
   element?: Element | null,
   options: {
-    /** The change starts from the release of a touch drag (DR3). */
+    /** The change starts from the release of a touch drag (DR2). */
     touchRelease?: boolean;
   } = {},
 ): ReducedMotionFade | null {
@@ -88,14 +91,14 @@ export function reducedMotionFade(
     return {duration: 0, easing: 'linear'};
   }
   if (element != null) {
-    registerTimingTable();
+    registerReducedMotionCrossFade();
   }
   const curve =
     element != null
-      ? resolveMotion(element, timing.curves.easeInOut)
-      : timing.curves.easeInOut;
+      ? resolveMotion(element, reducedMotionCrossFade.curve)
+      : reducedMotionCrossFade.curve;
   return {
-    duration: timing.reducedMotionCrossFadeMs,
+    duration: reducedMotionCrossFade.durationMs,
     easing: `cubic-bezier(${curve.join(', ')})`,
   };
 }

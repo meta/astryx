@@ -109,8 +109,9 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four frames
-fails: the animation under test was not moving during the block. With
+plateaus within a pixel or two of rest. A judged part shorter than four of the
+screencast's intervals fails: the animation under test was not moving during
+the block. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -118,11 +119,13 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` tolerates what a
-loaded machine does to a screencast and nothing a frozen animation does: a
-median frame interval of at most 20 ms, no stall longer than three screencast
-intervals (two dropped frames), and at least 90% of the window's whole frame
-intervals presenting a new position (one miss is always allowed).
+created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+frames the screencast delivered, whatever its rate (a loaded machine's can
+deliver one frame in five or six), and tolerates nothing a frozen animation
+does: at least one frame in the judged part, no stall longer than three of the
+screencast's intervals (two dropped frames), and at least 90% of the window's
+whole intervals presenting a new position (one miss is always allowed). Pass
+`maxMedianFrameMs` (20 at 60 Hz) only in a proof that claims display rate.
 `verdict.failures` names each miss with its numbers, and `summary` carries the
 raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
@@ -131,7 +134,12 @@ block into a filmstrip.
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame.
+Layout or Paint there; a layout-property animation does one per frame. The
+harness's own animation recorder stands down while the trace runs, since its
+frame loop would make every frame a main-thread one, restyling each running
+animation's target and laying out an anchored one: it reads only the element a
+CSS animation or transition event names, once, when that animation starts, and
+catches up afterwards.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
