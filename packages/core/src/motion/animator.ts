@@ -2016,6 +2016,14 @@ export function createAnimator(
       return;
     }
     for (const landing of [...landings]) {
+      // A waiting call that named its own opacity loses it to this call: it
+      // never reaches that opacity, so it settles interrupted even though its
+      // travel still lands.
+      for (const owner of [landing.owner, ...landing.carried]) {
+        if (namedOpacity.has(owner) && !owner.settled) {
+          settle(owner, false);
+        }
+      }
       if (landing.values.size > 0) {
         continue;
       }
@@ -2035,6 +2043,9 @@ export function createAnimator(
       }
     }
   };
+
+  /** Reduce Motion calls that named their own opacity. */
+  const namedOpacity = new WeakSet<HandleState>();
 
   /** What the Reduce Motion planner reads of this animator. */
   const planView: ReducedMotionView = {
@@ -2069,6 +2080,9 @@ export function createAnimator(
     role?: 'entrance' | 'exit',
   ): ReducedPlan => {
     takeOverLandings(properties, targets.opacity != null);
+    if (targets.opacity != null) {
+      namedOpacity.add(owner);
+    }
     const plan = planReducedMotion(
       planView,
       time,
