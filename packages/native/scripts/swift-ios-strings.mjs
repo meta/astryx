@@ -29,6 +29,10 @@ export const SWIFT_IOS_STRINGS_DIR = path.join(
 export const SWIFT_IOS_STRING_KEYS = [
   '@astryx.avatar.nameWithStatus',
   '@astryx.button.loading',
+  '@astryx.spinner.loading',
+  '@astryx.thumbnail.fallbackName',
+  '@astryx.thumbnail.open',
+  '@astryx.thumbnail.remove',
 ];
 
 // Apple names a localization by its language alone unless one language has

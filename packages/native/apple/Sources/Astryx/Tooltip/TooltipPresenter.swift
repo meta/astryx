@@ -13,6 +13,16 @@ enum TooltipFocus: Equatable, Sendable {
   /// The view is made a tab stop so focus can show the tooltip, as core gives
   /// a static element with a tooltip a tab stop.
   case tabStop
+  /// The view holds controls that take focus; `true` while one of them has
+  /// it. Focus there shows the tooltip, as core's tooltip on a wrapper shows
+  /// on focus within it.
+  case inside(Bool)
+
+  /// Whether a control inside the view has focus.
+  var isInsideFocused: Bool {
+    if case .inside(let focused) = self { return focused }
+    return false
+  }
 }
 
 /// What a direct tap on a touch screen does, as core's `touchTrigger`.
@@ -206,9 +216,9 @@ struct TooltipPresenter: ViewModifier {
         focusIsKeyboard = Self.keyboardFocusHolds(afterHover: inside, holds: focusIsKeyboard)
         update()
       }
-      .onChange(of: isFocused) {
+      .onChange(of: anyFocused) {
         focusIsKeyboard =
-          isFocused && Self.isKeyboardFocus(isHovering: isHovering, sincePress: Date().timeIntervalSince(pressedAt))
+          anyFocused && Self.isKeyboardFocus(isHovering: isHovering, sincePress: Date().timeIntervalSince(pressedAt))
         update()
       }
       .onChange(of: text) {
@@ -268,12 +278,15 @@ struct TooltipPresenter: ViewModifier {
     isTapShown = false
   }
 
+  /// Focus on the view itself, or on a control inside it (`inside`).
+  private var anyFocused: Bool { isFocused || focus.isInsideFocused }
+
   /// Shows the bubble after the delay; hides it after the bridge.
   private func update() {
     pending?.cancel()
-    let keyboardFocused = Self.holdsByFocus(isFocused: isFocused, focusIsKeyboard: focusIsKeyboard)
+    let keyboardFocused = Self.holdsByFocus(isFocused: anyFocused, focusIsKeyboard: focusIsKeyboard)
     let wants = Self.showsBubble(
-      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble, isFocused: isFocused,
+      hasText: text != nil, isHovering: isHovering, isHoveringBubble: isHoveringBubble, isFocused: anyFocused,
       focusIsKeyboard: focusIsKeyboard, focus: focus)
     guard wants != isShown else { return }
     let byFocus = keyboardFocused && focus != .none && !isHovering && !isHoveringBubble
