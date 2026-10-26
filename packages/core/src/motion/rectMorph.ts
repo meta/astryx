@@ -66,6 +66,7 @@ import {
   type ProgressChannel,
 } from './progress';
 import type {SpringDescription} from './spring';
+import {resolveMotion} from './resolveMotion';
 
 /**
  * A box in viewport px.
@@ -494,21 +495,39 @@ export function createRectMorph(
     }
   };
 
-  const playOptions = (play: RectMorphPlayOptions): AnimateOptions => ({
+  // A path with no opacity of its own gives the animator's Reduced Motion
+  // cross-fade nothing to read, and it would start the motion on the source
+  // rect and dip. Such a path says which way it goes, so the cross-fade
+  // lands at rest on a present and fades out in place on a dismissal
+  // (design:reduced-motion); a caller's own `crossfadeAs` still wins.
+  const playOptions = (
+    play: RectMorphPlayOptions,
+    path: MorphPath,
+    direction: 'entrance' | 'exit' = 'entrance',
+  ): AnimateOptions => ({
     ...(play.touchRelease != null ? {touchRelease: play.touchRelease} : null),
-    ...(play.crossfadeAs != null ? {crossfadeAs: play.crossfadeAs} : null),
+    ...(play.crossfadeAs != null
+      ? {crossfadeAs: play.crossfadeAs}
+      : path.opacityAt == null
+        ? {crossfadeAs: direction}
+        : null),
   });
 
+  // The springs are resolved against the element that plays them: a
+  // registered table's leaf is a motion role, and a theme that retunes it
+  // owns its value (spec:AST-094 FR4). A table nothing registered keeps its
+  // own value, so a caller's bare spring is unaffected.
   const curvesFor = (
+    on: Element,
     path: MorphPath,
     spring: SpringDescription,
     play: RectMorphPlayOptions,
     velocity: number,
   ) => {
-    const progress = progressCurve(spring, {velocity});
+    const progress = progressCurve(resolveMotion(on, spring), {velocity});
     const fade =
       play.fadeSpring != null
-        ? progressCurve(play.fadeSpring, {velocity})
+        ? progressCurve(resolveMotion(on, play.fadeSpring), {velocity})
         : progress;
     return morphCurves(path, progress, fade);
   };
@@ -538,8 +557,8 @@ export function createRectMorph(
     element.style.setProperty('transform-origin', '0px 0px');
     animator.set(startValues(start, opacity));
     const handle = animator.play(
-      curvesFor(start, spring, play, velocity),
-      playOptions(play),
+      curvesFor(element, start, spring, play, velocity),
+      playOptions(play, start),
     );
     presenting = handle;
     void handle.finished.then(done => {
@@ -580,8 +599,8 @@ export function createRectMorph(
     // The copy starts as the element shows now, whatever its clone kept.
     closing.set(startValues(back, opacity));
     const handle = closing.play(
-      curvesFor(back, spring, play, velocity),
-      playOptions(play),
+      curvesFor(target, back, spring, play, velocity),
+      playOptions(play, back, 'exit'),
     );
     const current = {
       target,

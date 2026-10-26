@@ -27,6 +27,8 @@ import {
   type MorphRect,
 } from './rectMorph';
 import {timing} from './uikit/timing';
+import {registerSpringsTable, springs} from './uikit/springs';
+import {resolveMotion} from './resolveMotion';
 
 interface Recorded {
   element: Element;
@@ -534,6 +536,52 @@ describe('createRectMorph', () => {
     await vi.advanceTimersByTimeAsync(ms);
   };
 
+  it("plays the theme's spring, not the table's (spec:AST-094 FR4)", () => {
+    // A registered table's leaf is a motion role, so a theme that retunes
+    // it owns the value the morph plays.
+    const {element, morph} = setup();
+    const scope = document.createElement('div');
+    scope.setAttribute('data-astryx-theme', 'brisk');
+    document.body.appendChild(scope);
+    scope.appendChild(element);
+    registerSpringsTable();
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (node: Element) =>
+        ({
+          getPropertyValue: (name: string) =>
+            node === scope && name === '--motion-springs-menu-open'
+              ? '0.9s 0.25'
+              : '',
+        }) as CSSStyleDeclaration,
+    );
+
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, springs.menuOpen);
+    const [presenting] = live(element, 'scale');
+    const themedMs = Number(presenting.options.duration);
+    // Read while the theme is still mocked: this is the value the role
+    // resolves to, and what the morph must have played.
+    const themedSpring = resolveMotion(element, springs.menuOpen);
+    expect(themedSpring).not.toBe(springs.menuOpen);
+    vi.restoreAllMocks();
+
+    const plain = setup();
+    plain.morph.present(
+      lerpPath(SQUARE, BOX, {opacity: [0, 1]}),
+      springs.menuOpen,
+    );
+    const [plainPresenting] = live(plain.element, 'scale');
+    const plainMs = Number(plainPresenting.options.duration);
+    // The theme's spring settles later than the table's, by exactly the
+    // difference between the two curves.
+    expect(themedMs).not.toBeCloseTo(plainMs, 0);
+    expect(themedMs - plainMs).toBeCloseTo(
+      progressCurve(themedSpring).duration * 1000 -
+        progressCurve(springs.menuOpen).duration * 1000,
+      6,
+    );
+  });
+
   it('presents the element from its source to rest on the spring', () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
@@ -780,6 +828,18 @@ describe('createRectMorph', () => {
         clock = start + t;
         expectRect(morph.presentedRect()!, BOX, 0.01);
       }
+    });
+
+    it('lands a path with no opacity at rest, instead of starting on its source rect', () => {
+      // With no opacity of its own the path gives the cross-fade nothing to
+      // read, so the morph says which way it goes: a present lands at rest
+      // (design:reduced-motion), it does not dip to the source and grow.
+      const {element, morph} = setup({reducedMotion: true, coarse: true});
+      const path = lerpPath(SQUARE, BOX);
+      morph.present(path, SPRING);
+      expectRect(morph.presentedRect()!, BOX, 0.01);
+      expect(live(element, 'scale').length).toBe(0);
+      expect(live(element, 'translate').length).toBe(0);
     });
 
     it('on any other pointer, it completes at once', () => {
