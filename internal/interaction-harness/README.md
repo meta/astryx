@@ -25,7 +25,9 @@ pnpm storyboards                          # only the tests tagged @storyboard
 
 On Linux distributions whose system libraries are older than Playwright's
 WebKit build needs, run the WebKit project inside the official Playwright
-image (podman or docker; the repository is mounted at the same path):
+image (podman or docker; the repository is mounted at the same path, and
+under a rootful docker daemon the container runs as your user so its
+`test-results/` stay yours):
 
 ```sh
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
