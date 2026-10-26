@@ -344,6 +344,55 @@ describe('usePressTracker', () => {
     remove.mockRestore();
   });
 
+  it('ends a press whose control, the only enabled one, is disabled under the finger: nothing reports from the commit or at the lift', () => {
+    const events: ControlEvent[] = [];
+    const onEvent = (event: ControlEvent) => events.push(event);
+    const {getByTestId, rerender} = render(<Button onEvent={onEvent} />);
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 11, x: 1, y: 1}, 0);
+    expect(events).toEqual(['touchDown']);
+    act(() => {
+      rerender(<Button onEvent={onEvent} isDisabled />);
+    });
+    // The commit that disables it ends the press and calls back nothing.
+    expect(events).toEqual(['touchDown']);
+    touch('touchend', button, {id: 11, x: 1, y: 1}, 50, true);
+    expect(events).toEqual(['touchDown']);
+  });
+
+  it('ends a press whose control is disabled under the finger while another control keeps the host listening: the lift reports nothing', () => {
+    const events: ControlEvent[] = [];
+    const onEvent = (event: ControlEvent) => events.push(event);
+    function Other() {
+      const ref = useRef<HTMLButtonElement>(null);
+      usePressTracker(ref);
+      return (
+        <button data-testid="other" ref={ref} type="button">
+          Other
+        </button>
+      );
+    }
+    function Pair({isDisabled}: {isDisabled: boolean}) {
+      return (
+        <>
+          <Button onEvent={onEvent} isDisabled={isDisabled} />
+          <Other />
+        </>
+      );
+    }
+    const {getByTestId, rerender} = render(<Pair isDisabled={false} />);
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 12, x: 1, y: 1}, 0);
+    expect(events).toEqual(['touchDown']);
+    act(() => {
+      rerender(<Pair isDisabled />);
+    });
+    expect(events).toEqual(['touchDown']);
+    // A disabled control tracks no touch: the lift is no touchUpInside.
+    touch('touchend', button, {id: 12, x: 1, y: 1}, 50, true);
+    expect(events).toEqual(['touchDown']);
+  });
+
   it('reports UIControl events for a tap', () => {
     const events: ControlEvent[] = [];
     const {getByTestId} = render(
