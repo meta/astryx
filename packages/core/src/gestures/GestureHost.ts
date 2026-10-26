@@ -116,6 +116,12 @@ export interface GestureHostOptions {
   inputMode?: 'auto' | 'pointer-events';
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: GestureArenaOptions['onTransition'];
+  /**
+   * Whether the primary pointer is coarse (a phone, a tablet). Where it is
+   * fine, the host registers no listener at all (`spec:AST-094` FR19, FR24).
+   * @default `(pointer: coarse)` on the document's window
+   */
+  isPrimaryPointerCoarse?: () => boolean;
 }
 
 export interface AttachOptions {
@@ -260,6 +266,7 @@ export class GestureHost {
   /** The last position fed per contact, so one channel's echo is dropped. */
   /** The elements each held contact turned selection off on. */
   private readonly heldSelectionBy = new Map<number, HTMLElement[]>();
+  private readonly isPrimaryPointerCoarse: () => boolean;
   private readonly lastFed = new Map<number, TouchSample>();
   private readonly hovered = new Map<number, Set<HoverGestureRecognizer>>();
   /** When a finger was last down or lifted, and where it landed. */
@@ -292,6 +299,12 @@ export class GestureHost {
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
     });
+    const view = doc.defaultView;
+    this.isPrimaryPointerCoarse =
+      options.isPrimaryPointerCoarse ??
+      (() =>
+        typeof view?.matchMedia === 'function' &&
+        view.matchMedia('(pointer: coarse)').matches);
   }
 
   // --- Attachment ------------------------------------------------------------
@@ -310,9 +323,14 @@ export class GestureHost {
     } else {
       registration.recognizers.push(recognizer);
     }
+    recognizer.onEnabledChange = () => {
+      this.refresh(element, registration);
+      this.syncListeners();
+    };
     this.refresh(element, registration);
-    this.install();
+    this.syncListeners();
     return () => {
+      recognizer.onEnabledChange = null;
       const index = registration.recognizers.indexOf(recognizer);
       if (index >= 0) {
         registration.recognizers.splice(index, 1);
@@ -338,7 +356,7 @@ export class GestureHost {
   attachConsumer(element: Element, consumer: TouchConsumer): () => void {
     const registration = this.registrationFor(element);
     registration.consumer = consumer;
-    this.install();
+    this.syncListeners();
     return () => {
       if (registration.consumer === consumer) {
         registration.consumer = null;
@@ -353,10 +371,10 @@ export class GestureHost {
    */
   addDelegatedConsumer(type: DelegatedConsumerType): () => void {
     this.delegated.add(type);
-    this.install();
+    this.syncListeners();
     return () => {
       this.delegated.delete(type);
-      this.uninstallIfIdle();
+      this.syncListeners();
     };
   }
 
@@ -427,7 +445,9 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    const needsListener = registration.recognizers.some(claimsWhileMoving);
+    const needsListener =
+      this.isPrimaryPointerCoarse() &&
+      registration.recognizers.some(r => r.isEnabled && claimsWhileMoving(r));
     if (needsListener && registration.touchMoveListener == null) {
       const listener: EventListener = event =>
         this.cancelIfClaimed(event as TouchEvent);
@@ -478,13 +498,40 @@ export class GestureHost {
       element.removeEventListener('touchmove', registration.touchMoveListener);
     }
     this.registry.delete(element);
-    this.uninstallIfIdle();
+    this.syncListeners();
   }
 
-  private uninstallIfIdle(): void {
-    if (this.registry.size === 0 && this.delegated.size === 0) {
+  /**
+   * Listen only while something could take a touch: the primary pointer is
+   * coarse and an enabled recognizer, a consumer or a delegated consumer is
+   * attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
+   * registered, so a desktop page pays nothing.
+   */
+  private syncListeners(): void {
+    if (this.shouldListen()) {
+      this.install();
+    } else if (this.isInstalled) {
       this.uninstall();
     }
+  }
+
+  private shouldListen(): boolean {
+    if (!this.isPrimaryPointerCoarse()) {
+      return false;
+    }
+    if (this.delegated.size > 0) {
+      return true;
+    }
+    for (const registration of this.registry.values()) {
+      if (
+        registration.consumer != null ||
+        registration.recognizers.some(r => r.isEnabled) ||
+        registration.hovers.some(r => r.isEnabled)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // --- Listeners -------------------------------------------------------------
