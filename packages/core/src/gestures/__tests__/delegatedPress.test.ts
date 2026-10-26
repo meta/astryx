@@ -16,6 +16,7 @@ import {installPressAttribute} from '../delegatedPress';
 import {PRESS_PROFILES} from '../PressTracker';
 import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {coarsePrimaryPointer} from './harness';
 
 interface Contact {
   id: number;
@@ -61,14 +62,18 @@ const ATTRIBUTES = {
 } as const;
 
 let release: () => void = () => {};
+let restorePointer: () => void = () => {};
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // A phone: the document's host listens only where the pointer is coarse.
+  restorePointer = coarsePrimaryPointer();
   release = installPressAttribute(document, ATTRIBUTES);
 });
 
 afterEach(() => {
   release();
+  restorePointer();
   vi.useRealTimers();
   document.body.innerHTML = '';
 });
