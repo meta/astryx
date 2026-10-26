@@ -162,7 +162,7 @@ const TIMER_GATE = `(() => {
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
   const realCancelFrame = window.cancelAnimationFrame.bind(window);
-  const gate = {frozen: false, queue: [], frame: realFrame};
+  const gate = {frozen: false, queue: [], frame: realFrame, timeout: realTimeout};
   window.__harnessTimerGate = gate;
   const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
   window.setTimeout = (fn, ms, ...args) => {

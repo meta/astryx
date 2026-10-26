@@ -81,6 +81,18 @@ export async function blockMainThread(
   return during.evaluate(
     (element, {duration, minProgress, wait}) =>
       new Promise<BusyWindow>((resolve, reject) => {
+        // The harness's own waits run on the real timers: a frozen timer gate
+        // (story.ts) holds only the page's.
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {
+              frame?: typeof requestAnimationFrame;
+              timeout?: typeof setTimeout;
+            };
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        const later = gate?.timeout ?? window.setTimeout.bind(window);
         const deadline = performance.now() + wait;
         const tick = () => {
           const running = element
@@ -95,7 +107,7 @@ export async function blockMainThread(
             // The same loop as above, from a task queued in the frame that saw
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
-            setTimeout(() => {
+            later(() => {
               const from = performance.timeOrigin + performance.now();
               const end = performance.now() + duration;
               while (performance.now() < end) {
@@ -106,10 +118,10 @@ export async function blockMainThread(
           } else if (performance.now() > deadline) {
             reject(new Error('blockMainThread: no animation started'));
           } else {
-            requestAnimationFrame(tick);
+            frame(tick);
           }
         };
-        requestAnimationFrame(tick);
+        frame(tick);
       }),
     {duration: ms, minProgress, wait: timeout},
   );
@@ -189,7 +201,8 @@ export interface BusyProof extends FrameStats {
   /**
    * `moved` (and `recorderSkipped`) over the frames judged: the frames the
    * screencast delivered in the judged part, or with a compositor record the
-   * compositor's frames there; `expectedFrames` when nothing was delivered.
+   * compositor's frames from the first to the last moved frame;
+   * `expectedFrames` when nothing moved or was delivered.
    */
   readonly movedFraction: number;
   /** The judgment against the limits (see `busyWindowProof`). */
@@ -216,7 +229,8 @@ export interface BusyProof extends FrameStats {
  *   (a short window may still miss one): the frames the screencast delivered
  *   in the judged part, so an irregular cast is judged on what it delivered
  *   and a frame it did not deliver is a gap for the stall check, not a miss;
- *   with a compositor record, the compositor's frames there;
+ *   with a compositor record, the compositor's frames from the first to the
+ *   last moved frame (the gaps before and after are the stall check's);
  * - the judged part spans at least `minJudgedFrames` frames. Fewer means the
  *   animation under test was not moving during the block (it settled before
  *   the block, or the block caught another animation), so there is nothing to
@@ -436,9 +450,11 @@ export function busyWindowProof(
   );
   const moved = changes.length;
   // The frames judged for motion: the screencast's own frames in the judged
-  // part (each `changes` entry is one of them), or the compositor's frames
-  // when recorded. A part that delivered nothing is judged against its span,
-  // so a frozen animation misses here too.
+  // part (each `changes` entry is one of them), or, with a compositor record,
+  // the compositor's frames from the first to the last moved frame (the gaps
+  // before and after them are the stall check's). A part that moved nothing,
+  // or delivered nothing, is judged against its span, so a frozen animation
+  // misses here too.
   const deliveredFrames = tracked.filter(
     f =>
       f.box != null &&
@@ -446,9 +462,15 @@ export function busyWindowProof(
       f.t <= judged.to,
   ).length;
   const judgedFrames =
-    compositorFrameMs != null || deliveredFrames === 0
-      ? expectedFrames
-      : deliveredFrames;
+    compositorFrameMs != null
+      ? changes.length > 0
+        ? Math.round(
+            (changes[changes.length - 1] - changes[0]) / compositorFrameMs,
+          ) + 1
+        : expectedFrames
+      : deliveredFrames === 0
+        ? expectedFrames
+        : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
   // The cast's position step, and the motion per interval it has to resolve.
   const positions = tracked.flatMap(f => (f.box == null ? [] : [f.box[axis]]));

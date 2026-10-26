@@ -360,6 +360,16 @@ const skipFrames = (): TrackedFrame[] =>
   );
 
 describe('busyWindowProof with the compositor record', () => {
+  it('with a compositor record, judges a sparse cast from its first to its last moved frame', () => {
+    // One screencast frame in six, as on a loaded machine, with the compositor
+    // presenting every frame: the frames before the first and after the last
+    // moved one are the stall check's, not misses.
+    const sparse = moving().filter((_, i) => i % 6 === 0);
+    expect(
+      busyWindowProof(sparse, BLOCK, {presented: drawn()}).verdict.failures,
+    ).toEqual([]);
+  });
+
   it('reads frames the screencast skipped while the compositor presented them as presented: a recorded run that fails without the record', () => {
     const frames = skipFrames();
     const alone = busyWindowProof(frames, skip.block, {settledWithin: 1});

@@ -175,7 +175,8 @@ a stall as before. A gap that opens or closes the judged part, or holds a
 delivered frame that did not move, is judged from the screencast, so a
 frozen element fails whatever else the compositor draws (a rAF animation's
 block presents no compositor frame at all). With the record, the 90% counts the
-compositor's frames in the judged part. WebKit has no such trace:
+compositor's frames from the first to the last moved frame; the gaps before and
+after are the stall check's. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
@@ -195,7 +196,8 @@ evidence. A component that finishes an animation from a timer (a transitionend
 backstop, a cleanup render) would do so behind a held storyboard's back:
 `installTimerGate` before the animation starts and `freezeTimers` while
 photographing. The page can still cancel a held callback, a held frame callback
-gets the time it actually runs, and the harness's own frame waits are not held.
+gets the time it actually runs, and the harness's own waits (its frame waits,
+`blockMainThread` with `during`, `sampleRects`) are not held.
 An animation that repeats forever does not set a storyboard's default length;
 with nothing else to film, pass `times`. A touch filmstrip keeps the scripted
 event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
