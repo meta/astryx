@@ -712,6 +712,49 @@ describe('ComplexSelector trigger semantics', () => {
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
   });
 
+  it('names the built-in trigger with the field label when the caller gives no name', () => {
+    render(
+      <ComplexSelector label="Destination" value={[]}>
+        {() => <button type="button">Apply</button>}
+      </ComplexSelector>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Destination'});
+    const labelId = trigger.getAttribute('aria-labelledby');
+    expect(labelId).toBeTruthy();
+    expect(document.getElementById(labelId!)).toHaveTextContent('Destination');
+    expect(trigger).not.toHaveAttribute('aria-label');
+  });
+
+  it("lets a caller's aria-label name the built-in trigger instead of the field label (family:input-fields FR10)", () => {
+    render(
+      <ComplexSelector
+        label="Destination"
+        aria-label="Trip destination"
+        value={[]}>
+        {() => <button type="button">Apply</button>}
+      </ComplexSelector>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Trip destination'});
+    expect(trigger).toHaveAttribute('aria-label', 'Trip destination');
+    expect(trigger).not.toHaveAttribute('aria-labelledby');
+  });
+
+  it("lets a caller's aria-labelledby replace the field label on the built-in trigger (family:input-fields FR10)", () => {
+    render(
+      <>
+        <span id="trip-heading">Where to next</span>
+        <ComplexSelector
+          label="Destination"
+          aria-labelledby="trip-heading"
+          value={[]}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Where to next'});
+    expect(trigger).toHaveAttribute('aria-labelledby', 'trip-heading');
+  });
+
   it('spreads the combobox role, required, and disabled state onto a caller control', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
