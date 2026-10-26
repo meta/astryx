@@ -27,14 +27,6 @@ import {parseTransform, type TimedValue, type Transform2D} from './math';
 export const END_INSET_MS = 0.5;
 
 /**
- * Installs `window.__harnessCurveEnd(animation)`: the local time (ms, delay
- * included) where the animation's effect stops changing. An animation whose
- * keyframes end in a run of identical values (an end value held so that a
- * later interruption can read it) ends where that run starts, when it plays
- * forward under a linear or cubic-bézier effect easing (the time the run
- * starts is solved from the curve); any other ends at its end time.
- */
-/**
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
@@ -172,6 +164,14 @@ async function installRecorder(page: Page): Promise<void> {
   await page.evaluate(animationRecorder);
 }
 
+/**
+ * Installs `window.__harnessCurveEnd(animation)`: the local time (ms, delay
+ * included) where the animation's effect stops changing. An animation whose
+ * keyframes end in a run of identical values (an end value held so that a
+ * later interruption can read it) ends where that run starts, when it plays
+ * forward under a linear or cubic-bézier effect easing (the time the run
+ * starts is solved from the curve); any other ends at its end time.
+ */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
   await page.evaluate(() => {
@@ -927,12 +927,17 @@ export async function waitForAnimation(
         // Running: since the watch, or (without one) any on the element. A
         // pending one (no start time yet) counts too: the action's animation
         // may still be pending at the first look, and an earlier one that
-        // finished must not answer for it.
+        // finished must not answer for it. Only document-timeline animations
+        // count, as for holdAnimations: a scroll- or view-timeline one moves
+        // only when something scrolls and never progresses on its own.
         const live = (
           watchedFrom == null
             ? element.getAnimations({subtree: true})
             : recorded.filter(e => e.finishedAt == null).map(e => e.animation)
-        ).filter(a => a.playState === 'running');
+        ).filter(
+          a =>
+            a.playState === 'running' && a.timeline instanceof DocumentTimeline,
+        );
         const running = live.filter(a => a.startTime != null);
         // Progress along the curve, on the timeline: a delay presents nothing
         // (going backward, the end delay plays first), a run going backward
