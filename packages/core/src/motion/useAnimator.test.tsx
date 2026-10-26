@@ -72,4 +72,31 @@ describe('useAnimator', () => {
     unmount();
     expect(box.current?.element).toBeNull();
   });
+
+  it('ends its callers waits on unmount and keeps no timer for them', async () => {
+    vi.useFakeTimers();
+    try {
+      const box: {current: Animator | null} = {current: null};
+      function Probe() {
+        const {ref, animator} = useAnimator();
+        box.current = animator;
+        return <div ref={ref} />;
+      }
+      const {unmount} = render(<Probe />);
+      const animator = box.current!;
+      const handle = animator.animate({x: 100}, {spring: springs.sheetPresent});
+      let rested = false;
+      void animator.atRest().then(() => {
+        rested = true;
+      });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      unmount();
+      // Without advancing time: the curve has not ended.
+      await expect(handle.finished).resolves.toBe(false);
+      expect(rested).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

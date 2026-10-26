@@ -304,15 +304,42 @@ describe('ContextMenu', () => {
     );
   });
 
-  it('keeps only the top content padding in a menu BottomSheet', () => {
-    const source = readFileSync(
-      'packages/core/src/DropdownMenu/MenuBottomSheet.tsx',
-      'utf8',
-    );
-
-    expect(source).toContain('paddingBlockStart={4}');
-    expect(source).toContain('paddingBlockEnd={0}');
-  });
+  for (const mode of ['items', 'compound'] as const) {
+    it(`insets a ${mode} menu sheet itself and publishes the inset to its rows`, async () => {
+      render(
+        mode === 'items' ? (
+          <ContextMenu presentation="bottom-sheet" items={[{label: 'Edit'}]}>
+            <div>Right-click me</div>
+          </ContextMenu>
+        ) : (
+          <ContextMenu
+            presentation="bottom-sheet"
+            menuContent={<DropdownMenuItem label="Edit" />}>
+            <div>Right-click me</div>
+          </ContextMenu>
+        ),
+      );
+      fireEvent.contextMenu(screen.getByText('Right-click me'));
+      const content = await waitFor(() => {
+        const element = document.querySelector<HTMLElement>(
+          'dialog .astryx-context-menu',
+        );
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      // No Section wrapper: the menu element keeps the sheet's 16px top and
+      // 4px side inset plus its own 4px, and publishes the padding it applies.
+      expect(content.parentElement?.closest('.astryx-section')).toBeNull();
+      expect(content).toHaveStyle({
+        paddingTop: 'calc(var(--spacing-4) + var(--spacing-1))',
+        paddingInline: 'calc(var(--spacing-1) + var(--spacing-1))',
+        '--container-padding-block-start':
+          'calc(var(--spacing-4) + var(--spacing-1))',
+        '--container-padding-inline-start':
+          'calc(var(--spacing-1) + var(--spacing-1))',
+      });
+    });
+  }
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
     vi.stubGlobal(

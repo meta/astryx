@@ -47,9 +47,7 @@ describe('motion roles in a theme', () => {
   it('names the role in every refusal', () => {
     expect(() =>
       expandMotionRoles({springs: {sheet: {duration: 0.5, bounce: 0}}}, 'm'),
-    ).toThrow(
-      /m\.springs\["sheet"\]: a motion role is named by its table path/,
-    );
+    ).toThrow(/m\.springs\["sheet"\]: a motion role is named for its use/);
     expect(() =>
       expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
     ).toThrow(/"springs\.sheetPresent" is a spring/);
