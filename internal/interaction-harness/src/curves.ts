@@ -238,6 +238,12 @@ async function installCurveEnd(page: Page): Promise<void> {
       ) {
         return delay + active;
       }
+      // Keyframe offsets are progress, not time: under a non-linear effect
+      // easing the held end's offset is not its time, so the curve is read
+      // to the full end instead.
+      if (String(effect.getTiming().easing ?? 'linear') !== 'linear') {
+        return delay + active;
+      }
       const frames = effect.getKeyframes();
       let first = frames.length - 1;
       while (first > 0 && values(frames[first - 1]) === values(frames[first])) {
@@ -636,8 +642,10 @@ export async function sampleCurve(
           );
         }
         if (style.rotate !== 'none') {
-          // "45deg", "z 45deg" or "0 0 1 45deg": the angle is the last token.
-          const angle = style.rotate.split(' ').at(-1) ?? '0deg';
+          // "45deg", "x 45deg" (or y, z) or "1 0 0 45deg": the angle is the
+          // last token, the axis what comes before it (z when none).
+          const tokens = style.rotate.split(' ');
+          const angle = tokens.at(-1) ?? '0deg';
           const turns: Record<string, number> = {
             deg: 1,
             rad: 180 / Math.PI,
@@ -645,7 +653,28 @@ export async function sampleCurve(
             turn: 360,
           };
           const unit = /[a-z]+$/.exec(angle)?.[0] ?? 'deg';
-          matrix.rotateSelf(parseFloat(angle) * (turns[unit] ?? 1));
+          const named: Record<string, [number, number, number]> = {
+            x: [1, 0, 0],
+            y: [0, 1, 0],
+            z: [0, 0, 1],
+          };
+          const axis: [number, number, number] =
+            tokens.length === 1
+              ? [0, 0, 1]
+              : tokens.length === 2 && named[tokens[0]] != null
+                ? named[tokens[0]]
+                : tokens.length === 4
+                  ? [Number(tokens[0]), Number(tokens[1]), Number(tokens[2])]
+                  : [Number.NaN, Number.NaN, Number.NaN];
+          if (!axis.every(Number.isFinite)) {
+            throw new Error(
+              `sampleCurve: cannot resolve rotate ${JSON.stringify(style.rotate)}`,
+            );
+          }
+          matrix.rotateAxisAngleSelf(
+            ...axis,
+            parseFloat(angle) * (turns[unit] ?? 1),
+          );
         }
         if (style.scale !== 'none') {
           const [sx = 1, sy = sx] = style.scale.split(' ').map(Number);
