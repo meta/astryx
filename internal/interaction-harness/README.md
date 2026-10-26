@@ -84,7 +84,16 @@ identical values (an end value held so a later interruption can read it)
 ends where that run starts: `curveEndMs`, `waitForAnimation`'s interval and
 the default storyboard times stop there, and `waitForRest`, which judges the
 presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
-than `playState`, does not wait the hold out.
+than `playState`, does not wait the hold out. That holds for an animation that
+plays forward under a linear or cubic-bézier effect easing (the time the run
+starts is solved from the curve); under any other effect easing (steps,
+`linear()` stops, an overshoot) or another direction the curve is read to its
+full end, and `waitForRest` waits the hold out. An animation reversed before it starts (`reverse()`
+on a new animation, a negative playback rate from the start) is reported by
+`waitForAnimation` from when it started, but `holdAnimations` refuses it:
+seeking and sampling run a curve forward. The recorder keeps one entry per
+`Animation` object, so one reversed or replayed mid-run is reported as its
+first run; take a fresh animation for each run a proof reads.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the
@@ -123,8 +132,9 @@ created in the frame the page looks is not on the compositor yet. The `verdict` 
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
-screencast's intervals (two dropped frames), and at least 90% of the window's
-whole intervals presenting a new position (one miss is always allowed). Pass
+screencast's intervals (two dropped frames), and at least 90% of the frames it
+delivered in the judged part presenting a new position (one miss is always
+allowed; a frame it did not deliver is a gap, for the stall check). Pass
 `maxMedianFrameMs` (20 at 60 Hz) only in a proof that claims display rate.
 `verdict.failures` names each miss with its numbers, and `summary` carries the
 raw numbers for the report. Frames are judged in presentation order: a loaded
@@ -155,7 +165,8 @@ compositor's own frames: the frames it presented there count as presented
 a stall as before. A gap that opens or closes the judged part, or holds a
 delivered frame that did not move, is judged from the screencast, so a
 frozen element fails whatever else the compositor draws (a rAF animation's
-block presents no compositor frame at all). WebKit has no such trace:
+block presents no compositor frame at all). With the record, the 90% counts the
+compositor's frames in the judged part. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
@@ -171,7 +182,11 @@ down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
 animation the action starts a frame or two later is waited for) and reads no
 style until the trace ends (in the anchored fixture's steady middle,
-24 Layouts before, 0 now).
+24 Layouts before, 0 now). The trace's `longTasks` are the page's own: a task
+that ran a DevTools command (a harness read such as `waitForAnimation`
+describing keyframes, or `blockMainThread` without `during`) is in
+`devtoolsTasks` instead, unless page script ran inside it (a listener or timer
+the evaluate set off).
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
