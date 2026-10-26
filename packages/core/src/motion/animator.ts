@@ -1303,14 +1303,18 @@ export function createAnimator(
       channels.add(CHANNEL_OF[property]);
     }
     if (at != null) {
-      // An explicit clock is the caller's, except the clock of a call from
-      // rest on these channels still waiting for the browser's start (a drop
-      // and the reorder that rebases it in the same task): the new call joins
-      // that call, and the browser's start moves both.
+      // An explicit clock is the caller's, except a clock no later than a
+      // call from rest on these channels still waiting for the browser's
+      // start (an event timestamp, such as a drop's, for the reorder that
+      // rebases it): the new call joins that call, and the browser's start
+      // moves both. A later clock is a later call, often a frame or more
+      // later while the browser has not started the first: it keeps its own
+      // clock, since joining would sample its curve from the earlier call's
+      // time and hold its first value for the gap.
       for (const channel of channels) {
         for (const property of CHANNELS[channel]) {
           const group = segments.get(property)?.group;
-          if (group != null && !group.resolved) {
+          if (group != null && !group.resolved && at <= group.provisional) {
             return group;
           }
         }

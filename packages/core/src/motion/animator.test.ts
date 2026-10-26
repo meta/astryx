@@ -743,6 +743,19 @@ describe('review fixes', () => {
     );
   });
 
+  it('a later {at} than a call from rest still waiting keeps its own clock, with no hold', async () => {
+    const {animator} = setup();
+    animator.animate({opacity: 0}, {spring: springs.settle});
+    // A frame later the browser has still not started it (a busy compositor),
+    // and a tap's call names its own, later clock.
+    clock = 1011;
+    animator.animate({opacity: 1}, {spring: springs.settle}, {at: 1011});
+    const fade = recorded.filter(a => !a.cancelled).at(-1);
+    expect(fade?.startTime).toBe(1011);
+    // The curve moves from its first keyframe on.
+    expect(fade?.keyframes[1].opacity).not.toBe(fade?.keyframes[0].opacity);
+  });
+
   it('a call adopted by a later same-task call starts at the commit, after the work between them', async () => {
     const {animator} = setup();
     const first = animator.animate({x: 100}, {spring: springs.settle});
