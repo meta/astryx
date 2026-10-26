@@ -44,12 +44,12 @@ trackpad, or keyboard the change is immediate.
 
 ## Anatomy and hierarchy
 
-| Role              | Purpose                                      | Required relationship                                 |
-| ----------------- | -------------------------------------------- | ----------------------------------------------------- |
-| origin state      | What the person sees before the change       | Leaves without moving                                 |
-| destination state | What the person sees after the change        | Appears in its final place, size, and order           |
-| cross-fade        | Connects the two states on a touch screen    | Changes opacity only, 200 ms or less                  |
-| direct movement   | Content the person moves with their own hand | Follows the pointer or finger; it is not a transition |
+| Role              | Purpose                                      | Required relationship                                                                    |
+| ----------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| origin state      | What the person sees before the change       | Leaves without moving                                                                    |
+| destination state | What the person sees after the change        | Appears in its final place, size, and order                                              |
+| cross-fade        | Connects the two states on a touch screen    | Changes opacity only, 200 ms or less                                                     |
+| direct movement   | Content the person moves with their own hand | Follows the pointer or finger, and coasts on after a throw (DR2); it is not a transition |
 
 ## State representation
 
@@ -65,7 +65,13 @@ trackpad, or keyboard the change is immediate.
   primary pointer is coarse (`pointer: coarse`), or when the release of a touch
   drag starts the transition, each DR1 transition MUST change opacity only and MUST finish in 200 ms or less. An entering element
   appears in its final place and fades in; a leaving element fades out where it
-  is.
+  is. Momentum that continues a throw after release, a decay coast and its
+  settle at an edge, is direct movement and does not cross-fade, as scrolling
+  keeps decelerating under iOS Reduce Motion. A transition a component starts on
+  release, such as snapping to a detent, dismissing, or paging to a target,
+  still cross-fades. Native scrolling is the browser's and is untouched; a
+  coast Astryx animates itself after a throw behaves like native momentum
+  under Reduce Motion.
 - **DR3 — Fine-pointer presentations change at once.** Under reduced motion,
   every other DR1 transition, when the primary pointer is not coarse, MUST complete
   immediately, with no animated property.
@@ -75,7 +81,8 @@ trackpad, or keyboard the change is immediate.
   DR1–DR3.
 
 Content that moves with the person's own pointer or finger during a drag
-follows it as direct manipulation and is not a DR1 transition. A transition a
+follows it as direct manipulation and is not a DR1 transition, and neither is
+the momentum that continues a throw (DR2). A transition a
 component starts when a touch drag is released, such as a swiped row sliding
 out or returning (`spec:AST-057` FR5), cross-fades as DR2 says, because a
 finger started it. Any other transition, such as one sheet handing off to
@@ -110,11 +117,12 @@ No normative assets are included.
 
 ### Verification
 
-| Contract | Verification                                                          | Representative states                                                                              | Failure signal                                                                                                              |
-| -------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| DR1, DR2 | Real-browser computed animations under reduced motion, coarse pointer | Layer entrance and exit (Tooltip, Popover, menu); Dialog; modal BottomSheet; a presentation switch | An animated transform, size, or position; a spring; a property other than opacity; over 200 ms; a change with no cross-fade |
-| DR1, DR3 | Real-browser computed animations under reduced motion, fine pointer   | The same components                                                                                | Any animated property, or a frame where the change is partly applied                                                        |
-| DR4      | Component prop and theme review plus the browser checks above         | A component with a motion prop or theme motion value set                                           | A prop or theme value that restores travel or a longer animation under reduced motion                                       |
+| Contract     | Verification                                                              | Representative states                                                                                         | Failure signal                                                                                                              |
+| ------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| DR1, DR2     | Real-browser computed animations under reduced motion, coarse pointer     | Layer entrance and exit (Tooltip, Popover, menu); Dialog; modal BottomSheet; a presentation switch            | An animated transform, size, or position; a spring; a property other than opacity; over 200 ms; a change with no cross-fade |
+| DR2 momentum | Real-browser computed animations under reduced motion after a touch throw | A flick that coasts and settles at an edge; a release that snaps to a detent, dismisses, or pages to a target | A coast replaced by a cross-fade or stopped at release; a snap, dismissal, or page that travels instead of cross-fading     |
+| DR1, DR3     | Real-browser computed animations under reduced motion, fine pointer       | The same components                                                                                           | Any animated property, or a frame where the change is partly applied                                                        |
+| DR4          | Component prop and theme review plus the browser checks above             | A component with a motion prop or theme motion value set                                                      | A prop or theme value that restores travel or a longer animation under reduced motion                                       |
 
 ## Decision log
 
@@ -131,6 +139,19 @@ with no component able to keep its motion, means the preference is honored
 everywhere the same way.
 
 Rejected: a per-component setting that keeps full motion under reduced motion.
+
+### DEC-2 — Momentum after a throw continues, as on iOS
+
+**Reference:** `design:reduced-motion/DEC-2`
+**Decider:** `cixzhang`, `2026-10-24`
+
+Under iOS Reduce Motion, a flicked scroll view keeps coasting and settles at
+its edge; only the transitions an app starts change to cross-fades. Matching
+that keeps a throw feeling like the person's own movement and keeps content
+from stopping dead at release, while snaps, dismissals, and paging, which a
+component starts, still cross-fade under DR2.
+
+Rejected: cross-fading or stopping momentum at release.
 
 ## Open questions
 
