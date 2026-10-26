@@ -10,7 +10,7 @@
 import {describe, expect, it} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
-import {createHarness, scrollProbe} from './harness';
+import {createHarness} from './harness';
 
 describe('PanGestureRecognizer', () => {
   it('begins past the hysteresis and leaves the threshold out of the translation', () => {
