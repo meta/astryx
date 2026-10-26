@@ -42,6 +42,8 @@ interface Recorded {
   cancelled: boolean;
   /** A sampler holding it (the interaction harness pauses to seek). */
   paused: boolean;
+  /** Frames a resumed (play()) animation still waits for its start. */
+  startDelayFrames: number;
   /** Finished from outside (a sampler's `finish()`), keeping its start. */
   finished: boolean;
   readonly playState: 'idle' | 'paused' | 'running' | 'finished';
@@ -120,11 +122,16 @@ beforeEach(() => {
       },
       ready,
       commit(at) {
-        if (!this.cancelled && start == null) {
+        // A paused animation's pending pause completes without a start; one
+        // resumed with play() gets its start a frame later.
+        if (this.startDelayFrames > 0) {
+          this.startDelayFrames -= 1;
+        } else if (!this.cancelled && start == null && !this.paused) {
           start = at;
         }
         resolveReady(this);
       },
+      startDelayFrames: 0,
       finish() {
         this.finished = true;
       },
@@ -884,6 +891,15 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('contents');
   });
 
+  it("keeps the stylesheet's will-change reasons while it promotes, and hands them back", async () => {
+    const {animator, element} = setup();
+    stylesheet = {'will-change': 'transform, opacity'};
+    animator.animate({y: 40, opacity: 0.5}, {spring: springs.quickChange});
+    expect(element.style.willChange).toBe('transform, translate, opacity');
+    await advance(5000 + PROMOTION_LINGER_MS);
+    expect(element.style.willChange).toBe('');
+  });
+
   it('promotes during direct manipulation, until the writes stop', async () => {
     const {animator, element} = setup();
     animator.set({y: 10});
@@ -1497,6 +1513,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('x')).toBe(0);
   });
 
+  it('a spring back a touch release starts cross-fades on a fine pointer too (DR2)', async () => {
+    const {animator} = reduced(false);
+    animator.set({x: -80});
+    const start = clock;
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: 0, max: 100}}, at: start}),
+      {at: start, touchRelease: true},
+    );
+    // Not at once: it moves only while invisible.
+    expect(animator.get('x')).toBe(-80);
+    let moved = false;
+    while (clock <= start + fade) {
+      await advance(2);
+      if (!moved && animator.get('x') !== -80) {
+        moved = true;
+        expect(animator.get('opacity')).toBeLessThan(0.1);
+      }
+    }
+    expect(moved).toBe(true);
+    expect(animator.get('x')).toBe(0);
+  });
+
   it('a release with one axis past an edge is one handle: stop() stops the cross-fade too', async () => {
     const {animator} = reduced();
     animator.set({x: -80, y: 0});
@@ -1512,13 +1550,190 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(handle.properties).toEqual(expect.arrayContaining(['x', 'y']));
     await advance(fade / 4);
     handle.stop();
-    // Under the Reduce Motion plan a stop finishes the cross-fade and lands
-    // x with it, at once and while invisible: nothing moves after the stop.
+    // A catch freezes the release where it is on screen (AST-094 FR6): x
+    // never lands at its edge, and the fade it was waiting in finishes.
     const stopped = {x: animator.get('x'), y: animator.get('y')};
-    expect(stopped.x).toBe(0);
+    expect(stopped.x).toBe(-80);
+    expect(animator.get('opacity')).toBe(1);
     await advance(fade + END_HOLD_MS + 1);
-    expect(animator.get('x')).toBe(stopped.x);
+    expect(animator.get('x')).toBe(-80);
     expect(animator.get('y')).toBe(stopped.y);
+  });
+
+  it('a carried move keeps its own call: stopping or setting it settles that call, not the one carrying it', async () => {
+    for (const interrupt of ['set', 'stop'] as const) {
+      const {animator} = reduced();
+      const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+      await advance(fade / 4);
+      const b = animator.animate({y: 50}, {spring: springs.navigationPush});
+      if (interrupt === 'set') {
+        animator.set({x: 40});
+      } else {
+        a.stop();
+      }
+      await advance(fade * 2 + END_HOLD_MS + 1);
+      await expect(a.finished).resolves.toBe(false);
+      await expect(b.finished).resolves.toBe(true);
+      expect(animator.get('x')).toBe(interrupt === 'set' ? 40 : 0);
+      expect(animator.get('y')).toBe(50);
+    }
+  });
+
+  it("an earlier handle's stop leaves a later call's move on the same property alone", async () => {
+    const {animator} = reduced();
+    const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const b = animator.animate({x: 200}, {spring: springs.navigationPush});
+    a.stop();
+    await advance(fade * 2 + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(200);
+    await expect(a.finished).resolves.toBe(false);
+    await expect(b.finished).resolves.toBe(true);
+  });
+
+  it('a retargeted call settles interrupted; its retarget lands', async () => {
+    const {animator} = reduced();
+    const a = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const b = a.retarget({x: 150});
+    await advance(fade * 2 + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(150);
+    await expect(a.finished).resolves.toBe(false);
+    await expect(b.finished).resolves.toBe(true);
+  });
+
+  it('a move whose animations are paused before their first frame still lands once released', async () => {
+    for (const release of ['resume', 'finish'] as const) {
+      const {animator} = reduced();
+      const handle = animator.animate(
+        {x: 100},
+        {spring: springs.navigationPush},
+      );
+      // Something pauses the call's animations in its own task.
+      for (const animation of recorded) {
+        animation.paused = true;
+      }
+      await commitFrame(clock);
+      clock += 30;
+      await commitFrame(clock);
+      for (const animation of recorded) {
+        if (release === 'resume') {
+          // play(): pending, so the start comes a frame later, after the
+          // frame's callbacks.
+          animation.paused = false;
+          animation.startDelayFrames = 1;
+        } else {
+          animation.finish();
+        }
+      }
+      // Frames keep coming: step the clock through the landing.
+      for (let step = 0; step < 16; step++) {
+        await advance(fade / 4);
+      }
+      expect(animator.get('x')).toBe(100);
+      expect(animator.get('opacity')).toBe(1);
+      await expect(handle.finished).resolves.toBe(true);
+    }
+  });
+
+  it('a waiting call whose own opacity a later call retargets settles interrupted', async () => {
+    const {animator} = reduced();
+    const dismiss = animator.animate(
+      {y: 800, opacity: 0},
+      {spring: springs.sheetDismiss},
+    );
+    await advance(fade / 4);
+    const show = animator.animate({opacity: 1}, {spring: springs.settle});
+    // The plan lands by timer: step the clock through the dip.
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+    }
+    expect(animator.get('opacity')).toBe(1);
+    await expect(dismiss.finished).resolves.toBe(false);
+    await expect(show.finished).resolves.toBe(true);
+  });
+
+  it('a move taken back mid-dip fades straight back up instead of finishing the dip', async () => {
+    const {animator} = reduced();
+    const move = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const shown = animator.get('opacity');
+    expect(shown).toBeLessThan(1);
+    const back = animator.animate({x: 0}, {spring: springs.navigationPush});
+    let lowest = shown;
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+      lowest = Math.min(lowest, animator.get('opacity'));
+    }
+    expect(lowest).toBeGreaterThanOrEqual(shown - 1e-6);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+    await expect(move.finished).resolves.toBe(false);
+    await expect(back.finished).resolves.toBe(true);
+  });
+
+  it('an entrance by role caught mid-exit fades in from where the exit has it', async () => {
+    const {animator} = reduced();
+    animator.animate(
+      {y: 40},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await advance(fade / 4);
+    const shown = animator.get('opacity');
+    expect(shown).toBeLessThan(1);
+    animator.animate(
+      {y: 0},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'entrance'},
+    );
+    let lowest = shown;
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+      lowest = Math.min(lowest, animator.get('opacity'));
+    }
+    expect(lowest).toBeGreaterThanOrEqual(shown - 1e-6);
+    expect(animator.get('y')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a caught dismissal fades straight back up: a call that sets every waiting value takes it over', async () => {
+    const {animator} = reduced();
+    const dismiss = animator.animate(
+      {y: 800, opacity: 0},
+      {spring: springs.sheetDismiss},
+    );
+    await advance(fade / 4);
+    const shown = animator.get('opacity');
+    const present = animator.animate(
+      {y: 0, opacity: 1},
+      {spring: springs.sheetPresent},
+    );
+    await commitFrame(clock);
+    // No dip: the opacity only rises from where it was.
+    let lowest = shown;
+    const start = clock;
+    while (clock <= start + fade * 2) {
+      await advance(2);
+      lowest = Math.min(lowest, animator.get('opacity'));
+    }
+    expect(lowest).toBeGreaterThanOrEqual(shown - 1e-6);
+    expect(animator.get('y')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+    await expect(dismiss.finished).resolves.toBe(false);
+    await expect(present.finished).resolves.toBe(true);
+  });
+
+  it("a handle's stop mid-dip freezes its waiting travel where it is, as animator.stop() does (AST-094 FR6)", async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    handle.stop();
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(0);
+    await expect(handle.finished).resolves.toBe(false);
   });
 
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
@@ -1932,10 +2147,43 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     animator.animate({opacity: 0.5}, {spring: springs.settle});
     // Not while the element shows: at the bottom of the new call's dip.
     expect(animator.get('x')).toBe(0);
-    await advance(fade * 2);
+    const start = clock;
+    let landedAt: number | null = null;
+    while (clock <= start + fade * 2) {
+      await advance(2);
+      if (landedAt == null && animator.get('x') !== 0) {
+        landedAt = animator.get('opacity');
+      }
+    }
+    expect(landedAt).not.toBeNull();
+    expect(landedAt as number).toBeLessThan(0.05);
     expect(animator.get('x')).toBe(100);
     expect(animator.get('opacity')).toBeCloseTo(0.5, 9);
     await expect(move.finished).resolves.toBe(true);
+  });
+
+  it('a move whose opacity rises from or falls to a visible value lands only while transparent (DR1, DR2)', async () => {
+    for (const [from, to] of [
+      [0.5, 1],
+      [1, 0.5],
+    ] as const) {
+      const {animator} = reduced();
+      animator.set({opacity: from});
+      animator.animate({x: 100, opacity: to}, {spring: springs.navigationPush});
+      expect(animator.get('x')).toBe(0);
+      const start = clock;
+      let landedAt: number | null = null;
+      while (clock <= start + fade * 2) {
+        await advance(2);
+        if (landedAt == null && animator.get('x') !== 0) {
+          landedAt = animator.get('opacity');
+        }
+      }
+      expect(landedAt).not.toBeNull();
+      expect(landedAt as number).toBeLessThan(0.05);
+      expect(animator.get('x')).toBe(100);
+      expect(animator.get('opacity')).toBeCloseTo(to, 9);
+    }
   });
 
   it('an entrance lands in place and fades in', async () => {
@@ -2285,7 +2533,7 @@ describe('decay: momentum curves (a coast)', () => {
   });
 
   it('plays any curve as given, and a zero-length one rests at its value', async () => {
-    const {animator, element} = setup();
+    const {animator} = setup();
     const linear = {
       duration: 0.5,
       at: (t: number) => 200 * t,

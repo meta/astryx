@@ -20,6 +20,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
   case selector(SelectorNode)
   case `switch`(SwitchNode)
   case text(TextNode)
+  case thumbnail(ThumbnailNode)
   case textInput(TextInputNode)
   case vStack(VStackNode)
   case unsupported(component: String, key: String)
@@ -39,6 +40,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
     case .selector(let node): return node.key
     case .`switch`(let node): return node.key
     case .text(let node): return node.key
+    case .thumbnail(let node): return node.key
     case .textInput(let node): return node.key
     case .vStack(let node): return node.key
     case .unsupported(_, let key): return key
@@ -66,6 +68,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
       case "Selector": self = .selector(try SelectorNode(from: decoder))
       case "Switch": self = .`switch`(try SwitchNode(from: decoder))
       case "Text": self = .text(try TextNode(from: decoder))
+      case "Thumbnail": self = .thumbnail(try ThumbnailNode(from: decoder))
       case "TextInput": self = .textInput(try TextInputNode(from: decoder))
       case "VStack": self = .vStack(try VStackNode(from: decoder))
       default: self = .unsupported(component: component, key: key)
