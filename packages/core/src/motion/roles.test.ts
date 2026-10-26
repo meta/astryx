@@ -174,7 +174,7 @@ describe('motion roles', () => {
     // The Reduced Motion fade, UIKit's menu spring under Reduce Motion, the
     // thresholds and the arbitration timings are not motion roles either.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
-    expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
+    expect(motionRoleOf(springs.menuReducedMotion)).toBeUndefined();
     expect(motionRoleIn(timing.press, 'scrollBrakeMs')).toBeUndefined();
     expect(motionRoleIn(scroll, 'delaysContentTouchesMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'parallax')).toBeUndefined();
