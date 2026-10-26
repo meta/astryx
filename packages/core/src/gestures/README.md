@@ -521,8 +521,9 @@ way:
 7. The release hands `velocity()` (px/s, event time) to the animator.
    Delete local estimators, sample buffers and time windows; a flick, fling
    or commit threshold stays in the component, compared against it.
-8. A control's drag sets `preventsTextSelection: true`; content drags keep
-   selection.
+8. A control whose hold acts (a slider's thumb, a stepper's hold-repeat)
+   passes `selectionLock: lockSelection` to its recognizer or press tracker
+   (`spec:AST-094` FR41); content drags keep selection.
 9. Presses use `usePressTracker`; `keepsTouch: true` only for a control that
    tracks a held finger across its own area.
 10. Unit tests drive the gesture harness (`__tests__/harness.ts`) with
