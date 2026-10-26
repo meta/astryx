@@ -105,10 +105,11 @@ export interface SpringTransition {
 }
 
 /**
- * A momentum curve to play on the compositor: a released scroll view's coast
- * and its edge bounce (`coast.ts`). Only momentum plays through `decay`:
- * design:reduced-motion DR2 exempts it (DEC-2), so `decay` skips Reduce
- * Motion; every other motion goes through `animate`. Times are seconds from
+ * A curve a release starts, to play on the compositor: a released scroll
+ * view's coast and its edge bounce (`coast.ts`). Momentum keeps moving under
+ * Reduce Motion (design:reduced-motion DR2, DEC-2); a curve marked
+ * `isTransition` (a spring back from past an edge) cross-fades as `animate`
+ * does. Every other motion goes through `animate`. Times are seconds from
  * the curve's start; the value at `duration` is the end state. Start it at
  * the property's presentation value (`get`) to continue without a jump.
  */
@@ -195,9 +196,10 @@ export interface Animator {
     options?: AnimateOptions,
   ): MotionHandle;
   /**
-   * Plays momentum curves as given, one per property: a released scroll
-   * view's coast and edge bounce, which `coast()` (coast.ts) builds.
-   * Reduced Motion does not apply: a throw continues the finger. Only a
+   * Plays the curves a release starts, one per property: a released scroll
+   * view's coast and edge bounce, which `coast()` (coast.ts) builds. Under
+   * Reduced Motion momentum still plays (a throw continues the finger), and
+   * a curve marked `isTransition` cross-fades as `animate` does. Only a
    * surface that coasts imports the coast math and the scroll table.
    */
   decay(
