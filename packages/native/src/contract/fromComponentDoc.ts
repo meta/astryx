@@ -98,6 +98,18 @@ export interface NativeAdditions {
    * reason, such as a web presentation heuristic a native platform replaces.
    */
   readonly webOnly?: Readonly<Record<string, string>>;
+  /**
+   * Portable core-doc props that only some native platforms carry, with those
+   * platforms and the reason (AST-082 FR3): the prop leaves the core and joins
+   * each listed platform's contract unchanged, so a platform a ruling covers
+   * drops it while the others keep it.
+   */
+  readonly onlyOn?: Readonly<
+    Record<
+      string,
+      {readonly platforms: readonly NativePlatform[]; readonly reason: string}
+    >
+  >;
 }
 
 /** The documented props of the component the additions name. */
@@ -243,12 +255,34 @@ export function fromComponentDoc(
     };
   }
 
+  const platforms: Partial<Record<NativePlatform, Record<string, PropSpec>>> =
+    Object.fromEntries(
+      Object.entries(additions.platforms ?? {}).map(([p, props]) => [
+        p,
+        {...props},
+      ]),
+    );
+  for (const [name, {platforms: only}] of Object.entries(
+    additions.onlyOn ?? {},
+  )) {
+    const spec = core[name];
+    if (!spec) {
+      throw new Error(
+        `${additions.name}: onlyOn names "${name}", which is not a portable core prop`,
+      );
+    }
+    delete core[name];
+    for (const platform of only) {
+      platforms[platform] = {...platforms[platform], [name]: spec};
+    }
+  }
+
   return {
     name: additions.name,
     baseTarget: additions.baseTarget,
     types,
     core,
-    platforms: additions.platforms ?? {},
+    platforms,
     webOnly,
     projections,
     sameMeaning: Object.keys(additions.sameMeaning ?? {}).filter(
