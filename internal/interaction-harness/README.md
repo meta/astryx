@@ -203,7 +203,10 @@ Layouts before, 0 now). That holds for script animations and CSS
 transitions. On a CSS `@keyframes` animation (and, unwatched, a cancelled CSS
 transition), `waitForAnimation` and `started()` read the animation's timing,
 which flushes its style and adds Layouts to the trace: wait on one with
-`waitForRest`, or after the trace. The trace's `longTasks` are the page's own: only a
+`waitForRest`, or after the trace. Taking a watch (`watchAnimations`) inside
+a trace reads the watched element's animations, which restyles it (and lays
+out an anchored one), so a proof takes its traced watch before the window it
+counts. The trace's `longTasks` are the page's own: only a
 task the harness marked as its own read (`waitForAnimation` describing
 keyframes, `blockMainThread` without `during`) is in `devtoolsTasks` instead,
 and only when no page script ran inside it. A test's own `page.evaluate` stays a

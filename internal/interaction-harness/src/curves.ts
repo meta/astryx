@@ -221,8 +221,10 @@ function animationRecorder(): void {
     // changed style just before has its transition created by that read,
     // and it started before the arm. While a trace runs the page-wide read
     // stands down, as record() does; the watched element's own animations
-    // are still read, which resolves its pending style change (one the next
-    // frame would resolve anyway, so the trace gains no rendering step).
+    // are still read, which resolves its pending style change. That read
+    // restyles the element (and lays out an anchored one) in the task that
+    // takes the watch, so a traced proof takes its watch before the window
+    // it counts (README: No Layout / Paint).
     arm: (element?: Element) => {
       if (!tracing()) {
         record();
@@ -1301,7 +1303,9 @@ export interface AnimationWatch {
 /**
  * Starts watching `locator`'s element before an action, so the animation the
  * action starts is caught even when it ends before the test looks (a short
- * entrance on a cold page):
+ * entrance on a cold page). Taking the watch reads the element's animations,
+ * which restyles it, inside a rendering trace too: take a traced watch before
+ * the window the proof counts:
  *
  *   const watch = await watchAnimations(sheet);
  *   await driver.play(tap(button));
