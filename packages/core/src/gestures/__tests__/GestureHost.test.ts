@@ -22,6 +22,7 @@ import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {ManualClock, RecordingConsumer} from './harness';
+import type {GestureTouch} from '../types';
 
 interface Contact {
   id: number;
@@ -167,6 +168,94 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it('tells a recognizer tracking a finger about a second finger on plain page content, and leaves that finger to the page (spec:AST-094 FR28)', () => {
+    const {box} = mount('<div id="box"></div><p id="page">text</p>');
+    const page = document.getElementById('page')!;
+    const elsewhere: number[] = [];
+    class Recorder extends LongPressGestureRecognizer {
+      protected override touchBeganElsewhere(
+        touches: ReadonlyArray<GestureTouch>,
+      ): void {
+        elsewhere.push(...touches.map(t => t.id));
+      }
+    }
+    const recorder = new Recorder({name: 'recorder'});
+    detachers.push(host.attach(box, recorder));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [first], [first], 0);
+    const second = {id: 2, x: 200, y: 300};
+    const start = touch('touchstart', page, [second], [first, second], 20);
+    expect(elsewhere).toHaveLength(1);
+    expect(start.defaultPrevented).toBe(false);
+    const moved = {...second, y: 340};
+    const move = touch('touchmove', page, [moved], [first, moved], 36);
+    expect(move.defaultPrevented).toBe(false);
+    const end = touch('touchend', page, [moved], [first], 50);
+    expect(end.defaultPrevented).toBe(false);
+    touch('touchend', box, [first], [], 60);
+  });
+
+  it('leaves a finger on plain page content alone when no finger is being tracked', () => {
+    const {box} = mount('<div id="box"></div><p id="page">text</p>');
+    const page = document.getElementById('page')!;
+    const elsewhere: number[] = [];
+    class Recorder extends LongPressGestureRecognizer {
+      protected override touchBeganElsewhere(
+        touches: ReadonlyArray<GestureTouch>,
+      ): void {
+        elsewhere.push(...touches.map(t => t.id));
+      }
+    }
+    detachers.push(host.attach(box, new Recorder({name: 'recorder'})));
+    const finger = {id: 1, x: 200, y: 300};
+    touch('touchstart', page, [finger], [finger], 0);
+    touch('touchend', page, [finger], [], 30);
+    expect(elsewhere).toEqual([]);
+  });
+
+  it("does not read a recognizer's own scroll write as the browser taking the finger (spec:AST-094 FR30)", async () => {
+    const {list} = mount('<div id="list"><div id="row"></div></div>');
+    scrollable(list, {scrollHeight: 1000, clientHeight: 200});
+    const row = document.getElementById('row')!;
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    detachers.push(host.attach(row, press));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [finger], [finger], 0);
+    host.ownScroll(list);
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(1);
+    // After the next frame, a scroll nobody announced is the browser's again.
+    await new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(0);
+  });
+
+  it('watches the pointer kind only while something is attached (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const add = vi.fn();
+    const remove = vi.fn();
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: add,
+      removeEventListener: remove,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const host2 = new GestureHost(document, {clock});
+      expect(add).not.toHaveBeenCalled();
+      const detach = host2.attach(box, new PanGestureRecognizer());
+      expect(add).toHaveBeenCalledTimes(1);
+      detach();
+      expect(remove).toHaveBeenCalledWith('change', add.mock.calls[0][1]);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
   it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
     // jsdom drops touch-action from the style, so the writes are observed.
     const {box} = mount('<div id="box"></div>');
