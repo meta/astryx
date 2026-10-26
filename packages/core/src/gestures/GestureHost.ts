@@ -1374,9 +1374,14 @@ export class GestureHost {
   private readonly onHoldTouchStart = (event: TouchEvent): void => {
     const fingers = touchesOf(event.touches);
     const current = this.pageHoldTouch;
+    // Only a finger already down keeps its record: a new touch that reuses
+    // the identifier starts afresh.
     if (
       current != null &&
-      fingers.some(finger => finger.identifier === current.id)
+      fingers.some(finger => finger.identifier === current.id) &&
+      !touchesOf(event.changedTouches).some(
+        finger => finger.identifier === current.id,
+      )
     ) {
       // A second finger joins the held one: nothing is cancelled while two
       // are down (a pinch), and the first keeps its verdict for the rest of
