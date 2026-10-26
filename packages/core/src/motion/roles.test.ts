@@ -174,7 +174,7 @@ describe('motion roles', () => {
     // The Reduced Motion fade, UIKit's menu spring under Reduce Motion, the
     // thresholds and the arbitration timings are not motion roles either.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
-    expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
+    expect(motionRoleOf(springs.menuReducedMotion)).toBeUndefined();
     // Nor is the keyboard's motion: it rides the keyboard's own spring and
     // notification duration, not a role (spec:AST-094 FR4).
     expect(motionRoleIn(springs, 'keyboard')).toBeUndefined();
