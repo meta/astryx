@@ -148,7 +148,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: 'Touch motion has a table of springs, durations and curves, each read from UIKit on the iOS simulator or taken from Apple documentation. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A value in `motion.durations` applies to its role and takes precedence for it; the `fast`/`medium` duration scale sets the duration tokens a CSS transition reads and never changes a touch motion role. A motion reads its roles as it starts, so a theme change applies from the next motion.',
+          text: 'Touch motion has a table of springs, durations and curves, read from UIKit on the iOS simulator or taken from Apple documentation; the role table below marks a default that is still a guess awaiting a measurement, or that comes from WebKit. Each value is a motion role named by its table path, such as `springs.sheetPresent` or `timing.curves.move`. A theme retunes a role through `motion.springs`, `motion.durations` or `motion.curves`, at its root or in an adaptation rule; a role it leaves alone keeps its measured default. A value in `motion.durations` applies to its role and takes precedence for it; the `fast`/`medium` duration scale sets the duration tokens a CSS transition reads and never changes a touch motion role. A motion reads its roles as it starts, so a theme change applies from the next motion.',
         },
         {
           type: 'code',
@@ -190,12 +190,17 @@ const calmTheme = defineTheme({
               'duration',
               '350ms',
             ],
-            ['scroll.bounce', '--motion-scroll-bounce', 'spring', '0.5s 0'],
+            [
+              'scroll.bounce',
+              '--motion-scroll-bounce',
+              'spring',
+              '0.5s 0 (guess)',
+            ],
             [
               'scroll.paging.snap',
               '--motion-scroll-paging-snap',
               'spring',
-              '0.5s 0',
+              '0.5s 0 (guess)',
             ],
             [
               'springs.actionSheetDismiss',
@@ -225,7 +230,7 @@ const calmTheme = defineTheme({
               'springs.banner',
               '--motion-springs-banner',
               'spring',
-              '0.344144s 0',
+              '0.344144s 0 (guess)',
             ],
             [
               'springs.contextMenuDismiss',
@@ -303,7 +308,7 @@ const calmTheme = defineTheme({
               'springs.segmentedThumb',
               '--motion-springs-segmented-thumb',
               'spring',
-              '0.3s 0.25',
+              '0.3s 0.25 (guess)',
             ],
             ['springs.settle', '--motion-springs-settle', 'spring', '0.5s 0'],
             [
@@ -358,13 +363,13 @@ const calmTheme = defineTheme({
               'springs.switchThumbMove',
               '--motion-springs-switch-thumb-move',
               'spring',
-              '0.3s 0.25',
+              '0.3s 0.25 (WebKit)',
             ],
             [
               'springs.switchThumbStretch',
               '--motion-springs-switch-thumb-stretch',
               'spring',
-              '0.35s 0.13',
+              '0.35s 0.13 (WebKit)',
             ],
             [
               'springs.timedChange',
@@ -430,7 +435,7 @@ const calmTheme = defineTheme({
               'timing.press.highlightOutCurve',
               '--motion-timing-press-highlight-out-curve',
               'curve',
-              'cubic-bezier(0, 0, 0.2, 1)',
+              'cubic-bezier(0, 0, 0.2, 1) (guess)',
             ],
             [
               'timing.press.highlightOutMs',
