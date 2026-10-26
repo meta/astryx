@@ -21,6 +21,7 @@ import {
   registerNavigationTable,
   registerSpringsTable,
   registerTimingTable,
+  scroll,
   springs,
   timing,
 } from './uikit';
@@ -172,7 +173,7 @@ describe('the animator under a theme', () => {
     });
   });
 
-  it('a coast plays the edge spring its theme sets (scroll.bounce)', () => {
+  it('a coast plays the table edge spring whatever a scope sets: scroll.bounce is no role', () => {
     const {child} = themed('soft', {
       '--motion-scroll-bounce': '0.8s 0.3',
     });
@@ -183,7 +184,7 @@ describe('the animator under a theme', () => {
       coast(animator, {x: 0}, {bounds: {x: {min: -500, max: 0}}, at: 0}),
       {at: 0},
     );
-    const expected = solveSpring(toSpring({duration: 0.8, bounce: 0.3}), {
+    const expected = solveSpring(toSpring(scroll.bounce), {
       from: 60,
       to: 0,
     });
