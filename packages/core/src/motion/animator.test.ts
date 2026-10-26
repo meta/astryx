@@ -1393,6 +1393,27 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(Number(element.style.opacity || '1')).toBe(1);
   });
 
+  it('a node detached mid-dip while another axis moves is left with no animation or promotion', async () => {
+    const {animator, element} = reduced();
+    animator.set({x: 0, y: 0});
+    // y coasts (momentum keeps its motion) while x waits in a dip.
+    const start = clock;
+    animator.decay(coast(animator, {y: 800}, {at: start}), {at: start});
+    animator.animate({x: 240}, {spring: springs.navigationPush});
+    await advance(25);
+    animator.attach(null);
+    await advance(1);
+    expect(
+      recorded.filter(
+        animation =>
+          animation.element === element &&
+          !animation.cancelled &&
+          animation.playState !== 'finished',
+      ),
+    ).toEqual([]);
+    expect(element.style.willChange).toBe('');
+  });
+
   it('an identity held over a differing stylesheet follows a node replacement', () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0'};
