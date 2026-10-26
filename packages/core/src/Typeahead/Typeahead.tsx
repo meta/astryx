@@ -54,7 +54,7 @@ import {renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -625,6 +625,7 @@ export function Typeahead<T extends SearchableItem>({
             onKeyDown?.(event);
           }
         }}
+        {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
           themeProps('typeahead', {size, status: status?.type}),
           stylex.props(

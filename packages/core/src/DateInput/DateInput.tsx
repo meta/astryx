@@ -47,7 +47,7 @@ import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -831,6 +831,7 @@ function PointerDateField({
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
