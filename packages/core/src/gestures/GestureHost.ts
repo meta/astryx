@@ -20,6 +20,12 @@
  *   it and styles every registration; turning fine cancels every touch in
  *   flight and removes it all. A development warning names the first attach
  *   under a fine pointer.
+ * - The one carve-out is `perEventPointer` (AttachOptions). A per-event
+ *   recognizer gets its listeners and its element's style on any pointer. A
+ *   per-event press tracker, where the pointer is fine, gets only passive
+ *   `touchstart` and `pointerdown` listeners on its own element and no
+ *   style; the host's document and window listeners are added at a finger's
+ *   press on it and removed once that press's contacts end.
  *
  * INPUT CHANNELS
  *
@@ -207,13 +213,16 @@ export interface AttachOptions {
   manageStyle?: boolean;
   /**
    * The recognizer, or the press tracker, reads each event's pointer itself,
-   * so it attaches even where the primary pointer is fine: the host installs
-   * what it needs there, styles its element and raises no warning. A
-   * recognizer does so as `spec:AST-057`'s row swipe does. A press tracker
-   * there paints a finger's press feedback only (an FR19 exception for press
-   * feedback only, pending in `spec:AST-094`'s amendment): no control event,
-   * nothing kept from the browser, which still pans, and no mouse or pen
-   * press. Everything else stays inactive there. @default false
+   * so it attaches even where the primary pointer is fine, with no warning.
+   * A recognizer gets the host's listeners and its element's style there, as
+   * `spec:AST-057`'s row swipe does. A press tracker there gets only passive
+   * `touchstart` and `pointerdown` listeners on its own element, and no
+   * style; the host's document and window listeners come for a finger's
+   * press on it and go when the press ends. It paints that press's feedback
+   * only (an FR19 exception for press feedback only, pending in
+   * `spec:AST-094`'s amendment): no control event, nothing kept from the
+   * browser, which still pans, and no mouse or pen press. Everything else
+   * stays inactive there. @default false
    */
   perEventPointer?: boolean;
 }
