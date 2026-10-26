@@ -1485,13 +1485,26 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(handle.properties).toEqual(expect.arrayContaining(['x', 'y']));
     await advance(fade / 4);
     handle.stop();
-    // Under the Reduce Motion plan a stop finishes the cross-fade and lands
-    // x with it, at once and while invisible: nothing moves after the stop.
+    // A catch freezes the release where it is on screen (AST-094 FR6): x
+    // never lands at its edge, and the fade it was waiting in finishes.
     const stopped = {x: animator.get('x'), y: animator.get('y')};
-    expect(stopped.x).toBe(0);
+    expect(stopped.x).toBe(-80);
+    expect(animator.get('opacity')).toBe(1);
     await advance(fade + END_HOLD_MS + 1);
-    expect(animator.get('x')).toBe(stopped.x);
+    expect(animator.get('x')).toBe(-80);
     expect(animator.get('y')).toBe(stopped.y);
+  });
+
+  it("a handle's stop mid-dip freezes its waiting travel where it is, as animator.stop() does (AST-094 FR6)", async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    handle.stop();
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(0);
+    await expect(handle.finished).resolves.toBe(false);
   });
 
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
@@ -2210,6 +2223,21 @@ describe('play: any closed-form curve', () => {
     expect(() => handle.retarget({x: 0})).toThrow(/spring/);
     handle.retarget({x: 0}, {spring: springs.settle});
     expect(animator.getVelocity('x')).toBeCloseTo(300, 9);
+  });
+
+  it('lets an explicit axis win over scale, in either order', () => {
+    const {animator} = setup();
+    const flat = (value: number) => ({
+      duration: 0,
+      at: () => value,
+      velocity: () => 0,
+    });
+    animator.play({scaleY: flat(0.5), scale: flat(2)});
+    expect(animator.get('scaleX')).toBe(2);
+    expect(animator.get('scaleY')).toBe(0.5);
+    animator.play({scale: flat(3), scaleX: flat(0.25)});
+    expect(animator.get('scaleX')).toBe(0.25);
+    expect(animator.get('scaleY')).toBe(3);
   });
 
   it('rejects a curve without a finite duration', () => {

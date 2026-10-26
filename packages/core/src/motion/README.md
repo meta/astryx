@@ -58,13 +58,16 @@ animator.stop(['y']); // freezes at the value on screen
 animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
 // Any closed-form curve, here a press that keeps deepening: the target
-// scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
-  from: 1,
-  target: 1,
-  slope: -0.16,
-});
-animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+// scale falls at 0.16/s and the platter follows it on a spring. Press
+// feedback has no fade of its own, so it is skipped under Reduce Motion.
+if (animator.reducedMotion() === 'off') {
+  const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
+    from: 1,
+    target: 1,
+    slope: -0.16,
+  });
+  animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+}
 
 await handle.finished; // true if it ran to the end, false if interrupted
 ```

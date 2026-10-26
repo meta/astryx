@@ -1747,8 +1747,24 @@ export function createAnimator(
         }
         return animator.animate(to, {...transition, spring}, retargetOptions);
       },
+      // The call's own curves, and its travel still waiting to land under
+      // Reduce Motion: a catch freezes both where they are on screen
+      // (AST-094 FR6), travel first so the fade's landing no longer carries
+      // it, as `animator.stop()` does.
       stop: () =>
-        animator.stop(properties.filter(p => segments.get(p)?.owner === owner)),
+        animator.stop(
+          PROPERTIES.filter(
+            p =>
+              properties.includes(p) &&
+              (segments.get(p)?.owner === owner ||
+                [...landings].some(
+                  landing =>
+                    (landing.owner === owner ||
+                      landing.carried.includes(owner)) &&
+                    landing.values.has(p),
+                )),
+          ),
+        ),
     };
     return handle;
   };
@@ -2335,10 +2351,14 @@ export function createAnimator(
       const time = playOptions.at ?? now();
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
-      for (const [key, curve] of Object.entries(curves) as [
-        MotionProperty | 'scale',
-        MotionCurve | undefined,
-      ][]) {
+      // `scale` first, so an explicit `scaleX` or `scaleY` beside it wins.
+      const entries = (
+        Object.entries(curves) as [
+          MotionProperty | 'scale',
+          MotionCurve | undefined,
+        ][]
+      ).sort(([a], [b]) => Number(b === 'scale') - Number(a === 'scale'));
+      for (const [key, curve] of entries) {
         if (curve == null) {
           continue;
         }
