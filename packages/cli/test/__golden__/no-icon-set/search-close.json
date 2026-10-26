@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 45,
+    "matchCount": 44,
     "results": [
       {
         "domain": "component",
@@ -220,19 +220,6 @@
       },
       {
         "domain": "doc",
-        "name": "motion",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs motion touch-motion",
-        "parent": "astryx docs motion --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
         "name": "styling/styling-advanced",
         "package": "@astryxdesign/cli",
         "score": "<text>",
@@ -242,6 +229,17 @@
         "title": "<text>",
         "command": "astryx docs styling/styling-advanced compound-components",
         "parent": "astryx docs styling/styling-advanced --index",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "ComplexSelector",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/ComplexSelector",
+        "command": "astryx component ComplexSelector",
         "mentions": []
       }
     ]

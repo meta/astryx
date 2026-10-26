@@ -90,11 +90,11 @@ const menuItemStyles = stylex.create({
   destructive: {
     // Only recolor the text/icon; the hover / focus background stays the shared
     // neutral overlay from `root` so the hover state matches every other menu
-    // item. The root color covers the label/description via the Item custom
-    // properties (and any bare text). Semantic error tokens keep it theme-aware.
-    color: colorVars['--color-error'],
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
+    // item. The semantic status foreground covers the label, description, icon,
+    // and any bare text on a plain surface.
+    color: colorVars['--color-text-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
   },
 });
 

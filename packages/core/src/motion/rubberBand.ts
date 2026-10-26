@@ -15,9 +15,10 @@
  * displayed overflow b approaches d but never reaches it, and its slope at
  * the edge is c: the first points of overflow move at 55 % of the finger.
  *
- * The inverse matters for M2 (grab anything mid-flight): a finger that lands
- * on content still bouncing back has to resume the drag from the finger
- * position that would produce the overflow on screen, or the content jumps.
+ * The inverse matters for spec:AST-094 FR6 (a finger catches any animation
+ * mid-flight): a finger that lands on content still bouncing back has to
+ * resume the drag from the finger position that would produce the overflow
+ * on screen, or the content jumps.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/rubberBand.test.ts

@@ -29,8 +29,8 @@
  *   drilled-in sub-menu in place of a flyout) asks for both.
  *
  * Touch behaviour is one model on every touch device, iOS and Android alike;
- * nothing here chooses a platform. Touch motion reads the theme's motion
- * roles, whose defaults are the measured table.
+ * nothing here chooses a platform. Touch motion plays the measured table,
+ * through the internal motion roles where a value is one.
  *
  * CSS first: a style that changes with these conditions writes the same
  * query as a StyleX media key, spelled exactly as here (`@media` followed by
