@@ -5,3 +5,15 @@
 
 /* Screen-reader-only live-region announcement while a Button is in its loading state (spinner shown, action in flight). Progressive sense ("work in progress"), not a noun. Kept separate from `typeahead.loading` — translations may diverge. */
 "@astryx.button.loading" = "Đang tải";
+
+/* Screen-reader-only default name for a standalone Spinner's role="status" element, used when the consumer supplies neither `aria-label` nor a visible string label. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge. */
+"@astryx.spinner.loading" = "Đang tải";
+
+/* Generic screen-reader name for a Thumbnail (image preview) that has no `alt` or `label`. Last-resort fallback so the control is never nameless; prefer a real name via `alt` or `label`. */
+"@astryx.thumbnail.fallbackName" = "Hình thu nhỏ";
+
+/* "Open" = launch/reveal (not "unfold" or the adjective). Screen-reader-only name on a clickable Thumbnail — example: `Open Sunset photo`. */
+"@astryx.thumbnail.open" = "Mở {accessibleName}";
+
+/* Screen-reader-only label on the "×" on a Thumbnail (image preview chip). `{accessibleName}` is the thumbnail's name — example: `Remove profile.jpg`. */
+"@astryx.thumbnail.remove" = "Xóa {accessibleName}";
