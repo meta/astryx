@@ -42,9 +42,12 @@ interface Recorded {
   cancelled: boolean;
   /** A sampler holding it (the interaction harness pauses to seek). */
   paused: boolean;
-  readonly playState: 'idle' | 'paused' | 'running';
+  /** Finished from outside (a sampler's `finish()`), keeping its start. */
+  finished: boolean;
+  readonly playState: 'idle' | 'paused' | 'running' | 'finished';
   ready: Promise<Recorded>;
   commit(at: number): void;
+  finish(): void;
   cancel(): void;
 }
 
@@ -100,8 +103,15 @@ beforeEach(() => {
       createdAt: clock,
       cancelled: false,
       paused: false,
+      finished: false,
       get playState() {
-        return this.cancelled ? 'idle' : this.paused ? 'paused' : 'running';
+        return this.cancelled
+          ? 'idle'
+          : this.finished
+            ? 'finished'
+            : this.paused
+              ? 'paused'
+              : 'running';
       },
       ready,
       commit(at) {
@@ -109,6 +119,9 @@ beforeEach(() => {
           start = at;
         }
         resolveReady(this);
+      },
+      finish() {
+        this.finished = true;
       },
       cancel() {
         this.cancelled = true;
@@ -511,6 +524,25 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     expect(animator.get('x', 1400)).toBeCloseTo(curve.value(0.1), 9);
     expect(animator.get('y', 1400)).toBeCloseTo(curve.value(0.1), 9);
   });
+  it('an explicit clock after a waiting call was finished from outside keeps that clock, with no lead-in', async () => {
+    // A sampler holds a call from rest before the browser starts it, then
+    // finishes it (the interaction harness's release with finish): the call
+    // never gets a start time. A call on an explicit clock that follows plays
+    // from that clock instead of waiting on the finished call's start.
+    const {animator} = setup();
+    animator.animate({opacity: 0}, {spring: springs.settle});
+    const [held] = live('opacity');
+    expect(held.startTime).toBeNull();
+    held.paused = true;
+    held.finish();
+    clock += 9;
+    const at = clock - 4;
+    animator.animate({opacity: 1}, {spring: springs.settle}, {at});
+    const fade = recorded.filter(a => !a.cancelled && a !== held).at(-1);
+    expect(fade?.startTime).toBe(at);
+    // The curve moves from its first keyframe: no hold before it.
+    expect(fade?.keyframes[1].opacity).not.toBe(fade?.keyframes[0].opacity);
+  });
 });
 
 describe('review fixes', () => {
@@ -899,7 +931,7 @@ describe('atRest: waiting out every curve', () => {
   });
 });
 
-describe('presentation values, retargeting, velocity (M2, M3)', () => {
+describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => {
   it('hands a release velocity to the spring', () => {
     const {animator} = setup();
     animator.set({y: 200});
@@ -999,7 +1031,7 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
   });
 });
 
-describe('set: direct manipulation (M4)', () => {
+describe('set: direct manipulation', () => {
   it('writes one inline style per move and starts no animation', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
@@ -1118,6 +1150,36 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('overlapping dips on the stylesheet opacity never leave it pinned inline', async () => {
+    for (const at of ['fading out', 'fading back in'] as const) {
+      const {animator, element} = reduced();
+      stylesheet = {opacity: '0.6'};
+      animator.animate({x: 100}, {spring: springs.navigationPush});
+      await commitFrame(clock);
+      await advance(at === 'fading out' ? fade / 4 : fade / 2 + 20);
+      animator.animate({x: 200}, {spring: springs.navigationPush});
+      await commitFrame(clock);
+      await advance(fade * 2 + END_HOLD_MS + 1);
+      expect(animator.get('x')).toBe(200);
+      // The stylesheet owns opacity again.
+      expect(element.style.opacity).toBe('');
+      expect(animator.get('opacity')).toBe(1);
+    }
+  });
+
+  it('detaching and attaching a new node during a dip lands the move on it (React replacement)', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(50);
+    animator.attach(null);
+    const replacement = document.createElement('div');
+    animator.attach(replacement);
+    expect(animator.get('x')).toBe(100);
+    expect(replacement.style.translate).toBe('100px 0px');
+    await expect(handle.finished).resolves.toBe(true);
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
@@ -1136,6 +1198,22 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBeCloseTo(0, 9);
     expect(animator.get('opacity', clock + fade / 4)).toBeCloseTo(ease(0.5), 9);
     expect(live('translate')).toHaveLength(0);
+    expect(opacityOnly()).toBe(true);
+  });
+
+  it('a landing a busy main thread runs late still ends the dip on time', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(1000);
+    // The task that lands it runs 80 ms late (the page's clock is ahead
+    // of the timer when it fires).
+    clock += fade / 2 + 80;
+    await vi.advanceTimersByTimeAsync(fade / 2);
+    // Landed while transparent, never shown in the wrong place.
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeCloseTo(0, 9);
+    // The fade back in takes what is left: the dip ends when it was due.
+    expect(animator.get('opacity', 1000 + fade)).toBe(1);
     expect(opacityOnly()).toBe(true);
   });
 

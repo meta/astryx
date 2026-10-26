@@ -109,8 +109,9 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four frames
-fails: the animation under test was not moving during the block. With
+plateaus within a pixel or two of rest. A judged part shorter than four of the
+screencast's intervals fails: the animation under test was not moving during
+the block. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -118,15 +119,31 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` tolerates what a
-loaded machine does to a screencast and nothing a frozen animation does: a
-median frame interval of at most 20 ms, no stall longer than three screencast
-intervals (two dropped frames), and at least 90% of the window's whole frame
-intervals presenting a new position (one miss is always allowed).
+created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+frames the screencast delivered, whatever its rate (a loaded machine's can
+deliver one frame in five or six), and tolerates nothing a frozen animation
+does: at least one frame in the judged part, no stall longer than three of the
+screencast's intervals (two dropped frames), and at least 90% of the window's
+whole intervals presenting a new position (one miss is always allowed). Pass
+`maxMedianFrameMs` (20 at 60 Hz) only in a proof that claims display rate.
 `verdict.failures` names each miss with its numbers, and `summary` carries the
 raw numbers for the report. Frames are judged in presentation order: a loaded
 machine can deliver them out of order. `castStoryboard` turns the frames of the
 block into a filmstrip.
+
+A just-started animation can reach the screen after the block began (50–100 ms
+later in WebKit on a loaded machine). When the cast saw the element at rest
+before the block (wait for `cast.frameCount()` to pass 0 before starting the
+animation), judging starts at its first presented change: the judged part still
+ends with the block and still needs four intervals, and `onScreenFromMs` and the
+summary report when it came. An element already moving is judged from the
+block's start. WebKit's casts are 2 px quantized: the frames come at the
+viewport's size, but the page in them is captured at half resolution, so
+positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+motion per frame, a frame delivered a few ms early shows no step and reads as
+not moved. The proof reports `stepPx` and `pxPerFrame` and notes motion under
+two steps per frame, which never fails it. Move a proof's element at least two
+steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
@@ -136,7 +153,10 @@ harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
 CSS animation or transition event names, once, when that animation starts, and
-catches up afterwards.
+catches up afterwards. A `waitForRest` awaited inside the traced body stands
+down too: it waits on timers for the scheduled ends of the element's curves and
+reads no style until the trace ends (in the anchored fixture's steady middle,
+24 Layouts before, 0 now).
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

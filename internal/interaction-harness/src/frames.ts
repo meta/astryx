@@ -36,6 +36,12 @@ export interface CastFrame {
 }
 
 export interface Screencast {
+  /**
+   * Frames captured so far: wait for the first one to know the cast saw the
+   * page before an animation starts (`busyWindowProof` then knows its at-rest
+   * position).
+   */
+  frameCount(): number;
   /** Stops and returns every frame captured, in order. */
   stop(): Promise<CastFrame[]>;
 }
@@ -44,6 +50,12 @@ export interface ScreencastOptions {
   /** Lossless frames by default: marker colours survive PNG, not JPEG. */
   readonly format?: 'png' | 'jpeg';
   readonly quality?: number;
+  /**
+   * Keep one presented frame in this many (default 1, every frame): a slower
+   * evidence channel, like a loaded machine's screencast, for proving that a
+   * verdict does not depend on the screencast's rate.
+   */
+  readonly everyNthFrame?: number;
 }
 
 /**
@@ -75,7 +87,7 @@ export async function startScreencast(
 async function chromiumScreencast(
   page: Page,
   viewport: {width: number; height: number},
-  {format = 'png', quality = 90}: ScreencastOptions,
+  {format = 'png', quality = 90, everyNthFrame = 1}: ScreencastOptions,
 ): Promise<Screencast> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   const frames: CastFrame[] = [];
@@ -102,9 +114,10 @@ async function chromiumScreencast(
     quality,
     maxWidth: viewport.width,
     maxHeight: viewport.height,
-    everyNthFrame: 1,
+    everyNthFrame,
   });
   return {
+    frameCount: () => frames.length,
     async stop() {
       await cdp.send('Page.stopScreencast');
       cdp.off('Page.screencastFrame', onFrame);
@@ -117,13 +130,22 @@ async function chromiumScreencast(
 async function webkitScreencast(
   page: Page,
   viewport: {width: number; height: number},
-  {quality = 90}: ScreencastOptions,
+  {quality = 90, everyNthFrame = 1}: ScreencastOptions,
 ): Promise<Screencast> {
   const session = webkitPageSession(page);
   const frames: CastFrame[] = [];
   let generation = 0;
+  let delivered = 0;
   const onFrame = (payload: unknown) => {
     const frame = payload as {data: string; timestamp: number};
+    // WebKit's screencast has no everyNthFrame: keep one frame in N here.
+    delivered += 1;
+    if ((delivered - 1) % everyNthFrame !== 0) {
+      session
+        .send('Screencast.screencastFrameAck', {generation})
+        .catch(() => {});
+      return;
+    }
     frames.push({
       // WebKit stamps frames in seconds on the monotonic clock; rebased below.
       t: frame.timestamp * 1000,
@@ -148,6 +170,7 @@ async function webkitScreencast(
   // by however long that frame took to come, 60–100 ms on a busy page.)
   const wallMinusMonotonic = Date.now() - Number(process.hrtime.bigint()) / 1e6;
   return {
+    frameCount: () => frames.length,
     async stop() {
       await session.send('Screencast.stopScreencast');
       session.off?.('Screencast.screencastFrame', onFrame);

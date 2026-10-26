@@ -22,7 +22,7 @@
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
  * interpolation between keyframes is within a fraction of a pixel, and played
  * with `easing: linear`. The browser then runs them on its compositor: they
- * keep advancing every frame while JavaScript is busy (law M1).
+ * keep advancing every frame while JavaScript is busy (`spec:AST-094` FR5).
  *
  * Why keyframes and not one `linear()` easing: measured in Chromium, both
  * forms are composited and equally precise for the same samples, but WebKit's
@@ -38,8 +38,8 @@
  * The page never reads the DOM to know where something is: `get` and
  * `getVelocity` evaluate the curves at a time on the document timeline's
  * clock (`performance.now()` by default), so a finger can grab anything
- * mid-flight from the value on screen (M2), and a new target starts from the
- * current value with the current velocity (M3). A gesture's release velocity
+ * mid-flight from the value on screen, and a new target starts from the
+ * current value with the current velocity (`spec:AST-094` FR6). A gesture's release velocity
  * can be handed in explicitly instead.
  *
  * End state without a flicker frame: the element's inline style always holds
@@ -447,6 +447,8 @@ interface Landing {
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
+  /** When it is due on the document timeline, once the call has started. */
+  due: number | null;
 }
 
 /** What Reduced Motion makes of a call: its segments, and any landing. */
@@ -454,7 +456,9 @@ interface ReducedPlan {
   readonly next: Partial<Record<MotionProperty, Segment | null>>;
   /** Values that stay where they are until the landing writes them. */
   readonly holds: Partial<Record<MotionProperty, number>>;
-  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried'> | null;
+  readonly landing: Omit<Landing, 'owner' | 'timer' | 'carried' | 'due'> | null;
+  /** The stylesheet opacity a dip borrowed (no call owns opacity). */
+  readonly borrowed?: number | null;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -699,8 +703,9 @@ export function defaultIsCoarsePointer(): boolean {
  * @example
  * ```
  * const animator = createAnimator(sheet);
- * // finger lifts at 1200 px/s heading for the detent at 0:
- * animator.animate({y: 0}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+ * // finger lifts at 1200 px/s heading for the detent at 0 (a component
+ * // passes the spring of its motion role):
+ * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
  * // the finger lands again: where is it right now?
  * const y = animator.get('y', event.timeStamp);
  * animator.stop(['y']);
@@ -1142,6 +1147,10 @@ export function createAnimator(
       return;
     }
     if (channel === 'opacity' && borrowedOpacity != null) {
+      if ([...landings].some(landing => landing.fadeIn?.isBorrowed === true)) {
+        // At the bottom of the dip, before it lands and fades back in.
+        return;
+      }
       // A dip on the stylesheet's opacity ended: the stylesheet owns it again.
       borrowedOpacity = null;
       segments.delete('opacity');
@@ -1421,6 +1430,20 @@ export function createAnimator(
         resolveGroup(group, Number(animation.startTime));
         return;
       }
+    }
+    // Finished from outside before the browser started it (a sampler's
+    // finish() on a held animation): nothing is left to wait on, so the call
+    // keeps its own clock, and a later call on an explicit clock does not
+    // join it and wait for a start that never comes.
+    if (
+      group.animations.length > 0 &&
+      group.animations.every(
+        animation =>
+          animation.playState === 'finished' || animation.playState === 'idle',
+      ) &&
+      group.animations.some(animation => animation.playState === 'finished')
+    ) {
+      resolveGroup(group, group.provisional);
     }
   };
 
@@ -1751,7 +1774,7 @@ export function createAnimator(
     plan: NonNullable<ReducedPlan['landing']>,
     carried: HandleState[],
   ) => {
-    const landing: Landing = {...plan, owner, carried, timer: null};
+    const landing: Landing = {...plan, owner, carried, timer: null, due: null};
     landings.add(landing);
     // The handle settles when the landing (and its fade back in) is done.
     if (owner.timer != null) {
@@ -1762,17 +1785,21 @@ export function createAnimator(
       if (!landings.has(landing)) {
         return;
       }
+      landing.due = start + landing.at;
       landing.timer = setTimeout(
         () => land(landing),
-        Math.max(0, start + landing.at - now()),
+        Math.max(0, landing.due - now()),
       );
     });
   };
 
   /**
    * Writes the travel while the element is transparent: a plain style write,
-   * never an animation. A busy main thread only keeps it transparent longer.
-   * In a dip the fade back in starts from here.
+   * never an animation (DR2: opacity only), so it is never shown in the wrong
+   * place. In a dip the fade back in starts from here and takes what is left
+   * of the cross-fade, so the dip ends when it was due even when a busy main
+   * thread runs this timer late; past the whole fade back in (over 100 ms
+   * late) the element appears at once where it landed.
    */
   const land = (landing: Landing) => {
     landings.delete(landing);
@@ -1786,15 +1813,21 @@ export function createAnimator(
     }
     let end = time;
     if (landing.fadeIn != null) {
+      // The fade back in takes what is left of the cross-fade: a timer that
+      // a busy main thread runs late shortens it, so the dip still ends
+      // when it was due (design:reduced-motion DR2, 200 ms or less), and the
+      // element is never shown before it lands.
+      const late = landing.due == null ? 0 : Math.max(0, time - landing.due);
+      const ms = Math.max(1, landing.fadeIn.ms - late);
       segments.set(
         'opacity',
         fadeSegment(landing.owner, time, [
           {at: 0, value: valueAt('opacity', time)},
-          {at: landing.fadeIn.ms, value: landing.fadeIn.to},
+          {at: ms, value: landing.fadeIn.to},
         ]),
       );
       changed.push('opacity');
-      end = time + landing.fadeIn.ms;
+      end = time + ms;
     } else if (landing.restore != null) {
       segments.delete('opacity');
       resting.opacity = landing.restore;
@@ -1916,11 +1949,15 @@ export function createAnimator(
       // A dip: fades out, lands while transparent, fades back in. When no
       // call owns opacity it starts from and returns to the element's own
       // (stylesheet) opacity, not the model's 1.
+      // A dip still running on borrowed opacity (its fade out or back in)
+      // lends the same borrow to the next one: overlapping dips never pin
+      // the stylesheet's value inline.
+      const priorBorrow = borrowedOpacity;
       const ownsOpacity =
         named ||
-        segments.has('opacity') ||
-        resting.opacity !== IDENTITY.opacity;
-      const borrowed = ownsOpacity ? null : ownOpacity();
+        (priorBorrow == null &&
+          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
+      const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
       next.opacity = fadeSegment(owner, time, [
         {at: 0, value: borrowed ?? opacityNow},
         {at: ms / 2, value: 0},
@@ -1933,6 +1970,7 @@ export function createAnimator(
           ms: ms / 2,
           isBorrowed: borrowed != null,
         }),
+        borrowed,
       };
     }
     if ('opacity' in targets) {
@@ -1961,8 +1999,35 @@ export function createAnimator(
       }
       demote();
       if (next == null) {
-        // Unmount: nothing is left to animate, so every handle settles as
-        // interrupted and no completion timer outlives the element, as in
+        // A Reduce Motion move waiting to land lands now, in the model: a
+        // node that replaces this one (React's replacement order,
+        // architecture:react-component-runtime INV6) shows it where it ends,
+        // and its handles settle finished.
+        for (const landing of [...landings]) {
+          endLanding(landing);
+          for (const [property, value] of landing.values) {
+            segments.delete(property);
+            resting[property] = value;
+          }
+          if (landing.fadeIn != null || landing.restore != null) {
+            segments.delete('opacity');
+            resting.opacity =
+              landing.fadeIn?.isBorrowed === true
+                ? IDENTITY.opacity
+                : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
+          }
+          if (landing.fadeIn?.isBorrowed === true) {
+            borrowedOpacity = null;
+          }
+          for (const owner of [landing.owner, ...landing.carried]) {
+            carriedOwners.delete(owner);
+            if (!owner.settled) {
+              settle(owner, true);
+            }
+          }
+        }
+        // Unmount: nothing is left to animate, so every other handle settles
+        // as interrupted and no completion timer outlives the element, as in
         // dispose() (architecture:react-component-runtime INV5).
         const time = now();
         for (const property of PROPERTIES) {
@@ -2086,6 +2151,10 @@ export function createAnimator(
         }
       }
       commitCall(group, owner, changed, time);
+      if (plan?.borrowed != null) {
+        // The dip's own commit cleared it; the borrow lasts the dip.
+        borrowedOpacity = plan.borrowed;
+      }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
@@ -2180,6 +2249,10 @@ export function createAnimator(
         }
       }
       commitCall(group, owner, changed, time);
+      if (plan?.borrowed != null) {
+        // The dip's own commit cleared it; the borrow lasts the dip.
+        borrowedOpacity = plan.borrowed;
+      }
       const handle = makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, carried);
