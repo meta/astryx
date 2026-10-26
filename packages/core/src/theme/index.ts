@@ -104,6 +104,8 @@ export type {ColorScaleConfig, ColorScaleTokens} from './expandColorScale';
 
 export {expandMotionScale} from './expandMotionScale';
 export type {MotionScaleConfig, MotionScaleTokens} from './expandMotionScale';
+export type {MotionConfig, MotionRoleValues} from './expandMotionRoles';
+export type {MotionCurvePoints} from '../motion/roleValue';
 
 // Export token defaults and vars for use in custom components and themes
 export {
