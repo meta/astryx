@@ -69,6 +69,14 @@ dispatch latency, and the events go through the compositor's gesture detection
 the limits below. Read positions a frame after a move: Chromium delivers
 `pointermove` aligned to animation frames.
 
+**Stories, not Storybook.** `openStory` turns Storybook's highlight module off
+on every page it opens, and checks that its root element is absent. Left on,
+the module observes `#storybook-root` and, on every insertion, reads the
+computed style of every element on the page inside the inserting task (117
+reads and two forced style recalculations for one exit copy in a Button story),
+so a proof would measure Storybook as well as the component.
+`openStory(page, origin, id, args, {storybookHighlight: true})` keeps it on.
+
 **Curve sampling.** Pause every running animation (CSS transitions and
 animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
@@ -92,15 +100,16 @@ full end, and `waitForRest` waits the hold out. An animation reversed before it 
 on a new animation, a negative playback rate from the start) is reported by
 `waitForAnimation` from when it started, but `holdAnimations` refuses it:
 seeking and sampling run a curve forward. The recorder keeps one entry per
-`Animation` object, so one reversed or replayed mid-run is reported as its
-first run; take a fresh animation for each run a proof reads.
+`Animation` object, so one reversed or replayed mid-run is misread: a watch
+taken before the reversal rejects, and an unwatched wait returns at once with
+a curve dated before it. Take a fresh animation for each run a proof reads.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the
 page's own `requestAnimationFrame`, the CSS animation and transition events,
 and `Element.animate` as it is called, pending animations included. So
 `waitForAnimation` also reports one that started after the last
-`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+`waitForRest`, `waitForAnimation` or `watchAnimations` and has already finished (`finishedAt`
 set): a short entrance no longer races the first look on a cold page. When the
 action may be the page's first contact with the harness, take
 `watchAnimations(locator)` before it and read `watch.started()` after.
@@ -166,7 +175,8 @@ a stall as before. A gap that opens or closes the judged part, or holds a
 delivered frame that did not move, is judged from the screencast, so a
 frozen element fails whatever else the compositor draws (a rAF animation's
 block presents no compositor frame at all). With the record, the 90% counts the
-compositor's frames in the judged part. WebKit has no such trace:
+compositor's frames from the first to the last moved frame; the gaps before and
+after are the stall check's. WebKit has no such trace:
 `stop()` resolves to `[]` and the screencast is judged alone.
 
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
@@ -182,11 +192,15 @@ down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
 animation the action starts a frame or two later is waited for) and reads no
 style until the trace ends (in the anchored fixture's steady middle,
-24 Layouts before, 0 now). The trace's `longTasks` are the page's own: a task
-that ran a DevTools command (a harness read such as `waitForAnimation`
-describing keyframes, or `blockMainThread` without `during`) is in
-`devtoolsTasks` instead, unless page script ran inside it (a listener or timer
-the evaluate set off).
+24 Layouts before, 0 now). So do `waitForAnimation` and a watch's
+`started()`: they take the element's animations from the recorder's log,
+judge a started one by its own times, and reach the element through a handle,
+since each `locator.evaluate` makes a main-thread frame (there too, 24
+Layouts before, 0 now). The trace's `longTasks` are the page's own: only a
+task the harness marked as its own read (`waitForAnimation` describing
+keyframes, `blockMainThread` without `during`) is in `devtoolsTasks` instead,
+and only when no page script ran inside it. A test's own `page.evaluate` stays a
+long task, whether it calls page code directly or sets it off.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -195,7 +209,8 @@ evidence. A component that finishes an animation from a timer (a transitionend
 backstop, a cleanup render) would do so behind a held storyboard's back:
 `installTimerGate` before the animation starts and `freezeTimers` while
 photographing. The page can still cancel a held callback, a held frame callback
-gets the time it actually runs, and the harness's own frame waits are not held.
+gets the time it actually runs, and the harness's own waits (its frame waits,
+`blockMainThread` with `during`, `sampleRects`) are not held.
 An animation that repeats forever does not set a storyboard's default length;
 with nothing else to film, pass `times`. A touch filmstrip keeps the scripted
 event `timeStamp`s (Chromium), but a handler that reads `performance.now()` or
