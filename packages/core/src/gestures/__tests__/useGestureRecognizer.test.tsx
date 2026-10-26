@@ -11,10 +11,11 @@
  */
 
 import {act, render} from '@testing-library/react';
-import {useRef} from 'react';
+import {useEffect, useRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
+import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
 
 function touch(
@@ -180,6 +181,38 @@ describe('useGestureRecognizer', () => {
     (pan as PanGestureRecognizer | null)?.setEnabled(false);
     expect(states).toEqual(['began', 'cancelled']);
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
+  });
+
+  it('reports nothing from the isEnabled Effect for a recognizer that required the disabled one to fail (react-component-runtime INV2)', () => {
+    const onSingle = vi.fn();
+    function Taps({isDoubleEnabled}: {isDoubleEnabled: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      const double = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+        undefined,
+        {isEnabled: isDoubleEnabled},
+      );
+      const single = useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        onSingle,
+      );
+      useEffect(() => {
+        single.requireToFail(double);
+      }, [single, double]);
+      return <div data-testid="taps" ref={ref} />;
+    }
+    const {getByTestId, rerender} = render(<Taps isDoubleEnabled />);
+    const surface = getByTestId('taps');
+    touch('touchstart', surface, {id: 1, x: 5, y: 5}, 0);
+    touch('touchend', surface, {id: 1, x: 5, y: 5}, 40, true);
+    // The single tap waits for the double tap to fail.
+    expect(onSingle).not.toHaveBeenCalled();
+    // Turning the double tap off fails it in the Effect, and the single tap
+    // recognizes in that same arena pass: its caller hears nothing from it.
+    rerender(<Taps isDoubleEnabled={false} />);
+    expect(onSingle).not.toHaveBeenCalled();
   });
 
   it('detaches on unmount', () => {
