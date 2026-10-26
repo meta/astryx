@@ -162,7 +162,7 @@ describe('the press feedback against UIKit (iOS 26.2, measured frames)', () => {
   });
 });
 
-describe('pressFeedbackMotion: the feedback is a motion role a theme retunes', () => {
+describe('pressFeedbackMotion: the feedback plays the table’s motion (touch motion stays internal)', () => {
   // The touch code registers the table before its first motion.
   registerContextMenuTable();
 
@@ -198,7 +198,7 @@ describe('pressFeedbackMotion: the feedback is a motion role a theme retunes', (
     });
   });
 
-  it('takes a theme’s spring and latency; the onset, the commit and the menu’s moment are not roles', () => {
+  it('takes nothing from a theme: no ContextMenu value is a motion role', () => {
     const element = themed({
       '--motion-context-menu-press-feedback-spring': '0.5s 0',
       '--motion-context-menu-press-feedback-latency-ms': '80ms',
@@ -207,9 +207,9 @@ describe('pressFeedbackMotion: the feedback is a motion role a theme retunes', (
     });
     const motion = pressFeedbackMotion(element);
     expect(motion).toEqual({
-      spring: {duration: 0.5, bounce: 0},
+      spring: contextMenu.press.feedbackSpring,
       onsetMs: contextMenu.press.feedbackOnsetMs,
-      latencyMs: 80,
+      latencyMs: contextMenu.press.feedbackLatencyMs,
     });
     const curve = pressFeedbackCurve({motion});
     expect(curve.at(0)).toBe(1);

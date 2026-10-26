@@ -1045,37 +1045,6 @@ test('a tap on the backdrop closes the menu and reaches nothing under it', async
   expect(clicked.filter(target => target !== 'backdrop')).toEqual([]);
 });
 
-test('a theme retunes the lift (motion roles): a slower morph spring makes the menu’s entrance longer', async ({
-  page,
-}) => {
-  const {driver, center} = await openLiftStory(page);
-  // The theme scope's variable, as `defineTheme({motion})` writes it, set
-  // before the first press reads it.
-  await page.evaluate(() => {
-    const trigger = document.querySelector(
-      '[data-testid="touch-context-menu"]',
-    );
-    const scope =
-      trigger?.closest<HTMLElement>('[data-astryx-theme]') ??
-      document.documentElement;
-    scope.style.setProperty('--motion-context-menu-lift-morph-spring', '1s 0');
-  });
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 40}));
-  const menu = page.getByRole('menu', {name: 'Photo actions'});
-  await expect(menu).toBeVisible();
-  // The entrance plays on the menu's popover, the layer's own element.
-  const longest = await menu.evaluate(el =>
-    Math.max(
-      0,
-      ...(el.closest('[popover]') ?? el)
-        .getAnimations()
-        .map(a => Number(a.effect?.getTiming().duration ?? 0)),
-    ),
-  );
-  // UIKit's morph spring (0.3 s, 0.8) settles in about half a second.
-  expect(longest).toBeGreaterThan(900);
-});
-
 test('the lift keeps moving while the main thread is blocked: the card grows on every frame', async ({
   page,
   browserName,
