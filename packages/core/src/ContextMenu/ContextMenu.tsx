@@ -127,8 +127,7 @@ const styles = stylex.create({
   // tracks the trigger (and scrolls with it) instead of the page. The iOS
   // callout and text selection stay off, as they always have, so a long press
   // or a right-click opens our menu instead of selecting the trigger's text
-  // (spec:AST-017 FR59); the gesture host adds its own lock while its
-  // recognizer is attached.
+  // (spec:AST-017 FR59); the gesture host adds its own lock for a held press.
   trigger: {
     position: 'relative',
     WebkitTouchCallout: 'none',
