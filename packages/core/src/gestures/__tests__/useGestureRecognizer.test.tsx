@@ -72,6 +72,14 @@ afterEach(() => {
   restorePointer();
 });
 
+/** Wait for the next animation frame, where the host writes touch-action. */
+async function nextFrame(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
 describe('useGestureRecognizer', () => {
   afterEach(() => {
     renders = 0;
@@ -236,12 +244,14 @@ describe('useGestureRecognizer', () => {
     expect(onSingle).not.toHaveBeenCalled();
   });
 
-  it('attaches nothing while disabled: no touch-action, no gesture (FR24)', () => {
+  it('attaches nothing while disabled: no touch-action, no gesture (FR24)', async () => {
     const states: string[] = [];
     const {getByTestId, rerender} = render(
       <Draggable onPan={r => states.push(r.state)} />,
     );
     const surface = getByTestId('surface');
+    // The host writes its touch-action in the next frame (FR18).
+    await nextFrame();
     const remove = vi.spyOn(surface.style, 'removeProperty');
     act(() => {
       rerender(
@@ -285,10 +295,12 @@ describe('useGestureRecognizer', () => {
     touch('touchend', second, {id: 9, x: 30, y: 0}, 32, true);
   });
 
-  it('detaches on unmount', () => {
+  it('detaches on unmount', async () => {
     const onPan = vi.fn();
     const {getByTestId, unmount} = render(<Draggable onPan={onPan} />);
     const surface = getByTestId('surface');
+    // The host writes its touch-action in the next frame (FR18).
+    await nextFrame();
     const remove = vi.spyOn(surface.style, 'removeProperty');
     unmount();
     expect(remove).toHaveBeenCalledWith('touch-action');
