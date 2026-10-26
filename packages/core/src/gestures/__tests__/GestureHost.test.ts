@@ -898,6 +898,30 @@ describe('GestureHost', () => {
     expect(consumer.events.at(-1)).toMatch(/^cancelled/);
   });
 
+  it('lets a scroll take an unclaimed touch from 10 px of travel, straight or diagonal, and not before (spec:AST-094 FR20)', () => {
+    const takenAfter = (dx: number, dy: number) => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      const consumer = new RecordingConsumer();
+      const detach = host.attachConsumer(row, consumer);
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      const moved = {...finger, x: 10 + dx, y: 10 + dy};
+      touch('touchmove', row, [moved], [moved], 16);
+      list.dispatchEvent(new Event('scroll'));
+      const taken = consumer.events.some(event =>
+        event.startsWith('cancelled'),
+      );
+      touch('touchend', row, [moved], [], 32);
+      detach();
+      return taken;
+    };
+    expect(takenAfter(0, 9)).toBe(false);
+    expect(takenAfter(0, 10)).toBe(true);
+    // 9.9 px and 11.3 px from where it landed.
+    expect(takenAfter(7, 7)).toBe(false);
+    expect(takenAfter(8, 8)).toBe(true);
+  });
+
   it("leaves a still finger's press and click alone when the page scrolls under it", () => {
     const {list, button} = mount(
       '<div id="list"><button id="button">Go</button></div>',
