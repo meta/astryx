@@ -742,6 +742,19 @@ describe('review fixes', () => {
     );
   });
 
+  it('a later {at} than a call from rest still waiting keeps its own clock, with no hold', async () => {
+    const {animator} = setup();
+    animator.animate({opacity: 0}, {spring: springs.settle});
+    // A frame later the browser has still not started it (a busy compositor),
+    // and a tap's call names its own, later clock.
+    clock = 1011;
+    animator.animate({opacity: 1}, {spring: springs.settle}, {at: 1011});
+    const fade = recorded.filter(a => !a.cancelled).at(-1);
+    expect(fade?.startTime).toBe(1011);
+    // The curve moves from its first keyframe on.
+    expect(fade?.keyframes[1].opacity).not.toBe(fade?.keyframes[0].opacity);
+  });
+
   it('a call adopted by a later same-task call starts at the commit, after the work between them', async () => {
     const {animator} = setup();
     const first = animator.animate({x: 100}, {spring: springs.settle});
@@ -1060,6 +1073,19 @@ describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => 
 });
 
 describe('set: direct manipulation', () => {
+  it('a commit that leaves several channels at identity reads the stylesheet once', () => {
+    // Each read after a write forces a style recalculation (a lifted menu
+    // that grows back to identity on translate, scale and opacity paid one
+    // per channel in its opening commit).
+    const {animator} = setup();
+    animator.set({x: 10, scale: 2, opacity: 0.5});
+    const reads = vi.mocked(window.getComputedStyle).mock.calls.length;
+    animator.set({x: 0, scale: 1, opacity: 1});
+    expect(vi.mocked(window.getComputedStyle).mock.calls.length - reads).toBe(
+      1,
+    );
+  });
+
   it('writes one inline style per move and starts no animation', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
@@ -1135,6 +1161,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
         ),
       ),
     );
+
+  it('an entrance after an outside finish starts from what is on screen', async () => {
+    const {animator} = reduced();
+    animator.animate(
+      {opacity: 0},
+      {spring: springs.settle},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(16);
+    // A test utility finishes the fade out: opacity 0 on screen, while the
+    // curve would still read about 0.93.
+    const [exit] = live('opacity');
+    exit.finish();
+    animator.animate(
+      {opacity: 1},
+      {spring: springs.settle},
+      {crossfadeAs: 'entrance'},
+    );
+    const fade = live('opacity').at(-1);
+    expect(fade?.keyframes[0].opacity).toBe('0');
+  });
 
   it('fades for 200 ms at most', () => {
     expect(fade).toBeGreaterThan(0);

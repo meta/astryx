@@ -1136,6 +1136,7 @@ export function createAnimator(
       }
       animation.cancel();
       releaseIdentity(channel);
+      flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
   };
@@ -1174,15 +1175,49 @@ export function createAnimator(
       target.style.removeProperty('opacity');
       return;
     }
-    const text = target.style.getPropertyValue(channel);
-    if (text !== IDENTITY_TEXT[channel]) {
+    if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
       return;
     }
-    target.style.removeProperty(channel);
-    const view = target.ownerDocument.defaultView;
-    const underneath = view?.getComputedStyle(target).getPropertyValue(channel);
-    if (underneath != null && !isIdentityText(channel, underneath)) {
-      target.style.setProperty(channel, text);
+    // Read with every other channel the same commit leaves at identity: one
+    // style read for the element, not one per channel (flushReleases).
+    releasing.add(channel);
+    if (!releaseQueued) {
+      releaseQueued = true;
+      queueMicrotask(flushReleases);
+    }
+  };
+
+  /** Channels left at identity whose stylesheet value is still to be read. */
+  const releasing = new Set<Channel>();
+  let releaseQueued = false;
+
+  /**
+   * Removes the identity values written since the last flush, reads the
+   * stylesheet once for all of them, and puts back the ones it would move:
+   * a single forced style read per element and commit, where a read per
+   * channel used to force one each.
+   */
+  const flushReleases = () => {
+    releaseQueued = false;
+    const element = target;
+    const channels = [...releasing].filter(
+      channel =>
+        !running.has(channel) &&
+        element?.style.getPropertyValue(channel) === IDENTITY_TEXT[channel],
+    );
+    releasing.clear();
+    if (element == null || channels.length === 0) {
+      return;
+    }
+    for (const channel of channels) {
+      element.style.removeProperty(channel);
+    }
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+    for (const channel of channels) {
+      const underneath = style?.getPropertyValue(channel);
+      if (underneath != null && !isIdentityText(channel, underneath)) {
+        element.style.setProperty(channel, IDENTITY_TEXT[channel]);
+      }
     }
   };
 
@@ -1302,14 +1337,18 @@ export function createAnimator(
       channels.add(CHANNEL_OF[property]);
     }
     if (at != null) {
-      // An explicit clock is the caller's, except the clock of a call from
-      // rest on these channels still waiting for the browser's start (a drop
-      // and the reorder that rebases it in the same task): the new call joins
-      // that call, and the browser's start moves both.
+      // An explicit clock is the caller's, except a clock no later than a
+      // call from rest on these channels still waiting for the browser's
+      // start (an event timestamp, such as a drop's, for the reorder that
+      // rebases it): the new call joins that call, and the browser's start
+      // moves both. A later clock is a later call, often a frame or more
+      // later while the browser has not started the first: it keeps its own
+      // clock, since joining would sample its curve from the earlier call's
+      // time and hold its first value for the gap.
       for (const channel of channels) {
         for (const property of CHANNELS[channel]) {
           const group = segments.get(property)?.group;
-          if (group != null && !group.resolved) {
+          if (group != null && !group.resolved && at <= group.provisional) {
             return group;
           }
         }
@@ -1467,6 +1506,30 @@ export function createAnimator(
   const syncPending = () => {
     for (const group of pendingGroups) {
       syncGroup(group);
+    }
+    syncFinished();
+  };
+
+  /**
+   * An animation finished from outside (a test utility's or devtools'
+   * `finish()`) shows its end state while the model still reads its curve:
+   * the curve ends now in the model too, so the next call starts from what
+   * is on screen.
+   */
+  const syncFinished = () => {
+    for (const [channel, animation] of running) {
+      if (animation.playState !== 'finished') {
+        continue;
+      }
+      const time = now();
+      for (const property of CHANNELS[channel]) {
+        const segment = segments.get(property);
+        if (segment == null || time >= segment.start + segment.duration) {
+          continue;
+        }
+        segments.delete(property);
+        resting[property] = segment.target;
+      }
     }
   };
 
@@ -1696,6 +1759,7 @@ export function createAnimator(
     for (const channel of channels) {
       rebuild(channel, time);
     }
+    flushReleases();
   };
 
   /** Reduced Motion landings still waiting for the element to be transparent. */
@@ -2076,6 +2140,7 @@ export function createAnimator(
           rebuild(channel, time);
         }
       }
+      flushReleases();
     },
 
     get(property, time = now()) {
