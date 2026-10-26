@@ -62,8 +62,19 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
 
   constructor(options: LongPressGestureRecognizerOptions = {}) {
     // A long press's hold does something (a menu, a hold-repeat): it locks
-    // selection for its press (spec:AST-094 FR41).
-    super({...options, selectionLock: options.selectionLock ?? lockSelection});
+    // selection for its press (spec:AST-094 FR41). One at 0 ms recognizes at
+    // touch-down and has no hold, so it brings none, nor does one told null:
+    // there the browser keeps its native long press.
+    super({
+      ...options,
+      selectionLock:
+        options.selectionLock !== undefined
+          ? options.selectionLock
+          : (options.minimumPressDuration ??
+                UIKIT_GESTURES.longPress.minimumPressDuration.value) > 0
+            ? lockSelection
+            : null,
+    });
     this.minimumPressDuration =
       options.minimumPressDuration ??
       UIKIT_GESTURES.longPress.minimumPressDuration.value;
