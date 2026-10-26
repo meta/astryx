@@ -595,6 +595,42 @@ test.describe('frame evidence', () => {
     expect(started.map(a => a.durationMs)).toEqual([600, 600]);
   });
 
+  test('a waitForRest awaited inside a traced body stands down too, so the trace counts no Layout from it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    let started = 0;
+    const trace = await traceRendering(page, async () => {
+      started = await pop.evaluate(el => {
+        el.animate(
+          [
+            {transform: 'translateY(0px)', opacity: 1},
+            {transform: 'translateY(100px)', opacity: 0.5},
+          ],
+          {duration: 600},
+        );
+        return performance.timeOrigin + performance.now();
+      });
+      // A per-frame wait here would make every frame a main-thread frame.
+      await waitForRest(pop);
+    });
+    expect(countBetween(trace, started + 100, started + 500).Layout ?? 0).toBe(
+      0,
+    );
+    // It still waited for the curve to end.
+    expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
+  });
+
   test('a CSS transition and animation that start and end inside a trace are reported, and lay out nothing in between', async ({
     page,
     browserName,
