@@ -181,10 +181,11 @@ compositor's frames in the judged part. WebKit has no such trace:
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
 Layout or Paint there; a layout-property animation does one per frame. Its
-`longTasks` are the page's own: a task that ran a DevTools command (a harness
-read such as `waitForAnimation` describing keyframes, or `blockMainThread`
-without `during`) is in `devtoolsTasks` instead, unless page script ran
-inside it (a listener or timer the evaluate set off).
+`longTasks` are the page's own: only a task the harness marked as its own read
+(`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
+is in `devtoolsTasks` instead, and only when no page script ran inside it. A
+test's own `page.evaluate` stays a long task, whether it calls page code
+directly or sets it off.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

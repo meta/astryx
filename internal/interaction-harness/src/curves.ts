@@ -843,6 +843,8 @@ export async function waitForAnimation(
   for (;;) {
     const found = await locator.evaluate(
       (element, {minProgress, since: watchedFrom}) => {
+        // The harness's own read: a trace sets it apart (trace.ts HARNESS_READ).
+        console.timeStamp('harness-read');
         const w = window as unknown as {
           __harnessCurveEnd: (a: Animation) => number;
           __harnessAnimations: {

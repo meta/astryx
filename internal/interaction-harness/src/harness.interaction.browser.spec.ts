@@ -672,7 +672,7 @@ test.describe('frame evidence', () => {
     expect(await readLongTasks(page, block)).toEqual([]);
   });
 
-  test("a harness read inside a trace is not the page's long task, while page script an evaluate sets off is", async ({
+  test("a harness read inside a trace is not the page's long task, while a test's own evaluate is, whether it calls the page directly or sets it off", async ({
     page,
     browserName,
   }) => {
@@ -698,11 +698,23 @@ test.describe('frame evidence', () => {
         }
       }),
     );
+    // Page code a test can call directly, as through a story's own API.
+    await page.evaluate(() => {
+      (window as unknown as {pageWork: (ms: number) => void}).pageWork = (
+        ms: number,
+      ) => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) {
+          // spin
+        }
+      };
+    });
     await frames(page, 3);
     const now = () =>
       page.evaluate(() => performance.timeOrigin + performance.now());
     const read = {from: 0, to: 0};
     const click = {from: 0, to: 0};
+    const direct = {from: 0, to: 0};
     let timer = {from: 0, to: 0};
     const trace = await traceRendering(page, async () => {
       read.from = await now();
@@ -726,6 +738,12 @@ test.describe('frame evidence', () => {
       click.from = await now();
       await slow.evaluate(el => (el as HTMLElement).click());
       click.to = await now();
+      // Page code a test's evaluate calls directly: 60 ms of the page's work.
+      direct.from = await now();
+      await page.evaluate(() =>
+        (window as unknown as {pageWork: (ms: number) => void}).pageWork(60),
+      );
+      direct.to = await now();
     });
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
@@ -737,6 +755,10 @@ test.describe('frame evidence', () => {
     expect(
       trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
     ).toBe(true);
+    expect(
+      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
+    ).toBe(true);
+    expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });
 

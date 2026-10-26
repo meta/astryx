@@ -67,6 +67,8 @@ export async function blockMainThread(
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
+      // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
+      console.timeStamp('harness-read');
       const from = performance.timeOrigin + performance.now();
       const end = performance.now() + duration;
       let spins = 0;
