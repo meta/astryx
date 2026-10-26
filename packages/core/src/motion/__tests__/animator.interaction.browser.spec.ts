@@ -15,7 +15,7 @@
  *   stylesheet hides stays visible once it retires; a dialog's ::backdrop follows
  *   the curve and holds its end state; a frame painted before the compositor
  *   has a curve shows the element where it is; a role variable set on a scope
- *   changes nothing while touch motion stays internal
+ *   changes nothing while touch motion stays internal (DEC-11)
  * @position Browser proof for animator.ts, run by `pnpm test:interaction`;
  *   jsdom runs no animations
  */
