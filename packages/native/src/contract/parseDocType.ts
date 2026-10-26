@@ -178,8 +178,8 @@ function parseFunction(text: string): ParsedType | null {
  * Parses a documented type string. Supported portable forms: `string`,
  * `number`, `boolean`, closed string or number unions, arrays, plain object
  * literals, callbacks with portable arguments (a trailing DOM event argument
- * is the web's part), and named types. A union of different
- * kinds has no Swift or Kotlin form.
+ * is the web's part), named types, and `string | boolean` (words or a
+ * switch). Any other union of different kinds has no Swift or Kotlin form.
  */
 export function parseDocType(raw: string): ParsedType {
   const text = stripOuterParens(raw.replace(/\s+/g, ' ').trim());
@@ -201,6 +201,13 @@ export function parseDocType(raw: string): ParsedType {
     }
     if (members.every(m => /^-?\d+(?:\.\d+)?$/.test(m))) {
       return ok({kind: 'numberEnum', values: members.map(Number)});
+    }
+    if (
+      members.length === 2 &&
+      members.includes('string') &&
+      members.includes('boolean')
+    ) {
+      return ok({kind: 'textOrBoolean'});
     }
     const webOnly = members.find(m => WEB_ONLY_TYPES[m] != null);
     if (webOnly) {

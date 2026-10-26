@@ -8,7 +8,6 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
-import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -482,7 +481,7 @@ function buildLayerSplitPlugin(
     configResolved(config) {
       base = config.base ?? '/';
     },
-    writeBundle(outputOptions, bundle) {
+    writeBundle(outputOptions) {
       const rulesById = stylex.__stylexGetSharedStore?.().rulesById;
       if (!rulesById || rulesById.size === 0) return;
 
@@ -493,42 +492,6 @@ function buildLayerSplitPlugin(
         renderSplitLayers(rulesById, options),
         options.lightningcssOptions,
       );
-
-      // An app's own stylesheets declare its own custom properties.
-      const emittedCss = Object.values(bundle)
-        .filter(
-          (output): output is Extract<typeof output, {type: 'asset'}> =>
-            output.type === 'asset' && output.fileName.endsWith('.css'),
-        )
-        .map(asset =>
-          typeof asset.source === 'string'
-            ? asset.source
-            : Buffer.from(asset.source).toString('utf8'),
-        );
-      const undeclared = undefinedGeneratedVariables(
-        split,
-        options.classNamePrefixes,
-        emittedCss,
-      );
-      if (undeclared.length > 0) {
-        this.warn(
-          'astryx-build-layer-split: the StyleX stylesheet reads ' +
-            `${undeclared.length} generated custom ` +
-            `propert${undeclared.length === 1 ? 'y' : 'ies'} ` +
-            'that no stylesheet in the build declares:\n' +
-            undeclared
-              .map(
-                name =>
-                  `  ${name}, read by: ${rulesReading(split, name).join(' ') || '(rule not found)'}`,
-              )
-              .join('\n') +
-            '\nWith no declaration, browsers drop the declarations that read ' +
-            'it. A `.stylex.ts` export read in a style must be a ' +
-            '`defineVars`/`defineConsts` value whose module reaches the build; ' +
-            'a property the app sets at runtime (an inline style) needs a name ' +
-            'outside the StyleX class-name prefixes.',
-        );
-      }
 
       const outDir = outputOptions.dir
         ? outputOptions.dir
@@ -586,14 +549,6 @@ function buildLayerSplitPlugin(
       linkStylesheetsForEveryPage(outDir, [sharedStylesheet], base);
     },
   };
-}
-
-/** The rules of `css` that read `name`, for the failure message. */
-function rulesReading(css: string, name: string): string[] {
-  return [...css.matchAll(/[^{}]+\{[^{}]*\}/g)]
-    .map(match => match[0].trim().replace(/\s+/g, ' '))
-    .filter(rule => rule.includes(`var(${name}`))
-    .slice(0, 3);
 }
 
 /** Every `.css` file under a directory, recursively. */
