@@ -486,7 +486,7 @@ test('a held finger on a checkbox inside an element whose hold does something tu
   expect(native).toEqual([native[0], native[0], native[0]]);
 });
 
-test('a scroll the page makes under a still finger keeps the touch and its tap; a drag that scrolls the feed takes it', async ({
+test('a scroll the page makes under a still finger keeps the touch and its tap', async ({
   page,
   browserName,
 }) => {
@@ -510,8 +510,18 @@ test('a scroll the page makes under a still finger keeps the touch and its tap; 
   });
   await driver.play([{t: 0, down: []}]);
   expect(states(await log(page), 'feedTap')).toEqual(['ended', 'possible']);
+});
 
-  // A drag that scrolls the feed natively is the browser's: no tap.
+test('a drag that scrolls the feed natively is the browser’s: no tap', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await open(page, browserName);
+  await page.locator('#feed').scrollIntoViewIfNeeded();
   await page.evaluate(() => {
     const feed = document.getElementById('feed');
     if (feed != null) {
