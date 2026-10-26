@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Under a finger or pen, holding a control whose hold does something (a slider's thumb, a switch's or a segmented control's drag) no longer starts text selection or the iOS callout; they come back when the finger lifts. A control or row whose hold does nothing keeps the browser's long-press selection. Text fields keep their selection, a link keeps its native menu and preview, and where the primary pointer is fine (a mouse, a trackpad, a touchscreen laptop, a desktop pen tablet) every contact keeps desktop selection. There, the press controller also registers no touch listener.
+[chore] Internal: under a finger or pen where the primary pointer is coarse, a gesture recognizer whose hold does something (a long press by default, or any recognizer given a `selectionLock`) suppresses text selection and the iOS callout for its press, and restores them when the contact ends. A hold that does nothing keeps the browser's long-press selection, text fields keep their selection, and a mouse or a fine primary pointer never takes the lock. Not exported from the package entry point; no component uses it yet.
 
 @vjeux

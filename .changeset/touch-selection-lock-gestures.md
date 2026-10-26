@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: the gesture host takes the press feedback's selection lock for a press-tracked control's contact and for a recognizer created with `preventsTextSelection`, a non-text input under the finger included, and restores selection when the contact ends. Not exported from the package entry point; no component uses it yet.
+[chore] Internal: the gesture host applies a recognizer's own `selectionLock` to that recognizer's contact and imports no lock itself, and where the primary pointer is fine the press controller registers no touch listener. Not exported from the package entry point.
 
 @vjeux
