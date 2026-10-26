@@ -3,27 +3,27 @@
 'use client';
 
 /**
- * @file useLift.ts
+ * @file useLiftFromTrigger.ts
  * @input React
- * @output Exports useLift: a component's one lift (lift.ts), ended when the
+ * @output Exports useLiftFromTrigger: a component's one lift (liftFromTrigger.ts), ended when the
  *   component unmounts
  * @position The React entry to the lift presentation; internal to core and
  *   opt-in, like the module itself
  *
- * SYNC: When modified, update /packages/core/src/lift/lift.test.ts
+ * SYNC: When modified, update /packages/core/src/liftFromTrigger/liftFromTrigger.test.ts
  */
 
 import {useEffect, useRef} from 'react';
-import {createLift, type Lift} from './lift';
+import {createLiftFromTrigger, type LiftFromTrigger} from './liftFromTrigger';
 
 /**
  * The component's lift. It stays the same object for the component's life;
  * an unmount ends whatever it has up and leaves the page as it was
  * (spec:AST-094 FR24).
  */
-export function useLift(): Lift {
-  const liftRef = useRef<Lift | null>(null);
-  liftRef.current ??= createLift();
+export function useLiftFromTrigger(): LiftFromTrigger {
+  const liftRef = useRef<LiftFromTrigger | null>(null);
+  liftRef.current ??= createLiftFromTrigger();
   const lift = liftRef.current;
   useEffect(() => () => lift.dispose(), [lift]);
   return lift;

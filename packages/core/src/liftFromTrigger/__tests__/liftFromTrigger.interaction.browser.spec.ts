@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file lift.interaction.browser.spec.ts
+ * @file liftFromTrigger.interaction.browser.spec.ts
  * @input The lift bundled with esbuild onto a blank fixture page
- *   (lift.fixture.ts): a list of rows in a clipping, transformed panel and a
+ *   (liftFromTrigger.fixture.ts): a list of rows in a clipping, transformed panel and a
  *   menu popover; Chromium and WebKit
  * @output Proof in real engines that a row lifts itself into the top layer
  *   at its lifted rect while one placeholder holds its spot (nothing else
@@ -18,7 +18,7 @@
  *   (AST-017 FR60); that repeated lifts leave no node or listener behind;
  *   that a tap while it grows reaches nothing (FR35) and one on the backdrop
  *   afterwards is the backdrop tap
- * @position Browser proof for lift.ts, run by `pnpm test:interaction`; jsdom
+ * @position Browser proof for liftFromTrigger.ts, run by `pnpm test:interaction`; jsdom
  *   has no layout, no top layer and no animations
  */
 
@@ -27,7 +27,7 @@ import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@playwright/test';
 import {build, type Plugin} from 'esbuild';
 // The page's `window.__lift`.
-import type {LiftFixture} from './lift.fixture';
+import type {LiftFixture} from './liftFromTrigger.fixture';
 
 // The layer runtime's gutter is a `stylex.defineConsts` table: static values
 // the StyleX compiler puts in place of the call. Unbundled by that compiler,
@@ -54,7 +54,7 @@ test.beforeAll(async () => {
     entryPoints: [
       path.join(
         path.dirname(fileURLToPath(import.meta.url)),
-        'lift.fixture.ts',
+        'liftFromTrigger.fixture.ts',
       ),
     ],
     bundle: true,
@@ -77,7 +77,7 @@ async function open(page: Page) {
 }
 
 type Box = [number, number, number, number];
-type LiftResult = NonNullable<ReturnType<LiftFixture['lift']>>;
+type LiftFromTriggerResult = NonNullable<ReturnType<LiftFixture['lift']>>;
 
 function expectBox(actual: Box, expected: Box, tolerance = 0.5) {
   for (let i = 0; i < 4; i++) {
@@ -124,7 +124,7 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
   expect(after.isOpen).toBe(true);
   // Grown by 26 px on its larger side, about its center: wider than the
   // clipping panel, and drawn whole.
-  const lifted: LiftResult['lifted'] = result?.lifted ?? {
+  const lifted: LiftFromTriggerResult['lifted'] = result?.lifted ?? {
     x: 0,
     y: 0,
     width: 0,

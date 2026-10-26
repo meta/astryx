@@ -1,17 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file lift.fixture.ts
+ * @file liftFromTrigger.fixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page with a list of rows inside a clipping, transformed panel
  *   (the first row rounded by `:first-child`, the second holding twelve
  *   elements), a menu popover beside it, and `window.__lift`: lift a row,
  *   grow and close the menu, drop, end, and the backdrop taps and the
  *   clicks the page received
- * @position Browser fixture of lift.interaction.browser.spec.ts; test-only
+ * @position Browser fixture of liftFromTrigger.interaction.browser.spec.ts; test-only
  */
 
-import {createLift, type LiftOptions, type LiftResult} from '../lift';
+import {
+  createLiftFromTrigger,
+  type LiftFromTriggerOptions,
+  type LiftFromTriggerResult,
+} from '../liftFromTrigger';
 
 interface LiftLog {
   backdropTaps: number;
@@ -21,7 +25,7 @@ interface LiftLog {
 /** The page's handle on its lift. */
 export interface LiftFixture {
   log: LiftLog;
-  lift: (id: string, springResponse?: number) => LiftResult | null;
+  lift: (id: string, springResponse?: number) => LiftFromTriggerResult | null;
   presentMenu: (press: {x: number; y: number} | null) => void;
   dismissMenu: () => void;
   closeMenu: () => void;
@@ -85,9 +89,9 @@ document.addEventListener(
   true,
 );
 
-const lift = createLift();
+const lift = createLiftFromTrigger();
 
-function options(response: number): LiftOptions {
+function options(response: number): LiftFromTriggerOptions {
   const spring = {response, dampingRatio: 0.9};
   return {
     motion: {
