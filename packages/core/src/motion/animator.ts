@@ -1102,6 +1102,7 @@ export function createAnimator(
       }
       animation.cancel();
       releaseIdentity(channel);
+      flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
   };
@@ -1140,15 +1141,49 @@ export function createAnimator(
       target.style.removeProperty('opacity');
       return;
     }
-    const text = target.style.getPropertyValue(channel);
-    if (text !== IDENTITY_TEXT[channel]) {
+    if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
       return;
     }
-    target.style.removeProperty(channel);
-    const view = target.ownerDocument.defaultView;
-    const underneath = view?.getComputedStyle(target).getPropertyValue(channel);
-    if (underneath != null && !isIdentityText(channel, underneath)) {
-      target.style.setProperty(channel, text);
+    // Read with every other channel the same commit leaves at identity: one
+    // style read for the element, not one per channel (flushReleases).
+    releasing.add(channel);
+    if (!releaseQueued) {
+      releaseQueued = true;
+      queueMicrotask(flushReleases);
+    }
+  };
+
+  /** Channels left at identity whose stylesheet value is still to be read. */
+  const releasing = new Set<Channel>();
+  let releaseQueued = false;
+
+  /**
+   * Removes the identity values written since the last flush, reads the
+   * stylesheet once for all of them, and puts back the ones it would move:
+   * a single forced style read per element and commit, where a read per
+   * channel used to force one each.
+   */
+  const flushReleases = () => {
+    releaseQueued = false;
+    const element = target;
+    const channels = [...releasing].filter(
+      channel =>
+        !running.has(channel) &&
+        element?.style.getPropertyValue(channel) === IDENTITY_TEXT[channel],
+    );
+    releasing.clear();
+    if (element == null || channels.length === 0) {
+      return;
+    }
+    for (const channel of channels) {
+      element.style.removeProperty(channel);
+    }
+    const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+    for (const channel of channels) {
+      const underneath = style?.getPropertyValue(channel);
+      if (underneath != null && !isIdentityText(channel, underneath)) {
+        element.style.setProperty(channel, IDENTITY_TEXT[channel]);
+      }
     }
   };
 
@@ -1657,6 +1692,7 @@ export function createAnimator(
     for (const channel of channels) {
       rebuild(channel, time);
     }
+    flushReleases();
   };
 
   /** Reduced Motion landings still waiting for the element to be transparent. */
@@ -2033,6 +2069,7 @@ export function createAnimator(
           rebuild(channel, time);
         }
       }
+      flushReleases();
     },
 
     get(property, time = now()) {

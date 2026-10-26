@@ -1033,6 +1033,19 @@ describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => 
 });
 
 describe('set: direct manipulation', () => {
+  it('a commit that leaves several channels at identity reads the stylesheet once', () => {
+    // Each read after a write forces a style recalculation (a lifted menu
+    // that grows back to identity on translate, scale and opacity paid one
+    // per channel in its opening commit).
+    const {animator} = setup();
+    animator.set({x: 10, scale: 2, opacity: 0.5});
+    const reads = vi.mocked(window.getComputedStyle).mock.calls.length;
+    animator.set({x: 0, scale: 1, opacity: 1});
+    expect(vi.mocked(window.getComputedStyle).mock.calls.length - reads).toBe(
+      1,
+    );
+  });
+
   it('writes one inline style per move and starts no animation', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
