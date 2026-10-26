@@ -59,7 +59,9 @@ function Sheet() {
   `highlightDelay`, `cancelTravel` and `quickTapFlash` (and the ref itself)
   as they are now, so a change, even mid-press, never drops the press in
   progress. Unmounting or losing its element calls neither
-  `onHighlightChange` nor `onControlEvent`.
+  `onHighlightChange` nor `onControlEvent`, and neither does disabling the
+  control under a finger: the press ends, so the handler that disables it
+  clears its own highlight.
 - `useFingerScroll(scroller)`, an internal piece of the touch module with
   no public API (not in the gestures barrel; a scroll-driven component
   imports its module, so it ships only where used), returns a reader, `true` while the scroller's scroll is a finger's: from a scroll
