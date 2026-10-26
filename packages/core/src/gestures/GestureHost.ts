@@ -378,12 +378,16 @@ export class GestureHost {
     };
   }
 
-  /** Re-derive an element's styles after its recognizers' options changed. */
+  /**
+   * Re-derive an element's styles and the host's listeners after its
+   * recognizers' options or its consumer's enabled state changed.
+   */
   update(element: Element): void {
     const registration = this.registry.get(element);
     if (registration != null) {
       this.refresh(element, registration);
     }
+    this.syncListeners();
   }
 
   /**
@@ -524,7 +528,8 @@ export class GestureHost {
     }
     for (const registration of this.registry.values()) {
       if (
-        registration.consumer != null ||
+        (registration.consumer != null &&
+          registration.consumer.isEnabled?.() !== false) ||
         registration.recognizers.some(r => r.isEnabled) ||
         registration.hovers.some(r => r.isEnabled)
       ) {

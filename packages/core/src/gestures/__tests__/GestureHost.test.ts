@@ -149,10 +149,40 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it('registers no document listener for a disabled consumer until it is enabled (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    added.mockClear();
+    removed.mockClear();
+    const types = (spy: typeof added) =>
+      spy.mock.calls
+        .map(call => call[0])
+        .filter(t => /^(touch|pointer)/.test(t));
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    let enabled = false;
+    const consumer = new RecordingConsumer();
+    Object.assign(consumer, {isEnabled: () => enabled});
+    const detach = coarse.attachConsumer(box, consumer);
+    expect(types(added)).toEqual([]);
+    enabled = true;
+    coarse.update(box);
+    expect(types(added)).toContain('touchstart');
+    enabled = false;
+    coarse.update(box);
+    expect(types(removed)).toContain('touchstart');
+    detach();
+  });
+
   it('registers no document listener where the primary pointer is fine, or while nothing enabled is attached (spec:AST-094 FR19, FR24)', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(document, 'addEventListener');
     const removed = vi.spyOn(document, 'removeEventListener');
+    added.mockClear();
+    removed.mockClear();
     const types = (spy: typeof added) =>
       spy.mock.calls
         .map(call => call[0])
