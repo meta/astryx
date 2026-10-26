@@ -1546,6 +1546,33 @@ describe('GestureHost', () => {
     touch('touchend', off, [one], [], 400);
   });
 
+  it('writes touch-action: manipulation for a kept-press control where the primary pointer is coarse, so rapid taps never zoom, and nothing where it is fine (spec:AST-094 FR18, FR19)', () => {
+    const pointer = pointerQuery(true);
+    detachers.push(pointer.restore);
+    const {stepper, row} = mount(
+      '<div><div id="stepper">+</div><div id="row">Row</div></div>',
+    );
+    // jsdom drops touch-action, so the writes are observed.
+    const set = vi.spyOn(stepper.style, 'setProperty');
+    const remove = vi.spyOn(stepper.style, 'removeProperty');
+    const rowSet = vi.spyOn(row.style, 'setProperty');
+    detachers.push(
+      host.attachConsumer(
+        stepper,
+        new PressTracker({getBounds: () => null, keepsTouch: true}),
+      ),
+    );
+    detachers.push(
+      host.attachConsumer(row, new PressTracker({getBounds: () => null})),
+    );
+    expect(set).toHaveBeenCalledWith('touch-action', 'manipulation');
+    // A press tracker that keeps no touch writes nothing.
+    expect(rowSet).not.toHaveBeenCalledWith('touch-action', expect.anything());
+    // Where the pointer turns fine, the browser's own value comes back (FR19).
+    pointer.set(false);
+    expect(remove).toHaveBeenCalledWith('touch-action');
+  });
+
   it("calls a press tracker's own selection lock for each finger's press, a stepper's hold-repeat, and nowhere else (spec:AST-094 FR41)", () => {
     detachers.push(coarsePrimaryPointer());
     const {stepper, row} = mount(

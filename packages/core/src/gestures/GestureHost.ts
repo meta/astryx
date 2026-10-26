@@ -805,7 +805,19 @@ export class GestureHost {
     const active = registration.recognizers.filter(recognizer =>
       this.isActive(recognizer),
     );
-    const style = active.length > 0 ? gestureHostStyle(active) : {};
+    let style: GestureHostStyle =
+      active.length > 0 ? gestureHostStyle(active) : {};
+    // A control that keeps its touch (a stepper's hold-repeat) takes taps in
+    // quick succession: where the pointer is coarse, the browser's double-tap
+    // zoom goes, as for a tap recognizer (`spec:AST-094` FR18); where it is
+    // fine, the browser keeps its own value (FR19).
+    if (
+      style.touchAction == null &&
+      this.isCoarse &&
+      registration.consumer?.keepsTouch != null
+    ) {
+      style = {...style, touchAction: 'manipulation'};
+    }
     for (const key of Object.keys(
       STYLE_PROPERTIES,
     ) as (keyof GestureHostStyle)[]) {
