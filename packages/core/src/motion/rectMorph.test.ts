@@ -536,12 +536,10 @@ describe('createRectMorph', () => {
     await vi.advanceTimersByTimeAsync(ms);
   };
 
-  it('plays the role\u2019s resolved value, not the table\u2019s raw one', () => {
-    // A registered table's leaf is a motion role, and the morph plays what
-    // the role resolves to on the element. No theme writes a role variable
-    // today — `defineTheme` takes the motion scale, not per-role values —
-    // so the scope's value is stubbed here: this pins the resolution, not a
-    // theme capability.
+  it('plays the table value, since a motion role is internal (DEC-11)', () => {
+    // A registered table's leaf is a motion role, but a role resolves to its
+    // table value: touch motion stays internal and no `--motion-*` variable
+    // retunes it. Writing one on the scope therefore changes nothing.
     const {element, morph} = setup();
     const scope = document.createElement('div');
     scope.setAttribute('data-astryx-theme', 'brisk');
@@ -557,15 +555,12 @@ describe('createRectMorph', () => {
               : '',
         }) as CSSStyleDeclaration,
     );
+    expect(resolveMotion(element, springs.menuOpen)).toBe(springs.menuOpen);
 
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
     morph.present(path, springs.menuOpen);
     const [presenting] = live(element, 'scale');
-    const themedMs = Number(presenting.options.duration);
-    // Read while the theme is still mocked: this is the value the role
-    // resolves to, and what the morph must have played.
-    const themedSpring = resolveMotion(element, springs.menuOpen);
-    expect(themedSpring).not.toBe(springs.menuOpen);
+    const withVariable = Number(presenting.options.duration);
     vi.restoreAllMocks();
 
     const plain = setup();
@@ -574,13 +569,8 @@ describe('createRectMorph', () => {
       springs.menuOpen,
     );
     const [plainPresenting] = live(plain.element, 'scale');
-    const plainMs = Number(plainPresenting.options.duration);
-    // The theme's spring settles later than the table's, by exactly the
-    // difference between the two curves.
-    expect(themedMs).not.toBeCloseTo(plainMs, 0);
-    expect(themedMs - plainMs).toBeCloseTo(
-      progressCurve(themedSpring).duration * 1000 -
-        progressCurve(springs.menuOpen).duration * 1000,
+    expect(withVariable).toBeCloseTo(
+      Number(plainPresenting.options.duration),
       6,
     );
   });
