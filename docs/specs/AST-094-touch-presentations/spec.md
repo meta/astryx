@@ -64,7 +64,8 @@ a measured, sourced difference exists.
   deceleration rate, rubber-band coefficient, gesture threshold and haptic
   moment a touch presentation uses MUST default to the measured native value
   for that use (FR2), and every component that plays the same motion or
-  gesture MUST use the same value; a theme MAY override a motion role (FR4).
+  gesture MUST use the same value; once the roles are public, a theme MAY
+  override a motion role (FR4).
   No component uses a value of its own where a measured value exists. The same
   values apply on every touch platform; a platform gets a value of its own only
   where a measured, sourced difference exists (FR2).
@@ -94,22 +95,22 @@ a measured, sourced difference exists.
   measures (0.55 for a scroll view and a sheet), and a release MUST pick its
   rest point by projecting its velocity the way its UIKit counterpart does:
   with a deceleration rate, or with a measured projection time.
-- **FR4 — Touch motion is themeable.** Every spring, duration and curve a
-  touch presentation plays MUST be a theme motion role named for its use
+- **FR4 — Touch motion uses named roles.** Every spring, duration and curve a
+  touch presentation plays MUST be a motion role named for its use
   (`architecture:theme-tokens` INV3). The roles this record names are listed below with their defaults and
   sources; further roles a component's own record measures join through the
-  generated motion role table (DEC-5). The role's default value is
-  its measured value (FR1, FR2), and a theme MAY override it through `motion`, at its root or
-  in an adaptation rule. A component MUST read touch motion through these roles
-  and MUST NOT play a literal. A theme value MUST reach the motion at its
+  generated motion role table (DEC-5). The role's value is its
+  measured value (FR1, FR2). The roles are internal until the public
+  motion-token set is decided, so a theme cannot override them yet (DEC-11). A component MUST read touch motion through these roles
+  and MUST NOT play a literal. Once a role is public, a theme value MUST reach the motion at its
   start, without changing how the motion runs (FR5, FR6). Motion that
   must stay in step with the on-screen keyboard is not a theme role: it rides
   the keyboard's own motion (`spec:AST-099` FR8,
   `architecture:react-component-runtime` INV11). Gesture thresholds, the timings that decide who gets a touch (the
   content-touch delay, the scroll brake, momentum memory) and haptics are not
-  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). This adds touch motion roles to the motion
-  configuration of `architecture:theme-authoring-contract` and to
-  `architecture:theme-tokens` beside the existing duration and easing tokens, whose rules are unchanged. It departs from the draft `design:motion` DR3
+  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). When the public set is decided, its roles join the motion configuration of
+  `architecture:theme-authoring-contract` and `architecture:theme-tokens`,
+  whose rules are unchanged until then. It departs from the draft `design:motion` DR3
   wherever the native motion settles with an overshoot or stretches with a
   rubber band.
 
@@ -323,7 +324,7 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 - **FR31 — Menus and popovers grow from their trigger and shrink back.**
   Under a finger, on every touch device, an anchored menu or a Popover MUST
   open by growing out of its trigger and close by shrinking back into it, on
-  its theme motion roles (FR4; a menu on `springs.menuOpen` and
+  its motion roles (FR4; a menu on `springs.menuOpen` and
   `springs.menuClose`). The shrink plays in full after the surface has
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
@@ -353,7 +354,7 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   sub-menu's rows and a leading "Back to <parent>" row replace the menu's rows
   in the same surface, no flyout opens, and Back returns to the row that
   opened it (`component:DropdownMenu` FR11 and FR20). The change between
-  levels plays on the theme motion roles `springs.subMenuOpen` and
+  levels plays on the motion roles `springs.subMenuOpen` and
   `springs.subMenuBack` (FR4); under reduced motion FR8 applies.
 - **FR35 — A presentation takes no input while it grows.** Under a finger, a
   tap or a drag that lands while a Popover or an anchored menu is still
@@ -456,8 +457,8 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 ## Current-state impact
 
 - `architecture:theme-tokens` and `architecture:theme-authoring-contract`:
-  touch motion roles join the motion configuration, with the table's values as
-  their defaults; INV3 and the duration and easing tokens are unchanged (FR4).
+  unchanged until the public motion-token set is decided; then its roles join
+  the motion configuration (FR4, DEC-11).
 - `architecture:interaction-modality`: the touch-presentation conditions
   (FR13) sit beside the shared modality state; its invariants are unchanged.
 - `architecture:react-component-runtime`: FR24 states the caller-visible
@@ -503,7 +504,7 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1, FR2        | Value check over every measured value and its uses                                                                             | every value; a guess and its measurement task; a platform-specific value; two components playing the same motion                                                                                                                                  | an unsourced value, an unknown source kind, a guess without a listed measurement, an unsourced platform split, or two values for one use fails                                                                                                                                                 |
 | FR3             | Unit tests of the spring, decay, rubber band and projection math against an independent integration and values read from UIKit | under-, critically and overdamped springs; release velocities; both rates; overscroll depths                                                                                                                                                      | changing a formula or a constant breaks the agreement with UIKit's values                                                                                                                                                                                                                      |
-| FR4             | Theme unit tests and a browser test of a themed spring                                                                         | no theme (table defaults); a theme writing a spring, a duration and a curve, at its root and in an adaptation                                                                                                                                     | a role that ignores the theme, a literal played in place of a role, or a default that differs from the table fails                                                                                                                                                                             |
+| FR4             | Role unit tests over every touch motion                                                                                        | each role at its table value; a theme that writes `motion`                                                                                                                                                                                        | a literal played in place of a role, a value that differs from the table, or a theme that changes a role before the public set is decided fails                                                                                                                                                |
 | FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame  | Chromium phone emulation; WebKit                                                                                                                                                                                                                  | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                                                         |
 | FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                     | catch at peak velocity; retarget with a new spring                                                                                                                                                                                                | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                                                |
 | FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                                                     | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                                                 |
@@ -621,6 +622,18 @@ element is not selectable by a long press, and the system adds no Copy item,
 so a caller that wants copying puts a Copy action in its own menu.
 
 Rejected: a system Copy item; suppressing selection on every press-tracked control.
+
+### DEC-11 — Touch motion roles stay internal until the public set is decided
+
+**Reference:** `spec:AST-094/DEC-11`
+**Decider:** `cixzhang`, `2026-10-25`
+
+Motion values stay internal for now: a public, theme-settable set is decided
+separately, so no component-specific role becomes a public token first.
+
+This defers DEC-1's and DEC-3's theme retuning until that set exists.
+
+Rejected: publishing the per-component roles as theme tokens.
 
 ## Open questions
 
