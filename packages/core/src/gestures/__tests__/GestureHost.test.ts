@@ -963,6 +963,51 @@ describe('GestureHost', () => {
     }
   });
 
+  it("never writes a touch-action wider than the author's, at any frame: a stylesheet's value is read in the first frame and nothing is written before it (spec:AST-094 FR18, DEC-8)", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    const restore = touchActionFromData();
+    try {
+      const {trigger} = mount(
+        '<div id="trigger" data-touch-action="none"></div>',
+      );
+      const set = vi.spyOn(trigger.style, 'setProperty');
+      const touchActions = () =>
+        set.mock.calls.filter(([name]) => name === 'touch-action');
+      detachers.push(
+        host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
+      );
+      // Until the frame reads the author's value the host writes nothing,
+      // so the author's `none` stands, never the wider `manipulation`.
+      expect(touchActions()).toEqual([]);
+      // The frame's callback, before its paint: the read, then the write.
+      vi.advanceTimersByTime(16);
+      expect(touchActions()).toEqual([['touch-action', 'none']]);
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives an element attached while on screen its touch-action at the next frame', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    const restore = touchActionFromData();
+    try {
+      const {box} = mount('<div id="box"></div>');
+      const set = vi.spyOn(box.style, 'setProperty');
+      const touchActions = () =>
+        set.mock.calls.filter(([name]) => name === 'touch-action');
+      detachers.push(host.attach(box, new TapGestureRecognizer({name: 'tap'})));
+      // No author value is known without a style read, so nothing is
+      // written in the attach itself; the frame writes the derived value.
+      expect(touchActions()).toEqual([]);
+      vi.advanceTimersByTime(16);
+      expect(touchActions()).toEqual([['touch-action', 'manipulation']]);
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
   it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's after paint", () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
