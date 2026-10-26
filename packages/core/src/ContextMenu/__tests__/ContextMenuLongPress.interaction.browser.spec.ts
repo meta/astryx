@@ -83,9 +83,13 @@ async function openTouchStory(
     const w = window as unknown as {
       __menuShownAt?: number | null;
       __liftHandledAt?: number | null;
+      __liftShownAt?: number | null;
+      __framesBeforeMenu?: number | null;
     };
     w.__menuShownAt = null;
     w.__liftHandledAt = null;
+    w.__liftShownAt = null;
+    w.__framesBeforeMenu = null;
     // When the page gets to the lift (the event's own timestamp is the
     // hardware's, or the script's): the menu shows in the same task.
     addEventListener(
@@ -100,6 +104,24 @@ async function openTouchStory(
       this: HTMLElement,
       ...args: Parameters<typeof show>
     ) {
+      // A finger's lift, where one opens the menu: the frames painted from
+      // it until the menu opens.
+      if (
+        w.__liftShownAt == null &&
+        this.hasAttribute('data-astryx-context-menu-lift')
+      ) {
+        w.__liftShownAt = performance.now();
+        let frames = 0;
+        const count = () => {
+          if (w.__menuShownAt == null) {
+            frames += 1;
+            requestAnimationFrame(count);
+          } else {
+            w.__framesBeforeMenu ??= frames;
+          }
+        };
+        requestAnimationFrame(count);
+      }
       // Only a popover that holds the menu (Storybook shows its own).
       if (
         this.matches('[role="menu"]') ||
@@ -130,6 +152,16 @@ const menuShownAt = async (page: Page) =>
       (window as unknown as {__menuShownAt?: number | null}).__menuShownAt ??
       null,
   );
+
+/** When a finger's lift started, and the frames painted before the menu. */
+const liftShownAt = async (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      __liftShownAt?: number | null;
+      __framesBeforeMenu?: number | null;
+    };
+    return {at: w.__liftShownAt ?? null, frames: w.__framesBeforeMenu ?? null};
+  });
 
 /** The page-clock timestamp of the last `type` event. */
 async function lastInput(
@@ -162,11 +194,18 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   await driver.play(hold(center, menuDisplayMs + 200));
   const start = await touchStartedAt(page);
   const shown = await menuShownAt(page);
+  const lift = await liftShownAt(page);
   expect(shown, 'the menu never showed').not.toBeNull();
-  const after = (shown as number) - start;
-  // The timer runs at its deadline, give or take a task.
+  expect(lift.at, 'the trigger never lifted').not.toBeNull();
+  // The presentation starts at the timeline's moment: the timer runs at its
+  // deadline, give or take a task, and the trigger lifts in it.
+  const after = (lift.at as number) - start;
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
   expect(after).toBeLessThan(menuDisplayMs + 20);
+  // The menu opens with it, in the commit that follows: by the lift's second
+  // frame at the latest (it starts to grow from nothing, so either reads as
+  // one moment).
+  expect(lift.frames ?? 0).toBeLessThanOrEqual(1);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 

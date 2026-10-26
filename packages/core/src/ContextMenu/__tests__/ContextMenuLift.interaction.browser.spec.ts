@@ -606,7 +606,7 @@ test('the card grows on from the press, and the backdrop fades in, on springs.co
   expect(Math.max(...samples.map(s => s.scale))).toBeGreaterThan(1.13);
 });
 
-test('the menu fades in on morphSpring, opacity only: no blur, travel or growth (AST-094 FR5)', async ({
+test('the menu grows out of the finger on morphSpring, translate, scale and opacity only: at the press at first, its frame at rest, nothing left inline (AST-094 FR5)', async ({
   page,
 }) => {
   const {driver, center} = await openLiftStory(page);
@@ -619,16 +619,35 @@ test('the menu fades in on morphSpring, opacity only: no blur, travel or growth 
     return page.evaluate(() => {
       const popover = document
         .querySelector('[role="menu"]')
-        ?.closest('[popover]');
+        ?.closest<HTMLElement>('[popover]');
       if (popover == null) {
         return null;
       }
       const style = getComputedStyle(popover);
       const r = popover.getBoundingClientRect();
+      const moving = new Set<string>();
+      for (const animation of popover.getAnimations()) {
+        const frames =
+          (animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+        const properties = new Set(frames.flatMap(frame => Object.keys(frame)));
+        for (const property of properties) {
+          if (
+            !['offset', 'computedOffset', 'easing', 'composite'].includes(
+              property,
+            ) &&
+            new Set(frames.map(frame => String(frame[property]))).size > 1
+          ) {
+            moving.add(property);
+          }
+        }
+      }
       return {
+        x: r.x + r.width / 2,
+        y: r.y + r.height / 2,
+        width: r.width,
         opacity: Number(style.opacity),
         filter: style.filter,
-        width: r.width,
+        moving: [...moving].sort(),
       };
     });
   };
@@ -641,14 +660,33 @@ test('the menu fades in on morphSpring, opacity only: no blur, travel or growth 
     from: 0,
     to: 1,
   });
-  const detail = JSON.stringify({start, middle, end});
+  const detail = JSON.stringify({center, start, middle, end});
+  // At the press, UIKit's blob wide, clear.
+  expect(start?.width ?? NaN, detail).toBeCloseTo(
+    contextMenu.lift.morphStartWidth,
+    0,
+  );
+  expect(start?.x ?? NaN, detail).toBeCloseTo(center.x, 0);
+  expect(start?.y ?? NaN, detail).toBeCloseTo(center.y, 0);
   expect(start?.opacity, detail).toBeCloseTo(0, 2);
+  // Its opacity follows the growth's own progress.
   expect(middle?.opacity, detail).toBeCloseTo(curve.value(0.1), 1);
   expect(end?.opacity, detail).toBeCloseTo(1, 2);
+  expect(end?.width ?? 0, detail).toBeGreaterThan(150);
   for (const sample of [start, middle, end]) {
     expect(sample?.filter, detail).toBe('none');
-    expect(sample?.width ?? NaN, detail).toBeCloseTo(end?.width ?? NaN, 0);
   }
+  expect(start?.moving, detail).toEqual(['opacity', 'scale', 'translate']);
+  // Once grown, nothing of the growth is left inline on the menu.
+  await page.waitForTimeout(300);
+  expect(
+    await page.evaluate(() => {
+      const popover = document
+        .querySelector('[role="menu"]')
+        ?.closest<HTMLElement>('[popover]');
+      return [popover?.style.translate, popover?.style.scale];
+    }),
+  ).toEqual(['', '']);
 });
 
 test('closing returns the card to its place and clears the backdrop', async ({

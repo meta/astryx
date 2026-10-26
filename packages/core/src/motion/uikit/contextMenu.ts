@@ -241,6 +241,18 @@ export const contextMenu = {
      *   the issued UIViewSpringAnimationBehaviorSettings are (0.8, 0.3)
      */
     morphSpring: {response: 0.3, dampingRatio: 0.8},
+    /**
+     * The menu grows out of the finger: it starts this wide (pt), centered
+     * on the press point and in its own aspect, and grows on `morphSpring`
+     * into its frame as it fades in.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, the morph container's frame per frame for a 3-action
+     *   menu with the card held in the middle, at the left and right edges
+     *   and at the bottom, Oct 23 2026: a 62 × 52 pt blob at the press
+     * @source GUESS — one start for every menu size
+     * @measure M-CM10
+     */
+    morphStartWidth: 62,
   },
 } as const;
 

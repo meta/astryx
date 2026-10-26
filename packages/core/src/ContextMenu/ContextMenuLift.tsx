@@ -8,7 +8,8 @@
  *   constants and springs, the app's declared layer inset (LayerProvider)
  * @output Exports useContextMenuLift: lift() / drop() to show UIKit's lifted
  *   preview over a tinted backdrop and to return it to its place, and the
- *   menu's entrance beside it, on the lift module with UIKit's numbers
+ *   menu's growth out of the finger beside it, on the lift module with
+ *   UIKit's numbers
  * @position The lift presentation of ContextMenu's touch invocation, run by
  *   the touch layer (ContextMenuTouchLayer.tsx); ContextMenu.tsx places the
  *   menu beside the preview it lifts
@@ -16,7 +17,8 @@
  * When a context menu shows on iOS 26.2, the long-pressed view lifts out of
  * the page (UIKit's preview platter): it grows on from the size the press
  * gave it to its lifted size, a shadow rising under it, above a backdrop
- * that tints the page (no blur, no zoom), and the menu fades in beside it.
+ * that tints the page (no blur, no zoom), and the menu grows out of the
+ * finger beside it.
  * When the menu closes, the view returns to its place while the backdrop and
  * the shadow clear.
  *
@@ -27,7 +29,11 @@
  * tint (the theme's modal overlay, `--color-overlay`; UIKit's own is #16152A
  * at 21 %) and the shadow (the theme's `--shadow-high`; UIKit's: black at
  * 0.30, radius 20, no offset, shaped by the view's pixels). A block trigger
- * lifts; an inline one keeps the cursor menu.
+ * lifts; an inline one keeps the cursor menu. The menu grows out of the
+ * press from `contextMenu.lift.morphStartWidth`, in its own aspect, on
+ * `morphSpring` (the module's rect morph: translate, scale and opacity only,
+ * so UIKit's blob and the content's blur and clip are not played).
+
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  * and /packages/core/src/ContextMenu/__tests__/ContextMenuLift.interaction.browser.spec.ts
@@ -73,8 +79,12 @@ export interface ContextMenuLift {
    * landed, or null without the popover API.
    */
   lift(from?: MorphRect, release?: () => void): ContextMenuLiftResult | null;
-  /** The menu's entrance beside the lifted preview: it fades in. */
-  enterMenu(menu: HTMLElement): void;
+  /**
+   * The menu's entrance beside the lifted preview: it grows out of `press`
+   * (client px) into its frame as it fades in. The lift layer takes no touch
+   * until the lift and the menu settle (spec:AST-094 FR35).
+   */
+  morphMenu(menu: HTMLElement, press: {x: number; y: number}): void;
   /** Return the preview to its place. */
   drop(): void;
 }
@@ -112,6 +122,7 @@ export function useContextMenuLift(
         return lift.lift(trigger, {
           motion: MOTION,
           scale: {maxScale: LIFT.maxScale, scaleUpPoints: LIFT.scaleUpPoints},
+          surfaceStartWidth: LIFT.morphStartWidth,
           from,
           release,
           inset: layerInsetRef.current,
@@ -119,8 +130,8 @@ export function useContextMenuLift(
           attribute: 'data-astryx-context-menu-lift',
         });
       },
-      enterMenu(menu) {
-        lift.presentSurface(menu, null);
+      morphMenu(menu, press) {
+        lift.presentSurface(menu, press);
       },
       drop() {
         lift.drop();

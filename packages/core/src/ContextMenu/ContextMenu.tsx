@@ -765,8 +765,8 @@ export function ContextMenu({
 
   // Opens the menu beside the lifted trigger: the layer's anchor moves to the
   // lift's box at the lifted rect (an anchor inside the trigger would move
-  // with the trigger's lift, which anchor positioning follows), the layer
-  // places the menu against it, and the menu fades in.
+  // with the trigger's lift, which anchor positioning follows), and the layer
+  // places the menu against it.
   const openLifted = useCallback(
     ({anchor}: ContextMenuLiftResult) => {
       const anchorEl = cursorAnchorRef.current;
@@ -780,10 +780,6 @@ export function ContextMenu({
           ? document.activeElement
           : triggerRef.current;
       layer.show();
-      const menu = listRef.current?.closest<HTMLElement>('[popover]');
-      if (menu != null) {
-        touchHandleRef.current?.presentation.enterMenu(menu);
-      }
       // A touch opened it: the menu itself takes the focus, so no row is lit
       // until the finger moves onto one (as openAtLocalPoint's touch path).
       requestAnimationFrame(() => {
@@ -827,28 +823,41 @@ export function ContextMenu({
   // The lift presentation (ContextMenuLift.tsx, run by the touch layer): when
   // the menu shows under a finger, the trigger's preview lifts above a tinted
   // backdrop and the menu sits beside it.
-  // A lift whose menu waits for its first side to render.
-  const pendingLiftRef = useRef<ContextMenuLiftResult | null>(null);
+  // A lift whose menu waits for its side to render, and the finger it grows
+  // out of.
+  const pendingLiftRef = useRef<{
+    lifted: ContextMenuLiftResult;
+    press: {x: number; y: number};
+    isShown: boolean;
+  } | null>(null);
   const [liftPlacement, setLiftPlacement] =
     useState<LiftedMenuPlacement | null>(null);
   // The lifted menu, once its first side (below) has rendered: show it,
   // measure it, and move it above before the frame paints if it does not fit
-  // (a state update in a layout effect renders again before paint).
+  // (a state update in a layout effect renders again before paint). It then
+  // grows out of the finger, from the side it settled on.
   useIsomorphicLayoutEffect(() => {
-    const lifted = pendingLiftRef.current;
-    if (lifted == null || liftPlacement == null) {
+    const pending = pendingLiftRef.current;
+    if (pending == null || liftPlacement == null) {
       return;
+    }
+    if (!pending.isShown) {
+      pending.isShown = true;
+      openLifted(pending.lifted);
+      const touch = touchHandleRef.current;
+      const menuHeight = listRef.current?.offsetHeight ?? 0;
+      if (touch != null) {
+        const placement = touch.placeMenu(pending.lifted, menuHeight);
+        if (placement.side !== liftPlacement.side) {
+          setLiftPlacement(placement);
+          return;
+        }
+      }
     }
     pendingLiftRef.current = null;
-    openLifted(lifted);
-    const touch = touchHandleRef.current;
-    const menuHeight = listRef.current?.offsetHeight ?? 0;
-    if (touch == null) {
-      return;
-    }
-    const placement = touch.placeMenu(lifted, menuHeight);
-    if (placement.side !== liftPlacement.side) {
-      setLiftPlacement(placement);
+    const menu = listRef.current?.closest<HTMLElement>('[popover]');
+    if (menu != null) {
+      touchHandleRef.current?.presentation.morphMenu(menu, pending.press);
     }
   }, [liftPlacement, openLifted, listRef]);
   // Touch invocation (menus-8). Under the touch model the touch layer
@@ -894,9 +903,10 @@ export function ContextMenu({
         touch.end();
         if (lifted != null) {
           // The menu's side depends on its height: it renders below first,
-          // and the layout effect above shows it, measures it, and moves it
-          // above before the frame paints if it does not fit.
-          pendingLiftRef.current = lifted;
+          // and the layout effect above shows it, measures it, moves it above
+          // before the frame paints if it does not fit, and then grows it out
+          // of the finger.
+          pendingLiftRef.current = {lifted, press: point, isShown: false};
           setLiftPlacement(touch.placeMenu(lifted, 0));
           return;
         }
