@@ -53,7 +53,10 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
-import {groupStyles as inputGroupStyles} from '../InputGroup/groupStyles';
+import {
+  groupStyles as inputGroupStyles,
+  inputGroupItemProps,
+} from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -836,6 +839,9 @@ export function Button({
         href={href}
         target={target}
         rel={rel}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}
@@ -857,6 +863,9 @@ export function Button({
         ref={mergedButtonRef}
         type={type}
         disabled={useAriaDisabled ? undefined : buttonDisabled}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}
