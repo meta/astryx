@@ -2016,6 +2016,29 @@ test.describe('animation state', () => {
     expect(exit.finishedAt).not.toBeNull();
   });
 
+  test('a wait on an element no longer in the document rejects at its own timeout', async ({
+    page,
+  }) => {
+    await fixture(page);
+    await page.evaluate(() => {
+      const gone = document.createElement('div');
+      gone.id = 'gone';
+      document.body.append(gone);
+    });
+    const gone = page.locator('#gone');
+    const watch = await watchAnimations(gone);
+    await page.evaluate(() => document.getElementById('gone')?.remove());
+    for (const wait of [
+      () => watch.started({timeout: 300}),
+      () => waitForAnimation(gone, {timeout: 300}),
+      () => waitForRest(gone, {timeout: 300}),
+    ]) {
+      const startedAt = Date.now();
+      await expect(wait()).rejects.toThrow(/not in the document/);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
