@@ -11,7 +11,7 @@ pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts):
 every positive check has a negative control beside it (a rAF animation that
-freezes under a blocked main thread).
+freezes, a `top` animation that lays out every frame).
 
 ## Running
 
@@ -46,6 +46,7 @@ committed: a pull request links or attaches it.
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `frameStats`.                                                                              |
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                              |
+| `trace.ts`      | `traceRendering(page, body)`: main-thread Layout / Paint / UpdateLayoutTree / PrePaint counts, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents.      |
 | `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                       |
@@ -151,8 +152,9 @@ two steps per frame, which never fails it. Move a proof's element at least two
 steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 
 On a loaded machine Chromium's screencast can skip frames the compositor
-still presents. Pass when the compositor presented each frame (epoch ms on the
-page clock, from a trace of `Display::FrameDisplayed`) as `presented`. A gap between two moved
+still presents. `startCompositorTrace(page)`, started with the screencast and
+stopped after the block, records when the compositor presented each frame
+(`Display::FrameDisplayed`); pass it as `presented`. A gap between two moved
 frames with nothing delivered inside it is then measured between the
 compositor's own frames: the frames it presented there count as presented
 (`recorderSkipped`, in the summary), and a gap it did not present through is
@@ -161,8 +163,18 @@ delivered frame that did not move, is judged from the screencast, so a
 frozen element fails whatever else the compositor draws (a rAF animation's
 block presents no compositor frame at all). With the record, the 90% counts the
 compositor's frames from the first to the last moved frame; the gaps before and
-after are the stall check's. Without a record (WebKit has no such trace), the
-screencast is judged alone.
+after are the stall check's. WebKit has no such trace:
+`stop()` resolves to `[]` and the screencast is judged alone.
+
+**No Layout / Paint.** `traceRendering` records a Chromium trace around the
+interaction; `countBetween` counts the steady middle of an animation (its
+first and last frames may commit). A transform/opacity animation does no
+Layout or Paint there; a layout-property animation does one per frame. Its
+`longTasks` are the page's own: only a task the harness marked as its own read
+(`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
+is in `devtoolsTasks` instead, and only when no page script ran inside it. A
+test's own `page.evaluate` stays a long task, whether it calls page code
+directly or sets it off.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -196,6 +208,8 @@ in all, and lists each retake under `recaptures` in the trace.
 | Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                          |
 | Curve sampling, storyboards, input log                 | yes          | yes                                                                                                   |
 | Screencast frame evidence (busy main thread)           | yes          | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                    |
+| Rendering trace, long tasks                            | yes          | no (Playwright exposes neither)                                                                       |
+| Compositor presentation record                         | yes          | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                           |
 
 What WebKit cannot show here — native scroll hand-off, flings, a finger
 lifting while another stays down, finger tracking under a busy main thread, and

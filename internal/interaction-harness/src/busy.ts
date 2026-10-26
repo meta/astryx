@@ -67,6 +67,8 @@ export async function blockMainThread(
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
+      // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
+      console.timeStamp('harness-read');
       const from = performance.timeOrigin + performance.now();
       const end = performance.now() + duration;
       let spins = 0;
@@ -249,8 +251,8 @@ export interface BusyProof extends FrameStats {
  * no step and read as not moved, which the proof notes (never a failure).
  *
  * A loaded machine's screencast can skip frames the compositor still presents
- * (Chromium). Given the compositor's record (`presented`: when it presented
- * each frame), a gap between two moved frames with no frame
+ * (Chromium). Given the compositor's record (`presented`, from
+ * `startCompositorTrace`), a gap between two moved frames with no frame
  * delivered inside it is measured between the compositor's own frames: it is
  * a stall only where the compositor presented nothing, and the frames it did
  * present there are neither stalls nor misses (`recorderSkipped`). A gap
@@ -307,8 +309,8 @@ export function busyWindowProof(
     settledAt?: number;
     /**
      * When the compositor presented each frame, epoch ms on the page clock
-     * (Chromium's `Display::FrameDisplayed`). Empty or absent, the screencast
-     * is judged alone.
+     * (`startCompositorTrace`; Chromium). Empty or absent, the screencast is
+     * judged alone.
      */
     presented?: readonly number[];
   } = {},
