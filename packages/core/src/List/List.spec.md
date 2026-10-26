@@ -26,22 +26,28 @@ architecture:
   [architecture:container-padding, architecture:public-component-api]
 contributing: [contributing:api-conventions]
 system_specs:
-  [spec:AST-002/DEC-1, spec:AST-002/DEC-2, spec:AST-017/FR4, spec:AST-057/FR9]
+  [
+    spec:AST-002/DEC-1,
+    spec:AST-002/DEC-2,
+    spec:AST-017/FR4,
+    spec:AST-057/FR9,
+    spec:AST-103,
+  ]
 ---
 
 # List component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Optional `edge?: 'padded' \| 'flush' \| 'outset' \| 'bleed'`, default `'padded'`. Deprecated `edgeCompensation?: 'inline'` resolves to `'outset'`.                                                    |
-| Behavior                | One edge treatment applies to every ListItem row and decides where row content and row paint sit relative to the list's edges and the host's padding.                                                 |
-| End-user impact         | Row text can share the line of the list header and a heading above, with row paint stopping at the text, reaching into the host padding, or reaching the host edges.                                  |
-| Builder impact          | One choice per list. `flush` works anywhere; `outset` and `bleed` act only inside a host that publishes container padding.                                                                            |
-| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`.                                                                                                 |
-| Review checks           | Reject header movement, row paint past the host's padding edge, duplicated padding values, physical-edge logic, automatic opt-in, a ListItem-level prop, or a second prop that can contradict `edge`. |
-| Governing rules         | `architecture:container-padding/INV3`, `INV9–INV11`; `spec:AST-002/DEC-1–DEC-2`; `spec:AST-017/FR4`; `spec:AST-057/FR9`.                                                                              |
+| Area                    | Contract                                                                                                                                                                                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | Optional `edge?: 'padded' \| 'flush' \| 'outset' \| 'bleed'`, default `'padded'`. Deprecated `edgeCompensation?: 'inline'` resolves to `'outset'`. Optional `reorderable` takes the object `createReorderable` returns, and ListItem's `itemKey` identifies each row (`spec:AST-103`). |
+| Behavior                | One edge treatment applies to every ListItem row and decides where row content and row paint sit relative to the list's edges and the host's padding. With `reorderable`, rows reorder by dragging a handle or through reorder mode (`spec:AST-103` FR3, FR4).                         |
+| End-user impact         | Row text can share the line of the list header and a heading above, with row paint stopping at the text, reaching into the host padding, or reaching the host edges.                                                                                                                   |
+| Builder impact          | One `edge` choice per list. `flush` works anywhere; `outset` and `bleed` act only inside a host that publishes container padding.                                                                                                                                                      |
+| Compatibility/readiness | Additive; omission keeps current geometry; `edgeCompensation` keeps working with a codemod to `edge`. `reorderable` and `itemKey` are additive and stable, specified and not implemented yet; without them nothing changes.                                                            |
+| Review checks           | Reject header movement, row paint past the host's padding edge, duplicated padding values, physical-edge logic, automatic opt-in, a ListItem-level edge prop, or a second prop that can contradict `edge`.                                                                             |
+| Governing rules         | `architecture:container-padding/INV3`, `INV9–INV11`; `spec:AST-002/DEC-1–DEC-2`; `spec:AST-017/FR4`; `spec:AST-057/FR9`. `spec:AST-103`.                                                                                                                                               |
 
 This table is a review projection; the body below is authoritative.
 
@@ -93,10 +99,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept                        | Closed values or states              | Meaning                                                                                 | Availability by variant/orientation/state                                                | Default  | Owner            | Stability  | Invalid-value behavior                       |
-| ------------------------------ | ------------------------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------- | ---------------- | ---------- | -------------------------------------------- |
-| Edge treatment                 | `padded`, `flush`, `outset`, `bleed` | Where row content and row paint sit relative to the list's edges and the host's padding | Every density, marker style, and divider setting; `outset` and `bleed` read host padding | `padded` | `component:List` | accepted   | Other values are rejected by the public type |
-| Edge compensation (deprecated) | omitted, `inline`                    | Same as `edge="outset"`                                                                 | As `outset`                                                                              | omitted  | `component:List` | deprecated | Other values are rejected by the public type |
+| Concept                        | Closed values or states              | Meaning                                                                                                                                          | Availability by variant/orientation/state                                                | Default  | Owner            | Stability  | Invalid-value behavior                       |
+| ------------------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- | -------- | ---------------- | ---------- | -------------------------------------------- |
+| Edge treatment                 | `padded`, `flush`, `outset`, `bleed` | Where row content and row paint sit relative to the list's edges and the host's padding                                                          | Every density, marker style, and divider setting; `outset` and `bleed` read host padding | `padded` | `component:List` | accepted   | Other values are rejected by the public type |
+| Edge compensation (deprecated) | omitted, `inline`                    | Same as `edge="outset"`                                                                                                                          | As `outset`                                                                              | omitted  | `component:List` | deprecated | Other values are rejected by the public type |
+| Reordering                     | absent, a `createReorderable` object | Rows can be reordered by handle, keyboard, and assistive technology; `onReorder` receives the moved row's key and its new index (`spec:AST-103`) | Every density, marker style, edge treatment, and divider setting                         | absent   | `spec:AST-103`   | accepted   | Other values are rejected by the public type |
 
 ## Behavioral and layout contract
 
@@ -180,6 +187,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   containing swipe-capable rows clips in the inline axis; List carries that clip
   (FR9) and `ListItem` passes `swipeActions` and `swipeBehavior` through to
   `Item` unchanged.
+- `spec:AST-103` owns reordering. List is its first adopter: it
+  takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
+  and its position is its index, and the
+  handle is the one element reordering adds to a row, at its trailing edge
+  (`spec:AST-103` FR5).
 
 ## Verification map
 
