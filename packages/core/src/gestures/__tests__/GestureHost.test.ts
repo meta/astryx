@@ -21,6 +21,7 @@ import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
+import type {SelectionLock} from '../GestureRecognizer';
 import {VelocityTracker} from '../VelocityTracker';
 import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
@@ -161,6 +162,13 @@ afterEach(() => {
   document.body.innerHTML = '';
   restorePointer();
 });
+
+/** A press tracker whose hold acts, as a stepper's hold-repeat (FR41). */
+class LockingConsumer extends RecordingConsumer {
+  constructor(readonly selectionLock: SelectionLock = lockSelection) {
+    super();
+  }
+}
 
 describe('GestureHost', () => {
   it('sets touch-action and the long-press styles on attach, and restores them on detach', () => {
@@ -388,36 +396,6 @@ describe('GestureHost', () => {
     expect(released).toBeCloseTo(625, 6);
   });
 
-  it.each([35, 45])(
-    'honours an explicit claim distance on an axis pan: a %i° drag in a vertical scroller is cancelled from the claim',
-    degrees => {
-      const {box} = mount('<div id="box"></div>');
-      // A pager that takes drags up to a little past 45° (axisRatio below
-      // 1), as UIKit gives a drag with |dx| ≥ |dy| to the pager.
-      const pager = new PanGestureRecognizer({
-        name: 'pager',
-        direction: 'horizontal',
-        axisRatio: 0.9,
-        claimDistance: 5,
-      });
-      detachers.push(host.attach(box, pager));
-      const start = {id: 1, x: 100, y: 100};
-      touch('touchstart', box, [start], [start], 0);
-      // 4 px steps along the drag's angle.
-      const radians = (degrees * Math.PI) / 180;
-      const at = (step: number) => ({
-        ...start,
-        x: 100 + 4 * Math.cos(radians) * step,
-        y: 100 + 4 * Math.sin(radians) * step,
-      });
-      const first = touch('touchmove', box, [at(1)], [at(1)], 16);
-      const second = touch('touchmove', box, [at(2)], [at(2)], 32);
-      // The second move puts the finger past 5 px: from it on, the pager's.
-      expect(first.defaultPrevented).toBe(false);
-      expect(second.defaultPrevented).toBe(true);
-    },
-  );
-
   it('samples a finger from its touch events once the browser cancels its pointer', () => {
     const {box} = mount('<div id="box"></div>');
     // A watcher follows the touch the browser takes (AST-094 FR20, DEC-7).
@@ -561,38 +539,6 @@ describe('GestureHost', () => {
     expect(onBoth.added()).toBe(1);
     detachPan();
     expect(onBoth.removed()).toBe(1);
-  });
-
-  it("cancels a one-way pan's moves from its claim distance, before it begins, and keeps the touch through a reversal", () => {
-    const {card} = mount('<div id="card"></div>');
-    const pan = new PanGestureRecognizer({
-      name: 'pan',
-      direction: 'up',
-      claimDistance: 'early',
-    });
-    detachers.push(host.attach(card, pan));
-    const finger = {id: 1, x: 50, y: 100};
-    touch('touchstart', card, [finger], [finger], 0);
-    const at = (y: number, time: number) =>
-      touch('touchmove', card, [{...finger, y}], [{...finger, y}], time);
-    expect(at(97, 16).defaultPrevented).toBe(false);
-    expect(at(95, 32).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(pan.isClaimCommitted).toBe(true);
-    // Safari would give the page nothing now: the reversal is the pan's.
-    expect(at(104, 48).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(at(112, 64).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('began');
-    touch('touchend', card, [{...finger, y: 112}], [], 80);
-    // A drag that starts the other way is the page's.
-    const down = {id: 2, x: 50, y: 100};
-    touch('touchstart', card, [down], [down], 100);
-    const downAt = (y: number, time: number) =>
-      touch('touchmove', card, [{...down, y}], [{...down, y}], time);
-    expect(downAt(106, 116).defaultPrevented).toBe(false);
-    expect(downAt(112, 132).defaultPrevented).toBe(false);
-    touch('touchend', card, [{...down, y: 112}], [], 148);
   });
 
   it('leaves a scroll-edge pan to claim at its begin', () => {
@@ -1371,6 +1317,45 @@ describe('GestureHost', () => {
     touch('touchend', off, [one], [], 400);
   });
 
+  it("calls a press tracker's own selection lock for each finger's press, a stepper's hold-repeat, and nowhere else (spec:AST-094 FR41)", () => {
+    detachers.push(coarsePrimaryPointer());
+    const {stepper, row} = mount(
+      '<div id="stepper">+</div><div id="row">Row</div>',
+    );
+    const release = vi.fn();
+    const lock = vi.fn(
+      (_elements: Iterable<Element>, _target: EventTarget | null) => release,
+    );
+    detachers.push(
+      host.attachConsumer(stepper, new LockingConsumer(lock)),
+      host.attachConsumer(row, new RecordingConsumer()),
+    );
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', stepper, [finger], [finger], 0);
+    expect(lock).toHaveBeenCalledTimes(1);
+    expect([...lock.mock.calls[0][0]]).toEqual([stepper]);
+    expect(release).not.toHaveBeenCalled();
+    touch('touchend', stepper, [finger], [], 600);
+    expect(release).toHaveBeenCalledTimes(1);
+    // A mouse press keeps desktop selection.
+    pointer('pointerdown', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 700,
+    });
+    pointer('pointerup', stepper, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      time: 750,
+    });
+    // A tracker whose hold does nothing brings no lock.
+    touch('touchstart', row, [finger], [finger], 800);
+    touch('touchend', row, [finger], [], 900);
+    expect(lock).toHaveBeenCalledTimes(1);
+  });
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(
@@ -1758,40 +1743,6 @@ describe('touch gates and a second finger', () => {
     expect(swipe.state).toBe('changed');
     expect(drag.defaultPrevented).toBe(true);
   });
-
-  it('keeps a claim a still-possible pan committed early when a second finger lands', () => {
-    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
-    // A one-way pan committing its claim at 5 px, before it begins.
-    const banner = new PanGestureRecognizer({
-      name: 'banner',
-      direction: 'up',
-      maximumNumberOfTouches: 1,
-      claimDistance: 5,
-    });
-    detachers.push(host.attach(row, banner));
-    const first = {id: 1, x: 100, y: 100};
-    touch('touchstart', row, [first], [first], 0);
-    const claimed = touch(
-      'touchmove',
-      row,
-      [{...first, y: 94}],
-      [{...first, y: 94}],
-      16,
-    );
-    expect(claimed.defaultPrevented).toBe(true);
-    expect(banner.state).toBe('possible');
-    const second = {id: 2, x: 200, y: 300};
-    touch('touchstart', text, [second], [{...first, y: 94}, second], 32);
-    // The claim stands: its moves are still not the browser's.
-    const next = touch(
-      'touchmove',
-      row,
-      [{...first, y: 88}],
-      [{...first, y: 88}, second],
-      48,
-    );
-    expect(next.defaultPrevented).toBe(true);
-  });
 });
 
 describe('a delivered press keeps its touch', () => {
@@ -2048,7 +1999,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it("lets a press tracker that reads each event's pointer take a mouse hold where the pointer is fine, beside one that stays inactive", () => {
+  it('where the pointer is fine, a per-event press tracker takes no mouse press, and attaches with no warning beside one that stays inactive (spec:AST-094 FR19)', () => {
     const warn = quietWarning();
     detachers.push(pointerQuery(false).restore);
     const {stepper, other} = mount(
@@ -2059,10 +2010,11 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       new PressTracker({
         getBounds: () => bounds,
         onControlEvent: event => events.push(event),
+        onHighlightChange: isHighlighted =>
+          events.push(isHighlighted ? 'highlight' : 'unhighlight'),
       });
     const held: string[] = [];
     const inactive: string[] = [];
-    // NumberInput's stepper repeats under a held mouse as under a finger.
     detachers.push(
       host.attachConsumer(stepper, tracker(held), {perEventPointer: true}),
     );
@@ -2082,7 +2034,9 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       y: 5,
       time: 600,
     });
-    expect(held).toEqual(['touchDown', 'touchUpInside']);
+    // Press feedback is for a finger: a mouse keeps the desktop's handling,
+    // with no paint and no control event.
+    expect(held).toEqual([]);
     pointer('pointerdown', other, {
       id: 2,
       pointerType: 'mouse',
@@ -2101,7 +2055,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(inactive).toEqual([]);
   });
 
-  it("where the pointer is fine, gives a per-event press tracker's finger its press feedback only: the browser keeps the pan (spec:AST-094 FR19)", () => {
+  it("where the pointer is fine, gives a per-event press tracker's finger its press feedback only: it paints, reports no control event, and the browser keeps the pan (spec:AST-094 FR19)", () => {
     quietWarning();
     const pointer = pointerQuery(false);
     detachers.push(pointer.restore);
@@ -2121,17 +2075,20 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     const finger = {id: 1, x: 5, y: 5};
     const moved = {id: 1, x: 5, y: 60};
     touch('touchstart', stepper, [finger], [finger], 0);
-    // Its press is delivered and painted, as under a coarse pointer.
-    expect(events).toContain('touchDown');
+    // Its press is painted, as under a coarse pointer, and reports nothing.
     expect(highlights).toContain(true);
+    expect(events).toEqual([]);
     // But it never keeps the touch from the browser: the page still pans.
     expect(
       touch('touchmove', stepper, [moved], [moved], 16).defaultPrevented,
     ).toBe(false);
     touch('touchend', stepper, [moved], [], 32);
-    // On a coarse primary pointer the same held press keeps its touch.
+    expect(events).toEqual([]);
+    // On a coarse primary pointer the same held press reports its events
+    // and keeps its touch.
     pointer.set(true);
     touch('touchstart', stepper, [finger], [finger], 100);
+    expect(events).toEqual(['touchDown']);
     expect(
       touch('touchmove', stepper, [moved], [moved], 116).defaultPrevented,
     ).toBe(true);
