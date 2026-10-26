@@ -1655,8 +1655,24 @@ export function createAnimator(
         }
         return animator.animate(to, {...transition, spring}, retargetOptions);
       },
+      // The call's own curves, and its travel still waiting to land under
+      // Reduce Motion: a catch freezes both where they are on screen
+      // (AST-094 FR6), travel first so the fade's landing no longer carries
+      // it, as `animator.stop()` does.
       stop: () =>
-        animator.stop(properties.filter(p => segments.get(p)?.owner === owner)),
+        animator.stop(
+          PROPERTIES.filter(
+            p =>
+              properties.includes(p) &&
+              (segments.get(p)?.owner === owner ||
+                [...landings].some(
+                  landing =>
+                    (landing.owner === owner ||
+                      landing.carried.includes(owner)) &&
+                    landing.values.has(p),
+                )),
+          ),
+        ),
     };
     return handle;
   };
