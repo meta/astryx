@@ -36,6 +36,7 @@ under the same rules.
 
 ```
 import {createAnimator} from '../motion/animator';
+import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {springs} from '../motion/uikit';
 
