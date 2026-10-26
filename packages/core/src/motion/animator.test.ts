@@ -1318,6 +1318,21 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('an unmount or dispose during a borrowed dip hands the opacity back to that element', async () => {
+    for (const end of ['detach', 'dispose'] as const) {
+      const {animator, element} = reduced();
+      stylesheet = {opacity: '0.6'};
+      animator.animate({x: 100}, {spring: springs.navigationPush});
+      await advance(25);
+      if (end === 'detach') {
+        animator.attach(null);
+      } else {
+        animator.dispose();
+      }
+      expect(element.style.opacity).toBe('');
+    }
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
