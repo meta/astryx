@@ -1387,6 +1387,49 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('x')).toBe(40);
   });
 
+  it('dispose settles a move still waiting to land, and the calls it carries, as interrupted', async () => {
+    const {animator} = reduced();
+    const first = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(10);
+    const second = animator.animate({y: 50}, {spring: springs.navigationPush});
+    await advance(10);
+    animator.dispose();
+    await expect(first.finished).resolves.toBe(false);
+    await expect(second.finished).resolves.toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a caught or replaced exit by role hands the stylesheet's opacity back", async () => {
+    // Caught: stop() 50 ms into the exit.
+    const caught = reduced();
+    stylesheet = {opacity: '0.6'};
+    caught.animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    caught.animator.stop();
+    expect(caught.element.style.opacity).toBe('');
+    // Replaced: React swaps the node 50 ms into the exit.
+    const replaced = reduced();
+    stylesheet = {opacity: '0.6'};
+    replaced.animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    replaced.animator.attach(null);
+    const node = document.createElement('div');
+    replaced.animator.attach(node);
+    expect(node.style.opacity).toBe('');
+    expect(replaced.animator.get('x')).toBe(100);
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
