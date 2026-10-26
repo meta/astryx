@@ -306,26 +306,17 @@ warning, so two writers never fight over the paint. Pass another
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can
   claim while it moves.
-- **Early claim (opt-in).** A one-way pan over content the browser could
-  scroll that opts in with `claimDistance: 'early'` (an overlay such as a
-  toast or a banner) cancels its touch's moves once the finger has gone
-  5 px its way (`UIKIT_GESTURES.pan.earlyClaimDistance`), before WebKit
-  claims a slow drag at 10–11 px; it still begins at 10 px with UIKit's
-  translation. Safari gives the page no scroll for a touch once one of its
-  moves was cancelled, so from then on the touch is the pan's: a reversal,
-  a second finger or content that could scroll no longer fails it, and it
-  begins whichever way the finger goes. That is UIKit's outcome too, where
-  a drag that starts on an overlay never reaches the content behind it. It
-  is off by default: a row's swipe or an edge pan over content leaves a
-  wobble to the scroll, as UIKit does.
+- **No early claim.** A pan claims its touch when it begins, at UIKit's
+  10 pt hysteresis, which is within the 10 px decision `spec:AST-094` FR19
+  asks of a recognizer that competes with native scrolling; nothing claims
+  earlier (FR17, FR19), so a 5 to 9 pt drag stays the browser's.
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
   (the last cancelable `touchmove` at 10 px), and cancelling every
   `touchmove` from 8 px keeps the page still for the whole gesture. Under
   `pan-y` it scrolls only drags steeper than about 2:1 to 3:1, once the
   vertical travel reaches about 10 px. A pan that competes with native
-  scrolling therefore decides at 10 px or less (the toast's swipe decides at
-  8).
+  scrolling therefore decides at 10 px or less.
 - **The browser's claim.** `pointercancel` on a finger, or a scroll above
   the touch once the finger has travelled the slop (the browser starts a pan
   no earlier), means the browser took the finger; a scroll under a finger
@@ -495,8 +486,7 @@ way:
    `touch-action`, so delete a hand-written one.
 3. Native scrolling: a sheet over its own list uses `scrollEdge`, not
    `scrollTop` checks; who gets a drag is decided once, when it begins
-   (`spec:AST-094` FR14). A banner that must win against a page scroll at
-   once sets `claimDistance: 'early'`.
+   (`spec:AST-094` FR14).
 4. A behavior that only watches the person's scrolling uses a watcher
    (`claimsTouches: false`) and `useFingerScroll`.
 5. A scroll lock holds the page with `holdPageScroll`; no `preventDefault`

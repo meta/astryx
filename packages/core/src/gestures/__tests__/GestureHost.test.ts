@@ -388,36 +388,6 @@ describe('GestureHost', () => {
     expect(released).toBeCloseTo(625, 6);
   });
 
-  it.each([35, 45])(
-    'honours an explicit claim distance on an axis pan: a %i° drag in a vertical scroller is cancelled from the claim',
-    degrees => {
-      const {box} = mount('<div id="box"></div>');
-      // A pager that takes drags up to a little past 45° (axisRatio below
-      // 1), as UIKit gives a drag with |dx| ≥ |dy| to the pager.
-      const pager = new PanGestureRecognizer({
-        name: 'pager',
-        direction: 'horizontal',
-        axisRatio: 0.9,
-        claimDistance: 5,
-      });
-      detachers.push(host.attach(box, pager));
-      const start = {id: 1, x: 100, y: 100};
-      touch('touchstart', box, [start], [start], 0);
-      // 4 px steps along the drag's angle.
-      const radians = (degrees * Math.PI) / 180;
-      const at = (step: number) => ({
-        ...start,
-        x: 100 + 4 * Math.cos(radians) * step,
-        y: 100 + 4 * Math.sin(radians) * step,
-      });
-      const first = touch('touchmove', box, [at(1)], [at(1)], 16);
-      const second = touch('touchmove', box, [at(2)], [at(2)], 32);
-      // The second move puts the finger past 5 px: from it on, the pager's.
-      expect(first.defaultPrevented).toBe(false);
-      expect(second.defaultPrevented).toBe(true);
-    },
-  );
-
   it('samples a finger from its touch events once the browser cancels its pointer', () => {
     const {box} = mount('<div id="box"></div>');
     // A watcher follows the touch the browser takes (AST-094 FR20, DEC-7).
@@ -561,38 +531,6 @@ describe('GestureHost', () => {
     expect(onBoth.added()).toBe(1);
     detachPan();
     expect(onBoth.removed()).toBe(1);
-  });
-
-  it("cancels a one-way pan's moves from its claim distance, before it begins, and keeps the touch through a reversal", () => {
-    const {card} = mount('<div id="card"></div>');
-    const pan = new PanGestureRecognizer({
-      name: 'pan',
-      direction: 'up',
-      claimDistance: 'early',
-    });
-    detachers.push(host.attach(card, pan));
-    const finger = {id: 1, x: 50, y: 100};
-    touch('touchstart', card, [finger], [finger], 0);
-    const at = (y: number, time: number) =>
-      touch('touchmove', card, [{...finger, y}], [{...finger, y}], time);
-    expect(at(97, 16).defaultPrevented).toBe(false);
-    expect(at(95, 32).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(pan.isClaimCommitted).toBe(true);
-    // Safari would give the page nothing now: the reversal is the pan's.
-    expect(at(104, 48).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('possible');
-    expect(at(112, 64).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('began');
-    touch('touchend', card, [{...finger, y: 112}], [], 80);
-    // A drag that starts the other way is the page's.
-    const down = {id: 2, x: 50, y: 100};
-    touch('touchstart', card, [down], [down], 100);
-    const downAt = (y: number, time: number) =>
-      touch('touchmove', card, [{...down, y}], [{...down, y}], time);
-    expect(downAt(106, 116).defaultPrevented).toBe(false);
-    expect(downAt(112, 132).defaultPrevented).toBe(false);
-    touch('touchend', card, [{...down, y: 112}], [], 148);
   });
 
   it('leaves a scroll-edge pan to claim at its begin', () => {
@@ -1757,40 +1695,6 @@ describe('touch gates and a second finger', () => {
     );
     expect(swipe.state).toBe('changed');
     expect(drag.defaultPrevented).toBe(true);
-  });
-
-  it('keeps a claim a still-possible pan committed early when a second finger lands', () => {
-    const {row, text} = mount('<div id="row"></div><p id="text">plain</p>');
-    // A one-way pan committing its claim at 5 px, before it begins.
-    const banner = new PanGestureRecognizer({
-      name: 'banner',
-      direction: 'up',
-      maximumNumberOfTouches: 1,
-      claimDistance: 5,
-    });
-    detachers.push(host.attach(row, banner));
-    const first = {id: 1, x: 100, y: 100};
-    touch('touchstart', row, [first], [first], 0);
-    const claimed = touch(
-      'touchmove',
-      row,
-      [{...first, y: 94}],
-      [{...first, y: 94}],
-      16,
-    );
-    expect(claimed.defaultPrevented).toBe(true);
-    expect(banner.state).toBe('possible');
-    const second = {id: 2, x: 200, y: 300};
-    touch('touchstart', text, [second], [{...first, y: 94}, second], 32);
-    // The claim stands: its moves are still not the browser's.
-    const next = touch(
-      'touchmove',
-      row,
-      [{...first, y: 88}],
-      [{...first, y: 88}, second],
-      48,
-    );
-    expect(next.defaultPrevented).toBe(true);
   });
 });
 

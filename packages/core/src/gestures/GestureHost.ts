@@ -1147,29 +1147,6 @@ export class GestureHost {
         }
       }
     }
-    // A one-way pan over content the browser could scroll (an overlay)
-    // claims before it begins, once the finger has gone its claim distance
-    // its way.
-    const ids = new Set<number>();
-    for (const touch of fingers) {
-      const id = this.touchIds.get(touch.identifier);
-      if (id != null) {
-        ids.add(id);
-      }
-    }
-    for (const recognizer of this.arena.involvedRecognizers) {
-      if (
-        isPanRecognizer(recognizer) &&
-        recognizer.claimsEarly() &&
-        recognizer.trackedTouches.some(touch => ids.has(touch.id))
-      ) {
-        // Safari gives the page no scroll for a touch once one of its moves
-        // was cancelled, so the pan commits to the touch.
-        event.preventDefault();
-        recognizer.commitClaim();
-        return;
-      }
-    }
   }
 
   private readonly onTouchEnd = (event: TouchEvent): void => {
@@ -1770,8 +1747,6 @@ export class GestureHost {
       if (
         isPanRecognizer(recognizer) &&
         recognizer.state === 'possible' &&
-        // An early claim (claimDistance) is a claim too.
-        !recognizer.claimsEarly() &&
         recognizer.maximumNumberOfTouches === 1 &&
         recognizer.trackedTouches.length > 0 &&
         recognizer.trackedTouches.every(
