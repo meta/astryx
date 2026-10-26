@@ -30,12 +30,10 @@ import {
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
-/** @experimental */
 export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<PinchGestureRecognizer> {
   hysteresis?: number;
 }
 
-/** @experimental */
 export class PinchGestureRecognizer extends GestureRecognizer {
   hysteresis: number;
   private initialSpan = 0;
@@ -120,7 +118,9 @@ export class PinchGestureRecognizer extends GestureRecognizer {
       return;
     }
     this.scaleValue = span / this.initialSpan;
-    this.tracker.add(this.scaleValue, 0, event.time);
+    // Every move of the fingers is a sample: a span that holds while they
+    // move reads as no change, so the velocity never goes stale.
+    this.tracker.add(this.scaleValue, 0, event.time, {isMotion: true});
     if (isActive(this.state)) {
       this.setState('changed');
     }

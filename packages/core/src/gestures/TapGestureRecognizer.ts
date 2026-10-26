@@ -11,7 +11,9 @@
  * `allowableMovement`, when more fingers land than required, when the next
  * tap does not land within `maximumIntervalBetweenTaps` of the previous lift
  * or lands further than `allowableSeparation` from the first, or when a
- * finger stays down longer than `maximumTapDuration`.
+ * finger stays down longer than `maximumTapDuration`. With several fingers a
+ * tap is placed at their centroid: the first tap where its fingers lifted,
+ * the next where its fingers landed, once all of them have.
  *
  * Between taps the recognizer stays `possible` with no touches, so a single
  * tap that requires a double tap to fail waits the interval out, as in UIKit.
@@ -27,7 +29,6 @@ import {
 } from './GestureRecognizer';
 import type {GestureEventContext, GestureTouch, Point} from './types';
 
-/** @experimental */
 export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<TapGestureRecognizer> {
   /** @default 1 */
   numberOfTapsRequired?: number;
@@ -41,7 +42,6 @@ export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<Ta
 
 const TAP = UIKIT_GESTURES.tap;
 
-/** @experimental */
 export class TapGestureRecognizer extends GestureRecognizer {
   numberOfTapsRequired: number;
   numberOfTouchesRequired: number;
@@ -53,7 +53,11 @@ export class TapGestureRecognizer extends GestureRecognizer {
   private tapCount = 0;
   private isTapInProgress = false;
   private maxTouchesThisTap = 0;
+  /** Where the first tap's fingers lifted: their centroid. */
   private firstTapLocation: Point | null = null;
+  /** The current tap's fingers: where each landed and where each lifted. */
+  private tapStarts = new Map<number, Point>();
+  private tapLifts = new Map<number, Point>();
 
   constructor(options: TapGestureRecognizerOptions = {}) {
     super(options);
@@ -92,16 +96,9 @@ export class TapGestureRecognizer extends GestureRecognizer {
     event: GestureEventContext,
   ): void {
     if (!this.isTapInProgress) {
-      const first = touches[0];
-      if (
-        this.firstTapLocation != null &&
-        distance({x: first.startX, y: first.startY}, this.firstTapLocation) >
-          this.allowableSeparation
-      ) {
-        this.setState('failed');
-        return;
-      }
       this.isTapInProgress = true;
+      this.tapStarts.clear();
+      this.tapLifts.clear();
       this.maxTouchesThisTap = 0;
       this.clearTimer();
       if (Number.isFinite(this.maximumTapDuration)) {
@@ -110,11 +107,25 @@ export class TapGestureRecognizer extends GestureRecognizer {
         });
       }
     }
+    for (const touch of touches) {
+      this.tapStarts.set(touch.id, {x: touch.startX, y: touch.startY});
+    }
     this.maxTouchesThisTap = Math.max(
       this.maxTouchesThisTap,
       this.numberOfTouches,
     );
     if (this.numberOfTouches > this.numberOfTouchesRequired) {
+      this.setState('failed');
+      return;
+    }
+    // A later tap must land near the first: compared once all of its
+    // fingers have landed, centroid to centroid.
+    if (
+      this.firstTapLocation != null &&
+      this.tapStarts.size === this.numberOfTouchesRequired &&
+      distance(centerOf(this.tapStarts.values()), this.firstTapLocation) >
+        this.allowableSeparation
+    ) {
       this.setState('failed');
     }
   }
@@ -133,6 +144,9 @@ export class TapGestureRecognizer extends GestureRecognizer {
       this.setState('failed');
       return;
     }
+    for (const touch of touches) {
+      this.tapLifts.set(touch.id, {x: touch.x, y: touch.y});
+    }
     if (this.numberOfTouches - touches.length > 0) {
       // Wait for every finger of this tap to lift.
       return;
@@ -144,7 +158,7 @@ export class TapGestureRecognizer extends GestureRecognizer {
       return;
     }
     this.tapCount += 1;
-    this.firstTapLocation ??= this.location();
+    this.firstTapLocation ??= centerOf(this.tapLifts.values());
     if (this.tapCount >= this.numberOfTapsRequired) {
       this.setState('ended');
       return;
@@ -159,5 +173,20 @@ export class TapGestureRecognizer extends GestureRecognizer {
     this.isTapInProgress = false;
     this.maxTouchesThisTap = 0;
     this.firstTapLocation = null;
+    this.tapStarts.clear();
+    this.tapLifts.clear();
   }
+}
+
+/** The centroid of some points. */
+function centerOf(points: Iterable<Point>): Point {
+  let x = 0;
+  let y = 0;
+  let count = 0;
+  for (const point of points) {
+    x += point.x;
+    y += point.y;
+    count += 1;
+  }
+  return count === 0 ? {x: 0, y: 0} : {x: x / count, y: y / count};
 }

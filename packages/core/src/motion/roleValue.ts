@@ -17,10 +17,7 @@ import {durationBounceOf, toSpring, type SpringDescription} from './spring';
 /** The three kinds of value a role can hold. */
 export type MotionRoleKind = 'spring' | 'duration' | 'curve';
 
-/**
- * Cubic-bézier control points `[x1, y1, x2, y2]`.
- * @experimental
- */
+/** Cubic-bézier control points `[x1, y1, x2, y2]`. */
 export type MotionCurvePoints = readonly [number, number, number, number];
 
 const ROLE_ID = /^[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
@@ -73,7 +70,8 @@ export function short(n: number): string {
  *   spring: mass folds into the duration, overdamping into a negative bounce);
  * - duration: `250ms`;
  * - curve: `cubic-bezier(0.42, 0, 0.58, 1)`, usable as is in CSS.
- * Throws on a value that is not a valid value of its kind.
+ * Throws on a value that is not a valid value of its kind, a spring that
+ * never settles included.
  */
 export function formatMotionRoleValue(
   kind: MotionRoleKind,
@@ -86,6 +84,11 @@ export function formatMotionRoleValue(
       );
     }
     const {duration, bounce} = durationBounceOf(toSpring(value));
+    if (!(bounce < 1)) {
+      throw new RangeError(
+        'a spring must settle: its bounce must be below 1 (a damping ratio above 0)',
+      );
+    }
     return `${short(duration)}s ${short(bounce)}`;
   }
   if (kind === 'duration') {

@@ -63,7 +63,10 @@ same generated contract.
   adapting per device where the device differs; a prop is never accepted
   without that meaning (`architecture:public-component-api` INV2). A prop only
   one platform can honor is that platform's prop, such as Switch's `size`,
-  which only macOS can honor with the system switch. A `content` slot, which `<Name>Props` leaves out, is a
+  which only macOS can honor with the system switch. Switch's `labelPosition` and
+  `labelSpacing` are absent from the Apple contracts: an Apple switch row follows the system toggle
+  layout, the label leading, the switch trailing, and the system's spacing
+  between them. A `content` slot, which `<Name>Props` leaves out, is a
   parameter of both initializers instead: the labeled one takes it as a
   `@ViewBuilder` closure and the props one as the slot's generated node type
   (A3, A4). The view
@@ -137,6 +140,7 @@ same generated contract.
 | A7          | A UI test finds the view by its `id` and does not find it when `isHidden` is true.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | A8          | DocC builds with no missing-documentation warning for a public component symbol.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | A9          | The `Astryx` product declares no public `HStack` or `VStack` view; the logic host draws `HStack` and `VStack` wire nodes with SwiftUI's stacks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| A2          | The Swift Switch view takes no `labelPosition` or `labelSpacing` parameter, and a capture shows its row with the label leading and the switch trailing, in light and dark and at the largest text size.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Current state
 
@@ -144,8 +148,12 @@ same generated contract.
   (SwiftUI views with core's names, `Button`, `Text`, and so on, re-exporting
   SwiftUI and the contracts) and the `AstryxNative` product (generated contract
   types, unprefixed: `ButtonProps`, `ButtonVariant`).
-- All six views still take hand-written parameters until each moves onto its
-  generated `<Name>Props`; Banner has no generated contract.
+- Avatar, Card, Heading, Icon, and Text take their generated `<Name>Props`; Button and
+  TextInput still take hand-written parameters until each moves onto its
+  generated props; Banner has no generated contract.
+- `AstryxNodeView` draws Avatar, Card, Heading, Icon, and Text wire nodes. Any other
+  node, HStack and VStack included, renders in its place as unsupported, and
+  its siblings still render, until the logic host draws stacks (A9).
 - The generated iOS `SwitchProps` still declares `size`, and `HStackProps` and
   `VStackProps` are still generated for iOS and macOS.
 

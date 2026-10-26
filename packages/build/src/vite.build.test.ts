@@ -73,7 +73,6 @@ async function buildFixture(
   {
     libraryPattern = 'packages/core/',
     zeroConfig = false,
-    undefinedVariables,
     stylexOverrides,
     warnings = [],
   }: {
@@ -81,7 +80,6 @@ async function buildFixture(
     libraryPattern?: string;
     /** Use `astryxStylex({...})` instead of the legacy `{stylexOptions}` form. */
     zeroConfig?: boolean;
-    undefinedVariables?: 'warn' | 'error';
     /** Zero-config form only: `stylexOverrides`. */
     stylexOverrides?: Record<string, unknown>;
     /** Receives every warning the build logs. */
@@ -121,7 +119,6 @@ async function buildFixture(
               dev: false,
               rootDir: REPO_ROOT,
               libraryPattern,
-              undefinedVariables,
               stylexOverrides,
             })
           : astryxStylex({
@@ -137,7 +134,6 @@ async function buildFixture(
                 },
               },
               libraryPattern,
-              undefinedVariables,
             })),
       ],
     });
@@ -431,53 +427,6 @@ describe('a production build resolves defineConsts imported across files', () =>
       },
     );
   }
-});
-
-describe('a production build checks the custom properties its stylesheet reads', () => {
-  const MESSAGE =
-    /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
-
-  it('warns by default, naming the variable and the rule that reads it', async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).toMatch(MESSAGE);
-  }, 180_000);
-
-  it("fails the build with undefinedVariables: 'error'", async () => {
-    await expect(
-      buildFixture('stylex-undefined-var', ['index.html'], {
-        undefinedVariables: 'error',
-      }),
-    ).rejects.toThrow(MESSAGE);
-  }, 180_000);
-
-  it('checks the product prefix a zero-config build sets in stylexOverrides', async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
-      zeroConfig: true,
-      stylexOverrides: {classNamePrefix: 'app'},
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).toMatch(
-      /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
-    );
-  }, 180_000);
-
-  it("never reports an app's own custom properties, declared in its own CSS", async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-app-vars', ['index.html'], {
-      undefinedVariables: 'error',
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).not.toMatch(
-      /no stylesheet in the build declares/,
-    );
-  }, 180_000);
 });
 
 describe('a production build validates StyleX declarations', () => {

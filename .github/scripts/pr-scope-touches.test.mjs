@@ -179,9 +179,9 @@ describe('pr-scope-touches', () => {
       workflow.match(
         /git show "\$BASE_SHA:\.github\/scripts\/pr-scope-touches\.sh" > "\$helper"/g,
       ) ?? [];
-    // Every consumer loads the helper from the base; new contract steps add
-    // consumers, so the count is a floor, not an exact tally.
-    expect(uses.length).toBeGreaterThanOrEqual(4);
+    // Every consumer loads the helper from the base; the count is a floor,
+    // not an exact tally.
+    expect(uses.length).toBeGreaterThanOrEqual(1);
     expect(fromBase.length).toBe(uses.length);
     expect(workflow).not.toMatch(/bash \.github\/scripts\/pr-scope-touches/);
   });

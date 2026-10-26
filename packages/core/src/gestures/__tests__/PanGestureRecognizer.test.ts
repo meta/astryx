@@ -295,6 +295,22 @@ describe('PanGestureRecognizer', () => {
   });
 
   describe('claiming before it begins', () => {
+    it("claims at the table's measured early-claim distance (spec:AST-094 FR2)", () => {
+      const distance = UIKIT_GESTURES.pan.earlyClaimDistance.value;
+      expect(UIKIT_GESTURES.pan.earlyClaimDistance).toEqual({
+        value: 5,
+        unit: 'px',
+      });
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
+      const finger = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
+      finger.move(0, 100 - distance + 1, 16);
+      expect(pan.claimsEarly()).toBe(false);
+      finger.move(0, 100 - distance, 32);
+      expect(pan.claimsEarly()).toBe(true);
+      finger.up(48);
+    });
+
     it('a one-way pan claims once the finger has gone 5 px its way, and begins at 10', () => {
       const h = createHarness();
       const pan = new PanGestureRecognizer({name: 'pan', direction: 'up'});
@@ -341,6 +357,44 @@ describe('PanGestureRecognizer', () => {
         .down(0, 100, 300, {recognizers: [off]})
         .move(0, 94, 316);
       expect(off.claimsEarly()).toBe(false);
+    });
+
+    it('keeps a committed claim through a second finger and through content that could scroll', () => {
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'up',
+        maximumNumberOfTouches: 1,
+      });
+      const first = h.finger(1).down(0, 100, 0, {recognizers: [pan]});
+      first.move(0, 95, 16);
+      expect(pan.claimsEarly()).toBe(true);
+      pan.commitClaim();
+      // A second finger only fails a one-finger pan that has not claimed.
+      h.finger(2).down(80, 100, 24, {recognizers: [pan]});
+      expect(pan.state).toBe('possible');
+      first.move(0, 88, 32);
+      expect(pan.state).toBe('began');
+      first.up(48);
+      h.finger(2).up(48);
+      // A scroll-edge sheet that claimed with its list at the top, then turned
+      // back toward content that scrolls.
+      const sheet = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+        claimDistance: 5,
+      });
+      const probe = scrollProbe((_dx, dy) => dy < 0);
+      const finger = h
+        .finger(3)
+        .down(0, 100, 100, {recognizers: [sheet], scroll: probe});
+      finger.move(0, 106, 116);
+      expect(sheet.claimsEarly()).toBe(true);
+      sheet.commitClaim();
+      finger.move(0, 89, 132);
+      expect(sheet.state).toBe('began');
+      finger.up(148);
     });
 
     it('commits on the claim: a reversal no longer fails it, and it begins at 10 px either way', () => {

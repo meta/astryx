@@ -21,7 +21,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
-  useLayer,
+  useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
   type LayerPlacement,
@@ -279,10 +279,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onHide,
   } = options;
 
-  const layer = useLayer({
+  // A tooltip stays open while its trigger is hovered, so it must never settle
+  // over the trigger: content taller than the room above and below opens
+  // beside it, or on the roomier side sized to that room, and scrolls what does not
+  // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
+    keepsAnchorClear: true,
   });
   const {
     ref: layerRef,

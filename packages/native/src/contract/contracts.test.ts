@@ -52,6 +52,20 @@ describe('native contracts', () => {
     expect(selector!.core).not.toHaveProperty('controlXstyle');
   });
 
+  it('moves a prop only some native platforms carry out of the core and onto those platforms', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const switchContract = contracts.find(
+      contract => contract.name === 'Switch',
+    )!;
+    for (const name of ['labelPosition', 'labelSpacing']) {
+      expect(switchContract.core).not.toHaveProperty(name);
+      expect(switchContract.platforms.android).toHaveProperty(name);
+      expect(switchContract.platforms.windows).toHaveProperty(name);
+      expect(switchContract.platforms.ios ?? {}).not.toHaveProperty(name);
+      expect(switchContract.platforms.macos ?? {}).not.toHaveProperty(name);
+    }
+  });
+
   it('keeps value callbacks, typed text slots, and number sets in the core', async () => {
     const {contracts} = await buildContracts(loadCoreDoc);
     const byName = new Map(
@@ -120,6 +134,35 @@ describe('native contracts', () => {
       "export type IconName = 'close' | 'chevronDown'",
     );
     expect(types['core.d.ts']).toContain('icon: IconName;');
+  });
+
+  it('gives Avatar its named sizes, a press, and a link, and leaves pixel sizes on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const avatar = contracts.find(contract => contract.name === 'Avatar');
+    expect(avatar).toBeDefined();
+    expect(avatar!.core.size.type).toEqual({
+      kind: 'enum',
+      values: ['xsm', 'sm', 'md', 'lg', 'xl'],
+    });
+    expect(Object.entries(avatar!.projections?.size ?? {})).toEqual(
+      ['xsm', 'sm', 'md', 'lg', 'xl'].map(size => [size, size]),
+    );
+    expect(Object.keys(avatar!.core)).toEqual(
+      expect.arrayContaining([
+        'src',
+        'fallbackSrc',
+        'name',
+        'alt',
+        'shape',
+        'href',
+        'onClick',
+      ]),
+    );
+    // `string | boolean`: words, or on (the name) and off.
+    expect(avatar!.core.tooltip?.type).toEqual({kind: 'textOrBoolean'});
+    expect(avatar!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining(['target', 'rel', 'status', 'as']),
+    );
   });
 
   it('reports naming and portability errors', () => {
