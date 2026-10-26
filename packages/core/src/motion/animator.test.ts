@@ -1577,6 +1577,23 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(element.style.opacity).toBe('');
   });
 
+  it('an unmount mid-dip lands the move where it was going, so a later attach shows it visible there', async () => {
+    const {animator, element} = reduced();
+    animator.set({opacity: 0.8});
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(50);
+    animator.attach(null);
+    await Promise.resolve(); // the end of the task: an unmount
+    await expect(handle.finished).resolves.toBe(false);
+    await advance(fade);
+    animator.attach(element);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBeCloseTo(0.8, 9);
+    expect(element.style.opacity).toBe('0.8');
+    expect(element.style.translate).toBe('100px 0px');
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
