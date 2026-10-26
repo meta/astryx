@@ -156,7 +156,8 @@ interface Registration {
   readonly recognizers: GestureRecognizer[];
   readonly hovers: HoverGestureRecognizer[];
   consumer: TouchConsumer | null;
-  touchMoveListener: EventListener | null;
+  /** Whether the element carries the host's shared blocking touchmove handler. */
+  hasTouchMoveListener: boolean;
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
   /**
@@ -734,7 +735,7 @@ export class GestureHost {
         recognizers: [],
         hovers: [],
         consumer: null,
-        touchMoveListener: null,
+        hasTouchMoveListener: false,
         savedStyle: new Map(),
         callerTouchAction: null,
         manageStyle: true,
@@ -783,14 +784,17 @@ export class GestureHost {
       // A kept press holds its touch only where the pointer is coarse; a
       // per-event tracker elsewhere gives press feedback only (FR19).
       (registration.consumer?.keepsTouch != null && this.isCoarse);
-    if (needsListener && registration.touchMoveListener == null) {
-      const listener: EventListener = event =>
-        this.cancelIfClaimed(event as TouchEvent);
-      registration.touchMoveListener = listener;
-      element.addEventListener('touchmove', listener, {passive: false});
-    } else if (!needsListener && registration.touchMoveListener != null) {
-      element.removeEventListener('touchmove', registration.touchMoveListener);
-      registration.touchMoveListener = null;
+    // The blocking listener sits on the element itself (FR19: a scroll that
+    // starts elsewhere never waits on it), but every element shares the
+    // host's one handler, which routes through the arena.
+    if (needsListener && !registration.hasTouchMoveListener) {
+      element.addEventListener('touchmove', this.onBlockingTouchMove, {
+        passive: false,
+      });
+      registration.hasTouchMoveListener = true;
+    } else if (!needsListener && registration.hasTouchMoveListener) {
+      element.removeEventListener('touchmove', this.onBlockingTouchMove);
+      registration.hasTouchMoveListener = false;
     }
   }
 
@@ -841,8 +845,8 @@ export class GestureHost {
     ) {
       return;
     }
-    if (registration.touchMoveListener != null) {
-      element.removeEventListener('touchmove', registration.touchMoveListener);
+    if (registration.hasTouchMoveListener) {
+      element.removeEventListener('touchmove', this.onBlockingTouchMove);
     }
     this.registry.delete(element);
     this.uninstallIfIdle();
@@ -1281,6 +1285,11 @@ export class GestureHost {
     }
     // A finger its pointer events sample is fed from there, never from here.
     this.feedMoves(inputs.filter(input => !this.pointerFed.has(input.id)));
+  };
+
+  /** The one blocking `touchmove` handler every claiming element shares. */
+  private readonly onBlockingTouchMove = (event: Event): void => {
+    this.cancelIfClaimed(event as TouchEvent);
   };
 
   /** Cancel a `touchmove` while a recognizer owns one of its fingers. */
