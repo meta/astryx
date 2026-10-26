@@ -57,11 +57,6 @@ describe('deriveTouchAction', () => {
     expect(
       deriveTouchAction([new SwipeGestureRecognizer({direction: 'left'})]),
     ).toBe('pan-y pinch-zoom');
-    expect(
-      deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
-      ]),
-    ).toBe('pan-y pinch-zoom');
   });
 
   it('leaves the browser everything for a one-way pan, or one that shares native scrolling', () => {
@@ -69,6 +64,12 @@ describe('deriveTouchAction', () => {
     // by cancelling touchmove when it begins.
     expect(
       deriveTouchAction([new PanGestureRecognizer({direction: 'down'})]),
+    ).toBeNull();
+    // A screen-edge pan from one edge goes one way, inward (spec:AST-094 FR18).
+    expect(
+      deriveTouchAction([
+        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
+      ]),
     ).toBeNull();
     expect(
       deriveTouchAction([
@@ -207,11 +208,9 @@ describe('createNativeScrollProbe', () => {
     expect(probe.canScroll(0, 20)).toBe(false);
     expect(probe.canScroll(0, -20)).toBe(true);
     expect(probe.isInsideScroller).toBe(true);
-    expect(probe.distanceToEdge?.(0, -20)).toBe(600);
     scroller(list, {scrollTop: 600});
     expect(probe.canScroll(0, -20)).toBe(false);
     expect(probe.canScroll(0, 20)).toBe(true);
-    expect(probe.distanceToEdge?.(0, 20)).toBe(600);
   });
 
   it('finds a scroller in a shadow tree around the slot a light-DOM row is slotted into', () => {

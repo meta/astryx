@@ -81,6 +81,8 @@ const VISUALLY_HIDDEN =
   'overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;' +
   'opacity:0;pointer-events:none;';
 
+let nextLabelId = 0;
+
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
   return input.type === 'checkbox' && input.hasAttribute('switch');
@@ -100,7 +102,9 @@ function swallow(event: Event): void {
  *   or back where it was, so it never lands on an `aria-hidden` element.
  * - A label that already has a control keeps it: the switch takes the
  *   label's activation (it goes first) and hands the click on to that
- *   control, so the tap plays and the control still toggles. A control
+ *   control, so the tap plays and the control still toggles. The control
+ *   keeps its name too: while the switch is attached it is labelled by the
+ *   label through `aria-labelledby`, unless it already names itself. A control
  *   that is itself a switch plays on its own, and a label tied to its
  *   control by `for` cannot be given a second one: both are left as they
  *   are.
@@ -143,12 +147,33 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   input.addEventListener('change', swallow);
   input.addEventListener('input', swallow);
   input.addEventListener('focus', onFocus);
+  // The switch becomes the label's control, so the control the label named
+  // is named through `aria-labelledby` instead (the switch is aria-hidden,
+  // so the label's text is the name).
+  let labelledControl: HTMLElement | null = null;
+  let addedLabelId = false;
   if (existing != null) {
     label.prepend(input);
+    if (
+      existing instanceof HTMLElement &&
+      !existing.hasAttribute('aria-labelledby') &&
+      !existing.hasAttribute('aria-label')
+    ) {
+      if (label.id === '') {
+        label.id = `astryx-haptic-label-${(nextLabelId += 1)}`;
+        addedLabelId = true;
+      }
+      existing.setAttribute('aria-labelledby', label.id);
+      labelledControl = existing;
+    }
   } else {
     label.appendChild(input);
   }
   return () => {
+    labelledControl?.removeAttribute('aria-labelledby');
+    if (addedLabelId) {
+      label.removeAttribute('id');
+    }
     input.removeEventListener('click', onClick);
     input.removeEventListener('change', swallow);
     input.removeEventListener('input', swallow);

@@ -129,12 +129,15 @@ describe('attachTapHaptic', () => {
     )!;
     // The switch takes the label's activation, so a tap plays.
     expect(label.control).toBe(sw);
+    // The checkbox keeps its name: the label's text, through aria-labelledby.
+    expect(own).toHaveAccessibleName('Remember me');
     sw.click();
     expect(sw.checked).toBe(true);
     expect(own.checked).toBe(true);
     expect(onOwnClick).toHaveBeenCalledTimes(1);
     release();
     expect(label.control).toBe(own);
+    expect(own).not.toHaveAttribute('aria-labelledby');
   });
 
   it('leaves a label whose control is already a switch, or tied by for, as it is', () => {
