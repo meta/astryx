@@ -1222,6 +1222,32 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('');
   });
 
+  it("reads the stylesheet's will-change in a task of its own, so a promotion reads no style in its own task", async () => {
+    // A drag's first move promotes: reading the stylesheet's reasons then
+    // would force a style recalculation in the input handler.
+    stylesheet['will-change'] = 'transform, opacity';
+    const {animator, element} = setup();
+    await commitFrame(clock);
+    await vi.advanceTimersByTimeAsync(0);
+    const readsOf = () =>
+      vi
+        .mocked(window.getComputedStyle)
+        .mock.calls.filter(([read]) => read === element).length;
+    const before = readsOf();
+    animator.set({y: 10});
+    expect(readsOf()).toBe(before);
+    expect(element.style.willChange).toBe('transform, opacity, translate');
+    await advance(PROMOTION_LINGER_MS + 10);
+    expect(element.style.willChange).toBe('');
+  });
+
+  it("keeps the stylesheet's will-change when an element attached in this task moves at once", () => {
+    stylesheet['will-change'] = 'transform, opacity';
+    const {animator, element} = setup();
+    animator.animate({y: 100}, {spring: springs.settle});
+    expect(element.style.willChange).toBe('transform, opacity, translate');
+  });
+
   it('promotes during direct manipulation, until the writes stop', async () => {
     const {animator, element} = setup();
     animator.set({y: 10});
