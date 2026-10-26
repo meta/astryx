@@ -82,7 +82,6 @@ function leavesOf(file: string): Leaf[] {
       starts.push(index);
     }
   });
-  expect(starts.length).toBeGreaterThan(0);
   // Values bound from one of those groups (`const {curve: move} = group;`)
   // are checked where the group declares them too.
   const bindings = /^const \{([^}]+)\} =\s*(?:\n\s*)?(\w+);/gm;
@@ -93,6 +92,7 @@ function leavesOf(file: string): Leaf[] {
       }
     }
   }
+  expect(starts.length).toBeGreaterThan(0);
   return [
     ...starts.flatMap(start => leavesFrom(file, lines, start, exported)),
     ...rows,
