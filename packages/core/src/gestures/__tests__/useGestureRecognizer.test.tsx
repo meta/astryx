@@ -12,11 +12,12 @@
 
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
 import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
+import {coarsePrimaryPointer} from './harness';
 
 function touch(
   type: string,
@@ -60,6 +61,15 @@ function Draggable({
   onRecognizer?.(pan);
   return <div data-testid="surface" ref={ref} />;
 }
+
+// A phone: the document's host listens only where the pointer is coarse.
+let restorePointer: () => void = () => {};
+beforeEach(() => {
+  restorePointer = coarsePrimaryPointer();
+});
+afterEach(() => {
+  restorePointer();
+});
 
 describe('useGestureRecognizer', () => {
   afterEach(() => {
