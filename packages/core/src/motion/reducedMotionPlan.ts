@@ -149,7 +149,9 @@ export function planReducedMotion(
       : null;
   if (!entering && !leaving && role === 'entrance') {
     entering = true;
-    fadeFrom = 0;
+    // From transparent, or from where a running fade (an exit caught
+    // midway) has it.
+    fadeFrom = view.hasOpacityCurve ? opacityNow : 0;
     fadeTo = roleBorrow ?? opacityTo;
   } else if (!entering && !leaving && role === 'exit') {
     leaving = true;

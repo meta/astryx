@@ -1437,6 +1437,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('x')).toBe(0);
   });
 
+  it('a spring back a touch release starts cross-fades on a fine pointer too (DR2)', async () => {
+    const {animator} = reduced(false);
+    animator.set({x: -80});
+    const start = clock;
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: 0, max: 100}}, at: start}),
+      {at: start, touchRelease: true},
+    );
+    // Not at once: it moves only while invisible.
+    expect(animator.get('x')).toBe(-80);
+    let moved = false;
+    while (clock <= start + fade) {
+      await advance(2);
+      if (!moved && animator.get('x') !== -80) {
+        moved = true;
+        expect(animator.get('opacity')).toBeLessThan(0.1);
+      }
+    }
+    expect(moved).toBe(true);
+    expect(animator.get('x')).toBe(0);
+  });
+
   it('a release with one axis past an edge is one handle: stop() stops the cross-fade too', async () => {
     const {animator} = reduced();
     animator.set({x: -80, y: 0});
@@ -1553,6 +1575,50 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBe(1);
     await expect(dismiss.finished).resolves.toBe(false);
     await expect(show.finished).resolves.toBe(true);
+  });
+
+  it('a move taken back mid-dip fades straight back up instead of finishing the dip', async () => {
+    const {animator} = reduced();
+    const move = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const shown = animator.get('opacity');
+    expect(shown).toBeLessThan(1);
+    const back = animator.animate({x: 0}, {spring: springs.navigationPush});
+    let lowest = shown;
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+      lowest = Math.min(lowest, animator.get('opacity'));
+    }
+    expect(lowest).toBeGreaterThanOrEqual(shown - 1e-6);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
+    await expect(move.finished).resolves.toBe(false);
+    await expect(back.finished).resolves.toBe(true);
+  });
+
+  it('an entrance by role caught mid-exit fades in from where the exit has it', async () => {
+    const {animator} = reduced();
+    animator.animate(
+      {y: 40},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await advance(fade / 4);
+    const shown = animator.get('opacity');
+    expect(shown).toBeLessThan(1);
+    animator.animate(
+      {y: 0},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'entrance'},
+    );
+    let lowest = shown;
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+      lowest = Math.min(lowest, animator.get('opacity'));
+    }
+    expect(lowest).toBeGreaterThanOrEqual(shown - 1e-6);
+    expect(animator.get('y')).toBe(0);
+    expect(animator.get('opacity')).toBe(1);
   });
 
   it('a caught dismissal fades straight back up: a call that sets every waiting value takes it over', async () => {
