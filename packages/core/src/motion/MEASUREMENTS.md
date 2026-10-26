@@ -325,3 +325,17 @@ display-link and feedback hooks; real HID touches.
 | ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
 | ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |
+
+## Reorder (UITableView edit-mode reorder)
+
+Subject "table T": a plain `UITableView` in editing mode with reorder controls
+only, 40 rows of 44 pt (rows 6 and 9 at 88 pt where noted), in the UIKit lab
+app. Measured so far (F4 batches 32, 32b, 32c): the claim, tracking, the
+crossing rule for a 44 pt row moving past 44 and 88 pt rows below its place
+and back, the slides, the drop, the autoscroll steps, Reduce Motion.
+
+| ID     | Scene                          | Gesture                                                                                                      | Extract                                                                                                                           | Method |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-RO26 | table T, one row at 88 pt      | drag the 88 pt row to edge depths 0 to 44 pt and hold; 44 pt rows held 4, 6, 8, 10 pt inside the bottom edge | autoscroll step per 20 ms tick by depth: indexed by the edge depth in points or by a fraction of the row; the exact start inset   | C      |
+| M-RO07 | table T                        | a system touch cancel mid-drag (a call or Control Center); `reloadData` mid-drag                             | does the row return to its origin or move to its slot; positions per frame                                                        | C      |
+| M-RO27 | table T, rows 6 and 9 at 88 pt | drag row 7 (44 pt) up past row 6; drag row 6 (88 pt) down past row 7 and back                                | the dragged row's centre travel at each change of the proposed slot, against `List/reorderModel.ts`'s slot rule (GUESS for these) | C      |

@@ -88,6 +88,26 @@ describe('discoverHooks (real core)', () => {
     expect(discoverHooks(core)).toEqual({Interaction: ['useResizable']});
   });
 
+  it('discovers a create*.doc.mjs factory documented as a hook, but no other file', () => {
+    const core = mkTmp('as-hd-factory-');
+    const dir = path.join(core, 'src', 'reorderable');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'createReorderable.doc.mjs'),
+      "export default {\n  category: 'interaction',\n};\n",
+    );
+    // Neither a component doc nor a lowercase `create` prefix is a hook.
+    fs.writeFileSync(path.join(dir, 'Creator.doc.mjs'), 'export default {};\n');
+    fs.writeFileSync(
+      path.join(dir, 'createdHelpers.doc.mjs'),
+      'export default {};\n',
+    );
+    expect(discoverHooks(core)).toEqual({Interaction: ['createReorderable']});
+    expect(findHookDoc(core, 'createReorderable')).toBe(
+      path.join(dir, 'createReorderable.doc.mjs'),
+    );
+  });
+
   it('returns {} when src/ is missing (guarded with existsSync)', () => {
     const core = mkTmp('as-hd-nosrc-');
     expect(discoverHooks(core)).toEqual({});

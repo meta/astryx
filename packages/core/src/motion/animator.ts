@@ -855,7 +855,7 @@ const IDENTITY_TEXT: Record<Channel, string> = {
 };
 
 /** Whether a computed value (or an unset one) is the channel's identity. */
-function isIdentityText(channel: Channel, text: string): boolean {
+export function isIdentityText(channel: Channel, text: string): boolean {
   const value = text.trim();
   if (value === '' || value === 'none') {
     return true;
@@ -884,7 +884,8 @@ function expand(values: MotionValues): Partial<Record<MotionProperty, number>> {
   return out;
 }
 
-function defaultNow(): number {
+/** The time the motion clock reads (`performance.now()`'s time base). */
+export function motionNow(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
@@ -941,7 +942,7 @@ export function createMotionAnimator(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
-  const now = options.now ?? defaultNow;
+  const now = options.now ?? motionNow;
   const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'

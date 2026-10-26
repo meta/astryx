@@ -119,6 +119,8 @@ const {detach} = reorderable.attach(listElement, {
   nearest the dragged item's center, and a dropped item settles on that slot's center.
   An array whose length differs from the item count is ignored, as is
   `positions` in a tree; drop positions then come from the measured layout.
+  Implementation gap: not built; `positions` does not exist yet, so drop
+  positions always come from the measured layout.
   Without `positions`, drop positions come from the measured layout;
   in the callback, `key` names the moved item by its key and `to` is the index the item has after the move, counted in the
   collection's full item order (every item it was given, mounted or not). In a
@@ -244,7 +246,8 @@ const {detach} = reorderable.attach(listElement, {
   public; `start` and the handle enter the same mode.
 - **FR4b — Plain elements attach without React.** The object exposes
   `attach(container, {items})`, where `items()` returns one
-  `{key, element, handle}` per item in order, and it returns `{detach}`. An
+  `{key, element, handle}` per item in order, and it returns `{detach}`.
+  Implementation gap: not built; the object has no `attach` yet. An
   attached container gets FR3's drag, FR4's reorder mode on each handle, and
   their announcements, with no collection component; `positions` and
   `isReorderable` apply as they do for a collection. `attach` gives each `handle` FR4's

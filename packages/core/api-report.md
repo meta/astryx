@@ -1514,6 +1514,7 @@ component List(props: ListProps)
   prop header?: ReactNode
   prop listStyle?: ListMarkerStyle = 'none'
   prop ref?: React.Ref<HTMLUListElement | HTMLOListElement>
+  prop reorderable?: Reorderable
   prop start?: number = 1
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -2998,6 +2999,7 @@ function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createReorderable: <TKey extends string | number = string | number, TTo = number>(options: ReorderableOptions<TKey, TTo>) => Reorderable<TKey, TTo>
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -5050,6 +5052,15 @@ type RadiusVarName = keyof typeof radiusDefaults
 interface RelativeDateFilterPreset
   label: string
   value: string
+interface ReorderMove<TKey extends string | number = string | number, TTo = number>
+  key: TKey
+  to: TTo
+interface Reorderable<TKey extends string | number = string | number, TTo = number>
+  [reorderableBrand]: { readonly key: TKey; readonly to: TTo }
+  start: (key: TKey) => void
+interface ReorderableOptions<TKey extends string | number = string | number, TTo = number>
+  isReorderable?: (key: TKey) => boolean
+  onReorder: (move: ReorderMove<TKey, TTo>) => void
 interface ResizableConfig
   autoSaveId?: string
   defaultIsCollapsed?: boolean
