@@ -644,33 +644,28 @@ export class GestureHost {
    * Turn text selection and the touch callout off, for as long as this
    * finger or pen is down, only on the elements whose hold does something:
    * a long press's (a menu, a hold-repeat) and those of recognizers created
-   * with a `selectionLock` (a slider's thumb, a switch's drag). Anything whose hold does nothing, a
-   * press-tracked control or row included, keeps the browser's long-press
-   * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
-   * lock only where the primary pointer is coarse (locksSelectionFor), so
-   * desktop selection is untouched.
+   * with a `selectionLock` (a slider's thumb, a switch's drag, a tab bar's
+   * zero-delay lens). Anything whose hold does nothing, a press-tracked
+   * control or row included, keeps the browser's long-press selection
+   * (`spec:AST-094` FR41). Restored when the contact ends. Callers lock only
+   * where the primary pointer is coarse (locksSelectionFor), so desktop
+   * selection is untouched, and only once the arena has admitted the
+   * contact: `recognizers` are the ones that took it.
    */
   private lockSelection(
     id: number,
     recognizers: ReadonlyArray<GestureRecognizer>,
     target: EventTarget | null,
-    pointerType: PointerKind,
   ): void {
     // Each recognizer whose hold does something brings its lock; the host
     // never imports one (a component without such a hold does not bundle
-    // it).
+    // it). Only one that took this contact locks for it: a recognizer that
+    // declined it (its pointer, or its own shouldReceiveTouch) has no hold
+    // here.
     const byLock = new Map<SelectionLock, Set<Element>>();
     for (const recognizer of recognizers) {
       const lock = recognizer.selectionLock;
-      if (
-        lock != null &&
-        // Only a recognizer that would take this contact locks for it: a
-        // pen is checked against pen acceptance, a finger against touch.
-        recognizer.isEnabled &&
-        (recognizer.allowedPointerTypes == null ||
-          recognizer.allowedPointerTypes.has(pointerType)) &&
-        recognizer.view instanceof Element
-      ) {
+      if (lock != null && recognizer.view instanceof Element) {
         const elements = byLock.get(lock) ?? new Set<Element>();
         elements.add(recognizer.view);
         byLock.set(lock, elements);
@@ -712,6 +707,8 @@ export class GestureHost {
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
     const stale: number[] = [];
+    // Locked once the arena knows which recognizers took each finger.
+    const toLock: {id: number; target: EventTarget | null}[] = [];
     for (const touch of touchesOf(event.changedTouches)) {
       if ((touch as StylusTouch).touchType === 'stylus') {
         continue;
@@ -730,7 +727,7 @@ export class GestureHost {
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
       if (locksSelectionFor('touch', this.doc.defaultView)) {
-        this.lockSelection(id, recognizers, target, 'touch');
+        toLock.push({id, target});
       }
       this.watchTarget(
         touch.identifier,
@@ -755,6 +752,9 @@ export class GestureHost {
       this.arena.cancelled(stale, time);
     }
     this.arena.began(inputs);
+    for (const {id, target} of toLock) {
+      this.lockSelection(id, this.arena.participantsOf(id), target);
+    }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
     if (event.target instanceof Node) {
@@ -1139,9 +1139,6 @@ export class GestureHost {
     }
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
-    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
-      this.lockSelection(id, recognizers, event.target, event.pointerType);
-    }
     this.arena.began([
       {
         id,
@@ -1155,6 +1152,9 @@ export class GestureHost {
         consumer,
       },
     ]);
+    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
+      this.lockSelection(id, this.arena.participantsOf(id), event.target);
+    }
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
