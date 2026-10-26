@@ -137,7 +137,7 @@ function mount(html: string): Record<string, HTMLElement> {
 
 beforeEach(() => {
   clock = new ManualClock();
-  host = new GestureHost(document, {clock});
+  host = new GestureHost(document, {clock, isPrimaryPointerCoarse: () => true});
   detachers = [];
 });
 
@@ -149,6 +149,45 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it('registers no document listener where the primary pointer is fine, or while nothing enabled is attached (spec:AST-094 FR19, FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const types = (spy: typeof added) =>
+      spy.mock.calls
+        .map(call => call[0])
+        .filter(t => /^(touch|pointer)/.test(t));
+    // A fine primary pointer: nothing is registered, an element's touchmove
+    // listener included.
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const detachFine = fine.attach(box, new PanGestureRecognizer());
+    expect(types(added)).toEqual([]);
+    expect(boxAdded).not.toHaveBeenCalled();
+    detachFine();
+    // A coarse one, with only a disabled recognizer: still nothing.
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    const pan = new PanGestureRecognizer({isEnabled: false});
+    const detach = coarse.attach(box, pan);
+    expect(types(added)).toEqual([]);
+    expect(boxAdded).not.toHaveBeenCalled();
+    // Enabling it registers the listeners; disabling removes them.
+    pan.setEnabled(true);
+    expect(types(added)).toContain('touchstart');
+    expect(boxAdded).toHaveBeenCalledWith('touchmove', expect.any(Function), {
+      passive: false,
+    });
+    pan.setEnabled(false);
+    expect(types(removed)).toContain('touchstart');
+    detach();
+  });
+
   it('sets touch-action on attach and restores it on detach; the long-press styles wait for a held press', () => {
     const {box} = mount('<div id="box" style="color: red"></div>');
     const set = vi.spyOn(box.style, 'setProperty');

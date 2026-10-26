@@ -120,9 +120,22 @@ export const chocolateTheme = defineTheme({
     '--color-on-dark': '#FFFCF7',
     '--color-on-light': '#4a3520',
     '--color-on-accent': ['#FFFFFF', '#4a3520'],
-    '--color-on-success': ['#FFFFFF', '#4a3520'],
-    '--color-on-error': ['#FFFFFF', '#4a3520'],
+    '--color-on-success': '#141010',
+    '--color-on-error': '#141010',
     '--color-on-warning': ['#4a3520', '#4a3520'],
+
+    // Info is its own blue status, independent of the accent.
+    '--color-info': ['#3a5e8c', '#7ba8d4'],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': ['#2e4a6e', '#8dbce0'],
+    '--color-text-success': ['#526f00', '#a8d43a'],
+    '--color-text-warning': ['#7a5500', '#ffd960'],
+    '--color-text-error': ['#cc0000', '#ff7a7a'],
+    '--color-on-info-muted': ['#2e4a6e', '#8dbce0'],
+    '--color-on-success-muted': ['#4d6800', '#a8d43a'],
+    '--color-on-warning-muted': ['#7a5500', '#ffd960'],
+    '--color-on-error-muted': ['#b40000', '#ff7a7a'],
 
     // Icon
     '--color-icon-accent': ['#8C5927', '#d4a06a'],
