@@ -28,8 +28,9 @@ export const END_INSET_MS = 0.5;
  * Installs `window.__harnessCurveEnd(animation)`: the local time (ms, delay
  * included) where the animation's effect stops changing. An animation whose
  * keyframes end in a run of identical values (an end value held so that a
- * later interruption can read it) ends where that run starts; any other ends
- * at its end time.
+ * later interruption can read it) ends where that run starts, when it plays
+ * forward under a linear or cubic-bézier effect easing (the time the run
+ * starts is solved from the curve); any other ends at its end time.
  */
 /**
  * Page side: records every animation the document runs, from its first frame
@@ -180,10 +181,9 @@ async function installCurveEnd(page: Page): Promise<void> {
       ) {
         return delay + active;
       }
-      // Keyframe offsets are progress, not time: under a non-linear effect
-      // easing the held end's offset is not its time, so the curve is read
-      // to the full end instead.
-      if (String(effect.getTiming().easing ?? 'linear') !== 'linear') {
+      // A held end is read only for an animation that plays forward: run
+      // backward (or alternating), the held run is where its motion starts.
+      if ((timing?.direction ?? 'normal') !== 'normal') {
         return delay + active;
       }
       const frames = effect.getKeyframes();
@@ -191,7 +191,51 @@ async function installCurveEnd(page: Page): Promise<void> {
       while (first > 0 && values(frames[first - 1]) === values(frames[first])) {
         first -= 1;
       }
-      return delay + Number(frames[first]?.computedOffset ?? 1) * active;
+      const offset = Number(frames[first]?.computedOffset ?? 1);
+      if (offset >= 1) {
+        return delay + active;
+      }
+      // Keyframe offsets are progress, not time. Under a cubic-bézier effect
+      // easing (the CSS keywords included) whose progress only rises, the
+      // time the held run starts is solved from the curve; under any other
+      // easing (steps, linear() stops, an overshoot) the curve is read to the
+      // full end.
+      const easing = String(effect.getTiming().easing ?? 'linear').trim();
+      const named: Record<string, number[]> = {
+        linear: [0, 0, 1, 1],
+        ease: [0.25, 0.1, 0.25, 1],
+        'ease-in': [0.42, 0, 1, 1],
+        'ease-out': [0, 0, 0.58, 1],
+        'ease-in-out': [0.42, 0, 0.58, 1],
+      };
+      const match = /^cubic-bezier\(([^)]+)\)$/.exec(easing);
+      const points =
+        named[easing] ?? (match ? match[1].split(',').map(Number) : null);
+      if (
+        points == null ||
+        points.length !== 4 ||
+        !points.every(Number.isFinite) ||
+        points[1] < 0 ||
+        points[1] > 1 ||
+        points[3] < 0 ||
+        points[3] > 1
+      ) {
+        return delay + active;
+      }
+      const [x1, y1, x2, y2] = points;
+      const bezier = (u: number, p1: number, p2: number) =>
+        3 * (1 - u) * (1 - u) * u * p1 + 3 * (1 - u) * u * u * p2 + u * u * u;
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 60; i += 1) {
+        const mid = (lo + hi) / 2;
+        if (bezier(mid, y1, y2) < offset) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      return delay + bezier((lo + hi) / 2, x1, x2) * active;
     };
   });
 }
@@ -207,7 +251,8 @@ export interface HeldAnimation {
   readonly delayMs: number;
   /**
    * Where its curve ends, ms from its start (delay included): before a held
-   * end value, if its keyframes end in one; otherwise its end time.
+   * end value, if its keyframes end in one and it plays forward under a
+   * linear or cubic-bézier effect easing; otherwise its end time.
    */
   readonly curveEndMs: number;
   readonly easing: string;
@@ -682,7 +727,8 @@ export interface ActiveAnimation {
   readonly name: string | null;
   /**
    * Epoch ms (page clock) when the animation's curve starts and ends. A held
-   * end value (see `HeldAnimation.curveEndMs`) is not part of the curve.
+   * end value (see `HeldAnimation.curveEndMs`, which says when one is read)
+   * is not part of the curve.
    */
   readonly from: number;
   readonly to: number;
@@ -889,6 +935,10 @@ export async function watchAnimations(
  * It judges curves and presented values, not `playState`: an animation that
  * holds its end value (a run of identical final keyframes kept so a later
  * interruption can read it) still reports `running` while nothing moves.
+ * A hold is read as such only where `HeldAnimation.curveEndMs` reads it (a
+ * forward run under a linear or cubic-bézier effect easing); under any other
+ * easing or direction, waitForRest waits the hold out, and a hold longer than
+ * `timeout` rejects with "still moving".
  */
 export async function waitForRest(
   locator: Locator,

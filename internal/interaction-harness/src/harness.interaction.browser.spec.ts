@@ -499,7 +499,7 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
-  test('a held end under a non-linear effect easing is read to the full end, and a rotate about x composes on its axis', async ({
+  test('a held end is solved through a cubic-bézier effect easing, a reversed one reads to the full end, and a rotate about x composes on its axis', async ({
     page,
   }) => {
     await fixture(page);
@@ -515,8 +515,37 @@ test.describe('holding', () => {
       );
     });
     const [held] = await holdAnimations(page, box);
-    // The keyframe offset 0.5 is progress, not 500 ms of time.
-    expect(held.curveEndMs).toBeCloseTo(1000, 0);
+    // The keyframe offset 0.5 is progress, not 500 ms of time: the run starts
+    // where the eased progress reaches 0.5.
+    const ease = cubicBezier(0.42, 0, 1, 1);
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 60; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (ease(mid) < 0.5) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    expect(held.curveEndMs).toBeCloseTo(lo * 1000, 0);
+    expect(held.curveEndMs).toBeGreaterThan(600);
+    await releaseAnimations(page, {finish: true});
+
+    // Played in reverse, the held run is where the motion starts: the curve
+    // runs to the full end.
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: '0px 0px', offset: 0},
+          {translate: '100px 0px', offset: 0.5},
+          {translate: '100px 0px', offset: 1},
+        ],
+        {duration: 1000, easing: 'linear', direction: 'reverse'},
+      );
+    });
+    const [reversed] = await holdAnimations(page, box);
+    expect(reversed.curveEndMs).toBeCloseTo(1000, 0);
     await releaseAnimations(page, {finish: true});
 
     await box.evaluate(el => {
