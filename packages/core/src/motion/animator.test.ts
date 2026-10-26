@@ -9,8 +9,8 @@
  *   back: presentation values and velocities, retarget continuity, stop,
  *   completion, Reduced Motion substitutions, momentum curves (a coast with
  *   edges), late attach
- * @position Testing; the compositor itself is proven in
- *   __tests__/animator.compositor.spec.ts
+ * @position Testing for /packages/core/src/motion/animator.ts (jsdom: the
+ *   compositor itself is proven in the browser)
  */
 
 import {execFileSync} from 'node:child_process';
