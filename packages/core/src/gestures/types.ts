@@ -9,6 +9,8 @@
  * @position Shared vocabulary of packages/core/src/gestures; no runtime code
  */
 
+import type {SelectionLock} from './GestureRecognizer';
+
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
  * `possible` to `ended` (UIKit's `.recognized` is the same value).
@@ -96,6 +98,13 @@ export interface GestureTouch {
   readonly scroll: NativeScrollProbe | null;
   /** The browser took this contact for its own pan or zoom. */
   takenByBrowser: boolean;
+  /**
+   * A finger delivered where the primary pointer is fine, which only a
+   * per-event press tracker hears (an FR19 exception for press feedback
+   * only, pending in `spec:AST-094`'s amendment): the tracker paints its
+   * press and reports no control event.
+   */
+  readonly isFeedbackOnly?: boolean;
 }
 
 /**
@@ -117,6 +126,8 @@ export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
+  /** See GestureTouch.isFeedbackOnly. */
+  readonly isFeedbackOnly?: boolean;
 }
 
 /**
@@ -175,4 +186,12 @@ export interface TouchConsumer {
    * move before the press is delivered still scrolls.
    */
   keepsTouch?(): boolean;
+  /**
+   * A control whose own record defines a hold action (a stepper's
+   * hold-repeat) brings the lock that turns text selection and the callout
+   * off for that press only, as a recognizer created with one does
+   * (`spec:AST-094` FR41). A control whose hold does nothing leaves it
+   * undefined and keeps the browser's long-press selection.
+   */
+  readonly selectionLock?: SelectionLock;
 }
