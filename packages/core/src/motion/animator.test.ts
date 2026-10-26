@@ -1100,6 +1100,24 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(opacityOnly()).toBe(true);
   });
 
+  it("a move with no opacity of its own dips from and back to the stylesheet's opacity, then hands it back", async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock); // the browser starts it
+    expect(animator.get('opacity', 1000)).toBeCloseTo(0.6, 9);
+    const [out] = live('opacity');
+    expect(out.keyframes[0].opacity).toBe('0.6');
+    await advance(fade / 2);
+    // Landed while transparent, fading back in to the stylesheet's value.
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity', clock + fade / 2)).toBeCloseTo(0.6, 9);
+    await advance(fade / 2 + END_HOLD_MS + 1);
+    // No inline opacity is left behind: the stylesheet owns it again.
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
@@ -1721,6 +1739,15 @@ describe('attach', () => {
       1,
     );
     expect(element.style.translate).toBe('300px 0px');
+  });
+
+  it('unmounting settles every handle as interrupted and leaves no timer', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 300}, {spring: springs.settle});
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    animator.attach(null);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(handle.finished).resolves.toBe(false);
   });
 
   it('detaching cancels the running animations', async () => {
