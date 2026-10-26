@@ -1280,6 +1280,25 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBeCloseTo(1, 9);
   });
 
+  it("a second call's fade re-times the first call's pending jump to its own invisible moment", async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const start = clock;
+    // x still waits for the first dip's bottom; y starts a new dip now.
+    animator.animate({y: 50}, {spring: springs.navigationPush});
+    // Neither moves while the element shows: both land at the new dip's
+    // bottom.
+    await advance(fade / 2 - 2);
+    expect(clock - start).toBe(fade / 2 - 2);
+    expect(animator.get('x')).toBe(0);
+    expect(animator.get('y')).toBe(0);
+    await advance(4);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('y')).toBe(50);
+    expect(animator.get('opacity')).toBeLessThan(0.1);
+  });
+
   it('a stop during a dip finishes the fade instead of freezing it', async () => {
     const {animator} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
@@ -1295,6 +1314,38 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     animator.animate({x: 100}, {spring: springs.navigationPush});
     await advance(fade / 4);
     animator.stop();
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('a call that does not own opacity keeps a running borrowed dip handing it back', async () => {
+    // One that moves nothing.
+    const still = reduced();
+    stylesheet = {opacity: '0.6'};
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    still.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade + END_HOLD_MS + 1);
+    expect(still.element.style.opacity).toBe('');
+
+    // One that springs after Reduce Motion turned off mid-dip.
+    const changed = setup({reduced: true, coarse: true});
+    changed.animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    stubMedia(false, true);
+    changed.animator.animate({y: 20}, {spring: springs.navigationPush});
+    await advance(2000);
+    expect(changed.element.style.opacity).toBe('');
+  });
+
+  it('a borrowed dip that ends while detached hands the opacity back on the next attach', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(25);
+    animator.attach(null);
+    await advance(fade + END_HOLD_MS + 1);
+    animator.attach(element);
     expect(element.style.opacity).toBe('');
     expect(animator.get('opacity')).toBe(1);
   });
@@ -1378,6 +1429,49 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     await expect(handle.finished).resolves.toBe(false);
     await advance(fade + END_HOLD_MS + 1);
     expect(animator.get('x')).toBe(40);
+  });
+
+  it('dispose settles a move still waiting to land, and the calls it carries, as interrupted', async () => {
+    const {animator} = reduced();
+    const first = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(10);
+    const second = animator.animate({y: 50}, {spring: springs.navigationPush});
+    await advance(10);
+    animator.dispose();
+    await expect(first.finished).resolves.toBe(false);
+    await expect(second.finished).resolves.toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a caught or replaced exit by role hands the stylesheet's opacity back", async () => {
+    // Caught: stop() 50 ms into the exit.
+    const caught = reduced();
+    stylesheet = {opacity: '0.6'};
+    caught.animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    caught.animator.stop();
+    expect(caught.element.style.opacity).toBe('');
+    // Replaced: React swaps the node 50 ms into the exit.
+    const replaced = reduced();
+    stylesheet = {opacity: '0.6'};
+    replaced.animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    replaced.animator.attach(null);
+    const node = document.createElement('div');
+    replaced.animator.attach(node);
+    expect(node.style.opacity).toBe('');
+    expect(replaced.animator.get('x')).toBe(100);
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
