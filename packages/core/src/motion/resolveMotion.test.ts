@@ -82,9 +82,7 @@ describe('resolveMotion', () => {
       duration: 0.8,
       bounce: 0.3,
     });
-    expect(resolveMotion(child, timing.curves.easeInOut)).toEqual([
-      0.4, 0, 0.2, 1,
-    ]);
+    expect(resolveMotion(child, timing.curves.move)).toEqual([0.4, 0, 0.2, 1]);
     expect(resolveMotion(child, navigation, 'transitionMs')).toBe(300);
   });
 
