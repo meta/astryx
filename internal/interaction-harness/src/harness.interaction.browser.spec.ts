@@ -648,13 +648,39 @@ test.describe('frame evidence', () => {
       /another page is open as the trace starts/,
     );
     await other.close();
-    // A page opened mid-trace: stop() refuses too.
+    // A page opened mid-trace: stop() refuses too, whether it is still open
+    // or closed again before the record stops.
     const record = await startCompositorTrace(page);
     const late = await page.context().newPage();
     await expect(record.stop()).rejects.toThrow(
-      /another page is open as the trace stops/,
+      /another page opened during the record/,
     );
     await late.close();
+    const brief = await startCompositorTrace(page);
+    const spinner = await page.context().newPage();
+    await spinner.setContent(
+      '<style>@keyframes spin{to{transform:rotate(360deg)}}</style><div style="width:50px;height:50px;background:red;animation:spin 1s linear infinite"></div>',
+    );
+    await page.waitForTimeout(200);
+    await spinner.close();
+    await expect(brief.stop()).rejects.toThrow(
+      /another page opened during the record/,
+    );
+    // In another context too.
+    const browser = page.context().browser();
+    if (browser != null) {
+      const elsewhere = await startCompositorTrace(page);
+      const context = await browser.newContext();
+      await (await context.newPage()).close();
+      await context.close();
+      await expect(elsewhere.stop()).rejects.toThrow(
+        /another page opened during the record/,
+      );
+    }
+    // Alone, it records.
+    const alone = await startCompositorTrace(page);
+    await page.waitForTimeout(100);
+    await expect(alone.stop()).resolves.toBeInstanceOf(Array);
   });
 
   test('the long-task log fails closed when it never ran on the document', async ({
