@@ -174,7 +174,8 @@ assistive-technology activation keep working.
 
 - `control` (a button, a switch): the highlight comes on in the same frame
   outside a scroller, the finger is tracked 70 pt beyond the bounds, and
-  the release takes UIButton's 0.25 s;
+  the release takes the list's deselect clock, as every surface's does
+  until a control runs its own (UIButton's 0.25 s);
 - `cell` (a table or collection row): the highlight waits the content-touch
   delay inside a scroll view and comes on at once outside one
   (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press for
@@ -442,8 +443,8 @@ mouse), and a decision taken once reads `readTouchPresentation()`.
 - `__tests__/GestureHost.test.ts`: the DOM integration through real
   listeners in jsdom.
 - `__tests__/VelocityTracker.test.ts`: UIKit's filter against the velocities
-  UIKit reported on recorded touch streams, and each strategy against the
-  true velocity.
+  UIKit reported on recorded touch streams, a steady speed and a hard
+  acceleration.
 - `__tests__/haptics.test.ts`: vibration patterns and the hidden switch.
 - `__tests__/browser/`: the browser proof on a phone-sized touch screen, in
   Chromium (CDP touches with timestamps) and WebKit (its own touch input).
