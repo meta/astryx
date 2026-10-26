@@ -1063,19 +1063,56 @@ describe('GestureHost', () => {
     expect(host.arena.now()).toBeLessThan(1e9);
   });
 
-  it('locks nothing for a recognizer that would not take the touch', () => {
-    const {slider} = mount('<div id="slider"></div>');
+  it('locks only for a recognizer that would take the contact: enabled, and accepting its pointer kind', () => {
+    detachers.push(coarsePrimaryPointer());
+    const {slider, stylus} = mount(
+      '<div><div id="slider"></div><div id="stylus"></div></div>',
+    );
+    const release = vi.fn();
+    const lock = vi.fn(() => release);
     const drag = new PanGestureRecognizer({
       name: 'drag',
       direction: 'horizontal',
-      selectionLock: lockSelection,
+      selectionLock: lock,
     });
     detachers.push(host.attach(slider, drag));
-    drag.setEnabled(false);
     const finger = {id: 1, x: 10, y: 10};
     touch('touchstart', slider, [finger], [finger], 0);
-    expect(slider.style.getPropertyValue('user-select')).toBe('');
+    expect(lock).toHaveBeenCalledTimes(1);
     touch('touchend', slider, [finger], [], 40);
+    expect(release).toHaveBeenCalledTimes(1);
+    drag.setEnabled(false);
+    touch('touchstart', slider, [finger], [finger], 100);
+    touch('touchend', slider, [finger], [], 140);
+    expect(lock).toHaveBeenCalledTimes(1);
+    // A pen-only drag locks for a pen: pen acceptance decides, not touch.
+    const penLock = vi.fn(() => () => {});
+    detachers.push(
+      host.attach(
+        stylus,
+        new PanGestureRecognizer({
+          name: 'pen',
+          direction: 'horizontal',
+          allowedPointerTypes: ['pen'],
+          selectionLock: penLock,
+        }),
+      ),
+    );
+    pointer('pointerdown', stylus, {
+      id: 7,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      time: 200,
+    });
+    expect(penLock).toHaveBeenCalledTimes(1);
+    pointer('pointerup', stylus, {
+      id: 7,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      time: 240,
+    });
   });
 
   it('shares one blocking touchmove handler among the elements that claim while moving: 200 pans, one handler, none for a tap (spec:AST-094 FR19)', () => {
@@ -1137,14 +1174,29 @@ describe('GestureHost', () => {
     const {trigger} = mount(
       '<div id="trigger" style="user-select: text">Hold for the menu</div>',
     );
+    const release = vi.fn();
+    const lock = vi.fn(() => release);
     detachers.push(
-      host.attach(trigger, new LongPressGestureRecognizer({name: 'menu'})),
+      host.attach(
+        trigger,
+        new LongPressGestureRecognizer({name: 'menu', selectionLock: lock}),
+      ),
     );
-    const inline = () => trigger.style.getPropertyValue('user-select');
     const finger = {id: 1, x: 5, y: 5};
     touch('touchstart', trigger, [finger], [finger], 0);
-    expect(inline()).toBe('none');
+    // The host calls the long press's lock for this contact alone.
+    expect(lock).toHaveBeenCalledTimes(1);
+    expect([
+      ...(lock.mock.calls[0] as unknown as [Iterable<Element>])[0],
+    ]).toEqual([trigger]);
+    expect(release).not.toHaveBeenCalled();
     touch('touchend', trigger, [finger], [], 600);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('a long press brings lockSelection by default', () => {
+    expect(new LongPressGestureRecognizer().selectionLock).toBe(lockSelection);
+    expect(new TapGestureRecognizer().selectionLock).toBeNull();
   });
 
   it('keeps native selection on a delegated pressable, whose hold does nothing (spec:AST-094 FR41)', () => {
