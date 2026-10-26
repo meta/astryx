@@ -26,7 +26,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `rubberBand.ts`        | UIScrollView's resistance past an edge, and its inverse.                                                                   |
 | `projection.ts`        | Release targets: the rest point nearest the projected coast; paging.                                                       |
 | `bezier.ts`            | Cubic-bézier timing functions (Core Animation's named curves).                                                             |
-| `animator.ts`          | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.         |
+| `animator.ts`          | Compositor animator: springs and coasts compiled to Web Animations, read back analytically.                                |
 | `reducedMotionPlan.ts` | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once. |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
@@ -38,7 +38,6 @@ under the same rules.
 ```
 import {createAnimator} from '../motion/animator';
 import {coast} from '../motion/coast';
-import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {springs} from '../motion/uikit';
 
 const animator = createAnimator(sheet);
@@ -57,15 +56,6 @@ animator.stop(['y']); // freezes at the value on screen
 // A throw on a scroll-like surface, with an edge (coast.ts builds the curves):
 animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
-// Any closed-form curve, here a press that keeps deepening: the target
-// scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
-  from: 1,
-  target: 1,
-  slope: -0.16,
-});
-animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
-
 await handle.finished; // true if it ran to the end, false if interrupted
 ```
 
@@ -76,17 +66,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - Promotion: every animation the animator creates, and every `set`, gives its
   channels a compositing layer in the same task (inline `will-change`, merged
   with the element's own), cleared 500 ms after the last motion. Mobile Safari
-  needs it to run a curve through a blocked main thread. A pseudo-element is
-  promoted through `--astryx-motion-will-change-<pseudo>` on its host; its
-  style opts in with
-  `willChange: 'var(--astryx-motion-will-change-before, auto)'`.
+  needs it to run a curve through a blocked main thread.
 - `atRest(properties)` resolves once none of them is moving, after the last
   curve ends, whoever started it.
 - `rebase({y: -shift})` moves properties at once, as a layout shift does; a
   property moving on a spring keeps its spring, velocity and target.
-- `play` bakes any curve given as value and velocity functions of time (a
-  spring chasing a moving target from `solveSpringTowardRamp`, a fitted UIKit
-  curve) exactly like a spring.
 - `animate` always starts from the presentation value with the presentation
   velocity unless a velocity is handed in, so retargeting is continuous
   (`handle.retarget(to)` keeps the call's spring).
@@ -97,7 +81,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
   (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
   several animators on one clock.
 - Reduced Motion (`prefers-reduced-motion: reduce`, design:reduced-motion):
-  every `animate` and `play` is replaced and nothing moves, scales or
+  every `animate` is replaced and nothing moves, scales or
   springs. On a coarse primary pointer, or for a call started by a touch
   drag's release (`{touchRelease: true}`), it is an opacity-only cross-fade
   of `timing.reducedMotionCrossFadeMs` (200 ms): an entrance lands and fades
@@ -118,9 +102,6 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
-  pseudo-element; with no inline style to hold it, a static filling animation
-  holds its end value until the next animation replaces it.
 
 ### How it stays on the compositor
 

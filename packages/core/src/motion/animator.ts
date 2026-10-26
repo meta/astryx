@@ -16,9 +16,8 @@
  *
  * Each animated value (x, y, rotate, scaleX, scaleY, opacity) follows a
  * closed-form curve: a spring (spring.ts), momentum curves its caller built (a
- * UIScrollView coast with an edge bounce, coast.ts), a curve handed to `play` (a spring chasing a moving
- * target, a fitted UIKit curve), or a Reduced Motion cross-fade. The curves are baked into
- * Web Animations keyframes on the individual transform properties (`translate`,
+ * UIScrollView coast with an edge bounce, coast.ts), or a Reduced Motion
+ * cross-fade. The curves are baked into Web Animations keyframes on the individual transform properties (`translate`,
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
  * interpolation between keyframes is within a fraction of a pixel, and played
  * with `easing: linear`. The browser then runs them on its compositor: they
@@ -69,17 +68,13 @@
  * Chromium starts it after the block.
  *
  * Promotion: Mobile Safari runs an animation whose start time is set from
- * script on its compositor at its first commit only if the element (or the
- * pseudo-element) already has a compositing layer; without one, a block
- * right after that commit freezes it (iOS 26.2 simulator: 2 of 7 runs kept
- * moving, 0 of 5 on a ::before). Every animation the animator creates, and
- * every `set`, therefore promotes its channels in the same task: inline
- * `will-change` on the element, merged with the element's own, or the custom
- * property `--astryx-motion-will-change-<pseudo>` on the host for a
- * pseudo-element, whose style opts in with
- * `will-change: var(--astryx-motion-will-change-before, auto)`. That is
- * enough (5 of 5, and 4 of 4 through the animator); promotion ends
- * PROMOTION_LINGER_MS after the last motion.
+ * script on its compositor at its first commit only if the element already
+ * has a compositing layer; without one, a block right after that commit
+ * freezes it (iOS 26.2 simulator: 2 of 7 runs kept moving). Every animation
+ * the animator creates, and every `set`, therefore promotes its channels in
+ * the same task: inline `will-change` on the element, merged with the
+ * element's own. That is enough (5 of 5, and 4 of 4 through the animator);
+ * promotion ends PROMOTION_LINGER_MS after the last motion.
  *
  * Known limits, iOS Safari (measured on the iOS 26.2 simulator):
  * - a block in the task that starts a motion delays it: it starts when the
@@ -96,8 +91,7 @@
  *   into the curve (simulator, not yet confirmed on a device).
  *
  * Reduced Motion (design:reduced-motion): with `prefers-reduced-motion:
- * reduce`, every `animate` and `play` (travel or opacity, on a spring or any
- * curve) is replaced, and nothing moves, scales or springs. The planner
+ * reduce`, every `animate` (travel or opacity) is replaced, and nothing moves, scales or springs. The planner
  * (reducedMotionPlan.ts) decides what each call becomes; the animator
  * applies the plan and runs its landings:
  * - on a coarse primary pointer, or for a call started by a touch drag's
@@ -128,10 +122,6 @@
  * picks (a detent, a page), is a transition: it plays through the Reduce
  * Motion policy above, a cross-fade on a coarse pointer and at once
  * elsewhere (DR2, DR3).
- *
- * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
- * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -177,7 +167,7 @@ export interface SpringTransition {
 }
 
 /**
- * Options of `animate` and `play`: the spring, a release velocity, the Reduced
+ * Options of `animate`: the spring, a release velocity, the Reduced
  * Motion handling.
  */
 export interface AnimateOptions {
@@ -207,11 +197,11 @@ export interface AnimateOptions {
 }
 
 /**
- * Any closed-form curve to play on the compositor (`Animator.play`, and a
- * release's coast through `Animator.decay`): a spring chasing a moving
- * target, a piecewise curve, a fitted UIKit curve. Times are seconds from
- * the curve's start; the value at `duration` is the end state. Start it at
- * the property's presentation value (`get`) to continue without a jump.
+ * A closed-form curve a release starts, to play on the compositor through
+ * `Animator.decay`: a released scroll view's coast and its edge bounce
+ * (coast.ts). Times are seconds from the curve's start; the value at
+ * `duration` is the end state. Start it at the property's presentation
+ * value (`get`) to continue without a jump.
  */
 export interface MotionCurve {
   /** Length, s. */
@@ -232,12 +222,6 @@ export interface MotionCurve {
  * Options of `createAnimator`.
  */
 export interface AnimatorOptions {
-  /**
-   * Animates a pseudo-element of the element instead (`'::backdrop'` of a
-   * native dialog). A pseudo-element has no inline style, so a static filling
-   * animation holds its value after a curve ends and after `set`.
-   */
-  pseudoElement?: string;
   /** Starting values; identity by default. Never read from the DOM. */
   initial?: MotionValues;
   /** Clock in ms on the document timeline's time base. */
@@ -318,19 +302,6 @@ export interface Animator {
     options?: AnimateOptions,
   ): MotionHandle;
   /**
-   * Plays given curves (`scale` drives both axes), baked like a spring:
-   * presentation values, velocities, `stop`, `finished` and the shared
-   * clock work the same, and a later `animate` starts from the curve's
-   * value and velocity. Reduced Motion treats a curve that moves x, y, rotate
-   * or scale as travel, which the policy replaces (design:reduced-motion: a
-   * cross-fade after a touch, an immediate change otherwise). Its handle has
-   * no spring of its own: `retarget` needs one.
-   */
-  play(
-    curves: Partial<Record<MotionProperty | 'scale', MotionCurve>>,
-    options?: AnimateOptions,
-  ): MotionHandle;
-  /**
    * Plays momentum curves as given, on the translate axes only: a released
    * scroll view's coast and edge bounce, which `coast()` (coast.ts) builds
    * from a finger's release velocity. Under Reduce Motion momentum keeps
@@ -338,7 +309,7 @@ export interface Animator {
    * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
    * past an edge) is a transition and plays through the Reduce Motion
    * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
-   * is a transition too: play it with `play` or `animate`. Only a surface
+   * is a transition too: play it with `animate`. Only a surface
    * that coasts imports the coast math and the scroll table.
    */
   decay(
@@ -571,10 +542,10 @@ function format(
   }
 }
 
-const shared = new WeakMap<HTMLElement, Map<string, Animator>>();
+const shared = new WeakMap<HTMLElement, Animator>();
 
 /**
- * The one animator for `element` (and `options.pseudoElement`), created on
+ * The one animator for `element`, created on
  * first use. Code that animates one element from several places (a swipe on
  * x, a removal on y) shares it, so their curves compose in one `translate`
  * track and retargeting one axis leaves the other on its curve; two
@@ -586,16 +557,10 @@ export function animatorFor(
   element: HTMLElement,
   options: AnimatorOptions = {},
 ): Animator {
-  let byPseudo = shared.get(element);
-  if (byPseudo == null) {
-    byPseudo = new Map();
-    shared.set(element, byPseudo);
-  }
-  const key = options.pseudoElement ?? '';
-  let animator = byPseudo.get(key);
+  let animator = shared.get(element);
   if (animator == null) {
     animator = createAnimator(element, options);
-    byPseudo.set(key, animator);
+    shared.set(element, animator);
   }
   return animator;
 }
@@ -731,7 +696,6 @@ export function createAnimator(
           requestAnimationFrame(() => callback());
         }
       : null);
-  const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4).
   const prefersReducedMotion = defaultPrefersReducedMotion;
@@ -764,11 +728,6 @@ export function createAnimator(
   /** The element's own inline will-change, restored when promotion ends. */
   let ownWillChange: string | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
-  /** A pseudo-element is promoted through a custom property on its host. */
-  const promotionProperty =
-    pseudoElement == null
-      ? null
-      : `--astryx-motion-will-change-${pseudoElement.replace(/^:+/, '')}`;
   /** Channels whose identity the last node held inline (see `attach`). */
   let heldIdentity = new Set<Channel>();
 
@@ -850,7 +809,7 @@ export function createAnimator(
     channel: Channel,
     value: (property: MotionProperty) => number,
   ) => {
-    if (target == null || pseudoElement != null) {
+    if (target == null) {
       return;
     }
     touched.add(channel);
@@ -915,32 +874,14 @@ export function createAnimator(
     return times;
   };
 
-  /** A pseudo-element's resting value, held by a static filling animation. */
-  const hold = (channel: Channel, time: number) => {
-    if (target == null) {
-      return;
-    }
-    const value = format(channel, finalValue);
-    const animation = target.animate([{[channel]: value}, {[channel]: value}], {
-      duration: 1,
-      fill: 'both',
-      pseudoElement,
-    });
-    animation.startTime = time;
-    running.set(channel, animation);
-  };
-
   const rebuild = (channel: Channel, time: number) => {
     const previous = running.get(channel);
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
-    // An element's inline style holds the end state, so its old animation can
-    // go first. A pseudo-element has none: its old animation keeps holding the
-    // value until the new one exists (same task, no frame in between).
-    if (pseudoElement == null) {
-      previous?.cancel();
-    }
+    // The element's inline style holds the end state, so its old animation
+    // can go first.
+    previous?.cancel();
     const properties = CHANNELS[channel];
     // Settled curves become resting values.
     for (const property of properties) {
@@ -957,10 +898,6 @@ export function createAnimator(
       return;
     }
     if (moving.length === 0) {
-      if (pseudoElement != null) {
-        hold(channel, time);
-      }
-      previous?.cancel();
       return;
     }
     // A channel rebuilt by an explicit call (set, rebase, a retarget of
@@ -987,10 +924,6 @@ export function createAnimator(
       ),
     );
     if (end <= from) {
-      if (pseudoElement != null) {
-        hold(channel, time);
-      }
-      previous?.cancel();
       return;
     }
     if (callGroup != null) {
@@ -1074,7 +1007,6 @@ export function createAnimator(
       // inline style already holds the same values, so that changes no pixel.
       fill: 'both',
       easing: 'linear',
-      ...(pseudoElement != null ? {pseudoElement} : {}),
     });
     if (waiting != null) {
       // From rest: no start time, so the browser starts the animation when
@@ -1095,9 +1027,7 @@ export function createAnimator(
 
   /**
    * Once the main thread runs after the curve's end, the animation leaves the
-   * running state: an element's inline style already shows the end values; a
-   * pseudo-element's end value moves to a static holding animation, created
-   * before the long one goes.
+   * running state: the element's inline style already shows the end values.
    */
   const scheduleRetire = (
     channel: Channel,
@@ -1124,15 +1054,6 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
-      // A pseudo-element holds its resting value, unless the stylesheet
-      // takes it back now (a borrowed dip that has ended).
-      const handsBack =
-        channel === 'opacity' &&
-        borrowedOpacity != null &&
-        ![...landings].some(landing => landing.fadeIn?.isBorrowed === true);
-      if (pseudoElement != null && !handsBack) {
-        hold(channel, now());
-      }
       animation.cancel();
       releaseIdentity(channel);
       flushReleases();
@@ -1147,36 +1068,22 @@ export function createAnimator(
       target == null
         ? NaN
         : Number.parseFloat(
-            view
-              ?.getComputedStyle(target, pseudoElement ?? null)
-              .getPropertyValue('opacity') ?? '',
+            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
           );
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
   };
 
   /**
    * Whether the animator holds an opacity of its own on the element: an inline
-   * value it wrote, or a pseudo-element's holding animation (a `set` over a
-   * stylesheet that hides or dims it). A dip returns to that value.
+   * value it wrote (a `set` over a stylesheet that hides or dims it). A dip
+   * returns to that value.
    */
   const writesOwnOpacity = (): boolean =>
-    pseudoElement == null
-      ? (target?.style.getPropertyValue('opacity') ?? '') !== ''
-      : running.has('opacity');
+    (target?.style.getPropertyValue('opacity') ?? '') !== '';
 
-  /**
-   * Gives the element's opacity back to its stylesheet: an element's inline
-   * value goes; a pseudo-element, which has no inline style, loses the
-   * animation holding its value.
-   */
+  /** Gives the element's opacity back to its stylesheet: its inline value goes. */
   const releaseOwnOpacity = () => {
-    if (pseudoElement == null) {
-      target?.style.removeProperty('opacity');
-      return;
-    }
-    const held = running.get('opacity');
-    running.delete('opacity');
-    held?.cancel();
+    target?.style.removeProperty('opacity');
   };
 
   /**
@@ -1261,9 +1168,6 @@ export function createAnimator(
       releaseOwnOpacity();
       return;
     }
-    if (pseudoElement != null) {
-      return;
-    }
     if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
       return;
     }
@@ -1327,17 +1231,9 @@ export function createAnimator(
 
   // -- promotion -------------------------------------------------------------
 
-  /** Writes the promoted channels as will-change (or the pseudo's property). */
+  /** Writes the promoted channels as will-change. */
   const writePromotion = (element: HTMLElement) => {
     const list = [...promoted].join(', ');
-    if (promotionProperty != null) {
-      if (list === '') {
-        element.style.removeProperty(promotionProperty);
-      } else {
-        element.style.setProperty(promotionProperty, list);
-      }
-      return;
-    }
     if (list === '') {
       element.style.willChange = ownWillChange ?? '';
       ownWillChange = null;
@@ -1349,7 +1245,7 @@ export function createAnimator(
   };
 
   /**
-   * Gives the element (or its pseudo-element) a compositing layer for
+   * Gives the element a compositing layer for
    * `channel` from the task that starts the motion: Mobile Safari runs an
    * animation whose start time is set from script on its compositor at its
    * first commit only if the element already has a layer.
@@ -2141,25 +2037,9 @@ export function createAnimator(
       }
       // After the landing's commit, which can promote the element again.
       demote();
-      // A pseudo-element holds an identity with a static animation, which the
-      // cancel below drops: note the channels to hold again on the next node
-      // (never a borrowed opacity, which is the stylesheet's).
       const isOpacityBorrowed =
         borrowedOpacity != null ||
         [...landings].some(landing => landing.restoreIsBorrowed === true);
-      const pseudoHeld =
-        pseudoElement == null || target == null
-          ? null
-          : new Set(
-              (Object.keys(CHANNELS) as Channel[]).filter(
-                channel =>
-                  running.has(channel) &&
-                  !(channel === 'opacity' && isOpacityBorrowed) &&
-                  CHANNELS[channel].every(
-                    p => !segments.has(p) && resting[p] === IDENTITY[p],
-                  ),
-              ),
-            );
       for (const animation of running.values()) {
         animation.cancel();
       }
@@ -2179,15 +2059,13 @@ export function createAnimator(
       // differs, kept through a detach for the node that comes next.
       if (target != null) {
         const outgoing = target;
-        heldIdentity =
-          pseudoHeld ??
-          new Set(
-            (Object.keys(CHANNELS) as Channel[]).filter(
-              channel =>
-                outgoing.style.getPropertyValue(channel) ===
-                IDENTITY_TEXT[channel],
-            ),
-          );
+        heldIdentity = new Set(
+          (Object.keys(CHANNELS) as Channel[]).filter(
+            channel =>
+              outgoing.style.getPropertyValue(channel) ===
+              IDENTITY_TEXT[channel],
+          ),
+        );
       }
       const held = heldIdentity;
       target = next;
@@ -2217,13 +2095,8 @@ export function createAnimator(
         } else if (held.has(channel)) {
           // An identity the animator held inline over a stylesheet that
           // differs goes onto the new node too (writeInline keeps it only
-          // where the new node's stylesheet still differs); a pseudo-element's
-          // is held again.
-          if (pseudoElement != null) {
-            hold(channel, time);
-          } else {
-            writeInline(channel, property => resting[property]);
-          }
+          // where the new node's stylesheet still differs).
+          writeInline(channel, property => resting[property]);
         }
       }
       flushReleases();
@@ -2297,104 +2170,6 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
-      );
-      const carried =
-        plan?.landing != null
-          ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
-          : [];
-      const changed: MotionProperty[] = [];
-      for (const [property, segment] of Object.entries(next) as [
-        MotionProperty,
-        Segment | null,
-      ][]) {
-        interrupt(property, time);
-        changed.push(property);
-        if (segment == null) {
-          // Read before the segment goes: valueAt falls back to resting.
-          const value =
-            plan?.holds[property] ??
-            targets[property] ??
-            valueAt(property, time);
-          segments.delete(property);
-          resting[property] = value;
-        } else {
-          segments.set(property, segment);
-        }
-      }
-      commitCall(group, owner, changed, time);
-      if (plan?.borrowed != null) {
-        // The dip's own commit cleared it; the borrow lasts the dip.
-        borrowedOpacity = plan.borrowed;
-      }
-      const handle = makeHandle(owner, changed, finished, time, group);
-      if (plan?.landing != null) {
-        scheduleLanding(owner, handle.started, plan.landing, carried);
-      }
-      return handle;
-    },
-
-    play(curves, playOptions = {}) {
-      syncPending();
-      const time = playOptions.at ?? now();
-      const {owner, finished} = newOwner();
-      const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
-      for (const [key, curve] of Object.entries(curves) as [
-        MotionProperty | 'scale',
-        MotionCurve | undefined,
-      ][]) {
-        if (curve == null) {
-          continue;
-        }
-        if (!Number.isFinite(curve.duration) || curve.duration < 0) {
-          throw new RangeError(
-            `animator: a curve needs a finite duration ≥ 0 (got ${curve.duration})`,
-          );
-        }
-        for (const property of expandList([key])) {
-          byProperty[property] = curve;
-        }
-      }
-      const properties = Object.keys(byProperty) as MotionProperty[];
-      const targets: Partial<Record<MotionProperty, number>> = {};
-      for (const property of properties) {
-        const curve = byProperty[property] as MotionCurve;
-        targets[property] = curve.at(curve.duration);
-      }
-      const plan = prefersReducedMotion()
-        ? reducedMotion(
-            owner,
-            time,
-            targets,
-            properties,
-            isCoarsePointer() || playOptions.touchRelease === true,
-            playOptions.crossfadeAs,
-          )
-        : null;
-      const next: Partial<Record<MotionProperty, Segment | null>> = {
-        ...plan?.next,
-      };
-      for (const property of properties) {
-        if (property in next) {
-          continue;
-        }
-        const curve = byProperty[property] as MotionCurve;
-        next[property] =
-          curve.duration === 0
-            ? null
-            : {
-                start: time,
-                duration: Math.min(MAX_DURATION_MS, curve.duration * 1000),
-                target: targets[property] as number,
-                at: t => curve.at(t / 1000),
-                speed: t => curve.velocity(t / 1000),
-                jumps: [],
-                owner,
-              };
-      }
-      const group = beginGroup(
-        time,
-        Object.keys(next) as MotionProperty[],
-        playOptions.at,
       );
       const carried =
         plan?.landing != null
