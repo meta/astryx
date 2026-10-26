@@ -378,7 +378,8 @@ export async function castStoryboard(
     readonly data: string;
     readonly format: 'png' | 'jpeg';
   }[],
-  options: StoryboardOptions & {
+  // A cast is already the screen's frames: no clip is applied to them.
+  options: Omit<StoryboardOptions, 'clip'> & {
     readonly zero: number;
     readonly from?: number;
     readonly to?: number;

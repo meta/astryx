@@ -318,13 +318,16 @@ export async function startCompositorTrace(
 }
 
 const LONG_TASK_SCRIPT = `(() => {
-  if (window.__harnessLongTasks || typeof PerformanceObserver === 'undefined') return;
+  if (window.__harnessLongTasks) return;
   const tasks = [];
-  window.__harnessLongTasks = tasks;
+  const log = {tasks, supported: false};
+  window.__harnessLongTasks = log;
+  if (typeof PerformanceObserver === 'undefined' || !(PerformanceObserver.supportedEntryTypes || []).includes('longtask')) return;
   try {
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) tasks.push({start: performance.timeOrigin + entry.startTime, durationMs: entry.duration, name: entry.name});
     }).observe({type: 'longtask', buffered: true});
+    log.supported = true;
   } catch {}
 })()`;
 
@@ -347,16 +350,35 @@ export interface LongTask {
   readonly name: string;
 }
 
-/** Long tasks recorded since navigation, optionally only those overlapping a window. */
+/**
+ * Long tasks recorded since navigation, optionally only those overlapping a
+ * window. Fails closed: it throws when the log never ran on this document
+ * (installed after the page navigated) or the engine has no Long Tasks API
+ * (WebKit), so an empty answer is evidence of no long task, never of no log.
+ */
 export async function readLongTasks(
   page: Page,
   range?: {from: number; to: number},
 ): Promise<LongTask[]> {
-  const tasks = await page.evaluate(
+  const log = await page.evaluate(
     () =>
-      (window as unknown as {__harnessLongTasks?: LongTask[]})
-        .__harnessLongTasks ?? [],
+      (
+        window as unknown as {
+          __harnessLongTasks?: {tasks: LongTask[]; supported: boolean};
+        }
+      ).__harnessLongTasks ?? null,
   );
+  if (log == null) {
+    throw new Error(
+      'readLongTasks: the long-task log is not running on this document; call installLongTaskLog(page) before navigating',
+    );
+  }
+  if (!log.supported) {
+    throw new Error(
+      'readLongTasks: this engine has no Long Tasks API, so the log records nothing',
+    );
+  }
+  const tasks = log.tasks;
   return range == null
     ? tasks
     : tasks.filter(
