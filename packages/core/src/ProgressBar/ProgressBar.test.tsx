@@ -10,6 +10,7 @@
 import {describe, it, expect, beforeAll} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
 import {ProgressBar} from './ProgressBar';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 // A labeled mark wraps the tick in a lazily-loaded Tooltip (React.lazy +
 // Suspense). Preload that chunk once so the Tooltip (and its
@@ -836,5 +837,16 @@ describe('ProgressBar theme target names', () => {
     expect(container.querySelector('.astryx-progressbar-track')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-fill')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-mark')).toBeNull();
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11).
+describe('ProgressBar forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<ProgressBar value={40} variant="error" label="Upload" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

@@ -24,7 +24,7 @@
  * event, so a listener that writes a transform writes it in the same frame
  * as the input, with no React render in between.
  *
- * SYNC: When modified, update GestureArena.ts and README.md.
+ * SYNC: When modified, update GestureArena.ts.
  */
 
 import type {GestureArena} from './GestureArena';

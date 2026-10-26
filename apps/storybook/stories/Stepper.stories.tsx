@@ -239,19 +239,19 @@ export const StatusAllStates: Story = {
           <Step
             step={1}
             label="Success"
-            description="--color-success"
+            description="--color-icon-success"
             status="success"
           />
           <Step
             step={2}
             label="Warning"
-            description="--color-warning"
+            description="--color-icon-warning"
             status="warning"
           />
           <Step
             step={3}
             label="Error"
-            description="--color-error"
+            description="--color-icon-error"
             status="error"
           />
           <Step
