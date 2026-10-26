@@ -642,6 +642,23 @@ describe('review fixes', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('rebasing a curve that waits for its first frame keeps it in its call', async () => {
+    const {animator} = setup();
+    animator.play({
+      opacity: {duration: 0.3, at: t => 1 - t, velocity: () => -1},
+      x: {duration: 0.3, at: t => 100 * t, velocity: () => 100},
+      rotate: {duration: 0.3, at: t => 90 * t, velocity: () => 90},
+    });
+    animator.rebase({x: -20});
+    animator.animate({y: 50}, {spring: springs.settle});
+    clock = 1300;
+    await commitFrame(1300);
+    // Every curve starts with the browser's start.
+    // 100 ms in: 9° (not the 27° of a curve dated at the call), x 10 − 20.
+    expect(animator.get('rotate', 1400)).toBeCloseTo(9, 6);
+    expect(animator.get('x', 1400)).toBeCloseTo(-10, 6);
+  });
+
   it('a rebase and a retarget in the task of a drop from rest start on the browser\u2019s clock', async () => {
     // A list row's drop: it springs home from where the finger left it.
     const {animator} = setup();
@@ -1131,6 +1148,9 @@ describe('Reduced Motion (design:reduced-motion)', () => {
         {spring: springs.quickChange},
         {crossfadeAs: 'exit'},
       );
+      animator.play({
+        rotate: {duration: 0.3, at: t => 30 * t, velocity: () => 30},
+      });
       await advance(1000);
     }
     expect(recorded.length).toBeGreaterThan(0);
@@ -1838,6 +1858,20 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     );
   });
 
+  it('a played curve, opacity alone included, becomes the timed fade', async () => {
+    const {animator} = reduced();
+    // A long dim that would follow a sheet's spring.
+    animator.play({
+      opacity: {duration: 0.6, at: t => 1 - t / 0.6, velocity: () => -1 / 0.6},
+    });
+    await commitFrame(clock); // the browser starts it
+    expect(animator.get('opacity', 1000 + fade)).toBe(0);
+    expect(Number(live('opacity')[0].options.duration)).toBeCloseTo(
+      fade + END_HOLD_MS,
+      6,
+    );
+  });
+
   it('a slide without opacity takes its direction from crossfadeAs', async () => {
     const entrance = reduced().animator;
     entrance.set({x: 300});
@@ -1878,9 +1912,13 @@ describe('Reduced Motion (design:reduced-motion)', () => {
   it('completes at once on a fine pointer, opacity included', () => {
     const {animator} = reduced(false);
     animator.animate({x: 100, opacity: 0.5}, {spring: springs.navigationPush});
+    animator.play({
+      y: {duration: 0.4, at: t => 100 * t, velocity: () => 100},
+    });
     expect(recorded).toHaveLength(0);
     expect(animator.get('x')).toBe(100);
     expect(animator.get('opacity')).toBe(0.5);
+    expect(animator.get('y')).toBeCloseTo(40, 9);
   });
 
   it('fades on a fine pointer when a touch release started the call', async () => {
@@ -1932,6 +1970,124 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     await commitFrame(clock); // the browser starts it
     expect(live('opacity')).toHaveLength(0);
     expect(animator.getVelocity('y', 1010)).toBeLessThan(0);
+  });
+});
+
+describe('play: any closed-form curve', () => {
+  // A press that keeps deepening: the scale's target falls at 0.16 per
+  // second and the presentation follows it on a spring.
+  const pressSpring = toSpring(springs.contextMenuLift);
+  const press = solveSpringTowardRamp(pressSpring, {
+    from: 1,
+    target: 1,
+    slope: -0.16,
+  });
+  const pressCurve = {
+    duration: 0.266,
+    at: (t: number) => press.value(t),
+    velocity: (t: number) => press.velocity(t),
+  };
+
+  it('bakes the curve into keyframes and reads it back', async () => {
+    const {animator, element} = setup();
+    animator.play({scale: pressCurve});
+    const [animation] = live('scale');
+    await commitFrame(1000);
+    expect(animation.startTime).toBe(1000);
+    expect(Number(animation.options.duration)).toBeCloseTo(
+      266 + END_HOLD_MS,
+      6,
+    );
+    // Up to the end: from then on the value rests where the curve ended.
+    for (let t = 0; t < 266; t += 0.5) {
+      const [sx, sy] = sampleAt(animation, 'scale', 1000 + t);
+      expect(Math.abs(sx - press.value(t / 1000))).toBeLessThan(0.001);
+      expect(sy).toBe(sx);
+      expect(animator.get('scale', 1000 + t)).toBeCloseTo(
+        press.value(t / 1000),
+        12,
+      );
+      expect(animator.getVelocity('scaleY', 1000 + t)).toBeCloseTo(
+        press.velocity(t / 1000),
+        12,
+      );
+    }
+    const end = press.value(0.266);
+    expect(animator.get('scale', 1266)).toBeCloseTo(end, 12);
+    expect(animator.getVelocity('scale', 1266)).toBe(0);
+    for (const axis of parse(element.style.scale)) {
+      expect(axis).toBeCloseTo(end, 4);
+    }
+  });
+
+  it('finishes true at its end, false when interrupted', async () => {
+    const {animator} = setup();
+    const done = animator.play({
+      x: {duration: 0.2, at: t => 100 * t, velocity: () => 100},
+    });
+    await advance(250);
+    await expect(done.finished).resolves.toBe(true);
+    const cut = animator.play({
+      x: {duration: 0.2, at: t => 20 + 100 * t, velocity: () => 100},
+    });
+    await advance(50);
+    animator.set({x: 0});
+    await expect(cut.finished).resolves.toBe(false);
+  });
+
+  it('a later animate starts from the played value and velocity', async () => {
+    const {animator} = setup();
+    animator.play({scale: pressCurve});
+    await advance(120);
+    const value = animator.get('scale');
+    const velocity = animator.getVelocity('scale');
+    expect(value).toBeCloseTo(press.value(0.12), 12);
+    animator.animate({scale: 1.06}, {spring: springs.contextMenuLift});
+    expect(animator.get('scale')).toBeCloseTo(value, 9);
+    expect(animator.getVelocity('scale')).toBeCloseTo(velocity, 9);
+  });
+
+  it('a zero-length curve puts the value in place', () => {
+    const {animator, element} = setup();
+    animator.play({opacity: {duration: 0, at: () => 0.4, velocity: () => 0}});
+    expect(live('opacity')).toHaveLength(0);
+    expect(animator.get('opacity')).toBe(0.4);
+    expect(element.style.opacity).toBe('0.4');
+  });
+
+  it('under Reduced Motion a played travel cross-fades to its end', async () => {
+    const reduced = setup({
+      reduced: true,
+      coarse: true,
+    });
+    reduced.animator.play({
+      x: {duration: 0.3, at: t => 300 * t, velocity: () => 300},
+    });
+    await commitFrame(clock); // the browser starts it
+    const [opacity] = live('opacity');
+    expect(opacity).toBeDefined();
+    expect(live('translate')).toHaveLength(0);
+    await advance(timing.reducedMotionCrossFadeMs);
+    expect(reduced.animator.get('x')).toBeCloseTo(90, 9);
+  });
+
+  it('its handle retargets only with a spring', () => {
+    const {animator} = setup();
+    const handle = animator.play({
+      x: {duration: 0.3, at: t => 300 * t, velocity: () => 300},
+    });
+    expect(() => handle.retarget({x: 0})).toThrow(/spring/);
+    handle.retarget({x: 0}, {spring: springs.settle});
+    expect(animator.getVelocity('x')).toBeCloseTo(300, 9);
+  });
+
+  it('rejects a curve without a finite duration', () => {
+    const {animator} = setup();
+    expect(() =>
+      animator.play({
+        x: {duration: Number.POSITIVE_INFINITY, at: () => 0, velocity: () => 0},
+      }),
+    ).toThrow(RangeError);
   });
 });
 

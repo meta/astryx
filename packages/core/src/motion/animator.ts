@@ -16,8 +16,9 @@
  *
  * Each animated value (x, y, rotate, scaleX, scaleY, opacity) follows a
  * closed-form curve: a spring (spring.ts), momentum curves its caller built (a
- * UIScrollView coast with an edge bounce, coast.ts), or a Reduced Motion
- * cross-fade. The curves are baked into Web Animations keyframes on the individual transform properties (`translate`,
+ * UIScrollView coast with an edge bounce, coast.ts), a curve handed to `play` (a spring chasing a moving
+ * target, a fitted UIKit curve), or a Reduced Motion cross-fade. The curves are baked into
+ * Web Animations keyframes on the individual transform properties (`translate`,
  * `rotate`, `scale`) and `opacity`, sampled adaptively until linear
  * interpolation between keyframes is within a fraction of a pixel, and played
  * with `easing: linear`. The browser then runs them on its compositor: they
@@ -91,7 +92,8 @@
  *   into the curve (simulator, not yet confirmed on a device).
  *
  * Reduced Motion (design:reduced-motion): with `prefers-reduced-motion:
- * reduce`, every `animate` (travel or opacity) is replaced, and nothing moves, scales or springs. The planner
+ * reduce`, every `animate` and `play` (travel or opacity, on a spring or any
+ * curve) is replaced, and nothing moves, scales or springs. The planner
  * (reducedMotionPlan.ts) decides what each call becomes; the animator
  * applies the plan and runs its landings:
  * - on a coarse primary pointer, or for a call started by a touch drag's
@@ -167,7 +169,7 @@ export interface SpringTransition {
 }
 
 /**
- * Options of `animate`: the spring, a release velocity, the Reduced
+ * Options of `animate` and `play`: the spring, a release velocity, the Reduced
  * Motion handling.
  */
 export interface AnimateOptions {
@@ -197,11 +199,11 @@ export interface AnimateOptions {
 }
 
 /**
- * A closed-form curve a release starts, to play on the compositor through
- * `Animator.decay`: a released scroll view's coast and its edge bounce
- * (coast.ts). Times are seconds from the curve's start; the value at
- * `duration` is the end state. Start it at the property's presentation
- * value (`get`) to continue without a jump.
+ * Any closed-form curve to play on the compositor (`Animator.play`, and a
+ * release's coast through `Animator.decay`): a spring chasing a moving
+ * target, a piecewise curve, a fitted UIKit curve. Times are seconds from
+ * the curve's start; the value at `duration` is the end state. Start it at
+ * the property's presentation value (`get`) to continue without a jump.
  */
 export interface MotionCurve {
   /** Length, s. */
@@ -302,6 +304,19 @@ export interface Animator {
     options?: AnimateOptions,
   ): MotionHandle;
   /**
+   * Plays given curves (`scale` drives both axes), baked like a spring:
+   * presentation values, velocities, `stop`, `finished` and the shared
+   * clock work the same, and a later `animate` starts from the curve's
+   * value and velocity. Reduced Motion treats a curve that moves x, y, rotate
+   * or scale as travel, which the policy replaces (design:reduced-motion: a
+   * cross-fade after a touch, an immediate change otherwise). Its handle has
+   * no spring of its own: `retarget` needs one.
+   */
+  play(
+    curves: Partial<Record<MotionProperty | 'scale', MotionCurve>>,
+    options?: AnimateOptions,
+  ): MotionHandle;
+  /**
    * Plays momentum curves as given, on the translate axes only: a released
    * scroll view's coast and edge bounce, which `coast()` (coast.ts) builds
    * from a finger's release velocity. Under Reduce Motion momentum keeps
@@ -309,7 +324,7 @@ export interface Animator {
    * DR2, DEC-2). A curve marked `isTransition` (coast()'s spring back from
    * past an edge) is a transition and plays through the Reduce Motion
    * policy, as `animate` does. Anything else (a fade, a slide a tap starts)
-   * is a transition too: play it with `animate`. Only a surface
+   * is a transition too: play it with `play` or `animate`. Only a surface
    * that coasts imports the coast math and the scroll table.
    */
   decay(
@@ -2170,6 +2185,104 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
+      );
+      const carried =
+        plan?.landing != null
+          ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
+          : [];
+      const changed: MotionProperty[] = [];
+      for (const [property, segment] of Object.entries(next) as [
+        MotionProperty,
+        Segment | null,
+      ][]) {
+        interrupt(property, time);
+        changed.push(property);
+        if (segment == null) {
+          // Read before the segment goes: valueAt falls back to resting.
+          const value =
+            plan?.holds[property] ??
+            targets[property] ??
+            valueAt(property, time);
+          segments.delete(property);
+          resting[property] = value;
+        } else {
+          segments.set(property, segment);
+        }
+      }
+      commitCall(group, owner, changed, time);
+      if (plan?.borrowed != null) {
+        // The dip's own commit cleared it; the borrow lasts the dip.
+        borrowedOpacity = plan.borrowed;
+      }
+      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.landing != null) {
+        scheduleLanding(owner, handle.started, plan.landing, carried);
+      }
+      return handle;
+    },
+
+    play(curves, playOptions = {}) {
+      syncPending();
+      const time = playOptions.at ?? now();
+      const {owner, finished} = newOwner();
+      const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
+      for (const [key, curve] of Object.entries(curves) as [
+        MotionProperty | 'scale',
+        MotionCurve | undefined,
+      ][]) {
+        if (curve == null) {
+          continue;
+        }
+        if (!Number.isFinite(curve.duration) || curve.duration < 0) {
+          throw new RangeError(
+            `animator: a curve needs a finite duration ≥ 0 (got ${curve.duration})`,
+          );
+        }
+        for (const property of expandList([key])) {
+          byProperty[property] = curve;
+        }
+      }
+      const properties = Object.keys(byProperty) as MotionProperty[];
+      const targets: Partial<Record<MotionProperty, number>> = {};
+      for (const property of properties) {
+        const curve = byProperty[property] as MotionCurve;
+        targets[property] = curve.at(curve.duration);
+      }
+      const plan = prefersReducedMotion()
+        ? reducedMotion(
+            owner,
+            time,
+            targets,
+            properties,
+            isCoarsePointer() || playOptions.touchRelease === true,
+            playOptions.crossfadeAs,
+          )
+        : null;
+      const next: Partial<Record<MotionProperty, Segment | null>> = {
+        ...plan?.next,
+      };
+      for (const property of properties) {
+        if (property in next) {
+          continue;
+        }
+        const curve = byProperty[property] as MotionCurve;
+        next[property] =
+          curve.duration === 0
+            ? null
+            : {
+                start: time,
+                duration: Math.min(MAX_DURATION_MS, curve.duration * 1000),
+                target: targets[property] as number,
+                at: t => curve.at(t / 1000),
+                speed: t => curve.velocity(t / 1000),
+                jumps: [],
+                owner,
+              };
+      }
+      const group = beginGroup(
+        time,
+        Object.keys(next) as MotionProperty[],
+        playOptions.at,
       );
       const carried =
         plan?.landing != null
