@@ -88,6 +88,36 @@ class SwiftWriter {
         return '[AstryxNode]';
       case 'icon':
         return 'IconName';
+      case 'textOrBoolean': {
+        const name = `${owner}${pascal(prop)}`;
+        this.decls.push(
+          [
+            `/// Words or a switch: \`.on\` is the component's own words, \`.off\` none,`,
+            `/// \`.text\` the given words. On the wire it is the web value, a string or a Bool.`,
+            `public enum ${name}: Equatable, Codable, Sendable, ExpressibleByStringLiteral, ExpressibleByBooleanLiteral {`,
+            '  case on',
+            '  case off',
+            '  case text(String)',
+            '  public init(stringLiteral value: String) { self = .text(value) }',
+            '  public init(booleanLiteral value: Bool) { self = value ? .on : .off }',
+            '  public init(from decoder: any Decoder) throws {',
+            '    let container = try decoder.singleValueContainer()',
+            '    if let value = try? container.decode(Bool.self) { self = value ? .on : .off }',
+            '    else { self = .text(try container.decode(String.self)) }',
+            '  }',
+            '  public func encode(to encoder: any Encoder) throws {',
+            '    var container = encoder.singleValueContainer()',
+            '    switch self {',
+            '    case .on: try container.encode(true)',
+            '    case .off: try container.encode(false)',
+            '    case .text(let value): try container.encode(value)',
+            '    }',
+            '  }',
+            '}',
+          ].join('\n'),
+        );
+        return name;
+      }
       case 'named':
         return type.name;
     }
