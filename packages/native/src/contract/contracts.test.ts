@@ -136,6 +136,35 @@ describe('native contracts', () => {
     expect(types['core.d.ts']).toContain('icon: IconName;');
   });
 
+  it('gives Avatar its named sizes, a press, and a link, and leaves pixel sizes on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const avatar = contracts.find(contract => contract.name === 'Avatar');
+    expect(avatar).toBeDefined();
+    expect(avatar!.core.size.type).toEqual({
+      kind: 'enum',
+      values: ['xsm', 'sm', 'md', 'lg', 'xl'],
+    });
+    expect(Object.entries(avatar!.projections?.size ?? {})).toEqual(
+      ['xsm', 'sm', 'md', 'lg', 'xl'].map(size => [size, size]),
+    );
+    expect(Object.keys(avatar!.core)).toEqual(
+      expect.arrayContaining([
+        'src',
+        'fallbackSrc',
+        'name',
+        'alt',
+        'shape',
+        'href',
+        'onClick',
+      ]),
+    );
+    // `string | boolean`: words, or on (the name) and off.
+    expect(avatar!.core.tooltip?.type).toEqual({kind: 'textOrBoolean'});
+    expect(avatar!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining(['target', 'rel', 'status', 'as']),
+    );
+  });
+
   it('reports naming and portability errors', () => {
     const bad: ComponentContract = {
       name: 'Bad',
