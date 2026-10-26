@@ -262,6 +262,25 @@ export const UIKIT_VELOCITY = {
    *   pt/s
    */
   currentWeight: {value: 0.2, unit: 'ratio'},
+  /**
+   * A scrolling surface's release (paging, a wheel) is this times the
+   * newest pan value plus the rest times the previous one
+   * (architecture:interaction-modality INV10).
+   * @source GUESS — architecture:interaction-modality INV10 states
+   *   UIScrollView's release as 0.25 x the newest pan value + 0.75 x the
+   *   previous one.
+   * @measure M-G14
+   */
+  scrollReleaseWeight: {value: 0.25, unit: 'ratio'},
+  /**
+   * A contact that has not moved for longer than this before it lifts
+   * releases at 0 (spec:AST-100 FR2). Not a UIKit value: UIKit's filter
+   * never decays, so it flings after a rest.
+   * @source GUESS — Android VelocityTracker and Flutter VelocityTracker
+   *   treat a pointer that has not moved for 40 ms as stopped.
+   * @measure M-G16
+   */
+  stillness: {value: 40, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
 export const UIKIT_CLICK = {
