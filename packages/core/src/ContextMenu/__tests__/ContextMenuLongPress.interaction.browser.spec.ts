@@ -327,24 +327,41 @@ test('under Reduce Motion the card does not grow, and the menu still opens at 73
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
-test('the trigger’s selection and callout lock comes from the gesture host, not a local style', async ({
+test('the trigger’s selection and callout lock: its own style keeps it off at rest, and the gesture host locks it for a held press', async ({
   page,
 }) => {
-  const {trigger} = await openTouchStory(page);
+  const {driver, trigger, center} = await openTouchStory(page);
   // WebKit spells it `-webkit-user-select` only.
-  const lock = await trigger.evaluate(el => {
-    const host = el as HTMLElement;
-    const computed = getComputedStyle(host);
-    return {
-      inline:
-        host.style.getPropertyValue('user-select') ||
-        host.style.getPropertyValue('-webkit-user-select'),
-      computed:
-        computed.getPropertyValue('user-select') ||
-        computed.getPropertyValue('-webkit-user-select'),
-    };
-  });
-  expect(lock).toEqual({inline: 'none', computed: 'none'});
+  const readLock = async () =>
+    trigger.evaluate(el => {
+      const host = el as HTMLElement;
+      const computed = getComputedStyle(host);
+      return {
+        inline:
+          host.style.getPropertyValue('user-select') ||
+          host.style.getPropertyValue('-webkit-user-select'),
+        computed:
+          computed.getPropertyValue('user-select') ||
+          computed.getPropertyValue('-webkit-user-select'),
+      };
+    });
+  // At rest the trigger's own style keeps selection off (spec:AST-017
+  // FR59), whatever the host writes inline then.
+  const rest = await readLock();
+  expect(rest.computed).toBe('none');
+  // A held finger, short of the commit: the host's lock is on the element.
+  const playing = driver.play(hold(center, commitMs - 100));
+  await page.waitForTimeout(commitMs / 2);
+  const held = await readLock();
+  await playing;
+  await page.waitForTimeout(100);
+  // Lifted with no menu: back to the rest value.
+  const lifted = await readLock();
+  expect(held).toEqual({inline: 'none', computed: 'none'});
+  expect(lifted).toEqual(rest);
+  expect(
+    await page.getByRole('menu', {name: 'Photo actions'}).isVisible(),
+  ).toBe(false);
 });
 
 test('a touch open lights no row: the menu itself takes the focus, and every row keeps its resting background', async ({
