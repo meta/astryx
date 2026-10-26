@@ -2182,6 +2182,18 @@ export function createAnimator(
             target = detached;
             try {
               landPending(false);
+              // The landing's commit rebuilt every channel it touched on the
+              // detached node, any axis still moving included: leave that
+              // node with no animation, timer or promotion.
+              for (const animation of running.values()) {
+                animation.cancel();
+              }
+              running.clear();
+              for (const timer of retireTimers.values()) {
+                clearTimeout(timer);
+              }
+              retireTimers.clear();
+              demote();
             } finally {
               target = current;
             }
