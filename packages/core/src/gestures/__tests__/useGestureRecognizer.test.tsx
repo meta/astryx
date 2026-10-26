@@ -229,6 +229,19 @@ describe('usePressTracker', () => {
     expect(events).toEqual(['touchDown', 'touchUpInside']);
   });
 
+  it('takes an option changed after mount from the next touch', () => {
+    const events: ControlEvent[] = [];
+    const {getByTestId, rerender} = render(
+      <Button onEvent={event => events.push(event)} />,
+    );
+    rerender(<Button onEvent={event => events.push(event)} cancelTravel={5} />);
+    const button = getByTestId('button');
+    touch('touchstart', button, {id: 7, x: 1, y: 1}, 0);
+    touch('touchmove', button, {id: 7, x: 1, y: 11}, 16);
+    expect(events).toEqual(['touchDown', 'touchCancel']);
+    touch('touchend', button, {id: 7, x: 1, y: 11}, 50, true);
+  });
+
   it('ends a held press on unmount without calling back from the effect', () => {
     const highlights: boolean[] = [];
     const events: ControlEvent[] = [];
