@@ -28,12 +28,15 @@ import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
+import {internals} from './recognizerInternals';
 
 export interface UseGestureRecognizerOptions {
   /**
    * Live toggle; turning it off mid-gesture cancels the gesture. That cancel
    * does not call `onGesture`: it comes from the render that turned the
-   * recognizer off, and the code that turned it off already knows.
+   * recognizer off, and the code that turned it off already knows. A
+   * recognizer that required this one to fail resolves just after that
+   * render and reports as usual.
    * @default true
    */
   isEnabled?: boolean;
@@ -44,13 +47,30 @@ export interface UseGestureRecognizerOptions {
 /**
  * How many hooks are driving a recognizer from an Effect right now: an
  * `isEnabled` sync, or the detach of a replaced node that cancels a gesture
- * in flight. The arena pass either starts can reach other recognizers (one
- * that required the disabled one to fail recognizes in it), so while it runs
- * no hook's listener calls its caller's callback (react-component-runtime
- * INV2, INV3). Their later transitions report from the input events that
- * cause them.
+ * in flight. While one runs no hook's listener calls its caller's callback
+ * (react-component-runtime INV2, INV3): the recognizer it stops is cancelled
+ * silently, and what that stop unblocks (a recognizer that required it to
+ * fail) resolves in the arena's next pass, a microtask later, where its
+ * listener reports as usual (`deferringResolution`).
  */
 let syncingDepth = 0;
+
+/**
+ * Runs `body` with the recognizer's arena leaving what it unblocks to the
+ * next pass, outside the Effect (GestureArena.deferResolution). A recognizer
+ * that has met no touch has no arena, and nothing waits on it.
+ */
+function deferringResolution(
+  recognizer: GestureRecognizer,
+  body: () => void,
+): void {
+  const {arena} = internals(recognizer);
+  if (arena == null) {
+    body();
+    return;
+  }
+  arena.deferResolution(body);
+}
 
 /**
  * Attach a recognizer to the element behind `ref`.
@@ -101,7 +121,9 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   useIsomorphicLayoutEffect(() => {
     syncingDepth += 1;
     try {
-      recognizer.setEnabled(isEnabled);
+      deferringResolution(recognizer, () => {
+        recognizer.setEnabled(isEnabled);
+      });
     } finally {
       syncingDepth -= 1;
     }
@@ -127,7 +149,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
       return () => {
         syncingDepth += 1;
         try {
-          detach();
+          deferringResolution(recognizer, detach);
         } finally {
           syncingDepth -= 1;
         }
