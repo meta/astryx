@@ -551,6 +551,7 @@ test.describe('holding', () => {
     // One reversed by `reverse()` (a negative playback rate) is reported as
     // starting when it did, running its whole curve, and is refused by a
     // hold, which seeks curves forward only.
+    const watch = await watchAnimations(box);
     const readyAt = await box.evaluate(async el => {
       const animation = el.animate(
         [
@@ -564,11 +565,33 @@ test.describe('holding', () => {
       await animation.ready;
       return performance.timeOrigin + performance.now();
     });
-    const [running] = await waitForAnimation(box);
+    const [running] = await watch.started();
     expect(Math.abs(running.from - readyAt)).toBeLessThan(100);
     expect(running.to - running.from).toBeCloseTo(1000, -1);
     await expect(holdAnimations(page, box)).rejects.toThrow(/runs backward/);
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // A property keyed only before the held run, and a last keyframe short of
+    // offset 1, each get an implicit end frame: the curve runs to its end.
+    for (const keyframes of [
+      [
+        {translate: '0px 0px', opacity: 0, offset: 0},
+        {translate: '100px 0px', offset: 0.5},
+        {translate: '100px 0px', offset: 1},
+      ],
+      [
+        {translate: '0px 0px', offset: 0},
+        {translate: '100px 0px', offset: 0.5},
+        {translate: '100px 0px', offset: 0.8},
+      ],
+    ]) {
+      await box.evaluate((el, frames) => {
+        el.animate(frames, {duration: 1000, easing: 'linear'});
+      }, keyframes);
+      const [moving] = await holdAnimations(page, box);
+      expect(moving.curveEndMs).toBeCloseTo(1000, 0);
+      await releaseAnimations(page, {finish: true});
+    }
 
     await box.evaluate(el => {
       el.animate([{rotate: 'x 0deg'}, {rotate: 'x 60deg'}], {

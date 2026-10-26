@@ -191,8 +191,24 @@ async function installCurveEnd(page: Page): Promise<void> {
         return delay + active;
       }
       const frames = effect.getKeyframes();
+      // A run holds only when it reaches offset 1 and every frame in it keys
+      // every property the animation keys: a property left out, or a last
+      // frame before offset 1, gets an implicit end frame and keeps moving.
+      const keyed = new Set(
+        frames.flatMap(k => Object.keys(k).filter(p => !timingKeys.has(p))),
+      );
+      const keysAll = (k: ComputedKeyframe) =>
+        [...keyed].every(p => k[p] !== undefined);
+      const last = frames[frames.length - 1];
+      if (last == null || Number(last.computedOffset) !== 1 || !keysAll(last)) {
+        return delay + active;
+      }
       let first = frames.length - 1;
-      while (first > 0 && values(frames[first - 1]) === values(frames[first])) {
+      while (
+        first > 0 &&
+        keysAll(frames[first - 1]) &&
+        values(frames[first - 1]) === values(frames[first])
+      ) {
         first -= 1;
       }
       const offset = Number(frames[first]?.computedOffset ?? 1);
