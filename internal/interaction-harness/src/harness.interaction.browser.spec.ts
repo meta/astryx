@@ -628,6 +628,17 @@ test.describe('frame evidence', () => {
     expect(top.Layout ?? 0).toBeGreaterThan(18);
   });
 
+  test('the long-task log fails closed when it never ran on the document', async ({
+    page,
+  }) => {
+    // No installLongTaskLog before navigating: an empty answer would read as
+    // "no long task", so it throws instead.
+    await fixture(page);
+    await expect(readLongTasks(page)).rejects.toThrow(
+      /not running on this document/,
+    );
+  });
+
   test("the long-task log records the page's own long task but not a DevTools evaluate, which the trace reports apart", async ({
     page,
     browserName,
