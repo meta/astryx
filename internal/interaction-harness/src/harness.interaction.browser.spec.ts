@@ -1988,6 +1988,28 @@ test.describe('animation state', () => {
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
   });
 
+  test('inside a rendering trace too, a watch taken right after a style change does not report that change', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    await traceRendering(page, async () => {
+      // The step: a transition the next style read creates.
+      await box.evaluate(el => {
+        el.style.transition = 'opacity 300ms linear';
+        el.style.opacity = '0.5';
+      });
+      const watch = await watchAnimations(box);
+      await expect(watch.started({timeout: 200})).rejects.toThrow(
+        /waitForAnimation/,
+      );
+    });
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
   test('an exit whose element the page removes at its end is still reported', async ({
     page,
   }) => {
