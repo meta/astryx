@@ -36,6 +36,12 @@ export interface ListReorderOptions {
   readonly onReorder: (move: {key: Key; to: number}) => void;
   /** Whether the item with `key` moves; every item does without it. */
   readonly isReorderable?: (key: Key) => boolean;
+  /**
+   * An adapted object's (internal/reorder `adaptReorderable`): the owner's
+   * options, which the owner's `start` finds this list by, while the moves go
+   * through these.
+   */
+  readonly startedBy?: ListReorderOptions;
 }
 
 /** The handle a reorderable row ends with (List/ListReorderHandle.tsx). */

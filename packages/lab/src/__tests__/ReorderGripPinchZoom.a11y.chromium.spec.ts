@@ -7,10 +7,12 @@
  *   Default stories, a built Storybook and real Chromium touch input (CDP) on
  *   a phone viewport
  * @output Browser evidence that a pinch which starts on, or reaches, a reorder
- *   grip zooms the page and leaves the order as it was, while a one-finger
- *   drag on the grip still reorders (WCAG 1.4.4)
- * @position Chromium proof for the shared Lab reorder grip's `touch-action`
- *   (packages/lab/src/reorderStyles.ts)
+ *   grip zooms the page and leaves the order as it was. That holds also for a
+ *   grip whose first finger slid on it first. A one-finger drag on the grip
+ *   still reorders (WCAG 1.4.4)
+ * @position Chromium proof for the Lab reorder grips' `touch-action`: the
+ *   shared Lab grip (packages/lab/src/reorderStyles.ts, ListInput) and core
+ *   List's reorder handle (TransferList)
  */
 
 import {
@@ -56,6 +58,8 @@ interface Surface {
   grip: string;
   /** Every reorderable row, in display order, keyed by this attribute. */
   rowAttribute: string;
+  /** How long a finger rests on the grip before a drag claims it. */
+  holdMs?: number;
 }
 
 const SURFACES: Surface[] = [
@@ -68,8 +72,11 @@ const SURFACES: Surface[] = [
   {
     name: 'TransferList',
     story: 'lab-transferlist--default',
-    grip: '[data-transfer-list-row]:not([data-transfer-list-row=""]) button[aria-pressed]',
+    grip: '[data-transfer-list-row] button[data-astryx-list-reorder]',
     rowAttribute: 'data-transfer-list-row',
+    // Core List's handle claims a still finger after 150 ms, as UIKit's
+    // reorder control does.
+    holdMs: 250,
   },
 ];
 
@@ -110,27 +117,33 @@ async function touch(
   });
 }
 
-// Two fingers land one after the other and spread apart, as a person pinches.
-// The spread is wide enough to clear the browser's minimum pinch span.
-async function pinch(cdp: CDPSession, first: Point, second: Point) {
+// A second finger lands beside the first (already down) and the two spread
+// apart, as a person pinches. The spread is wide enough to clear the
+// browser's minimum pinch span.
+async function spread(cdp: CDPSession, first: Point, second: Point) {
   const steps = 12;
-  const spread = 2.5;
+  const factor = 2.5;
   const mid = {x: (first.x + second.x) / 2, y: (first.y + second.y) / 2};
   const at = (p: Point, k: number) => ({
     x: mid.x + (p.x - mid.x) * k,
     y: mid.y + (p.y - mid.y) * k,
   });
-  await touch(cdp, 'touchStart', [first]);
-  await sleep(30);
   await touch(cdp, 'touchStart', [first, second]);
   for (let i = 1; i <= steps; i++) {
     await sleep(16);
-    const k = 1 + ((spread - 1) * i) / steps;
+    const k = 1 + ((factor - 1) * i) / steps;
     await touch(cdp, 'touchMove', [at(first, k), at(second, k)]);
   }
   await sleep(16);
   await touch(cdp, 'touchEnd', []);
   await sleep(600);
+}
+
+// Two fingers land one after the other and spread apart.
+async function pinch(cdp: CDPSession, first: Point, second: Point) {
+  await touch(cdp, 'touchStart', [first]);
+  await sleep(30);
+  await spread(cdp, first, second);
 }
 
 for (const surface of SURFACES) {
@@ -153,6 +166,26 @@ for (const surface of SURFACES) {
       expect(await readOrder(page, surface)).toEqual(order);
     });
 
+    test('a pinch whose first finger slid on a grip zooms and keeps the order', async ({
+      page,
+    }) => {
+      const {center, cdp, order} = await openStory(page, surface);
+      // The first finger slides 24 px on the grip right away, as a pinch
+      // often starts, before the second lands; the release must not drop the
+      // row. (A finger held still past core List's hold claims the drag
+      // instead, and a second finger then changes nothing: List's own spec.)
+      await touch(cdp, 'touchStart', [center]);
+      let first = center;
+      for (let i = 1; i <= 2; i++) {
+        await sleep(16);
+        first = {x: center.x, y: center.y + 12 * i};
+        await touch(cdp, 'touchMove', [first]);
+      }
+      await spread(cdp, first, {x: first.x + 40, y: first.y + 140});
+      expect(await zoom(page)).toBeGreaterThan(1.2);
+      expect(await readOrder(page, surface)).toEqual(order);
+    });
+
     test('a one-finger drag on a grip still reorders', async ({page}) => {
       const {center, cdp, order} = await openStory(page, surface);
       const rows = await page.evaluate(
@@ -165,6 +198,9 @@ for (const surface of SURFACES) {
       // Past the second row's centre: the first row lands second or later.
       const distance = (rows[2] - rows[0]) * 0.9;
       await touch(cdp, 'touchStart', [center]);
+      if (surface.holdMs != null) {
+        await sleep(surface.holdMs);
+      }
       for (let i = 1; i <= 20; i++) {
         await sleep(16);
         await touch(cdp, 'touchMove', [
