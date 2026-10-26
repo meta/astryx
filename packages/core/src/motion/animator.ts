@@ -1118,12 +1118,6 @@ export function createAnimator(
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
   };
 
-  /**
-   * A channel at identity with no animation of its own leaves the element:
-   * its inline value is removed, unless the stylesheet would then move the
-   * element, in which case the identity stays inline. Runs when such a value
-   * is written and again when a motion ends.
-   */
   /** The element's own (stylesheet) opacity, read once when a dip starts. */
   const ownOpacity = (): number => {
     const view = target?.ownerDocument.defaultView;
@@ -1136,6 +1130,12 @@ export function createAnimator(
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
   };
 
+  /**
+   * A channel at identity with no animation of its own leaves the element:
+   * its inline value is removed, unless the stylesheet would then move the
+   * element, in which case the identity stays inline. Runs when such a value
+   * is written and again when a motion ends.
+   */
   const releaseIdentity = (channel: Channel) => {
     if (target == null || pseudoElement != null || running.has(channel)) {
       return;
@@ -2103,7 +2103,8 @@ export function createAnimator(
           if (landing.fadeIn != null || landing.restore != null) {
             segments.delete('opacity');
             resting.opacity =
-              landing.fadeIn?.isBorrowed === true
+              landing.fadeIn?.isBorrowed === true ||
+              landing.restoreIsBorrowed === true
                 ? IDENTITY.opacity
                 : (landing.fadeIn?.to ?? landing.restore ?? IDENTITY.opacity);
           }
@@ -2407,7 +2408,10 @@ export function createAnimator(
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
-      const wasBorrowed = borrowedOpacity != null;
+      // A borrowed dip, or an exit by role that returns to the stylesheet.
+      const wasBorrowed =
+        borrowedOpacity != null ||
+        [...landings].some(landing => landing.restoreIsBorrowed === true);
       // Read before the landings go: a dip's fade back in, an exit's restore.
       const heading = opacityHeading();
       for (const property of list) {
@@ -2563,8 +2567,16 @@ export function createAnimator(
     },
 
     dispose() {
+      // A Reduce Motion move still waiting to land never will: its call and
+      // the calls it carries settle as interrupted.
       for (const landing of [...landings]) {
         endLanding(landing);
+        for (const owner of [landing.owner, ...landing.carried]) {
+          carriedOwners.delete(owner);
+          if (!owner.settled) {
+            settle(owner, false);
+          }
+        }
       }
       // Nothing moves any more: every atRest() wait settles.
       for (const wait of [...restWaits]) {
