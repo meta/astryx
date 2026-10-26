@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/Popover/Popover.doc.mjs,
     packages/core/src/Popover/usePopover.doc.mjs,
     packages/core/src/hooks/useFocusTrap.test.tsx,
+    packages/core/src/Popover/PopoverPresentation.test.tsx,
     packages/cli/foundation/discovery/theming-targets.mjs,
     packages/cli/foundation/discovery/theming-targets.test.mjs,
     scripts/check-knowledge.mjs,
@@ -61,7 +62,7 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 - `presentation` (DEC-6) defaults to `popover`, the released anchored surface;
   `presentation="popover"` is also the value that keeps it wherever a touch
   default would otherwise apply (`architecture:public-component-api` INV16,
-  `spec:AST-017` FR3, DEC-23). Popover does not implement `presentation` yet.
+  `spec:AST-017` FR3, DEC-23).
 - Canonical target: `popover` owns the broad painted-surface contract for
   `<Popover>` and public `usePopover` compositions
 - Removed alias: 0.7.0 removes `popover-surface`; themes and CSS selectors migrate
@@ -271,12 +272,13 @@ table owns their semantic effect.
 
 ## Design relationships
 
-| Anatomy or state       | Design requirement                                                                                                 | Representation authority       | Hierarchy role | Component contract    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------- | --------------------- |
-| Trigger element        | Supplies or references the control and anchor without becoming Popover-owned presentation.                         | Caller content                 | Supporting     | FR6, AR1              |
-| Popover surface        | Paints the component surface, owns the canonical `popover` target, and carries scroll, focus, and dialog behavior. | Current source and owner DEC-2 | Prominent      | FR2, FR4–FR7, AR2–AR4 |
-| Popover content        | Renders caller-supplied interaction or information inside the surface.                                             | Caller content                 | Prominent      | FR2, FR6              |
-| Fallback close control | Provides an end-of-trap close affordance without becoming the initial focus destination.                           | `component:Button`             | Supporting     | FR2, AR3              |
+| Anatomy or state       | Design requirement                                                                                                                         | Representation authority       | Hierarchy role | Component contract    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------- | --------------------- |
+| Trigger element        | Supplies or references the control and anchor without becoming Popover-owned presentation.                                                 | Caller content                 | Supporting     | FR6, AR1              |
+| Popover surface        | Paints the component surface, owns the canonical `popover` target, and carries scroll, focus, and dialog behavior.                         | Current source and owner DEC-2 | Prominent      | FR2, FR4–FR7, AR2–AR4 |
+| Touch sheet            | Holds the same content in place of the surface when `presentation` resolves to `bottom-sheet`; paints BottomSheet's `bottom-sheet` target. | `component:BottomSheet`        | Prominent      | DEC-6, AR1, AR4       |
+| Popover content        | Renders caller-supplied interaction or information inside the surface.                                                                     | Caller content                 | Prominent      | FR2, FR6              |
+| Fallback close control | Provides an end-of-trap close affordance without becoming the initial focus destination.                                                   | `component:Button`             | Supporting     | FR2, AR3              |
 
 ### Theming anatomy
 
@@ -290,6 +292,9 @@ table owns their semantic effect.
     }
   },
   "Popover surface": {"target": "popover"},
+  "Touch sheet": {
+    "delegatesTo": {"owner": "component:BottomSheet", "target": "bottom-sheet"}
+  },
   "Popover content": {
     "none": {
       "reason": "intentional: Caller-supplied content is caller-owned; normal CSS may inherit from the surface, but Popover provides no content target."
@@ -300,6 +305,15 @@ table owns their semantic effect.
   }
 }
 ```
+
+`Popover surface` and `Touch sheet` are alternative presentations of the same
+content, not simultaneous anatomy.
+
+Any element the open touch sheet renders beyond the anchored popover under a
+fine pointer is part of BottomSheet's frame, with its job in
+`component:BottomSheet`'s element jobs, within the open-layer allowance of
+`spec:AST-017` FR60 (DEC-29). Popover adds only its fallback close control to
+the sheet, as the Button itself.
 
 Every public `usePopover` painted surface belongs to the broad `popover` target.
 A composed component may add its own authoritative refinement target, such as
@@ -338,6 +352,7 @@ consumers that need distinct theme reachability provide and document an owned
 | FR5                          | `Popover.test.tsx` scheduling and observer-lifecycle suites                                                                                               | Closed, opened, repeated signals, cleanup                                                                          | Constructing observers while closed or measuring more than once per pending frame fails lifecycle assertions.                                       | `audit:Popover/resources`     |
 | FR6, FR7 and theming anatomy | `Popover.test.tsx`, `Popover.doc.mjs`, `usePopover.doc.mjs`, `astryx theme targets Popover --json`, and `scripts/check-knowledge.mjs`                     | One real surface with canonical `popover` plus composed-component refinements                                      | A fake anatomy part, missing canonical output, or an active target without a real owner fails review or validation.                                 | `audit:Popover/theming`       |
 | AR5                          | `Popover.stories.tsx` manual-AT fixture and PR #5373 test record                                                                                          | Read-only dialog manual-AT fixture; no recorded NVDA/VoiceOver announcement result                                 | A fixture without recorded AT/browser observations cannot be cited as announcement proof.                                                           | `audit:Popover/at-evidence`   |
+| Presentation (DEC-6, DEC-8)  | `PopoverPresentation.test.tsx`                                                                                                                            | Default on a phone, adaptive on a phone and a desktop, forced sheet, close, controlled, dismissal mapping          | A sheet on a default phone popover, an anchored popover where the sheet is asked for, or a trigger state that ignores the sheet fails.              | `audit:Popover/api`           |
 
 ## Decision log
 
@@ -401,6 +416,7 @@ placement and bypasses the shared focus-indication owner.
 ### DEC-6 — Presentation: the anchored popover, a sheet, or adaptive
 
 **Reference:** `component:Popover/DEC-6`
+
 **Decider:** `cixzhang`, `2026-10-25`
 
 Popover takes `presentation` with the vocabulary the menus already use:
@@ -409,6 +425,25 @@ released anchored surface. `bottom-sheet` presents the content in a
 BottomSheet. `adaptive` chooses exactly as the menus do: the sheet under
 `spec:AST-094` FR13's touch rule, with compact governed by `spec:AST-012` FR9,
 and the anchored popover elsewhere.
+
+### DEC-8 — The sheet Popover presents: label, size, dismissal and loading
+
+**Reference:** `component:Popover/DEC-8`
+
+**Decider:** `cixzhang`, `2026-10-25`
+
+In a sheet, Popover's content is labeled by its `label`, or by the trigger's
+text when it has none, so the dialog always has a name. The sheet always
+light-dismisses: a tap outside it or a swipe down closes it, whatever
+`hasLightDismiss` says, so a finger always has a way out. Its fallback close
+stays hidden, as in an anchored popover. Everything else follows Popover's
+existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
+height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+style its panel, and `placement`, `alignment` and `width` do not apply. The
+surface is chosen when the popover opens and stays until it closes, and the
+trigger's expanded state and controlled element follow whichever surface is
+open. The sheet loads on demand, so pages whose popovers stay anchored do not
+load it.
 
 ## Verification gaps
 
