@@ -128,7 +128,8 @@ not evidence of conformance or violation.
   twin to measure or reserve space, because CSS can size and reserve it on the
   element that shows it (INV2). A layer mounts exactly one presentation. The
   only second copy is one transient copy during an exit, a presentation
-  switch, or a handoff between sheets, such as the cross-fade
+  switch, a lift from the trigger (`architecture:layer-runtime` INV15), or a
+  handoff between sheets, such as the cross-fade
   `design:reduced-motion` DR2 requires; it is made by one Core mechanism that
   every layer uses, rather than by each component, and is removed within 1
   second of the transition ending. Until that shared mechanism exists, a

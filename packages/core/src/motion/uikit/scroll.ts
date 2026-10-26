@@ -113,7 +113,9 @@ export const scroll = {
    * approaches the top as 1 − e^(−9.7 t) whatever the distance (done in about
    * 1.6 s for 500, 2000 or 8000 pt), which is a decay at this per-millisecond
    * rate (e^(−0.0097)) whose rest point is the top: a decay with a
-   * starting velocity of 9.7 × the distance per second.
+   * starting velocity of 9.7 × the distance per second. It is not a throw's
+   * momentum, so under Reduce Motion it does not coast: it follows
+   * `design:reduced-motion` DR2 (the coast exception covers only a throw).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, setContentOffset log after status-bar taps (starts 85–95
    *   ms after the tap), Oct 23 2026

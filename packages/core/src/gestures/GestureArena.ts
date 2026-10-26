@@ -870,7 +870,10 @@ export class GestureArena {
       this.timers.delete(recognizer);
       this.currentTime = this.clampTime(timer.deadline);
       timer.callback();
-      this.settle();
+      // Inside a re-entrant entry the outermost call settles (see run()).
+      if (this.depth <= 1) {
+        this.settle();
+      }
     }
     this.scheduleRealTimer();
   }
