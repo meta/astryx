@@ -83,8 +83,8 @@ A recognizer created with `claimsTouches: false` is a watcher (a tab bar
 that minimizes while the page scrolls): it never claims, so its element gets
 only passive listeners and a scroll never waits for it; it prevents no other
 recognizer and none prevents it; and it follows a touch the browser takes
-for a scroll to the lift. Attach it with `manageStyle: false` to leave the
-element's `touch-action` alone.
+for a scroll to the lift. It adds nothing to the element's derived
+`touch-action`.
 
 Every recognizer also has UIKit's switches: `isEnabled` (use `setEnabled`;
 turning it off mid-gesture cancels), `cancelsTouchesInView` (default true),
