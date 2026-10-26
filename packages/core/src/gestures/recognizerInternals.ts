@@ -44,6 +44,10 @@ export interface RecognizerInternals {
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,
   ): void;
+  deliverBeganElsewhere(
+    touches: ReadonlyArray<GestureTouch>,
+    event: GestureEventContext,
+  ): void;
   deliverMoved(
     touches: ReadonlyArray<GestureTouch>,
     event: GestureEventContext,

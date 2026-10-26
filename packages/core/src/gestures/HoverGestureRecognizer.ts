@@ -54,8 +54,8 @@ export class HoverGestureRecognizer extends GestureRecognizer {
       return;
     }
     if (isTerminal(this.state)) {
-      // Cancelled mid-hover (disabled, or `cancel()`), with no arena to
-      // reset it: a new hover starts over.
+      // A hover cancelled mid-way (the recognizer was disabled, or stopped
+      // from code) starts over at the next enter.
       this.resetToPossible();
     }
     this.point = point;
