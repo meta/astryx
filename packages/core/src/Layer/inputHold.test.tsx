@@ -5,11 +5,11 @@ import {useRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {
-  holdPresentation,
+  holdInput,
   isInHeldLayer,
-  isPresentationShield,
-  usePresentationHold,
-} from './presentationHold';
+  isInputShield,
+  useInputHold,
+} from './inputHold';
 
 function deferred() {
   let resolve: () => void = () => {};
@@ -40,13 +40,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('holdPresentation', () => {
+describe('holdInput', () => {
   it('holds a presenting layer with a shield over the viewport until its end settles', async () => {
     const {layer, child} = mountLayer();
     const outside = document.createElement('div');
     document.body.append(outside);
     const end = deferred();
-    holdPresentation(layer, {until: end.promise, scope: 'viewport'});
+    holdInput(layer, {until: end.promise, scope: 'viewport'});
     const shield = layer.lastElementChild as HTMLElement;
     expect(shield).not.toBe(child);
     expect(shield.getAttribute('popover')).toBe('manual');
@@ -70,7 +70,7 @@ describe('holdPresentation', () => {
 
   it('swallows a press and a click on the shield before they reach the page, and leaves a touch its start so a pinch can still zoom', () => {
     const {layer} = mountLayer();
-    holdPresentation(layer, {until: new Promise(() => {}), scope: 'viewport'});
+    holdInput(layer, {until: new Promise(() => {}), scope: 'viewport'});
     const shield = layer.lastElementChild as HTMLElement;
     const seen: string[] = [];
     for (const type of ['pointerdown', 'click', 'touchstart']) {
@@ -97,7 +97,7 @@ describe('holdPresentation', () => {
     child.focus();
     expect(document.activeElement).toBe(child);
     const end = deferred();
-    holdPresentation(layer, {until: end.promise, scope: 'layer'});
+    holdInput(layer, {until: end.promise, scope: 'layer'});
     // Focus leaves the content: a focused element that turns inert would
     // keep its key activation.
     expect(document.activeElement).not.toBe(child);
@@ -122,17 +122,17 @@ describe('holdPresentation', () => {
     const popover = document.createElement('div');
     popover.setAttribute('popover', 'manual');
     document.body.append(popover);
-    const release = holdPresentation(layer, {
+    const release = holdInput(layer, {
       until: new Promise(() => {}),
       scope: 'viewport',
     });
     const shield = layer.lastElementChild as HTMLElement;
-    expect(isPresentationShield(shield)).toBe(true);
+    expect(isInputShield(shield)).toBe(true);
     for (const other of [layer, child, popover, null]) {
-      expect(isPresentationShield(other)).toBe(false);
+      expect(isInputShield(other)).toBe(false);
     }
     release();
-    expect(isPresentationShield(shield)).toBe(false);
+    expect(isInputShield(shield)).toBe(false);
   });
 
   it('sees slotted content as held: the flat tree, a slotted node to its slot', () => {
@@ -145,7 +145,7 @@ describe('holdPresentation', () => {
     layer.append(document.createElement('slot'));
     root.append(layer);
     expect(isInHeldLayer(slotted)).toBe(false);
-    const release = holdPresentation(layer, {
+    const release = holdInput(layer, {
       until: new Promise(() => {}),
       scope: 'viewport',
     });
@@ -157,7 +157,7 @@ describe('holdPresentation', () => {
   it('takes an animator handle, ending with its finished', async () => {
     const {layer, child} = mountLayer();
     const end = deferred();
-    holdPresentation(layer, {until: {finished: end.promise}, scope: 'layer'});
+    holdInput(layer, {until: {finished: end.promise}, scope: 'layer'});
     expect(isInHeldLayer(child)).toBe(true);
     end.resolve();
     await flush();
@@ -166,11 +166,11 @@ describe('holdPresentation', () => {
 
   it('stacks holds on one layer, either scope, under one shield: it comes back when the last one ends', () => {
     const {layer, child} = mountLayer();
-    const first = holdPresentation(layer, {
+    const first = holdInput(layer, {
       until: new Promise(() => {}),
       scope: 'viewport',
     });
-    const second = holdPresentation(layer, {
+    const second = holdInput(layer, {
       until: new Promise(() => {}),
       scope: 'layer',
     });
@@ -189,8 +189,8 @@ describe('holdPresentation', () => {
   it("registers one touch gate per document, which answers whether a touch's target is held", () => {
     const addTouchGate = vi.spyOn(GestureHost.prototype, 'addTouchGate');
     const {layer, child} = mountLayer();
-    holdPresentation(layer, {until: new Promise(() => {}), scope: 'layer'});
-    const release = holdPresentation(layer, {
+    holdInput(layer, {until: new Promise(() => {}), scope: 'layer'});
+    const release = holdInput(layer, {
       until: new Promise(() => {}),
       scope: 'viewport',
     });
@@ -204,10 +204,10 @@ describe('holdPresentation', () => {
   });
 });
 
-describe('usePresentationHold', () => {
+describe('useInputHold', () => {
   function Bar({isHeld}: {isHeld: boolean}) {
     const ref = useRef<HTMLDivElement>(null);
-    usePresentationHold(ref, {isHeld, scope: 'layer'});
+    useInputHold(ref, {isHeld, scope: 'layer'});
     return (
       <div ref={ref} data-testid="bar">
         <button type="button">Back</button>
