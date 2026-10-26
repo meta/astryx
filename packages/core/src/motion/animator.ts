@@ -687,8 +687,9 @@ export function defaultIsCoarsePointer(): boolean {
  * @example
  * ```
  * const animator = createAnimator(sheet);
- * // finger lifts at 1200 px/s heading for the detent at 0:
- * animator.animate({y: 0}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+ * // finger lifts at 1200 px/s heading for the detent at 0 (a component
+ * // passes the spring of its motion role):
+ * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
  * // the finger lands again: where is it right now?
  * const y = animator.get('y', event.timeStamp);
  * animator.stop(['y']);

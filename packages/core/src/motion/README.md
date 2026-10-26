@@ -39,15 +39,17 @@ under the same rules.
 ```
 import {createAnimator} from '../motion/animator';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
-import {springs} from '../motion/uikit';
 
 const animator = createAnimator(sheet);
+// A component takes its spring from its motion role (the theme), not from
+// the UIKit table (spec:AST-094 FR4); a plain description stands in here.
+const spring = {response: 0.45, dampingRatio: 0.9};
 
 // A drag writes one style per frame and never renders:
 animator.set({y: offset});
 
 // The finger lifts: spring to the detent with the release velocity (px/s).
-const handle = animator.animate({y: detent}, {spring: springs.sheetDetent, velocity: {y: 1200}});
+const handle = animator.animate({y: detent}, {spring, velocity: {y: 1200}});
 
 // A finger lands mid-flight: where is the sheet right now, how fast?
 const y = animator.get('y', event.timeStamp);
@@ -59,7 +61,7 @@ animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, ma
 
 // Any closed-form curve, here a press that keeps deepening: the target
 // scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(springs.contextMenuLift), {
+const ramp = solveSpringTowardRamp(toSpring(spring), {
   from: 1,
   target: 1,
   slope: -0.16,

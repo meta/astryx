@@ -114,9 +114,9 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     .info()
     .annotations.push({type: 'busy window', description: proof.summary});
   expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
-  // The harness's verdict: display rate, no stall over two dropped frames,
-  // nearly every expected frame moved (what a loaded runner still meets and a
-  // main-thread animation never does).
+  // The harness's verdict: no stall over two dropped frames, and nearly
+  // every expected frame moved (what a loaded runner still meets and a
+  // main-thread animation never does). It sets no display-rate bound.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
   // And it is the spring: placing each frame inside the block on the
