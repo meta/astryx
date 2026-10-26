@@ -451,6 +451,11 @@ export function createAnimator(
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
+  /**
+   * The stylesheet's opacity a Reduce Motion dip borrowed because no call
+   * owned opacity; the dip runs from and back to it, then hands it back.
+   */
+  let borrowedOpacity: number | null = null;
   let target: HTMLElement | null = null;
 
   // -- reading the curves ---------------------------------------------------
@@ -700,8 +705,28 @@ export function createAnimator(
    * element, in which case the identity stays inline. Runs when such a value
    * is written and again when a motion ends.
    */
+  /** The element's own (stylesheet) opacity, read once when a dip starts. */
+  const ownOpacity = (): number => {
+    const view = target?.ownerDocument.defaultView;
+    const value =
+      target == null
+        ? NaN
+        : Number.parseFloat(
+            view?.getComputedStyle(target).getPropertyValue('opacity') ?? '',
+          );
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 1;
+  };
+
   const releaseIdentity = (channel: Channel) => {
     if (target == null || running.has(channel)) {
+      return;
+    }
+    if (channel === 'opacity' && borrowedOpacity != null) {
+      // A dip on the stylesheet's opacity ended: the stylesheet owns it again.
+      borrowedOpacity = null;
+      segments.delete('opacity');
+      resting.opacity = IDENTITY.opacity;
+      target.style.removeProperty('opacity');
       return;
     }
     const text = target.style.getPropertyValue(channel);
@@ -710,8 +735,8 @@ export function createAnimator(
     }
     target.style.removeProperty(channel);
     const view = target.ownerDocument.defaultView;
-    const resting = view?.getComputedStyle(target).getPropertyValue(channel);
-    if (resting != null && !isIdentityText(channel, resting)) {
+    const underneath = view?.getComputedStyle(target).getPropertyValue(channel);
+    if (underneath != null && !isIdentityText(channel, underneath)) {
       target.style.setProperty(channel, text);
     }
   };
@@ -898,6 +923,9 @@ export function createAnimator(
     for (const property of changed) {
       channels.add(CHANNEL_OF[property]);
     }
+    if (channels.has('opacity')) {
+      borrowedOpacity = null;
+    }
     for (const channel of channels) {
       rebuild(channel, time);
     }
@@ -911,6 +939,15 @@ export function createAnimator(
     attach(next) {
       if (next === target) {
         return;
+      }
+      if (next == null) {
+        // Unmount: nothing is left to animate, so every handle settles as
+        // interrupted and no completion timer outlives the element, as in
+        // dispose() (architecture:react-component-runtime INV5).
+        const time = now();
+        for (const property of PROPERTIES) {
+          interrupt(property, time);
+        }
       }
       for (const animation of running.values()) {
         animation.cancel();
@@ -976,14 +1013,23 @@ export function createAnimator(
       // A fade the call does not name ends where it was heading.
       const opacityTo = targets.opacity ?? finalValue('opacity');
 
+      // A dip on a touch screen when no call owns opacity starts from and
+      // returns to the element's own opacity, not the model's 1.
+      const ownsOpacity =
+        targets.opacity != null ||
+        segments.has('opacity') ||
+        resting.opacity !== IDENTITY.opacity;
+      const borrowed =
+        reduce && !instant && travels && !ownsOpacity ? ownOpacity() : null;
       if (reduce) {
         const fade = Math.min(
           reducedMotionCrossFade.durationMs,
           REDUCED_MOTION_MAX_FADE_MS,
         );
-        const opacityNow = valueAt('opacity', time);
-        const entering = opacityTo > opacityNow + 1e-6;
-        const leaving = opacityTo < opacityNow - 1e-6;
+        const opacityNow = borrowed ?? valueAt('opacity', time);
+        const fadeTo = borrowed ?? opacityTo;
+        const entering = fadeTo > opacityNow + 1e-6;
+        const leaving = fadeTo < opacityNow - 1e-6;
         for (const property of properties) {
           if (!TRAVEL.includes(property)) {
             continue;
@@ -1011,7 +1057,7 @@ export function createAnimator(
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},
             {at: fade / 2, value: 0},
-            {at: fade, value: opacityTo},
+            {at: fade, value: borrowed ?? opacityTo},
           ]);
         } else if (targets.opacity != null) {
           next.opacity = null; // already there
@@ -1048,6 +1094,7 @@ export function createAnimator(
         }
       }
       commit(changed, time);
+      borrowedOpacity = borrowed;
       return makeHandle(owner, changed, finished, time);
     },
 
