@@ -446,6 +446,11 @@ interface Landing {
   } | null;
   /** The opacity written with the landing (an exit by role). */
   restore: number | null;
+  /**
+   * The restore returns to the stylesheet's opacity (an exit by role on a
+   * surface no call owns opacity on): the stylesheet owns it again.
+   */
+  restoreIsBorrowed?: boolean;
   /** Earlier calls whose landings this one carries: they land with it. */
   readonly carried: HandleState[];
   timer: ReturnType<typeof setTimeout> | null;
@@ -749,6 +754,8 @@ export function createAnimator(
   const pendingGroups = new Set<StartGroup>();
   /** atRest() calls still waiting; dispose settles them. */
   const restWaits = new Set<RestWait>();
+  /** A detach that settles as an unmount at the end of the task, unless an attach follows. */
+  let unmountQueued = false;
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -1764,8 +1771,9 @@ export function createAnimator(
       if (property === 'opacity') {
         endLanding(landing);
         landNow(landing);
-      } else {
-        landing.values.delete(property);
+      } else if (landing.values.delete(property) && !landing.owner.settled) {
+        // Set or stopped before it landed: the call did not finish.
+        settle(landing.owner, false);
       }
     }
   };
@@ -1897,10 +1905,15 @@ export function createAnimator(
       end = time + ms;
     } else if (landing.restore != null) {
       segments.delete('opacity');
-      resting.opacity = landing.restore;
+      resting.opacity =
+        landing.restoreIsBorrowed === true ? IDENTITY.opacity : landing.restore;
       changed.push('opacity');
     }
     commit(changed, time);
+    if (landing.restoreIsBorrowed === true) {
+      // The stylesheet owns its opacity again.
+      target?.style.removeProperty('opacity');
+    }
     if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
       // again once the fade ends (releaseIdentity).
@@ -1968,14 +1981,29 @@ export function createAnimator(
     let fadeFrom = opacityNow;
     let fadeTo = opacityTo;
     let restore: number | null = null;
+    // A fade by role on a surface no call owns opacity on starts from, or
+    // returns to, the element's own (stylesheet) opacity, as a dip does.
+    const roleBorrow =
+      role != null &&
+      !named &&
+      borrowedOpacity == null &&
+      !segments.has('opacity') &&
+      resting.opacity === IDENTITY.opacity
+        ? ownOpacity()
+        : null;
     if (!entering && !leaving && role === 'entrance') {
       entering = true;
       fadeFrom = 0;
+      fadeTo = roleBorrow ?? opacityTo;
     } else if (!entering && !leaving && role === 'exit') {
       leaving = true;
+      fadeFrom = roleBorrow ?? opacityNow;
       fadeTo = 0;
-      restore = opacityTo;
+      restore = roleBorrow ?? opacityTo;
     }
+    // A move still waiting to land (an earlier dip's) lands at this call's
+    // invisible moment, never while the element shows.
+    const pending = landings.size > 0;
     // Not a role: nothing lengthens it (design:reduced-motion DR4).
     const ms = reducedMotionCrossFade.durationMs;
     for (const property of properties) {
@@ -1989,15 +2017,23 @@ export function createAnimator(
         holds[property] = valueAt(property, time);
         values.set(property, targets[property] as number);
       }
-      return {at, values, fadeIn, restore};
+      return {
+        at,
+        values,
+        fadeIn,
+        restore,
+        ...(roleBorrow != null && restore != null
+          ? {restoreIsBorrowed: true}
+          : {}),
+      };
     };
-    if (entering) {
+    if (entering && !pending) {
       // Lands at once (the travel is null above) and fades in.
       next.opacity = fadeSegment(owner, time, [
         {at: 0, value: fadeFrom},
         {at: ms, value: fadeTo},
       ]);
-      return {next, holds, landing: null};
+      return {next, holds, landing: null, borrowed: roleBorrow};
     }
     if (leaving) {
       // Fades out in place, then lands.
@@ -2009,10 +2045,12 @@ export function createAnimator(
         next,
         holds,
         landing:
-          travel.length > 0 || restore != null ? landsLater(ms, null) : null,
+          travel.length > 0 || restore != null || pending
+            ? landsLater(ms, null)
+            : null,
       };
     }
-    if (travel.length > 0) {
+    if (travel.length > 0 || pending) {
       // A dip: fades out, lands while transparent, fades back in. When no
       // call owns opacity it starts from and returns to the element's own
       // (stylesheet) opacity, not the model's 1.
@@ -2025,8 +2063,15 @@ export function createAnimator(
         (priorBorrow == null &&
           (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
+      // It opens at the opacity on screen: an earlier dip's, when one is
+      // still running, else the borrowed stylesheet value.
       next.opacity = fadeSegment(owner, time, [
-        {at: 0, value: borrowed ?? opacityNow},
+        {
+          at: 0,
+          value: segments.has('opacity')
+            ? opacityNow
+            : (borrowed ?? opacityNow),
+        },
         {at: ms / 2, value: 0},
       ]);
       return {
@@ -2093,18 +2138,32 @@ export function createAnimator(
             }
           }
         }
-        // Unmount: nothing is left to animate, so every other handle settles
-        // as interrupted and no completion timer outlives the element, as in
-        // dispose() (architecture:react-component-runtime INV5).
-        const time = now();
-        for (const property of PROPERTIES) {
-          interrupt(property, time);
+        // Unmount, unless a node replaces this one in the same task (React's
+        // replacement order: attach(null), then the new node): nothing is
+        // left to animate, so at the end of the task every other handle
+        // settles as interrupted, every atRest() wait settles and no
+        // completion timer outlives the element, as in dispose()
+        // (architecture:react-component-runtime INV5). A replacement keeps
+        // them all: the motion goes on on the new node.
+        if (!unmountQueued) {
+          unmountQueued = true;
+          queueMicrotask(() => {
+            if (!unmountQueued) {
+              return;
+            }
+            unmountQueued = false;
+            const time = now();
+            for (const property of PROPERTIES) {
+              interrupt(property, time);
+            }
+            for (const wait of [...restWaits]) {
+              wait.settle();
+            }
+          });
         }
-        // Nothing is left to wait for: every atRest() wait settles and its
-        // poll timer goes with it (INV5).
-        for (const wait of [...restWaits]) {
-          wait.settle();
-        }
+      } else {
+        // A node in place of the one just detached: no unmount.
+        unmountQueued = false;
       }
       for (const animation of running.values()) {
         animation.cancel();
@@ -2370,6 +2429,8 @@ export function createAnimator(
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
       const wasBorrowed = borrowedOpacity != null;
+      // Read before the landings go: a dip's fade back in, an exit's restore.
+      const heading = opacityHeading();
       for (const property of list) {
         cancelLanding(property);
         const segment = segments.get(property);
@@ -2382,7 +2443,7 @@ export function createAnimator(
           ? valueAt(property, time)
           : wasBorrowed
             ? IDENTITY.opacity
-            : segment.target;
+            : heading;
         interrupt(property, time);
         segments.delete(property);
         resting[property] = value;

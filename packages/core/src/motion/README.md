@@ -56,6 +56,7 @@ the timings that decide who gets a touch are not roles.
 
 ```
 import {createAnimator} from '../motion/animator';
+import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
 import {registerSpringsTable, springs} from '../motion/uikit';
