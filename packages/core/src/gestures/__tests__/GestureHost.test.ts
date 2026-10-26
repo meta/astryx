@@ -102,16 +102,6 @@ function scrollable(
 }
 
 /**
- * Fake the animation frame, where the host reads an author's touch-action
- * and writes its own (spec:AST-094 FR18): `next()` runs that frame.
- */
-function fakeFrames(): {next: () => void} {
-  vi.useFakeTimers({toFake: ['requestAnimationFrame']});
-  detachers.push(() => vi.useRealTimers());
-  return {next: () => vi.advanceTimersByTime(16)};
-}
-
-/**
  * jsdom drops `touch-action` from styles: elements under test carry it in
  * `data-touch-action`, and computed style reports it from there.
  */
@@ -1694,16 +1684,11 @@ describe('GestureHost', () => {
   });
 
   it('writes touch-action: manipulation for a kept-press control where the primary pointer is coarse, so rapid taps never zoom, and nothing where it is fine (spec:AST-094 FR18, FR19)', () => {
-    const frame = fakeFrames();
     const pointer = pointerQuery(true);
     detachers.push(pointer.restore);
     const {stepper, row} = mount(
       '<div><div id="stepper">+</div><div id="row">Row</div></div>',
     );
-    // jsdom drops touch-action, so the writes are observed.
-    const set = vi.spyOn(stepper.style, 'setProperty');
-    const remove = vi.spyOn(stepper.style, 'removeProperty');
-    const rowSet = vi.spyOn(row.style, 'setProperty');
     detachers.push(
       host.attachConsumer(
         stepper,
@@ -1713,13 +1698,14 @@ describe('GestureHost', () => {
     detachers.push(
       host.attachConsumer(row, new PressTracker({getBounds: () => null})),
     );
-    frame.next();
-    expect(set).toHaveBeenCalledWith('touch-action', 'manipulation');
-    // A press tracker that keeps no touch writes nothing.
-    expect(rowSet).not.toHaveBeenCalledWith('touch-action', expect.anything());
+    expect(stepper.getAttribute('data-astryx-touch-action')).toBe(
+      'manipulation',
+    );
+    // A press tracker that keeps no touch gets no mark.
+    expect(row.hasAttribute('data-astryx-touch-action')).toBe(false);
     // Where the pointer turns fine, the browser's own value comes back (FR19).
     pointer.set(false);
-    expect(remove).toHaveBeenCalledWith('touch-action');
+    expect(stepper.hasAttribute('data-astryx-touch-action')).toBe(false);
   });
 
   it("calls a press tracker's own selection lock for each finger's press, a stepper's hold-repeat, and nowhere else (spec:AST-094 FR41)", () => {
@@ -2360,13 +2346,10 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
   });
 
   it('follows the pointer: turning coarse installs it, turning fine cancels the touch in flight and removes it all', () => {
-    const frame = fakeFrames();
     quietWarning();
     const pointer = pointerQuery(false);
     detachers.push(pointer.restore);
     const {box} = mount('<div id="box"></div>');
-    // jsdom drops touch-action, so the writes are observed.
-    const set = vi.spyOn(box.style, 'setProperty');
     const pan = new PanGestureRecognizer({name: 'pan'});
     const states: string[] = [];
     pan.addTransitionListener((_current, _from, to) => states.push(to));
@@ -2374,11 +2357,10 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       host.attach(box, pan),
       host.attach(box, new LongPressGestureRecognizer({name: 'press'})),
     );
-    expect(set).not.toHaveBeenCalledWith('touch-action', expect.anything());
+    expect(box.hasAttribute('data-astryx-touch-action')).toBe(false);
     // A tablet undocks its mouse.
     pointer.set(true);
-    frame.next();
-    expect(set).toHaveBeenCalledWith('touch-action', expect.any(String));
+    expect(box.hasAttribute('data-astryx-touch-action')).toBe(true);
     const finger = {id: 1, x: 5, y: 5};
     const moved = {id: 1, x: 40, y: 5};
     touch('touchstart', box, [finger], [finger], 0);
@@ -2396,11 +2378,9 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
   });
 
   it("attaches a recognizer that reads each event's pointer where it is fine, with its own listener and style and no warning (spec:AST-057)", () => {
-    const frame = fakeFrames();
     const warn = quietWarning();
     detachers.push(pointerQuery(false).restore);
     const {box} = mount('<div id="box"></div>');
-    const set = vi.spyOn(box.style, 'setProperty');
     const swipe = new PanGestureRecognizer({
       name: 'swipe',
       direction: 'horizontal',
@@ -2408,8 +2388,9 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     const states: string[] = [];
     swipe.addTransitionListener((_current, _from, to) => states.push(to));
     detachers.push(host.attach(box, swipe, {perEventPointer: true}));
-    frame.next();
-    expect(set).toHaveBeenCalledWith('touch-action', 'pan-y pinch-zoom');
+    expect(box.getAttribute('data-astryx-touch-action')).toBe(
+      'pan-y pinch-zoom',
+    );
     const finger = {id: 1, x: 5, y: 5};
     const moved = {id: 1, x: 60, y: 5};
     touch('touchstart', box, [finger], [finger], 0);
@@ -2436,6 +2417,7 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       host.attachConsumer(row, consumer),
     );
     expect(set).not.toHaveBeenCalled();
+    expect(row.hasAttribute('data-astryx-touch-action')).toBe(false);
     const finger = {id: 2, x: 5, y: 5};
     touch('touchstart', row, [finger], [finger], 0);
     touch('touchend', row, [finger], [], 50);
@@ -2541,14 +2523,10 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
   });
 
   it('keeps it working when the pointer turns fine, as the rest comes down', () => {
-    const frame = fakeFrames();
     quietWarning();
     const pointer = pointerQuery(true);
     detachers.push(pointer.restore);
     const {box, row} = mount('<div id="box"></div><div id="row"></div>');
-    const removed = vi.spyOn(box.style, 'removeProperty');
-    const rowSet = vi.spyOn(row.style, 'setProperty');
-    const rowRemoved = vi.spyOn(row.style, 'removeProperty');
     const swipe = new PanGestureRecognizer({
       name: 'swipe',
       direction: 'horizontal',
@@ -2559,12 +2537,13 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
       host.attach(box, swipe, {perEventPointer: true}),
       host.attach(row, new LongPressGestureRecognizer({name: 'press'})),
     );
-    frame.next();
-    expect(rowSet).toHaveBeenCalledWith('touch-action', 'manipulation');
+    expect(row.getAttribute('data-astryx-touch-action')).toBe('manipulation');
     pointer.set(false);
-    expect(rowRemoved).toHaveBeenCalledWith('touch-action');
+    expect(row.hasAttribute('data-astryx-touch-action')).toBe(false);
     // The swipe's own touch-action stays.
-    expect(removed).not.toHaveBeenCalledWith('touch-action');
+    expect(box.getAttribute('data-astryx-touch-action')).toBe(
+      'pan-y pinch-zoom',
+    );
     const finger = {id: 3, x: 5, y: 5};
     const moved = {id: 3, x: 60, y: 5};
     touch('touchstart', box, [finger], [finger], 0);
