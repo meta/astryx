@@ -55,9 +55,16 @@ describe('deriveTouchAction', () => {
     ).toBe('pan-y pinch-zoom');
     expect(
       deriveTouchAction([
-        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
+        new ScreenEdgePanGestureRecognizer({edges: ['leading', 'trailing']}),
       ]),
     ).toBe('pan-y pinch-zoom');
+    // From one edge the pan goes one way, inward: the browser keeps every
+    // touch behavior and the pan claims as it begins (spec:AST-094 FR18).
+    expect(
+      deriveTouchAction([
+        new ScreenEdgePanGestureRecognizer({edges: ['leading']}),
+      ]),
+    ).toBeNull();
   });
 
   it('leaves the browser everything for a one-way pan, or one that shares native scrolling', () => {
