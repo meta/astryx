@@ -1414,6 +1414,32 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(element.style.willChange).toBe('');
   });
 
+  it('lands a waiting move on the latest node detached in the task, after a replacement too', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
+    await advance(25);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(null);
+    animator.attach(next);
+    animator.attach(null);
+    await advance(100);
+    // The node attached last, then detached, is the one left visible.
+    expect(Number(next.style.opacity || '1')).toBe(1);
+    next.remove();
+  });
+
+  it('a dispose right after a detach lands the waiting move on that node', async () => {
+    const {animator, element} = reduced();
+    animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
+    await advance(25);
+    animator.attach(null);
+    animator.dispose();
+    await advance(100);
+    expect(Number(element.style.opacity || '1')).toBe(1);
+    expect(element.style.willChange).toBe('');
+  });
+
   it('an identity held over a differing stylesheet follows a node replacement', () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0'};

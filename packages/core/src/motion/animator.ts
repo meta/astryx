@@ -762,6 +762,22 @@ export function createAnimator(
   const restWaits = new Set<RestWait>();
   /** A detach that settles as an unmount at the end of the task, unless an attach follows. */
   let unmountQueued = false;
+  /**
+   * The node the latest attach(null) detached, while its unmount is pending:
+   * a waiting Reduce Motion move lands there, so that node is left visible
+   * where it was going.
+   */
+  let lastDetached: HTMLElement | null = null;
+  /** Runs `write` with the pending unmount's node as the target. */
+  const onLastDetached = (write: () => void) => {
+    const current = target;
+    target = target ?? lastDetached;
+    try {
+      write();
+    } finally {
+      target = current;
+    }
+  };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -2258,9 +2274,9 @@ export function createAnimator(
         // completion timer outlives the element, as in dispose()
         // (architecture:react-component-runtime INV5). A replacement keeps
         // them all: the motion goes on on the new node.
+        lastDetached = target;
         if (!unmountQueued) {
           unmountQueued = true;
-          const detached = target;
           queueMicrotask(() => {
             if (!unmountQueued) {
               return;
@@ -2271,9 +2287,7 @@ export function createAnimator(
             // left its low opacity inline there, so a later attach of that
             // node (a Suspense or Activity reveal) shows it landed and
             // visible. Its calls settle as interrupted.
-            const current = target;
-            target = detached;
-            try {
+            onLastDetached(() => {
               landPending(false);
               // The landing's commit rebuilt every channel it touched on the
               // detached node, any axis still moving included: leave that
@@ -2287,9 +2301,8 @@ export function createAnimator(
               }
               retireTimers.clear();
               demote();
-            } finally {
-              target = current;
-            }
+            });
+            lastDetached = null;
             const time = now();
             for (const property of PROPERTIES) {
               interrupt(property, time);
@@ -2302,6 +2315,7 @@ export function createAnimator(
       } else {
         // A node in place of the one just detached: no unmount.
         unmountQueued = false;
+        lastDetached = null;
       }
       // After the landing's commit, which can promote the element again.
       demote();
@@ -2845,8 +2859,14 @@ export function createAnimator(
 
     dispose() {
       // A Reduce Motion move still waiting to land is written at its end
-      // state, so the element is left visible where it was going; its call
-      // and the calls it carries settle as interrupted.
+      // state, so the element is left visible where it was going (the node
+      // just detached, when an unmount is pending); its call and the calls
+      // it carries settle as interrupted.
+      if (target == null && unmountQueued) {
+        target = lastDetached;
+      }
+      lastDetached = null;
+      unmountQueued = false;
       landPending(false);
       // Nothing moves any more: every atRest() wait settles.
       for (const wait of [...restWaits]) {
