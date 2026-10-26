@@ -1306,6 +1306,18 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(changed.element.style.opacity).toBe('');
   });
 
+  it('a borrowed dip that ends while detached hands the opacity back on the next attach', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(25);
+    animator.attach(null);
+    await advance(fade + END_HOLD_MS + 1);
+    animator.attach(element);
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};

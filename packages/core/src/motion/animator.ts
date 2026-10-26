@@ -2156,6 +2156,18 @@ export function createAnimator(
         return;
       }
       const time = now();
+      // A borrowed dip that ended while detached hands the stylesheet's
+      // opacity back instead of writing the borrowed value inline.
+      const dip = segments.get('opacity');
+      if (
+        borrowedOpacity != null &&
+        (dip == null || time >= dip.start + dip.duration)
+      ) {
+        borrowedOpacity = null;
+        segments.delete('opacity');
+        resting.opacity = IDENTITY.opacity;
+        target.style.removeProperty('opacity');
+      }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
         const isDefault = properties.every(
