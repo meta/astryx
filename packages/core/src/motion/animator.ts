@@ -514,7 +514,12 @@ interface HandleState {
  * dip, the fade back in.
  */
 interface Landing {
-  readonly owner: HandleState;
+  /**
+   * The call that settles when the landing (and its fade back in) ends; a
+   * call that joins the dip takes it over, and the call it replaces is
+   * carried.
+   */
+  owner: HandleState;
   /** ms after the call's start. */
   readonly at: number;
   readonly values: Map<MotionProperty, number>;
@@ -554,6 +559,8 @@ interface ReducedPlan {
   > | null;
   /** The stylesheet opacity a dip borrowed (no call owns opacity). */
   readonly borrowed?: number | null;
+  /** The call joins the waiting dip (see the planner's `joins`). */
+  readonly joins?: boolean;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -1969,6 +1976,7 @@ export function createAnimator(
     finished: Promise<boolean>,
     time: number,
     group: StartGroup | null = null,
+    settlesWithLanding = false,
   ): MotionHandle => {
     const ends = properties.map(p => {
       const segment = segments.get(p);
@@ -1977,7 +1985,9 @@ export function createAnimator(
         : time;
     });
     const end = Math.max(time, ...ends);
-    if (properties.length === 0 || end <= time) {
+    if (settlesWithLanding) {
+      // The landing it joined settles it.
+    } else if (properties.length === 0 || end <= time) {
       settle(owner, true);
     } else {
       // Interruptions settle false as they happen (interrupt); reaching the
@@ -2300,6 +2310,27 @@ export function createAnimator(
     return {carried, owners};
   };
 
+  /**
+   * A call joins the newest waiting dip: it takes the landing over and
+   * settles when the dip ends, and the call it replaces lands with it. Each
+   * value keeps the call whose move it is.
+   */
+  const joinWaitingDip = (owner: HandleState) => {
+    const dip = [...landings].reverse().find(landing => landing.fadeIn != null);
+    if (dip == null) {
+      settle(owner, true);
+      return;
+    }
+    for (const property of dip.values.keys()) {
+      if (!dip.owners.has(property)) {
+        dip.owners.set(property, dip.owner);
+      }
+    }
+    dip.carried.push(dip.owner);
+    carriedOwners.add(dip.owner);
+    dip.owner = owner;
+  };
+
   /** Where opacity is heading: past a waiting landing's fade back in. */
   const opacityHeading = (): number => {
     let to = finalValue('opacity');
@@ -2516,6 +2547,9 @@ export function createAnimator(
     get hasPendingLanding() {
       return landings.size > 0;
     },
+    get hasWaitingDip() {
+      return [...landings].some(landing => landing.fadeIn != null);
+    },
   };
 
   /**
@@ -2555,6 +2589,7 @@ export function createAnimator(
       holds: plan.holds,
       landing: plan.landing,
       borrowed: plan.borrowed,
+      joins: plan.joins,
     };
   };
 
@@ -2824,7 +2859,13 @@ export function createAnimator(
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
       }
-      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.joins === true) {
+        joinWaitingDip(owner);
+      }
+      const handle =
+        plan?.joins === true
+          ? makeHandle(owner, ['opacity'], finished, time, group, true)
+          : makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, adopted);
       }
@@ -2943,7 +2984,13 @@ export function createAnimator(
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
       }
-      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.joins === true) {
+        joinWaitingDip(owner);
+      }
+      const handle =
+        plan?.joins === true
+          ? makeHandle(owner, ['opacity'], finished, time, group, true)
+          : makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, adopted);
       }

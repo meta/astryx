@@ -1507,6 +1507,64 @@ describe('Reduced Motion (design:reduced-motion)', () => {
       ),
     );
 
+  it('a call naming the opacity a running dip heads to keeps the dip', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    const start = clock;
+    await advance(fade / 4);
+    // Mid fade out: a call names the opacity the dip returns to.
+    const handle = animator.animate({opacity: 1}, {spring: springs.settle});
+    // The dip goes on as it was: at its bottom when it was due, not opening
+    // a second dip from where it had got to.
+    expect(animator.get('opacity', start + fade / 2)).toBeCloseTo(0, 6);
+    await advance(fade / 4 + 1);
+    // Landed at the bottom; the fade back in ends when the dip was due to.
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity', start + fade)).toBeCloseTo(1, 6);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(await handle.finished).toBe(true);
+  });
+
+  it('a call naming the opacity a dip heads to, in the same task as the dip, hands the browser no second fade', async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    animator.animate({opacity: 1}, {spring: springs.settle});
+    await commitFrame(clock);
+    const fades = recorded.filter(animation =>
+      animation.keyframes.some(keyframe => 'opacity' in keyframe),
+    );
+    expect(fades).toHaveLength(1);
+    expect(fades[0].cancelled).toBe(false);
+  });
+
+  it('a release played as a dip, then its state layer naming the opacity the dip returns to, fades once', async () => {
+    // A swipe row's release: the move's layer plays the travel, then the
+    // state layer lands its opacity on the same element in the same task.
+    const {animator} = reduced();
+    const move = animator.play(
+      {x: {duration: 0.3, at: t => (100 * t) / 0.3, velocity: () => 100 / 0.3}},
+      {touchRelease: true},
+    );
+    const state = animator.animate(
+      {opacity: 1},
+      {spring: springs.settle},
+      {touchRelease: true},
+    );
+    await commitFrame(clock);
+    const fades = recorded.filter(animation =>
+      animation.keyframes.some(keyframe => 'opacity' in keyframe),
+    );
+    expect(fades).toHaveLength(1);
+    await advance(fade + END_HOLD_MS + 1);
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(await move.finished).toBe(true);
+    expect(await state.finished).toBe(true);
+  });
+
   it('an entrance after an outside finish starts from what is on screen', async () => {
     const {animator} = reduced();
     animator.animate(
