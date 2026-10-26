@@ -28,11 +28,11 @@
  * Two profiles (PRESS_PROFILES) cover what UIKit does:
  *
  * - `control` (a button, a switch): as above.
- * - `cell` (a table or collection row, always inside a scroll view in
- *   UIKit): the highlight always waits the content-touch delay, travel past
- *   the pan hysteresis cancels the press for good (the scroll view took the
- *   touch), and a quicker tap highlights at the lift straight into the
- *   release, with no flash.
+ * - `cell` (a table or collection row): the highlight waits the
+ *   content-touch delay inside a scroll view and comes on at once outside one
+ *   (`spec:AST-094` FR11), travel past the pan hysteresis cancels the press
+ *   for good (the scroll view took the touch), and a quicker tap highlights
+ *   at the lift straight into the release, with no flash.
  *
  * And UIControl's iOS 6 rule: a single-finger single tap recognizer on an
  * ANCESTOR does not beat the control's own action for a touch on it (the
@@ -97,7 +97,7 @@ export interface PressTrackerOptions {
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
-   * control), always (a cell), or never. @default 'inScrollers'
+   * control or a cell), always, or never. @default 'inScrollers'
    */
   highlightDelay?: PressHighlightDelay;
   /**
@@ -143,7 +143,10 @@ export const PRESS_PROFILES = {
   control: {
     highlightDelay: 'inScrollers',
     quickTapFlash: PRESS.quickTapFlash.value,
-    releaseMs: timing.press.buttonReleaseMs,
+    // The shared press styles release every surface on the deselect clock
+    // until a control runs its own release (UIButton's 250 ms), so a
+    // painter's `fading` never outlasts the fade it shows.
+    releaseMs: timing.press.highlightOutMs,
   },
   /**
    * A table or collection cell: inside a scroll view it highlights after the

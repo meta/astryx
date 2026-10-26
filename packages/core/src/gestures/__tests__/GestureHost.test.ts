@@ -31,6 +31,7 @@ import {holdPageScroll, type PageScrollDecision} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
 import {COARSE_POINTER_QUERY} from '../coarsePointer';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
+import type {GestureTouch} from '../types';
 
 interface Contact {
   id: number;
@@ -173,6 +174,101 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
+  it('tells a recognizer tracking a finger about a second finger on plain page content, and leaves that finger to the page (spec:AST-094 FR28)', () => {
+    const {box} = mount('<div id="box"></div><p id="page">text</p>');
+    const page = document.getElementById('page')!;
+    const elsewhere: number[] = [];
+    class Recorder extends LongPressGestureRecognizer {
+      protected override touchBeganElsewhere(
+        touches: ReadonlyArray<GestureTouch>,
+      ): void {
+        elsewhere.push(...touches.map(t => t.id));
+      }
+    }
+    const recorder = new Recorder({name: 'recorder'});
+    detachers.push(host.attach(box, recorder));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [first], [first], 0);
+    const second = {id: 2, x: 200, y: 300};
+    const start = touch('touchstart', page, [second], [first, second], 20);
+    expect(elsewhere).toHaveLength(1);
+    expect(start.defaultPrevented).toBe(false);
+    const moved = {...second, y: 340};
+    const move = touch('touchmove', page, [moved], [first, moved], 36);
+    expect(move.defaultPrevented).toBe(false);
+    const end = touch('touchend', page, [moved], [first], 50);
+    expect(end.defaultPrevented).toBe(false);
+    touch('touchend', box, [first], [], 60);
+  });
+
+  it('leaves a finger on plain page content alone when no finger is being tracked', () => {
+    const {box} = mount('<div id="box"></div><p id="page">text</p>');
+    const page = document.getElementById('page')!;
+    const elsewhere: number[] = [];
+    class Recorder extends LongPressGestureRecognizer {
+      protected override touchBeganElsewhere(
+        touches: ReadonlyArray<GestureTouch>,
+      ): void {
+        elsewhere.push(...touches.map(t => t.id));
+      }
+    }
+    detachers.push(host.attach(box, new Recorder({name: 'recorder'})));
+    const finger = {id: 1, x: 200, y: 300};
+    touch('touchstart', page, [finger], [finger], 0);
+    touch('touchend', page, [finger], [], 30);
+    expect(elsewhere).toEqual([]);
+  });
+
+  it("does not read a recognizer's own scroll write as the browser taking the finger (spec:AST-094 FR30)", async () => {
+    const {list} = mount('<div id="list"><div id="row"></div></div>');
+    scrollable(list, {scrollHeight: 1000, clientHeight: 200});
+    const row = document.getElementById('row')!;
+    // Tolerant enough to keep tracking a finger that has travelled the
+    // press slop: only such a finger's touch can be the browser's pan.
+    const press = new LongPressGestureRecognizer({
+      name: 'press',
+      allowableMovement: 100,
+    });
+    detachers.push(host.attach(row, press));
+    const finger = {id: 1, x: 10, y: 10};
+    touch('touchstart', row, [finger], [finger], 0);
+    const moved = {...finger, y: 40};
+    touch('touchmove', row, [moved], [moved], 16);
+    host.ownScroll(list);
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(1);
+    // After the next frame, a scroll nobody announced is the browser's again.
+    await new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    list.dispatchEvent(new Event('scroll'));
+    expect(press.numberOfTouches).toBe(0);
+  });
+
+  it('watches the pointer kind only while something is attached (spec:AST-094 FR24)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const add = vi.fn();
+    const remove = vi.fn();
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: add,
+      removeEventListener: remove,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const host2 = new GestureHost(document, {clock});
+      expect(add).not.toHaveBeenCalled();
+      const detach = host2.attach(box, new PanGestureRecognizer());
+      expect(add).toHaveBeenCalledTimes(1);
+      detach();
+      expect(remove).toHaveBeenCalledWith('change', add.mock.calls[0][1]);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
   it('sets touch-action only while the primary pointer is coarse and a recognizer is enabled (spec:AST-094 FR19)', () => {
     // jsdom drops touch-action from the style, so the writes are observed.
     const {box} = mount('<div id="box"></div>');
@@ -1026,23 +1122,69 @@ describe('GestureHost', () => {
   });
 
   it("writes a touch-action no wider than the caller's own", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
-    const {trigger, strip} = mount(
-      '<div id="trigger" data-touch-action="none"></div><div id="strip" data-touch-action="pan-y"></div>',
-    );
-    const set = vi.spyOn(trigger.style, 'setProperty');
-    const setStrip = vi.spyOn(strip.style, 'setProperty');
-    detachers.push(
-      host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
-      host.attach(
-        strip,
-        new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
-      ),
-    );
-    expect(set).toHaveBeenCalledWith('touch-action', 'none');
-    // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
-    expect(setStrip).toHaveBeenCalledWith('touch-action', 'pan-y');
-    restore();
+    try {
+      const {trigger, strip} = mount(
+        '<div id="trigger" data-touch-action="none"></div><div id="strip" data-touch-action="pan-y"></div>',
+      );
+      const set = vi.spyOn(trigger.style, 'setProperty');
+      const setStrip = vi.spyOn(strip.style, 'setProperty');
+      detachers.push(
+        host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
+        host.attach(
+          strip,
+          new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
+        ),
+      );
+      // A stylesheet's value is read after paint (see below).
+      vi.advanceTimersByTime(50);
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
+      // pan-y pinch-zoom (the pan's) ∩ pan-y (the caller's).
+      expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads no computed style while attaching: a caller's inline touch-action applies at once, a stylesheet's after paint", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
+    const restore = touchActionFromData();
+    try {
+      const {trigger, strip} = mount(
+        '<div id="trigger" data-touch-action="none"></div><div id="strip"></div>',
+      );
+      // jsdom keeps no touch-action in a style: this stands in for the
+      // caller's inline `touch-action: pan-y`.
+      vi.spyOn(strip.style, 'getPropertyValue').mockImplementation(name =>
+        name === 'touch-action' ? 'pan-y' : '',
+      );
+      const set = vi.spyOn(trigger.style, 'setProperty');
+      const setStrip = vi.spyOn(strip.style, 'setProperty');
+      const read = vi.mocked(window.getComputedStyle);
+      read.mockClear();
+      detachers.push(
+        host.attach(trigger, new LongPressGestureRecognizer({name: 'hold'})),
+        host.attach(
+          strip,
+          new PanGestureRecognizer({name: 'h', direction: 'horizontal'}),
+        ),
+      );
+      // Attaching forces no style recalc over whatever just mounted.
+      expect(read).not.toHaveBeenCalled();
+      // The caller's inline value: pan-y pinch-zoom ∩ pan-y, at once.
+      expect(setStrip).toHaveBeenLastCalledWith('touch-action', 'pan-y');
+      // A stylesheet's value: the host's own until the frame has painted,
+      // then what both allow.
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'manipulation');
+      vi.advanceTimersByTime(50);
+      expect(set).toHaveBeenLastCalledWith('touch-action', 'none');
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
   });
 
   it('releases the same velocity for one stroke from a finger, a pen and a mouse (spec:AST-100 FR1, FR4)', () => {
@@ -1685,6 +1827,34 @@ describe('GestureHost', () => {
     touch('touchend', row, [finger], [], 900);
     expect(lock).toHaveBeenCalledTimes(1);
   });
+  it('locks for a hold that takes the touch, and nothing where it declines one: a zero-delay hold opts in with its own lock (spec:AST-094 FR41)', () => {
+    detachers.push(coarsePrimaryPointer());
+    const {bar, lens, search} = mount(
+      '<div id="bar"><div id="lens">Lens</div><button id="search">Search</button></div>',
+    );
+    // A tab bar's lens: a hold at 0 ms that brings the lock itself, and
+    // takes only touches on the lens, not on the search tab beside it.
+    detachers.push(
+      host.attach(
+        bar,
+        new LongPressGestureRecognizer({
+          minimumPressDuration: 0,
+          selectionLock: lockSelection,
+          shouldReceiveTouch: (_recognizer, contact) =>
+            contact.target instanceof Node && lens.contains(contact.target),
+        }),
+      ),
+    );
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', search, [finger], [finger], 0);
+    expect(bar.style.getPropertyValue('user-select')).toBe('');
+    touch('touchend', search, [finger], [], 100);
+    touch('touchstart', lens, [finger], [finger], 200);
+    expect(bar.style.getPropertyValue('user-select')).toBe('none');
+    touch('touchend', lens, [finger], [], 300);
+    expect(bar.style.getPropertyValue('user-select')).toBe('');
+  });
+
   it('on a coarse primary pointer, keeps selection for a mouse, a press-tracked row and a pan that does not ask, and locks a pan that asks', () => {
     detachers.push(coarsePrimaryPointer());
     const {row, sheet, slider} = mount(

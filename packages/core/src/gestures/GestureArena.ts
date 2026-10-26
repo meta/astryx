@@ -167,6 +167,15 @@ export class GestureArena {
     return this.records.get(id)?.touch;
   }
 
+  /**
+   * The recognizers that took touch `id` when it began: each was enabled,
+   * accepted its pointer, and its `shouldReceiveTouch` agreed. Empty for a
+   * touch the arena does not track.
+   */
+  participantsOf(id: number): ReadonlyArray<GestureRecognizer> {
+    return this.records.get(id)?.participants ?? [];
+  }
+
   /** Every touch the arena tracks, lifted ones awaiting a decision included. */
   get touches(): ReadonlyArray<GestureTouch> {
     return [...this.records.values()].map(record => record.touch);
@@ -268,6 +277,41 @@ export class GestureArena {
       }
       for (const record of created) {
         this.deliverViewBegan(record);
+      }
+    });
+  }
+
+  /**
+   * A contact began where nothing takes part (plain page content). It is
+   * never tracked and stays the browser's; recognizers already tracking a
+   * gesture hear of it, as of any touch off their hit path.
+   */
+  untrackedBegan(input: TouchBeganInput): void {
+    if (!this.active.some(recognizer => recognizer.numberOfTouches > 0)) {
+      return;
+    }
+    this.run(input.time, () => {
+      const time = this.clampTime(input.time);
+      const touch: GestureTouch = {
+        id: input.id,
+        pointerType: input.pointerType,
+        phase: 'began',
+        x: input.x,
+        y: input.y,
+        time,
+        startX: input.x,
+        startY: input.y,
+        startTime: time,
+        samples: [{x: input.x, y: input.y, time}],
+        target: input.target,
+        scroll: input.scroll ?? null,
+        takenByBrowser: false,
+      };
+      const context = this.context();
+      for (const recognizer of [...this.active]) {
+        if (recognizer.numberOfTouches > 0) {
+          internals(recognizer).deliverBeganElsewhere([touch], context);
+        }
       }
     });
   }
