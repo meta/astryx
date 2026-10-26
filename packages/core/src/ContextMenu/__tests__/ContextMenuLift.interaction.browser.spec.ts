@@ -1113,7 +1113,8 @@ test('the close keeps going while the main thread is blocked: the menu’s exit 
   browserName,
 }, testInfo) => {
   // As the lift's own proof: Linux WebKit's compositor stalls with its main
-  // thread; iOS Safari is the simulator recording.
+  // thread; iOS Safari is the simulator recording, through the same 1 s
+  // block.
   test.skip(
     browserName !== 'chromium',
     'Linux WebKit’s compositor stalls with its main thread; iOS Safari is the simulator recording',
@@ -1122,11 +1123,12 @@ test('the close keeps going while the main thread is blocked: the menu’s exit 
   await liftAndSettle(page, story);
   await markSelector(page, '[data-astryx-context-menu-lift-exit]');
   // A tap on the dim starts the close as its finger lifts (60 ms); blocked
-  // from 20 ms into the close, while the copy shrinks.
-  const busyWindow = await blockAfterTouch(page, 60 + 20, 200);
+  // from 20 ms into the close for 1 s (spec:AST-094's FR5 row), past the
+  // copy's whole shrink.
+  const busyWindow = await blockAfterTouch(page, 60 + 20, 1000);
   const cast = await startScreencast(page);
   await story.driver.play(tap({x: 24, y: 24}, {holdMs: 60}));
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(1600);
   const castFrames = await cast.stop();
   const block = await busyWindow();
   // The copy fades as it shrinks, so its marker pales: a wider tolerance
