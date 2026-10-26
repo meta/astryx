@@ -40,9 +40,8 @@ describe('SwipeGestureRecognizer', () => {
     const drift = diagonal
       .finger(1)
       .down(0, 0, 0, {recognizers: [b]})
-      .move(45, 40, 60);
-    expect(b.state).toBe('possible');
-    drift.move(48, 56, 70);
+      .move(45, 55, 60);
+    // 55 px across is past the 50 px secondary allowance.
     expect(b.state).toBe('failed');
 
     const wrong = createHarness();
@@ -90,6 +89,47 @@ describe('SwipeGestureRecognizer', () => {
       }
       expect(swipe.state).toBe('ended');
       finger.up(time + 8);
+    }
+  });
+
+  it('gives the same verdict for the same path however its events are spaced', () => {
+    // A straight drag to (55, 40): along 55 past the 50 px distance, 40 px
+    // across within the 50 px allowance.
+    const sparse = createHarness();
+    const a = new SwipeGestureRecognizer({name: 'a'});
+    sparse
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [a]})
+      .move(55, 40, 40);
+    expect(a.state).toBe('ended');
+
+    const dense = createHarness();
+    const b = new SwipeGestureRecognizer({name: 'b'});
+    const finger = dense.finger(1).down(0, 0, 0, {recognizers: [b]});
+    for (let step = 1; step <= 10; step += 1) {
+      finger.move(5.5 * step, 4 * step, 4 * step);
+    }
+    expect(b.state).toBe('ended');
+    expect(b.recognizedDirection).toBe('right');
+  });
+
+  it('recognizes a 40\u00b0 swipe at 16 px per event as at small steps', () => {
+    // At 40\u00b0 the travel along reaches 50 px with 42 px across, inside
+    // the 50 px allowance; at 16 px per event the next event is already 51 px
+    // across, so the verdict must come from the path between the events.
+    const angle = (40 * Math.PI) / 180;
+    for (const step of [2, 16]) {
+      const h = createHarness();
+      const swipe = new SwipeGestureRecognizer({name: 'swipe'});
+      const finger = h.finger(1).down(0, 0, 0, {recognizers: [swipe]});
+      for (let d = step, t = 4; d <= 96; d += step, t += 4) {
+        finger.move(d * Math.cos(angle), d * Math.sin(angle), t);
+        if (swipe.state !== 'possible') {
+          break;
+        }
+      }
+      expect(swipe.state).toBe('ended');
+      expect(swipe.recognizedDirection).toBe('right');
     }
   });
 });

@@ -27,6 +27,7 @@ apple/
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
 │   │   ├── Icon/          # Icon, Icon.spec.md
+│   │   ├── Avatar/        # Avatar, Avatar.spec.md
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
