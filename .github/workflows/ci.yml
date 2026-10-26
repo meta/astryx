@@ -573,6 +573,7 @@ jobs:
           SCOPE="$POLICY_ROOT/.github/scripts/component-audit-scope.cjs"
           REGISTRY="$POLICY_ROOT/scripts/component-packages.cjs"
           if git show "origin/${{ github.base_ref }}:.github/scripts/component-audit-scope.cjs" > "$SCOPE" 2>/dev/null \
+            && git show "origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs" > "$POLICY_ROOT/.github/scripts/knowledge-paths.cjs" 2>/dev/null \
             && git show "origin/${{ github.base_ref }}:scripts/component-packages.cjs" > "$REGISTRY" 2>/dev/null; then
             git diff --name-status "$MERGE_BASE"...HEAD \
               | node "$SCOPE" --registry "$REGISTRY" --github-output
