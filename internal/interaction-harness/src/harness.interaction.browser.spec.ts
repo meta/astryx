@@ -894,6 +894,67 @@ test.describe('holding', () => {
     await releaseAnimations(page);
   });
 
+  test("a pseudo-element's animation does not label its element's samples", async ({
+    page,
+  }) => {
+    await fixture(page);
+    // #box moves for 300 ms; its ::after fades for 600 ms.
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent = "#box::after { content: ''; display: block; }";
+      document.head.append(style);
+      const box = document.getElementById('box');
+      box?.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(300px)'}],
+        {duration: 300, easing: 'linear'},
+      );
+      box?.animate([{opacity: 1}, {opacity: 0}], {
+        duration: 600,
+        pseudoElement: '::after',
+      });
+    });
+    await holdAnimations(page);
+    const samples = await sampleCurve(page.locator('#box'), [0, 150, 300]);
+    // The move is read just inside its own end, not at the ::after's time.
+    expect(samples.at(-1)?.presentedAt).toBe(299.5);
+    await releaseAnimations(page);
+  });
+
+  test('a percentage translate resolves against the unrounded border box, and a calc() is refused', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.width = '80.6px';
+      el.style.height = '40.4px';
+      el.animate([{translate: '0% 0%'}, {translate: '100% 50%'}], {
+        duration: 300,
+        easing: 'linear',
+      });
+    });
+    await holdAnimations(page, box);
+    const [mid] = await sampleCurve(box, [150]);
+    expect(mid.transform.translateX).toBeCloseTo(40.3, 2);
+    expect(mid.transform.translateY).toBeCloseTo(10.1, 2);
+    await releaseAnimations(page);
+
+    await box.evaluate(el => {
+      el.animate(
+        [
+          {translate: 'calc(10% + 5px) 0px'},
+          {translate: 'calc(20% + 5px) 0px'},
+        ],
+        {duration: 300, easing: 'linear'},
+      );
+    });
+    await holdAnimations(page, box);
+    await expect(sampleCurve(box, [150])).rejects.toThrow(
+      /cannot resolve translate/,
+    );
+    await releaseAnimations(page);
+  });
+
   test('a hold stays where it was read, not a frame later', async ({page}) => {
     await fixture(page);
     await page.evaluate(() => {
@@ -1092,6 +1153,25 @@ test.describe('animation state', () => {
     expect(settledAt).toBeGreaterThanOrEqual(running.to);
     const transform = await box.evaluate(el => getComputedStyle(el).transform);
     expect(parseTransform(transform).translateY).toBeCloseTo(100, 1);
+  });
+
+  test("waitForAnimation's progress starts after a transition's delay", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.style.transition = 'transform 300ms linear 200ms';
+      void (el as HTMLElement).offsetWidth;
+      el.style.transform = 'translateY(100px)';
+    });
+    await waitForAnimation(box, {minProgressMs: 50});
+    // 50 ms along the curve: past the 200 ms delay, not inside it.
+    const currentTime = await box.evaluate(el =>
+      Number(el.getAnimations()[0]?.currentTime),
+    );
+    expect(currentTime).toBeGreaterThanOrEqual(250);
+    await waitForRest(box);
   });
 
   test('waitForAnimation reports a short animation that ended before it looked', async ({
