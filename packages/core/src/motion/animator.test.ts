@@ -1435,6 +1435,27 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(animator.get('opacity')).toBe(1);
   });
 
+  it('a release past an edge springs back as a cross-fade, not momentum (DR2)', async () => {
+    const {animator} = reduced();
+    animator.set({x: -80});
+    const start = clock;
+    animator.decay(
+      coast(animator, {x: 0}, {bounds: {x: {min: 0, max: 100}}, at: start}),
+      {at: start},
+    );
+    // The plan lands by timer: step the clock; it moves only while invisible.
+    let moved = false;
+    while (clock <= start + fade) {
+      await advance(2);
+      if (!moved && animator.get('x') !== -80) {
+        moved = true;
+        expect(animator.get('opacity')).toBeLessThan(0.1);
+      }
+    }
+    expect(moved).toBe(true);
+    expect(animator.get('x')).toBe(0);
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
