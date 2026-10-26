@@ -222,7 +222,19 @@ const UTIL_SUBPATH_DIRS = [
  * `Markdown/remark` is the limited Remark compatibility adapter
  * (`module:Markdown/remark`, `spec:AST-036` FR24).
  */
-const FILE_MODULE_SUBPATH_EXPORTS = ['Markdown/remark'];
+const FILE_MODULE_SUBPATH_EXPORTS = [
+  // One opt-in module per CodeBlock language (`component:CodeBlock` FR13).
+  'CodeBlock/languages/dockerfile',
+  'CodeBlock/languages/graphql',
+  'CodeBlock/languages/java',
+  'CodeBlock/languages/lua',
+  'CodeBlock/languages/objective-c',
+  'CodeBlock/languages/powershell',
+  'CodeBlock/languages/ruby',
+  'CodeBlock/languages/thrift',
+  'CodeBlock/languages/toml',
+  'Markdown/remark',
+];
 
 /**
  * Discover all exportable directories under src/.
