@@ -3,23 +3,32 @@
 /**
  * @file selectionLock.ts
  * @input The elements a held touch contact presses, and the touch's target
- * @output Exports lockSelection: text selection and the touch callout off,
- *   inline and refcounted, until the returned release runs; and
+ * @output Exports lockSelection: no text selection and no touch callout
+ *   start under the held finger until the returned release runs; and
  *   locksSelectionFor: which contacts take it
  * @position Brought by the recognizers whose hold does something (a long
  *   press, and a recognizer created with `selectionLock: lockSelection`); the
  *   gesture host calls it and never imports it (`spec:AST-094` FR41)
  *
- * A hold that does something never starts a selection under the finger.
- * WebKit's own stylesheet makes every input selectable
- * (`-webkit-user-select: text`), out of reach of an ancestor's lock: a
- * checkbox, a radio or a switch's input under the finger inside a locked
- * element is locked too (iOS 26.2: its hold otherwise opens the loupe). A
- * text field keeps its selection: a held finger places its caret. A link
- * keeps the touch callout: on a link, or under one, a held finger opens the
- * link's native menu and preview, as in Safari.
+ * A hold that does something never starts a selection or the callout under
+ * the finger, a link's menu and preview included (`spec:AST-094` FR41,
+ * DEC-9). A text field keeps its selection: a held finger places its caret.
+ * How it is refused differs by engine, because a style change repaints
+ * everything it covers:
+ * - Where iOS WebKit runs (its touch callout query), only `user-select` refuses
+ *   a long-press selection: WebKit fires no `selectstart` for one. It covers
+ *   every held element, inline and refcounted: on the element under the
+ *   finger alone, a long press selected a word beside it (iOS 26.2
+ *   simulator). WebKit's own stylesheet makes every input selectable
+ *   (`-webkit-user-select: text`), out of reach of an ancestor's lock, so a
+ *   checkbox, a radio or a switch's input under the finger is locked too.
+ * - Elsewhere a long press fires `selectstart`, and cancelling it refuses
+ *   the selection with no style write, so nothing repaints (Chromium on
+ *   Android re-rastered a held surface at the touch-down and the lift when
+ *   the style toggled).
  *
- * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts.
+ * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts; the
+ * iOS query matches utils/touchPresentation.ts.
  */
 
 import {isCoarsePointer} from './coarsePointer';
@@ -31,9 +40,6 @@ const SELECTION_LOCK = [
   '-webkit-user-select',
   'user-select',
 ] as const;
-
-/** The same lock where a link's native menu must stay: no callout lock. */
-const LINK_SELECTION_LOCK = ['-webkit-user-select', 'user-select'] as const;
 
 /** Inputs whose text a held finger edits: it places the caret there. */
 const TEXT_ENTRY_TYPES = new Set([
@@ -70,9 +76,9 @@ const locks = new WeakMap<
 >();
 
 /**
- * Turn text selection and the touch callout off on `elements` (and on a
- * non-text input target inside one of them) until the returned function
- * runs; restored when the last holder releases. Idempotent release.
+ * Refuse a selection and the touch callout on `elements` (and on a non-text
+ * input target inside one of them) until the returned function runs, while
+ * any holder holds. Idempotent release.
  */
 export function lockSelection(
   elements: Iterable<Element>,
@@ -85,11 +91,25 @@ export function lockSelection(
   ) {
     set.add(target);
   }
-  // A held finger on a link, or under one, opens its native menu.
-  const names =
-    [...set].some(isLink) || isUnderLink(target)
-      ? LINK_SELECTION_LOCK
-      : SELECTION_LOCK;
+  if (!isIosWebKit()) {
+    const refuse = (event: Event) => {
+      if (!isTextEntry(event.target)) {
+        event.preventDefault();
+      }
+    };
+    for (const element of set) {
+      element.addEventListener('selectstart', refuse);
+    }
+    let isRefusing = true;
+    return () => {
+      if (isRefusing) {
+        isRefusing = false;
+        for (const element of set) {
+          element.removeEventListener('selectstart', refuse);
+        }
+      }
+    };
+  }
   const locked: Element[] = [];
   for (const element of set) {
     const style = styleOf(element);
@@ -104,13 +124,13 @@ export function lockSelection(
     }
     locks.set(element, {
       count: 1,
-      saved: names.map(name => ({
+      saved: SELECTION_LOCK.map(name => ({
         name,
         value: style.getPropertyValue(name),
         priority: style.getPropertyPriority(name),
       })),
     });
-    for (const name of names) {
+    for (const name of SELECTION_LOCK) {
       style.setProperty(name, 'none');
     }
   }
@@ -150,27 +170,41 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
   );
 }
 
-/** A link a held finger opens the native menu of. */
-function isLink(node: unknown): boolean {
+/**
+ * The query only iOS WebKit answers: it alone has the touch callout. The
+ * same as utils/touchPresentation.ts's IOS_SUPPORTS_QUERY, kept here so the
+ * gesture modules import nothing from React.
+ */
+const IOS_SUPPORTS_QUERY = '(-webkit-touch-callout: none)';
+
+/** Whether the engine is iOS WebKit. */
+function isIosWebKit(): boolean {
+  // Not every environment has `CSS.supports` (jsdom has `CSS.escape` only).
   return (
-    node instanceof Element &&
-    (node.localName === 'a' || node.localName === 'area') &&
-    node.hasAttribute('href')
+    typeof CSS !== 'undefined' &&
+    typeof CSS.supports === 'function' &&
+    CSS.supports(IOS_SUPPORTS_QUERY)
   );
 }
 
-/** Whether `target` is a link or inside one, across shadow roots. */
-function isUnderLink(target: EventTarget | null): boolean {
-  for (
-    let current: Node | null = target instanceof Node ? target : null;
-    current != null;
-    current = parentAcrossShadow(current)
-  ) {
-    if (isLink(current)) {
-      return true;
-    }
+/** Text a held finger edits: it places the caret there. */
+function isTextEntry(node: EventTarget | null): boolean {
+  const element =
+    node instanceof Element
+      ? node
+      : node instanceof Node
+        ? node.parentElement
+        : null;
+  if (element == null) {
+    return false;
   }
-  return false;
+  if (element.localName === 'textarea') {
+    return true;
+  }
+  if (element.localName === 'input') {
+    return TEXT_ENTRY_TYPES.has((element as HTMLInputElement).type);
+  }
+  return (element as HTMLElement).isContentEditable;
 }
 
 /** Whether `node` is `ancestor` or inside it, across shadow roots. */
