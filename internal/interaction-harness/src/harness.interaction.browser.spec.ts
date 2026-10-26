@@ -735,6 +735,50 @@ test.describe('frame evidence', () => {
     expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
   });
 
+  test('a waitForAnimation or watch.started() awaited inside a traced body stands down too, so the trace counts no Layout from it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'rendering traces are Chromium-only (README: engine limits)',
+    );
+    await page.route('http://anchored.test/', route =>
+      route.fulfill({contentType: 'text/html', body: ANCHORED}),
+    );
+    await page.goto('http://anchored.test/');
+    const pop = page.locator('#pop');
+    await waitForRest(pop);
+    const watch = await watchAnimations(pop);
+    let started = 0;
+    let waited: {durationMs: number}[] = [];
+    let watched: {durationMs: number}[] = [];
+    const trace = await traceRendering(page, async () => {
+      started = await pop.evaluate(el => {
+        el.animate(
+          [
+            {transform: 'translateY(0px)', opacity: 1},
+            {transform: 'translateY(100px)', opacity: 0.5},
+          ],
+          {duration: 600},
+        );
+        return performance.timeOrigin + performance.now();
+      });
+      // Both poll until 450 ms of the curve has played, across the steady
+      // middle; a read of the page's animations each time would lay it out.
+      waited = await waitForAnimation(pop, {minProgressMs: 450});
+      watched = await watch.started({minProgressMs: 450});
+      await page.waitForTimeout(200);
+    });
+    expect(countBetween(trace, started + 100, started + 500).Layout ?? 0).toBe(
+      0,
+    );
+    // Each still answered with the animation once 450 ms of it had played.
+    expect(waited.map(a => a.durationMs)).toEqual([600]);
+    expect(watched.map(a => a.durationMs)).toEqual([600]);
+    expect(trace.window.to - started).toBeGreaterThanOrEqual(590);
+  });
+
   test('a waitForRest awaited inside a traced body waits for an animation the action starts two frames later', async ({
     page,
     browserName,
