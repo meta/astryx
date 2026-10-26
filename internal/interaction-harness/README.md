@@ -26,7 +26,7 @@ pnpm test:interaction <spec file>         # one spec, both engines
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scripts.ts` | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`. |
 | `touch.ts`   | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                |
-| `curves.ts`  | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `releaseAnimations`.                                                                                                              |
+| `curves.ts`  | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                        |
 | `math.ts`    | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`. |
 | `story.ts`   | `phone`, `withStorybook`, `openStory`, `frames`.                                                                                                                                                                              |
 
@@ -54,13 +54,27 @@ budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 inside it, the last frame it presents, and the sample says so (`presentedAt`,
 where oracles are read). An animation whose keyframes end in a run of
 identical values (an end value held so a later interruption can read it)
-ends where that run starts: `curveEndMs` stops there. That holds for an
-animation that plays forward under a linear or cubic-bézier effect easing (the
-time the run starts is solved from the curve); under any other effect easing
-(steps, `linear()` stops, an overshoot) or another direction the curve is read
-to its full end. `holdAnimations` refuses an animation running backward
-(`reverse()`, a negative playback rate): seeking and sampling run a curve
+ends where that run starts: `curveEndMs` and `waitForAnimation`'s interval
+stop there, and `waitForRest`, which judges the
+presented `transform`, `translate`, `rotate`, `scale` and `opacity` rather
+than `playState`, does not wait the hold out. That holds for an animation that
+plays forward under a linear or cubic-bézier effect easing (the time the run
+starts is solved from the curve); under any other effect easing (steps,
+`linear()` stops, an overshoot) or another direction the curve is read to its
+full end, and `waitForRest` waits the hold out. An animation running backward (`reverse()`, a
+negative playback rate) is reported by `waitForAnimation` from when it
+started, but `holdAnimations` refuses it: seeking and sampling run a curve
 forward.
+
+**Waiting for an animation.** The page records every animation from the first
+call into `curves.ts` on it (and on every later document): a frame loop on the
+page's own `requestAnimationFrame`, the CSS animation and transition events,
+and `Element.animate` as it is called, pending animations included. So
+`waitForAnimation` also reports one that started after the last
+`waitForRest` or `waitForAnimation` and has already finished (`finishedAt`
+set): a short entrance no longer races the first look on a cold page. When the
+action may be the page's first contact with the harness, take
+`watchAnimations(locator)` before it and read `watch.started()` after.
 
 ## Engine limits (measured with Playwright 1.61)
 
