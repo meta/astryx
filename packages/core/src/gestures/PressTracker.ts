@@ -198,6 +198,14 @@ export class PressTracker implements TouchConsumer {
       UIKIT_GESTURES.control.trackingExpansion.value;
   }
 
+  /**
+   * Whether the control takes touches now: a disabled one gives the host no
+   * reason to listen (`spec:AST-094` FR24).
+   */
+  isEnabled(): boolean {
+    return this.options.isEnabled?.() !== false;
+  }
+
   touchBegan(touch: GestureTouch): void {
     if (
       this.touchId != null ||
