@@ -969,6 +969,27 @@ test.describe('animation state', () => {
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
   });
 
+  test('a scroll-timeline animation in scope does not hold up a wait', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const scroller = page.locator('#scroller');
+    await waitForRest(scroller);
+    // A row driven by its scroller's timeline (it moves only on scroll), and
+    // a short document animation that ends.
+    await scroller.evaluate(el => {
+      const [row, other] = [...el.children] as HTMLElement[];
+      row.animate([{opacity: 0.5}, {opacity: 1}], {
+        timeline: new ScrollTimeline({source: el}),
+      });
+      return other.animate([{opacity: 0.2}, {opacity: 1}], {duration: 40})
+        .finished;
+    });
+    const [found] = await waitForAnimation(scroller, {timeout: 2000});
+    expect(found.durationMs).toBe(40);
+    expect(found.finishedAt).not.toBeNull();
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
