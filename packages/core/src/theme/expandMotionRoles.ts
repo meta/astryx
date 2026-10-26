@@ -10,9 +10,9 @@
  * @position Theme utility; consumed by resolveThemeValues for the root theme
  *   and for each adaptation rule
  *
- * A motion role is a spring, duration or curve of a motion table, named by its
- * table path (`springs.sheetPresent`, `springs.navigationPush`,
- * `timing.curves.move`; see motion/roles.ts), and listed in
+ * A motion role is a spring, duration or curve of a motion table, named for
+ * its use (`springs.sheetPresent`, `springs.settle`, `timing.curves.move`;
+ * see motion/roles.ts), and listed in
  * motion/roleKinds.generated.ts. A theme writes a role's CSS
  * variable only when it sets the role; an empty variable means the table's
  * measured value, so a theme never has to restate the defaults.
@@ -135,7 +135,7 @@ export function expandMotionRoles(
       const location = `${path}.${group}["${id}"]`;
       if (!isMotionRoleId(id)) {
         throw new Error(
-          `${location}: a motion role is named by its table path, such as "springs.sheetPresent" or "timing.curves.move".`,
+          `${location}: a motion role is named for its use, such as "springs.sheetPresent", "springs.settle" or "timing.curves.move".`,
         );
       }
       // The generated list, not the runtime registry: the check must not
