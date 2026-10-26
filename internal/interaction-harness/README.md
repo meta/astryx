@@ -33,7 +33,7 @@ under a rootful docker daemon the container runs as your user so its
 node internal/interaction-harness/scripts/webkit-container.mjs [playwright test args…]
 ```
 
-Evidence (storyboards, curve traces, busy-main-thread frames) is written to
+Evidence (storyboards, curve traces) is written to
 `test-results/interaction-evidence/` (override with
 `ASTRYX_INTERACTION_EVIDENCE`) and attached to the test report. It is never
 committed: a pull request links or attaches it.
@@ -104,7 +104,8 @@ action may be the page's first contact with the harness, take
 
 **Busy main thread.** Mark the element, start the screencast, start the
 animation, wait until it runs (`waitForAnimation`: an animation cannot start
-while the thread is held), block the main thread 500–1000 ms, stop. Always
+while the thread is held), block the main thread for 1 s (`spec:AST-094`
+FR5's verification row), stop. Always
 start the gesture or animation first and block mid-flight, never before:
 in headless Chromium a touch that starts while the main thread is busy does
 not scroll or start a gesture even with only passive listeners (the input
