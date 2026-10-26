@@ -219,11 +219,19 @@ function animationRecorder(): void {
     },
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
-    // and it started before the arm. While a trace runs the read stands
-    // down, as record() does.
-    arm: () => {
+    // and it started before the arm. While a trace runs the page-wide read
+    // stands down, as record() does; the watched element's own animations
+    // are still read, which resolves its pending style change. That read
+    // restyles the element (and lays out an anchored one) in the task that
+    // takes the watch, so a traced proof takes its watch before the window
+    // it counts (README: No Layout / Paint).
+    arm: (element?: Element) => {
       if (!tracing()) {
         record();
+      } else if (element != null) {
+        for (const animation of element.getAnimations({subtree: true})) {
+          remember(animation);
+        }
       }
       const newest = log.length === 0 ? 0 : log[log.length - 1].seenAt;
       armedAt = Math.max(performance.now(), newest + 0.001);
@@ -1253,13 +1261,31 @@ export async function waitForAnimation(
   }
 }
 
-/** Marks now as the point later waits count animations from. */
-async function armRecorder(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    (
-      window as unknown as {__harnessAnimations: {arm: () => number}}
-    ).__harnessAnimations.arm(),
-  );
+/**
+ * Marks now as the point later waits count animations from. With a locator,
+ * its element's pending style change is resolved first, also inside a trace
+ * (reached through a handle, which adds no main-thread frame).
+ */
+async function armRecorder(page: Page, locator?: Locator): Promise<number> {
+  const handles = locator == null ? [] : await locator.elementHandles();
+  try {
+    if (handles.length === 1) {
+      return await handles[0].evaluate(element =>
+        (
+          window as unknown as {
+            __harnessAnimations: {arm: (element?: Element) => number};
+          }
+        ).__harnessAnimations.arm(element as Element),
+      );
+    }
+    return await page.evaluate(() =>
+      (
+        window as unknown as {__harnessAnimations: {arm: () => number}}
+      ).__harnessAnimations.arm(),
+    );
+  } finally {
+    await Promise.all(handles.map(handle => handle.dispose()));
+  }
 }
 
 export interface AnimationWatch {
@@ -1277,7 +1303,9 @@ export interface AnimationWatch {
 /**
  * Starts watching `locator`'s element before an action, so the animation the
  * action starts is caught even when it ends before the test looks (a short
- * entrance on a cold page):
+ * entrance on a cold page). Taking the watch reads the element's animations,
+ * which restyles it, inside a rendering trace too: take a traced watch before
+ * the window the proof counts:
  *
  *   const watch = await watchAnimations(sheet);
  *   await driver.play(tap(button));
@@ -1287,7 +1315,7 @@ export async function watchAnimations(
   locator: Locator,
 ): Promise<AnimationWatch> {
   await installCurveEnd(locator.page());
-  const since = await armRecorder(locator.page());
+  const since = await armRecorder(locator.page(), locator);
   return {
     started: options => waitForAnimation(locator, {...options, since}),
   };

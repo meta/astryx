@@ -31,8 +31,9 @@
  *
  * - Fingers begin and end with Touch Events: they are the only cancelable
  *   channel (a pointer event's preventDefault cannot stop a scroll or a
- *   click), they keep arriving after the browser takes a pan (which a scroll
- *   handoff needs), and every event lists all the fingers at once. A
+ *   click), they keep arriving after the browser takes a pan (which a
+ *   watcher following the scroll to the lift needs, `spec:AST-094` FR20,
+ *   DEC-7), and every event lists all the fingers at once. A
  *   finger's movement is sampled from ONE channel: its `pointermove`s, once
  *   its pointerdown has paired with its touchstart (by target and
  *   position), since Chromium sends no `touchmove` until a finger has
@@ -2153,7 +2154,7 @@ export class GestureHost {
       if (id != null) {
         // The pointer channel ends here while the finger keeps moving (the
         // browser scrolls with it): its touch events, now the only channel,
-        // sample it, as a scroll handoff needs.
+        // sample it, as a watcher following the scroll to the lift needs.
         this.pointerFed.delete(id);
         this.browserTook([id], eventTime(event));
       }
@@ -2331,6 +2332,14 @@ export class GestureHost {
         }
       });
     });
+  }
+
+  /**
+   * @internal Whether a recognizer is scrolling `scroller` itself now
+   * (ownScroll): that scroll is not a finger's (fingerScroll.ts reads it).
+   */
+  isOwnScroll(scroller: Node): boolean {
+    return this.ownedScrolls.has(scroller);
   }
 
   private readonly onScroll = (event: Event): void => {

@@ -16,8 +16,10 @@
  *
  * A scroll is a finger's from a scroll event while a finger that landed
  * inside the scroller is down, until the scroller's `scrollend` (the lift
- * starts the momentum, which is still the finger's). A scroll with no
- * finger down is the program's, even right after a tap. No timers. A
+ * starts the momentum, which is still the finger's), or, where the browser
+ * sends no `scrollend`, until a 150 ms fallback after the last scroll event.
+ * A scroll with no finger down, or a recognizer's own scroll, is the
+ * program's, even right after a tap. A
  * component that reacts to the person's scrolling only (a tab bar that
  * minimizes as the page scrolls down) reads this instead of listening to
  * touches itself.
@@ -63,6 +65,8 @@ export function useFingerScroll(
             ),
           };
   });
+  // Synchronizes with the gesture host's finger-scroll watch: unmounting
+  // releases the watch this hook attached.
   useIsomorphicLayoutEffect(
     () => () => {
       attachedRef.current?.detach();
