@@ -13,6 +13,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import {createRef, useState} from 'react';
 import {BottomSheet} from './BottomSheet';
+import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -496,6 +497,28 @@ describe('BottomSheet', () => {
 
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
+  });
+
+  it("the internal Escape gate (Popover's sheet) blocks Escape and the close request, not the scrim or swipe", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheetEscapeContext value={false}>
+        <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+          Content
+        </BottomSheet>
+      </BottomSheetEscapeContext>,
+    );
+    const dialog = screen.getByRole('dialog');
+
+    fireEvent.keyDown(dialog, {key: 'Escape'});
+    fireEvent(dialog, new Event('cancel', {cancelable: true}));
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.click(dialog);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
+    expect(onOpenChange).toHaveBeenCalledTimes(2);
+    expect(onOpenChange).toHaveBeenNthCalledWith(2, false);
   });
 
   it('stays open when a file picker inside it is dismissed, and still closes on its own close request', () => {
