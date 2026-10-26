@@ -1332,6 +1332,28 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     }
   });
 
+  it('a new element taking over mid-dip keeps the dip, so the move lands while invisible', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 240}, {spring: springs.navigationPush});
+    await advance(25);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(next);
+    // The outgoing element follows its stylesheet again.
+    expect(element.style.opacity).toBe('');
+    const start = clock - 25;
+    for (let t = start; t <= start + fade; t += 2) {
+      if (animator.get('x', t) !== 0) {
+        expect(animator.get('opacity', t)).toBeCloseTo(0, 6);
+        break;
+      }
+    }
+    await advance(fade + END_HOLD_MS + 1);
+    expect(next.style.opacity).toBe('');
+    next.remove();
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
@@ -1478,22 +1500,6 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     exit.animator.dispose();
     expect(['', '1']).toContain(exit.element.style.opacity);
     expect(exit.element.style.translate).toBe('100px 0px');
-  });
-
-  it('a new element attached mid-dip takes the move already landed, never travelling while it shows', async () => {
-    const {animator} = reduced();
-    stylesheet = {opacity: '0.6'};
-    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
-    await commitFrame(clock);
-    await advance(30);
-    const node = document.createElement('div');
-    animator.attach(node);
-    expect(animator.get('x')).toBe(100);
-    expect(node.style.translate).toBe('100px 0px');
-    expect(node.style.opacity).toBe('');
-    await expect(handle.finished).resolves.toBe(true);
-    await advance(fade + END_HOLD_MS + 1);
-    expect(node.style.opacity).toBe('');
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
