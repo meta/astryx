@@ -899,7 +899,7 @@ describe('atRest: waiting out every curve', () => {
   });
 });
 
-describe('presentation values, retargeting, velocity (M2, M3)', () => {
+describe('presentation values, retargeting, velocity (spec:AST-094 FR6)', () => {
   it('hands a release velocity to the spring', () => {
     const {animator} = setup();
     animator.set({y: 200});
@@ -999,7 +999,7 @@ describe('presentation values, retargeting, velocity (M2, M3)', () => {
   });
 });
 
-describe('set: direct manipulation (M4)', () => {
+describe('set: direct manipulation', () => {
   it('writes one inline style per move and starts no animation', () => {
     const {animator, element} = setup();
     for (let x = 0; x < 30; x += 3) {
@@ -1116,6 +1116,36 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     // No inline opacity is left behind: the stylesheet owns it again.
     expect(element.style.opacity).toBe('');
     expect(animator.get('opacity')).toBe(1);
+  });
+
+  it('overlapping dips on the stylesheet opacity never leave it pinned inline', async () => {
+    for (const at of ['fading out', 'fading back in'] as const) {
+      const {animator, element} = reduced();
+      stylesheet = {opacity: '0.6'};
+      animator.animate({x: 100}, {spring: springs.navigationPush});
+      await commitFrame(clock);
+      await advance(at === 'fading out' ? fade / 4 : fade / 2 + 20);
+      animator.animate({x: 200}, {spring: springs.navigationPush});
+      await commitFrame(clock);
+      await advance(fade * 2 + END_HOLD_MS + 1);
+      expect(animator.get('x')).toBe(200);
+      // The stylesheet owns opacity again.
+      expect(element.style.opacity).toBe('');
+      expect(animator.get('opacity')).toBe(1);
+    }
+  });
+
+  it('detaching and attaching a new node during a dip lands the move on it (React replacement)', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(50);
+    animator.attach(null);
+    const replacement = document.createElement('div');
+    animator.attach(replacement);
+    expect(animator.get('x')).toBe(100);
+    expect(replacement.style.translate).toBe('100px 0px');
+    await expect(handle.finished).resolves.toBe(true);
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
