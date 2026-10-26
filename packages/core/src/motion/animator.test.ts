@@ -527,6 +527,23 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     expect(animator.get('opacity', start + fade)).toBeCloseTo(1, 9);
   });
 
+  it("a second call's fade re-times the first call's pending jump to its own invisible moment", async () => {
+    const {animator} = reduced();
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await advance(fade / 4);
+    const start = clock;
+    // x still waits for the first dip's bottom; y starts a new dip now.
+    animator.animate({y: 50}, {spring: springs.navigationPush});
+    for (let t = start; t <= start + fade; t += 5) {
+      if (animator.get('x', t) !== 0) {
+        expect(animator.get('opacity', t)).toBeCloseTo(0, 6);
+        break;
+      }
+    }
+    expect(animator.get('x', start + fade / 2)).toBe(100);
+    expect(animator.get('y', start + fade / 2)).toBe(50);
+  });
+
   it('a stop during a dip finishes the fade instead of freezing it', async () => {
     const {animator} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});

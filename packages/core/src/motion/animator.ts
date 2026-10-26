@@ -1014,6 +1014,7 @@ export function createAnimator(
           Math.abs((targets[p] as number) - valueAt(p, time)) > 1e-9,
       );
       const next: Partial<Record<MotionProperty, Segment | null>> = {};
+      const retimed = new Set<MotionProperty>();
       // A fade the call does not name ends where it was heading.
       const opacityTo = targets.opacity ?? finalValue('opacity');
 
@@ -1045,7 +1046,20 @@ export function createAnimator(
         // it shows.
         const isInvisible = opacityNow <= 1e-6;
         const fadesOut = fadeTo <= 1e-6;
-        const dips = travels && !isInvisible && !fadesOut;
+        // An earlier call's travel still waiting for its dip: this call's
+        // fade replaces that dip, so the travel lands at this fade's own
+        // invisible moment instead of while the element shows.
+        const pendingJumps = TRAVEL.filter(property => {
+          if (properties.includes(property)) {
+            return false;
+          }
+          const segment = segments.get(property);
+          return (
+            segment?.steps === true && time < segment.start + segment.duration
+          );
+        });
+        const dips =
+          (travels || pendingJumps.length > 0) && !isInvisible && !fadesOut;
         for (const property of properties) {
           if (!TRAVEL.includes(property)) {
             continue;
@@ -1069,7 +1083,7 @@ export function createAnimator(
             {at: 0, value: opacityNow},
             {at: fade, value: opacityTo},
           ]);
-        } else if (travels) {
+        } else if (dips) {
           next.opacity = fadeSegment(owner, time, [
             {at: 0, value: opacityNow},
             {at: fade / 2, value: 0},
@@ -1077,6 +1091,20 @@ export function createAnimator(
           ]);
         } else if (targets.opacity != null) {
           next.opacity = null; // already there
+        }
+        if (!instant) {
+          const landAt = isInvisible ? 0 : fadesOut ? fade : fade / 2;
+          for (const property of pendingJumps) {
+            retimed.add(property);
+            const segment = segments.get(property) as Segment;
+            next[property] = jumpSegment(
+              segment.owner,
+              time,
+              valueAt(property, time),
+              segment.target,
+              landAt,
+            );
+          }
         }
       } else {
         for (const property of properties) {
@@ -1097,7 +1125,10 @@ export function createAnimator(
         MotionProperty,
         Segment | null,
       ][]) {
-        interrupt(property, time);
+        // A re-timed jump keeps its own call's handle running.
+        if (!retimed.has(property)) {
+          interrupt(property, time);
+        }
         changed.push(property);
         if (segment == null) {
           segments.delete(property);
