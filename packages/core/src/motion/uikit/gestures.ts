@@ -253,8 +253,9 @@ export const UIKIT_VELOCITY = {
    * instantaneous velocity plus the rest times the previous event's
    * (instantaneous velocity: position change over timestamp change between
    * consecutive events, the touch-down counting as the first). The lift
-   * does not update it, and a finger at rest sends no events, so a release
-   * after a pause reports the last moving value.
+   * does not update it, and a finger at rest sends no events, so UIKit
+   * reports the last moving value after a pause; Astryx's release reads 0
+   * once the finger has rested (`spec:AST-100` FR2).
    * @source measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed
    *   with HID touches, Oct 23 2026: fitted to all 69 velocity(in:) values of
    *   six HID streams (constant, accelerating, pauses before the lift) to 0.0
