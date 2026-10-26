@@ -161,8 +161,22 @@ describe('native contracts', () => {
     // `string | boolean`: words, or on (the name) and off.
     expect(avatar!.core.tooltip?.type).toEqual({kind: 'textOrBoolean'});
     expect(avatar!.webOnly.map(prop => prop.name)).toEqual(
-      expect.arrayContaining(['target', 'rel', 'status', 'as']),
+      expect.arrayContaining(['target', 'rel', 'as']),
     );
+  });
+
+  it('gives Avatar a status slot and AvatarStatusDot its variants and label', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const avatar = contracts.find(contract => contract.name === 'Avatar');
+    expect(avatar!.core.status?.type).toEqual({kind: 'content'});
+    const dot = contracts.find(contract => contract.name === 'AvatarStatusDot');
+    expect(dot).toBeDefined();
+    expect(dot!.core.variant?.type).toEqual({
+      kind: 'enum',
+      values: ['success', 'neutral', 'error'],
+    });
+    expect(dot!.core.label?.type).toEqual({kind: 'string'});
+    expect(dot!.webOnly.map(prop => prop.name)).toContain('icon');
   });
 
   it('reports naming and portability errors', () => {
