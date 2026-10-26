@@ -117,20 +117,32 @@ describe('PanGestureRecognizer', () => {
     expect(down.state).toBe('failed');
   });
 
-  it('waits between the lines of an axisRatio above 1, and fails past the diagonal', () => {
-    const begin = createHarness();
+  it('decides by 10 px with an axisRatio above 1: between the lines it fails (spec:AST-094 FR19), on its axis it begins', () => {
+    const between = createHarness();
     const pan = new PanGestureRecognizer({
       name: 'pan',
       direction: 'vertical',
       axisRatio: 2,
     });
-    begin
+    between
       .finger(1)
       .down(0, 0, 0, {recognizers: [pan]})
       .move(8, 12, 16);
-    expect(pan.state).toBe('possible'); // 12 is not more than 2 x 8
-    begin.finger(1).move(8, 17, 32);
-    expect(pan.state).toBe('began'); // 17 > 16
+    // 12 is not more than 2 x 8, and not less than 8: undecided past 10 px.
+    expect(pan.state).toBe('failed');
+    expect(between.claims).toEqual([]);
+
+    const along = createHarness();
+    const steep = new PanGestureRecognizer({
+      name: 'steep',
+      direction: 'vertical',
+      axisRatio: 2,
+    });
+    along
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [steep]})
+      .move(4, 12, 16);
+    expect(steep.state).toBe('began'); // 12 > 2 x 4
 
     const diagonal = createHarness();
     const side = new PanGestureRecognizer({

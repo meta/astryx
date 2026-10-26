@@ -122,6 +122,55 @@ const groups = [
       'Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.',
     headers: ['Token', 'Light', 'Dark'],
     formatRow: lightDarkRow,
+    // One line per status role (architecture:theme-tokens INV11), so a reader
+    // picks the token by the surface it sits on.
+    extraContent: [
+      {
+        type: 'prose',
+        text: 'Status roles: pick the token by the surface. `<status>` is info, success, warning, or error.',
+      },
+      {
+        type: 'table',
+        headers: ['Status role', 'Use it for', 'Pairs with'],
+        rows: [
+          [
+            '--color-text-<status>',
+            'Status text on the page or a card (4.5:1 or more).',
+            '—',
+          ],
+          [
+            '--color-icon-<status>',
+            'Status icons on the page or a card. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-border-<status>',
+            'Status borders on the page or a card, such as an invalid field. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-<status>',
+            'Strong status fill, such as a Badge or StatusDot.',
+            '--color-on-<status>',
+          ],
+          [
+            '--color-on-<status>',
+            'Text and icons on the strong fill (4.5:1 or more).',
+            '--color-<status>',
+          ],
+          [
+            '--color-<status>-muted',
+            'Pale status fill, such as a Banner.',
+            '--color-on-<status>-muted',
+          ],
+          [
+            '--color-on-<status>-muted',
+            'Text and icons on the pale fill (4.5:1 or more).',
+            '--color-<status>-muted',
+          ],
+        ],
+      },
+    ],
   },
   {
     key: 'data',
@@ -285,6 +334,7 @@ for (const group of groups) {
   /** @type {import('@astryxdesign/cli/authoring').ReferenceContentBlock[]} */
   const content = [
     {type: 'prose', text: group.description},
+    ...(group.extraContent ?? []),
     {type: 'table', headers: group.headers, rows},
   ];
 
