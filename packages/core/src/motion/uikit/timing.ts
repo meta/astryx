@@ -220,6 +220,15 @@ export function registerTimingTable(): void {
       'curves.easeOut': 'curves.entrance',
       'curves.easeInOut': 'curves.move',
     },
+    // The motion roles: only the ones spec:AST-094 FR4 names. The press
+    // clocks and every other value are internal measured constants.
+    roles: [
+      'stateChangeMs',
+      'curves.viewChange',
+      'curves.exit',
+      'curves.entrance',
+      'curves.move',
+    ],
   });
 }
 

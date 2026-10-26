@@ -12,14 +12,15 @@
  *
  * A motion role is one value of a motion table that a theme may retune: a
  * spring, a duration (a key ending in `Ms`, in milliseconds) or a curve (four
- * cubic-bézier control points). It is named for its use (`spec:AST-094` FR4):
- * by its table path, for example `springs.sheetDetent` or `scroll.bounce`,
- * unless the table renames it, as the shared tables do for the roles FR4
- * names (`springs.settle` for SwiftUI's `.smooth`, `timing.curves.move` for
- * UIKit's ease-in-out). It is carried by one CSS custom property, `--motion-`
- * followed by the role id in kebab case (`--motion-springs-sheet-detent`). A theme writes that property
- * only for the roles it sets; an empty property means the table's value, so
- * the table stays the one measured source of every default.
+ * cubic-bézier control points). The roles are the ones `spec:AST-094` FR4
+ * names, each by its table path, such as `springs.settle` or
+ * `timing.curves.move`: a table lists its roles when it registers, and every
+ * other value, a component's measured spring included, stays an internal
+ * constant that no theme reaches.
+ * A role is carried by one CSS custom property, `--motion-` followed by its id
+ * in kebab case (`--motion-springs-settle`). A theme writes that property only
+ * for the roles it sets; an empty property means the table's value, so the
+ * table stays the one measured source of every default.
  *
  * Gesture thresholds, the velocity filter, the timings that decide who gets a
  * touch and haptics are not motion: they are not roles (tables leave them out
@@ -66,8 +67,9 @@ const pathOfGroup = new WeakMap<object, string>();
 const roleIdOfPath = new Map<string, string>();
 
 /**
- * Registers a motion table: each spring, `…Ms` duration and curve leaf becomes
- * a role named by its path under `id`. A leaf object the table shares between
+ * Registers a motion table: each spring, `…Ms` duration and curve leaf that
+ * `roles` lists (its role name, relative to the table) becomes a role named
+ * by its path under `id`; the table's other values stay internal constants. A leaf object the table shares between
  * two keys is replaced in the table by an equal copy, so each role has its own
  * object (an animator resolves a role from the object it is handed).
  * `exclude` lists paths, relative to the table, that are not motion;
@@ -80,9 +82,11 @@ export function registerMotionTable(
   id: string,
   table: object,
   {
+    roles = [],
     exclude = [],
     rename = {},
   }: {
+    roles?: ReadonlyArray<string>;
     exclude?: ReadonlyArray<string>;
     rename?: Readonly<Record<string, string>>;
   } = {},
@@ -97,6 +101,7 @@ export function registerMotionTable(
   }
   tablesById.set(id, table);
   const skip = new Set(exclude.map(path => `${id}.${path}`));
+  const listed = new Set(roles.map(name => `${id}.${name}`));
   const walk = (group: Record<string, unknown>, prefix: string) => {
     pathOfGroup.set(group, prefix);
     for (const [key, value] of Object.entries(group)) {
@@ -124,6 +129,10 @@ export function registerMotionTable(
       }
       const relative = path.slice(id.length + 1);
       const roleId = relative in rename ? `${id}.${rename[relative]}` : path;
+      // Only the roles the table lists; every other value stays internal.
+      if (!listed.has(roleId)) {
+        continue;
+      }
       if (roleId !== path) {
         roleIdOfPath.set(path, roleId);
       }

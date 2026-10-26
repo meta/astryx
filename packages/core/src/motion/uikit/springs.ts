@@ -394,5 +394,21 @@ export function registerSpringsTable(): void {
       swiftUIDefault: 'stateChange',
       swiftUISpring: 'directChange',
     },
+    // The motion roles: only the ones spec:AST-094 FR4 names. Every other
+    // spring here is a component's measured value, internal to it.
+    roles: [
+      'fingerTracking',
+      'emphasis',
+      'settle',
+      'quickChange',
+      'viewChange',
+      'timedChange',
+      'stateChange',
+      'directChange',
+      'menuOpen',
+      'menuClose',
+      'subMenuOpen',
+      'subMenuBack',
+    ],
   });
 }

@@ -259,8 +259,8 @@ export interface DefineThemeInput {
    * // A softer sheet, and a longer navigation transition (it paces
    * // completion callbacks):
    * motion: {
-   *   springs: { 'springs.sheetPresent': { duration: 0.6, bounce: 0.1 } },
-   *   durations: { 'navigation.transitionMs': 450 },
+   *   springs: { 'springs.settle': { duration: 0.6, bounce: 0.1 } },
+   *   durations: { 'timing.stateChangeMs': 450 },
    * }
    * ```
    */
