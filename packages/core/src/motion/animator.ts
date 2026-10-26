@@ -145,11 +145,7 @@
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {reducedMotionCrossFade} from './uikit/timing';
-import {
-  planReducedMotion,
-  TRAVEL_PROPERTIES,
-  type ReducedMotionView,
-} from './reducedMotionPlan';
+import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
 
 /**
  * A value the animator can drive.
@@ -530,8 +526,6 @@ const RETIRE_RECHECK_MS = 100;
 
 /** How long an element stays promoted after its last motion, ms. */
 export const PROMOTION_LINGER_MS = 500;
-
-const TRAVEL = TRAVEL_PROPERTIES;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
