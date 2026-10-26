@@ -295,6 +295,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   protected override reset(): void {
+    this.isClaimCommitted = false;
     this.lockedAxis = null;
     this.travelAtBegan = ZERO;
     this.origin = ZERO;
@@ -355,7 +356,8 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * or wait for more movement (see `axisRatio`).
    */
   protected classify(translation: Point): 'begin' | 'fail' | 'wait' {
-    if (this.direction === 'any') {
+    if (this.direction === 'any' || this.isClaimCommitted) {
+      // A pan that committed to its touch begins whichever way it goes.
       return 'begin';
     }
     const isHorizontal =
