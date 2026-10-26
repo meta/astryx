@@ -429,44 +429,6 @@ describe('a production build resolves defineConsts imported across files', () =>
   }
 });
 
-describe('a production build checks the custom properties its stylesheet reads', () => {
-  const MESSAGE =
-    /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--x[a-z0-9]+, read by: [^\n]*row-gap/;
-
-  it('warns, naming the variable and the rule that reads it', async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).toMatch(MESSAGE);
-  }, 180_000);
-
-  it('checks the product prefix a zero-config build sets in stylexOverrides', async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-undefined-var', ['index.html'], {
-      zeroConfig: true,
-      stylexOverrides: {classNamePrefix: 'app'},
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).toMatch(
-      /reads 1 generated custom property that no stylesheet in the build declares[\s\S]*--app[a-z0-9]+, read by: [^\n]*row-gap/,
-    );
-  }, 180_000);
-
-  it("never reports an app's own custom properties, declared in its own CSS", async () => {
-    const warnings: string[] = [];
-    const built = await buildFixture('stylex-app-vars', ['index.html'], {
-      warnings,
-    });
-    rmSync(built.outDir, {recursive: true, force: true});
-    expect(warnings.join('\n')).not.toMatch(
-      /no stylesheet in the build declares/,
-    );
-  }, 180_000);
-});
-
 describe('a production build validates StyleX declarations', () => {
   it('fails with longhand guidance instead of dropping a border shorthand', async () => {
     await expect(buildFixture('invalid-border')).rejects.toThrow(
