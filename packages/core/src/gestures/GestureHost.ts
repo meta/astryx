@@ -3,10 +3,9 @@
 /**
  * @file GestureHost.ts
  * @input DOM touch, pointer, click, contextmenu, scroll and focus events of
- *   one document; elements with recognizers and consumers attached, and
- *   consumer types found by attribute
- * @output Exports GestureHost (the DOM side of the gesture system),
- *   getGestureHost (one host per document) and the delegated consumer type
+ *   one document; elements with recognizers and consumers attached
+ * @output Exports GestureHost (the DOM side of the gesture system) and
+ *   getGestureHost (one host per document)
  * @position Browser adapter of packages/core/src/gestures: turns real events
  *   into GestureArena input, and carries out what the arena decides
  *
@@ -149,21 +148,6 @@ export interface AttachOptions {
   manageStyle?: boolean;
 }
 
-/**
- * A kind of view-level consumer found by attribute instead of attached to
- * each element.
- */
-export interface DelegatedConsumerType {
-  /** Marks an element as this kind of consumer. */
-  readonly attribute: string;
-  /**
-   * The consumer for one contact on `element`, or null for none (a disabled
-   * control). The innermost marked element decides, even with null: a press
-   * on a disabled button does not light the row around it.
-   */
-  create(element: Element, pointerType: PointerKind): TouchConsumer | null;
-}
-
 const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
   touchAction: 'touch-action',
   WebkitTouchCallout: '-webkit-touch-callout',
@@ -234,7 +218,6 @@ export class GestureHost {
   readonly arena: GestureArena;
   private readonly doc: Document;
   private readonly registry = new Map<Element, Registration>();
-  private readonly delegated = new Set<DelegatedConsumerType>();
   /** The selection lock each contact holds, by host contact id. */
   private readonly lockedBy = new Map<number, () => void>();
   /** Touch.identifier → arena id, for live fingers. */
@@ -306,11 +289,24 @@ export class GestureHost {
       onTransition: options.onTransition,
     });
     const view = doc.defaultView;
+    const coarseQuery =
+      options.isPrimaryPointerCoarse == null &&
+      typeof view?.matchMedia === 'function'
+        ? view.matchMedia('(pointer: coarse)')
+        : null;
     this.isPrimaryPointerCoarse =
-      options.isPrimaryPointerCoarse ??
-      (() =>
-        typeof view?.matchMedia === 'function' &&
-        view.matchMedia('(pointer: coarse)').matches);
+      options.isPrimaryPointerCoarse ?? (() => coarseQuery?.matches ?? false);
+    // The primary pointer can change (a tablet's keyboard attached or
+    // removed): styles and listeners follow it.
+    coarseQuery?.addEventListener?.('change', () => this.refreshAll());
+  }
+
+  /** Re-derive every element's styles and the host's listeners. */
+  private refreshAll(): void {
+    for (const [element, registration] of this.registry) {
+      this.refresh(element, registration);
+    }
+    this.syncListeners();
   }
 
   // --- Attachment ------------------------------------------------------------
@@ -368,19 +364,6 @@ export class GestureHost {
         registration.consumer = null;
       }
       this.cleanup(element, registration);
-    };
-  }
-
-  /**
-   * Find consumers of a kind by attribute, one instance per contact. Returns
-   * the function that stops it.
-   */
-  addDelegatedConsumer(type: DelegatedConsumerType): () => void {
-    this.delegated.add(type);
-    this.syncListeners();
-    return () => {
-      this.delegated.delete(type);
-      this.syncListeners();
     };
   }
 
@@ -471,7 +454,13 @@ export class GestureHost {
   }
 
   private applyStyle(element: HTMLElement, registration: Registration): void {
-    const style = gestureHostStyle(registration.recognizers);
+    // Where the primary pointer is fine, or no attached recognizer is
+    // enabled, the host manages no style: the element keeps its own
+    // touch-action (spec:AST-094 FR19); any value set before is restored.
+    // A disabled recognizer leaves the browser everything too.
+    const style: GestureHostStyle = this.isPrimaryPointerCoarse()
+      ? gestureHostStyle(registration.recognizers.filter(r => r.isEnabled))
+      : {};
     for (const key of Object.keys(
       STYLE_PROPERTIES,
     ) as (keyof GestureHostStyle)[]) {
@@ -521,8 +510,7 @@ export class GestureHost {
 
   /**
    * Listen only while something could take a touch: the primary pointer is
-   * coarse and an enabled recognizer, a consumer or a delegated consumer is
-   * attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
+   * coarse and an enabled recognizer or an enabled consumer is attached (`spec:AST-094` FR19, FR24). Otherwise no document listener is
    * registered, so a desktop page pays nothing.
    */
   private syncListeners(): void {
@@ -536,9 +524,6 @@ export class GestureHost {
   private shouldListen(): boolean {
     if (!this.isPrimaryPointerCoarse()) {
       return false;
-    }
-    if (this.delegated.size > 0) {
-      return true;
     }
     for (const registration of this.registry.values()) {
       if (
@@ -619,7 +604,7 @@ export class GestureHost {
   /**
    * The recognizers on the path from `target` to the document, innermost
    * first, and (for a contact) its consumer: the innermost element with an
-   * attached consumer or a delegated consumer type's attribute.
+   * attached consumer.
    */
   private participantsAt(
     target: unknown,
@@ -653,13 +638,6 @@ export class GestureHost {
         consumer = registration.consumer;
         hasConsumerOwner = true;
         continue;
-      }
-      for (const type of this.delegated) {
-        if (node.hasAttribute(type.attribute)) {
-          consumer = type.create(node, pointerType);
-          hasConsumerOwner = true;
-          break;
-        }
       }
     }
     return {recognizers, consumer, hovers};
