@@ -7,6 +7,10 @@ import {createRef} from 'react';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
 import type {DiffViewerLineRef} from './diffTypes';
+import {createDiffFile} from './createDiffFile';
+import {dockerfile} from '@astryxdesign/core/CodeBlock/languages/dockerfile';
+import {graphql} from '@astryxdesign/core/CodeBlock/languages/graphql';
+import {createCodeLanguage} from '@astryxdesign/core/CodeBlock';
 
 const PATCH = `diff --git a/src/greet.ts b/src/greet.ts
 --- a/src/greet.ts
@@ -70,6 +74,73 @@ describe('DiffViewer', () => {
     expect(removed?.textContent).toBe("  return 'Hello ' + name;");
     // ts inferred from the extension: tokens are painted with span classes.
     expect(container.querySelector('.astryx-token-keyword')).not.toBeNull();
+  });
+
+  describe('language values (CodeBlock FR13)', () => {
+    const keywords = (root: ParentNode) =>
+      Array.from(root.querySelectorAll('.astryx-token-keyword')).map(
+        node => node.textContent,
+      );
+    const schema = createDiffFile({
+      oldValue: 'type User {}\n',
+      newValue: 'type User { name: String }\n',
+      newPath: 'api/schema.graphql',
+    });
+
+    it('takes a language value as language', () => {
+      const plain = render(<DiffViewer file={schema} language="graphql" />);
+      expect(keywords(plain.container)).toEqual([]);
+      const {container} = render(
+        <DiffViewer file={schema} language={graphql} />,
+      );
+      expect(keywords(container)).toContain('type');
+    });
+
+    it('infers a listed value from the file extension or name', () => {
+      const unlisted = render(<DiffViewer file={schema} />);
+      expect(keywords(unlisted.container)).toEqual([]);
+      const listed = render(
+        <DiffViewer file={schema} codeLanguages={[dockerfile, graphql]} />,
+      );
+      expect(keywords(listed.container)).toContain('type');
+      const docker = createDiffFile({
+        oldValue: 'FROM node:20\n',
+        newValue: 'FROM node:22\n',
+        newPath: 'Dockerfile',
+      });
+      const byName = render(
+        <DiffViewer file={docker} codeLanguages={[graphql, dockerfile]} />,
+      );
+      expect(keywords(byName.container)).toContain('FROM');
+    });
+
+    it('infers a custom language from its extension', () => {
+      const zig = createCodeLanguage({
+        name: 'zig',
+        identifiers: ['zig'],
+        fileExtensions: ['zig'],
+        tokenize: () => [{type: 'keyword', start: 0, end: 3}],
+      });
+      const file = createDiffFile({
+        oldValue: 'pub a\n',
+        newValue: 'pub b\n',
+        newPath: 'src/main.zig',
+      });
+      const {container} = render(
+        <DiffViewer file={file} codeLanguages={[zig]} />,
+      );
+      expect(keywords(container)).toContain('pub');
+    });
+
+    it('infers the newer built-ins from their extensions', () => {
+      const rust = createDiffFile({
+        oldValue: 'fn a() {}\n',
+        newValue: 'fn b() {}\n',
+        newPath: 'src/lib.rs',
+      });
+      const {container} = render(<DiffViewer file={rust} />);
+      expect(keywords(container)).toContain('fn');
+    });
   });
 
   it('marks changed lines for assistive technology', () => {
