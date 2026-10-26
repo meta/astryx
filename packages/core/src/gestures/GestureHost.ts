@@ -377,6 +377,14 @@ export class GestureHost {
   private readonly perEventRecognizers = new Set<GestureRecognizer>();
   /** Press consumers attached with `perEventPointer`: active on any pointer. */
   private readonly perEventConsumers = new Set<TouchConsumer>();
+  /**
+   * Where the primary pointer is fine: the elements of enabled
+   * perEventPointer press trackers, which listen for a finger's press
+   * themselves, and whether such a press is in progress (the host's document
+   * and window listeners last only that long).
+   */
+  private readonly armedElements = new Map<Element, () => void>();
+  private isArmedPress = false;
   private readonly inputMode: 'auto' | 'pointer-events';
   private usesTouchEvents = true;
   private swallowDeadline = Number.NEGATIVE_INFINITY;
@@ -836,11 +844,103 @@ export class GestureHost {
    * disabled control pay nothing.
    */
   private syncListeners(): void {
+    this.syncArmed();
     if (this.shouldListen()) {
       this.install();
     } else {
       this.uninstall();
     }
+  }
+
+  /**
+   * Where the primary pointer is fine, an enabled perEventPointer press
+   * tracker's element listens for a finger's press itself (passive, on the
+   * element only): the host's document and window listeners are added at
+   * that press's start and removed at its end, so an idle tracker leaves
+   * none (spec:AST-094 FR19's exception, for a press's feedback only).
+   */
+  private syncArmed(): void {
+    const wanted = new Set<Element>();
+    if (!this.isCoarse) {
+      for (const [element, registration] of this.registry) {
+        const consumer = registration.consumer;
+        if (
+          consumer != null &&
+          this.perEventConsumers.has(consumer) &&
+          consumer.isEnabled?.() !== false
+        ) {
+          wanted.add(element);
+        }
+      }
+    }
+    for (const [element, release] of this.armedElements) {
+      if (!wanted.has(element)) {
+        release();
+        this.armedElements.delete(element);
+      }
+    }
+    for (const element of wanted) {
+      if (this.armedElements.has(element)) {
+        continue;
+      }
+      element.addEventListener(
+        'touchstart',
+        this.onArmedPress,
+        PASSIVE_CAPTURE,
+      );
+      element.addEventListener(
+        'pointerdown',
+        this.onArmedPress,
+        PASSIVE_CAPTURE,
+      );
+      this.armedElements.set(element, () => {
+        element.removeEventListener(
+          'touchstart',
+          this.onArmedPress,
+          PASSIVE_CAPTURE,
+        );
+        element.removeEventListener(
+          'pointerdown',
+          this.onArmedPress,
+          PASSIVE_CAPTURE,
+        );
+      });
+    }
+    if (wanted.size === 0) {
+      this.isArmedPress = false;
+    }
+  }
+
+  /** A finger's press on an armed element: listen for this press. */
+  private readonly onArmedPress = (event: Event): void => {
+    if (
+      this.isInstalled ||
+      (event.type === 'pointerdown' &&
+        (event as PointerEvent).pointerType !== 'touch')
+    ) {
+      return;
+    }
+    this.isArmedPress = true;
+    this.install();
+    // The document's capture phase is over for this event: hand it on.
+    if (event.type === 'touchstart') {
+      this.onTouchStart(event as TouchEvent);
+    } else {
+      this.onPointerDown(event as PointerEvent);
+    }
+  };
+
+  /** After a contact ends: an armed press that is over stops listening. */
+  private releaseArmedPress(): void {
+    if (!this.isArmedPress) {
+      return;
+    }
+    queueMicrotask(() => {
+      if (this.isArmedPress && this.arena.touches.length === 0) {
+        this.isArmedPress = false;
+        this.syncListeners();
+      }
+    });
   }
 
   /** With nothing attached, stop listening and stop following the pointer. */
@@ -904,12 +1004,22 @@ export class GestureHost {
     if (this.retainers > 0) {
       return true;
     }
+    let isArmed = false;
     for (const registration of this.registry.values()) {
       const consumer = registration.consumer;
       if (
-        (consumer != null &&
-          consumer.isEnabled?.() !== false &&
-          this.isConsumerActive(consumer)) ||
+        consumer != null &&
+        consumer.isEnabled?.() !== false &&
+        this.isConsumerActive(consumer)
+      ) {
+        if (this.isCoarse) {
+          return true;
+        }
+        // A perEventPointer press tracker where the pointer is fine: only
+        // while a press it armed is in progress (syncArmed).
+        isArmed = true;
+      }
+      if (
         registration.recognizers.some(
           recognizer => recognizer.isEnabled && this.isActive(recognizer),
         ) ||
@@ -918,7 +1028,7 @@ export class GestureHost {
         return true;
       }
     }
-    return false;
+    return isArmed && this.isArmedPress;
   }
 
   // --- Listeners -------------------------------------------------------------
@@ -1350,6 +1460,7 @@ export class GestureHost {
   }
 
   private readonly onTouchEnd = (event: TouchEvent): void => {
+    this.releaseArmedPress();
     this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
@@ -1381,6 +1492,7 @@ export class GestureHost {
   };
 
   private readonly onTouchCancel = (event: TouchEvent): void => {
+    this.releaseArmedPress();
     this.noteFingersDown(event);
     if (!this.takeEvent(event)) {
       return;
@@ -1696,6 +1808,7 @@ export class GestureHost {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       // The lift itself is the touchend's: it alone can cancel the click.
       this.fingerPointers.delete(event.pointerId);
@@ -1717,6 +1830,7 @@ export class GestureHost {
   };
 
   private readonly onPointerCancel = (event: PointerEvent): void => {
+    this.releaseArmedPress();
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       const id =
         this.fingerPointers.get(event.pointerId) ??
