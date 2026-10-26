@@ -3,7 +3,7 @@
 /**
  * @file lift.test.ts
  * @input vitest (jsdom), the lift, stand-ins for the popover API and for
- *   layout (jsdom has neither) and a spy on the presentation hold
+ *   layout (jsdom has neither) and a spy on the input hold
  * @output Checks the lift's bookkeeping in the page: while up it adds the
  *   layer and one placeholder whatever the source holds, and nothing at
  *   rest; the source keeps its place among its siblings; a drop or an
@@ -16,15 +16,15 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import * as presentationHold from '../Layer/presentationHold';
+import * as inputHold from '../Layer/inputHold';
 import {createLift, type LiftOptions} from './lift';
 
-vi.mock('../Layer/presentationHold', async importOriginal => ({
-  ...(await importOriginal<typeof presentationHold>()),
-  holdPresentation: vi.fn(() => () => {}),
+vi.mock('../Layer/inputHold', async importOriginal => ({
+  ...(await importOriginal<typeof inputHold>()),
+  holdInput: vi.fn(() => () => {}),
 }));
 
-const {holdPresentation} = presentationHold;
+const {holdInput} = inputHold;
 
 const SPRING = {response: 0.3, dampingRatio: 1};
 
@@ -171,7 +171,7 @@ beforeEach(() => {
       realRemove(type, listener, opts);
     },
   );
-  vi.mocked(holdPresentation).mockClear();
+  vi.mocked(holdInput).mockClear();
 });
 
 afterEach(() => {
@@ -362,21 +362,21 @@ describe('lift', () => {
     const lift = createLift();
     lift.lift(source, options());
     const layer = document.querySelector('[data-test-lift]');
-    expect(vi.mocked(holdPresentation)).toHaveBeenLastCalledWith(layer, {
+    expect(vi.mocked(holdInput)).toHaveBeenLastCalledWith(layer, {
       scope: 'viewport',
       until: expect.any(Promise),
     });
-    vi.mocked(holdPresentation).mockClear();
+    vi.mocked(holdInput).mockClear();
     lift.presentSurface(
       menu.querySelector<HTMLElement>('[role="menu"]') as HTMLElement,
       {x: 180, y: 330},
     );
-    expect(vi.mocked(holdPresentation)).toHaveBeenLastCalledWith(layer, {
+    expect(vi.mocked(holdInput)).toHaveBeenLastCalledWith(layer, {
       scope: 'viewport',
       until: expect.any(Promise),
     });
     lift.drop();
-    expect(vi.mocked(holdPresentation)).toHaveBeenLastCalledWith(layer, {
+    expect(vi.mocked(holdInput)).toHaveBeenLastCalledWith(layer, {
       scope: 'layer',
       until: expect.any(Promise),
     });

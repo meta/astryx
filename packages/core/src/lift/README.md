@@ -9,8 +9,8 @@ default, and any surface that lifts uses this module, never a copy of it.
 Nothing here is exported from the package entry point; components import it
 by path.
 
-Layer stays generic. The top layer, dismissal, the presentation hold
-(`Layer/presentationHold.ts`) and the shared exit copy
+Layer stays generic. The top layer, dismissal, the input hold
+(`Layer/inputHold.ts`) and the shared exit copy
 (`Layer/layerExitCopy.ts`) belong to Layer; the lift only uses them. Its
 motion is the rect morph's (`motion/rectMorph.ts`), and its springs, scale
 rule and gap are the caller's own.
@@ -26,7 +26,7 @@ is the tint); the shadow, a box in the layer that follows the trigger on a
 rect morph of its own (an animated `::backdrop` of the trigger would restyle
 and lay out the page on every frame); an empty box at the lifted rect for
 the surface to be placed against (anchor positioning follows transforms, so
-a box inside the trigger would move with it); and the placeholder. The presentation hold's shield joins while the lift grows and
+a box inside the trigger would move with it); and the placeholder. The input hold's shield joins while the lift grows and
 while it closes: never more than five (`spec:AST-017` FR60, DEC-29). The
 exit copy the surface shrinks on is the layer runtime's transient copy. At
 rest there is nothing.

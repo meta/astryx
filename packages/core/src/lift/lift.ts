@@ -7,7 +7,7 @@
  * @input An element to lift (the source) and, beside it, a surface that
  *   grows out of the press (a menu's popover); the caller's springs, scale
  *   rule and tint; the rect morph
- *   (motion/rectMorph.ts); the layer runtime's presentation hold, exit copy,
+ *   (motion/rectMorph.ts); the layer runtime's input hold, exit copy,
  *   viewport gutter and declared inset
  * @output Exports createLift: lift a source out of the page above a tinted
  *   backdrop, grow a surface out of the press beside it, shrink the surface
@@ -15,7 +15,7 @@
  * @position The one lift-from-trigger presentation, internal to core and
  *   opt-in: only a surface that chooses it uses it (ContextMenu's touch
  *   invocation today). Layer stays generic: the top layer, dismissal, the
- *   presentation hold and the shared exit copy are its; this module only
+ *   input hold and the shared exit copy are its; this module only
  *   uses them
  *
  * UIKit's context menu lifts the long-pressed view out of the page: it grows
@@ -52,7 +52,7 @@
  * its own along the same path; the tint as a spring-sampled Web Animation of
  * the layer's `::backdrop`. A tap or
  * a drag that lands while the lift and the surface grow reaches nothing
- * (the presentation hold, FR35); the close holds the layer until the source
+ * (the input hold, FR35); the close holds the layer until the source
  * is back, the surface's exit is done and every press on the layer has
  * lifted. Its timers and document listeners end with it (FR24). Reduce
  * Motion is the animator's (design:reduced-motion): opacity only.
@@ -66,7 +66,7 @@ import type {LayerInset} from '../Layer/LayerContext';
 import {placeLayerExitCopy} from '../Layer/layerExitCopy';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
-import {holdPresentation} from '../Layer/presentationHold';
+import {holdInput} from '../Layer/inputHold';
 import type {MotionHandle} from '../motion/animator';
 import {progressCurve} from '../motion/progress';
 import {
@@ -1009,7 +1009,7 @@ export function createLift(): Lift {
     // No touch reaches the layer, or anything under it, while the source
     // grows (spec:AST-094 FR35); a surface extends the hold to its own
     // growth.
-    current.releaseGrowHold = holdPresentation(layer, {
+    current.releaseGrowHold = holdInput(layer, {
       scope: 'viewport',
       until: growing.finished,
     });
@@ -1025,7 +1025,7 @@ export function createLift(): Lift {
   ) => {
     releaseGrowHold(current);
     const until = Promise.all([current.growing.finished, surfaceSettled]);
-    current.releaseGrowHold = holdPresentation(current.layer, {
+    current.releaseGrowHold = holdInput(current.layer, {
       scope: 'viewport',
       until,
     });
@@ -1245,7 +1245,7 @@ export function createLift(): Lift {
     // layer has lifted.
     const ended = settled.then(async () => current.untilPointersLift());
     current.releaseHold?.();
-    current.releaseHold = holdPresentation(layer, {
+    current.releaseHold = holdInput(layer, {
       scope: 'layer',
       until: ended,
     });
