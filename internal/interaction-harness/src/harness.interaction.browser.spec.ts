@@ -981,6 +981,17 @@ test.describe('frame evidence', () => {
     expect(ended.every(a => a.finishedAt != null)).toBe(true);
   });
 
+  test('the long-task log fails closed when it never ran on the document', async ({
+    page,
+  }) => {
+    // No installLongTaskLog before navigating: an empty answer would read as
+    // "no long task", so it throws instead.
+    await fixture(page);
+    await expect(readLongTasks(page)).rejects.toThrow(
+      /not running on this document/,
+    );
+  });
+
   test("the long-task log records the page's own long task but not a DevTools evaluate, which the trace reports apart", async ({
     page,
     browserName,
@@ -1985,6 +1996,28 @@ test.describe('animation state', () => {
     await expect(watch.started({timeout: 200})).rejects.toThrow(
       /waitForAnimation/,
     );
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('inside a rendering trace too, a watch taken right after a style change does not report that change', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    await fixture(page);
+    const box = page.locator('#box');
+    await waitForRest(box);
+    await traceRendering(page, async () => {
+      // The step: a transition the next style read creates.
+      await box.evaluate(el => {
+        el.style.transition = 'opacity 300ms linear';
+        el.style.opacity = '0.5';
+      });
+      const watch = await watchAnimations(box);
+      await expect(watch.started({timeout: 200})).rejects.toThrow(
+        /waitForAnimation/,
+      );
+    });
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
   });
 
