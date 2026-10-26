@@ -981,7 +981,7 @@ test.describe('frame evidence', () => {
     expect(await readLongTasks(page, block)).toEqual([]);
   });
 
-  test("a harness read inside a trace is not the page's long task, while page script an evaluate sets off is", async ({
+  test("a harness read inside a trace is not the page's long task, while a test's own evaluate is, whether it calls the page directly or sets it off", async ({
     page,
     browserName,
   }) => {
@@ -1007,16 +1007,32 @@ test.describe('frame evidence', () => {
         }
       }),
     );
+    // Page code a test can call directly, as through a story's own API.
+    await page.evaluate(() => {
+      (window as unknown as {pageWork: (ms: number) => void}).pageWork = (
+        ms: number,
+      ) => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) {
+          // spin
+        }
+      };
+    });
     await frames(page, 3);
     const now = () =>
       page.evaluate(() => performance.timeOrigin + performance.now());
     const read = {from: 0, to: 0};
     const click = {from: 0, to: 0};
+    const direct = {from: 0, to: 0};
     let timer = {from: 0, to: 0};
     const trace = await traceRendering(page, async () => {
       read.from = await now();
       await waitForAnimation(page.locator('#list'));
       read.to = await now();
+      // On a slow machine each frame of 1,200 running rows is a long task of
+      // the page's own; the windows below hold only their own work.
+      await page.evaluate(() => document.getElementById('list')?.remove());
+      await frames(page, 2);
       // The page's own task: a timer that spins 60 ms.
       timer = await page.evaluate(
         () =>
@@ -1035,17 +1051,28 @@ test.describe('frame evidence', () => {
       click.from = await now();
       await slow.evaluate(el => (el as HTMLElement).click());
       click.to = await now();
+      // Page code a test's evaluate calls directly: 60 ms of the page's work.
+      direct.from = await now();
+      await page.evaluate(() =>
+        (window as unknown as {pageWork: (ms: number) => void}).pageWork(60),
+      );
+      direct.to = await now();
     });
     const within = (w: {from: number; to: number}) => (t: {start: number}) =>
       t.start >= w.from - 20 && t.start < w.to;
+    // The read itself is set apart. The rows' frames around it may be long
+    // tasks too, the page's own: they stay in longTasks.
     expect(trace.devtoolsTasks.some(within(read))).toBe(true);
-    expect(trace.longTasks.filter(within(read))).toEqual([]);
     expect(
       trace.longTasks.some(t => within(timer)(t) && t.durationMs >= 55),
     ).toBe(true);
     expect(
       trace.longTasks.some(t => within(click)(t) && t.durationMs >= 55),
     ).toBe(true);
+    expect(
+      trace.longTasks.some(t => within(direct)(t) && t.durationMs >= 55),
+    ).toBe(true);
+    expect(trace.devtoolsTasks.filter(within(direct))).toEqual([]);
   });
 });
 
@@ -1853,6 +1880,49 @@ test.describe('animation state', () => {
     ).toEqual([true, true]);
   });
 
+  test('a wait answers with the animation the action started, not one that finished before it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const frames = [{opacity: 0.2}, {opacity: 1}];
+    // The recorder runs and is armed from here.
+    await waitForRest(box);
+    // A short one runs and ends; then the action starts a longer one, still
+    // pending when the wait first looks.
+    await box.evaluate(
+      (el, keyframes) => el.animate(keyframes, {duration: 40}).finished,
+      frames,
+    );
+    await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 1000});
+    }, frames);
+    const [found] = await waitForAnimation(box);
+    expect(found.durationMs).toBe(1000);
+    await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+  });
+
+  test('a scroll-timeline animation in scope does not hold up a wait', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const scroller = page.locator('#scroller');
+    await waitForRest(scroller);
+    // A row driven by its scroller's timeline (it moves only on scroll), and
+    // a short document animation that ends.
+    await scroller.evaluate(el => {
+      const [row, other] = [...el.children] as HTMLElement[];
+      row.animate([{opacity: 0.5}, {opacity: 1}], {
+        timeline: new ScrollTimeline({source: el}),
+      });
+      return other.animate([{opacity: 0.2}, {opacity: 1}], {duration: 40})
+        .finished;
+    });
+    const [found] = await waitForAnimation(scroller, {timeout: 2000});
+    expect(found.durationMs).toBe(40);
+    expect(found.finishedAt).not.toBeNull();
+  });
+
   test('a watch reports only what started after it', async ({page}) => {
     await fixture(page);
     const box = page.locator('#box');
@@ -2204,6 +2274,34 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     for (const gap of gaps(1)) {
       expect(gap).toBeGreaterThan(2 * (1000 / 60));
     }
+  });
+
+  test("the harness's own waits run on the real timers: a frozen timer gate holds neither blockMainThread's block nor sampleRects", async ({
+    page,
+  }) => {
+    await fixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 1_500, easing: 'linear'},
+      );
+    });
+    await freezeTimers(page);
+    // Settled, or still held after 5 s.
+    const within = (work: Promise<unknown>) =>
+      Promise.race([
+        work.then(() => 'settled'),
+        new Promise<string>(resolve =>
+          setTimeout(() => resolve('held'), 5_000),
+        ),
+      ]);
+    expect(
+      await within(blockMainThread(page, 100, {during: box, timeout: 2_000})),
+    ).toBe('settled');
+    expect(await within(sampleRects(box, 200))).toBe('settled');
+    await thawTimers(page);
   });
 
   test('the timer gate holds a component timer until the filmstrip is done', async ({

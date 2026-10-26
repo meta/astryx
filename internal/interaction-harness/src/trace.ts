@@ -22,6 +22,14 @@
 
 import type {CDPSession, Page} from '@playwright/test';
 
+/**
+ * The mark a harness function puts on its own page-side work
+ * (`console.timeStamp('harness-read')` at the start of the function it
+ * evaluates in the page), so a trace can tell the harness's reads from page
+ * code a test's own evaluate runs.
+ */
+export const HARNESS_READ = 'harness-read';
+
 /** Trace events that run page script: a listener, a timer, a frame callback. */
 const PAGE_SCRIPT_EVENTS = new Set([
   'EventDispatch',
@@ -55,9 +63,9 @@ export interface RenderingTrace {
   readonly durationMs: number;
   /**
    * The page's own main-thread tasks longer than 50 ms inside the window (long
-   * tasks), epoch ms. A task that ran a DevTools command (a `page.evaluate`)
-   * is one only if page script ran inside it (an event listener, a timer, a
-   * frame callback it set off); otherwise it is in `devtoolsTasks`.
+   * tasks), epoch ms. A task that ran a test's own DevTools command (a
+   * `page.evaluate`) is one, whether it calls page code directly or sets it
+   * off; only the harness's own marked reads are in `devtoolsTasks`.
    */
   readonly longTasks: readonly {
     readonly start: number;
@@ -65,9 +73,9 @@ export interface RenderingTrace {
   }[];
   /**
    * Main-thread tasks longer than 50 ms inside the window that ran a DevTools
-   * command and no page script, epoch ms: a harness read inside the body
-   * (`waitForAnimation` describing every animation's keyframes) or
-   * `blockMainThread(page, ms)` without `during`.
+   * command the harness marked as its own read (`HARNESS_READ`) and no page
+   * script, epoch ms: `waitForAnimation` describing every animation's
+   * keyframes, or `blockMainThread(page, ms)` without `during`.
    */
   readonly devtoolsTasks: readonly {
     readonly start: number;
@@ -219,8 +227,16 @@ export async function traceRendering(
             {mojo_interface_tag?: unknown} | undefined
         )?.mojo_interface_tag === 'blink.mojom.DevToolsSession',
     );
+    // Only the harness's own reads are set apart: a test's evaluate may call
+    // page code directly, which leaves no listener or timer in the trace.
+    const harnessRead = inside.some(
+      e =>
+        e.name === 'TimeStamp' &&
+        (e.args?.data as {message?: unknown} | undefined)?.message ===
+          HARNESS_READ,
+    );
     const pageScript = inside.some(e => PAGE_SCRIPT_EVENTS.has(e.name));
-    (devtools && !pageScript ? devtoolsTasks : longTasks).push({
+    (devtools && harnessRead && !pageScript ? devtoolsTasks : longTasks).push({
       start: toEpochMs(task.ts),
       durationMs: (task.dur ?? 0) / 1000,
     });
