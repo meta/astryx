@@ -308,7 +308,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
   // Pans (the cards' too), a long press, a pinch and the sheet's pan can take
   // a moving touch; a tap-only element and a press consumer never wait.
   expect(new Set(blocking)).toEqual(
-    new Set(['hpan', 'presser', 'pinchable', 'sheetBody', 'card', 'cardLate']),
+    new Set(['hpan', 'presser', 'pinchable', 'sheetBody', 'card']),
   );
 });
 
