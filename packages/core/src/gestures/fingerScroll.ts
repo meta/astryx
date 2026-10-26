@@ -150,7 +150,7 @@ function start(host: GestureHost, watch: Watch): () => void {
  * Keep track of whether the scrolls of `scroller` (an element in `host`'s
  * document, or the document itself) are a finger's, for isFingerScroll,
  * until the returned function runs.
- * Proposed; pending owner review.
+ * Internal: not exported from the package.
  */
 export function watchFingerScrolls(
   host: GestureHost,
@@ -192,7 +192,7 @@ export function watchFingerScrolls(
 
 /**
  * Whether the scroll now moving a watched `scroller` is a finger's.
- * Proposed; pending owner review.
+ * Internal: not exported from the package.
  */
 export function isFingerScroll(host: GestureHost, scroller: Node): boolean {
   return watches.get(host)?.fingerScrollers.has(scroller) === true;

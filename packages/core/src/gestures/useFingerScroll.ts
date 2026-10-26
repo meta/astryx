@@ -36,7 +36,7 @@ function isDocument(value: unknown): value is Document {
  * Watch a scroller's finger scrolls. Pass a ref to a scrolling element, or
  * the document for the page's own scroll. Returns a reader, stable across
  * renders: `true` while the scroller's scroll is a finger's.
- * Proposed; pending owner review.
+ * Internal: not exported from the package.
  */
 export function useFingerScroll(
   scroller: RefObject<Element | null> | Document,
