@@ -19,7 +19,7 @@
  * tap that requires a double tap to fail waits the interval out, as in UIKit.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_TAP} from '../motion/uikit/gestures';
 import {distance, travel} from './geometry';
 import {
   GestureRecognizer,
@@ -40,7 +40,7 @@ export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<Ta
   maximumTapDuration?: number;
 }
 
-const TAP = UIKIT_GESTURES.tap;
+const TAP = UIKIT_TAP;
 
 export class TapGestureRecognizer extends GestureRecognizer {
   numberOfTapsRequired: number;
