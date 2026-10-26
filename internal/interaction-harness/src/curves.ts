@@ -1060,14 +1060,17 @@ export async function waitForRest(
         let still = 0;
         const tick = () => {
           const now = read();
-          const moving = element
-            .getAnimations({subtree: true})
-            .some(
-              a =>
-                a.pending ||
-                (a.playState === 'running' &&
-                  Number(a.currentTime ?? 0) < curveEnd(a)),
-            );
+          const moving = element.getAnimations({subtree: true}).some(
+            a =>
+              a.pending ||
+              (a.playState === 'running' &&
+                // Going backward the curve ends at the start delay, after
+                // the end delay (which plays first) and the curve itself.
+                (a.playbackRate < 0
+                  ? Number(a.currentTime ?? 0) >
+                    Number(a.effect?.getComputedTiming().delay ?? 0)
+                  : Number(a.currentTime ?? 0) < curveEnd(a))),
+          );
           still = !moving && now === last ? still + 1 : 0;
           last = now;
           if (still >= need) {

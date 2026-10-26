@@ -1086,6 +1086,15 @@ test.describe('animation state', () => {
       waitForAnimation(box, {minProgressMs: 100, timeout: 300}),
     ).rejects.toThrow();
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
+
+    // Nor is it rest: waitForRest waits out the end delay and the curve.
+    const restFrom = await box.evaluate((el, keyframes) => {
+      el.animate(keyframes, {duration: 600, endDelay: 500}).reverse();
+      return performance.now();
+    }, frames);
+    await waitForRest(box, {timeout: 5_000});
+    const restAt = await box.evaluate(() => performance.now());
+    expect(restAt - restFrom).toBeGreaterThan(1_000);
   });
 
   test('an end value held by the keyframes is not part of the curve, and individual transform properties are sampled', async ({
