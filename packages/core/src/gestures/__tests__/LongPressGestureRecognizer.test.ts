@@ -9,7 +9,9 @@
 
 import {describe, expect, it} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import type {SelectionLock} from '../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
+import {lockSelection} from '../selectionLock';
 import {createHarness} from './harness';
 
 describe('LongPressGestureRecognizer', () => {
@@ -137,5 +139,29 @@ describe('LongPressGestureRecognizer', () => {
     expect(press.numberOfTouches).toBe(1);
     h.finger(1).up(800);
     expect(h.log).toContain('press:ended@800');
+  });
+});
+
+describe('LongPressGestureRecognizer selection lock (spec:AST-094 FR41)', () => {
+  it('brings the lock for a hold, none for a touch-down detector at 0 ms, and none when told null', () => {
+    expect(new LongPressGestureRecognizer().selectionLock).toBe(lockSelection);
+    expect(
+      new LongPressGestureRecognizer({minimumPressDuration: 300}).selectionLock,
+    ).toBe(lockSelection);
+    // A 0 ms long press recognizes at touch-down: it has no hold to act on,
+    // so the browser keeps its native long press.
+    expect(
+      new LongPressGestureRecognizer({minimumPressDuration: 0}).selectionLock,
+    ).toBeNull();
+    expect(
+      new LongPressGestureRecognizer({selectionLock: null}).selectionLock,
+    ).toBeNull();
+    const own: SelectionLock = () => () => {};
+    expect(
+      new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        selectionLock: own,
+      }).selectionLock,
+    ).toBe(own);
   });
 });
