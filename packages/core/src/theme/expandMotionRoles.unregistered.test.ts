@@ -21,23 +21,32 @@ describe('motion role checks without the motion tables', () => {
   it('refuses a misspelt role id', () => {
     expect(() =>
       expandMotionRoles(
-        {springs: {'springs.sheetPresnt': {duration: 0.5, bounce: 0}}},
+        {springs: {'springs.settel': {duration: 0.5, bounce: 0}}},
         'm',
       ),
     ).toThrow(
-      /m\.springs\["springs\.sheetPresnt"\]: "springs\.sheetPresnt" is not a motion role/,
+      /m\.springs\["springs\.settel"\]: "springs\.settel" is not a motion role/,
     );
+  });
+
+  it('refuses a component\u2019s measured value: only the roles FR4 names are roles', () => {
+    expect(() =>
+      expandMotionRoles(
+        {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+        'm',
+      ),
+    ).toThrow(/"springs\.sheetPresent" is not a motion role/);
   });
 
   it('refuses a role under the wrong group', () => {
     expect(() =>
-      expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
-    ).toThrow(/"springs\.sheetPresent" is a spring/);
+      expandMotionRoles({durations: {'springs.settle': 300}}, 'm'),
+    ).toThrow(/"springs\.settle" is a spring/);
   });
 
   it('accepts a known role', () => {
     expect(
-      expandMotionRoles({durations: {'navigation.transitionMs': 300}}, 'm'),
-    ).toEqual({'--motion-navigation-transition-ms': '300ms'});
+      expandMotionRoles({durations: {'timing.stateChangeMs': 300}}, 'm'),
+    ).toEqual({'--motion-timing-state-change-ms': '300ms'});
   });
 });

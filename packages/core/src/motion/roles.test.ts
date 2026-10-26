@@ -9,6 +9,7 @@
  * @position Testing for /packages/core/src/motion/roles.ts
  */
 
+import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {MOTION_ROLE_KINDS} from './roleKinds.generated';
@@ -16,7 +17,6 @@ import {
   formatMotionRoleValue,
   isMotionRoleId,
   listMotionRoles,
-  motionRole,
   motionRoleIn,
   motionRoleOf,
   motionRoleVariable,
@@ -60,34 +60,43 @@ describe('motion roles', () => {
     expect(() => motionRoleVariable('sheet')).toThrow(/dotted table path/);
   });
 
-  it('registers springs, …Ms durations and curves, skipping exclusions and other numbers', () => {
+  it('leaves a table value FR4 does not name an internal constant', () => {
     const shared = {response: 0.4, dampingRatio: 0.9};
     const table = {
       present: shared,
       dismiss: shared,
       fadeMs: 200,
-      holdMs: 150,
-      threshold: 48,
       curves: {out: [0, 0, 0.58, 1] as const},
     };
-    registerMotionTable('fixture', table, {exclude: ['holdMs']});
-    expect(motionRoleOf(table.present)?.id).toBe('fixture.present');
-    // A shared object becomes one copy per role, equal in value.
-    expect(table.dismiss).not.toBe(table.present);
-    expect(table.dismiss).toEqual(shared);
-    expect(motionRoleOf(table.dismiss)?.id).toBe('fixture.dismiss');
-    expect(motionRoleIn(table, 'fadeMs')).toMatchObject({
-      id: 'fixture.fadeMs',
-      kind: 'duration',
-      variable: '--motion-fixture-fade-ms',
-    });
-    expect(motionRoleIn(table, 'holdMs')).toBeUndefined();
-    expect(motionRoleIn(table, 'threshold')).toBeUndefined();
-    expect(motionRoleOf(table.curves.out)).toMatchObject({
-      id: 'fixture.curves.out',
-      kind: 'curve',
-    });
-    expect(motionRoleIn(table.curves, 'out')?.id).toBe('fixture.curves.out');
+    registerMotionTable('fixture', table);
+    // No role, no CSS variable, and the table is untouched.
+    expect(motionRoleOf(table.present)).toBeUndefined();
+    expect(table.dismiss).toBe(table.present);
+    expect(motionRoleIn(table, 'fadeMs')).toBeUndefined();
+    expect(motionRoleOf(table.curves.out)).toBeUndefined();
+    expect(listMotionRoles().some(role => role.id.startsWith('fixture.'))).toBe(
+      false,
+    );
+  });
+
+  it('has exactly the roles spec:AST-094 FR4 names', () => {
+    const spec = readFileSync(
+      resolve(
+        __dirname,
+        '../../../../docs/specs/AST-094-touch-presentations/spec.md',
+      ),
+      'utf8',
+    );
+    const fr4 = spec.slice(spec.indexOf('**FR4'), spec.indexOf('**FR5'));
+    const named = [...fr4.matchAll(/^\s*\| `([a-z][\w.]*)`\s*\|/gm)].map(
+      match => match[1],
+    );
+    expect(named.length).toBeGreaterThan(0);
+    // Every table registered, the roles are exactly FR4's (other tests
+    // here register a fixture, which lists none).
+    expect(new Set(listMotionRoles().map(role => role.id))).toEqual(
+      new Set(named),
+    );
   });
 
   it('names the shared roles for their use, as spec:AST-094 FR4 does', () => {
@@ -153,29 +162,24 @@ describe('motion roles', () => {
     expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
   });
 
-  it('makes the shared tables roles, without their thresholds and arbitration timings', () => {
-    expect(motionRoleOf(springs.sheetPresent)?.id).toBe('springs.sheetPresent');
+  it('makes the roles of the shared tables, and keeps every other value internal', () => {
     expect(motionRoleOf(springs.viewChange)?.id).toBe('springs.viewChange');
-    expect(springs.sheetPresent).toEqual(springs.viewChange);
-    expect(motionRoleOf(scroll.bounce)?.kind).toBe('spring');
     expect(motionRoleOf(timing.curves.move)?.kind).toBe('curve');
-    expect(motionRoleIn(timing.press, 'flashMs')?.kind).toBe('duration');
-    // The Reduced Motion fade is not a role: no theme lengthens it.
+    expect(motionRoleIn(timing, 'stateChangeMs')?.kind).toBe('duration');
+    // A component's measured value is a constant no theme reaches.
+    expect(motionRoleOf(springs.sheetPresent)).toBeUndefined();
+    expect(springs.sheetPresent).toEqual(springs.viewChange);
+    expect(motionRoleOf(scroll.bounce)).toBeUndefined();
+    expect(motionRoleIn(timing.press, 'flashMs')).toBeUndefined();
+    expect(motionRoleIn(navigation, 'transitionMs')).toBeUndefined();
+    // The Reduced Motion fade, UIKit's menu spring under Reduce Motion, the
+    // thresholds and the arbitration timings are not motion roles either.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
-    // Nor is UIKit's menu spring under Reduce Motion: nothing springs under
-    // reduced motion (design:reduced-motion DR1).
     expect(motionRoleIn(springs, 'menuReducedMotion')).toBeUndefined();
-    expect(motionRoleIn(navigation, 'transitionMs')?.id).toBe(
-      'navigation.transitionMs',
-    );
     expect(motionRoleIn(timing.press, 'scrollBrakeMs')).toBeUndefined();
     expect(motionRoleIn(scroll, 'delaysContentTouchesMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'parallax')).toBeUndefined();
-    expect(motionRole('springs.navigationPush')?.value).toBe(
-      springs.navigationPush,
-    );
     const ids = listMotionRoles().map(role => role.id);
-    expect(ids).toContain('scroll.bounce');
     expect(ids.some(id => id.startsWith('gestures.'))).toBe(false);
     // Every role has its own CSS variable.
     const variables = listMotionRoles().map(role => role.variable);

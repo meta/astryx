@@ -28,18 +28,18 @@ describe('motion roles in a theme', () => {
       expandMotionRoles(
         {
           springs: {
-            'springs.sheetPresent': {duration: 0.6, bounce: 0.1},
-            'springs.alertPresent': {response: 0.5, dampingRatio: 0.85},
+            'springs.settle': {duration: 0.6, bounce: 0.1},
+            'springs.quickChange': {response: 0.5, dampingRatio: 0.85},
           },
-          durations: {'navigation.transitionMs': 300},
+          durations: {'timing.stateChangeMs': 300},
           curves: {'timing.curves.move': [0.4, 0, 0.2, 1]},
         },
         'motion',
       ),
     ).toEqual({
-      '--motion-springs-sheet-present': '0.6s 0.1',
-      '--motion-springs-alert-present': '0.5s 0.15',
-      '--motion-navigation-transition-ms': '300ms',
+      '--motion-springs-settle': '0.6s 0.1',
+      '--motion-springs-quick-change': '0.5s 0.15',
+      '--motion-timing-state-change-ms': '300ms',
       '--motion-timing-curves-move': 'cubic-bezier(0.4, 0, 0.2, 1)',
     });
   });
@@ -49,13 +49,13 @@ describe('motion roles in a theme', () => {
       expandMotionRoles({springs: {sheet: {duration: 0.5, bounce: 0}}}, 'm'),
     ).toThrow(/m\.springs\["sheet"\]: a motion role is named for its use/);
     expect(() =>
-      expandMotionRoles({durations: {'springs.sheetPresent': 300}}, 'm'),
-    ).toThrow(/"springs\.sheetPresent" is a spring/);
+      expandMotionRoles({durations: {'springs.settle': 300}}, 'm'),
+    ).toThrow(/"springs\.settle" is a spring/);
     expect(() =>
       expandMotionRoles({curves: {'timing.curves.exit': [1.5, 0, 1, 1]}}, 'm'),
     ).toThrow(/m\.curves\["timing\.curves\.exit"\]: a curve's x1 and x2/);
     expect(() =>
-      expandMotionRoles({durations: {'timing.press.flashMs': -5}}, 'm'),
+      expandMotionRoles({durations: {'timing.stateChangeMs': -5}}, 'm'),
     ).toThrow(/≥ 0/);
   });
 
@@ -78,17 +78,17 @@ describe('motion roles in a theme', () => {
         fast: 175,
         medium: 410,
         ratio: 0.75,
-        springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}},
+        springs: {'springs.settle': {duration: 0.6, bounce: 0.1}},
       },
     });
-    expect(theme.tokens['--motion-springs-sheet-present']).toBe('0.6s 0.1');
+    expect(theme.tokens['--motion-springs-settle']).toBe('0.6s 0.1');
     expect(theme.tokens['--duration-fast']).toBe('175ms');
     const motionTokens = Object.keys(theme.tokens).filter(name =>
       name.startsWith('--motion-'),
     );
-    expect(motionTokens).toEqual(['--motion-springs-sheet-present']);
+    expect(motionTokens).toEqual(['--motion-springs-settle']);
     expect(generateThemeCSS(theme).component).toContain(
-      '--motion-springs-sheet-present: 0.6s 0.1',
+      '--motion-springs-settle: 0.6s 0.1',
     );
   });
 
@@ -100,10 +100,10 @@ describe('motion roles in a theme', () => {
     const child = defineTheme({
       name: 'child',
       extends: base,
-      motion: {durations: {'navigation.transitionMs': 400}},
+      motion: {durations: {'timing.stateChangeMs': 400}},
     });
     expect(child.tokens['--duration-fast']).toBe('120ms');
-    expect(child.tokens['--motion-navigation-transition-ms']).toBe('400ms');
+    expect(child.tokens['--motion-timing-state-change-ms']).toBe('400ms');
   });
 });
 
@@ -174,7 +174,7 @@ describe('motion roles in adaptation rules', () => {
         {
           when: {motion: 'reduce'},
           value: {
-            motion: {durations: {'navigation.transitionMs': 250}},
+            motion: {durations: {'timing.stateChangeMs': 250}},
           },
         },
       ]),
@@ -187,14 +187,14 @@ describe('motion roles in adaptation rules', () => {
   it('keeps duplicate conditions and a later root-restoring role write, in order', () => {
     const theme = defineTheme({
       name: 'ordered-motion',
-      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+      motion: {springs: {'springs.settle': {duration: 0.6, bounce: 0.1}}},
       adaptations: {
         rules: [
           {
             when: {pointer: 'coarse'},
             value: {
               motion: {
-                springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+                springs: {'springs.settle': {duration: 0.4, bounce: 0}},
               },
             },
           },
@@ -202,7 +202,7 @@ describe('motion roles in adaptation rules', () => {
             when: {pointer: 'coarse'},
             value: {
               motion: {
-                springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}},
+                springs: {'springs.settle': {duration: 0.6, bounce: 0.1}},
               },
             },
           },
@@ -211,10 +211,8 @@ describe('motion roles in adaptation rules', () => {
     });
     const css = generateAdaptationCSS(theme).component;
     expect(css.split('@media (pointer: coarse)')).toHaveLength(3);
-    const quick = css.indexOf('--motion-springs-sheet-present: 0.4s 0;');
-    const restored = css.lastIndexOf(
-      '--motion-springs-sheet-present: 0.6s 0.1',
-    );
+    const quick = css.indexOf('--motion-springs-settle: 0.4s 0;');
+    const restored = css.lastIndexOf('--motion-springs-settle: 0.6s 0.1');
     expect(quick).toBeGreaterThan(-1);
     expect(restored).toBeGreaterThan(quick);
   });
@@ -225,7 +223,7 @@ describe('motion roles in adaptation rules', () => {
         when: {pointer: 'coarse'},
         value: {
           motion: {
-            springs: {'springs.sheetPresent': {duration: 0.4, bounce: 0}},
+            springs: {'springs.settle': {duration: 0.4, bounce: 0}},
           },
         },
       },
@@ -240,24 +238,24 @@ describe('motion roles in adaptation rules', () => {
     } as DefinedTheme;
     const child = defineTheme({name: 'built-motion-child', extends: built});
     expect(generateAdaptationCSS(child).component).toContain(
-      '--motion-springs-sheet-present: 0.4s 0',
+      '--motion-springs-settle: 0.4s 0',
     );
   });
 
   it('merges roles by role through extends', () => {
     const base = defineTheme({
       name: 'roles-base',
-      motion: {springs: {'springs.sheetPresent': {duration: 0.6, bounce: 0.1}}},
+      motion: {springs: {'springs.settle': {duration: 0.6, bounce: 0.1}}},
     });
     const child = defineTheme({
       name: 'roles-child',
       extends: base,
       motion: {
-        springs: {'springs.alertPresent': {response: 0.5, dampingRatio: 1}},
+        springs: {'springs.quickChange': {response: 0.5, dampingRatio: 1}},
       },
     });
-    expect(child.tokens['--motion-springs-sheet-present']).toBe('0.6s 0.1');
-    expect(child.tokens['--motion-springs-alert-present']).toBe('0.5s 0');
+    expect(child.tokens['--motion-springs-settle']).toBe('0.6s 0.1');
+    expect(child.tokens['--motion-springs-quick-change']).toBe('0.5s 0');
   });
 
   it('refuses a platform condition, which adaptations do not have', () => {
@@ -265,7 +263,7 @@ describe('motion roles in adaptation rules', () => {
       adaptive([
         {
           when: {platform: 'ios'} as never,
-          value: {motion: {durations: {'navigation.transitionMs': 300}}},
+          value: {motion: {durations: {'timing.stateChangeMs': 300}}},
         },
       ]),
     ).toThrow(/platform/);
