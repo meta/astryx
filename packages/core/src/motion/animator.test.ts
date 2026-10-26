@@ -1502,6 +1502,30 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(exit.element.style.translate).toBe('100px 0px');
   });
 
+  it('an unmount mid-dip leaves no compositing promotion on the element it leaves', async () => {
+    const {animator, element} = reduced();
+    animator.decay(coast(animator, {y: 1500}));
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock);
+    await advance(20);
+    animator.attach(null);
+    expect(element.style.willChange).toBe('');
+  });
+
+  it("a new element taking over an exit by role leaves the stylesheet's opacity on the outgoing one", async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate(
+      {x: 100},
+      {spring: springs.navigationPush},
+      {crossfadeAs: 'exit'},
+    );
+    await commitFrame(clock);
+    await advance(50);
+    animator.attach(document.createElement('div'));
+    expect(element.style.opacity).toBe('');
+  });
+
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
     const {animator, element} = reduced();
     animator.animate({x: 100}, {spring: springs.navigationPush});
