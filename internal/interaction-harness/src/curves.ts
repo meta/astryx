@@ -1010,7 +1010,10 @@ async function withinTimeout<T>(
  * does, so it adds no frame the trace counts: it takes the element's
  * animations from the recorder's log, judges a started one by its own times,
  * and reaches the element through a handle to what the locator matches at
- * each look.
+ * each look. That holds for script animations and CSS transitions. On a CSS
+ * `@keyframes` animation (and, unwatched, a cancelled CSS transition) it reads
+ * the animation's timing, which flushes its style and adds Layouts to the
+ * trace: wait on one with `waitForRest`, or after the trace.
  */
 export async function waitForAnimation(
   locator: Locator,

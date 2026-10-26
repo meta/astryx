@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file presentationHold.fixture.ts
+ * @file inputHold.fixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page whose whole area is a button (`#under`), a modal dialog
  *   (`#dialog`: text, an action, and a gesture-host tap recognizer on the
@@ -12,17 +12,13 @@
  *   release it, read what an element at a point is and what lies past a
  *   hold's shield there, and a log of every
  *   click, tap recognition and popover toggle
- * @position Browser fixture of presentationHold.interaction.browser.spec.ts;
+ * @position Browser fixture of inputHold.interaction.browser.spec.ts;
  *   test-only
  */
 
 import {getGestureHost} from '../../gestures/GestureHost';
 import {TapGestureRecognizer} from '../../gestures/TapGestureRecognizer';
-import {
-  holdPresentation,
-  isPresentationShield,
-  type PresentationHoldScope,
-} from '../presentationHold';
+import {holdInput, isInputShield, type InputHoldScope} from '../inputHold';
 
 type LayerId = 'dialog' | 'pop' | 'lift';
 
@@ -37,7 +33,7 @@ declare global {
     __hold: {
       log: HoldLog;
       open: (id: LayerId) => void;
-      hold: (id: LayerId, scope: PresentationHoldScope) => void;
+      hold: (id: LayerId, scope: InputHoldScope) => void;
       release: () => void;
       hitAt: (x: number, y: number) => string;
       hitPast: (x: number, y: number) => string;
@@ -111,7 +107,7 @@ window.__hold = {
     }
   },
   hold(id, scope) {
-    release = holdPresentation(element(id), {
+    release = holdInput(element(id), {
       until: new Promise(() => {}),
       scope,
     });
@@ -125,8 +121,7 @@ window.__hold = {
   },
   hitPast(x, y) {
     return describe(
-      document.elementsFromPoint(x, y).find(el => !isPresentationShield(el)) ??
-        null,
+      document.elementsFromPoint(x, y).find(el => !isInputShield(el)) ?? null,
     );
   },
 };
@@ -135,7 +130,7 @@ function describe(hit: Element | null): string {
   if (hit == null) {
     return 'nothing';
   }
-  if (isPresentationShield(hit)) {
+  if (isInputShield(hit)) {
     return `shield:${hit.parentElement?.id ?? ''}`;
   }
   return hit.id !== '' ? hit.id : hit.tagName.toLowerCase();

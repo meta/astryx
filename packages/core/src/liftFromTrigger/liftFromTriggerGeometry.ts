@@ -1,13 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file liftGeometry.ts
+ * @file liftFromTriggerGeometry.ts
  * @input A source's box, the viewport and the layer runtime's gutter, and
  *   the caller's scale rule and gap
- * @output Exports liftScale, liftedRect and surfacePlacement: how far a
+ * @output Exports liftFromTriggerScale, liftFromTriggerRect and surfacePlacement: how far a
  *   lifted source grows, where it lands inside the gutter, and which side of
  *   it a surface (a menu) takes
- * @position The geometry of the lift presentation (lift.ts); internal to
+ * @position The geometry of the lift presentation (liftFromTrigger.ts); internal to
  *   core
  *
  * A lifted source grows about its center by the caller's rule (UIKit's
@@ -18,7 +18,7 @@
  * gutter, else above; centered on the source, or flush with the edge the
  * source is held against.
  *
- * SYNC: When modified, update /packages/core/src/lift/liftGeometry.test.ts
+ * SYNC: When modified, update /packages/core/src/liftFromTrigger/liftFromTriggerGeometry.test.ts
  */
 
 import type {MorphRect} from '../motion/rectMorph';
@@ -29,7 +29,7 @@ import type {MorphRect} from '../motion/rectMorph';
  * edge's safe-area inset, whichever is larger, plus the inset an app declares
  * for a bar floating over that edge.
  */
-export interface LiftGutter {
+export interface LiftFromTriggerGutter {
   readonly top: number;
   readonly bottom: number;
   readonly inline: number;
@@ -39,15 +39,15 @@ export interface LiftGutter {
  * The viewport a source lifts in, CSS px, the layer runtime's gutter, and the
  * page's direction (a surface's alignment is logical).
  */
-export interface LiftViewport {
+export interface LiftFromTriggerViewport {
   readonly width: number;
   readonly height: number;
-  readonly gutter: LiftGutter;
+  readonly gutter: LiftFromTriggerGutter;
   readonly direction?: 'ltr' | 'rtl';
 }
 
 /** How far a lifted source grows. */
-export interface LiftScaleRule {
+export interface LiftFromTriggerScaleRule {
   /** The largest factor it grows by. */
   readonly maxScale: number;
   /** Below `maxScale`, it grows by this many px on its larger side. */
@@ -65,11 +65,11 @@ export interface SurfacePlacement {
  * `rule.scaleUpPoints` on its larger side, and never wider than the viewport
  * less its gutter (which can make it smaller than 1).
  */
-export function liftScale(
+export function liftFromTriggerScale(
   width: number,
   height: number,
-  viewport: LiftViewport,
-  rule: LiftScaleRule,
+  viewport: LiftFromTriggerViewport,
+  rule: LiftFromTriggerScaleRule,
 ): number {
   const side = Math.max(width, height);
   if (side <= 0) {
@@ -83,16 +83,21 @@ export function liftScale(
 }
 
 /**
- * The lifted source's rect: `source` scaled by `liftScale` about its center,
+ * The lifted source's rect: `source` scaled by `liftFromTriggerScale` about its center,
  * then moved inside the viewport's gutter if it crosses it.
  */
-export function liftedRect(
+export function liftFromTriggerRect(
   source: MorphRect,
-  viewport: LiftViewport,
-  rule: LiftScaleRule,
+  viewport: LiftFromTriggerViewport,
+  rule: LiftFromTriggerScaleRule,
 ): MorphRect {
   const {gutter} = viewport;
-  const scale = liftScale(source.width, source.height, viewport, rule);
+  const scale = liftFromTriggerScale(
+    source.width,
+    source.height,
+    viewport,
+    rule,
+  );
   const width = source.width * scale;
   const height = source.height * scale;
   const clamp = (value: number, min: number, max: number) =>
@@ -120,7 +125,7 @@ export function liftedRect(
 export function surfacePlacement(
   lifted: MorphRect,
   surfaceHeight: number,
-  viewport: LiftViewport,
+  viewport: LiftFromTriggerViewport,
   gap: number,
 ): SurfacePlacement {
   const {gutter} = viewport;

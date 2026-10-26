@@ -245,7 +245,7 @@ or keyboard anchoring.
 
 Under a finger, a touch-opened menu on a block trigger lifts the trigger
 itself above the tinted page (`spec:AST-094` FR33), through the lift module
-(`packages/core/src/lift/`). While the menu is up, the page has four
+(`packages/core/src/liftFromTrigger/`). While the menu is up, the page has four
 elements more than under a fine pointer, within the open-layer allowance of
 `spec:AST-017` FR60 and DEC-29, and each has one job:
 
@@ -261,7 +261,7 @@ elements more than under a fine pointer, within the open-layer allowance of
   page does not move while the trigger is in the top layer.
 
 None of the four is themeable or part of the anatomy, none is mounted at rest, and no content is mounted
-twice: the trigger lifts itself, with no copy. The presentation hold's shield
+twice: the trigger lifts itself, with no copy. The input hold's shield
 joins while the lift grows, and the layer runtime's exit copy while the menu
 closes.
 
