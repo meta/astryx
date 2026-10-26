@@ -758,17 +758,18 @@ test('the lift keeps moving while the main thread is blocked: the card grows on 
 }, testInfo) => {
   // Measured: Linux WebKit's compositor stalls with its main thread (no
   // frames for most of a block, the card frozen). iOS Safari keeps the card
-  // growing through the block: the simulator recording.
+  // growing through the same 1 s block: the simulator recording.
   test.skip(
     browserName !== 'chromium',
     'Linux WebKit’s compositor stalls with its main thread; iOS Safari is the simulator recording',
   );
   const {driver, center} = await openLiftStory(page);
   await markSelector(page, '[data-testid="touch-context-menu"]');
-  // Blocked from 20 ms after the menu's moment, while the card grows.
-  const busyWindow = await blockAfterTouch(page, menuDisplayMs + 20, 350);
+  // Blocked from 20 ms after the menu's moment for 1 s (spec:AST-094's FR5
+  // row), past the card's whole growth; the finger lifts after the block.
+  const busyWindow = await blockAfterTouch(page, menuDisplayMs + 20, 1000);
   const cast = await startScreencast(page);
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 900}));
+  await driver.play(tap(center, {holdMs: menuDisplayMs + 1300}));
   const castFrames = await cast.stop();
   const block = await busyWindow();
   const tracked = await trackMarker(page, castFrames);
