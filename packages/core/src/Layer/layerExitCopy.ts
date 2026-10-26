@@ -121,6 +121,10 @@ const TRANSFORM_PROPERTIES = [
 ] as const;
 
 /** Each layer's copy: placing another for the same layer replaces it. */
+/** The elements a `<form>` can own; `form=""` matches no form's id. */
+const FORM_CONTROLS =
+  'button, fieldset, input, object, output, select, textarea';
+
 const copies = new WeakMap<HTMLElement, HTMLElement>();
 
 /** A length in px, or 0. */
@@ -206,6 +210,14 @@ export function placeLayerExitCopy(
   for (const node of copy.querySelectorAll('[name], [form]')) {
     node.removeAttribute('name');
     node.removeAttribute('form');
+  }
+  // The copy stands right after the layer, which renders inline by default,
+  // so a layer inside a `<form>` would leave the copy's controls owned by
+  // that form while it closes: a cloned empty `required` field makes the
+  // form invalid and blocks its submit. `form=""` matches no form's id, so
+  // each cloned control has no owner wherever the copy stands.
+  for (const node of copy.querySelectorAll(FORM_CONTROLS)) {
+    node.setAttribute('form', '');
   }
   copy.setAttribute(attribute, '');
   copy.setAttribute('aria-hidden', 'true');

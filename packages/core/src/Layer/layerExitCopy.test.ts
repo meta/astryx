@@ -113,9 +113,38 @@ describe('placeLayerExitCopy', () => {
     );
     const live = element.querySelector<HTMLInputElement>('input[value="m"]')!;
     const copy = place(element);
-    expect(copy.querySelectorAll('[name], [form]')).toHaveLength(0);
+    expect(copy.querySelectorAll('[name]')).toHaveLength(0);
+    // Every cloned control names a form that cannot exist, so none has an
+    // owner, whatever the copy stands inside.
+    expect(
+      [...copy.querySelectorAll('input')].map(node =>
+        node.getAttribute('form'),
+      ),
+    ).toEqual(['', '', '']);
     expect(live.checked).toBe(true);
     expect(live.getAttribute('name')).toBe('size');
+  });
+
+  it('leaves a form around the layer valid while the copy stands in it', () => {
+    popoverApi(true);
+    const element = layer();
+    const form = document.createElement('form');
+    element.parentElement!.append(form);
+    form.append(element);
+    element.insertAdjacentHTML(
+      'beforeend',
+      '<input type="text" required><select required><option value=""></option></select><textarea required></textarea>',
+    );
+    // The live layer's own fields are the form's while it is open.
+    expect(form.checkValidity()).toBe(false);
+    const copy = place(element);
+    // The copy stands right after the layer, so inside the form; its
+    // controls belong to no form, and the live fields are unchanged.
+    expect(copy.closest('form')).toBe(form);
+    expect([...form.elements]).toHaveLength(3);
+    for (const node of copy.querySelectorAll('input, select, textarea')) {
+      expect((node as HTMLInputElement).form).toBeNull();
+    }
   });
 
   it('keeps one copy per layer: a second takes only that layer\u2019s first away', () => {
