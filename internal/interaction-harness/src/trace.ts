@@ -84,7 +84,8 @@ interface TraceEvent {
 /**
  * Traces the page while `body` runs and counts the rendering work its main
  * thread did between a start mark (placed just before `body`) and an end mark
- * (just after).
+ * (just after). The harness's animation recorder and `waitForRest` stand down
+ * meanwhile, so a body may wait with either and add no frame of its own.
  */
 export async function traceRendering(
   page: Page,
