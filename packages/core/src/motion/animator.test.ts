@@ -1575,6 +1575,23 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     }
   });
 
+  it('a waiting call whose own opacity a later call retargets settles interrupted', async () => {
+    const {animator} = reduced();
+    const dismiss = animator.animate(
+      {y: 800, opacity: 0},
+      {spring: springs.sheetDismiss},
+    );
+    await advance(fade / 4);
+    const show = animator.animate({opacity: 1}, {spring: springs.settle});
+    // The plan lands by timer: step the clock through the dip.
+    for (let step = 0; step < 12; step++) {
+      await advance(fade / 8);
+    }
+    expect(animator.get('opacity')).toBe(1);
+    await expect(dismiss.finished).resolves.toBe(false);
+    await expect(show.finished).resolves.toBe(true);
+  });
+
   it('a caught dismissal fades straight back up: a call that sets every waiting value takes it over', async () => {
     const {animator} = reduced();
     const dismiss = animator.animate(
