@@ -14,7 +14,7 @@
 import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {lockSelection} from '../../../utils/selectionLock';
 
 declare global {
   interface Window {
