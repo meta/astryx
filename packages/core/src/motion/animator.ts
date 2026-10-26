@@ -975,7 +975,14 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      handBackBorrow();
+      if (next == null) {
+        handBackBorrow();
+      } else if (borrowedOpacity != null) {
+        // A new element takes over a running borrowed dip: the dip keeps
+        // running there, so a pending move still lands while it is
+        // invisible; the outgoing element gets its stylesheet's opacity back.
+        target?.style.removeProperty('opacity');
+      }
       target = next;
       if (target == null) {
         return;

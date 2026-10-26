@@ -614,6 +614,28 @@ describe('Reduced Motion on a coarse pointer (DR2): a cross-fade of 200 ms or le
     }
   });
 
+  it('a new element taking over mid-dip keeps the dip, so the move lands while invisible', async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
+    animator.animate({x: 240}, {spring: springs.navigationPush});
+    await advance(25);
+    const next = document.createElement('div');
+    document.body.append(next);
+    animator.attach(next);
+    // The outgoing element follows its stylesheet again.
+    expect(element.style.opacity).toBe('');
+    const start = clock - 25;
+    for (let t = start; t <= start + fade; t += 2) {
+      if (animator.get('x', t) !== 0) {
+        expect(animator.get('opacity', t)).toBeCloseTo(0, 6);
+        break;
+      }
+    }
+    await advance(fade + END_HOLD_MS + 1);
+    expect(next.style.opacity).toBe('');
+    next.remove();
+  });
+
   it('a second move during a borrowed dip copies no stylesheet opacity inline', async () => {
     const {animator, element} = reduced();
     stylesheet = {opacity: '0.6'};
