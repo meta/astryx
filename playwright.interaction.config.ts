@@ -3,8 +3,8 @@
 /**
  * @file playwright.interaction.config.ts
  * @input Uses @playwright/test
- * @output Touch interaction proofs on a phone-sized touch screen, in Chromium
- *   and WebKit.
+ * @output Touch interaction and animation proofs on a phone-sized touch
+ *   screen, in Chromium and WebKit.
  * @position Run with `pnpm test:interaction`. Separate from `pnpm test` (no
  *   browser needed there) and from playwright.config.ts (accessibility
  *   contracts on desktop profiles).
