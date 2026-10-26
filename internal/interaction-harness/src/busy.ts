@@ -143,6 +143,17 @@ export interface BusyProof extends FrameStats {
   /** Facts worth reading beside the verdict, which never fail it. */
   readonly notes: readonly string[];
   /**
+   * With a compositor record (`presented`): frames the screencast skipped
+   * between two moved frames while the compositor presented them, which are
+   * neither stalls nor misses; 0 without one.
+   */
+  readonly recorderSkipped: number;
+  /**
+   * The compositor's frame interval around the window, ms, from `presented`;
+   * null without a usable record (the screencast alone is judged).
+   */
+  readonly compositorFrameMs: number | null;
+  /**
    * The screencast's frame interval, from the frames around the window as well
    * as inside it (a short window has few intervals; a frozen one has none).
    */
@@ -213,6 +224,16 @@ export interface BusyProof extends FrameStats {
  * `stepPx` and `pxPerFrame` say whether a frame's motion is resolvable at
  * all: under two position steps per frame, a frame delivered early can show
  * no step and read as not moved, which the proof notes (never a failure).
+ *
+ * A loaded machine's screencast can skip frames the compositor still presents
+ * (Chromium). Given the compositor's record (`presented`, from
+ * `startCompositorTrace`), a gap between two moved frames with no frame
+ * delivered inside it is measured between the compositor's own frames: it is
+ * a stall only where the compositor presented nothing, and the frames it did
+ * present there are neither stalls nor misses (`recorderSkipped`). A gap
+ * that opens or closes the judged part, or holds a delivered frame that did
+ * not move, is judged from the screencast as before, so a frozen element
+ * fails whatever else the compositor draws.
  */
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
@@ -226,6 +247,7 @@ export function busyWindowProof(
     maxStallFrames = 3,
     minMovedFraction = 0.9,
     minJudgedFrames = 4,
+    presented,
   }: {
     axis?: 'x' | 'y' | 'width' | 'height';
     marginMs?: number;
@@ -260,6 +282,12 @@ export function busyWindowProof(
      * position until the main thread commits the end state.
      */
     settledAt?: number;
+    /**
+     * When the compositor presented each frame, epoch ms on the page clock
+     * (`startCompositorTrace`; Chromium). Empty or absent, the screencast is
+     * judged alone.
+     */
+    presented?: readonly number[];
   } = {},
 ): BusyProof {
   let end = window.to - marginMs;
@@ -320,10 +348,6 @@ export function busyWindowProof(
   const judged = {from: onScreenFrom ?? inner.from, to: inner.to};
   const changes = inWindow.filter(t => t > judged.from || onScreenFrom == null);
   const edges = [judged.from, ...changes, judged.to];
-  const stalls = edges.slice(1).map((t, i) => t - edges[i]);
-  const longestStallMs = Math.max(...stalls);
-  // Where the longest stall starts, from the start of the window.
-  const longestStallAtMs = edges[stalls.indexOf(longestStallMs)] - window.from;
   const around = tracked
     .filter(f => f.t >= inner.from - 250 && f.t <= inner.to + 250)
     .map(f => f.t);
@@ -339,10 +363,68 @@ export function busyWindowProof(
     intervals.length >= 4
       ? intervals[Math.floor(intervals.length / 2)]
       : stats.medianFrameMs || 1000 / 60;
-  const expectedFrames = Math.floor((judged.to - judged.from) / cadence);
-  const longestStallFrames = Math.round(longestStallMs / cadence);
+  // The compositor's own frames, when recorded: its interval, from the frames
+  // around the judged part.
+  const draws = [...(presented ?? [])]
+    .filter(t => t >= judged.from - 250 && t <= judged.to + 250)
+    .sort((a, b) => a - b);
+  const drawIntervals = draws
+    .slice(1)
+    .map((t, i) => t - draws[i])
+    .sort((a, b) => a - b);
+  const compositorFrameMs =
+    drawIntervals.length >= 4
+      ? drawIntervals[Math.floor(drawIntervals.length / 2)]
+      : null;
+  const changed = new Set(inWindow);
+  const delivered = tracked
+    .filter(f => f.box != null && f.t > judged.from && f.t < judged.to)
+    .map(f => f.t);
+  // Each gap between presented changes, in intervals of the channel that saw
+  // it: the screencast's, or, for a gap between two moved frames with no
+  // frame delivered inside it, the compositor's own longest interval there.
+  const gaps = edges.slice(1).map((to, i) => {
+    const from = edges[i];
+    const ms = to - from;
+    if (
+      compositorFrameMs == null ||
+      !changed.has(from) ||
+      !changed.has(to) ||
+      delivered.some(t => t > from && t < to)
+    ) {
+      return {from, ms, frames: Math.round(ms / cadence), skipped: 0};
+    }
+    const span = draws.filter(
+      t => t > from - compositorFrameMs / 2 && t < to + compositorFrameMs / 2,
+    );
+    const longest =
+      span.length >= 2
+        ? Math.min(ms, Math.max(...span.slice(1).map((t, j) => t - span[j])))
+        : ms;
+    const frames = Math.round(longest / compositorFrameMs);
+    return {
+      from,
+      ms: longest,
+      frames,
+      skipped: Math.max(0, Math.round(ms / compositorFrameMs) - frames),
+    };
+  });
+  const longestGap = gaps.reduce((a, b) =>
+    b.frames > a.frames || (b.frames === a.frames && b.ms > a.ms) ? b : a,
+  );
+  const longestStallMs = longestGap.ms;
+  // Where the longest stall starts, from the start of the window.
+  const longestStallAtMs = longestGap.from - window.from;
+  const longestStallFrames = longestGap.frames;
+  const skips = gaps.filter(g => g.skipped > 0);
+  const recorderSkipped = skips.reduce((sum, g) => sum + g.skipped, 0);
+  // With a compositor record, frames count in its intervals, and the frames
+  // it presented where the screencast skipped are presented frames.
+  const expectedFrames = Math.floor(
+    (judged.to - judged.from) / (compositorFrameMs ?? cadence),
+  );
   const moved = changes.length;
-  const movedFraction = moved / Math.max(1, expectedFrames);
+  const movedFraction = (moved + recorderSkipped) / Math.max(1, expectedFrames);
   // The cast's position step, and the motion per interval it has to resolve.
   const positions = tracked.flatMap(f => (f.box == null ? [] : [f.box[axis]]));
   const stepPx =
@@ -361,6 +443,16 @@ export function busyWindowProof(
       ? 0
       : Math.abs(last.value - first.value) / ((last.t - first.t) / cadence);
   const notes: string[] = [];
+  if (presented != null && compositorFrameMs == null) {
+    notes.push(
+      'no compositor frames recorded around the window: judged from the screencast alone',
+    );
+  }
+  if (recorderSkipped > 0) {
+    notes.push(
+      `the screencast skipped ${recorderSkipped} frames the compositor presented (at ${skips.map(g => `+${(g.from - window.from).toFixed(0)} ms`).join(', ')})`,
+    );
+  }
   if (pxPerFrame > 0 && pxPerFrame < 2 * stepPx) {
     notes.push(
       `${pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps: a frame delivered early can show no step and read as not moved`,
@@ -388,20 +480,23 @@ export function busyWindowProof(
     1,
     Math.floor((1 - minMovedFraction) * expectedFrames + 1e-9),
   );
-  if (expectedFrames - moved > allowedMisses) {
+  if (expectedFrames - moved - recorderSkipped > allowedMisses) {
     failures.push(
-      `${moved} of ${expectedFrames} expected frames moved (${(movedFraction * 100).toFixed(0)}% < ${(minMovedFraction * 100).toFixed(0)}%)`,
+      `${moved} of ${expectedFrames} expected frames moved${recorderSkipped > 0 ? ` (and ${recorderSkipped} the screencast skipped)` : ''} (${(movedFraction * 100).toFixed(0)}% < ${(minMovedFraction * 100).toFixed(0)}%)`,
     );
   }
   const onScreenFromMs =
     onScreenFrom == null ? null : onScreenFrom - window.from;
   const summary =
     `${(judged.to - judged.from).toFixed(0)} ms judged at ${cadence.toFixed(1)} ms/frame: ${stats.frames} frames presented, ` +
-    `${moved}/${expectedFrames} moved (${(movedFraction * 100).toFixed(0)}%), ` +
+    `${moved}/${expectedFrames} moved${recorderSkipped > 0 ? ` and ${recorderSkipped} skipped by the screencast` : ''} (${(movedFraction * 100).toFixed(0)}%), ` +
     `median ${stats.medianFrameMs.toFixed(1)} ms, ` +
     `longest stall ${longestStallMs.toFixed(1)} ms (${longestStallFrames} intervals) at +${longestStallAtMs.toFixed(0)} ms, ` +
     `${stats.monotonic ? 'monotonic' : 'not monotonic'}, ` +
     `${pxPerFrame.toFixed(1)} px/frame in ${stepPx} px steps` +
+    (compositorFrameMs == null
+      ? ''
+      : `, compositor presenting every ${compositorFrameMs.toFixed(1)} ms`) +
     (onScreenFromMs == null
       ? ''
       : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
@@ -414,6 +509,8 @@ export function busyWindowProof(
     stepPx,
     pxPerFrame,
     notes,
+    recorderSkipped,
+    compositorFrameMs,
     cadenceMs: cadence,
     longestStallMs,
     longestStallAtMs,

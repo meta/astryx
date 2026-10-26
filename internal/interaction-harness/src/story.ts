@@ -110,8 +110,9 @@ export async function frames(page: Page, count = 2): Promise<void> {
 
 // A held callback is queued under its timer or frame id, so the page's own
 // clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
-// frame callback gets the time it actually runs at. `frame` stays the real
-// requestAnimationFrame, for the harness's own waits.
+// frame callback gets the time it actually runs at. `frame` and `timeout`
+// stay the real requestAnimationFrame and setTimeout, for the harness's own
+// waits.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -119,7 +120,7 @@ const TIMER_GATE = `(() => {
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
   const realCancelFrame = window.cancelAnimationFrame.bind(window);
-  const gate = {frozen: false, queue: [], frame: realFrame};
+  const gate = {frozen: false, queue: [], frame: realFrame, timeout: realTimeout};
   window.__harnessTimerGate = gate;
   const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
   window.setTimeout = (fn, ms, ...args) => {
