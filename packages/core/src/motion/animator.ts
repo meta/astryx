@@ -2025,7 +2025,8 @@ export function createAnimator(
       !named &&
       borrowedOpacity == null &&
       !segments.has('opacity') &&
-      resting.opacity === IDENTITY.opacity
+      resting.opacity === IDENTITY.opacity &&
+      (target?.style.getPropertyValue('opacity') ?? '') === ''
         ? ownOpacity()
         : null;
     if (!entering && !leaving && role === 'entrance') {
@@ -2095,10 +2096,14 @@ export function createAnimator(
       // lends the same borrow to the next one: overlapping dips never pin
       // the stylesheet's value inline.
       const priorBorrow = borrowedOpacity;
+      // An opacity the animator left inline (a `set` over a stylesheet that
+      // hides or dims the element) is owned too: a dip returns to it.
       const ownsOpacity =
         named ||
         (priorBorrow == null &&
-          (segments.has('opacity') || resting.opacity !== IDENTITY.opacity));
+          (segments.has('opacity') ||
+            resting.opacity !== IDENTITY.opacity ||
+            (target?.style.getPropertyValue('opacity') ?? '') !== ''));
       const borrowed = ownsOpacity ? null : (priorBorrow ?? ownOpacity());
       // It opens at the opacity on screen: an earlier dip's, when one is
       // still running, else the borrowed stylesheet value.
@@ -2147,13 +2152,6 @@ export function createAnimator(
         return;
       }
       if (next == null) {
-        // A Reduce Motion move waiting to land lands now, on the element it
-        // ran on: a node that replaces this one (React's replacement order,
-        // architecture:react-component-runtime INV6) shows it where it
-        // ends, and its handles settle finished. A new element attached
-        // straight away keeps the dip instead, and the move lands at its
-        // bottom, while invisible (design:reduced-motion DR2).
-        landPending(true);
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
         // left to animate, so at the end of the task every other handle
@@ -2191,15 +2189,14 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
-      if (next == null) {
-        handBackBorrow();
-      } else if (
+      if (
         borrowedOpacity != null ||
         [...landings].some(landing => landing.restoreIsBorrowed === true)
       ) {
-        // A new element takes over a running borrowed dip: the dip keeps
-        // running there, so a pending move still lands while it is
-        // invisible; the outgoing element gets its stylesheet's opacity back.
+        // A running borrowed dip (or an exit by role returning to the
+        // stylesheet) stays in the model through any attach, so a pending
+        // move still lands while the element is invisible; only the
+        // outgoing element gets its stylesheet's opacity back.
         target?.style.removeProperty('opacity');
       }
       target = next;
@@ -2207,6 +2204,17 @@ export function createAnimator(
         return;
       }
       const time = now();
+      // A borrowed dip that ended while detached hands the opacity back
+      // instead of writing the borrowed value inline.
+      const dip = segments.get('opacity');
+      if (
+        borrowedOpacity != null &&
+        (dip == null || time >= dip.start + dip.duration)
+      ) {
+        borrowedOpacity = null;
+        segments.delete('opacity');
+        resting.opacity = IDENTITY.opacity;
+      }
       for (const channel of Object.keys(CHANNELS) as Channel[]) {
         const properties = CHANNELS[channel];
         const isDefault = properties.every(
