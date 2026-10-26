@@ -489,6 +489,10 @@ export class GestureHost {
    * recognizers' options or its consumer's enabled state changed.
    */
   update(element: Element): void {
+    if (!this.followsPointer) {
+      // A read passed in (a test's) is not followed: an update reads it again.
+      this.isCoarse = this.isPrimaryPointerCoarse();
+    }
     const registration = this.registry.get(element);
     if (registration != null) {
       this.refresh(element, registration);
@@ -650,8 +654,9 @@ export class GestureHost {
   private applyStyle(element: HTMLElement, registration: Registration): void {
     // Where the primary pointer is fine, the browser's own styles, but a
     // perEventPointer recognizer's (FR19).
-    const active = registration.recognizers.filter(recognizer =>
-      this.isActive(recognizer),
+    // A disabled recognizer leaves the browser everything (FR24).
+    const active = registration.recognizers.filter(
+      recognizer => recognizer.isEnabled && this.isActive(recognizer),
     );
     let style: GestureHostStyle =
       active.length > 0 ? gestureHostStyle(active) : {};
