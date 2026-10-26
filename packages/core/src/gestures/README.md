@@ -54,10 +54,12 @@ function Sheet() {
   gesture the unmount ended.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
   (see below). It follows its element the same way, takes `isBraking` (by
-  default the host's: a touch that stops a flick presses nothing), and
-  rebuilds its tracker when `trackingExpansion`, `highlightDelay`,
-  `cancelTravel` or `quickTapFlash` change, from the next touch. Unmounting
-  calls neither `onHighlightChange` nor `onControlEvent`.
+  default the host's: a touch that stops a flick presses nothing), and keeps
+  one tracker for the component's life: it reads `trackingExpansion`,
+  `highlightDelay`, `cancelTravel` and `quickTapFlash` (and the ref itself)
+  as they are now, so a change, even mid-press, never drops the press in
+  progress. Unmounting or losing its element calls neither
+  `onHighlightChange` nor `onControlEvent`.
 - `useFingerScroll(scroller)`, an internal piece of the touch module with
   no public API (not in the gestures barrel; a scroll-driven component
   imports its module, so it ships only where used), returns a reader, `true` while the scroller's scroll is a finger's: from a scroll
