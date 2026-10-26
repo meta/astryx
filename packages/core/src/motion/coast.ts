@@ -19,7 +19,8 @@
  *   edge spring, which settles on the edge;
  * - released past an edge, it springs straight back with the release
  *   velocity: a transition, not momentum, so under Reduce Motion `decay`
- *   cross-fades it (`design:reduced-motion` DR2);
+ *   plays it as `animate` does, a cross-fade on a coarse pointer and at once
+ *   on any other (`design:reduced-motion` DR2, DR3);
  * - at zero velocity inside its bounds, it rests where it is.
  *
  * SYNC: When modified, update coast.test.ts.
