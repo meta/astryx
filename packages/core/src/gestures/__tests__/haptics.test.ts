@@ -140,6 +140,28 @@ describe('attachTapHaptic', () => {
     expect(own).not.toHaveAttribute('aria-labelledby');
   });
 
+  it('gives a disabled control no feedback and leaves no focus on the switch (FR23)', () => {
+    document.body.innerHTML =
+      '<button id="before">Before</button>' +
+      '<label id="tap"><input id="own" type="checkbox" disabled> Remember me</label>';
+    const before = document.getElementById('before') as HTMLButtonElement;
+    const label = document.getElementById('tap') as HTMLLabelElement;
+    const own = document.getElementById('own') as HTMLInputElement;
+    const release = attachTapHaptic(label);
+    const sw = label.querySelector<HTMLInputElement>(
+      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
+    )!;
+    before.focus();
+    sw.focus();
+    sw.click();
+    // The switch did not toggle (nothing plays), the control did not change,
+    // and focus is not stranded on the hidden switch.
+    expect(sw.checked).toBe(false);
+    expect(own.checked).toBe(false);
+    expect(document.activeElement).toBe(before);
+    release();
+  });
+
   it('leaves a label whose control is already a switch, or tied by for, as it is', () => {
     document.body.innerHTML =
       '<label id="a"><input type="checkbox" switch> Wi-Fi</label>' +
