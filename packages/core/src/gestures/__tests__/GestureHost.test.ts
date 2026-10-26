@@ -2140,6 +2140,43 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(inactive).toEqual([]);
   });
 
+  it("where the pointer is fine, gives a per-event press tracker's finger its press feedback only: the browser keeps the pan (spec:AST-094 FR19)", () => {
+    quietWarning();
+    const pointer = pointerQuery(false);
+    detachers.push(pointer.restore);
+    const {stepper} = mount('<div id="stepper"></div>');
+    const bounds = {left: 0, top: 0, right: 100, bottom: 100};
+    const events: string[] = [];
+    const highlights: boolean[] = [];
+    const tracker = new PressTracker({
+      getBounds: () => bounds,
+      keepsTouch: true,
+      onControlEvent: event => events.push(event),
+      onHighlightChange: isHighlighted => highlights.push(isHighlighted),
+    });
+    detachers.push(
+      host.attachConsumer(stepper, tracker, {perEventPointer: true}),
+    );
+    const finger = {id: 1, x: 5, y: 5};
+    const moved = {id: 1, x: 5, y: 60};
+    touch('touchstart', stepper, [finger], [finger], 0);
+    // Its press is delivered and painted, as under a coarse pointer.
+    expect(events).toContain('touchDown');
+    expect(highlights).toContain(true);
+    // But it never keeps the touch from the browser: the page still pans.
+    expect(
+      touch('touchmove', stepper, [moved], [moved], 16).defaultPrevented,
+    ).toBe(false);
+    touch('touchend', stepper, [moved], [], 32);
+    // On a coarse primary pointer the same held press keeps its touch.
+    pointer.set(true);
+    touch('touchstart', stepper, [finger], [finger], 100);
+    expect(
+      touch('touchmove', stepper, [moved], [moved], 116).defaultPrevented,
+    ).toBe(true);
+    touch('touchend', stepper, [moved], [], 132);
+  });
+
   it('keeps it working when the pointer turns fine, as the rest comes down', () => {
     quietWarning();
     const pointer = pointerQuery(true);

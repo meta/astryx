@@ -9,7 +9,10 @@
  * @output useFingerScroll: whether the scroller's current scroll is a
  *   finger's, read at any moment
  * @position Gesture hook of packages/core/src/gestures, over the
- *   finger-scroll watch (fingerScroll.ts)
+ *   finger-scroll watch (fingerScroll.ts). An internal piece of the touch
+ *   module with no public API, not in the gestures barrel: a scroll-driven
+ *   component (a tab bar that minimizes, a header that collapses, a picker
+ *   that commits at rest) imports it from here, so it ships only where used
  *
  * A scroll is a finger's from a scroll event while a finger that landed
  * inside the scroller is down, until the scroller's `scrollend` (the lift
@@ -19,8 +22,7 @@
  * minimizes as the page scrolls down) reads this instead of listening to
  * touches itself.
  *
- * SYNC: When modified, update useFingerScroll.doc.mjs and
- * __tests__/useFingerScroll.test.tsx.
+ * SYNC: When modified, update __tests__/useFingerScroll.test.tsx.
  */
 
 import {useCallback, useRef, type RefObject} from 'react';
