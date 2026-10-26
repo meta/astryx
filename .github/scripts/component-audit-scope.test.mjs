@@ -41,6 +41,9 @@ describe('component audit scope', () => {
     expect(workflow).toContain(
       'origin/${{ github.base_ref }}:scripts/component-packages.cjs',
     );
+    expect(workflow).toContain(
+      'origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs',
+    );
     expect(workflow).toContain('force_full_component_audits=true');
   });
 
@@ -99,6 +102,34 @@ describe('component audit scope', () => {
         COMPONENT_PACKAGES,
       ),
     ).toEqual(NO_COMPONENT_AUDIT_SCOPE);
+  });
+
+  it('skips component audits for knowledge records beside a known non-component surface', () => {
+    expect(
+      classifyComponentAuditScope(
+        [
+          'packages/core/src/Button/Button.spec.md',
+          'packages/cli/api/theme/build/build.mjs',
+        ],
+        COMPONENT_PACKAGES,
+      ),
+    ).toEqual(NO_COMPONENT_AUDIT_SCOPE);
+  });
+
+  it('still audits a component whose record changes beside its code', () => {
+    expect(
+      classifyComponentAuditScope(
+        [
+          'packages/core/src/Button/Button.spec.md',
+          'packages/core/src/Button/Button.tsx',
+        ],
+        COMPONENT_PACKAGES,
+      ),
+    ).toMatchObject({
+      has_components: true,
+      has_rtl_components: true,
+      force_full_component_audits: false,
+    });
   });
 
   it('keeps root scripts on full component audits', () => {
