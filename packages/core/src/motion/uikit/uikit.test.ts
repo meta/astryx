@@ -74,9 +74,11 @@ function leavesOf(file: string): Leaf[] {
     }
     exported.add(match[1]);
     const doc = docAbove(lines, index);
-    if (/^@source /m.test(doc)) {
+    // A one-line export is a row whether or not it is sourced, so an
+    // unsourced one fails the source check below instead of being skipped.
+    if (/^@source /m.test(doc) || !line.endsWith('{')) {
       rows.push({file, key: match[1], doc});
-    } else if (line.endsWith('{')) {
+    } else {
       starts.push(index);
     }
   });
