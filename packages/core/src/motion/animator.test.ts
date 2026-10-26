@@ -695,6 +695,37 @@ describe('review fixes', () => {
     );
   });
 
+  it('an earlier {at} on a channel whose other axis waits joins that call, so the screen and get() share its clock', async () => {
+    const {animator} = setup();
+    clock = 1020;
+    animator.animate({x: 100}, {spring: springs.settle});
+    // An event timestamp 20 ms before the waiting call's time.
+    animator.animate({y: 50}, {spring: springs.settle}, {at: 1000});
+    clock = 1300;
+    await commitFrame(1300);
+    const y = animator.get('y', 1316);
+    expect(sampleAt(live('translate')[0], 'translate', 1316)[1]).toBeCloseTo(
+      y,
+      1,
+    );
+  });
+
+  it('a call adopted by a later same-task call starts at the commit, after the work between them', async () => {
+    const {animator} = setup();
+    const first = animator.animate({x: 100}, {spring: springs.settle});
+    // 300 ms of work in the same task, then another axis from rest.
+    clock = 1300;
+    animator.animate({y: 50}, {spring: springs.settle});
+    clock = 1310;
+    await commitFrame(1310);
+    await expect(first.started).resolves.toBe(1310);
+    expect(animator.get('x', 1310)).toBeCloseTo(0, 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1310)[0]).toBeCloseTo(
+      0,
+      1,
+    );
+  });
+
   it('under Reduced Motion on a fine pointer, a move leaves a running fade alone', async () => {
     const {animator} = setup({
       reduced: true,
@@ -1069,20 +1100,22 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     expect(opacityOnly()).toBe(true);
   });
 
-  it('a change at once during a running fade ends that fade at its target', async () => {
-    // A touch release fades on a fine pointer too (DR2); the next call there
-    // completes at once (DR3) and leaves the fade where it was heading.
-    const {animator} = reduced(false);
-    animator.animate(
-      {opacity: 0},
-      {spring: springs.settle},
-      {touchRelease: true},
-    );
-    await advance(60);
-    expect(animator.get('opacity')).toBeGreaterThan(0);
+  it("a move with no opacity of its own dips from and back to the stylesheet's opacity, then hands it back", async () => {
+    const {animator, element} = reduced();
+    stylesheet = {opacity: '0.6'};
     animator.animate({x: 100}, {spring: springs.navigationPush});
+    await commitFrame(clock); // the browser starts it
+    expect(animator.get('opacity', 1000)).toBeCloseTo(0.6, 9);
+    const [out] = live('opacity');
+    expect(out.keyframes[0].opacity).toBe('0.6');
+    await advance(fade / 2);
+    // Landed while transparent, fading back in to the stylesheet's value.
     expect(animator.get('x')).toBe(100);
-    expect(animator.get('opacity')).toBe(0);
+    expect(animator.get('opacity', clock + fade / 2)).toBeCloseTo(0.6, 9);
+    await advance(fade / 2 + END_HOLD_MS + 1);
+    // No inline opacity is left behind: the stylesheet owns it again.
+    expect(element.style.opacity).toBe('');
+    expect(animator.get('opacity')).toBe(1);
   });
 
   it('a move dips: fades out, lands while transparent, fades back in', async () => {
@@ -1579,13 +1612,12 @@ describe('decay: momentum curves (a coast)', () => {
     };
     animator.decay({
       x: linear,
-      opacity: {duration: 0, at: () => 0.5, velocity: () => 0},
+      y: {duration: 0, at: () => 5, velocity: () => 0},
     });
     await commitFrame(clock); // the browser starts it
     expect(animator.get('x', 1250)).toBeCloseTo(50, 9);
     expect(animator.get('x', 1e7)).toBeCloseTo(100, 9);
-    expect(animator.get('opacity')).toBe(0.5);
-    expect(element.style.opacity).toBe('0.5');
+    expect(animator.get('y')).toBe(5);
   });
 
   it('keeps moving under Reduced Motion: momentum continues the throw (DEC-2)', async () => {
@@ -1707,6 +1739,15 @@ describe('attach', () => {
       1,
     );
     expect(element.style.translate).toBe('300px 0px');
+  });
+
+  it('unmounting settles every handle as interrupted and leaves no timer', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 300}, {spring: springs.settle});
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    animator.attach(null);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(handle.finished).resolves.toBe(false);
   });
 
   it('detaching cancels the running animations', async () => {

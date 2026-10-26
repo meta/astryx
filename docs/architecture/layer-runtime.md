@@ -308,7 +308,8 @@ independent:
 
 - auto popovers use native light dismiss;
 - native dialogs handle backdrop clicks locally;
-- ContextMenu uses a local outside `mousedown` listener;
+- ContextMenu uses a local outside `mousedown` listener, which skips the
+  compatibility mouse events of the finger press that opened the menu;
 - Tooltip and HoverCard use hover/focus loss plus a touch-only outside listener;
 - sheets own scrim and swipe behavior; and
 - dropdown submenus encode their root-close relationship locally through

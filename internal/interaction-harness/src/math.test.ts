@@ -147,6 +147,28 @@ describe('compareCurve', () => {
   });
 });
 
+describe('compareCurve with points it cannot compare', () => {
+  it('fails a sample the reference has no value for', () => {
+    const reference = new Map([[0, 0]]);
+    const result = compareCurve(
+      [
+        {t: 0, value: 0},
+        {t: 10, value: 1},
+      ],
+      t => reference.get(t) ?? Number.NaN,
+      0.1,
+    );
+    expect(result.pass).toBe(false);
+    expect(result.worst.t).toBe(10);
+    expect(result.maxError).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it('fails a non-finite sampled value', () => {
+    const result = compareCurve([{t: 0, value: Number.NaN}], () => 0, 0.1);
+    expect(result.pass).toBe(false);
+  });
+});
+
 describe('timeline', () => {
   it('includes both ends', () => {
     expect(timeline(50, 1000 / 60)).toEqual([0, 16.667, 33.333, 50]);
