@@ -3,9 +3,10 @@
 /**
  * @file touchAction.ts
  * @input The recognizers attached to one element
- * @output Exports deriveTouchAction (the element's `touch-action`),
- *   gestureHostStyle (the inline style a host sets for its recognizers) and
- *   holdSelectionStyle (the selection and callout lock for one held press)
+ * @output Exports deriveTouchAction (the element's `touch-action`) and
+ *   gestureHostStyle (the inline style a host sets for its recognizers). The
+ *   selection and callout lock for one held press is the recognizer's own
+ *   `selectionLock` (gestures/selectionLock.ts), which the host calls
  * @position Browser negotiation of packages/core/src/gestures, pure so a
  *   server render can emit the same style the client would set
  *
@@ -27,9 +28,14 @@
  */
 
 import type {GestureRecognizer, NativeTouchBehavior} from './GestureRecognizer';
-import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
+import {internals} from './recognizerInternals';
 
-/** The intersection of what each touch recognizer leaves the browser. */
+/**
+ * The intersection of what each touch recognizer leaves the browser. A
+ * watcher (`claimsTouches: false`) never takes a touch, so it leaves the
+ * browser everything: its direction restricts no scroll (`spec:AST-094`
+ * FR20, DEC-7).
+ */
 export function combinedNativeBehavior(
   recognizers: ReadonlyArray<GestureRecognizer>,
 ): NativeTouchBehavior {
@@ -38,7 +44,7 @@ export function combinedNativeBehavior(
   let pinchZoom = true;
   let doubleTapZoom = true;
   for (const recognizer of recognizers) {
-    if (!recognizer.acceptsTouchInput) {
+    if (!internals(recognizer).acceptsTouchInput || !recognizer.claimsTouches) {
       continue;
     }
     const behavior = recognizer.nativeTouchBehavior;
@@ -103,22 +109,68 @@ export function gestureHostStyle(
   return style;
 }
 
+/** What a `touch-action` value lets the browser do, as tokens. */
+const ALL_PANS = [
+  'pan-left',
+  'pan-right',
+  'pan-up',
+  'pan-down',
+  'pinch-zoom',
+] as const;
+
+function touchActionTokens(value: string): Set<string> {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(part => part !== '');
+  const tokens = new Set<string>();
+  if (parts.length === 0) {
+    parts.push('auto');
+  }
+  for (const part of parts) {
+    if (part === 'auto') {
+      ALL_PANS.forEach(token => tokens.add(token));
+      tokens.add('double-tap-zoom');
+    } else if (part === 'manipulation') {
+      ALL_PANS.forEach(token => tokens.add(token));
+    } else if (part === 'pan-x') {
+      tokens.add('pan-left').add('pan-right');
+    } else if (part === 'pan-y') {
+      tokens.add('pan-up').add('pan-down');
+    } else if ((ALL_PANS as ReadonlyArray<string>).includes(part)) {
+      tokens.add(part);
+    }
+  }
+  return tokens;
+}
+
 /**
- * The lock a host applies for one press only, from touch-down to the lift or
- * a cancel, on an element whose hold does something (a long press): no iOS
- * callout and no text-selection start under the held finger, as a
- * long-pressed row in UIKit selects no text (spec:AST-094 FR41). Null where
- * the hold does nothing, so a long press there selects natively.
+ * The `touch-action` that allows only what both values allow: the host's
+ * derived value never overrides a caller's narrower one.
  */
-export function holdSelectionStyle(
-  recognizers: ReadonlyArray<GestureRecognizer>,
-): GestureHostStyle | null {
-  const holds = recognizers.some(
-    recognizer =>
-      recognizer instanceof LongPressGestureRecognizer &&
-      recognizer.acceptsTouchInput,
+export function intersectTouchAction(derived: string, caller: string): string {
+  const own = touchActionTokens(caller);
+  const both = new Set(
+    [...touchActionTokens(derived)].filter(token => own.has(token)),
   );
-  return holds
-    ? {WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'}
-    : null;
+  if (ALL_PANS.every(token => both.has(token))) {
+    return both.has('double-tap-zoom') ? 'auto' : 'manipulation';
+  }
+  const parts: string[] = [];
+  for (const [axis, start, end] of [
+    ['pan-x', 'pan-left', 'pan-right'],
+    ['pan-y', 'pan-up', 'pan-down'],
+  ] as const) {
+    if (both.has(start) && both.has(end)) {
+      parts.push(axis);
+    } else if (both.has(start)) {
+      parts.push(start);
+    } else if (both.has(end)) {
+      parts.push(end);
+    }
+  }
+  if (both.has('pinch-zoom')) {
+    parts.push('pinch-zoom');
+  }
+  return parts.length === 0 ? 'none' : parts.join(' ');
 }

@@ -27,6 +27,7 @@
  * read fresh on every question, since a native scroll moves them.
  */
 
+import {isRtlElement} from '../hooks/isRtlElement';
 import type {NativeScrollProbe} from './types';
 
 export interface AllowedPans {
@@ -136,7 +137,8 @@ function buildChain(target: Element): Chain {
         element,
         x: scrollsX && allowX,
         y: scrollsY && allowY,
-        isRtl: style.direction === 'rtl',
+        // The writing direction through core's one helper.
+        isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
         isBeyondFixed,

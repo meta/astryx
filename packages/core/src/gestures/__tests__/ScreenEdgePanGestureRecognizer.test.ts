@@ -96,6 +96,28 @@ describe('ScreenEdgePanGestureRecognizer', () => {
     expect(wide.nativeTouchBehavior).toEqual(ALL_NATIVE_TOUCH);
   });
 
+  it('takes a strip authored at the edge region as the edge zone though layout lays it out at 40.203 px', () => {
+    const strip = new ScreenEdgePanGestureRecognizer();
+    // 40.2 px snapped to layout's 1/64 px.
+    strip.view = viewOfSize(Math.ceil(strip.edgeRegion * 64) / 64, 844);
+    expect(strip.nativeTouchBehavior).toEqual({
+      panX: false,
+      panY: true,
+      pinchZoom: true,
+      doubleTapZoom: false,
+    });
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    h.environment.view = {width: 40.203, height: 844};
+    const hysteresis = UIKIT_SCREEN_EDGE_PAN.hysteresis.value;
+    h.finger(1)
+      .down(10, 300, 0, {recognizers: [edge]})
+      .drag(hysteresis - 1, 0, 30);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(2, 0, 50);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+
   it('in the edge zone, still decides at its hysteresis', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});

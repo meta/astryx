@@ -15,8 +15,11 @@ import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
+import {lockSelection} from '../../selectionLock';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
+import {PressTracker} from '../../PressTracker';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
+import {internals} from '../../recognizerInternals';
 
 interface Entry {
   name: string;
@@ -39,6 +42,13 @@ declare global {
   interface Window {
     __gestures: Entry[];
     __listeners: ListenerEntry[];
+    /** Every touch listener added to the document or the window, by type. */
+    __pageTouchListeners: string[];
+    /**
+     * The same, as the page left them once loaded: the test driver adds its
+     * own window listeners when it first runs a script.
+     */
+    __pageTouchListenersAtLoad: string[];
   }
 }
 
@@ -47,6 +57,7 @@ window.__gestures = [];
 // Every touch listener added to an element with an id, as the engine sees
 // it: which elements make a scroll wait for the page.
 window.__listeners = [];
+window.__pageTouchListeners = [];
 const addListener = EventTarget.prototype.addEventListener;
 EventTarget.prototype.addEventListener = function (
   this: EventTarget,
@@ -54,6 +65,9 @@ EventTarget.prototype.addEventListener = function (
   listener: EventListenerOrEventListenerObject | null,
   options?: boolean | AddEventListenerOptions,
 ) {
+  if ((this === document || this === window) && type.startsWith('touch')) {
+    window.__pageTouchListeners.push(type);
+  }
   if (this instanceof Element && this.id !== '' && type.startsWith('touch')) {
     window.__listeners.push({
       id: this.id,
@@ -81,7 +95,17 @@ document.body.innerHTML = `
       <div style="height: 1200px">sheet content</div>
     </div>
     <div id="passive" style="height: 60px; background: #dfd; touch-action: pan-y pinch-zoom">passive control</div>
+    <div id="slider" style="height: 60px; background: #fdf">slider: a pan that turns selection off</div>
+    <div id="checkRow" style="height: 60px; background: #eef">checkbox row <input id="check" type="checkbox" style="width: 40px; height: 40px"></div>
+    <div id="switchRow" style="height: 60px; background: #efe">switch: a drag that turns selection off <input id="switchInput" type="checkbox" style="width: 40px; height: 40px"></div>
     <div id="card" style="height: 80px; background: #def">card (swipe up)</div>
+    <div id="onePan" style="height: 160px; background: #dde">one-finger pan</div>
+    <div id="kept" style="height: 80px; background: #ede">kept press (a stepper's hold)</div>
+    <div id="plainArea" style="height: 160px; background: #eed">plain area</div>
+    <div id="feed" style="height: 240px; overflow-y: auto; overscroll-behavior: contain; background: #efe">
+      <div id="feedRow" style="height: 80px; background: #cfc">feed row (tap)</div>
+      <div style="height: 1200px">feed content</div>
+    </div>
     <div style="height: 1600px">page</div>
   </div>`;
 
@@ -100,7 +124,7 @@ function record(recognizer: GestureRecognizer, extra: () => Partial<Entry>) {
     window.__gestures.push({
       name: current.name,
       state: to,
-      time: current.arena?.now() ?? performance.now(),
+      time: internals(current).arena?.now() ?? performance.now(),
       ...(to === 'possible' || to === 'failed' ? {} : extra()),
     });
   });
@@ -113,6 +137,12 @@ host.attach(element('hpan'), hpan);
 const tap = new TapGestureRecognizer({name: 'tap'});
 record(tap, () => ({}));
 host.attach(element('tapper'), tap);
+
+// A row in a scroller: a scroll the page makes under a still finger keeps
+// its tap; a drag that scrolls the feed takes it.
+const feedTap = new TapGestureRecognizer({name: 'feedTap'});
+record(feedTap, () => ({}));
+host.attach(element('feedRow'), feedTap);
 
 const press = new LongPressGestureRecognizer({name: 'press'});
 record(press, () => ({
@@ -150,12 +180,67 @@ host.attach(element('card'), card);
 // press consumer, under pan-y, as a passive switch is.
 const passiveEvent = (state: string) =>
   window.__gestures.push({name: 'passive', state, time: performance.now()});
+host.attach(
+  element('slider'),
+  new PanGestureRecognizer({
+    name: 'slider',
+    direction: 'horizontal',
+    selectionLock: lockSelection,
+  }),
+);
+
+host.attach(
+  element('switchRow'),
+  new PanGestureRecognizer({
+    name: 'switchRow',
+    direction: 'horizontal',
+    selectionLock: lockSelection,
+  }),
+);
+
+host.attachConsumer(element('checkRow'), {
+  touchBegan: () => {},
+  touchMoved: () => {},
+  touchEnded: () => {},
+  touchCancelled: () => {},
+});
+
 host.attachConsumer(element('passive'), {
   touchBegan: () => passiveEvent('began'),
   touchMoved: () => passiveEvent('moved'),
   touchEnded: () => passiveEvent('ended'),
   touchCancelled: () => passiveEvent('cancelled'),
 });
+
+// A one-finger pan: a second finger before any claim fails it.
+const onePan = new PanGestureRecognizer({
+  name: 'onePan',
+  maximumNumberOfTouches: 1,
+});
+record(onePan, () => ({
+  x: onePan.translation().x,
+  y: onePan.translation().y,
+}));
+host.attach(element('onePan'), onePan);
+
+// A control that keeps its press through a drag, as a stepper's hold does.
+const keptEvent = (state: string) =>
+  window.__gestures.push({name: 'kept', state, time: performance.now()});
+host.attachConsumer(
+  element('kept'),
+  new PressTracker({
+    getBounds: () => element('kept').getBoundingClientRect(),
+    keepsTouch: true,
+    onControlEvent: event => keptEvent(event),
+    onHighlightChange: isHighlighted =>
+      keptEvent(isHighlighted ? 'highlight' : 'unhighlight'),
+  }),
+);
+
+// A scroll lock's page hold, held on demand: every one-finger pan would
+// scroll the page.
+(window as unknown as {__holdPage: () => () => void}).__holdPage = () =>
+  host.holdPageScroll(() => true);
 
 for (const type of ['click', 'mousedown']) {
   document.addEventListener(
@@ -171,3 +256,5 @@ for (const type of ['click', 'mousedown']) {
     true,
   );
 }
+
+window.__pageTouchListenersAtLoad = [...window.__pageTouchListeners];
