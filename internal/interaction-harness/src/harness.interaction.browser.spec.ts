@@ -1192,33 +1192,25 @@ test.describe('frame evidence', () => {
 });
 
 test.describe('wheel and pen input', () => {
-  /** A non-passive wheel listener that keeps a ctrl step from zooming the page. */
-  const takePinches = (page: Page) =>
+  /** A non-passive wheel listener: Chromium then waits for the page itself. */
+  const listenNonPassively = (page: Page) =>
     page.evaluate(() =>
-      window.addEventListener(
-        'wheel',
-        event => {
-          if (event.ctrlKey) {
-            event.preventDefault();
-          }
-        },
-        {passive: false},
-      ),
+      window.addEventListener('wheel', () => {}, {passive: false}),
     );
   /** The wheel steps the page received. */
   const wheelsOf = async (page: Page) =>
     (await readInputLog(page)).filter(r => r.type === 'wheel');
 
-  test('a wheel step reaches the page as exactly its deltas, trusted, with Control when held', async ({
+  test('a wheel step reaches the page as exactly its deltas, trusted, with Control when held, by the time wheel() resolves on a page whose wheel listeners are all passive', async ({
     page,
   }) => {
     await fixture(page);
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     await driver.wheel({x: 60, y: 520, dy: 120});
-    // A component that takes trackpad pinches listens non-passively and keeps
-    // the page from zooming; Chromium delivers a ctrl step only then.
-    await takePinches(page);
+    // The input log listens passively, so Chromium answers the dispatch
+    // before the page has the step: read right after the call.
+    expect(await wheelsOf(page)).toHaveLength(1);
     await driver.wheel({x: 60, y: 520, dx: 30, dy: -40, ctrl: true});
     const wheels = await wheelsOf(page);
     expect(wheels).toHaveLength(2);
@@ -1238,6 +1230,30 @@ test.describe('wheel and pen input', () => {
       deltaX: 30,
       deltaY: -40,
       deltaMode: 0,
+      ctrlKey: true,
+    });
+  });
+
+  test('a wheel step reaches the page by the time wheel() resolves with a non-passive wheel listener too', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    await listenNonPassively(page);
+    await driver.wheel({x: 60, y: 520, dy: 80});
+    expect(await wheelsOf(page)).toHaveLength(1);
+    await driver.wheel({x: 60, y: 520, dy: -20, ctrl: true});
+    const wheels = await wheelsOf(page);
+    expect(wheels).toHaveLength(2);
+    expect(wheels[0]).toMatchObject({
+      isTrusted: true,
+      deltaY: 80,
+      ctrlKey: false,
+    });
+    expect(wheels[1]).toMatchObject({
+      isTrusted: true,
+      deltaY: -20,
       ctrlKey: true,
     });
   });
@@ -1308,7 +1324,7 @@ test.describe('wheel and pen input', () => {
       const driver = await webInputDriver(page);
       expect(driver.wheels).toBe(true);
       await driver.wheel({x: 60, y: 520, dy: 120});
-      await takePinches(page);
+      expect(await wheelsOf(page)).toHaveLength(1);
       await driver.wheel({x: 60, y: 520, dx: -25, dy: 0, ctrl: true});
       const wheels = await wheelsOf(page);
       expect(wheels).toHaveLength(2);

@@ -4,9 +4,9 @@
  * @file webInput.ts
  * @input Uses a Playwright `Page` (Chromium or WebKit)
  * @output `webInputDriver(page)`: a wheel step (`wheel({x, y, dx, dy, ctrl})`)
- *   and a pen stroke (`pen(points)`) as REAL engine input, for the proofs that
- *   a gesture works for every pointer (`spec:AST-094` FR43), not only a
- *   finger.
+ *   and a pen stroke (`pen(points)`) as REAL engine input, for proofs that
+ *   the same motion works for every pointer, not only a finger
+ *   (`spec:AST-100` FR4).
  * @position The non-touch half of the input drivers; touch.ts is the touch
  *   half and owns the input log both are read through. Untrusted DOM events
  *   are not input (a component can tell them apart with `isTrusted`), so both
@@ -17,9 +17,10 @@
  *   deltas it delivers by the device scale factor times the visual viewport's
  *   scale, so the driver multiplies them back: the page receives exactly `dx`
  *   and `dy` CSS px, in pixel mode (`deltaMode` 0). `ctrl` holds Control, as a
- *   trackpad pinch arrives; Chromium delivers such a step only to a page with
- *   a non-passive wheel listener (otherwise it zooms the page), as a component
- *   that takes trackpad pinches has.
+ *   trackpad pinch arrives. On a page whose wheel listeners are all passive
+ *   (every page with the input log), Chromium answers the dispatch at once
+ *   and delivers the step to the page afterwards, so `wheel` waits, through a
+ *   one-shot passive listener, until the page has the step.
  * - A pen stroke is pressed at its first point, moved through every point and
  *   released at the last, with `pointerType: 'pen'`, a pressure and an
  *   optional tilt, each event stamped with its scripted time: the page
@@ -27,7 +28,7 @@
  *   with those timestamps.
  *
  * WebKit (Playwright's Linux build): `page.mouse.wheel` in a desktop context
- * (`isMobile: false`, `hasTouch: false`). WebKit's mobile emulation has no
+ * (`isMobile: false`, `hasTouch: false`), waiting the same way. WebKit's mobile emulation has no
  * wheel input, and Playwright has no pen for WebKit: both throw, naming the
  * reason, so a proof skips on the driver's flags instead.
  *
@@ -35,7 +36,7 @@
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
  */
 
-import type {CDPSession, Page} from '@playwright/test';
+import type {CDPSession, JSHandle, Page} from '@playwright/test';
 import type {Engine} from './touch';
 
 /** One wheel step: the page receives exactly `dx`, `dy` CSS px. */
@@ -81,6 +82,48 @@ export const PEN_SKIP =
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/** How long `wheel` waits for the page to receive its step. */
+const WHEEL_DELIVERY_MS = 2000;
+
+/**
+ * Arms a one-shot passive capture listener for the page's next wheel step,
+ * before the step is dispatched. Passive, so the page's own listeners keep
+ * deciding whether the engine waits for it. (The promise sits in an object:
+ * a handle to a bare promise would wait for it to settle.)
+ */
+function armWheel(page: Page): Promise<JSHandle<{received: Promise<void>}>> {
+  return page.evaluateHandle(() => ({
+    received: new Promise<void>(resolve => {
+      window.addEventListener('wheel', () => resolve(), {
+        capture: true,
+        once: true,
+        passive: true,
+      });
+    }),
+  }));
+}
+
+/** Waits until the armed listener has seen the step; throws past the limit. */
+async function untilReceived(
+  page: Page,
+  armed: JSHandle<{received: Promise<void>}>,
+): Promise<void> {
+  const received = await page.evaluate(
+    ([box, ms]) =>
+      Promise.race([
+        box.received.then(() => true),
+        new Promise<boolean>(resolve => setTimeout(() => resolve(false), ms)),
+      ]),
+    [armed, WHEEL_DELIVERY_MS] as const,
+  );
+  await armed.dispose();
+  if (!received) {
+    throw new Error(
+      `webInputDriver: the page did not receive the wheel step within ${WHEEL_DELIVERY_MS} ms (is the point inside the viewport, over the main document?)`,
+    );
+  }
+}
+
 async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   return {
@@ -91,6 +134,7 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
       const scale = await page.evaluate(
         () => window.devicePixelRatio * (window.visualViewport?.scale ?? 1),
       );
+      const armed = await armWheel(page);
       await cdp.send('Input.dispatchMouseEvent', {
         type: 'mouseWheel',
         x,
@@ -99,6 +143,7 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
         deltaY: dy * scale,
         modifiers: ctrl ? 2 : 0,
       });
+      await untilReceived(page, armed);
     },
     async pen(points) {
       if (points.length === 0) {
@@ -153,7 +198,9 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
         await page.keyboard.down('Control');
       }
       try {
+        const armed = await armWheel(page);
         await page.mouse.wheel(dx, dy);
+        await untilReceived(page, armed);
       } finally {
         if (ctrl) {
           await page.keyboard.up('Control');
