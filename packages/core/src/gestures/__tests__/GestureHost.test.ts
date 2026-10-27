@@ -759,22 +759,79 @@ describe('GestureHost', () => {
     touch('touchend', card, [{...finger, y: 88}], [], 64);
   });
 
-  it('leaves a scroll-edge pan to claim at its begin', () => {
-    const {sheet} = mount('<div id="sheet"></div>');
-    const pan = new PanGestureRecognizer({
-      name: 'sheet',
-      direction: 'down',
-      scrollEdge: true,
+  describe("a scroll-edge pan's first moves (spec:AST-094 FR19, DEC-18)", () => {
+    /** A sheet whose own list sits under the finger, scrolled to `scrollTop`. */
+    function sheetOverList(scrollTop: number, options = {scrollEdge: true}) {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        ...options,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (y: number, time: number, cancelable = true) =>
+        touch(
+          'touchmove',
+          row,
+          [{...finger, y}],
+          [{...finger, y}],
+          time,
+          cancelable,
+        );
+      const lift = (y: number, time: number) =>
+        touch('touchend', row, [{...finger, y}], [], time);
+      return {list, pan, at, lift};
+    }
+
+    it('cancels the moves from the first one while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(102, 16).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      expect(at(107, 32).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      expect(at(112, 48).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('began');
+      lift(112, 64);
     });
-    detachers.push(host.attach(sheet, pan));
-    const finger = {id: 1, x: 50, y: 100};
-    touch('touchstart', sheet, [finger], [finger], 0);
-    const at = (y: number, time: number) =>
-      touch('touchmove', sheet, [{...finger, y}], [{...finger, y}], time);
-    expect(at(107, 16).defaultPrevented).toBe(false);
-    expect(at(112, 32).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('began');
-    touch('touchend', sheet, [{...finger, y: 112}], [], 48);
+
+    it('leaves the moves to the browser while a scroller under the finger can still scroll that way', () => {
+      const {pan, at, lift} = sheetOverList(50);
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      expect(at(112, 48).defaultPrevented).toBe(false);
+      expect(pan.state).toBe('failed');
+      lift(112, 64);
+    });
+
+    it('leaves a first move toward the content to the browser', () => {
+      const {at, lift} = sheetOverList(0);
+      expect(at(98, 16).defaultPrevented).toBe(false);
+      lift(98, 32);
+    });
+
+    it('cancels nothing before a pan without scrollEdge begins', () => {
+      const {pan, at, lift} = sheetOverList(0, {scrollEdge: false});
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      expect(at(112, 48).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('began');
+      lift(112, 64);
+    });
+
+    it('cancels nothing once the browser has taken the touch for a scroll', () => {
+      const {list, at, lift} = sheetOverList(50);
+      // The browser scrolls the list: its moves can no longer be cancelled.
+      at(102, 16, false);
+      // The list reaches its edge under the same finger: still the browser's.
+      scrollable(list, {scrollTop: 0});
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      lift(107, 48);
+    });
   });
 
   it('names the pointer a finger, a pen or a mouse is driven by', () => {
