@@ -1666,6 +1666,11 @@ export class GestureHost {
     for (const input of untracked) {
       this.arena.untrackedBegan(input);
     }
+    // Again once the new fingers are delivered: a pinch's second finger may
+    // have landed on another one-finger pan, the next row (FR10).
+    if (this.fingerTargets.length > 1) {
+      this.failUnclaimedLoneFingerPans();
+    }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
     const landed = landedOn(event);
@@ -2284,6 +2289,19 @@ export class GestureHost {
         ...(this.isCoarse ? {} : {isFeedbackOnly: true}),
       },
     ]);
+    if (
+      event.pointerType === 'touch' &&
+      this.arena.touches.filter(
+        touch =>
+          touch.pointerType === 'touch' &&
+          touch.phase !== 'ended' &&
+          touch.phase !== 'cancelled',
+      ).length > 1
+    ) {
+      // Again once this finger is delivered: it may have landed on another
+      // one-finger pan (FR10).
+      this.failUnclaimedLoneFingerPans();
+    }
     if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
       this.lockSelection(
         id,
