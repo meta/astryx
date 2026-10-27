@@ -58,6 +58,13 @@ export interface ContextRequestOptions {
      * UIKit opens a context menu then. @default false
      */
     requestOnLift?: boolean;
+    /**
+     * How far the finger may drift before the request, px: before the commit
+     * it fails the hold, after it cancels it. @default UIKit's long press, 10
+     */
+    allowableMovement?: number;
+    /** Measure `allowableMovement` on each axis, as a context menu does. @default false */
+    isPerAxis?: boolean;
   };
   /**
    * A hold's progress: committed (claimed), then ended after its request,
@@ -95,6 +102,9 @@ export function attachContextRequest(
   let lastKeyRequestAt = Number.NEGATIVE_INFINITY;
   let held: {touchId: number; pointerType: PointerKind} | null = null;
   const requestOnLift = options.hold?.requestOnLift === true;
+  const allowableMovement =
+    options.hold?.allowableMovement ?? LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
+  const isPerAxis = options.hold?.isPerAxis === true;
   let hasRequested = false;
   // Drifted past the long press's movement before the request: no hold.
   let hasDrifted = false;
@@ -103,7 +113,8 @@ export function attachContextRequest(
   const recognizer = new LongPressGestureRecognizer({
     name: 'contextRequest',
     minimumPressDuration: commitMs,
-    allowableMovement: LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+    allowableMovement,
+    isPerAxis,
     // A mouse held still selects text and drags: a hold is a finger's or a
     // pen's (spec:AST-094 FR43).
     allowedPointerTypes: ['touch', 'pen'],
@@ -154,13 +165,13 @@ export function attachContextRequest(
       }
     } else if (state === 'changed') {
       const point = recognizer.location();
-      if (
-        !hasRequested &&
-        !hasDrifted &&
-        start != null &&
-        Math.hypot(point.x - start.x, point.y - start.y) >
-          LONG_PRESS_ALLOWABLE_MOVEMENT_PX
-      ) {
+      const drift =
+        start == null
+          ? 0
+          : isPerAxis
+            ? Math.max(Math.abs(point.x - start.x), Math.abs(point.y - start.y))
+            : Math.hypot(point.x - start.x, point.y - start.y);
+      if (!hasRequested && !hasDrifted && drift > allowableMovement) {
         hasDrifted = true;
         host.arena.clearTimer(recognizer);
         options.onHold?.('cancelled');

@@ -195,6 +195,38 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
       expect(phases).toEqual(['committed', 'cancelled']);
     });
 
+    it("measures the hold's drift on each axis against its own tolerance when asked, as a context menu does, before the commit and after it: (11, 11) holds with 11.5 per axis, (12, 12) does not", () => {
+      const perAxis = {allowableMovement: 11.5, isPerAxis: true};
+      const kept = holdRequests(perAxis);
+      touch('touchstart', kept.row, {id: 1, x: 20, y: 20}, 0);
+      touch('touchmove', kept.row, {id: 1, x: 31, y: 31}, 100);
+      host.arena.advanceTime(400);
+      touch('touchmove', kept.row, {id: 1, x: 9, y: 9}, 500);
+      host.arena.advanceTime(735);
+      expect(kept.phases).toEqual(['committed']);
+      expect(kept.seen.map(request => request.time)).toEqual([735]);
+      touch('touchend', kept.row, {id: 1, x: 9, y: 9}, 800, true);
+      for (const detach of detachers.splice(0)) {
+        detach();
+      }
+      const before = holdRequests(perAxis);
+      touch('touchstart', before.row, {id: 2, x: 20, y: 20}, 1000);
+      touch('touchmove', before.row, {id: 2, x: 32, y: 32}, 1100);
+      host.arena.advanceTime(1400);
+      expect(before.phases).toEqual([]);
+      touch('touchend', before.row, {id: 2, x: 32, y: 32}, 1500, true);
+      for (const detach of detachers.splice(0)) {
+        detach();
+      }
+      const after = holdRequests(perAxis);
+      touch('touchstart', after.row, {id: 3, x: 20, y: 20}, 2000);
+      host.arena.advanceTime(2400);
+      touch('touchmove', after.row, {id: 3, x: 32, y: 20}, 2500);
+      expect(after.phases).toEqual(['committed', 'cancelled']);
+      host.arena.advanceTime(2735);
+      expect(after.seen).toEqual([]);
+    });
+
     it("requests on the host's clock: a lift that comes late, past the request time, finds the request made at that time first", () => {
       const {row, phases, seen} = holdRequests({});
       touch('touchstart', row, {id: 1, x: 20, y: 20}, 0);

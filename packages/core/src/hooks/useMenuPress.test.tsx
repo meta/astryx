@@ -534,6 +534,81 @@ describe('useMenuPress — the trigger', () => {
     }
   });
 
+  it("keeps the released tolerance where the primary pointer is fine, 10 px on each axis: a finger's (8, 8) settle on the trigger still opens, an 11 px drift does not (useMenuPress FR9)", () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    });
+    const hold = (dx: number, dy: number) => {
+      const onOpenChange = vi.fn();
+      const {unmount} = render(<Harness onOpenChange={onOpenChange} />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      fireEvent.pointerMove(trigger, {...touch(), clientX: dx, clientY: dy});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      const opened = onOpenChange.mock.calls.some(([open]) => open === true);
+      fireEvent.pointerUp(trigger, touch());
+      unmount();
+      return opened;
+    };
+    try {
+      expect(hold(8, 8)).toBe(true);
+      expect(hold(0, 11)).toBe(false);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
+  it('observes no pointer query from a menu or its rows: the trigger reads (pointer: coarse) when its press starts (spec:AST-094 FR24)', () => {
+    const original = window.matchMedia;
+    const listening: string[] = [];
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: () => listening.push(query),
+          removeEventListener: () => {},
+          addListener: () => listening.push(query),
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    });
+    try {
+      const {unmount} = render(<Harness />);
+      expect(listening.filter(query => query.includes('pointer'))).toEqual([]);
+      unmount();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
   it('marks the menu root as carrying the press model', () => {
     render(<Harness />);
     expect(screen.getByRole('menu')).toHaveAttribute('data-astryx-menu-press');

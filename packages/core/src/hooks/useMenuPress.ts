@@ -55,11 +55,10 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
-import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
+import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   IDLE_MENU_PRESS,
   menuPressStep,
@@ -68,11 +67,18 @@ import {
   type MenuPressGesture,
   type MenuPressPointerType,
 } from './menuPressGesture';
-import {useLongPress, type UseLongPressHandlers} from './useLongPress';
+import {
+  useLongPress,
+  type LongPressTolerance,
+  type UseLongPressHandlers,
+} from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
 import {
   __resetClickGuardForTest,
   armClickGuard,
@@ -108,11 +114,16 @@ export const MENU_PRESS_LONG_PRESS_MS = LONG_PRESS_DURATION_MS;
  */
 export const MENU_PRESS_TRIGGER_DRIFT_PX = 13;
 
-const viewOrNull = () => (typeof window === 'undefined' ? null : window);
-const subscribeCoarsePointer = (onChange: () => void) =>
-  watchCoarsePointer(viewOrNull(), onChange);
-const readCoarsePointer = () => isCoarsePointer(viewOrNull());
-const readServerCoarsePointer = () => false;
+/**
+ * A finger held on the trigger: FR29's drift allowance where the primary
+ * pointer is coarse; where it is fine, the released behavior's tolerance
+ * (useMenuPress FR9), the long press's own. Read when the press starts.
+ */
+function triggerTolerance(): LongPressTolerance {
+  return isCoarsePointer(typeof window === 'undefined' ? null : window)
+    ? {moveCancelPx: MENU_PRESS_TRIGGER_DRIFT_PX}
+    : {moveCancelPx: LONG_PRESS_ALLOWABLE_MOVEMENT_PX};
+}
 /** Distance from a scrolling menu's edge within which a resting pointer scrolls. */
 export const MENU_PRESS_AUTOSCROLL_ZONE_PX = 24;
 const AUTOSCROLL_STEP_PX = 6;
@@ -740,19 +751,11 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // onto its trigger, driven here from the pointer stream this model already
   // observes. Its touch handlers go unused; the hold duration, the movement
   // tolerance and the timer are what matter, and they now have one home.
-  // FR29's drift allowance is a finger's where the primary pointer is
-  // coarse; where it is fine, the shared tolerance stays (useMenuPress FR9).
-  const isPrimaryPointerCoarse = useSyncExternalStore(
-    subscribeCoarsePointer,
-    readCoarsePointer,
-    readServerCoarsePointer,
-  );
+  // The press's tolerance is read as it starts (triggerTolerance), so no
+  // menu or row observes the pointer query (spec:AST-094 FR24).
   longPressApiRef.current = useLongPress({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
-    moveCancelPx: isPrimaryPointerCoarse
-      ? MENU_PRESS_TRIGGER_DRIFT_PX
-      : undefined,
   });
 
   // --- Handlers ------------------------------------------------------------
@@ -833,7 +836,11 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
       attach(native.pointerId);
       lastPointerEventRef.current = native;
       if (pointerType !== 'mouse') {
-        longPressApiRef.current?.start({x: native.clientX, y: native.clientY});
+        longPressApiRef.current?.start(
+          {x: native.clientX, y: native.clientY},
+          undefined,
+          triggerTolerance(),
+        );
       }
       step(
         {

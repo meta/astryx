@@ -37,6 +37,14 @@ export function travel(touch: GestureTouch): number {
   return Math.hypot(touch.x - touch.startX, touch.y - touch.startY);
 }
 
+/** How far a touch has moved from where it began, on its farther axis. */
+export function axisTravel(touch: GestureTouch): number {
+  return Math.max(
+    Math.abs(touch.x - touch.startX),
+    Math.abs(touch.y - touch.startY),
+  );
+}
+
 /** The angle of the vector from the first touch to the second, radians. */
 export function angleBetween(a: Point, b: Point): number {
   return Math.atan2(b.y - a.y, b.x - a.x);
