@@ -37,7 +37,8 @@ deciding_specs: [spec:AST-086/DEC-2, spec:AST-099/DEC-1, spec:AST-105/DEC-1]
       "INV10",
       "INV11",
       "INV12",
-      "INV13"
+      "INV13",
+      "INV15"
     ]
   }
 }
@@ -191,6 +192,18 @@ those contracts.
   packages: undocumented, outside the compatibility promise, versioned in
   lockstep with Core, and limited by lint to Core and Lab (`spec:AST-017`
   FR21).
+- **INV15 — The animator animates a number.** The animator has a value mode:
+  it plays a number, such as a count or a chart value, on the same springs and
+  motion roles as its property channels, and hands the value to an `onUpdate`
+  callback each frame for the component to format and write. The component owns
+  the change size past which it swaps to the new value instead of counting, so
+  a jump from twelve to over a million does not spin. Under reduced motion the
+  new value is written at once on any pointer, as an in-place value change
+  (`design:reduced-motion` DR2). It
+  announces nothing: where the component's own record announces the value,
+  only the final value is announced, never the values between. Number formatting stays
+  with the caller. The value mode is part of the animator, adds no module, and
+  is internal (`spec:AST-017` FR21).
 
 ## Authoring guidance
 
@@ -339,3 +352,4 @@ component suite is not blanket conformance with every invariant.
 | INV11            | Source boundary check plus hook tests across StrictMode replay and unmount                                                                                                            | A second keyboard listener or measurement in Core; a consumer reading a CSS custom property on the root or a shared ancestor for the height; an export of the hook; a component outside Core measuring by a rule other than AST-099 FR2, or riding the keyboard; a listener left after unmount; a Core rider driven by JavaScript per frame or by its own transition; or more than one layout read per keyboard change |
 | INV12            | Source boundary check plus real-browser tests on a throttled phone profile over a 10-level by 50-sibling tree and two changes in one frame                                            | A per-frame height or layout, a walk past the area or into a subtree other than `display: contents`, an element moved twice for one frame, an added element, or an exported reporting function fails                                                                                                                                                                                                                   |
 | INV13            | Source boundary check plus bundle analysis of a page with several touch components, and real-browser tests on a throttled phone profile, under a fine pointer, and on a hybrid device | A second copy of a touch module on one page, a component bundling its own copy of a module's primitive, an `import()` of a module in a component, a public export or doc entry for the modules, an install call or installed check in the public API, a touch listener under a fine primary pointer, or an import of `@astryxdesign/core/internal/*` outside Core and Lab fails                                        |
+| INV15            | Unit tests of the animator's value mode and real-browser proofs of its adopters                                                                                                       | A value off its motion role, a count past the component's swap size, a count or cross-fade under reduced motion with a coarse or a fine pointer, an intermediate value announced, or a public export fails                                                                                                                                                                                                             |
