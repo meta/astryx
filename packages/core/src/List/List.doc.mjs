@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
-      description: "Spacing density for items. Under a finger, an interactive row's hit target reaches the touch target (44px unless the theme sets one) where its neighbors leave room, with no change to how rows look or lay out.",
+      description: "Spacing density for items. Under a finger, an interactive row's hit target reaches 44px where its neighbors leave room, with no change to how rows look or lay out.",
       default: "'balanced'",
     },
     {

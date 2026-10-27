@@ -592,7 +592,7 @@ describe('List', () => {
   });
 
   // ===========================================================================
-  // Touch hit area (component:List FR10)
+  // Touch hit area (`spec:AST-094` FR42; `component:List` FR10, #8571)
   // ===========================================================================
 
   /** The rules among `rules` whose selector reaches the row's `::after`. */

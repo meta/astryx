@@ -1616,6 +1616,42 @@ describe('GestureHost', () => {
     expect(actions).toEqual(['ended']);
   });
 
+  it('gives a recognizer inside a shadow root its finger: a touch reaches the page retargeted to the shadow host, and the composed path names what it landed on', () => {
+    const {outer} = mount('<div id="outer"></div>');
+    const shadow = outer.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<span id="inner">x</span>';
+    const inner = shadow.getElementById('inner') as HTMLElement;
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const actions: string[] = [];
+    tap.addListener(r => actions.push(r.state));
+    detachers.push(host.attach(inner, tap));
+    // At the document, a touch's target is the shadow host, as the event's.
+    const finger = {id: 1, x: 5, y: 5, target: outer};
+    touch('touchstart', inner, [finger], [finger], 0);
+    touch('touchend', inner, [finger], [], 50);
+    expect(actions).toEqual(['ended']);
+  });
+
+  it('gives a recognizer inside a shadow root a mouse press too, the pointer event retargeted to the shadow host at the document', () => {
+    const {outer} = mount('<div id="outer"></div>');
+    const shadow = outer.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<span id="inner">x</span>';
+    const inner = shadow.getElementById('inner') as HTMLElement;
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const actions: string[] = [];
+    tap.addListener(r => actions.push(r.state));
+    detachers.push(host.attach(inner, tap));
+    pointer('pointerdown', inner, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', inner, {pointerType: 'mouse', x: 5, y: 5, time: 50});
+    expect(actions).toEqual(['ended']);
+  });
+
   it('drives hover recognizers from a hovering mouse', () => {
     const {box, other} = mount('<div id="box"></div><div id="other"></div>');
     const hover = new HoverGestureRecognizer();
