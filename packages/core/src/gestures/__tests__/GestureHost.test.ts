@@ -3594,3 +3594,162 @@ describe("inputMode 'pointer-events'", () => {
     ).toBe(true);
   });
 });
+
+describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', () => {
+  const gestureListeners = (spy: ReturnType<typeof vi.spyOn>) =>
+    (spy.mock.calls as unknown[][])
+      .map(call => call[0] as string)
+      .filter(t => /^(touch|pointer|click|blur|scroll|contextmenu)/.test(t));
+
+  function fineHost(): GestureHost {
+    return new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+  }
+
+  function mouse(type: string, target: EventTarget, x: number, time: number) {
+    return pointer(type, target, {
+      pointerType: 'mouse',
+      x,
+      y: 10,
+      buttons: type === 'pointerup' ? 0 : 1,
+      time,
+    });
+  }
+
+  it('keeps one passive pointerdown listener on each element that uses a gesture while idle, and no page listener', () => {
+    const {box, row} = mount('<div id="box"></div><div id="row"></div>');
+    const added = vi.spyOn(document, 'addEventListener');
+    const viewAdded = vi.spyOn(window, 'addEventListener');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const rowAdded = vi.spyOn(row, 'addEventListener');
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+      fine.attachConsumer(row, new RecordingConsumer()),
+    );
+    expect(gestureListeners(added)).toEqual([]);
+    expect(gestureListeners(viewAdded)).toEqual([]);
+    expect(gestureListeners(boxAdded)).toEqual(['pointerdown']);
+    expect(gestureListeners(rowAdded)).toEqual(['pointerdown']);
+  });
+
+  it('pans with a mouse, its page listeners lasting only the press', async () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const states: string[] = [];
+    pan.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(box, pan));
+    added.mockClear();
+    mouse('pointerdown', box, 10, 0);
+    expect(gestureListeners(added)).toEqual(
+      expect.arrayContaining(['pointermove', 'pointerup']),
+    );
+    mouse('pointermove', box, 25, 16);
+    mouse('pointermove', box, 40, 32);
+    mouse('pointerup', box, 40, 48);
+    expect(states[0]).toBe('began');
+    expect(states.at(-1)).toBe('ended');
+    removed.mockClear();
+    await Promise.resolve();
+    expect(gestureListeners(removed)).toEqual(
+      expect.arrayContaining(['pointermove', 'pointerup']),
+    );
+  });
+
+  it('pans with a pen', () => {
+    const {box} = mount('<div id="box"></div>');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const states: string[] = [];
+    pan.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(box, pan));
+    for (const [type, x, time] of [
+      ['pointerdown', 10, 0],
+      ['pointermove', 25, 16],
+      ['pointermove', 40, 32],
+      ['pointerup', 40, 48],
+    ] as const) {
+      pointer(type, box, {
+        pointerType: 'pen',
+        x,
+        y: 10,
+        buttons: type === 'pointerup' ? 0 : 1,
+        time,
+      });
+    }
+    expect(states[0]).toBe('began');
+    expect(states.at(-1)).toBe('ended');
+  });
+
+  it('gives a press consumer a mouse press, with no feedback-only mode (DEC-21)', () => {
+    const {row} = mount('<div id="row"></div>');
+    const fine = fineHost();
+    const consumer = new RecordingConsumer();
+    detachers.push(fine.attachConsumer(row, consumer));
+    mouse('pointerdown', row, 10, 0);
+    mouse('pointerup', row, 10, 80);
+    expect(consumer.events.map(event => event.split(':')[0])).toEqual([
+      'began',
+      'ended',
+    ]);
+  });
+
+  it('starts nothing for a secondary button', () => {
+    const {box} = mount('<div id="box"></div>');
+    const viewAdded = vi.spyOn(window, 'addEventListener');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const states: string[] = [];
+    pan.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(box, pan));
+    viewAdded.mockClear();
+    const down = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+      clientX: 10,
+      clientY: 10,
+      button: 2,
+      buttons: 2,
+    });
+    box.dispatchEvent(down);
+    mouse('pointermove', box, 40, 32);
+    expect(gestureListeners(viewAdded)).toEqual([]);
+    expect(states).toEqual([]);
+  });
+
+  it("writes a pan's touch-action under a fine pointer too, for a touchscreen laptop's finger (FR18)", () => {
+    const {box} = mount('<div id="box"></div>');
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+    );
+    expect(box.getAttribute('data-astryx-touch-action')).toBe(
+      'pan-y pinch-zoom',
+    );
+  });
+
+  it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    detachers.push(() => warn.mockRestore());
+    const {box, row} = mount('<div id="box"></div><div id="row"></div>');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const rowAdded = vi.spyOn(row, 'addEventListener');
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(box, new PanGestureRecognizer({direction: 'horizontal'}), {
+        perEventPointer: true,
+      }),
+      fine.attach(row, new PanGestureRecognizer({direction: 'horizontal'})),
+    );
+    expect(gestureListeners(boxAdded)).toEqual(gestureListeners(rowAdded));
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
