@@ -62,8 +62,9 @@
  * two cannot disagree about which key presses are the controller's.
  *
  * A native control inside a surface (a link or a button in a row's
- * description) takes its own press, for every pointer: the surface stays at
- * rest.
+ * description) takes its own press, for every pointer, and the surface stays
+ * at rest; the surface's activator (its first control: a row's radio, the
+ * invisible button an Item row's content sits in) is the surface's own.
  *
  * A surface's hold does nothing, so it keeps the browser's long-press text
  * selection (`spec:AST-094` FR41); only an element whose hold does something
@@ -581,9 +582,15 @@ function apply(slot: Slot, step: PressStep): void {
  */
 /**
  * A native control nested in a pressable surface: a press on it is the
- * control's own, not the surface's.
+ * control's own, not the surface's, unless it is the surface's activator.
  */
 const NESTED_CONTROL = 'a[href], button, [role="button"], [role="link"]';
+/**
+ * A surface's activator is its first control in tree order: the radio a
+ * RadioList row delegates to, the invisible button or link an Item row's
+ * content sits in. A press on the activator is the surface's.
+ */
+const ACTIVATOR = `input, select, textarea, ${NESTED_CONTROL}`;
 
 function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {
@@ -593,11 +600,17 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(found instanceof HTMLElement) || found.matches(DISABLED)) {
     return null;
   }
-  // A native control inside the surface (a link or a button in a row's
-  // description) takes its own press, for every pointer: the rule
-  // RadioListItem's `:active:not(:has(...))` arm kept for a mouse.
+  // A native control inside the surface other than its activator (a link or
+  // a button in a row's description) takes its own press, for every
+  // pointer: the rule RadioListItem's `:active:not(:has(...))` arm kept for
+  // a mouse.
   const control = target.closest(NESTED_CONTROL);
-  if (control != null && control !== found && found.contains(control)) {
+  if (
+    control != null &&
+    control !== found &&
+    found.contains(control) &&
+    control !== found.querySelector(ACTIVATOR)
+  ) {
     return null;
   }
   return found;

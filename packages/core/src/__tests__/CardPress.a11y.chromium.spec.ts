@@ -298,7 +298,7 @@ for (const surface of SURFACES) {
     }
   });
 
-  test(`${surface.name}: a desktop mouse is unchanged: hover, \`:active\`, release, leave`, async ({
+  test(`${surface.name}: a desktop mouse: hover, the press controller's press, its release, leave`, async ({
     browser,
   }) => {
     const desktop = await open(browser, DESKTOP, surface);
@@ -308,9 +308,13 @@ for (const surface of SURFACES) {
       const hover = await steadyPixel(desktop.page, desktop.sample);
       await desktop.page.mouse.down();
       const pressed = await steadyPixel(desktop.page, desktop.sample);
-      // A fine pointer's press is `:active` alone: the controller writes nothing.
-      expect(await pressAttribute(desktop, surface)).toBeNull();
+      // A fine pointer's press is the controller's, in place of `:active`
+      // (`spec:AST-094` FR11, DEC-21).
+      expect(await pressAttribute(desktop, surface)).toBe('on');
       await desktop.page.mouse.up();
+      await expect
+        .poll(async () => pressAttribute(desktop, surface))
+        .toBeNull();
       const released = await steadyPixel(desktop.page, desktop.sample);
       await desktop.page.mouse.move(1, 1);
       const left = await steadyPixel(desktop.page, desktop.sample);

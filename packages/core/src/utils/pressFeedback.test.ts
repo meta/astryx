@@ -1021,6 +1021,10 @@ describe('a link or button inside a pressable is its own press, for every pointe
     text: HTMLElement;
   } {
     const row = rows[1];
+    // The row's activator comes first, as a RadioList row's radio does.
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    row.appendChild(radio);
     const text = document.createElement('span');
     text.textContent = 'Free forever.';
     let nested: HTMLElement;
@@ -1072,6 +1076,21 @@ describe('a link or button inside a pressable is its own press, for every pointe
       vi.runAllTimers();
       row.replaceChildren();
     }
+  });
+
+  it("paints the row for a press inside its activator: an Item row's content sits in an invisible button", () => {
+    const activator = document.createElement('button');
+    const label = document.createElement('span');
+    label.textContent = 'Inbox';
+    activator.appendChild(label);
+    rows[1].appendChild(activator);
+    press(label, 'pointerdown', 10, 100, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(label, 'pointerup', 10, 100, 'mouse');
+    vi.runAllTimers();
+    press(label, 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
   it('still paints a pressable that is itself a button, pressed on its label', () => {

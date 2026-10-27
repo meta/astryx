@@ -190,7 +190,8 @@ test('a mouse: no hold; the press releases and Back just pops', async ({
     await expect(target).toBeVisible();
     await target.click();
     await expect(page.getByTestId('pushed-screen')).toBeVisible();
-    expect(await pressState(target)).toBeNull();
+    // The press releases on its own fade (`spec:AST-094` FR11): no hold.
+    await expect.poll(async () => pressState(target)).toBeNull();
     await page.getByRole('button', {name: 'Back', exact: true}).click();
     await expect(page.getByTestId('pushed-screen')).toHaveCount(0);
     expect(await pressState(target)).toBeNull();

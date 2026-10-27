@@ -369,11 +369,13 @@ interface PixelFrame {
 }
 
 /** The probe point's value in every frame, decoded in a scratch page. */
-test('with a fine primary pointer, a mouse press on a button adds no layer and no isolation (the desktop rule)', async ({
+test("with a fine primary pointer, a mouse press on a button is the press controller's and adds no layer and no isolation", async ({
   browser,
 }) => {
-  // `spec:AST-017` FR59/DEC-25: touch work leaves a fine pointer's behavior as it
-  // is. A desktop: no touch, a mouse.
+  // A mouse's press goes through the press controller (`spec:AST-094` FR11,
+  // DEC-21); the control press layer stays a coarse pointer's, so a desktop
+  // press adds no stylesheet work (`spec:AST-017` FR59). A desktop: no
+  // touch, a mouse.
   const context = await browser.newContext({
     viewport: {width: 402, height: 714},
     hasTouch: false,
@@ -406,9 +408,10 @@ test('with a fine primary pointer, a mouse press on a button adds no layer and n
     for (const state of states) {
       expect(['none', 'normal'], JSON.stringify(state)).toContain(state.layer);
       expect(state.isolation).toBe('auto');
-      // A mouse's press is `:active`'s: the controller writes nothing.
-      expect(state.press).toBeNull();
     }
+    // The controller writes the press at the button's down and fades it at
+    // its release.
+    expect(states.map(state => state.press)).toEqual([null, 'on', 'fading']);
   } finally {
     await context.close();
   }
