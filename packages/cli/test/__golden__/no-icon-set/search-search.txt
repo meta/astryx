@@ -1,4 +1,4 @@
-Results for "search" (20 of 112)
+Results for "search" (20 of 113)
 name:        cli/api/functions/search
 domain:      doc
 package:     @astryxdesign/cli

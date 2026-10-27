@@ -53,26 +53,65 @@ async function open(
 }
 
 /**
- * Sets the story's sizing container to `width` and, for every field with a
- * visible clear-all lane, returns each visible box that intersects the lane:
- * tokens, the "+N more" count, and the input's content box (where its text
- * and caret paint).
+ * Sizes the story to `width` (a pixel width, or `max-content` for a
+ * content-sized field) and waits for the layout to settle.
+ *
+ * The sizing box is the story decorator's: the outermost element in the story
+ * whose own inline style sizes it, by a width or by a grid column, and that
+ * holds the fields. An inline size inside a field never counts: the end
+ * lane's reserved Spinner sets its own width inline, and resizing it instead
+ * of the story would widen the lane across the token rows. A grid decorator
+ * sizes its fields through its column, so the column follows the width. The
+ * layer mode's popover takes its width from the in-flow field inside the box.
  */
-async function overlapsAt(page: Page, width: number): Promise<string[]> {
-  return page.evaluate(async width => {
-    // The story decorator's fixed-width box; the layer mode's popover takes
-    // its width from the in-flow field inside it.
-    const host = document.querySelector<HTMLElement>(
-      '#storybook-root [style*="width"]',
-    );
-    if (!host) {
-      throw new Error('No sizing container in the story');
+async function sizeStory(page: Page, width: string): Promise<void> {
+  const box = await page
+    .locator(
+      '#storybook-root [style*="width"], #storybook-root [style*="grid-template-columns"]',
+    )
+    .filter({has: page.locator('.astryx-tokenizer')})
+    .first()
+    .elementHandle({timeout: 5_000});
+  if (box == null) {
+    throw new Error('No sizing container in the story');
+  }
+  await box.evaluate(async (host, width) => {
+    host.style.width = width;
+    if (host.style.gridTemplateColumns !== '') {
+      host.style.gridTemplateColumns =
+        width === 'max-content' ? 'max-content' : `minmax(0, ${width})`;
     }
-    host.style.width = `${width}px`;
     for (let frame = 0; frame < 4; frame++) {
       await new Promise(resolve => requestAnimationFrame(resolve));
     }
+    // The fields sit inside the box, so a pixel width bounds every one of
+    // them; no field inside, or one wider than the box, means the box sized
+    // something else.
+    const fields = host.querySelectorAll('.astryx-tokenizer');
+    if (fields.length === 0) {
+      throw new Error('The sizing box holds no field');
+    }
+    if (width !== 'max-content') {
+      for (const field of fields) {
+        const fieldWidth = field.getBoundingClientRect().width;
+        if (fieldWidth > parseFloat(width) + 0.5) {
+          throw new Error(
+            `Sized the story to ${width}, but a field is ${fieldWidth}px wide`,
+          );
+        }
+      }
+    }
+  }, width);
+}
 
+/**
+ * Sizes the story to `width` and, for every field with a visible clear-all
+ * lane, returns each visible box that intersects the lane: tokens, the "+N
+ * more" count, and the input's content box (where its text and caret paint).
+ */
+async function overlapsAt(page: Page, width: number): Promise<string[]> {
+  await sizeStory(page, `${width}px`);
+  return page.evaluate(width => {
     const isShown = (el: Element) =>
       el.checkVisibility({visibilityProperty: true}) &&
       !el.closest('[aria-hidden="true"]');
@@ -174,32 +213,26 @@ async function sweepWhileBusy(
 }
 
 /**
- * Sizes the story container (a pixel width, or `max-content` for a
- * content-sized field) and returns the field's border box.
+ * Sizes the story (a pixel width, or `max-content` for a content-sized field)
+ * and returns the field's border box.
  */
 async function fieldBoxAt(
   page: Page,
   width: string,
 ): Promise<{width: number; height: number}> {
-  return page.evaluate(async width => {
-    const host = document.querySelector<HTMLElement>(
-      '#storybook-root [style*="width"]',
-    );
+  await sizeStory(page, width);
+  return page.evaluate(() => {
     const field = document.querySelector('button[aria-label="Clear all"]')
       ?.parentElement?.parentElement;
-    if (!host || !field) {
-      throw new Error('Field or sizing container did not render');
-    }
-    host.style.width = width;
-    for (let frame = 0; frame < 4; frame++) {
-      await new Promise(resolve => requestAnimationFrame(resolve));
+    if (!field) {
+      throw new Error('Field did not render');
     }
     const {width: w, height: h} = field.getBoundingClientRect();
     return {
       width: Math.round(w * 100) / 100,
       height: Math.round(h * 100) / 100,
     };
-  }, width);
+  });
 }
 
 /** Adds tokens through the menu, as a person would. */

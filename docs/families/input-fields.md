@@ -176,8 +176,10 @@ another implementation helper.
 - **FR7 — Component-owned source work keeps family geometry and accessibility.**
   Typeahead and Tokenizer own asynchronous search state through BaseTypeahead,
   not through the family `isLoading` meaning. Their visible source-busy feedback
-  still MUST be named, expose busy semantics on the combobox, and satisfy FR1,
-  FR2, and FR3 where grouped.
+  still MUST be named, expose busy semantics on the combobox — or, in a
+  presentation without a combobox, such as Tokenizer's sheet
+  (`component:Tokenizer` DEC-3), on the result list the search updates — and
+  satisfy FR1, FR2, and FR3 where grouped.
 - **FR8 — Status placement follows member capability.** Every input MUST offer
   `detached` and `tooltip`. A member supports `attached` only when its direct
   control is opaque, bordered, fixed-height (a height set by its resolved size,
@@ -361,9 +363,7 @@ DEC-6 does not require unrelated components to add a new floor.
 
   | Component                          | Root styling reaches | Base props reach                       | Primary semantic control    | Root styling migrates to |
   | ---------------------------------- | -------------------- | -------------------------------------- | --------------------------- | ------------------------ |
-  | TextInput                          | control box          | native input                           | native input                | `control*`               |
   | TextArea                           | control box          | native textarea                        | native textarea             | `control*`               |
-  | NumberInput                        | control box          | native input                           | native input                | `control*`               |
   | FileInput                          | control box          | native file input                      | native file input           | `control*`               |
   | DateInput (pointer, native, touch) | control box          | control box                            | date input                  | `control*`               |
   | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger               | `control*`               |
