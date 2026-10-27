@@ -16,6 +16,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
+import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {ManualClock} from './harness';
 
 let clock: ManualClock;
@@ -297,6 +298,16 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       }
     }
     expect(states).toEqual([]);
+  });
+
+  it('listens for the wheel only where a recognizer a wheel can drive allows it: a tap that allows scroll input adds no wheel listener', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(box, 'addEventListener');
+    const tap = new TapGestureRecognizer({allowedScrollTypes: ['continuous']});
+    detachers.push(host.attach(box, tap));
+    expect(
+      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toEqual([]);
   });
 
   it("takes no wheel for a pan that allows no scroll type, UIKit's default: its element gets no wheel listener, and the page scrolls", () => {
