@@ -40,16 +40,18 @@ describe('ScreenEdgePanGestureRecognizer', () => {
     }
   });
 
-  it('a caller can still allow it another pointer', () => {
+  it('is locked to a finger: a caller cannot widen its pointers, so a pen drag from the edge band still does not begin (spec:AST-094 FR43)', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({
       name: 'edge',
+      // @ts-expect-error the screen-edge pan takes no allowedPointerTypes
       allowedPointerTypes: ['touch', 'pen'],
     });
+    expect([...(edge.allowedPointerTypes ?? [])]).toEqual(['touch']);
     h.finger(1)
       .down(10, 300, 0, {recognizers: [edge], pointerType: 'pen'})
       .drag(40, 4, 50);
-    expect(h.log[0]).toMatch(/^edge:began@/);
+    expect(h.log.some(line => line.startsWith('edge:began'))).toBe(false);
   });
 
   it('resolves the leading edge under RTL and requires inward movement', () => {

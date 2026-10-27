@@ -1464,9 +1464,9 @@ export class GestureHost {
    * stepper's hold-repeat). Anything whose hold does nothing, a plain
    * press-tracked control or row included, keeps the browser's long-press
    * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
-   * lock only where the primary pointer is coarse (locksSelectionFor), so
-   * desktop selection is untouched, and only once the arena has admitted
-   * the contact: `recognizers` and `consumer` are the ones that took it.
+   * lock for a finger or a pen under any primary pointer, never for a mouse
+   * (locksSelectionFor), and only once the arena has admitted the contact:
+   * `recognizers` and `consumer` are the ones that took it.
    */
   private lockSelection(
     id: number,
@@ -1639,7 +1639,7 @@ export class GestureHost {
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
-      if (locksSelectionFor('touch', this.doc.defaultView)) {
+      if (locksSelectionFor('touch')) {
         toLock.push({id, target, consumerElement});
       }
       // The finger's events keep going to what the engine hit.
@@ -2287,7 +2287,7 @@ export class GestureHost {
         consumer,
       },
     ]);
-    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
+    if (locksSelectionFor(event.pointerType)) {
       // The presented target: what the pen is on, where the engine's own
       // hit test may still see the motion's start.
       this.lockSelection(
