@@ -16,7 +16,11 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {MotionCurve, MotionProperty} from './animator';
+import {
+  createAnimator,
+  type MotionCurve,
+  type MotionProperty,
+} from './animator';
 import {progressCurve} from './progress';
 import {
   createRectMorph,
@@ -609,6 +613,46 @@ describe('createRectMorph', () => {
     }
   });
 
+  it('plays on an animator it is handed, and leaves it to its owner when disposed', async () => {
+    // A zoom stage already drives the photo with its own animator (pinch,
+    // pan, settle): the morph plays on it, so the two share the channels.
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    stubMedia(false, true);
+    const stage = createAnimator(element, {now: () => clock, requestFrame});
+    const morph = createRectMorph(element, {
+      animator: stage,
+      now: () => clock,
+      requestFrame,
+    });
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, BOUNCY);
+    await playFrame();
+    expect(live(element, 'scale')).toHaveLength(1);
+    clock += 50;
+    expect(stage.get('scaleX', clock)).toBeCloseTo(
+      morph.presentedRect()!.width / BOX.width,
+      9,
+    );
+    expect(stage.get('scaleX', clock)).not.toBeCloseTo(1, 3);
+    morph.dispose();
+    // Still the stage's: it moves the element after the morph is gone.
+    stage.set({x: 12});
+    expect(stage.get('x')).toBe(12);
+  });
+
+  it('holds the element at its first values until two frames present it, when asked for the presented start', async () => {
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, BOUNCY, {start: 'presented'});
+    expect(live(element, 'scale')).toHaveLength(0);
+    expectRect(morph.presentedRect()!, path.rectAt(0), 0.01);
+    await playFrame();
+    expect(live(element, 'scale')).toHaveLength(0);
+    await playFrame();
+    expect(live(element, 'scale')).toHaveLength(1);
+  });
+
   it('leaves nothing of its own inline once the present settles', async () => {
     const {element, morph} = setup();
     morph.present(lerpPath(SQUARE, BOX, {opacity: [0, 1]}), SPRING);
@@ -936,6 +980,21 @@ describe('createRectMorph', () => {
       expectRect(morph.presentedRect()!, BOX, 0.01);
       expect(live(element, 'scale').length).toBe(0);
       expect(live(element, 'translate').length).toBe(0);
+    });
+
+    it('keeps the animator’s dip for an element that only moves, when the caller says so', () => {
+      // A sub-menu's parent card stays visible and only moves: treated as an
+      // entrance it would cut out and fade in, so its caller asks for a move,
+      // and the animator dips it: out, the travel lands, back in.
+      const {element, morph} = setup({reducedMotion: true, coarse: true});
+      const path = lerpPath(SQUARE, BOX);
+      morph.present(path, SPRING, {crossfadeAs: 'move'});
+      const [dip] = live(element, 'opacity');
+      expect(dip).toBeDefined();
+      expect(Number(dip.keyframes[0].opacity)).toBeCloseTo(1, 6);
+      expect(
+        Math.min(...dip.keyframes.map(frame => Number(frame.opacity))),
+      ).toBeLessThan(0.5);
     });
 
     it('on any other pointer, it completes at once', () => {
