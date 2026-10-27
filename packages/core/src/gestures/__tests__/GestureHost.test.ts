@@ -1002,6 +1002,32 @@ describe('GestureHost', () => {
       lift(112, 64);
     });
 
+    it('holds nothing while two fingers are down: a pinch at the edge stays the page\u2019s (spec:AST-094 FR10)', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+      });
+      detachers.push(host.attach(row, pan));
+      const a = {id: 1, x: 50, y: 100};
+      const b = {id: 2, x: 150, y: 100};
+      touch('touchstart', row, [a], [a], 0);
+      touch('touchstart', row, [b], [a, b], 8);
+      // Both fingers move apart and down: a pinch, never cancelled.
+      const moved = [
+        {...a, x: 40, y: 104},
+        {...b, x: 160, y: 104},
+      ];
+      expect(touch('touchmove', row, moved, moved, 16).defaultPrevented).toBe(
+        false,
+      );
+      touch('touchend', row, moved, [], 32);
+    });
+
     it('cancels nothing once the browser has taken the touch for a scroll', () => {
       const {list, at, lift} = sheetOverList(50);
       // The browser scrolls the list: its moves can no longer be cancelled.
