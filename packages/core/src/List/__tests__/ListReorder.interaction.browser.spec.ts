@@ -108,6 +108,15 @@ const lineTop = async (page: Page): Promise<number | null> =>
     return list.getBoundingClientRect().top + list.clientTop + y;
   }, `#storybook-root ${LINE}`);
 
+/**
+ * How many moves the story's `onReorder` has reported (its list's
+ * `data-moves`): one per drop, none per cancel (spec:AST-103 FR3).
+ */
+const moves = async (page: Page) =>
+  Number(
+    await page.locator('#storybook-root ul').first().getAttribute('data-moves'),
+  );
+
 const row = (page: Page, label: string) =>
   page.locator(ROW).filter({hasText: label}).first();
 
@@ -202,6 +211,7 @@ test('a finger held still on a handle picks the row up: it dims in place, a prev
   page,
 }) => {
   await open(page);
+  const reportedBefore = await moves(page);
   const {pitch} = await pitchOf(page);
   const inbox = row(page, 'Inbox');
   const opacity = async () =>
@@ -267,6 +277,8 @@ test('a finger held still on a handle picks the row up: it dims in place, a prev
   await expect
     .poll(async () => labels(page))
     .toEqual(['Sent', 'Drafts', 'Inbox', 'Archive', 'Spam', 'Trash']);
+  // One report for the drop, not two (spec:AST-103 FR3).
+  expect(await moves(page)).toBe(reportedBefore + 1);
   await waitForRest(page);
   for (const label of ROWS) {
     expect(await translateY(row(page, label))).toBe(0);
@@ -629,6 +641,7 @@ test('a cancelled drag restores everything at once and commits no move', async (
   // WebKit's driver dispatches no touch cancel.
   test.skip(browserName === 'webkit', 'Chromium dispatches the touch cancel');
   await open(page);
+  const reportedBefore = await moves(page);
   const {pitch} = await pitchOf(page);
   const before = await rowTops(page);
   const from = await centerOf(handle(page, 'Inbox'));
@@ -705,6 +718,8 @@ test('a cancelled drag restores everything at once and commits no move', async (
     );
   }
   expect(await labels(page)).toEqual(ROWS);
+  // A cancelled drag reports nothing.
+  expect(await moves(page)).toBe(reportedBefore);
   await expect(page.locator('[data-astryx-reordering]')).toHaveCount(0);
 });
 
@@ -1113,6 +1128,7 @@ test.describe('with a mouse', () => {
   }) => {
     await openStory(page, storybook(), STORY);
     await expectFinePointer(page);
+    const reportedBefore = await moves(page);
     const {pitch} = await pitchOf(page);
     const grip = handle(page, 'Inbox');
     const cursor = async () =>
@@ -1130,6 +1146,8 @@ test.describe('with a mouse', () => {
     await expect
       .poll(async () => labels(page))
       .toEqual(['Sent', 'Drafts', 'Inbox', 'Archive', 'Spam', 'Trash']);
+    // One report for the drop, not two (spec:AST-103 FR3).
+    expect(await moves(page)).toBe(reportedBefore + 1);
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
     for (const label of ROWS) {
       expect(await translateY(row(page, label))).toBe(0);

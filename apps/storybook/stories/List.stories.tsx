@@ -654,13 +654,21 @@ function ReorderDemo({
   edge?: 'padded' | 'flush';
 }) {
   const [rows, setRows] = useState(initial);
+  // Each move onReorder reports, counted on the list for the browser proofs:
+  // one per drop and per reorder mode move, none per cancel (spec:AST-103
+  // FR3).
+  const [moves, setMoves] = useState(0);
   return (
     <List
+      data-moves={moves}
       hasDividers
       hasAnimatedChanges
       edge={edge}
       reorderable={createReorderable({
-        onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
+        onReorder: ({key, to}) => {
+          setMoves(count => count + 1);
+          setRows(current => moveKey(current, key, to));
+        },
         isReorderable: key => !pinned.includes(key as string),
       })}>
       {rows.map(label => (
