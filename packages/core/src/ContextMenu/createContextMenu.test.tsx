@@ -16,7 +16,7 @@
 import {act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {stableClassName} from '../naming';
+import {dataAttr, stableClassName} from '../naming';
 import {
   createContextMenu,
   type ContextMenuController,
@@ -161,6 +161,32 @@ describe('createContextMenu', () => {
     await waitFor(() =>
       expect(document.activeElement?.textContent).toContain('Delete'),
     );
+  });
+
+  it("lives inside the element's dialog, where a modal dialog leaves it usable", () => {
+    attach({items: [{label: 'Archive'}]});
+    // The element moves into a dialog after the menu is attached.
+    const dialog = document.createElement('dialog');
+    document.body.append(dialog);
+    dialog.append(element);
+    rightClick(element);
+    expect(isOpen()).toBe(true);
+    const host = document.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentElement).toBe(dialog);
+    expect(element.contains(host)).toBe(false);
+    dialog.remove();
+  });
+
+  it("lives inside the element's popover, so opening it leaves that popover open", () => {
+    attach({items: [{label: 'Archive'}]});
+    const popover = document.createElement('div');
+    popover.setAttribute('popover', 'auto');
+    document.body.append(popover);
+    popover.append(element);
+    rightClick(element);
+    const host = document.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentElement).toBe(popover);
+    popover.remove();
   });
 
   it('choosing a row runs it and closes the menu', async () => {

@@ -9,7 +9,8 @@
  *   list row; its lift clicks nothing; a key focuses the first row; Escape
  *   returns focus to the row; a choice runs once and the row hears no click;
  *   the list keeps only its `li` rows; useContextMenu opens the same menu,
- *   and its `menuContent` rows act once under a mouse and close the menu
+ *   and its `menuContent` rows act once under a mouse and close the menu; on
+ *   a row inside a modal dialog the menu takes focus and a choice acts
  * @position Run with `pnpm test:interaction createContextMenu`
  */
 
@@ -118,4 +119,32 @@ test("useContextMenu's menuContent rows act once under a mouse, and choosing one
   await expect(menu).toBeHidden();
   await page.waitForTimeout(300);
   await expect(log(page)).toHaveText('restore');
+});
+
+test('on a row inside a modal dialog, the menu takes focus and a choice acts (spec:AST-107 FR8)', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  // The row moves into a modal dialog, which leaves everything outside it
+  // inert.
+  await page.evaluate(() => {
+    const row = document.querySelector('[data-testid="headless-row"]');
+    if (row == null) {
+      throw new Error('no row');
+    }
+    const dialog = document.createElement('dialog');
+    const list = document.createElement('ul');
+    list.append(row);
+    dialog.append(list);
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+  const at = await centerOf(page, 'headless-row');
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  const menu = page.getByRole('menu', {name: 'Inbox actions'});
+  await expect(menu).toBeVisible();
+  await expect.poll(async () => focusedRole(page)).toBe('menuitem');
+  await page.getByRole('menuitem', {name: 'Archive'}).click();
+  await expect(menu).toBeHidden();
+  await expect(log(page)).toHaveText('open,archive,close');
 });
