@@ -114,16 +114,32 @@ export function lockSelection(
 }
 
 /**
- * Refuse a selection on `elements` with inline styles, on every engine, until
- * the returned function runs: a mouse or a pen drag a recognizer claimed has
- * already started selecting when it claims, which only the styles stop, so
- * the selection it started is cleared first (`spec:AST-094` FR43, FR41).
+ * Refuse a selection while a mouse or a pen drag a recognizer claimed runs,
+ * until the returned function runs (`spec:AST-094` FR43, FR41). The drag has
+ * already started selecting when it claims, so that selection goes first.
+ * `elements` refuse one with inline styles, on every engine. The document
+ * refuses one too, as WebKit extends a drag's selection over text outside
+ * the elements without another `selectstart`: a `selectstart` anywhere is
+ * refused and a selection the drag extends is cleared. The press's own
+ * `mouseup` and `click` come after its `pointerup` in the same task, and
+ * WebKit settles the drag's selection there, so the document's hold ends a
+ * task after the release. Page listeners only during a press (FR24).
  * Idempotent release.
  */
 export function lockDragSelection(
   elements: Iterable<Element>,
   view: Window | null | undefined,
 ): () => void {
+  const clear = () => {
+    const selection = view?.getSelection();
+    if (
+      selection != null &&
+      selection.rangeCount > 0 &&
+      !selection.isCollapsed
+    ) {
+      selection.removeAllRanges();
+    }
+  };
   view?.getSelection()?.removeAllRanges();
   const set = new Set(elements);
   const refuse = (event: Event) => {
@@ -134,6 +150,15 @@ export function lockDragSelection(
   for (const element of set) {
     element.addEventListener('selectstart', refuse);
   }
+  const doc = view?.document ?? null;
+  // The focused field keeps its own selection (a drag never starts in one).
+  const clearOutsideEntry = () => {
+    if (!isTextEntry(doc?.activeElement ?? null)) {
+      clear();
+    }
+  };
+  doc?.addEventListener('selectstart', refuse, true);
+  doc?.addEventListener('selectionchange', clearOutsideEntry);
   const unlockStyles = lockStyles(set);
   let isReleased = false;
   return () => {
@@ -145,6 +170,16 @@ export function lockDragSelection(
       element.removeEventListener('selectstart', refuse);
     }
     unlockStyles();
+    const release = () => {
+      clearOutsideEntry();
+      doc?.removeEventListener('selectstart', refuse, true);
+      doc?.removeEventListener('selectionchange', clearOutsideEntry);
+    };
+    if (view == null) {
+      release();
+    } else {
+      view.setTimeout(release, 0);
+    }
   };
 }
 
