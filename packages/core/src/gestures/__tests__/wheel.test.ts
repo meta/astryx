@@ -126,6 +126,27 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toEqual(['began', 'changed']);
   });
 
+  it('reads a right-to-left scroller a pixel short of its end, where Chromium stops it, as at its end: a scroll on toward the end is the pan’s', () => {
+    const {strip, scroller, item} = mount(
+      '<div id="strip"><div id="scroller" dir="rtl"><div id="item"></div></div></div>',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(strip, pan));
+    // The end is minus the overflow (-100); Chromium stops at -99.
+    scrollableX(scroller, {
+      scrollLeft: -99,
+      scrollWidth: 300,
+      clientWidth: 200,
+    });
+    expect(wheel(item, {dx: -20, time: 0}).defaultPrevented).toBe(true);
+    expect(wheel(item, {dx: -20, time: 16}).defaultPrevented).toBe(true);
+    expect(states).toEqual(['began', 'changed']);
+  });
+
   it('finds a scroller inside a shadow tree between the pointer and the pan, from what the wheel landed on', () => {
     const {outer} = mount('<div id="outer"></div>');
     const shadow = outer.attachShadow({mode: 'open'});
