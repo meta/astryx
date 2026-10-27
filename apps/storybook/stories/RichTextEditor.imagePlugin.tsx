@@ -849,7 +849,7 @@ type ImageSource = 'sample' | 'url' | 'file';
  * `endContent` and the dialog does NOT: a `Toolbar` is a roving tab stop, so
  * everything inside it is `tabindex="-1"`, and a dialog rendered there cannot
  * be tabbed through at all. `RichTextEditorToolbar` renders its own link
- * dialog as a sibling of the toolbar for the same reason; a consumer-authored
+ * popover as a sibling of the toolbar for the same reason; a consumer-authored
  * control reaches that position through the editor's `plugins` slot, so the
  * two halves are joined by this context rather than by the tree.
  */
