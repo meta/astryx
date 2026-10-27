@@ -17,10 +17,10 @@
  *   passes later options through updateContextMenu
  *
  * The `render` slot publishes what the menu's rows read from inside the menu
- * (its row context, its open state and its layer) for its container, so
- * content a React caller portals into the container keeps the rows'
- * behavior: a choice closes the menu, and a sub-menu drills in or flies out
- * above it.
+ * (its row context, its open state, its layer and layer depth) for its
+ * container, so content a React caller portals into the container keeps the
+ * rows' behavior: a choice closes the menu, a sub-menu drills in or flies out
+ * above it, and a layer in the rows takes Escape before the menu.
  *
  * The options mean what ContextMenu's props of the same names mean. The menu
  * is ContextMenu's: its rows, keys, typeahead, sub-menus, dismissal and
@@ -43,6 +43,7 @@ import {
 import {attachContextRequest} from '../gestures/contextRequest';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {LayerContext, type LayerContextValue} from '../Layer/LayerContext';
+import {LayerDepthContext} from '../Layer/LayerDepthContext';
 import {dataAttr} from '../naming';
 import {
   ContextMenuView,
@@ -104,6 +105,8 @@ export interface ContextMenuRowsContext {
   readonly menu: DropdownMenuContextValue | null;
   readonly isOpen: boolean | null;
   readonly layer: LayerContextValue | null;
+  /** The layer depth inside the menu, which ranks a layer in its rows above it. */
+  readonly depth: number;
 }
 
 interface RowsContextEntry {
@@ -223,14 +226,15 @@ function RenderedContent({render}: {render: ContextMenuContentRenderer}) {
   const menu = use(DropdownMenuContext);
   const isOpen = use(DropdownMenuRootOpenContext);
   const layer = use(LayerContext);
+  const depth = use(LayerDepthContext);
   // Declared first, so the container's rows context is out before `render`
   // runs, and follows the menu after.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (container != null) {
-      publishRowsContext(container, {menu, isOpen, layer});
+      publishRowsContext(container, {menu, isOpen, layer, depth});
     }
-  }, [menu, isOpen, layer]);
+  }, [menu, isOpen, layer, depth]);
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (container == null) {

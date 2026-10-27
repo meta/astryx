@@ -37,6 +37,7 @@ import {
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {InternationalizationContext} from '../i18n/InternationalizationContext';
 import {LayerContext} from '../Layer/LayerContext';
+import {LayerDepthContext} from '../Layer/LayerDepthContext';
 import {LinkContext} from '../Link/LinkContext';
 import {ThemeContext} from '../theme/useTheme';
 import type {ContextMenuOption} from './ContextMenu';
@@ -143,18 +144,22 @@ function createMenuContentPortal(doc: Document): MenuContentPortal {
 /**
  * Gives `menuContent`'s rows what they read from inside the menu while it is
  * open: its row context (a choice closes it, a sub-menu drills in), its open
- * state and its layer (a flyout stacks above it).
+ * state, its layer (a flyout stacks above it) and its layer depth (a layer in
+ * the rows takes Escape before the menu).
  */
 function MenuRows({store, children}: {store: RowsStore; children: ReactNode}) {
   const rows = useSyncExternalStore(store.subscribe, store.get, store.get);
   const callerLayer = use(LayerContext);
+  const callerDepth = use(LayerDepthContext);
   return (
     <LayerContext value={rows?.layer ?? callerLayer}>
-      <DropdownMenuContext value={rows?.menu ?? null}>
-        <DropdownMenuRootOpenContext value={rows?.isOpen ?? false}>
-          {children}
-        </DropdownMenuRootOpenContext>
-      </DropdownMenuContext>
+      <LayerDepthContext value={rows?.depth ?? callerDepth}>
+        <DropdownMenuContext value={rows?.menu ?? null}>
+          <DropdownMenuRootOpenContext value={rows?.isOpen ?? false}>
+            {children}
+          </DropdownMenuRootOpenContext>
+        </DropdownMenuContext>
+      </LayerDepthContext>
     </LayerContext>
   );
 }
