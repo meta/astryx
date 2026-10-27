@@ -1274,6 +1274,11 @@ export class GestureHost {
     for (const scroller of [...this.scrollEndFallbacks.keys()]) {
       this.clearScrollEndFallback(scroller);
     }
+    // Its scroll and scrollend go with the listeners: a finger scroll still
+    // running would never end, and later program scrolls would read as the
+    // finger's.
+    this.fingerScrollers.clear();
+    this.endedWhileDown.clear();
     this.lastTouch = null;
     this.lastScroll = null;
   }
