@@ -333,7 +333,9 @@ presses nothing.
   (FR14). One exception: a `scrollEdge` pan cancels its finger's moves from
   the first one while every scroller under the finger is at its edge and
   the finger pulls away from it, the pan's own way (the browser could only
-  rubber-band there); it still begins at 10 pt.
+  rubber-band there); it still begins at 10 pt. It holds only while that is
+  the one finger on the screen: with a second down anywhere, the moves stay
+  the browser's, for its pinch (FR10).
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
   (the last cancelable `touchmove` at 10 px), and cancelling every

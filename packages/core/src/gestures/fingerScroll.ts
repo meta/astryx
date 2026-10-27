@@ -21,7 +21,7 @@
  * adds only passive scroll listeners, and only while something is watched.
  */
 
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import type {GestureHost} from './GestureHost';
 
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
