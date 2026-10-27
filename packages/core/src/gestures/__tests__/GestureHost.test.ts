@@ -3672,6 +3672,55 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     expect(last?.defaultPrevented).toBe(true);
   });
 
+  it('takes no text selection once a mouse or a pen pan claims: the selection its drag started goes, and its element refuses one until the lift (FR43, FR41)', async () => {
+    const {box} = mount('<div id="box">Some text a drag would select</div>');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      // The drag selects text before the pan claims at 10 px.
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(box);
+      selection.addRange(range);
+      time += 1000;
+      for (const [type, x, buttons] of [
+        ['pointerdown', 10, 1],
+        ['pointermove', 30, 1],
+        ['pointermove', 50, 1],
+      ] as const) {
+        time += 16;
+        pointer(type, box, {pointerType, x, y: 10, buttons, time});
+      }
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(selection.rangeCount).toBe(0);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      box.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
+      await Promise.resolve();
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
+    const {box} = mount('<div id="box">Some selected text</div>');
+    const fine = fineHost();
+    detachers.push(fine.attach(box, new TapGestureRecognizer()));
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    selection.addRange(range);
+    mouse('pointerdown', box, 10, 0);
+    mouse('pointerup', box, 10, 80);
+    expect(selection.rangeCount).toBe(1);
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     detachers.push(() => warn.mockRestore());
