@@ -32,7 +32,8 @@
  * kept as it was laid out, and the source takes no hits while lifted (a tap
  * on it is a tap on the backdrop). Inheritance follows the DOM, so the page's
  * theme still reaches it. The placeholder goes after the source, so the
- * source keeps its place among its siblings. The tint is the `::backdrop` of
+ * source keeps its place among its siblings; in a list it is an `li` that
+ * is not a list item, so the list stays valid and keeps its numbers. The tint is the `::backdrop` of
  * a lift layer at the end of the body that covers the viewport and takes the
  * page's touches (its color and the gutter's spacing resolved where the
  * source is); the shadow is a box in the layer that follows the source on a
@@ -532,25 +533,50 @@ function createLayer(doc: Document, attribute: string): HTMLElement {
 }
 
 /**
+ * The element that holds a source's spot: an `li` in a list, so the list
+ * keeps only `li` children (HTML's content model for `ul`, `ol` and `menu`),
+ * and a `span` elsewhere.
+ */
+function placeholderTag(source: HTMLElement): 'li' | 'span' {
+  const parent = source.parentElement?.localName;
+  return parent === 'ul' || parent === 'ol' || parent === 'menu'
+    ? 'li'
+    : 'span';
+}
+
+/**
  * The placeholder that holds a source's spot in the page while it is lifted:
  * empty, hidden, at its laid-out size, with its margins and its place in a
- * flex or grid container.
+ * flex or grid container. It is never a list item itself, so it takes no
+ * number and the items after it keep theirs, and the page's own rules for
+ * its tag (an `li`'s minimum height, its padding) never change its size.
  */
 function placeholderStyle(
   computed: CSSStyleDeclaration,
   box: MorphRect,
 ): Partial<CSSStyleDeclaration> {
+  const shown = computed.getPropertyValue('display');
   const display =
-    computed.display === 'inline'
+    shown === 'inline'
       ? 'inline-block'
-      : computed.display === 'contents' || computed.display === 'none'
+      : shown === 'contents' || shown === 'none'
         ? 'block'
-        : computed.display;
+        : shown.includes('list-item')
+          ? shown.includes('inline')
+            ? 'inline-block'
+            : 'block'
+          : shown;
   return {
     display,
     boxSizing: 'border-box',
     width: `${box.width}px`,
     height: `${box.height}px`,
+    minWidth: '0',
+    minHeight: '0',
+    maxWidth: 'none',
+    maxHeight: 'none',
+    padding: '0',
+    border: '0',
     marginTop: computed.marginTop,
     marginRight: computed.marginRight,
     marginBottom: computed.marginBottom,
@@ -851,7 +877,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     layer.append(anchor);
     let placeholder: HTMLElement | null = null;
     if (placeholderValues != null) {
-      placeholder = doc.createElement('span');
+      placeholder = doc.createElement(placeholderTag(source));
       placeholder.setAttribute(`${attribute}-placeholder`, '');
       placeholder.setAttribute('aria-hidden', 'true');
       Object.assign(placeholder.style, placeholderValues);
