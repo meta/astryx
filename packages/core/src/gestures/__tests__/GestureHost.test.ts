@@ -1028,6 +1028,28 @@ describe('GestureHost', () => {
       touch('touchend', row, moved, [], 32);
     });
 
+    it('holds nothing while a second finger is down off the sheet: a pinch across the edge stays the page\u2019s (spec:AST-094 FR10)', () => {
+      const {pan} = sheetOverList(0);
+      const row = document.getElementById('row') as HTMLElement;
+      const page = document.createElement('div');
+      document.body.append(page);
+      const first = {id: 1, x: 50, y: 100};
+      const second = {id: 2, x: 150, y: 20};
+      touch('touchstart', page, [second], [first, second], 8);
+      // The sheet's finger pulls away from the list's top edge while the
+      // other finger, on plain page content, moves up: a pinch.
+      const moved = [
+        {...first, y: 108},
+        {...second, y: 12},
+      ];
+      expect(
+        touch('touchmove', row, [moved[0]], moved, 16).defaultPrevented,
+      ).toBe(false);
+      expect(pan.state).not.toBe('began');
+      touch('touchend', row, moved, [], 32);
+      page.remove();
+    });
+
     it('cancels nothing once the browser has taken the touch for a scroll', () => {
       const {list, at, lift} = sheetOverList(50);
       // The browser scrolls the list: its moves can no longer be cancelled.
