@@ -13,6 +13,8 @@ import * as stylex from '@stylexjs/stylex';
 import {expect, waitFor, within} from 'storybook/test';
 import {useState, type ComponentProps} from 'react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -292,6 +294,61 @@ export const Showcase: Story = {
             </VStack>
           </Section>
         </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * Done announces and closes in one tap. Rendered inside the sheet, so
+ * `useAnnounce` follows the sheet's dialog; while the sheet fades out over
+ * the Dialog it still covers it, so the words wait and reach the Dialog's
+ * own live region at the sheet's real close (spec:AST-086 FR14).
+ */
+function SaveAndDone({onDone}: {onDone: () => void}) {
+  const announce = useAnnounce();
+  return (
+    <Button
+      label="Done"
+      onClick={() => {
+        announce('Saved');
+        onDone();
+      }}
+    />
+  );
+}
+
+export const SheetOverDialog: Story = {
+  name: 'Sheet over a Dialog',
+  render: () => {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open dialog" onClick={() => setIsDialogOpen(true)} />
+        <Dialog
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          aria-label="Edit item">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <DialogHeader title="Edit item" onOpenChange={setIsDialogOpen} />
+              <Button label="Open sheet" onClick={() => setIsSheetOpen(true)} />
+              <BottomSheet
+                isOpen={isSheetOpen}
+                onOpenChange={setIsSheetOpen}
+                label="Options">
+                <Section padding={4}>
+                  <VStack gap={4}>
+                    <Heading level={3}>Options</Heading>
+                    <CheckboxInput label="Notify me" value={false} />
+                    <SaveAndDone onDone={() => setIsSheetOpen(false)} />
+                  </VStack>
+                </Section>
+              </BottomSheet>
+            </VStack>
+          </Section>
+        </Dialog>
       </>
     );
   },

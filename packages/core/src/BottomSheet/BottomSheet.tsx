@@ -62,6 +62,7 @@ import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import {useDevWarning, useScrollLock} from '../hooks';
 import {mergeProps} from '../utils';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {focusForLastInput} from '../utils/focusReturn';
@@ -510,10 +511,16 @@ function StandaloneBottomSheet({
         onScrimOpacity={handleScrimOpacity}
         onElementChange={handlePanelElementChange}
         onMotionComplete={handleMotionComplete}>
-        <LayerDepthProvider>
-          {/* A sheet opened inside this one starts from Escape on. */}
-          <BottomSheetEscapeContext value>{children}</BottomSheetEscapeContext>
-        </LayerDepthProvider>
+        <ModalAnnounceProvider
+          dialogRef={dialogRef}
+          isOpen={isOpen && hasScrim}>
+          <LayerDepthProvider>
+            {/* A sheet opened inside this one starts from Escape on. */}
+            <BottomSheetEscapeContext value>
+              {children}
+            </BottomSheetEscapeContext>
+          </LayerDepthProvider>
+        </ModalAnnounceProvider>
       </BottomSheetPanel>
       {/* Its own element, outside the panel's transform, so it stays flush
           with the viewport's bottom edge at every detent; only while the
@@ -823,12 +830,16 @@ function SwitcherBottomSheetItem({
               fresh ownership scope so a nested BottomSheet is standalone unless
               it establishes a nested BottomSheetSwitcher of its own. */}
           <BottomSheetSwitcherContext value={null}>
-            <LayerDepthProvider>
-              {/* A sheet opened inside this one starts from Escape on. */}
-              <BottomSheetEscapeContext value>
-                {children}
-              </BottomSheetEscapeContext>
-            </LayerDepthProvider>
+            <ModalAnnounceProvider
+              dialogRef={dialogRef}
+              isOpen={isPresented && hasScrim}>
+              <LayerDepthProvider>
+                {/* A sheet opened inside this one starts from Escape on. */}
+                <BottomSheetEscapeContext value>
+                  {children}
+                </BottomSheetEscapeContext>
+              </LayerDepthProvider>
+            </ModalAnnounceProvider>
           </BottomSheetSwitcherContext>
         </BottomSheetPanel>
       </div>

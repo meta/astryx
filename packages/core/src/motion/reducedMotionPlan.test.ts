@@ -26,11 +26,37 @@ function view(overrides: Partial<ReducedMotionView> = {}): ReducedMotionView {
     hasOpacityCurve: false,
     restingOpacity: 1,
     hasPendingLanding: false,
+    hasWaitingDip: false,
     ...overrides,
   };
 }
 
 describe('planReducedMotion', () => {
+  it('a call naming the opacity a waiting dip returns to, with no travel, joins that dip', () => {
+    const plan = planReducedMotion(
+      view({hasPendingLanding: true, hasWaitingDip: true}),
+      0,
+      {opacity: 1},
+      ['opacity'],
+      true,
+    );
+    expect(plan.joins).toBe(true);
+    expect(plan.atOnce).toEqual([]);
+    expect(plan.opacityFade).toBeNull();
+    expect(plan.landing).toBeNull();
+  });
+
+  it('a call naming travel, or another opacity, while a dip waits does not join it', () => {
+    const waiting = view({hasPendingLanding: true, hasWaitingDip: true});
+    expect(
+      planReducedMotion(waiting, 0, {opacity: 1, x: 0}, ['opacity', 'x'], true)
+        .joins,
+    ).toBeUndefined();
+    expect(
+      planReducedMotion(waiting, 0, {opacity: 0.5}, ['opacity'], true).joins,
+    ).toBeUndefined();
+  });
+
   it('without a fade (a fine primary pointer), writes everything at once (DR3)', () => {
     const plan = planReducedMotion(
       view(),
@@ -75,6 +101,42 @@ describe('planReducedMotion', () => {
     expect(plan.landing?.at).toBe(MS);
     expect([...(plan.landing?.values ?? [])]).toEqual([['x', 100]]);
     expect(plan.holds).toEqual({x: 0});
+  });
+
+  it('a move whose opacity rises from a visible value dips rather than landing in view', () => {
+    const plan = planReducedMotion(
+      view({valueAt: p => (p === 'opacity' ? 0.5 : 0)}),
+      0,
+      {x: 100, opacity: 1},
+      ['x', 'opacity'],
+      true,
+    );
+    expect(plan.opacityFade).toEqual([
+      {at: 0, value: 0.5},
+      {at: MS / 2, value: 0},
+    ]);
+    expect(plan.landing?.at).toBe(MS / 2);
+    expect(plan.landing?.fadeIn).toEqual({
+      to: 1,
+      ms: MS / 2,
+      isBorrowed: false,
+    });
+  });
+
+  it('a move whose opacity falls to a visible value dips rather than landing in view', () => {
+    const plan = planReducedMotion(
+      view(),
+      0,
+      {x: 100, opacity: 0.5},
+      ['x', 'opacity'],
+      true,
+    );
+    expect(plan.landing?.at).toBe(MS / 2);
+    expect(plan.landing?.fadeIn).toEqual({
+      to: 0.5,
+      ms: MS / 2,
+      isBorrowed: false,
+    });
   });
 
   it('a move alone dips on the stylesheet opacity it borrows, and lands at the bottom', () => {
