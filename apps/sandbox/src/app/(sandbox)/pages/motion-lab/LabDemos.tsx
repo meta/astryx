@@ -34,6 +34,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 // A swizzled copy of core's TabList carrying the proposed travelling indicator.
 import {
@@ -43,6 +44,7 @@ import {
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {Token} from '@astryxdesign/core/Token';
+import {themeProps} from '@astryxdesign/core/utils';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {useMotionLab} from './MotionLabStore';
@@ -937,6 +939,61 @@ export function OriginRig({kind}: {kind: 'zero' | 'centre' | 'anchored'}) {
   );
 }
 
+// --- progress fill -----------------------------------------------------------
+
+/** The values a fast upload might report, one per tick. */
+const FILL_STEPS = [12, 58, 34, 86] as const;
+
+/**
+ * The determinate fill on a data change. Before is the real ProgressBar,
+ * which transitions `width` (a layout property, every frame of every tick).
+ * After is a sandbox copy of its track and fill that moves the same fill with
+ * `transform: scaleX()` on the same token and curve, so only the technique
+ * differs. It carries ProgressBar's theming targets (root, track and fill),
+ * so the theme paints it as it paints the real bar.
+ */
+export function ProgressFillRig({mode}: {mode: Mode}) {
+  const [step, setStep] = useState(0);
+  useLoop(() => setStep(current => (current + 1) % FILL_STEPS.length), 1600);
+  const value = FILL_STEPS[step];
+
+  return (
+    <VStack gap={2} {...stylex.props(sx.full)}>
+      {mode === 'before' ? (
+        <ProgressBar label="Uploading" value={value} hasValueLabel />
+      ) : (
+        <div {...themeProps('progress-bar', {variant: 'accent'})}>
+          <VStack gap={1}>
+            <HStack gap={2} hAlign="between">
+              <Text>Uploading</Text>
+              <Text color="secondary">{value}%</Text>
+            </HStack>
+            <div
+              {...themeProps('progress-bar-track')}
+              className={`astryx-progress-bar-track ${styles.fillTrack}`}
+              role="progressbar"
+              aria-label="Uploading"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={value}>
+              <div
+                {...themeProps('progress-bar-fill', {variant: 'accent'})}
+                className={`astryx-progress-bar-fill ${styles.fillScale}`}
+                style={{transform: `scaleX(${value / 100})`}}
+              />
+            </div>
+          </VStack>
+        </div>
+      )}
+      <Hint>
+        {mode === 'before'
+          ? 'Width is a layout property: every frame of every tick re-lays out the bar. A fast upload ticks often enough to behave like a layout loop.'
+          : 'The same fill on transform: scaleX, so it runs on the compositor. The cost shows at the ends: the rounded caps squash at small values, which is why this needs an exception or a different structure before it ships.'}
+      </Hint>
+    </VStack>
+  );
+}
+
 // --- loops -------------------------------------------------------------------
 
 export function LoopRig({policy}: {policy: 'today' | 'delete' | 'degrade'}) {
@@ -986,28 +1043,60 @@ export function LoopRig({policy}: {policy: 'today' | 'delete' | 'degrade'}) {
 
 // --- table tint (the 150ms rows) ---------------------------------------------
 
-export function TintRig({mode}: {mode: Mode}) {
+const TINT_ROWS = [
+  ['Quarterly report', 'Draft', '2 min ago'],
+  ['Design review', 'Scheduled', '1 h ago'],
+  ['Launch checklist', 'In progress', '3 h ago'],
+  ['Onboarding flow', 'Shipped', 'Yesterday'],
+  ['Pricing page', 'Draft', 'Yesterday'],
+  ['Support macros', 'In review', '2 days ago'],
+  ['Search ranking', 'Blocked', '3 days ago'],
+  ['Release notes', 'Shipped', 'Last week'],
+];
+
+/**
+ * Table rows' hover tint, over enough rows that sweeping the pointer down the
+ * table shows what the duration costs. `before` is Table today (a hardcoded
+ * 150ms on the CSS default curve); `after` reads the state token and changes at
+ * once under Reduce Motion (design:reduced-motion DR3); `none` deletes the
+ * transition, which is the option the rubric asks the preview to make visible.
+ */
+export function TintRig({mode}: {mode: Mode | 'none'}) {
+  const rowClass =
+    mode === 'none'
+      ? `${styles.tintRow} ${styles.tintRowNone}`
+      : mode === 'after'
+        ? `${styles.tintRow} ${styles.tintRowToken}`
+        : styles.tintRow;
   return (
     <VStack gap={1} {...stylex.props(sx.full)}>
-      {['Row one', 'Row two', 'Row three'].map(row => (
-        <div
-          key={row}
-          className={styles.tintRow}
-          style={
-            mode === 'after'
-              ? {
-                  ['--tint-duration' as string]: 'var(--lab-duration-state)',
-                  ['--tint-ease' as string]: 'var(--ease-state)',
-                }
-              : undefined
-          }>
-          <Text type="supporting">{row}</Text>
-        </div>
-      ))}
+      <table className={styles.tintTable}>
+        <tbody>
+          {TINT_ROWS.map(([name, status, updated]) => (
+            <tr key={name} className={rowClass}>
+              <td>
+                <Text type="supporting">{name}</Text>
+              </td>
+              <td>
+                <Text type="supporting" color="secondary">
+                  {status}
+                </Text>
+              </td>
+              <td>
+                <Text type="supporting" color="secondary">
+                  {updated}
+                </Text>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <Hint>
         {mode === 'before'
-          ? 'Hardcoded 150ms with the CSS default curve.'
-          : 'The state token, at 175ms with --ease-state.'}
+          ? 'Hardcoded 150ms with the CSS default curve. A literal: no token, rail switch or device setting reaches it, so it fades the same everywhere.'
+          : mode === 'after'
+            ? 'The state token with --ease-state. When the device asks for reduced motion, the tint changes at once on every rail setting (design:reduced-motion DR3): the colour still says which row is under the pointer.'
+            : "No transition at all: the tint is immediate, whatever the rail or the device's reduced-motion setting. Sweep the pointer down the table and compare it with the fades."}
       </Hint>
     </VStack>
   );
