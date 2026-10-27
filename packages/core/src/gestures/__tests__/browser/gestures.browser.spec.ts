@@ -761,6 +761,34 @@ test("the host's touch-action applies from the attach itself, an author rule out
   });
 });
 
+test("an author rule in any cascade layer outranks the host's touch-action (spec:AST-094 FR18, DEC-8)", async ({
+  page,
+  browserName,
+}) => {
+  await openBare(page, browserName);
+  const actions = await page.evaluate(() => {
+    const {host, PanGestureRecognizer} = window.__api;
+    // The layer order a package stylesheet declares (spec:AST-080 FR3), and
+    // author rules in Astryx's base layer and in the product's layer.
+    const author = document.createElement('style');
+    author.textContent = `@layer reset, astryx-base, astryx-theme, product;
+      @layer astryx-base { #base { touch-action: none; } }
+      @layer product { #product { touch-action: pan-x; } }`;
+    document.head.append(author);
+    document.body.innerHTML =
+      '<div id="base" style="height: 60px"></div><div id="product" style="height: 60px"></div>';
+    const base = document.getElementById('base') as HTMLElement;
+    const product = document.getElementById('product') as HTMLElement;
+    host.attach(base, new PanGestureRecognizer({direction: 'horizontal'}));
+    host.attach(product, new PanGestureRecognizer({direction: 'horizontal'}));
+    return {
+      base: getComputedStyle(base).touchAction,
+      product: getComputedStyle(product).touchAction,
+    };
+  });
+  expect(actions).toEqual({base: 'none', product: 'pan-x'});
+});
+
 test('a subtree that mounts with a recognizer is styled once: the host adds no second recalc of it (spec:AST-094 FR18)', async ({
   page,
   browserName,
@@ -910,6 +938,25 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   );
 });
 
+test('a finger the window blur cancelled lifts on nothing: its lift gets no click, and a later tap there keeps its own (spec:AST-094 FR28)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const at = await center(page, 'hbutton');
+  await clearLog(page);
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  // A headless page keeps its focus, so the blur is dispatched to the window.
+  await page.evaluate(() => window.dispatchEvent(new FocusEvent('blur')));
+  await driver.play([{t: 0, down: []}]);
+  await page.waitForTimeout(100);
+  const clicks = async () =>
+    (await log(page)).filter(entry => entry.name === 'click:hbutton');
+  expect(await clicks()).toEqual([]);
+  await driver.tap(at);
+  expect(await clicks()).toHaveLength(1);
+});
+
 test('scroll edge: at the top the pull is the sheet’s at once', async ({
   page,
   browserName,
@@ -923,6 +970,25 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(
     sheet.filter(entry => entry.state === 'changed').at(-1)?.y,
   ).toBeCloseTo(96 - 10, 0);
+  expect(await scrollTop(page, 'sheetBody')).toBe(0);
+});
+
+test("scroll edge: at the top the sheet cancels the pull's moves from the first one, before it begins (spec:AST-094 FR19, DEC-18)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await logTouchMoves(page);
+  const start = await center(page, 'sheetBody');
+  await driver.play(drag(start, {x: start.x, y: start.y + 24}));
+  const moves = await readTouchMoves(page);
+  // WebKit sends the first move at 2 px, well before the sheet's 10 px begin;
+  // Chromium sends none inside its own 15 px slop. Every move the page sees
+  // is cancelled, the first one included.
+  expect(moves.length).toBeGreaterThan(0);
+  expect(moves).toEqual(moves.map(() => true));
+  const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
+  expect(sheet[0]?.state).toBe('began');
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
@@ -1119,4 +1185,199 @@ test.describe('where the primary pointer is fine', () => {
       warnings.filter(text => text.includes('primary pointer is fine')),
     ).toHaveLength(1);
   });
+});
+
+/**
+ * A page with a scroller of rows and a tap recognizer on one row; every
+ * transition of the tap goes to `window.__taps`.
+ */
+async function openTapInScroller(page: Page, engine: string): Promise<Driver> {
+  const driver = await openBare(page, engine);
+  await page.evaluate(() => {
+    const {host, TapGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="list" style="height: 300px; overflow-y: auto; overscroll-behavior: contain">
+        <div id="row" style="height: 80px; background: #cfc">row</div>
+        <div style="height: 1200px">more rows</div>
+      </div>`;
+    const taps: string[] = [];
+    (window as unknown as {__taps: string[]}).__taps = taps;
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    tap.addTransitionListener((_current, _from, to) => taps.push(to));
+    host.attach(document.getElementById('row') as HTMLElement, tap);
+  });
+  return driver;
+}
+
+for (const travel of [
+  {dx: 0, dy: 9, label: '9 px straight', keeps: true},
+  {dx: 0, dy: 10, label: '10 px straight', keeps: false},
+  {dx: 7, dy: 7, label: '(7, 7), 9.9 px diagonally', keeps: true},
+  {dx: 8, dy: 8, label: '(8, 8), 11.3 px diagonally', keeps: false},
+]) {
+  test(`a finger moved ${travel.label} over a scroll view ${travel.keeps ? 'keeps its tap and scrolls nothing' : 'is a tap or a scroll, never both'} (spec:AST-094 FR18–FR22)`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openTapInScroller(page, browserName);
+    await logTouchMoves(page);
+    const at = await center(page, 'row');
+    await driver.play(drag(at, {x: at.x + travel.dx, y: at.y + travel.dy}, 6));
+    await page.waitForTimeout(100);
+    const taps = await page.evaluate(
+      () => (window as unknown as {__taps: string[]}).__taps,
+    );
+    const scrolled = (await scrollTop(page, 'list')) > 0;
+    if (travel.keeps) {
+      // Under 10 px of travel: a tap, and no scroll took the touch.
+      expect(taps).toContain('ended');
+      expect(scrolled).toBe(false);
+    } else {
+      // From 10 px the browser may scroll (WebKit on a phone starts at 10;
+      // Chromium waits longer): if it does, the scroll takes the touch and
+      // there is no tap; if it does not, the tap stands.
+      expect(scrolled && taps.includes('ended')).toBe(false);
+    }
+    // A tap never claims a moving touch: no touchmove is cancelled, so the
+    // browser's scroll is never blocked.
+    expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
+  });
+}
+
+/**
+ * A screen-edge pan on a strip along the left edge as wide as its band
+ * (40.2 px, which lays out at 40.203), over a horizontal scroller that
+ * fills the page; every
+ * transition of the pan goes to `window.__edge`.
+ */
+async function openEdgePan(page: Page, engine: string): Promise<Driver> {
+  const driver = await openBare(page, engine);
+  await page.evaluate(() => {
+    const {host, ScreenEdgePanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="hscroll" style="height: 300px; overflow-x: auto; overscroll-behavior: contain">
+        <div style="width: 3000px; height: 300px; background: linear-gradient(90deg, #eef, #cce)">wide</div>
+      </div>
+      <div id="edge" style="position: fixed; left: 0; top: 0; width: 40.2px; height: 300px"></div>`;
+    const edges: string[] = [];
+    (window as unknown as {__edge: string[]}).__edge = edges;
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    pan.addTransitionListener((_current, _from, to) => edges.push(to));
+    host.attach(document.getElementById('edge') as HTMLElement, pan);
+  });
+  return driver;
+}
+
+for (const run of [
+  {travel: 14, begins: false},
+  {travel: 15, begins: true},
+]) {
+  test(`a screen-edge pan landing 40 px from the edge ${run.begins ? 'claims at' : 'has not claimed at'} ${run.travel} px of travel (spec:AST-094 FR18–FR22)`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openEdgePan(page, browserName);
+    await logTouchMoves(page);
+    await driver.play(
+      drag({x: 40, y: 150}, {x: 40 + run.travel, y: 150}, 7, false),
+    );
+    await page.waitForTimeout(100);
+    const edges = await page.evaluate(
+      () => (window as unknown as {__edge: string[]}).__edge,
+    );
+    expect(edges.includes('began')).toBe(run.begins);
+    await driver.play([{t: 0, down: []}]);
+  });
+}
+
+test('a touch landing 41 px from the edge is outside the band: the edge pan never begins, and the horizontal scroll it starts is not blocked (spec:AST-094 FR18–FR22)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await openEdgePan(page, browserName);
+  await page.evaluate(() => {
+    (document.getElementById('hscroll') as HTMLElement).scrollLeft = 600;
+  });
+  await logTouchMoves(page);
+  await driver.play(drag({x: 41, y: 150}, {x: 201, y: 150}, 12));
+  await page.waitForTimeout(300);
+  const edges = await page.evaluate(
+    () => (window as unknown as {__edge: string[]}).__edge,
+  );
+  expect(edges).not.toContain('began');
+  expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
+  expect(
+    await page.evaluate(
+      () => (document.getElementById('hscroll') as HTMLElement).scrollLeft,
+    ),
+  ).toBeLessThan(600);
+});
+
+/** A watcher's transition, with how far the list had scrolled then. */
+interface WatchTransition {
+  to: string;
+  scrollTop: number;
+}
+
+test('a watcher follows a touch the browser scrolls with to the lift, and cancels none of its moves (spec:AST-094 FR20)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {host, PanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="list" style="height: 300px; overflow-y: auto">
+        <div id="row" style="height: 80px; background: #cfc">row</div>
+        <div style="height: 1200px">more rows</div>
+      </div>`;
+    const list = document.getElementById('list') as HTMLElement;
+    const states: WatchTransition[] = [];
+    (window as unknown as {__watch: WatchTransition[]}).__watch = states;
+    const watcher = new PanGestureRecognizer({
+      name: 'watch',
+      direction: 'vertical',
+      claimsTouches: false,
+    });
+    // Each transition with how far the list had scrolled then.
+    watcher.addTransitionListener((_current, _from, to) =>
+      states.push({to, scrollTop: list.scrollTop}),
+    );
+    host.attach(document.getElementById('list') as HTMLElement, watcher, {
+      manageStyle: false,
+    });
+  });
+  await logTouchMoves(page);
+  const at = await center(page, 'row');
+  await driver.play(drag(at, {x: at.x, y: at.y - 120}, 30));
+  await page.waitForTimeout(100);
+  const states = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __watch: WatchTransition[];
+        }
+      ).__watch,
+  );
+  // The browser scrolled the list: the watcher took nothing from it.
+  expect(await scrollTop(page, 'list')).toBeGreaterThan(20);
+  expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
+  // And it followed the scroll from its start to the lift: it still
+  // reported moves once the browser had taken the touch and was scrolling.
+  expect(states.map(entry => entry.to)).toContain('began');
+  expect(
+    states.some(entry => entry.to === 'changed' && entry.scrollTop > 0),
+  ).toBe(true);
+  expect(states.at(-1)?.to).toBe('ended');
 });

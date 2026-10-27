@@ -2464,6 +2464,26 @@ describe('Toast swipe dismissal under a finger', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it('springs back a release moving back toward rest, however far out the card is (spec:AST-094 FR37)', async () => {
+    // 60 px toward the edge, then 10 px back, lifted while still moving back
+    // at 125 px/s: the card is 19.8 px out, past the dismiss offset.
+    const {visualToast, onHide} = await renderSwipeToast();
+    act(() => {
+      penStroke(visualToast, 37, [
+        [0, 0],
+        [200, 30],
+        [400, 60],
+        [440, 55],
+        [480, 50],
+        [482, 50],
+      ]);
+    });
+    await afterRetract();
+    expect(onHide).not.toHaveBeenCalled();
+    expect(cardY(visualToast)).toBe(0);
+    expect(screen.getByText('Swipe toast')).toBeInTheDocument();
+  });
+
   /** A native touch event at an explicit time (ms on the page clock). */
   function touchAt(
     type: 'touchstart' | 'touchmove' | 'touchend',

@@ -219,11 +219,19 @@ function animationRecorder(): void {
     },
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
-    // and it started before the arm. While a trace runs the read stands
-    // down, as record() does.
-    arm: () => {
+    // and it started before the arm. While a trace runs the page-wide read
+    // stands down, as record() does; the watched element's own animations
+    // are still read, which resolves its pending style change. That read
+    // restyles the element (and lays out an anchored one) in the task that
+    // takes the watch, so a traced proof takes its watch before the window
+    // it counts (README: No Layout / Paint).
+    arm: (element?: Element) => {
       if (!tracing()) {
         record();
+      } else if (element != null) {
+        for (const animation of element.getAnimations({subtree: true})) {
+          remember(animation);
+        }
       }
       const newest = log.length === 0 ? 0 : log[log.length - 1].seenAt;
       armedAt = Math.max(performance.now(), newest + 0.001);
@@ -955,6 +963,15 @@ async function readElement<A, R>(
   }
 }
 
+/** The rejection for a wait whose element is not in the document. */
+function notInDocument(name: string, cause?: unknown): Error {
+  return new Error(
+    `${name}: the element is not in the document. An exit that removes ` +
+      'its element is read through its container (watch the parent).',
+    cause === undefined ? undefined : {cause},
+  );
+}
+
 /**
  * Runs a locator read within the wait's own deadline. A locator waits for
  * its element with no timeout of its own, so one the page removed (an exit
@@ -976,11 +993,7 @@ async function withinTimeout<T>(
       if ((await locator.count()) > 0) {
         return null;
       }
-      throw new Error(
-        `${name}: the element is not in the document. An exit that removes ` +
-          'its element is read through its container (watch the parent).',
-        {cause: error},
-      );
+      throw notInDocument(name, error);
     }
     throw error;
   }
@@ -1242,6 +1255,12 @@ export async function waitForAnimation(
       return found;
     }
     if (Date.now() > deadline) {
+      // A traced read goes through handles, which find no element rather
+      // than wait for one: a missing element is reported as missing, as the
+      // untraced read reports it.
+      if (traced && (await locator.count()) === 0) {
+        throw notInDocument('waitForAnimation');
+      }
       throw new Error(
         'waitForAnimation: no animation started on the element, none running ' +
           'and none recorded since the last wait. If the action is the ' +
@@ -1253,13 +1272,31 @@ export async function waitForAnimation(
   }
 }
 
-/** Marks now as the point later waits count animations from. */
-async function armRecorder(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    (
-      window as unknown as {__harnessAnimations: {arm: () => number}}
-    ).__harnessAnimations.arm(),
-  );
+/**
+ * Marks now as the point later waits count animations from. With a locator,
+ * its element's pending style change is resolved first, also inside a trace
+ * (reached through a handle, which adds no main-thread frame).
+ */
+async function armRecorder(page: Page, locator?: Locator): Promise<number> {
+  const handles = locator == null ? [] : await locator.elementHandles();
+  try {
+    if (handles.length === 1) {
+      return await handles[0].evaluate(element =>
+        (
+          window as unknown as {
+            __harnessAnimations: {arm: (element?: Element) => number};
+          }
+        ).__harnessAnimations.arm(element as Element),
+      );
+    }
+    return await page.evaluate(() =>
+      (
+        window as unknown as {__harnessAnimations: {arm: () => number}}
+      ).__harnessAnimations.arm(),
+    );
+  } finally {
+    await Promise.all(handles.map(handle => handle.dispose()));
+  }
 }
 
 export interface AnimationWatch {
@@ -1277,7 +1314,9 @@ export interface AnimationWatch {
 /**
  * Starts watching `locator`'s element before an action, so the animation the
  * action starts is caught even when it ends before the test looks (a short
- * entrance on a cold page):
+ * entrance on a cold page). Taking the watch reads the element's animations,
+ * which restyles it, inside a rendering trace too: take a traced watch before
+ * the window the proof counts:
  *
  *   const watch = await watchAnimations(sheet);
  *   await driver.play(tap(button));
@@ -1287,7 +1326,7 @@ export async function watchAnimations(
   locator: Locator,
 ): Promise<AnimationWatch> {
   await installCurveEnd(locator.page());
-  const since = await armRecorder(locator.page());
+  const since = await armRecorder(locator.page(), locator);
   return {
     started: options => waitForAnimation(locator, {...options, since}),
   };
@@ -1311,9 +1350,12 @@ export async function watchAnimations(
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
  * scheduled ends of the curves on the element instead (a run going backward,
- * until it finishes), reading no style, so
- * motion that no animation drives (a script writing styles) is not seen until
- * the trace ends. Finding no animation, it looks again `frames` times a frame
+ * until it finishes), so motion that no animation drives (a script writing
+ * styles) is not seen until the trace ends. Its one read of the element's
+ * animations, as it is called, restyles the element (and lays out an anchored
+ * one) when an animation is already running there: await it right after the
+ * action that starts the motion, before the window a proof counts, not in its
+ * middle (README: No Layout / Paint). Finding no animation, it looks again `frames` times a frame
  * apart before settling, so one the action starts a few frames later is
  * waited for.
  */

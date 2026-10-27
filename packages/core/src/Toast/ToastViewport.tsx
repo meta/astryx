@@ -27,6 +27,7 @@ import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, durationVars, easeVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -36,6 +37,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
+  type ModalOutletChange,
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
@@ -159,6 +161,16 @@ const styles = stylex.create({
   toastWrapperExiting: {
     gridTemplateRows: '0fr',
     paddingBlockEnd: 0,
+  },
+  // Under reduced motion on a touch screen Toast's own exit is a fade in
+  // place (Toast.tsx, design:reduced-motion DR2): the row waits for it, then
+  // closes at once, so the fade is never cut short by the unmount.
+  toastWrapperExitingAfterFade: {
+    transitionDelay: {
+      default: '0s',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+    },
   },
   toastWrapperInner: {
     width: '100%',
@@ -303,6 +315,7 @@ function ToastRow({
         isReversed ? styles.toastWrapperFromTop : styles.toastWrapperFromBottom,
         isReversed ? styles.toastWrapperGapReversed : styles.toastWrapperGap,
         isCollapsing && styles.toastWrapperExiting,
+        isCollapsing && !isNotification && styles.toastWrapperExitingAfterFade,
       )}
       onTransitionEnd={(e: React.TransitionEvent) => {
         // `grid-template-rows` is not private to this wrapper — any descendant
@@ -618,7 +631,7 @@ export function ToastViewport({
     if (!isTopLayer || host == null) {
       return;
     }
-    const place = () => {
+    const place = (change: ModalOutletChange = 'outlet') => {
       const parent = getActiveModalOutlet() ?? rootOutletRef.current;
       if (parent == null) {
         return;
@@ -634,7 +647,9 @@ export function ToastViewport({
       }
       // Leaving the document hid the popover. Showing it again puts it above
       // the modal that just opened, or above everything once the last modal
-      // closed.
+      // closed. A non-modal surface that entered the top layer (`entry`)
+      // moved nothing, so the viewport leaves and re-enters in place to get
+      // above it; focus inside it is kept across the re-entry.
       const el = viewportRef.current;
       if (el == null || typeof el.showPopover !== 'function') {
         return;
@@ -644,6 +659,28 @@ export function ToastViewport({
         isShowing = el.matches(':popover-open');
       } catch {
         /* :popover-open unsupported */
+      }
+      if (isShowing && change === 'entry') {
+        const active = document.activeElement;
+        const hadFocus = active instanceof HTMLElement && el.contains(active);
+        try {
+          el.hidePopover();
+          isShowing = false;
+        } catch {
+          /* not a showing popover */
+        }
+        if (isShowing) {
+          return;
+        }
+        try {
+          el.showPopover();
+        } catch {
+          /* already showing */
+        }
+        if (hadFocus) {
+          active.focus({preventScroll: true});
+        }
+        return;
       }
       if (!isShowing) {
         try {

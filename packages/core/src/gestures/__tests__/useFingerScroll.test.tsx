@@ -13,6 +13,7 @@
 import {render} from '@testing-library/react';
 import {useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {getGestureHost} from '../GestureHost';
 import {useFingerScroll} from '../useFingerScroll';
 import {coarsePrimaryPointer} from './pointerQuery';
 
@@ -81,6 +82,17 @@ describe('useFingerScroll', () => {
     expect(read()).toBe(true);
     list.dispatchEvent(new Event('scrollend'));
     expect(read()).toBe(false);
+  });
+
+  it("reads a recognizer's own scroll as the program's, even with a finger resting inside", () => {
+    const {getByTestId} = render(<List />);
+    const list = getByTestId('list');
+    touch('touchstart', getByTestId('row'), true);
+    // A menu's edge autoscroll under the resting finger.
+    getGestureHost(document).ownScroll(list);
+    list.dispatchEvent(new Event('scroll'));
+    expect(read()).toBe(false);
+    touch('touchend', getByTestId('row'), false);
   });
 
   it('reads the page’s own scroll through the document', () => {

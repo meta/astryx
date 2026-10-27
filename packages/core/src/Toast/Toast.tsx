@@ -361,13 +361,6 @@ export function ToastSurface({
   const isDismissingRef = useRef(false);
   const isExitingRef = useRef(isExiting);
   isExitingRef.current = isExiting;
-  const isMountedRef = useRef(false);
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
   requestDismissRef.current = (reason: ToastDismissReason) => {
     if (!isNotification) {
       onDismissRef.current(reason);
@@ -384,7 +377,9 @@ export function ToastSurface({
       // does with a fine pointer; in a viewport the row is leaving by then.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (isMountedRef.current && !isExitingRef.current) {
+          // Still in the document (React detaches the ref on unmount) and
+          // not leaving.
+          if (rootRef.current?.isConnected === true && !isExitingRef.current) {
             isDismissingRef.current = false;
             rest();
           }

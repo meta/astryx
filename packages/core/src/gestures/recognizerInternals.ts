@@ -3,15 +3,17 @@
 /**
  * @file recognizerInternals.ts
  * @input GestureRecognizer
- * @output internals(recognizer): the members the arena and the host drive,
- *   and RecognizerFamily, the brand the host reads instead of `instanceof`
+ * @output internals(recognizer): the members the arena, the host and the
+ *   React hooks drive, and RecognizerFamily, the brand the host reads instead
+ *   of `instanceof`
  * @position Internal to packages/core/src/gestures; never exported from the
  *   experimental subpath
  *
  * A recognizer's arena plumbing (its arena, a pending recognition, touch
  * delivery, approved transitions) is `protected` on the class, so the
  * published type offers it to subclasses only. The arena and the host reach
- * it through this view.
+ * it through this view, and so do the React hooks, for the arena an Effect's
+ * stop defers its resolution to.
  *
  * SYNC: When modified, update the `protected` members of GestureRecognizer.ts.
  */
@@ -39,6 +41,7 @@ export interface RecognizerInternals {
   requiresFailureOf(other: GestureRecognizer): boolean;
   allowsSimultaneous(other: GestureRecognizer): boolean;
   shouldBegin(): boolean;
+  keepsTouch(touchId: number): boolean;
   wantsTouch(touch: GestureTouch): boolean;
   deliverBegan(
     touches: ReadonlyArray<GestureTouch>,

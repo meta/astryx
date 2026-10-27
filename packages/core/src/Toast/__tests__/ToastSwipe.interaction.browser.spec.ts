@@ -309,6 +309,7 @@ function curveEnd(animation: ActiveAnimation): number {
 
 test('the card stays still for the follow distance, then follows the finger at the follow ratio', async ({
   page,
+  browserName,
 }) => {
   const {driver, card, from} = await openToast(page);
   const travel = 36;
@@ -352,9 +353,13 @@ test('the card stays still for the follow distance, then follows the finger at t
   await waitForRest(card);
   expect(await cardOffset(card)).toBeCloseTo(0, 1);
   await expect(card).toBeVisible();
-  expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
-    [],
-  );
+  // No long task while the card followed: the Long Tasks API is Chromium's,
+  // and the log refuses to answer in WebKit rather than report nothing.
+  if (browserName === 'chromium') {
+    expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
+      [],
+    );
+  }
 });
 
 test('a release short of the dismiss travel springs back on the settle spring', async ({
@@ -624,7 +629,8 @@ test('a dismissing release retracts the card past the top edge on the banner’s
   const {driver, card, from} = await openToast(page);
   const box = await cardBox(card);
   const viewportHeight = await page.evaluate(() => innerHeight);
-  // 60 px: the card 25.3 px out, past the dismiss offset.
+  // 60 px: the card 25.3 px out, past the dismiss offset, and a finger at
+  // rest before the lift: the retract starts at that release velocity, 0.
   await driver.play(restingDrag(from, 60));
   const {samples, opacity} = await sampleRetract(page, card);
   const start = follow(60);
@@ -633,6 +639,7 @@ test('a dismissing release retracts the card past the top edge on the banner’s
     retractTarget(box, viewportHeight, -1),
     TOAST.exitMs,
     TOAST.exitCurve,
+    0,
   );
   const result = compareCurve(samples, t => curve.at(t / 1000), 1);
   expect(samples[0].value).toBeCloseTo(start, 0);
@@ -802,6 +809,37 @@ test('under Reduce Motion a turn-back still stretches the card, and its release 
   await expect(card).toBeVisible();
 });
 
+test("a flick's retract continues at the card's release velocity (spec:AST-094 FR38)", async ({
+  page,
+}) => {
+  const {driver, card, from} = await openToast(page);
+  const box = await cardBox(card);
+  const viewportHeight = await page.evaluate(() => innerHeight);
+  // 15 px in 25 ms at 600 px/s: the card hands on the follow ratio of it.
+  const script = flick(from, {
+    velocity: {x: 0, y: -600},
+    durationMs: 25,
+    hz: 120,
+  });
+  await driver.play(script);
+  const {samples} = await sampleRetract(page, card);
+  const handedOn = releaseVelocity(script).y * TOAST.followRatio;
+  const curve = retractCurve(
+    samples[0].value,
+    retractTarget(box, viewportHeight, -1),
+    TOAST.exitMs,
+    TOAST.exitCurve,
+    handedOn,
+  );
+  // The retract the card plays starts at the speed it was released at.
+  expect(Math.abs(curve.velocity(0) - handedOn)).toBeLessThanOrEqual(
+    Math.abs(handedOn) * 0.05,
+  );
+  const result = compareCurve(samples, t => curve.at(t / 1000), 1);
+  expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(1);
+  await expect(page.locator('.astryx-toast')).toHaveCount(0);
+});
+
 test('a horizontal drag leaves the card where it is', async ({page}) => {
   const {driver, card, from} = await openToast(page);
   const offsets: number[] = [];
@@ -960,6 +998,86 @@ test.describe('with a fine pointer', () => {
     await expect(page.locator('.astryx-toast')).toHaveCount(1);
     expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
   });
+});
+
+test('under Reduce Motion on a touch screen, presentation="toast" fades the card out before its row closes', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await openStory(page, storybook(), 'core-toast--mobile-toast-presentation');
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Show toast'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const card = page.locator('.astryx-toast').first();
+  await expect(card).toBeVisible();
+  await waitForRest(card);
+  const close = await card
+    .getByRole('button', {name: 'Dismiss notification'})
+    .boundingBox();
+  if (close == null) {
+    throw new Error('no close button');
+  }
+  // Every frame from the tap: the card's opacity and its row's height.
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __exitFrames: {t: number; opacity: number | null; row: number | null}[];
+    };
+    w.__exitFrames = [];
+    const start = performance.now();
+    const tick = () => {
+      const el = document.querySelector('.astryx-toast');
+      const row = el?.closest('[data-toast-id]');
+      w.__exitFrames.push({
+        t: performance.now() - start,
+        opacity: el == null ? null : Number(getComputedStyle(el).opacity),
+        row: row == null ? null : row.getBoundingClientRect().height,
+      });
+      if (performance.now() - start < 500) {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+  const openRow = await card.evaluate(
+    el => el.closest('[data-toast-id]')?.getBoundingClientRect().height ?? 0,
+  );
+  await driver.tap({
+    x: close.x + close.width / 2,
+    y: close.y + close.height / 2,
+  });
+  await expect(page.locator('.astryx-toast')).toHaveCount(0);
+  const exitFrames = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __exitFrames: {
+            t: number;
+            opacity: number | null;
+            row: number | null;
+          }[];
+        }
+      ).__exitFrames,
+  );
+  const fading = exitFrames.filter(
+    f => f.opacity != null && f.opacity < 0.99 && f.opacity > 0.01,
+  );
+  // It fades where it is (DR2), over several frames, not at once.
+  expect(fading.length, JSON.stringify(exitFrames)).toBeGreaterThanOrEqual(3);
+  // Its row stays open while it is visible.
+  for (const f of fading) {
+    expect(f.row).toBeCloseTo(openRow, 0);
+  }
 });
 
 test('under Reduce Motion on a touch screen a toast fades in where it lands', async ({
