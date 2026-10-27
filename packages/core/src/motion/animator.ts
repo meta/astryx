@@ -1846,17 +1846,41 @@ export function createAnimator(
       // with its own two frames. Every other property starts here, whatever
       // its segment's group: a value Reduce Motion writes at once, or lands
       // under a dip, has no curve of this call's.
-      const own = changed.filter(
-        property =>
-          !CHANNELS[CHANNEL_OF[property]].some(other => {
-            const waiting = segments.get(other)?.group;
-            return (
+      const own: MotionProperty[] = [];
+      let handedTo: StartGroup | null = null;
+      for (const property of changed) {
+        const holder = CHANNELS[CHANNEL_OF[property]]
+          .map(other => segments.get(other)?.group)
+          .find(
+            waiting =>
               waiting != null &&
               waiting !== group &&
-              deferredCalls.some(call => call.group === waiting)
-            );
-          }),
-      );
+              deferredCalls.some(call => call.group === waiting),
+          );
+        if (holder == null) {
+          own.push(property);
+          continue;
+        }
+        // A curve of this call's in that channel never ran: the element held
+        // it at its start. It starts with the later call, which creates the
+        // channel, dated from that call's start, so the model reads what the
+        // screen shows.
+        const segment = segments.get(property);
+        if (segment != null && segment.group === group) {
+          segment.start += holder.provisional - group.provisional;
+          segment.group = holder;
+          holder.segments.push(segment);
+          group.segments.splice(group.segments.indexOf(segment), 1);
+          handedTo = holder;
+        }
+      }
+      if (own.length === 0 && handedTo != null) {
+        // Everything this call still plays starts with the later call.
+        const adopter = handedTo;
+        group.adoptedBy = adopter;
+        void adopter.started.then(start => resolveGroup(group, start));
+        continue;
+      }
       // From the call's own time: the curve starts at the browser's commit.
       startCall(group, own, group.provisional);
     }

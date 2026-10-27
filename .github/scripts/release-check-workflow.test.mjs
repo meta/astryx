@@ -501,6 +501,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
             docsite_only: 'false',
             spec_only: 'false',
             tooling_only: 'false',
+            full_suite: 'true',
             release_bump: 'false',
           },
         ],
