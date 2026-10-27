@@ -1959,4 +1959,49 @@ describe("inputMode 'pointer-events'", () => {
     touch('touchend', box, [finger], [], 820);
     expect(states).toContain('ended');
   });
+
+  it("cancels a claimed finger's touchmove, matching its touches to its pointer", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pointerHost = new GestureHost(document, {
+      clock,
+      inputMode: 'pointer-events',
+      isPrimaryPointerCoarse: () => true,
+    });
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(pointerHost.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    const finger = {id: 7, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    // Before the pan claims, the browser keeps the move.
+    const early = {...finger, x: 14};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 14,
+      y: 10,
+      buttons: 1,
+      time: 8,
+    });
+    expect(touch('touchmove', box, [early], [early], 8).defaultPrevented).toBe(
+      false,
+    );
+    // Past its hysteresis the pan owns the finger: its touchmoves are cancelled.
+    const claimed = {...finger, x: 40};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 40,
+      y: 10,
+      buttons: 1,
+      time: 32,
+    });
+    expect(pan.state).toBe('began');
+    expect(
+      touch('touchmove', box, [claimed], [claimed], 32).defaultPrevented,
+    ).toBe(true);
+  });
 });
