@@ -11,12 +11,30 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import {UIKIT_PINCH, UIKIT_SWIPE} from '../../motion/uikit/gestures';
+import {GestureRecognizer} from '../GestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {SwipeGestureRecognizer} from '../SwipeGestureRecognizer';
 import {createHarness, RecordingConsumer} from './harness';
+
+/**
+ * A recognizer that stays possible, even past its finger's lift, until the
+ * test fails it: something another recognizer can wait on.
+ */
+class Held extends GestureRecognizer {
+  private isWaiting = true;
+
+  override isInvolved(): boolean {
+    return super.isInvolved() || this.isWaiting;
+  }
+
+  fail(): void {
+    this.isWaiting = false;
+    this.setState('failed');
+  }
+}
 
 describe('conflict matrix', () => {
   it('pinch + pan recognize simultaneously when allowed', () => {
@@ -55,6 +73,8 @@ describe('conflict matrix', () => {
       direction: 'horizontal',
     });
     inner.requireToFail(edge);
+    // A thin edge view: the edge zone, where the pan takes its axis.
+    band.environment.view = {width: edge.edgeRegion, height: 844};
     band.finger(1).down(8, 300, 0, {recognizers: [inner, edge]});
     band.finger(1).drag(60, 2, 60, 6);
     // The edge pan's own hysteresis is 15 px: the second 10 px step.
@@ -112,6 +132,46 @@ describe('conflict matrix', () => {
   });
 });
 
+describe('a recognizer waiting on another', () => {
+  it('a swipe holds its recognition past its lift and its deadline (spec:AST-094 FR15)', () => {
+    const h = createHarness();
+    const held = new Held({name: 'held'});
+    const swipe = new SwipeGestureRecognizer({name: 'swipe'});
+    swipe.requireToFail(held);
+    h.finger(1)
+      .down(0, 0, 0, {recognizers: [swipe, held]})
+      .drag(80, 0, 60, 8)
+      .up(70);
+    h.advance(UIKIT_SWIPE.maximumDuration.value + 100);
+    expect(swipe.state).toBe('possible');
+    expect(h.log.some(entry => entry.startsWith('swipe:failed'))).toBe(false);
+    held.fail();
+    expect(h.log).toContain(
+      `swipe:ended@${UIKIT_SWIPE.maximumDuration.value + 100}`,
+    );
+    expect(swipe.recognizedDirection).toBe('right');
+  });
+
+  it('a pinch keeps its start once it passes the hysteresis, so it begins at the scale its fingers show (spec:AST-094 FR15)', () => {
+    const h = createHarness();
+    const held = new Held({name: 'held'});
+    const pinch = new PinchGestureRecognizer({name: 'pinch'});
+    pinch.requireToFail(held);
+    h.finger(1).down(100, 100, 0, {recognizers: [pinch, held]});
+    h.finger(2).down(200, 100, 0, {recognizers: [pinch, held]});
+    // Span 100 -> 120 -> 140 -> 160 while the pinch waits.
+    h.finger(2).move(220, 100, 16);
+    h.finger(2).move(240, 100, 32);
+    h.finger(2).move(260, 100, 48);
+    expect(pinch.state).toBe('possible');
+    held.fail();
+    expect(h.log).toContain('pinch:began@48');
+    // Measured against 100 + 8 once, not re-based on every move.
+    const hysteresis = UIKIT_PINCH.hysteresis.value;
+    expect(pinch.scale).toBeCloseTo(160 / (100 + hysteresis), 5);
+  });
+});
+
 describe('delivery to the view', () => {
   it('holds the began with delaysTouchesBegan until the recognizer fails', () => {
     const h = createHarness();
@@ -122,7 +182,7 @@ describe('delivery to the view', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [swipe], consumer});
     expect(consumer.events).toEqual([]);
-    h.advance(UIKIT_GESTURES.swipe.maximumDuration.value);
+    h.advance(UIKIT_SWIPE.maximumDuration.value);
     expect(consumer.events).toEqual(['began:1']);
   });
 });
