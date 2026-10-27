@@ -771,6 +771,10 @@ describe('List reorderable', () => {
     // The key has Table's idKey shape: a string or a number, nothing else.
     // @ts-expect-error: a bigint is no item key.
     void (<ListItem itemKey={7n} label="Seven" />);
+    // Nor is it a reorderable object's key: no item could report one
+    // (spec:AST-103 FR1).
+    // @ts-expect-error: a bigint is no reorder key.
+    void createReorderable<bigint>({onReorder: () => {}});
   });
 
   it('keeps reorder mode when the object is made anew, and calls the latest onReorder', async () => {

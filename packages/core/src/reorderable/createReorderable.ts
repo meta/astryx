@@ -18,7 +18,6 @@
  * List/listReorderContext.ts and List/List.doc.mjs.
  */
 
-import type {Key} from 'react';
 import {
   REORDER_ENGINE,
   type ListReorderOptions,
@@ -27,7 +26,10 @@ import {
 import {listReorderEngine} from '../List/listReorderEngine';
 
 /** A committed move: the item that moved and where it went. */
-export interface ReorderMove<TKey extends Key = string | number, TTo = number> {
+export interface ReorderMove<
+  TKey extends string | number = string | number,
+  TTo = number,
+> {
   /**
    * The moved item's key: its ListItem's `itemKey`, or the key a collection
    * built from data takes through its `idKey` (a field name or a function of
@@ -43,7 +45,7 @@ export interface ReorderMove<TKey extends Key = string | number, TTo = number> {
 
 /** What `createReorderable` takes. */
 export interface ReorderableOptions<
-  TKey extends Key = string | number,
+  TKey extends string | number = string | number,
   TTo = number,
 > {
   /**
@@ -68,7 +70,10 @@ declare const reorderableBrand: unique symbol;
  * its `reorderable` prop. It applies to the whole collection; each item's key
  * and `isReorderable` decide which items move.
  */
-export interface Reorderable<TKey extends Key = string | number, TTo = number> {
+export interface Reorderable<
+  TKey extends string | number = string | number,
+  TTo = number,
+> {
   /** The keys and places it reports; a type, not a value. */
   readonly [reorderableBrand]: {readonly key: TKey; readonly to: TTo};
   /**
@@ -106,7 +111,7 @@ export interface Reorderable<TKey extends Key = string | number, TTo = number> {
  * ```
  */
 export function createReorderable<
-  TKey extends Key = string | number,
+  TKey extends string | number = string | number,
   TTo = number,
 >(options: ReorderableOptions<TKey, TTo>): Reorderable<TKey, TTo> {
   const internals: ReorderableInternals = {
