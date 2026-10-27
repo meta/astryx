@@ -1008,6 +1008,49 @@ function wheelAt(
   return event;
 }
 
+/**
+ * A page that scrolls: the document's scroller, 3000 px of content in a
+ * 600 px viewport, scrolled to `scrollTop` (jsdom lays out nothing).
+ */
+function scrollablePage(scrollTop: number) {
+  const root = (document.scrollingElement ??
+    document.documentElement) as HTMLElement;
+  const keys = ['scrollHeight', 'clientHeight', 'scrollTop'] as const;
+  const saved = keys.map(
+    key => [key, Object.getOwnPropertyDescriptor(root, key)] as const,
+  );
+  let top = scrollTop;
+  Object.defineProperty(root, 'scrollHeight', {
+    configurable: true,
+    get: () => 3000,
+  });
+  Object.defineProperty(root, 'clientHeight', {
+    configurable: true,
+    get: () => 600,
+  });
+  Object.defineProperty(root, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+  return {
+    scrollTo(value: number) {
+      top = value;
+    },
+    restore() {
+      for (const [key, descriptor] of saved) {
+        if (descriptor == null) {
+          Reflect.deleteProperty(root, key);
+        } else {
+          Object.defineProperty(root, key, descriptor);
+        }
+      }
+    },
+  };
+}
+
 /** A browser's touchcancel for one finger, after its pointercancel. */
 function fineTouchCancel(
   target: HTMLElement,
@@ -1173,6 +1216,47 @@ describe('Toast swipe dismissal', () => {
       await new Promise(resolve => setTimeout(resolve, 150));
     });
     expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('leaves a wheel over the toast to the page while the page can still scroll toward its edge, and takes it at the page edge (spec:AST-094 FR43)', async () => {
+    const page = scrollablePage(500);
+    try {
+      const {visualToast, onHide} = renderSwipeToast();
+      // A bottom toast: a wheel moving the content down, toward its edge,
+      // while the page can still scroll that way.
+      let start = fineClockStart();
+      const kept: WheelEvent[] = [];
+      act(() => {
+        for (let i = 0; i < 6; i += 1) {
+          kept.push(wheelAt(visualToast, start + i * 16, -16));
+        }
+      });
+      expect(kept.map(step => step.defaultPrevented)).toEqual(
+        kept.map(() => false),
+      );
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      });
+      expect(onHide).not.toHaveBeenCalled();
+
+      // At the page's top the same wheel is the toast's.
+      page.scrollTo(0);
+      start = fineClockStart();
+      const taken: WheelEvent[] = [];
+      act(() => {
+        for (let i = 0; i < 6; i += 1) {
+          taken.push(wheelAt(visualToast, start + i * 16, -16));
+        }
+      });
+      expect(taken.every(step => step.defaultPrevented)).toBe(true);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      });
+      expect(onHide).toHaveBeenCalledWith('manual');
+    } finally {
+      page.restore();
+    }
   });
 
   it('dismisses on a trackpad scroll toward the edge (spec:AST-094 FR43)', async () => {
@@ -4004,6 +4088,50 @@ describe('Toast swipe dismissal under a finger', () => {
     });
     await afterRetract();
     expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('leaves a wheel over the banner to the page while the page can still scroll toward its edge, and takes it at the page edge (spec:AST-094 FR43)', async () => {
+    const page = scrollablePage(500);
+    // Wheel steps on this suite's clock, which only moves forward.
+    const wheelStroke = (target: HTMLElement, time: number, deltaY: number) => {
+      strokeClock = Math.max(strokeClock, time);
+      return wheelAt(target, time, deltaY);
+    };
+    try {
+      const {visualToast, onHide} = await renderSwipeToast();
+      let start = strokeStart();
+      const kept: WheelEvent[] = [];
+      act(() => {
+        for (let i = 0; i < 6; i += 1) {
+          kept.push(wheelStroke(visualToast, start + i * 16, -16));
+        }
+      });
+      expect(kept.map(step => step.defaultPrevented)).toEqual(
+        kept.map(() => false),
+      );
+      expect(cardY(visualToast)).toBe(0);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      });
+      expect(onHide).not.toHaveBeenCalled();
+
+      page.scrollTo(0);
+      start = strokeStart();
+      const taken: WheelEvent[] = [];
+      act(() => {
+        for (let i = 0; i < 6; i += 1) {
+          taken.push(wheelStroke(visualToast, start + i * 16, -16));
+        }
+      });
+      expect(taken.every(step => step.defaultPrevented)).toBe(true);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      });
+      await afterRetract();
+      expect(onHide).toHaveBeenCalledWith('manual');
+    } finally {
+      page.restore();
+    }
   });
 
   it('follows a trackpad scroll toward the edge with the banner swipe, and dismisses on its release (spec:AST-094 FR43)', async () => {

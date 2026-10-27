@@ -22,7 +22,8 @@
  *
  * The swipe is a PanGestureRecognizer on the shared gesture host
  * (`spec:AST-094` FR43, FR24): it takes every pointer and, as every pan does,
- * wheel and trackpad scrolling, and once it claims a mouse or a pen
+ * wheel and trackpad scrolling (the page keeps a scroll over the toast while
+ * it can still scroll that way), and once it claims a mouse or a pen
  * drag the host clears and holds off text selection (FR41); it
  * begins at the pan's 10 pt toward the edge (FR17), a second finger never ends
  * a swipe that began (FR10), and a drag sideways or away from the edge stays
@@ -94,6 +95,10 @@ export function useToastGesture(
 ): UseToastGestureResult {
   const rootRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef(options);
+  // Synchronizes the pan recognizer's callbacks (`shouldReceiveTouch` and
+  // the transition listener below) with the latest options, which they read
+  // when input arrives; it acquires nothing (architecture:react-component-
+  // runtime INV3).
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
@@ -115,6 +120,16 @@ export function useToastGesture(
           if (
             root == null ||
             current.shouldIgnoreTarget(touch.target as EventTarget, root)
+          ) {
+            return false;
+          }
+          // A wheel or trackpad scroll over the toast stays the page's while
+          // the page, or anything else under the pointer, can still scroll
+          // toward the toast's edge: the toast floats over the page
+          // (spec:AST-094 FR43).
+          if (
+            touch.scrollType != null &&
+            touch.scroll?.canScroll(0, current.direction) === true
           ) {
             return false;
           }
@@ -149,10 +164,14 @@ export function useToastGesture(
     {isEnabled: options.enabled, manageStyle: true},
   );
 
+  // Synchronizes the pan recognizer's direction with the toast's edge; it
+  // acquires nothing and is idempotent (INV3).
   useIsomorphicLayoutEffect(() => {
     pan.setDirection(panDirection(options.direction));
   }, [pan, options.direction]);
 
+  // Subscribes to the pan recognizer's state transitions, which move and
+  // release the card; the cleanup removes the listener (INV3).
   useEffect(
     () =>
       pan.addTransitionListener((recognizer, _from, to) => {

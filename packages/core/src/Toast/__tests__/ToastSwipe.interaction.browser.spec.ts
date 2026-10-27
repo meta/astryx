@@ -990,6 +990,155 @@ test.describe('with a fine pointer', () => {
     ).toBeLessThan(-40);
   });
 
+  test('a wheel over the toast scrolls the page while the page can still scroll, and swipes the toast at the page edge (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    // The app's toasts: the viewport in the top layer, fixed to the window
+    // over the page.
+    await openStory(page, storybook(), 'core-toast--default');
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    const driver = await webInputDriver(page);
+    await page.getByRole('button', {name: 'Show toast'}).click();
+    const card = page.locator('.astryx-toast').first();
+    await expect(card).toBeVisible();
+    await waitForRest(card);
+    // A page with room to scroll both ways, scrolled to the middle.
+    const scroll = await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '3000px';
+      document.body.append(spacer);
+      window.scrollTo(0, 600);
+      const root = document.scrollingElement as HTMLElement;
+      return {y: window.scrollY, max: root.scrollHeight - window.innerHeight};
+    });
+    expect(scroll.y).toBe(600);
+    expect(scroll.max).toBeGreaterThan(1200);
+    const box = await card.boundingBox();
+    if (box == null) {
+      throw new Error('no toast');
+    }
+    const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    // Toward the toast's edge: a bottom toast's is down, so the content
+    // moving down (a scroll up, negative dy); a top toast's the reverse.
+    const isBottom = at.y > (await page.evaluate(() => window.innerHeight)) / 2;
+    const dy = isBottom ? -16 : 16;
+    const scrollY = async () => page.evaluate(() => window.scrollY);
+    // Each wheel step's fate, read once the page's listeners have run.
+    await page.evaluate(() => {
+      const w = window as unknown as {__wheels: boolean[]};
+      w.__wheels = [];
+      window.addEventListener('wheel', event => {
+        w.__wheels.push(event.defaultPrevented);
+      });
+    });
+    const takeWheels = async () =>
+      page.evaluate(() => {
+        const w = window as unknown as {__wheels: boolean[]};
+        const fates = w.__wheels;
+        w.__wheels = [];
+        return fates;
+      });
+    // The page can still scroll that way: every step is the page's, and the
+    // card stays where it is.
+    for (let i = 0; i < 6; i += 1) {
+      await driver.wheel({...at, dy});
+    }
+    expect(await takeWheels()).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    if (isBottom) {
+      await expect.poll(scrollY).toBeLessThan(scroll.y);
+    } else {
+      await expect.poll(scrollY).toBeGreaterThan(scroll.y);
+    }
+    expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
+    await page.waitForTimeout(200);
+    await expect(page.locator('.astryx-toast')).toHaveCount(1);
+    // At the page's edge the same scroll is the toast's: it swipes it away.
+    const edge = isBottom ? 0 : scroll.max;
+    await page.evaluate(y => window.scrollTo(0, y), edge);
+    await expect.poll(scrollY).toBe(edge);
+    for (let i = 0; i < 6; i += 1) {
+      await driver.wheel({...at, dy});
+    }
+    expect(await takeWheels()).toEqual([true, true, true, true, true, true]);
+    await expect(page.locator('.astryx-toast')).toHaveCount(0);
+    expect(await scrollY()).toBe(edge);
+  });
+
+  test('under Reduce Motion, presentation="notification" settles and leaves at once after a mouse release (spec:AST-094 FR43, design:reduced-motion DR3)', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await openStory(
+      page,
+      storybook(),
+      'core-toast--mobile-notification-presentation',
+    );
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    await page.getByRole('button', {name: 'Show toast'}).click();
+    const card = page.locator('.astryx-toast').first();
+    await expect(card).toBeVisible();
+    await waitForRest(card);
+    const box = await card.boundingBox();
+    if (box == null) {
+      throw new Error('no toast');
+    }
+    const x = box.x + 40;
+    const y = box.y + box.height / 2;
+    // Every frame from the release: the card's opacity, while it is there.
+    const logFrames = async () =>
+      card.evaluate(el => {
+        const w = window as unknown as {__opacities: number[]};
+        w.__opacities = [];
+        const start = performance.now();
+        const sample = () => {
+          if (!el.isConnected || performance.now() - start > 600) {
+            return;
+          }
+          w.__opacities.push(Number(getComputedStyle(el).opacity));
+          requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      });
+    const fadedFrames = async () =>
+      page.evaluate(() =>
+        (window as unknown as {__opacities: number[]}).__opacities.filter(
+          opacity => opacity > 0 && opacity < 1,
+        ),
+      );
+
+    // 30 px toward the edge, rested before the release: short of dismissing.
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y - 30, {steps: 10});
+    await page.waitForTimeout(150);
+    await logFrames();
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    expect(await cardOffset(card)).toBe(0);
+    expect(await fadedFrames()).toEqual([]);
+
+    // 90 px, rested: the release dismisses, and the card leaves at once.
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y - 90, {steps: 15});
+    await page.waitForTimeout(150);
+    await logFrames();
+    await page.mouse.up();
+    await expect(page.locator('.astryx-toast')).toHaveCount(0);
+    expect(await fadedFrames()).toEqual([]);
+  });
+
   /**
    * A real pen stroke (Chromium's input pipeline, explicit timestamps): a slow
    * 12 px start, then a 35 px throw at 2.3 px/ms, 47 px in all, short of the

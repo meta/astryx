@@ -97,6 +97,21 @@ interface SwipeSession {
   pausedTimer: boolean;
   /** Where the card is now, px from rest toward the edge. */
   offset: number;
+  /**
+   * A finger's swipe: only its release is a touch release, which cross-fades
+   * under Reduce Motion on any primary pointer; a mouse's, a trackpad's or a
+   * pen's does where the primary pointer is coarse and completes at once
+   * otherwise (`spec:AST-094` FR43, `design:reduced-motion` DR2, DR3).
+   */
+  isFinger: boolean;
+}
+
+/** A dismissing release, for the retract it starts. */
+interface DismissingRelease {
+  /** The card's speed toward its edge (px/s). */
+  velocity: number;
+  /** A finger's release (see SwipeSession.isFinger). */
+  isFinger: boolean;
 }
 
 export interface UseToastBannerSwipeOptions {
@@ -110,7 +125,7 @@ export interface UseToastBannerSwipeOptions {
   /**
    * The notification presentation on every device (`presentation=
    * "notification"`): the gesture host listens where the primary pointer is
-   * fine too, and the pan still takes only a finger or a pen.
+   * fine too.
    */
   isForced: boolean;
   direction: ToastGestureDirection;
@@ -147,10 +162,8 @@ export function useToastBannerSwipe(
   const sessionRef = useRef<SwipeSession | null>(null);
   const settlingRef = useRef<MotionHandle | null>(null);
   const retractingRef = useRef<Promise<void> | null>(null);
-  /** The next retract follows a release (a touch release, for Reduced Motion). */
-  const releasedRef = useRef(false);
-  /** The card's speed toward its edge at a dismissing release (px/s). */
-  const releaseVelocityRef = useRef(0);
+  /** The dismissing release the next retract follows, if any. */
+  const releaseRef = useRef<DismissingRelease | null>(null);
   const optionsRef = useRef(options);
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
@@ -191,15 +204,30 @@ export function useToastBannerSwipe(
           ) {
             return false;
           }
+          // A wheel or trackpad scroll over the toast stays the page's while
+          // the page, or anything else under the pointer, can still scroll
+          // toward the toast's edge: the toast floats over the page
+          // (spec:AST-094 FR43).
+          if (
+            touch.scrollType != null &&
+            touch.scroll?.canScroll(0, current.direction) === true
+          ) {
+            return false;
+          }
           if (sessionRef.current == null) {
-            // Touch-down: hold the auto-hide timer while the finger is on
+            // Touch-down: hold the auto-hide timer while the contact is on
             // the card.
             const pausedTimer =
               current.canPauseTimer && !current.isTimerPaused();
             if (pausedTimer) {
               current.pauseTimer();
             }
-            sessionRef.current = {pausedTimer, offset: 0};
+            sessionRef.current = {
+              pausedTimer,
+              offset: 0,
+              isFinger:
+                touch.pointerType === 'touch' && touch.scrollType == null,
+            };
           }
           return true;
         },
@@ -244,10 +272,12 @@ export function useToastBannerSwipe(
         ) {
           // The retract starts in this call and continues the card's speed
           // (the follow ratio of the finger's, spec:AST-094 FR38).
-          releasedRef.current = true;
-          releaseVelocityRef.current = fingerVelocity * toast.followRatio;
+          releaseRef.current = {
+            velocity: fingerVelocity * toast.followRatio,
+            isFinger: session.isFinger,
+          };
           dismiss();
-          releasedRef.current = false;
+          releaseRef.current = null;
           return;
         }
         if (session.offset !== 0) {
@@ -257,11 +287,13 @@ export function useToastBannerSwipe(
           const velocity =
             to === 'ended' ? fingerVelocity * toast.followRatio : 0;
           // Under reduced motion the animator replaces the spring with a
-          // cross-fade (a touch release): the card lands at rest and fades in.
+          // cross-fade where the primary pointer is coarse or a finger let go
+          // (the card lands at rest and fades in), and puts the card at rest
+          // at once otherwise.
           const handle = animator.animate(
             {y: 0},
             {spring: SETTLE_SPRING, velocity: {y: velocity * direction}},
-            {crossfadeAs: 'entrance', touchRelease: true},
+            {crossfadeAs: 'entrance', touchRelease: session.isFinger},
           );
           settlingRef.current = handle;
           void handle.finished.then(() => {
@@ -299,9 +331,10 @@ export function useToastBannerSwipe(
       optionsRef.current.direction,
     );
     optionsRef.current.onRetract?.();
-    // Under reduced motion the animator replaces the slide with a cross-fade:
-    // the card fades out where it is.
-    const touchRelease = releasedRef.current;
+    // Under reduced motion the animator replaces the slide with a cross-fade
+    // where the primary pointer is coarse or a finger let go (the card fades
+    // out where it is), and removes the card at once otherwise.
+    const release = releaseRef.current;
     const handle = animator.play(
       {
         y: retractCurve(
@@ -310,12 +343,12 @@ export function useToastBannerSwipe(
           toast.exitMs,
           toast.exitCurve,
           // After a dismissing release: the card's speed toward its edge.
-          touchRelease
-            ? releaseVelocityRef.current * optionsRef.current.direction
-            : undefined,
+          release == null
+            ? undefined
+            : release.velocity * optionsRef.current.direction,
         ),
       },
-      {crossfadeAs: 'exit', touchRelease},
+      {crossfadeAs: 'exit', touchRelease: release?.isFinger === true},
     );
     retractingRef.current = handle.finished.then(() => undefined);
     await retractingRef.current;

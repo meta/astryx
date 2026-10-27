@@ -530,7 +530,7 @@ export const MobileSwipeToDismiss: StoryObj = {
       story: {
         ...mobileStoryParameters.docs.story,
         description:
-          'Interactive vertical edge swipe-to-dismiss example using real ToastViewport behavior. The vertical axis intentionally matches the Toast placement and motion model: top Toasts leave upward and bottom Toasts leave downward. A non-passive touchmove handoff claims only dominant travel toward that edge; opposite-direction and horizontal page scrolling remain available. A finger, a pen, a mouse, a mouse wheel and a trackpad scroll all swipe, and a claimed mouse or pen drag selects no text; the close button and F6 keyboard access remain available.',
+          'Interactive vertical edge swipe-to-dismiss example using real ToastViewport behavior. The vertical axis intentionally matches the Toast placement and motion model: top Toasts leave upward and bottom Toasts leave downward. A non-passive touchmove handoff claims only dominant travel toward that edge; opposite-direction and horizontal page scrolling remain available. A finger, a pen, a mouse, a mouse wheel and a trackpad scroll all swipe (a scroll the page can still take goes to the page), and a claimed mouse or pen drag selects no text; the close button and F6 keyboard access remain available.',
       },
     },
   },
@@ -559,6 +559,40 @@ export const MobileToastPresentation: StoryObj = {
               {
                 key: 'mobile-toast-presentation',
                 body: 'Close me',
+                isAutoHide: false,
+              },
+            ]}
+          />
+        </MockCard>
+      </ToastViewport>
+    </MobileCanvas>
+  ),
+  parameters: mobileStoryParameters,
+};
+
+export const MobileNotificationPresentation: StoryObj = {
+  name: 'Mobile situations / Notification presentation',
+  render: () => (
+    <MobileCanvas
+      title="Notification presentation"
+      description={
+        'presentation="notification" follows iOS notification banners on every device, with a mouse too. Under Reduce Motion with a mouse or a trackpad, its release and its exit change at once.'
+      }>
+      <ToastViewport
+        position="topEnd"
+        isTopLayer={false}
+        maxVisible={2}
+        presentation="notification">
+        <MockCard>
+          <Text type="supporting" color="secondary">
+            Drag the toast toward its edge, or close it: it moves and leaves as
+            a notification banner does, whatever the pointer.
+          </Text>
+          <ToastReplayControls
+            items={[
+              {
+                key: 'mobile-notification-presentation',
+                body: 'Drag or close me',
                 isAutoHide: false,
               },
             ]}
