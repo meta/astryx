@@ -26,8 +26,10 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {AppShell} from '@astryxdesign/core/AppShell';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -39,6 +41,7 @@ import {
   TabList as ProposedTabList,
 } from './proposed/TabList';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
+import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {Token} from '@astryxdesign/core/Token';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
@@ -90,32 +93,42 @@ const sx = stylex.create({
     color: 'var(--color-text-secondary)',
   },
   outlineItemOn: {color: 'var(--color-text-primary)'},
-  railItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '9px',
-    padding: '6px 8px',
-    borderRadius: 'var(--radius-sm, 6px)',
-  },
-  railIcon: {
-    width: '15px',
-    height: '15px',
-    borderRadius: '4px',
-    backgroundColor: 'var(--color-border)',
-    flexShrink: 0,
-  },
-  frame: {
+  shellFrame: {
     borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: 'var(--color-border)',
     borderRadius: 'var(--radius-md, 9px)',
     overflow: 'hidden',
-    height: '190px',
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr',
-    backgroundColor: 'var(--color-background-base)',
+    height: '240px',
   },
-  framePad: {padding: '14px'},
+  // The shell fills its demo frame rather than the window.
+  shellFill: {height: '100%'},
+  // The fix's rail: its width animates on the lab's collapse-and-expand
+  // duration (--lab-duration-reveal, which carries the speed control and
+  // Delete) and decelerating curve, and snaps under Degrade (--lab-translate)
+  // and the OS setting.
+  railWidth: {
+    transitionProperty: 'width',
+    transitionDuration: {
+      default: 'calc(var(--lab-duration-reveal) * var(--lab-translate, 1))',
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: 'var(--ease-entry)',
+  },
+  // A page narrower than the content area, as an app's page is beside a rail
+  // (a demo pane is narrow, so the width is scaled down with it).
+  pageCentered: {
+    maxWidth: '160px',
+    marginInline: 'auto',
+    padding: '14px',
+  },
+  // Anchored to the rail edge, so it moves with the rail and never re-centers.
+  pageAnchored: {
+    maxWidth: '160px',
+    marginInlineStart: 0,
+    marginInlineEnd: 'auto',
+    padding: '14px',
+  },
   checkBox: {
     width: '20px',
     height: '20px',
@@ -569,53 +582,71 @@ export function DisclosureRig({
 
 const RAIL_ITEMS = ['Home', 'Projects', 'Components', 'Tokens', 'Settings'];
 
+function RailIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden {...props}>
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * The real AppShell and SideNav, collapsing on a loop through SideNav's own
+ * controlled `collapsible` config. Today the rail snaps between its widths.
+ * The fix animates the rail's width (the lab's reveal duration and entry
+ * curve, decelerating), so the content,
+ * AppShell's flex sibling, follows the rail edge in the same frame with no
+ * script per frame, and the page is anchored to the rail edge rather than
+ * centered in its own widening space, so it never re-centers. Reduce Motion
+ * (the OS setting, or the lab's) snaps.
+ */
 export function RailRig({mode}: {mode: Mode}) {
   const [collapsed, setCollapsed] = useState(false);
   useLoop(() => setCollapsed(v => !v), 2800);
+  const isFix = mode === 'after';
 
-  // Hand-built, unlike the TabList and CheckboxInput demos on this page.
-  //
-  // A real fork of core's SideNav needs `SideNavCollapseContext` on the public
-  // surface — SideNav is a provider, and core exports only the reader hook
-  // `useSideNavCollapse`. Importing the context by relative path compiles and
-  // is silently wrong: the app resolves `@astryxdesign/core/*` to dist, so a
-  // relative import of src yields a SECOND React context object, and core's
-  // SideNavItem/Heading/Section read the other one, see the default
-  // `{isCollapsed: false}`, and render labels inside a narrow rail with no
-  // error anywhere.
-  //
-  // So this pane approximates the rail rather than being it, and the demo is
-  // weaker for it. The one-line fix is `export {SideNavCollapseContext}` from
-  // packages/core/src/SideNav/index.ts, beside the hook — exactly how
-  // SideNavRenderContext is already exported three lines below. Deferred: it is
-  // a public API surface change and wants its own review.
   return (
     <VStack gap={2} {...stylex.props(sx.full)}>
-      <div {...stylex.props(sx.frame)}>
-        <div
-          data-collapsed={collapsed}
-          className={`${styles.rail} ${mode === 'after' ? styles.railAnimated : ''}`}>
-          <VStack gap={0.5} {...stylex.props(sx.framePad)}>
-            {RAIL_ITEMS.map(item => (
-              <span key={item} {...stylex.props(sx.railItem)}>
-                <span {...stylex.props(sx.railIcon)} />
-                <span className={styles.railLabel}>
-                  <Text type="supporting">{item}</Text>
-                </span>
-              </span>
-            ))}
-          </VStack>
-        </div>
-        <div {...stylex.props(sx.framePad)}>
-          <Text type="supporting" color="secondary">
-            Content
-          </Text>
-        </div>
+      {/* A demo, not part of the page: inert keeps its shell's main landmark,
+          skip link and items out of the page's accessibility tree and tab
+          order. */}
+      <div inert {...stylex.props(sx.shellFrame)}>
+        <AppShell
+          height="fill"
+          xstyle={sx.shellFill}
+          sideNav={
+            <SideNav
+              collapsible={{
+                isCollapsed: collapsed,
+                onCollapsedChange: setCollapsed,
+              }}
+              xstyle={isFix ? sx.railWidth : undefined}>
+              <SideNavSection title="Pages" isHeaderHidden>
+                {RAIL_ITEMS.map((item, index) => (
+                  <SideNavItem
+                    key={item}
+                    label={item}
+                    icon={RailIcon}
+                    isSelected={index === 1}
+                  />
+                ))}
+              </SideNavSection>
+            </SideNav>
+          }>
+          <div {...stylex.props(isFix ? sx.pageAnchored : sx.pageCentered)}>
+            <VStack gap={1}>
+              <Text weight="semibold">Projects</Text>
+              <Text type="supporting" color="secondary">
+                The page beside the rail.
+              </Text>
+            </VStack>
+          </div>
+        </AppShell>
       </div>
       <Hint>
-        {mode === 'before'
-          ? 'Only the chevron rotates. The rail snaps between widths, so the content beside it jumps. Approximated \u2014 see the note in LabDemos.tsx for why this one is not the real SideNav.'
-          : 'The rail\u2019s own width animates on --ease-move. width is a layout property, so this is a deliberate criterion-6 exception \u2014 the transform alternative leaves neighbouring content un-reflowed until the animation ends, which reads worse on a rail this narrow.'}
+        {isFix
+          ? 'The rail\u2019s width animates on the lab\u2019s collapse-and-expand duration and decelerating curve. The content is AppShell\u2019s flex sibling, so its edge follows the rail in the same frame, and the page is anchored to that edge, so it moves with the rail instead of half as far. Reduce Motion snaps.'
+          : 'Today: the real SideNav snaps between its widths, so the page beside it jumps.'}
       </Hint>
     </VStack>
   );

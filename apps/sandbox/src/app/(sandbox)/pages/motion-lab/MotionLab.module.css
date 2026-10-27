@@ -439,33 +439,6 @@
   transform: rotate(90deg);
 }
 
-/* ------------------------------------------------------------- sidenav --- */
-
-.rail {
-  overflow: hidden;
-  height: 100%;
-  width: 156px;
-  border-inline-end: 1px solid var(--color-border);
-  background: var(--color-background-surface);
-}
-
-.railAnimated {
-  transition: width var(--lab-duration-reveal) var(--ease-move);
-}
-
-.rail[data-collapsed='true'] {
-  width: 52px;
-}
-
-.railLabel {
-  white-space: nowrap;
-  transition: opacity var(--lab-duration-state) var(--ease-state);
-}
-
-.rail[data-collapsed='true'] .railLabel {
-  opacity: 0;
-}
-
 /* ------------------------------------------------------ skeleton swap ---- */
 
 .swap {
