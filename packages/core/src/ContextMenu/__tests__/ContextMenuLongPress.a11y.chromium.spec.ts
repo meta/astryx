@@ -49,20 +49,34 @@ async function triggerCenter(page: Page): Promise<{x: number; y: number}> {
 }
 
 /**
- * Resolves once the browser has delivered the `click` that follows a touch
- * (the last of its compatibility mouse events) and two frames have run, so
- * anything that event closes has closed.
+ * Resolves two frames after the lift's `touchend`, or after the `click` that
+ * follows it when the browser sends one (the last of a touch's compatibility
+ * mouse events), so anything those events close has closed. Under the touch
+ * model a hold that opens the menu gets no compatibility events, so the lift's
+ * `touchend` is the last event of the press.
  */
 async function armCompatClick(page: Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as unknown as {__compatClick?: Promise<void>};
     w.__compatClick = new Promise(resolve => {
-      document.addEventListener(
-        'click',
-        () =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        {once: true, capture: true},
-      );
+      // Each event restarts the two frames, so a click that follows the
+      // lift's touchend is waited for too.
+      let last = 0;
+      const settle = () => {
+        const mine = ++last;
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (mine === last) {
+              resolve();
+            }
+          }),
+        );
+      };
+      document.addEventListener('touchend', settle, {
+        once: true,
+        capture: true,
+      });
+      document.addEventListener('click', settle, {once: true, capture: true});
     });
   });
 }
