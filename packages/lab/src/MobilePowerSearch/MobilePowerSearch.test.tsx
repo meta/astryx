@@ -353,8 +353,9 @@ function isSheetOpen(): boolean {
 }
 
 /**
- * The switcher gives every step its own dialog. Outgoing dialogs stay open but
- * inert until their exit transition completes, so return only the active one.
+ * Every step is its own sheet with its own dialog. During a replace handoff
+ * the outgoing dialog stays open but inert until its fade completes, so
+ * return only the active one.
  */
 function sheet(): HTMLElement {
   const dialog = document.querySelector<HTMLElement>(
@@ -400,8 +401,8 @@ function settleSheets(): void {
 
 function tapRow(name: RegExp | string): void {
   const matches = within(sheet()).getAllByRole('button', {name});
-  // The switcher keeps the outgoing sheet mounted while the incoming one
-  // enters; the last match is always on the sheet that just arrived.
+  // The replace handoff keeps the outgoing sheet presented while the incoming
+  // one enters; the last match is always on the sheet that just arrived.
   fireEvent.click(matches[matches.length - 1]);
 }
 
@@ -1447,6 +1448,168 @@ describe('MobilePowerSearch value sheet', () => {
 // =============================================================================
 // Content search
 // =============================================================================
+
+describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
+  // Three sibling BottomSheets, one per step, controlled by one `step` value:
+  // a same-update close and open is the stack's replace handoff. These read
+  // only what a person or assistive technology can observe: which dialogs
+  // are open, which is modal, and which is inert and hidden.
+  function stepDialogs(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>('dialog[open]'));
+  }
+
+  it('Filters opens as one modal dialog, named by the step', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    // One dialog per presented step, each with its own accessible name.
+    expect(stepDialogs().map(d => d.getAttribute('aria-label'))).toEqual([
+      'Filters',
+    ]);
+    expect(sheet()).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('Filters → Add filter is a replace handoff: the entering step is on top, the leaving step stays presented, inert and hidden, then leaves', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    const filters = sheet();
+    tapRow('Add filter');
+    const open = stepDialogs();
+    expect(open.map(d => d.getAttribute('aria-label'))).toEqual([
+      'Filters',
+      'Add filter',
+    ]);
+    // The one being replaced: still presented, out of the tab order and the
+    // accessibility tree; the entering step is the interactive one.
+    expect(filters).toHaveAttribute('inert');
+    expect(filters).toHaveAttribute('aria-hidden', 'true');
+    expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
+    expect(sheet()).not.toHaveAttribute('inert');
+    expect(sheet()).not.toHaveAttribute('aria-hidden');
+    // The entering step's motion completes first, then the retained step's
+    // fade (the stack sequences them): only the new step remains.
+    settleSheets();
+    settleSheets();
+    expect(stepDialogs().map(d => d.getAttribute('aria-label'))).toEqual([
+      'Add filter',
+    ]);
+    expect(isSheetOpen()).toBe(true);
+  });
+
+  it('a step on its own is one open modal dialog, interactive and exposed', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    settleSheets();
+    expect(stepDialogs()).toHaveLength(1);
+    expect(sheet()).toHaveAttribute('aria-modal', 'true');
+    expect(sheet()).not.toHaveAttribute('inert');
+    expect(sheet()).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('focus returns to the trigger after a flow that crossed every step (the return target survives each handoff)', () => {
+    setup({filters: [openFilter]});
+    trigger().focus();
+    openSheet();
+    tapRow('Add filter');
+    settleSheets();
+    tapRow(/^Status/);
+    settleSheets();
+    expect(sheet()).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Status'),
+    );
+    // Back from the value step, Back from Add filter, Done from Filters.
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+    settleSheets();
+    expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+    settleSheets();
+    expect(sheet()).toHaveAttribute('aria-label', 'Filters');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Done'}));
+    expect(isSheetOpen()).toBe(false);
+    settleSheets();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('Escape on the Filters step closes the flow and returns focus to the trigger', () => {
+    setup({filters: [openFilter]});
+    trigger().focus();
+    openSheet();
+    settleSheets();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
+    expect(isSheetOpen()).toBe(false);
+    settleSheets();
+    expect(trigger()).toHaveFocus();
+  });
+
+  it('a scrim press on the Filters step (purpose info) closes the flow; on the value step (purpose form) it does not', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    settleSheets();
+    // A click on the dialog element itself is the scrim.
+    fireEvent.click(sheet());
+    expect(isSheetOpen()).toBe(false);
+    settleSheets();
+
+    openEditFlow(/^Status/);
+    settleSheets();
+    expect(sheet()).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Status'),
+    );
+    fireEvent.click(sheet());
+    expect(isSheetOpen()).toBe(true);
+    expect(sheet()).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Status'),
+    );
+  });
+
+  it('a downward swipe on the Filters step dismisses the flow', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    settleSheets();
+    const handle = sheet().querySelector<HTMLElement>(
+      '.astryx-bottom-sheet > div[aria-hidden="true"]',
+    )!;
+    fireEvent.pointerDown(handle, {
+      pointerId: 1,
+      clientY: 0,
+      button: 0,
+      isPrimary: true,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerMove(handle, {
+      pointerId: 1,
+      clientY: 40,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerMove(handle, {
+      pointerId: 1,
+      clientY: 120,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerUp(handle, {
+      pointerId: 1,
+      clientY: 120,
+      pointerType: 'touch',
+    });
+    expect(isSheetOpen()).toBe(false);
+  });
+
+  it('a stale dismissal from the leaving sheet cannot end the flow: a scrim press on the replaced Filters sheet is ignored once the step has moved on', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    const filters = sheet();
+    tapRow('Add filter');
+    // The leaving Filters dialog is still presented (fading, inert); a click
+    // on its own element is the scrim path, which BottomSheet does not gate
+    // on its open state — the flow's per-step guard must ignore it because
+    // the flow is on Add filter now.
+    fireEvent.click(filters);
+    expect(isSheetOpen()).toBe(true);
+    expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
+  });
+});
 
 describe('MobilePowerSearch content search', () => {
   it('opens empty content-search configurations directly to Add filter with focus in the search', () => {

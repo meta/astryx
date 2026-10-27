@@ -108,6 +108,15 @@ export function lockSelection(
   return lockStyles(set);
 }
 
+/** How a drag's selection hold ends: at a lift, or at a cancel. */
+export interface DragSelectionReleaseOptions {
+  /**
+   * The press was cancelled (a pointercancel, a blur, a detach): no mouseup
+   * or click follows.
+   */
+  isCancel?: boolean;
+}
+
 /**
  * Refuse a selection while a mouse or a pen drag a recognizer claimed runs,
  * until the returned function runs (`spec:AST-094` FR43, FR41). The drag has
@@ -118,13 +127,14 @@ export function lockSelection(
  * refused and a selection the drag extends is cleared. The press's own
  * `mouseup` and `click` come after its `pointerup` in the same task, and
  * WebKit settles the drag's selection there, so the document's hold ends a
- * task after the release. Page listeners only during a press (FR24).
+ * task after a lift; a cancel, which nothing follows, ends it at once. Page
+ * listeners only during a press (FR24).
  * Idempotent release.
  */
 export function lockDragSelection(
   elements: Iterable<Element>,
   view: Window | null | undefined,
-): () => void {
+): (options?: DragSelectionReleaseOptions) => void {
   const clear = () => {
     const selection = view?.getSelection();
     if (
@@ -156,7 +166,7 @@ export function lockDragSelection(
   doc?.addEventListener('selectionchange', clearOutsideEntry);
   const unlockStyles = lockStyles(set);
   let isReleased = false;
-  return () => {
+  return ({isCancel = false}: DragSelectionReleaseOptions = {}) => {
     if (isReleased) {
       return;
     }
@@ -170,7 +180,9 @@ export function lockDragSelection(
       doc?.removeEventListener('selectstart', refuse, true);
       doc?.removeEventListener('selectionchange', clearOutsideEntry);
     };
-    if (view == null) {
+    // A lift's own mouseup and click follow in its task and must still meet
+    // the hold; nothing follows a cancel, which lifts it at once (FR41).
+    if (view == null || isCancel) {
       release();
     } else {
       view.setTimeout(release, 0);

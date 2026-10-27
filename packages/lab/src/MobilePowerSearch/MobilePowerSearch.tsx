@@ -6,14 +6,16 @@
  * @file MobilePowerSearch.tsx
  * @input Core PowerSearch config, filters and onChange (the same props as
  *   @astryxdesign/core PowerSearch); public @astryxdesign/core components only
- *   (BottomSheet, BottomSheetSwitcher, Button, Field, Heading, Icon, List,
+ *   (BottomSheet, Button, Field, Heading, Icon, List,
  *   RadioList, Text, TextInput, Token, Tooltip hooks, i18n, hooks, utils,
  *   Layout container-padding styles)
  * @output Exports MobilePowerSearch — Lab prototype of the touch PowerSearch
  *   flow: the whole field is one "Manage filters" trigger with display-only
  *   tokens, a Filters sheet with chevron rows, Add filter and sticky
  *   Clear all / Done, and a field → operator → value drill-down whose edit
- *   sheet holds Cancel / Apply / Remove
+ *   sheet holds Cancel / Apply / Remove; the steps are sibling BottomSheets
+ *   that replace one another on a same-update switch (one scrim, the
+ *   entering step above the leaving one)
  * @position Lab (canary) stack layer 1: validates the touch design before any
  *   Core promotion. The caller chooses it explicitly
  *   (`isTouch ? MobilePowerSearch : PowerSearch`); there is no pointer
@@ -68,7 +70,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
-import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
 import {
   Field,
@@ -652,9 +654,9 @@ export function MobilePowerSearch({
 
   const [step, setStep] = useState<SheetStep | null>(null);
   stepRef.current = step;
-  // The draft outlives a step change on purpose: the switcher keeps the
-  // outgoing sheet mounted while the incoming one enters, and clearing the
-  // draft with the step would blank that sheet mid-transition.
+  // The draft outlives a step change on purpose: the replace handoff keeps
+  // the outgoing sheet presented while the incoming one enters, and clearing
+  // the draft with the step would blank that sheet mid-transition.
   const [draft, setDraft] = useState<FilterDraft | null>(null);
   const [fieldQuery, setFieldQuery] = useState('');
   const [contentQuery, setContentQuery] = useState('');
@@ -801,8 +803,9 @@ export function MobilePowerSearch({
     if (isDisabled) {
       return;
     }
-    // The switcher restores focus to the element that was active when its
-    // dialog opened; make sure that is the trigger even for a tap on a token.
+    // A sheet returns focus to the element that was active when its dialog
+    // opened, and a replace handoff carries that target from step to step;
+    // make sure it is the trigger even for a tap on a token.
     triggerRef.current?.focus({preventScroll: true});
     if (filters.length === 0 && isInteractive) {
       fieldPickerOriginRef.current = 'trigger';
@@ -1106,13 +1109,30 @@ export function MobilePowerSearch({
     setStep('manage');
   }, [draft, filters, handleRemoveFilter, queueManagerAddFocus]);
 
-  const handleActiveSheetChange = useCallback((active: string | null) => {
-    // The switcher only reports null, for a dismissal the active sheet
-    // allows. Every step change goes through the handlers above.
-    if (active == null) {
-      setStep(null);
-    }
-  }, []);
+  // Each step sheet is controlled by `step`; a sheet only ever asks to close
+  // (a dismissal its `purpose` allows: Escape, the scrim, a swipe), and only
+  // the current step's request ends the flow. Every step change goes through
+  // the handlers above.
+  const handleStepOpenChange = useCallback(
+    (sheetStep: SheetStep, isOpen: boolean) => {
+      if (!isOpen && stepRef.current === sheetStep) {
+        setStep(null);
+      }
+    },
+    [],
+  );
+  const handleManageOpenChange = useCallback(
+    (isOpen: boolean) => handleStepOpenChange('manage', isOpen),
+    [handleStepOpenChange],
+  );
+  const handleFieldsOpenChange = useCallback(
+    (isOpen: boolean) => handleStepOpenChange('fields', isOpen),
+    [handleStepOpenChange],
+  );
+  const handleValueOpenChange = useCallback(
+    (isOpen: boolean) => handleStepOpenChange('value', isOpen),
+    [handleStepOpenChange],
+  );
 
   const handleFocusWithin = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
@@ -1410,413 +1430,411 @@ export function MobilePowerSearch({
           disabledMessageTooltip.renderTooltip(disabledMessage)}
       </Field>
 
-      <BottomSheetSwitcher
-        activeSheet={step}
-        onActiveSheetChange={handleActiveSheetChange}>
-        <BottomSheet sheetId="manage" label="Filters" height="tall" padding={0}>
-          <div {...stylex.props(styles.sheet)}>
-            {sheetStatus}
-            <div {...stylex.props(styles.header)}>
-              <div {...stylex.props(styles.headerRow)}>
-                <div {...stylex.props(styles.headerText)}>
-                  <Heading level={3}>Filters</Heading>
-                </div>
-                {isInteractive && (
-                  <Button
-                    ref={managerAddButtonRef}
-                    label="Add filter"
-                    variant="ghost"
-                    xstyle={styles.touchAction}
-                    onClick={openFieldList}
-                  />
-                )}
+      <BottomSheet
+        isOpen={step === 'manage'}
+        onOpenChange={handleManageOpenChange}
+        label="Filters"
+        height="tall"
+        padding={0}>
+        <div {...stylex.props(styles.sheet)}>
+          {sheetStatus}
+          <div {...stylex.props(styles.header)}>
+            <div {...stylex.props(styles.headerRow)}>
+              <div {...stylex.props(styles.headerText)}>
+                <Heading level={3}>Filters</Heading>
               </div>
-            </div>
-            <div {...bodyProps}>
-              {filterRows.length === 0 ? (
-                <div {...stylex.props(styles.empty)}>
-                  <Text type="supporting" color="secondary">
-                    No filters selected
-                  </Text>
-                </div>
-              ) : (
-                <List hasDividers density="spacious" edge="bleed">
-                  {filterRows.map(row => {
-                    const canEdit = isInteractive && !row.filter.isReadOnly;
-                    return (
-                      <ListItem
-                        key={row.key}
-                        ref={node => {
-                          if (node == null) {
-                            managerRowsRef.current.delete(row.index);
-                          } else {
-                            managerRowsRef.current.set(row.index, node);
-                          }
-                        }}
-                        label={row.displayLabel}
-                        onClick={
-                          canEdit
-                            ? () => handleFilterEdit(row.index)
-                            : undefined
-                        }
-                        endContent={
-                          canEdit ? (
-                            <Icon
-                              icon="chevronRight"
-                              size="sm"
-                              color="secondary"
-                              xstyle={rtlStyles.mirror}
-                            />
-                          ) : undefined
-                        }
-                      />
-                    );
-                  })}
-                </List>
-              )}
-            </div>
-            <div {...stylex.props(styles.footer)}>
-              {isClearAllShown && (
+              {isInteractive && (
                 <Button
-                  label="Clear all"
+                  ref={managerAddButtonRef}
+                  label="Add filter"
                   variant="ghost"
                   xstyle={styles.touchAction}
-                  onClick={handleClearAll}
+                  onClick={openFieldList}
                 />
               )}
-              <div
-                {...stylex.props(
-                  styles.footerActions,
-                  !isClearAllShown && styles.footerSoleAction,
-                )}>
-                <Button
-                  label="Done"
-                  variant="primary"
-                  xstyle={styles.touchAction}
-                  onClick={closeSheet}
-                  width={isClearAllShown ? undefined : '100%'}
-                />
-              </div>
             </div>
           </div>
-        </BottomSheet>
-
-        <BottomSheet
-          sheetId="fields"
-          label="Add filter"
-          height="tall"
-          padding={0}>
-          <div {...stylex.props(styles.sheet)}>
-            {sheetStatus}
-            <div {...stylex.props(styles.header)}>
-              <div {...stylex.props(styles.headerRow)}>
-                <Button
-                  label="Back"
-                  icon={
-                    <Icon
-                      icon="chevronLeft"
-                      size="sm"
-                      xstyle={rtlStyles.mirror}
-                    />
-                  }
-                  isIconOnly
-                  variant="ghost"
-                  size="sm"
-                  xstyle={styles.touchIconAction}
-                  onClick={() => {
-                    if (fieldPickerOriginRef.current === 'trigger') {
-                      closeSheet();
-                      return;
-                    }
-                    queueManagerAddFocus();
-                    setStep('manage');
-                  }}
-                />
-                <div {...stylex.props(styles.headerText)}>
-                  <Heading level={3}>Add filter</Heading>
-                </div>
+          <div {...bodyProps}>
+            {filterRows.length === 0 ? (
+              <div {...stylex.props(styles.empty)}>
+                <Text type="supporting" color="secondary">
+                  No filters selected
+                </Text>
               </div>
-              {hasContentSearch ? (
-                <div ref={contentSearchRef}>
-                  <TextInput
-                    label="Search"
-                    isLabelHidden
-                    role="searchbox"
-                    aria-controls={contentResultsId}
-                    value={contentQuery}
-                    onChange={setContentQuery}
-                    onKeyDown={event => {
-                      if (isImeKeyEvent(event.nativeEvent)) {
-                        return;
+            ) : (
+              <List hasDividers density="spacious" edge="bleed">
+                {filterRows.map(row => {
+                  const canEdit = isInteractive && !row.filter.isReadOnly;
+                  return (
+                    <ListItem
+                      key={row.key}
+                      ref={node => {
+                        if (node == null) {
+                          managerRowsRef.current.delete(row.index);
+                        } else {
+                          managerRowsRef.current.set(row.index, node);
+                        }
+                      }}
+                      label={row.displayLabel}
+                      onClick={
+                        canEdit ? () => handleFilterEdit(row.index) : undefined
                       }
-                      if (event.key === 'Enter' && contentResults[0] != null) {
-                        event.preventDefault();
-                        handleContentSuggestionSelect(contentResults[0]);
-                        return;
-                      }
-                      if (event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        contentSuggestionListRef.current
-                          ?.querySelector<HTMLButtonElement>('button')
-                          ?.focus();
-                      }
-                    }}
-                    placeholder={contentSearchPlaceholder}
-                    hasClear
-                    startIcon={
-                      <Icon icon="search" size="sm" color="secondary" />
-                    }
-                    isDisabled={!isInteractive}
-                    width="100%"
-                  />
-                </div>
-              ) : isFieldSearchShown ? (
-                <TextInput
-                  label="Search filters"
-                  isLabelHidden
-                  placeholder="Search filters…"
-                  value={fieldQuery}
-                  onChange={setFieldQuery}
-                  startIcon={<Icon icon="search" size="sm" color="secondary" />}
-                  isDisabled={!isInteractive}
-                  width="100%"
-                />
-              ) : null}
-            </div>
-            <div {...bodyProps}>
-              {hasContentSearch ? (
-                contentResults.length > 0 ? (
-                  <List
-                    ref={contentSuggestionListRef}
-                    id={contentResultsId}
-                    aria-label="Search results"
-                    hasDividers
-                    density="spacious"
-                    edge="bleed">
-                    {contentResults.map((item, index) => (
-                      <ListItem
-                        key={item.id}
-                        label={item.label}
-                        isDisabled={!isInteractive}
-                        onClick={() => handleContentSuggestionSelect(item)}
-                        onKeyDown={event => {
-                          if (
-                            isImeKeyEvent(event.nativeEvent) ||
-                            (event.key !== 'ArrowDown' &&
-                              event.key !== 'ArrowUp')
-                          ) {
-                            return;
-                          }
-                          event.preventDefault();
-                          const buttons = [
-                            ...(contentSuggestionListRef.current?.querySelectorAll<HTMLButtonElement>(
-                              'button',
-                            ) ?? []),
-                          ];
-                          const nextIndex =
-                            event.key === 'ArrowDown'
-                              ? Math.min(index + 1, buttons.length - 1)
-                              : index - 1;
-                          if (nextIndex < 0) {
-                            contentSearchRef.current
-                              ?.querySelector<HTMLInputElement>('input')
-                              ?.focus();
-                          } else {
-                            buttons[nextIndex]?.focus();
-                          }
-                        }}
-                      />
-                    ))}
-                  </List>
-                ) : (
-                  contentQuery.trim() !== '' && (
-                    <div {...stylex.props(styles.empty)}>
-                      <Text type="supporting" color="secondary">
-                        No results found
-                      </Text>
-                    </div>
-                  )
-                )
-              ) : groupedFields.length === 0 ? (
-                <div {...stylex.props(styles.empty)}>
-                  <Text type="supporting" color="secondary">
-                    No filters match your search
-                  </Text>
-                </div>
-              ) : (
-                groupedFields.map(([group, groupFields]) => (
-                  <List
-                    key={group}
-                    hasDividers
-                    density="spacious"
-                    header={group === '' ? undefined : group}
-                    edge="bleed">
-                    {groupFields.map(field => (
-                      <ListItem
-                        key={field.key}
-                        ref={node => {
-                          if (node == null) {
-                            fieldRowsRef.current.delete(field.key);
-                          } else {
-                            fieldRowsRef.current.set(field.key, node);
-                          }
-                        }}
-                        label={field.label}
-                        isDisabled={!isInteractive}
-                        startContent={field.icon}
-                        endContent={
+                      endContent={
+                        canEdit ? (
                           <Icon
                             icon="chevronRight"
                             size="sm"
                             color="secondary"
                             xstyle={rtlStyles.mirror}
                           />
-                        }
-                        onClick={() => handleFieldSelect(field)}
-                      />
-                    ))}
-                  </List>
-                ))
-              )}
-            </div>
-          </div>
-        </BottomSheet>
-
-        <BottomSheet
-          sheetId="value"
-          label={editorTitle}
-          height="tall"
-          padding={0}
-          purpose="form">
-          <div {...stylex.props(styles.sheet)}>
-            {sheetStatus}
-            <div {...stylex.props(styles.header)}>
-              <div {...stylex.props(styles.headerRow)}>
-                <div {...stylex.props(styles.headerText)}>
-                  <Heading level={3} maxLines={1}>
-                    {editorTitle}
-                  </Heading>
-                </div>
-              </div>
-            </div>
-            {isDraftRenderable && EditorOverride != null ? (
-              <div {...bodyProps}>
-                <EditorOverride
-                  key={`${draft.mode}-${draft.filterIndex ?? 'new'}-${draft.field}`}
-                  config={configProp}
-                  filter={{
-                    field: draft.field,
-                    operator: draft.operator,
-                    value: draft.value,
-                  }}
-                  mode={draft.mode}
-                  onSave={saved => {
-                    if (saved == null) {
-                      if (draft.mode === 'edit') {
-                        handleRemove();
-                      } else {
-                        queueManagerAddFocus();
-                        setStep('manage');
+                        ) : undefined
                       }
-                      return;
-                    }
-                    commitSavedFilter(draft, saved);
-                  }}
-                  onCancel={returnFromValue}
-                  saveButtonLabel={saveButtonLabel}
-                  isReadOnly={isEditorDisabled}
-                  timezoneID={timezoneID}
-                />
-              </div>
-            ) : (
-              <>
-                <div {...bodyProps}>
-                  {isDraftRenderable ? (
-                    <>
-                      {draftOperators.length > 1 && (
-                        <RadioList
-                          label="Operator"
-                          isLabelHidden
-                          value={draft.operator ?? ''}
-                          onChange={operatorKey => {
-                            const operator = draftOperators.find(
-                              candidate => candidate.key === operatorKey,
-                            );
-                            if (operator != null) {
-                              handleOperatorSelect(operator);
-                            }
-                          }}
-                          isDisabled={isEditorDisabled}>
-                          {draftOperators.map(operator => (
-                            <RadioListItem
-                              key={operator.key}
-                              label={`${draftField.label} ${resolveOperatorLabel(operator, t)}`}
-                              value={operator.key}
-                            />
-                          ))}
-                        </RadioList>
-                      )}
-                      <MobilePowerSearchValueEditor
-                        key={`${draft.field}-${draft.operator}`}
-                        operatorValue={draftOperator.value}
-                        filterValue={draft.value}
-                        onChange={handleDraftValueChange}
-                        label={draftField.label}
-                        isDisabled={isEditorDisabled}
-                        maxMenuItems={maxOperatorMenuItems}
-                        timezoneID={timezoneID}
-                      />
-                    </>
-                  ) : (
-                    // A controlled config update removed the field or operator
-                    // being edited: say so and keep a way out.
-                    draft != null && (
-                      <div {...stylex.props(styles.empty)}>
-                        <Text type="supporting" color="secondary">
-                          This filter is no longer available
-                        </Text>
-                      </div>
-                    )
-                  )}
-                </div>
-                <div {...stylex.props(styles.footer)}>
-                  {draft?.mode === 'edit' && !isReadOnly && (
-                    <Button
-                      label="Remove"
-                      variant="ghost"
-                      isDisabled={isEditorDisabled}
-                      xstyle={styles.touchAction}
-                      onClick={handleRemove}
                     />
-                  )}
-                  <div
-                    {...stylex.props(
-                      styles.footerActions,
-                      isReadOnly && styles.footerSoleAction,
-                    )}>
-                    <Button
-                      label="Cancel"
-                      variant="ghost"
-                      xstyle={styles.touchAction}
-                      onClick={returnFromValue}
-                      width={isReadOnly ? '100%' : undefined}
-                    />
-                    {!isReadOnly && isDraftRenderable && (
-                      <Button
-                        label={saveButtonLabel}
-                        variant="primary"
-                        isDisabled={isSaveDisabled}
-                        xstyle={styles.touchAction}
-                        onClick={handleSave}
-                      />
-                    )}
-                  </div>
-                </div>
-              </>
+                  );
+                })}
+              </List>
             )}
           </div>
-        </BottomSheet>
-      </BottomSheetSwitcher>
+          <div {...stylex.props(styles.footer)}>
+            {isClearAllShown && (
+              <Button
+                label="Clear all"
+                variant="ghost"
+                xstyle={styles.touchAction}
+                onClick={handleClearAll}
+              />
+            )}
+            <div
+              {...stylex.props(
+                styles.footerActions,
+                !isClearAllShown && styles.footerSoleAction,
+              )}>
+              <Button
+                label="Done"
+                variant="primary"
+                xstyle={styles.touchAction}
+                onClick={closeSheet}
+                width={isClearAllShown ? undefined : '100%'}
+              />
+            </div>
+          </div>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={step === 'fields'}
+        onOpenChange={handleFieldsOpenChange}
+        label="Add filter"
+        height="tall"
+        padding={0}>
+        <div {...stylex.props(styles.sheet)}>
+          {sheetStatus}
+          <div {...stylex.props(styles.header)}>
+            <div {...stylex.props(styles.headerRow)}>
+              <Button
+                label="Back"
+                icon={
+                  <Icon
+                    icon="chevronLeft"
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
+                isIconOnly
+                variant="ghost"
+                size="sm"
+                xstyle={styles.touchIconAction}
+                onClick={() => {
+                  if (fieldPickerOriginRef.current === 'trigger') {
+                    closeSheet();
+                    return;
+                  }
+                  queueManagerAddFocus();
+                  setStep('manage');
+                }}
+              />
+              <div {...stylex.props(styles.headerText)}>
+                <Heading level={3}>Add filter</Heading>
+              </div>
+            </div>
+            {hasContentSearch ? (
+              <div ref={contentSearchRef}>
+                <TextInput
+                  label="Search"
+                  isLabelHidden
+                  role="searchbox"
+                  aria-controls={contentResultsId}
+                  value={contentQuery}
+                  onChange={setContentQuery}
+                  onKeyDown={event => {
+                    if (isImeKeyEvent(event.nativeEvent)) {
+                      return;
+                    }
+                    if (event.key === 'Enter' && contentResults[0] != null) {
+                      event.preventDefault();
+                      handleContentSuggestionSelect(contentResults[0]);
+                      return;
+                    }
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      contentSuggestionListRef.current
+                        ?.querySelector<HTMLButtonElement>('button')
+                        ?.focus();
+                    }
+                  }}
+                  placeholder={contentSearchPlaceholder}
+                  hasClear
+                  startIcon={<Icon icon="search" size="sm" color="secondary" />}
+                  isDisabled={!isInteractive}
+                  width="100%"
+                />
+              </div>
+            ) : isFieldSearchShown ? (
+              <TextInput
+                label="Search filters"
+                isLabelHidden
+                placeholder="Search filters…"
+                value={fieldQuery}
+                onChange={setFieldQuery}
+                startIcon={<Icon icon="search" size="sm" color="secondary" />}
+                isDisabled={!isInteractive}
+                width="100%"
+              />
+            ) : null}
+          </div>
+          <div {...bodyProps}>
+            {hasContentSearch ? (
+              contentResults.length > 0 ? (
+                <List
+                  ref={contentSuggestionListRef}
+                  id={contentResultsId}
+                  aria-label="Search results"
+                  hasDividers
+                  density="spacious"
+                  edge="bleed">
+                  {contentResults.map((item, index) => (
+                    <ListItem
+                      key={item.id}
+                      label={item.label}
+                      isDisabled={!isInteractive}
+                      onClick={() => handleContentSuggestionSelect(item)}
+                      onKeyDown={event => {
+                        if (
+                          isImeKeyEvent(event.nativeEvent) ||
+                          (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
+                        ) {
+                          return;
+                        }
+                        event.preventDefault();
+                        const buttons = [
+                          ...(contentSuggestionListRef.current?.querySelectorAll<HTMLButtonElement>(
+                            'button',
+                          ) ?? []),
+                        ];
+                        const nextIndex =
+                          event.key === 'ArrowDown'
+                            ? Math.min(index + 1, buttons.length - 1)
+                            : index - 1;
+                        if (nextIndex < 0) {
+                          contentSearchRef.current
+                            ?.querySelector<HTMLInputElement>('input')
+                            ?.focus();
+                        } else {
+                          buttons[nextIndex]?.focus();
+                        }
+                      }}
+                    />
+                  ))}
+                </List>
+              ) : (
+                contentQuery.trim() !== '' && (
+                  <div {...stylex.props(styles.empty)}>
+                    <Text type="supporting" color="secondary">
+                      No results found
+                    </Text>
+                  </div>
+                )
+              )
+            ) : groupedFields.length === 0 ? (
+              <div {...stylex.props(styles.empty)}>
+                <Text type="supporting" color="secondary">
+                  No filters match your search
+                </Text>
+              </div>
+            ) : (
+              groupedFields.map(([group, groupFields]) => (
+                <List
+                  key={group}
+                  hasDividers
+                  density="spacious"
+                  header={group === '' ? undefined : group}
+                  edge="bleed">
+                  {groupFields.map(field => (
+                    <ListItem
+                      key={field.key}
+                      ref={node => {
+                        if (node == null) {
+                          fieldRowsRef.current.delete(field.key);
+                        } else {
+                          fieldRowsRef.current.set(field.key, node);
+                        }
+                      }}
+                      label={field.label}
+                      isDisabled={!isInteractive}
+                      startContent={field.icon}
+                      endContent={
+                        <Icon
+                          icon="chevronRight"
+                          size="sm"
+                          color="secondary"
+                          xstyle={rtlStyles.mirror}
+                        />
+                      }
+                      onClick={() => handleFieldSelect(field)}
+                    />
+                  ))}
+                </List>
+              ))
+            )}
+          </div>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        isOpen={step === 'value'}
+        onOpenChange={handleValueOpenChange}
+        label={editorTitle}
+        height="tall"
+        padding={0}
+        purpose="form">
+        <div {...stylex.props(styles.sheet)}>
+          {sheetStatus}
+          <div {...stylex.props(styles.header)}>
+            <div {...stylex.props(styles.headerRow)}>
+              <div {...stylex.props(styles.headerText)}>
+                <Heading level={3} maxLines={1}>
+                  {editorTitle}
+                </Heading>
+              </div>
+            </div>
+          </div>
+          {isDraftRenderable && EditorOverride != null ? (
+            <div {...bodyProps}>
+              <EditorOverride
+                key={`${draft.mode}-${draft.filterIndex ?? 'new'}-${draft.field}`}
+                config={configProp}
+                filter={{
+                  field: draft.field,
+                  operator: draft.operator,
+                  value: draft.value,
+                }}
+                mode={draft.mode}
+                onSave={saved => {
+                  if (saved == null) {
+                    if (draft.mode === 'edit') {
+                      handleRemove();
+                    } else {
+                      queueManagerAddFocus();
+                      setStep('manage');
+                    }
+                    return;
+                  }
+                  commitSavedFilter(draft, saved);
+                }}
+                onCancel={returnFromValue}
+                saveButtonLabel={saveButtonLabel}
+                isReadOnly={isEditorDisabled}
+                timezoneID={timezoneID}
+              />
+            </div>
+          ) : (
+            <>
+              <div {...bodyProps}>
+                {isDraftRenderable ? (
+                  <>
+                    {draftOperators.length > 1 && (
+                      <RadioList
+                        label="Operator"
+                        isLabelHidden
+                        value={draft.operator ?? ''}
+                        onChange={operatorKey => {
+                          const operator = draftOperators.find(
+                            candidate => candidate.key === operatorKey,
+                          );
+                          if (operator != null) {
+                            handleOperatorSelect(operator);
+                          }
+                        }}
+                        isDisabled={isEditorDisabled}>
+                        {draftOperators.map(operator => (
+                          <RadioListItem
+                            key={operator.key}
+                            label={`${draftField.label} ${resolveOperatorLabel(operator, t)}`}
+                            value={operator.key}
+                          />
+                        ))}
+                      </RadioList>
+                    )}
+                    <MobilePowerSearchValueEditor
+                      key={`${draft.field}-${draft.operator}`}
+                      operatorValue={draftOperator.value}
+                      filterValue={draft.value}
+                      onChange={handleDraftValueChange}
+                      label={draftField.label}
+                      isDisabled={isEditorDisabled}
+                      maxMenuItems={maxOperatorMenuItems}
+                      timezoneID={timezoneID}
+                    />
+                  </>
+                ) : (
+                  // A controlled config update removed the field or operator
+                  // being edited: say so and keep a way out.
+                  draft != null && (
+                    <div {...stylex.props(styles.empty)}>
+                      <Text type="supporting" color="secondary">
+                        This filter is no longer available
+                      </Text>
+                    </div>
+                  )
+                )}
+              </div>
+              <div {...stylex.props(styles.footer)}>
+                {draft?.mode === 'edit' && !isReadOnly && (
+                  <Button
+                    label="Remove"
+                    variant="ghost"
+                    isDisabled={isEditorDisabled}
+                    xstyle={styles.touchAction}
+                    onClick={handleRemove}
+                  />
+                )}
+                <div
+                  {...stylex.props(
+                    styles.footerActions,
+                    isReadOnly && styles.footerSoleAction,
+                  )}>
+                  <Button
+                    label="Cancel"
+                    variant="ghost"
+                    xstyle={styles.touchAction}
+                    onClick={returnFromValue}
+                    width={isReadOnly ? '100%' : undefined}
+                  />
+                  {!isReadOnly && isDraftRenderable && (
+                    <Button
+                      label={saveButtonLabel}
+                      variant="primary"
+                      isDisabled={isSaveDisabled}
+                      xstyle={styles.touchAction}
+                      onClick={handleSave}
+                    />
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </BottomSheet>
     </>
   );
 }
