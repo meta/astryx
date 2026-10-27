@@ -446,6 +446,42 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toContain('ended');
   });
 
+  it("releases a mouse wheel's notches still, so position alone decides, while a trackpad's scroll keeps its speed (coordinator ruling; FR43 is silent)", () => {
+    const {notched, smooth} = mount(
+      '<div id="notched"></div><div id="smooth"></div>',
+    );
+    const released: Record<string, {velocity: number; scroll: number}> = {};
+    for (const [key, element] of [
+      ['notched', notched],
+      ['smooth', smooth],
+    ] as const) {
+      const pan = new PanGestureRecognizer({direction: 'vertical'});
+      pan.addTransitionListener((current, _from, to) => {
+        if (to === 'ended') {
+          released[key] = {
+            velocity: current.velocity().y,
+            scroll: current.scrollVelocity().y,
+          };
+        }
+      });
+      detachers.push(host.attach(element, pan));
+    }
+    // Three quick 100 px notches, as a mouse wheel reports them.
+    for (const time of [0, 16, 32]) {
+      expect(wheel(notched, {dy: 100, time}).defaultPrevented).toBe(true);
+    }
+    clock.runDue(32 + 100);
+    expect(Math.abs(released.notched.velocity)).toBe(0);
+    expect(Math.abs(released.notched.scroll)).toBe(0);
+    // A trackpad's steady scroll keeps its speed at the release.
+    for (const time of [500, 516, 532, 548]) {
+      wheel(smooth, {dy: 8, time});
+    }
+    clock.runDue(548 + 100);
+    expect(Math.abs(released.smooth.velocity)).toBeGreaterThan(0);
+    expect(Math.abs(released.smooth.scroll)).toBeGreaterThan(0);
+  });
+
   it('starts a new wheel gesture after a quiet gap even when the end timer has not run yet (a blocked main thread)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({
