@@ -6,7 +6,7 @@
  *   element (`--astryx-hit-inset-{top,right,bottom,left}`,
  *   HIT_INSET_PROPERTIES)
  * @output Exports `touchHitAreaStyles.layer`: an element's invisible hit
- *   layer under a finger (`spec:AST-094` FR43's coarse-only 44 px target)
+ *   layer under a finger (`spec:AST-094` FR42's coarse-only 44 px target)
  * @position Internal styling utility; a host composes
  *   `touchHitAreaStyles.layer` and keeps its insets live with
  *   `useTouchHitArea` (utils/touchHitArea.ts). List rows (ListItem) use it.

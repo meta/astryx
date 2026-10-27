@@ -345,6 +345,36 @@ describe('Item', () => {
     expect(anchor?.textContent).toContain('Link');
   });
 
+  it('follows the link on a click in a link row’s own box, outside its anchor (its padding, or its touch hit area under a finger)', () => {
+    const {container} = render(<Item label="Link" href="/docs" />);
+    const anchor = container.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    const row = container.firstElementChild as HTMLElement;
+    fireEvent.click(row);
+    expect(followed).toHaveBeenCalledTimes(1);
+    // A click on the anchor itself follows it once, not twice.
+    fireEvent.click(anchor);
+    expect(followed).toHaveBeenCalledTimes(2);
+    // Modifier keys carry over, so a ctrl or cmd click opens as on the label.
+    fireEvent.click(row, {ctrlKey: true});
+    expect(followed).toHaveBeenCalledTimes(3);
+    expect(followed.mock.calls[2][0].ctrlKey).toBe(true);
+  });
+
+  it('keeps a row with both onClick and href on onClick for a click in its own box', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <Item label="Both" href="/docs" onClick={onClick} />,
+    );
+    const anchor = container.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    fireEvent.click(container.firstElementChild as HTMLElement);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(followed).not.toHaveBeenCalled();
+  });
+
   it('sets target on anchor when provided', () => {
     const {container} = render(
       <Item label="External" href="https://example.com" target="_blank" />,

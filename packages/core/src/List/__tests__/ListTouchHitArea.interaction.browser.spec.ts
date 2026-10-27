@@ -4,7 +4,7 @@
  * @file ListTouchHitArea.interaction.browser.spec.ts
  * @input The built List stories in the touch phone context (primary pointer
  *   coarse) and in a mouse context of the same viewport and scale
- * @output Proofs for `component:List` FR10 under a finger: an interactive
+ * @output Proofs for `spec:AST-094` FR42 (`component:List` FR10, #8571) under a finger: an interactive
  *   row's hit layer grows toward the touch target, taking half the gap to
  *   each neighboring row and growing further only where nothing is near; a
  *   tap in that growth activates the row and a tap past it does not; no two
@@ -136,7 +136,7 @@ async function rowAt(page: Page, x: number, y: number): Promise<string | null> {
 const isTouch = async (page: Page) =>
   page.evaluate(() => matchMedia('(pointer: coarse)').matches);
 
-/** FR10's invariant: no row's area reaches into the next row's area. */
+/** FR42's invariant: no row's area reaches into the next row's area. */
 function expectNoOverlap(rows: ReadonlyArray<Row>): void {
   for (let i = 0; i + 1 < rows.length; i++) {
     expect(
@@ -291,16 +291,19 @@ test('under a finger, a row already as tall as the touch target gains nothing, r
   }
 });
 
-test('under a finger, the theme’s touch target and row padding reach the layer', async ({
+test('under a finger, a page can raise the touch target but never lower it below 44px, and row padding reaches the layer', async ({
   page,
 }) => {
   test.skip(!(await isTouch(page)), 'the hit area applies under a finger only');
-  // A theme whose touch target is shorter than the row: nothing to grow.
+  // A page's touch target under 44px leaves the 44px target (spec:AST-094
+  // FR42): the rows grow exactly as with none set.
+  await openStory(page, storybook(), 'core-list--interactive');
+  const plain = (await measuredRowsOf(page)).map(row => row.layer);
   await themeTouchTarget(page, '30px');
   await openStory(page, storybook(), 'core-list--interactive');
-  for (const row of await measuredRowsOf(page)) {
-    expect([row.layer.top, row.layer.bottom]).toEqual([0, 0]);
-  }
+  const lowered = (await measuredRowsOf(page)).map(row => row.layer);
+  expect(plain.some(layer => layer.top > 0 || layer.bottom > 0)).toBe(true);
+  expect(lowered).toEqual(plain);
   // A theme whose row padding makes the row as tall as the target (the later
   // stylesheet's 44px wins over the 30px one).
   await themeTouchTarget(page, '44px');
@@ -318,6 +321,25 @@ test('under a finger, the theme’s touch target and row padding reach the layer
   for (const row of padded) {
     expect([row.layer.top, row.layer.bottom]).toEqual([0, 0]);
   }
+});
+
+test('under a finger, a tap in a link row’s growth follows its link', async ({
+  page,
+}) => {
+  test.skip(!(await isTouch(page)), 'the hit area applies under a finger only');
+  // A 60px touch target, so the growth above the first row spans whole
+  // pixels a tap can land on, well clear of the row's anchor.
+  await themeTouchTarget(page, '60px');
+  await openStory(page, storybook(), 'core-list--links');
+  const rows = await measuredRowsOf(page);
+  const grow = rows[0].layer.top;
+  expect(grow, JSON.stringify(rows)).toBeGreaterThan(4);
+  const inside = Math.round(rows[0].top - grow / 2);
+  expect(await rowAt(page, rows[0].x, inside)).toBe(rows[0].text);
+  // The row is the Links story's "Documentation" (`href="/docs"`).
+  const followed = page.waitForURL(/\/docs$/, {timeout: 5000});
+  await page.touchscreen.tap(rows[0].x, inside);
+  await followed;
 });
 
 for (const story of [
