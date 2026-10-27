@@ -502,14 +502,14 @@ export const MobileSwipeToDismiss: StoryObj = {
       <ToastViewport position="topEnd" isTopLayer={false} maxVisible={2}>
         <MockCard>
           <Text type="supporting" color="secondary">
-            Use touch, a pen, a mouse or a trackpad scroll to swipe the toast
-            toward its configured block edge: up for top placement, down for
-            bottom placement. This matches the direction each Toast enters and
-            exits, keeping one spatial model for the whole interaction. The
-            gesture claims the touch only after dominant travel matches the
-            dismiss edge, so opposite-direction and horizontal page scrolling
-            remain available. Once it claims a mouse or pen drag, the drag
-            selects no text; the close button remains available.
+            Use touch, a pen, a mouse, a mouse wheel or a trackpad scroll to
+            swipe the toast toward its configured block edge: up for top
+            placement, down for bottom placement. This matches the direction
+            each Toast enters and exits, keeping one spatial model for the whole
+            interaction. The gesture claims the touch only after dominant travel
+            matches the dismiss edge, so opposite-direction and horizontal page
+            scrolling remain available. Once it claims a mouse or pen drag, the
+            drag selects no text; the close button remains available.
           </Text>
           <ToastReplayControls
             items={[
@@ -530,7 +530,7 @@ export const MobileSwipeToDismiss: StoryObj = {
       story: {
         ...mobileStoryParameters.docs.story,
         description:
-          'Interactive vertical edge swipe-to-dismiss example using real ToastViewport behavior. The vertical axis intentionally matches the Toast placement and motion model: top Toasts leave upward and bottom Toasts leave downward. A non-passive touchmove handoff claims only dominant travel toward that edge; opposite-direction and horizontal page scrolling remain available. A finger, a pen, a mouse and a trackpad scroll all swipe (mouse wheel notches scroll the page), and a claimed mouse or pen drag selects no text; the close button and F6 keyboard access remain available.',
+          'Interactive vertical edge swipe-to-dismiss example using real ToastViewport behavior. The vertical axis intentionally matches the Toast placement and motion model: top Toasts leave upward and bottom Toasts leave downward. A non-passive touchmove handoff claims only dominant travel toward that edge; opposite-direction and horizontal page scrolling remain available. A finger, a pen, a mouse, a mouse wheel and a trackpad scroll all swipe, and a claimed mouse or pen drag selects no text; the close button and F6 keyboard access remain available.',
       },
     },
   },

@@ -1156,22 +1156,30 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
-  it('dismisses on a trackpad scroll toward the edge, and leaves a mouse wheel notch to the page (spec:AST-094 FR43)', async () => {
+  it('dismisses on a mouse wheel notch toward the edge (spec:AST-094 FR43: a pan takes wheel and trackpad scrolling)', async () => {
     const {visualToast, onHide} = renderSwipeToast();
-    // A mouse wheel's notch (100 px at once) is the page's: a notch that
-    // crosses the card while the page scrolls never dismisses it.
-    let start = fineClockStart();
-    const notch = wheelAt(visualToast, start, -100);
-    expect(notch.defaultPrevented).toBe(false);
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    // One notch, 100 px at once, moving the content down toward a bottom
+    // toast's edge, with nothing under the pointer left to scroll.
+    const start = fineClockStart();
+    let notch: WheelEvent;
+    act(() => {
+      notch = wheelAt(visualToast, start, -100);
+    });
+    expect(notch!.defaultPrevented).toBe(true);
+    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe(
+      '100px',
+    );
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 150));
     });
-    expect(onHide).not.toHaveBeenCalled();
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
 
+  it('dismisses on a trackpad scroll toward the edge (spec:AST-094 FR43)', async () => {
+    const {visualToast, onHide} = renderSwipeToast();
     // A trackpad scroll moving the content down, toward a bottom toast's
     // edge: the card moves with it and leaves 100 ms after the last step.
-    start = fineClockStart();
+    const start = fineClockStart();
     const steps: WheelEvent[] = [];
     act(() => {
       for (let i = 0; i < 8; i += 1) {
@@ -3968,6 +3976,32 @@ describe('Toast swipe dismissal under a finger', () => {
       retractTarget({top: 0, bottom: 80}, window.innerHeight, 1),
     );
     expect(onHide).not.toHaveBeenCalled();
+    await afterRetract();
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('takes a mouse wheel notch toward the edge with the banner swipe, and dismisses (spec:AST-094 FR43)', async () => {
+    const {visualToast, onHide} = await renderSwipeToast();
+    const start = strokeStart();
+    const notch = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -100,
+      deltaMode: 0,
+      clientX: 10,
+      clientY: 10,
+    });
+    Object.defineProperty(notch, 'timeStamp', {value: start});
+    strokeClock = Math.max(strokeClock, start);
+    act(() => {
+      visualToast.dispatchEvent(notch);
+    });
+    expect(notch.defaultPrevented).toBe(true);
+    // Past the follow distance: 0.55 of the notch's 100 px beyond it.
+    expect(cardY(visualToast)).toBeCloseTo(0.55 * (100 - 14), 5);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
     await afterRetract();
     expect(onHide).toHaveBeenCalledWith('manual');
   });

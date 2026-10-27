@@ -938,7 +938,7 @@ test.describe('with a fine pointer', () => {
     await expect(page.locator('.astryx-toast')).toHaveCount(0);
   });
 
-  test('a trackpad scroll toward the edge swipes the toast away, and a mouse wheel notch leaves it to the page (spec:AST-094 FR43)', async ({
+  test('a mouse wheel notch and a trackpad scroll toward the edge each swipe the toast away (spec:AST-094 FR43)', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-toast--mobile-swipe-to-dismiss');
@@ -955,11 +955,14 @@ test.describe('with a fine pointer', () => {
       throw new Error('no toast');
     }
     const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
-    // A mouse wheel's notch (100 px at once): the card stays where it is.
+    // A mouse wheel's notch (100 px at once) moving the content up, toward
+    // this top toast's edge: a pan takes wheel scrolling too (FR43).
     await driver.wheel({...at, dy: 100});
-    await page.waitForTimeout(200);
-    expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
-    await expect(page.locator('.astryx-toast')).toHaveCount(1);
+    await expect(page.locator('.astryx-toast')).toHaveCount(0);
+    // A new toast for the trackpad.
+    await page.getByRole('button', {name: 'Show toast'}).click();
+    await expect(card).toBeVisible();
+    await waitForRest(card);
     // A trackpad scroll moving the content up, toward this top toast's edge,
     // with the cursor still: the card moves with it, out from under the
     // cursor, and leaves once the scroll stops. The card's offset is sampled

@@ -21,8 +21,8 @@
  * could only be dragged away, never flicked.
  *
  * The swipe is a PanGestureRecognizer on the shared gesture host
- * (`spec:AST-094` FR43, FR24): it takes every pointer and a trackpad's
- * scroll (not a mouse wheel's notches), and once it claims a mouse or a pen
+ * (`spec:AST-094` FR43, FR24): it takes every pointer and, as every pan does,
+ * wheel and trackpad scrolling, and once it claims a mouse or a pen
  * drag the host clears and holds off text selection (FR41); it
  * begins at the pan's 10 pt toward the edge (FR17), a second finger never ends
  * a swipe that began (FR10), and a drag sideways or away from the edge stays
@@ -107,10 +107,6 @@ export function useToastGesture(
         // banner swipe carries it where that presentation applies.
         name: 'Toast.swipe',
         direction: panDirection(options.direction),
-        // A trackpad's scroll moves the card as a finger does (FR43). A
-        // mouse wheel's notches stay the page's: one notch is past the dismiss
-        // distance, so any page scroll that crossed the card would dismiss it.
-        allowedScrollTypes: ['continuous'],
         axisRatio: VERTICAL_INTENT_RATIO,
         maximumNumberOfTouches: 1,
         shouldReceiveTouch: (_recognizer, touch) => {
