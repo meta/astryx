@@ -1,0 +1,85 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file useFingerScroll.ts
+ * @input A scroller (a ref to an element, or the document for the page) and
+ *   the document's gesture host
+ * @output useFingerScroll: whether the scroller's current scroll is a
+ *   finger's, read at any moment
+ * @position Gesture hook of packages/core/src/gestures, over the
+ *   finger-scroll watch (fingerScroll.ts). An internal piece of the touch
+ *   module with no public API, not in the gestures barrel: a scroll-driven
+ *   component (a tab bar that minimizes, a header that collapses, a picker
+ *   that commits at rest) imports it from here, so it ships only where used
+ *
+ * A scroll is a finger's from a scroll event while a finger that landed
+ * inside the scroller is down, until the scroller's `scrollend` (the lift
+ * starts the momentum, which is still the finger's), or, where the browser
+ * sends no `scrollend`, until a 150 ms fallback after the last scroll event.
+ * A scroll with no finger down, or a recognizer's own scroll, is the
+ * program's, even right after a tap. A
+ * component that reacts to the person's scrolling only (a tab bar that
+ * minimizes as the page scrolls down) reads this instead of listening to
+ * touches itself.
+ *
+ * SYNC: When modified, update __tests__/useFingerScroll.test.tsx.
+ */
+
+import {useCallback, useRef, type RefObject} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
+import {getGestureHost} from './GestureHost';
+
+function isDocument(value: unknown): value is Document {
+  return typeof Document !== 'undefined' && value instanceof Document;
+}
+
+/**
+ * Watch a scroller's finger scrolls. Pass a ref to a scrolling element, or
+ * the document for the page's own scroll. Returns a reader, stable across
+ * renders: `true` while the scroller's scroll is a finger's.
+ * Internal: not exported from the package.
+ */
+export function useFingerScroll(
+  scroller: RefObject<Element | null> | Document,
+): () => boolean {
+  const attachedRef = useRef<{node: Node; detach: () => void} | null>(null);
+  // Follows the node on every commit: a ref that now points at another
+  // element moves the watch to it.
+  useIsomorphicLayoutEffect(() => {
+    const node = isDocument(scroller) ? scroller : scroller.current;
+    if (attachedRef.current?.node === node) {
+      return;
+    }
+    attachedRef.current?.detach();
+    attachedRef.current =
+      node == null
+        ? null
+        : {
+            node,
+            detach: watchFingerScrolls(
+              getGestureHost(isDocument(node) ? node : node.ownerDocument),
+              node,
+            ),
+          };
+  });
+  // Synchronizes with the gesture host's finger-scroll watch: unmounting
+  // releases the watch this hook attached.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      attachedRef.current?.detach();
+      attachedRef.current = null;
+    },
+    [],
+  );
+  return useCallback(() => {
+    const node = attachedRef.current?.node;
+    if (node == null) {
+      return false;
+    }
+    const doc = isDocument(node) ? node : node.ownerDocument;
+    return doc != null && isFingerScroll(getGestureHost(doc), node);
+  }, []);
+}

@@ -4,9 +4,10 @@
 
 /**
  * @file useGestureRecognizer.ts
- * @input An element ref, a recognizer factory and a gesture listener; or an
- *   element ref and press tracker options
- * @output Exports useGestureRecognizer and usePressTracker
+ * @input An element ref, a recognizer factory and a gesture listener
+ * @output Exports useGestureRecognizer (usePressTracker lives in
+ *   usePressTracker.ts, so a gesture-only component never imports the press
+ *   tracker)
  * @position React face of packages/core/src/gestures
  *
  * The recognizer is created once and keeps its identity for the life of the
@@ -15,7 +16,9 @@
  * passing a new function each render re-attaches nothing, and a gesture
  * costs no React render at all — the listener runs inside the input event
  * and writes to the DOM itself. The recognizer attaches in a layout effect,
- * so its `touch-action` is in place before the browser can see a finger.
+ * so its `touch-action` is in place before the browser can see a finger, and
+ * re-attaches on any commit that finds another element behind the ref. After
+ * unmount neither hook calls the consumer back.
  *
  * SYNC: When modified, update useGestureRecognizer.test.tsx and README.md.
  */
@@ -24,18 +27,56 @@ import {useEffect, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
-import {PressTracker, type PressTrackerOptions} from './PressTracker';
+import {
+  isSyncingGestures,
+  syncingGestures,
+  useAttachment,
+  useIsUnmountedRef,
+} from './useAttachment';
+import {internals} from './recognizerInternals';
 
 export interface UseGestureRecognizerOptions {
   /**
    * Live toggle; turning it off mid-gesture cancels the gesture. That cancel
    * does not call `onGesture`: it comes from the render that turned the
-   * recognizer off, and the code that turned it off already knows.
+   * recognizer off, and the code that turned it off already knows. A
+   * recognizer that required this one to fail resolves just after that
+   * render and reports as usual.
    * @default true
    */
   isEnabled?: boolean;
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
+  /**
+   * Accepted and ignored: every attachment reads each event's pointer
+   * (`spec:AST-094` FR43). Kept so callers written before FR43 compile.
+   * @deprecated
+   */
+  perEventPointer?: boolean;
+  /**
+   * The element is an action group, sibling actions a held pointer slides
+   * across (`family:action-groups` FR5): the host serves it where the
+   * primary pointer is fine too (`AttachOptions.actionGroup`).
+   * @default false
+   */
+  actionGroup?: boolean;
+}
+
+/**
+ * Runs `body` with the recognizer's arena leaving what it unblocks to the
+ * next pass, outside the Effect (GestureArena.deferResolution). A recognizer
+ * that has met no touch has no arena, and nothing waits on it.
+ */
+function deferringResolution(
+  recognizer: GestureRecognizer,
+  body: () => void,
+): void {
+  const {arena} = internals(recognizer);
+  if (arena == null) {
+    body();
+    return;
+  }
+  arena.deferResolution(body);
 }
 
 /**
@@ -52,6 +93,7 @@ export interface UseGestureRecognizerOptions {
  * );
  * ```
  */
+
 export function useGestureRecognizer<R extends GestureRecognizer>(
   ref: RefObject<Element | null>,
   create: () => R,
@@ -60,206 +102,65 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
 ): R {
   const [recognizer] = useState(create);
   const onGestureRef = useRef(onGesture);
-  // True while an Effect drives the recognizer, so a transition it causes
-  // reaches no caller callback (react-component-runtime INV2, INV3).
-  const isSyncingRef = useRef(false);
+  // Syncs the listener's ref with the caller's newest callback.
   useIsomorphicLayoutEffect(() => {
     onGestureRef.current = onGesture;
   });
-  const {isEnabled = true, manageStyle = true} = options;
+  const {
+    isEnabled = true,
+    manageStyle = true,
+    perEventPointer = false,
+    actionGroup = false,
+  } = options;
+  const isUnmountedRef = useIsUnmountedRef();
 
-  // Syncs the recognizer's target-action listeners with the caller's
-  // callback (read through a ref, so a new function re-subscribes nothing).
+  // Syncs the recognizer's target-action listener with this component. The
+  // listener runs inside input events, never during a render or an Effect,
+  // and goes quiet once the component unmounts.
   useEffect(
     () =>
       recognizer.addListener(current => {
-        if (!isSyncingRef.current) {
+        if (!isUnmountedRef.current && !isSyncingGestures()) {
           onGestureRef.current?.(current);
         }
       }),
-    [recognizer],
+    [recognizer, isUnmountedRef],
   );
 
-  // Syncs the recognizer's `isEnabled` (UIKit's). It runs first, under the
-  // guard, so disabling cancels a gesture in flight before its attachment
-  // goes, and that cancel, run in an Effect, reaches no caller callback.
+  // Syncs the recognizer's `isEnabled` with the option. It runs first,
+  // under the guard, so disabling cancels a gesture in flight before its
+  // attachment goes.
   useIsomorphicLayoutEffect(() => {
-    isSyncingRef.current = true;
-    try {
-      recognizer.setEnabled(isEnabled);
-    } finally {
-      isSyncingRef.current = false;
-    }
+    syncingGestures(() => {
+      deferringResolution(recognizer, () => {
+        recognizer.setEnabled(isEnabled);
+      });
+    });
   }, [recognizer, isEnabled]);
 
-  // Syncs the document's gesture host with the element behind `ref`: attached
-  // while enabled, re-attached when the node is replaced. A disabled gesture
-  // is not attached at all: no listener and no `touch-action` of its own on
-  // the element (spec:AST-094 FR24).
-  useNodeAttachment(
+  // Syncs the document's gesture host with the element behind `ref`. A
+  // disabled gesture is not attached at all: no listener and no
+  // `touch-action` of its own on the element (spec:AST-094 FR24). A replaced
+  // node is released and the new one attached; detaching cancels a gesture in
+  // progress from a layout effect, and that cancel reaches no caller callback
+  // (react-component-runtime INV2, INV3).
+  useAttachment(
     ref,
-    element =>
-      isEnabled
-        ? getGestureHost(element.ownerDocument).attach(element, recognizer, {
-            manageStyle,
-          })
-        : null,
-    [recognizer, manageStyle, isEnabled],
+    element => {
+      if (!isEnabled) {
+        return () => {};
+      }
+      const detach = getGestureHost(element.ownerDocument).attach(
+        element,
+        recognizer,
+        {manageStyle, perEventPointer, actionGroup},
+      );
+      return () => {
+        syncingGestures(() => deferringResolution(recognizer, detach));
+      };
+    },
+    `${manageStyle}:${perEventPointer}:${isEnabled}:${actionGroup}`,
   );
 
   return recognizer;
-}
-
-export type UsePressTrackerOptions = Omit<
-  PressTrackerOptions,
-  'getBounds' | 'view'
->;
-
-/**
- * Track presses on the element behind `ref` with UIControl semantics. The
- * callbacks are read through a ref, like a recognizer's listener. Releasing
- * the element (unmount, or a replaced node) ends any press without calling
- * them: that release runs in an Effect, which never calls a caller's
- * callback (react-component-runtime INV2, INV3).
- */
-export function usePressTracker(
-  ref: RefObject<Element | null>,
-  options: UsePressTrackerOptions = {},
-): PressTracker {
-  const optionsRef = useRef(options);
-  // True while an Effect releases the tracker, so the press it ends reaches
-  // no caller callback.
-  const isReleasingRef = useRef(false);
-  useIsomorphicLayoutEffect(() => {
-    optionsRef.current = options;
-  });
-  const [tracker] = useState(
-    () =>
-      new PressTracker({
-        getBounds: () => ref.current?.getBoundingClientRect() ?? null,
-        get view() {
-          return ref.current;
-        },
-        onControlEvent: (event, touch) => {
-          if (!isReleasingRef.current) {
-            optionsRef.current.onControlEvent?.(event, touch);
-          }
-        },
-        onHighlightChange: isHighlighted => {
-          if (!isReleasingRef.current) {
-            optionsRef.current.onHighlightChange?.(isHighlighted);
-          }
-        },
-        trackingExpansion: options.trackingExpansion,
-        highlightDelay: options.highlightDelay,
-        cancelTravel: options.cancelTravel,
-        quickTapFlash: options.quickTapFlash,
-        vetoesAncestorRecognizer: recognizer =>
-          optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
-          defaultVeto(recognizer),
-        isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
-        // A touch that brakes a scroll the finger set moving presses nothing
-        // (GestureHost.isScrollBraking), unless the caller decides.
-        isBraking: touch => {
-          const element = ref.current;
-          return (
-            optionsRef.current.isBraking?.(touch) ??
-            (element != null &&
-              getGestureHost(element.ownerDocument).isScrollBraking(element))
-          );
-        },
-      }),
-  );
-
-  // Syncs the document's gesture host with the element behind `ref`: the
-  // tracker is its press consumer, moved when the node is replaced, and a
-  // press in progress ends with it.
-  useNodeAttachment(
-    ref,
-    element => {
-      const detach = getGestureHost(element.ownerDocument).attachConsumer(
-        element,
-        tracker,
-      );
-      return () => {
-        isReleasingRef.current = true;
-        try {
-          detach();
-          tracker.dispose();
-        } finally {
-          isReleasingRef.current = false;
-        }
-      };
-    },
-    [tracker],
-  );
-
-  // Syncs the host's listeners with the tracker's enabled state, which can
-  // change with any render: the host listens only while an enabled control
-  // is attached (spec:AST-094 FR24).
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    if (element != null) {
-      getGestureHost(element.ownerDocument).update(element);
-    }
-  });
-
-  return tracker;
-}
-
-/**
- * Keeps `attach` applied to the element behind `ref`: checked after every
- * render, so a replaced node (a re-keyed or swapped element) is detached and
- * the new one attached, a removed one detached, and a change in `deps`
- * re-attaches (`architecture:react-component-runtime` INV6). Costs no render.
- * `attach` returns its detach, or null for nothing attached.
- */
-function useNodeAttachment<T extends Element>(
-  ref: RefObject<T | null>,
-  attach: (element: T) => (() => void) | null,
-  deps: ReadonlyArray<unknown>,
-): void {
-  const attachedRef = useRef<{
-    element: T;
-    deps: ReadonlyArray<unknown>;
-    detach: (() => void) | null;
-  } | null>(null);
-  // Syncs the attachment with the DOM node the caller's ref holds after
-  // this commit.
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    const current = attachedRef.current;
-    if (
-      current != null &&
-      current.element === element &&
-      current.deps.length === deps.length &&
-      current.deps.every((dep, index) => Object.is(dep, deps[index]))
-    ) {
-      return;
-    }
-    current?.detach?.();
-    attachedRef.current =
-      element == null ? null : {element, deps, detach: attach(element)};
-  });
-  // Detaches at unmount.
-  useIsomorphicLayoutEffect(
-    () => () => {
-      attachedRef.current?.detach?.();
-      attachedRef.current = null;
-    },
-    [],
-  );
-}
-
-/** PressTracker's own default: an ancestor's single-finger single tap. */
-function defaultVeto(recognizer: GestureRecognizer): boolean {
-  const tap = recognizer as GestureRecognizer & {
-    numberOfTapsRequired?: number;
-    numberOfTouchesRequired?: number;
-  };
-  return (
-    recognizer.isDiscrete &&
-    tap.numberOfTapsRequired === 1 &&
-    tap.numberOfTouchesRequired === 1
-  );
 }

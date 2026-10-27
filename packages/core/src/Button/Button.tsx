@@ -123,9 +123,9 @@ const styles = stylex.create({
   pressable: {
     transform: {
       default: 'scale(1)',
-      // A mouse press. Under a coarse pointer `:active` is not a press (it
-      // paints on the touch and outlives a scroll), so the touch press model
-      // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
+      // A Space press where the primary pointer is fine. A pointer's press,
+      // and under a coarse pointer every press, is the press controller's
+      // `data-astryx-press`; see interactionOverlay.stylex.ts.
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',

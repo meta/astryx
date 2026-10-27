@@ -257,11 +257,13 @@ for (const press of ['mouse', 'space'] as const) {
   });
 }
 
-test('a desktop press is unchanged: `:active` paints it and the controller writes nothing', async ({
+test("a desktop mouse press is the press controller's and paints what `:active` paints; a Space press stays `:active`'s", async ({
   browser,
 }) => {
+  // `spec:AST-094` FR11, DEC-21: a fine pointer's press goes through the
+  // controller, in place of `:active`; a Space press keeps its path.
   const mouse = await desktopReference(browser, 'mouse');
-  expect(mouse.attribute).toBeNull();
+  expect(mouse.attribute).toBe('on');
   expect(mouse.pressed).not.toEqual(mouse.rest);
   expect(mouse.scale).toBeCloseTo(0.98, 3);
   const space = await desktopReference(browser, 'space');

@@ -13,9 +13,10 @@
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
  *
  * Detects a single-finger long-press: fires `onLongPress` with the press
- * start point after `delayMs`. Cancels if the finger moves past
- * `moveCancelPx` (treated as a scroll/drag), lifts, or the touch is
- * cancelled. The pending timer is also cleared on unmount.
+ * start point after `delayMs`. Cancels if the finger travels farther than
+ * `moveCancelPx` from where it landed (treated as a scroll/drag), lifts, or
+ * the touch is cancelled. The pending timer is also cleared on unmount. The
+ * defaults are the long-press recognizer's (motion/uikit/longPress.ts).
  *
  * Two ways in, one detector. Spread the touch handlers onto an element, or —
  * when the caller already runs its own pointer-event machine, as
@@ -30,10 +31,15 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
 
-// Default long-press tuning.
-const DEFAULT_DELAY_MS = 500;
-const DEFAULT_MOVE_CANCEL_PX = 10;
+// The long-press numbers have one source, shared with the gesture
+// recognizers (motion/uikit/longPress.ts).
+const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
+const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
 
 export interface UseLongPressOptions {
   /** Fired with the touch start point once the press is held for `delayMs`. */
@@ -42,7 +48,10 @@ export interface UseLongPressOptions {
   disabled?: boolean;
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
-  /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
+  /**
+   * Travel farther than this distance (px) from where the press began
+   * cancels it, as UIKit's `allowableMovement`. Defaults to 10.
+   */
   moveCancelPx?: number;
 }
 
@@ -116,10 +125,9 @@ export function useLongPress(
       if (from == null) {
         return false;
       }
-      if (
-        Math.abs(point.x - from.x) > moveCancelPx ||
-        Math.abs(point.y - from.y) > moveCancelPx
-      ) {
+      // A distance, as UIKit measures `allowableMovement`: a (7, 7) drift
+      // keeps the press, a (7.2, 7.2) one ends it.
+      if (Math.hypot(point.x - from.x, point.y - from.y) > moveCancelPx) {
         // Treat as a scroll/drag, not a long-press.
         clear();
         return false;

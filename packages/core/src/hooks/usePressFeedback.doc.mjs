@@ -35,7 +35,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Let the composed style own the press on every pointer: it keeps `:active` for a desktop mouse and drops it under `@media (pointer: coarse)`, where every press is painted for you (a finger through the press model, a mouse or Space key at once). A rule of your own that paints `:active` would paint under a finger too, on the touch and through a scroll.',
+          'Let the composed style own the press on every pointer: a finger, a mouse and a pen are painted for you through the press model (a mouse or pen at once), and a Space press keeps `:active` on a desktop. A rule of your own that paints `:active` would paint under a finger too, on the touch and through a scroll.',
       },
       {
         guidance: false,

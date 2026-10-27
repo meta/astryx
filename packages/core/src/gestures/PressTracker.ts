@@ -44,11 +44,12 @@
  * swallows for a touch a recognizer took.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
 import {timing} from '../motion/uikit/timing';
 import {travel} from './geometry';
-import type {GestureRecognizer} from './GestureRecognizer';
-import {TapGestureRecognizer} from './TapGestureRecognizer';
+import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
+import {internals} from './recognizerInternals';
+import type {TapGestureRecognizer} from './TapGestureRecognizer';
 import type {GestureTouch, TouchConsumer} from './types';
 
 export type ControlEvent =
@@ -75,6 +76,24 @@ export interface PressTrackerOptions {
   view?: unknown;
   onControlEvent?: (event: ControlEvent, touch: GestureTouch) => void;
   onHighlightChange?: (isHighlighted: boolean) => void;
+  /**
+   * A continuous-tracking control (a held stepper) keeps its touch once its
+   * press is delivered: the host cancels the browser's pan for that finger,
+   * as UIKit's `touchesShouldCancel(in:)` is false for a tracking control.
+   * Its element then gets a blocking `touchmove` listener, so a scroll that
+   * starts on it waits on the main thread: never set it on plain buttons,
+   * links, cards or list cells.
+   * @default false
+   */
+  keepsTouch?: boolean;
+  /**
+   * For a control whose own record defines a hold action (a stepper's
+   * hold-repeat): pass `lockSelection` (gestures/selectionLock.ts) to turn
+   * text selection and the callout off for each press, where the primary
+   * pointer is coarse (`spec:AST-094` FR41). A control whose hold does
+   * nothing passes none. @default undefined
+   */
+  selectionLock?: SelectionLock;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -104,7 +123,7 @@ export interface PressTrackerOptions {
   isBraking?: (touch: GestureTouch) => boolean;
 }
 
-const PRESS = UIKIT_GESTURES.press;
+const PRESS = UIKIT_PRESS;
 
 export type PressHighlightDelay = 'inScrollers' | 'always' | 'never';
 
@@ -136,7 +155,7 @@ export const PRESS_PROFILES = {
    */
   cell: {
     highlightDelay: 'inScrollers',
-    cancelTravel: UIKIT_GESTURES.pan.hysteresis.value,
+    cancelTravel: UIKIT_PAN.hysteresis.value,
     quickTapFlash: 0,
     releaseMs: timing.press.highlightOutMs,
   },
@@ -144,17 +163,22 @@ export const PRESS_PROFILES = {
 
 export type PressProfileName = keyof typeof PRESS_PROFILES;
 
-/** UIButton's rule: an ancestor's single-finger single tap. */
+/**
+ * UIButton's rule: an ancestor's single-finger single tap. The tap is told
+ * apart by its family rather than its class, so press tracking never ships
+ * TapGestureRecognizer.
+ */
 function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
-  return (
-    recognizer instanceof TapGestureRecognizer &&
-    recognizer.numberOfTapsRequired === 1 &&
-    recognizer.numberOfTouchesRequired === 1
-  );
+  if (internals(recognizer).family !== 'tap') {
+    return false;
+  }
+  const tap = recognizer as TapGestureRecognizer;
+  return tap.numberOfTapsRequired === 1 && tap.numberOfTouchesRequired === 1;
 }
 
 export class PressTracker implements TouchConsumer {
   isHighlighted = false;
+  private isKept = false;
   isTracking = false;
   isTouchInside = false;
   trackingExpansion: number;
@@ -168,10 +192,13 @@ export class PressTracker implements TouchConsumer {
   private isPendingDead = false;
 
   constructor(options: PressTrackerOptions) {
+    if (options.keepsTouch === true) {
+      // Only the tracked touch whose press was delivered is kept.
+      this.keepsTouch = touchId => this.isKept && this.touchId === touchId;
+    }
     this.options = options;
     this.trackingExpansion =
-      options.trackingExpansion ??
-      UIKIT_GESTURES.control.trackingExpansion.value;
+      options.trackingExpansion ?? UIKIT_CONTROL.trackingExpansion.value;
   }
 
   /**
@@ -186,7 +213,9 @@ export class PressTracker implements TouchConsumer {
     if (
       this.touchId != null ||
       this.options.isEnabled?.() === false ||
-      this.options.isBraking?.(touch) === true
+      // The scroll brake is a finger's (`spec:AST-094` FR11, DEC-21).
+      (touch.pointerType === 'touch' &&
+        this.options.isBraking?.(touch) === true)
     ) {
       return;
     }
@@ -246,6 +275,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     const inside = this.contains(touch);
     const wasPending = this.highlightTimer != null;
     this.clearHighlightTimer();
@@ -273,6 +303,7 @@ export class PressTracker implements TouchConsumer {
     if (touch.id !== this.touchId) {
       return;
     }
+    this.isKept = false;
     this.clearHighlightTimer();
     this.emit('touchCancel', touch);
     this.setHighlighted(false);
@@ -315,11 +346,30 @@ export class PressTracker implements TouchConsumer {
   }
 
   private setHighlighted(value: boolean): void {
+    if (value && this.touchId != null) {
+      // Delivered: the control keeps this touch until it ends (also when a
+      // quick tap's flash is still showing as the press arrives).
+      this.isKept = true;
+    }
     if (this.isHighlighted === value) {
       return;
     }
     this.isHighlighted = value;
     this.options.onHighlightChange?.(value);
+  }
+
+  /**
+   * Present only for a continuous-tracking control created with
+   * `keepsTouch: true` (a held stepper): once its press is delivered, the
+   * browser's pan must not take the touch. A plain pressable leaves it
+   * undefined and keeps passive listeners, so a scroll starting on it never
+   * waits on the main thread.
+   */
+  readonly keepsTouch?: (touchId: number) => boolean;
+
+  /** The selection lock of a control whose hold acts (FR41); see the option. */
+  get selectionLock(): SelectionLock | undefined {
+    return this.options.selectionLock;
   }
 
   private clearHighlightTimer(): void {
@@ -337,6 +387,8 @@ export class PressTracker implements TouchConsumer {
   }
 
   private finish(): void {
+    // A highlight shown at the lift (a quick tap's flash) keeps nothing.
+    this.isKept = false;
     this.touchId = null;
     this.isTracking = false;
     this.isTouchInside = false;

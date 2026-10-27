@@ -484,6 +484,56 @@ describe('useMenuPress — the trigger', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("a finger held on the trigger may drift 12 pt and still opens where the primary pointer is coarse; past FR29's 13 pt drift allowance it is a scroll, and where the primary pointer is fine the shared 10 px tolerance stays (spec:AST-094 FR29; useMenuPress FR9)", () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    const pointerIs = (coarse: boolean) => {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: (query: string) =>
+          ({
+            matches: coarse && query === '(pointer: coarse)',
+            media: query,
+            onchange: null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      });
+    };
+    const hold = (drift: number) => {
+      const onOpenChange = vi.fn();
+      const {unmount} = render(<Harness onOpenChange={onOpenChange} />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      fireEvent.pointerMove(trigger, {...touch(), clientX: 0, clientY: drift});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      const opened = onOpenChange.mock.calls.some(([open]) => open === true);
+      fireEvent.pointerUp(trigger, touch());
+      unmount();
+      return opened;
+    };
+    try {
+      pointerIs(true);
+      expect(hold(12)).toBe(true);
+      expect(hold(14)).toBe(false);
+      pointerIs(false);
+      expect(hold(9)).toBe(true);
+      expect(hold(12)).toBe(false);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
   it('marks the menu root as carrying the press model', () => {
     render(<Harness />);
     expect(screen.getByRole('menu')).toHaveAttribute('data-astryx-menu-press');

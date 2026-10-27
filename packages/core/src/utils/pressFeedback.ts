@@ -44,20 +44,35 @@
  * component that paints a press carries {@link PRESSABLE_ATTRIBUTE}, so all of
  * them change together.
  *
- * Where the primary pointer is fine (a desktop), the controller ignores the
- * mouse and the keyboard: CSS `:active` keeps their press, as it always has,
- * and the mouse path costs nothing. Under a finger the `:active` arm is
- * dropped by the CSS (`@media (pointer: coarse)`) and this writes
- * `data-astryx-press="on"` when the press is believed and
- * `data-astryx-press="fading"` for the release's exit.
+ A FINE POINTER'S PRESS, a mouse's or a pen's, goes through this controller
+ * on every device (`spec:AST-094` FR11, FR43, DEC-21): it paints at once on
+ * `pointerdown` (no scroller can claim it, so nothing waits and no brake
+ * applies), holds while the button is down (a mouse's press, like
+ * `:active`, through a drag off the surface), and fades at the release on a
+ * finger's clock on that device, in place of the browser's `:active`. A
+ * right click and a ctrl-click on macOS paint nothing (primaryClick.ts). A
+ * finger's press writes `data-astryx-press="on"` when the press is believed
+ * and `data-astryx-press="fading"` for the release's exit.
  *
- * That query reads the PRIMARY pointer, so on a phone or a tablet the
- * stylesheet drops `:active` for every press, including a mouse or trackpad
- * click and a Space press on a focused button. There, the controller paints
- * those too: at once (no scroller can claim a mouse button or a key, so
- * nothing waits), held while the button or key is down, and faded at the
- * release, the way a finger's press leaves. The query is the stylesheet's
- * own, so the two cannot disagree about which presses are the controller's.
+ * A Space press keeps its path: where the primary pointer is fine, the
+ * browser's `:active` paints it; on a phone or a tablet, where the
+ * stylesheet drops `:active` (`@media (pointer: coarse)` reads the PRIMARY
+ * pointer), the controller paints it, at once, held while the key is down,
+ * and faded on the deselect clock. The query is the stylesheet's own, so the
+ * two cannot disagree about which key presses are the controller's.
+ *
+ * A native control inside a surface (a link or a button in a row's
+ * description) takes its own press, for every pointer, and the surface stays
+ * at rest; the surface's activator (its first control: a row's radio, the
+ * invisible button an Item row's content sits in) is the surface's own.
+ *
+ * A surface's hold does nothing, so it keeps the browser's long-press text
+ * selection (`spec:AST-094` FR41); only an element whose hold does something
+ * suppresses it, through the gesture host (utils/selectionLock.ts).
+ *
+ * Its touch-only listeners, the finger's `touchend` and `touchcancel`, are on
+ * only while a press is tracked and the primary pointer is coarse
+ * (coarsePointer.ts, `spec:AST-094` FR24).
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
  * hooks/usePressFeedback.doc.mjs, utils/interactionOverlay.stylex.ts and
@@ -77,7 +92,12 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   pressGestureStep,
 } from './pressGesture';
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {controlPressConsts} from './controlPressLayer.stylex';
+import {subscribeInput} from './inputStream';
+import {resolveMotion} from '../motion/resolveMotion';
+import {press as pressTiming} from '../motion/uikit/timing';
+import {isPrimaryClick} from './primaryClick';
 import {TOUCH_QUERY} from './touchPresentation';
 
 /**
@@ -120,6 +140,12 @@ export interface PressProfile {
   readonly highlightDelay: 'inScrollers' | 'always';
   /** How long the release's exit runs, in ms: the attribute leaves after it. */
   readonly releaseMs: number;
+  /**
+   * The `timing.press` motion role behind `releaseMs`: the controller
+   * resolves it under the pressed element (`resolveMotion`), so the release
+   * lasts as long as that element's motion says. Without it, `releaseMs`.
+   */
+  readonly releaseRole?: 'buttonReleaseMs' | 'highlightOutMs';
 }
 
 /**
@@ -150,9 +176,14 @@ export const PRESS_PROFILES = {
   control: {
     highlightDelay: 'inScrollers',
     releaseMs: controlPressConsts.controlReleaseMs,
+    releaseRole: 'buttonReleaseMs',
   },
   /** A table or collection cell: waits only inside a scroll view (FR11). */
-  cell: {highlightDelay: 'inScrollers', releaseMs: PRESS_FADE_MS},
+  cell: {
+    highlightDelay: 'inScrollers',
+    releaseMs: PRESS_FADE_MS,
+    releaseRole: 'highlightOutMs',
+  },
 } as const satisfies Readonly<Record<string, PressProfile>>;
 
 export type PressProfileName = keyof typeof PRESS_PROFILES;
@@ -372,6 +403,10 @@ function timerMs(
   kind: NonNullable<PressStep['timer']>,
   live: {element: Element; releaseMs: number},
 ): number {
+  if (kind === 'flash') {
+    // The quick tap's flash, on its motion role under the pressed element.
+    return resolveMotion(live.element, pressTiming, 'flashMs');
+  }
   if (kind !== 'fade') {
     return TIMER_MS[kind];
   }
@@ -562,12 +597,37 @@ function apply(slot: Slot, step: PressStep): void {
  * disabled surface takes it and paints nothing, so a press on a disabled
  * control does not light the row around it.
  */
+/**
+ * A native control nested in a pressable surface: a press on it is the
+ * control's own, not the surface's, unless it is the surface's activator.
+ */
+const NESTED_CONTROL = 'a[href], button, [role="button"], [role="link"]';
+/**
+ * A surface's activator is its first control in tree order: the radio a
+ * RadioList row delegates to, the invisible button or link an Item row's
+ * content sits in. A press on the activator is the surface's.
+ */
+const ACTIVATOR = `input, select, textarea, ${NESTED_CONTROL}`;
+
 function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {
     return null;
   }
   const found = target.closest(`[${PRESSABLE_ATTRIBUTE}]`);
   if (!(found instanceof HTMLElement) || found.matches(DISABLED)) {
+    return null;
+  }
+  // A native control inside the surface other than its activator (a link or
+  // a button in a row's description) takes its own press, for every
+  // pointer: the rule RadioListItem's `:active:not(:has(...))` arm kept for
+  // a mouse.
+  const control = target.closest(NESTED_CONTROL);
+  if (
+    control != null &&
+    control !== found &&
+    found.contains(control) &&
+    control !== found.querySelector(ACTIVATOR)
+  ) {
     return null;
   }
   return found;
@@ -645,16 +705,32 @@ function takeOver(other: Slot, element: HTMLElement): void {
  * with any other pointer (a finger on a touch screen beside a mouse), as the
  * stylesheet's release arms are (the desktop rule, `spec:AST-017` FR59/DEC-25).
  */
-function releaseOf(profile: PressProfile): Pick<PressProfile, 'releaseMs'> {
+function releaseOf(
+  profile: PressProfile,
+  element: Element,
+): Pick<PressProfile, 'releaseMs'> {
   // The same coarse gate the stylesheet's release arms use.
-  const {releaseMs} = stylesheetDroppedActive() ? profile : PRESS_PROFILES.cell;
-  return {releaseMs};
+  return {
+    releaseMs: releaseMsOf(
+      stylesheetDroppedActive() ? profile : PRESS_PROFILES.cell,
+      element,
+    ),
+  };
+}
+
+/** A profile's release clock: its motion role under the element (#8268). */
+function releaseMsOf(profile: PressProfile, element: Element): number {
+  return profile.releaseRole == null
+    ? profile.releaseMs
+    : resolveMotion(element, pressTiming, profile.releaseRole);
 }
 
 /**
- * Whether presses with a mouse or a key are the controller's to paint here.
- * Asked at each such press: rendering a pressable never queries the pointer,
- * so a layout that must not depend on it stays independent.
+ * Whether the stylesheet drops `:active` here (a coarse primary pointer): a
+ * Space press is then the controller's to paint, and every release takes its
+ * profile's clock. Asked at each such press: rendering a pressable never
+ * queries the pointer, so a layout that must not depend on it stays
+ * independent.
  */
 function stylesheetDroppedActive(): boolean {
   // The shared touch resolver's key (`spec:AST-012` FR2): the condition the
@@ -698,19 +774,22 @@ function pressButton(
   }
   takeOver(finger, element);
   track();
-  // A mouse or a key keeps the fine pointer's 200 ms release on any surface;
-  // the marker tells the stylesheet's release arms the same.
+  // A mouse's release is a finger's on this device (FR11). A key keeps the
+  // fine pointer's 200 ms release on any surface, and the marker tells the
+  // stylesheet's release arms the same.
   button.live = {
     element,
     gesture: idlePressGesture(),
     pointerId,
-    releaseMs: PRESS_PROFILES.cell.releaseMs,
+    releaseMs:
+      pointerId == null
+        ? releaseMsOf(PRESS_PROFILES.cell, element)
+        : releaseOf(profileOf(element), element).releaseMs,
     timer: null,
   };
-  element.setAttribute(
-    PRESS_INPUT_ATTRIBUTE,
-    pointerId == null ? 'key' : 'mouse',
-  );
+  if (pointerId == null) {
+    element.setAttribute(PRESS_INPUT_ATTRIBUTE, 'key');
+  }
   holdKey(pointerId == null);
   apply(button, pressGestureStep(button.live.gesture, {kind: 'buttonDown'}));
 }
@@ -736,13 +815,18 @@ function cancelButton(): void {
 
 function onPointerDown(event: PointerEvent): void {
   if (event.pointerType === 'mouse') {
-    // A mouse already has hover and keeps `:active` where the primary pointer
-    // is fine; the touch treatment's CSS is inside `@media (pointer: coarse)`.
-    // Not tracking it there keeps desktop identical and costs the mouse path
-    // nothing. Only the primary button: that is the press `:active` paints.
-    if (event.button === 0 && stylesheetDroppedActive()) {
+    // A mouse is a fine pointer: its press paints at once, through this
+    // controller and the release fade a finger's has, in place of the
+    // browser's `:active` (`spec:AST-094` FR11, FR43, DEC-21). Only a
+    // primary click: a right click and a ctrl-click on macOS ask for the
+    // context menu.
+    if (isPrimaryClick(event)) {
       pressButton(event.target, event.pointerId);
     }
+    return;
+  }
+  if (event.pointerType === 'pen' && !isPrimaryClick(event)) {
+    // A pen's barrel or eraser button: not a press.
     return;
   }
   // Any finger arms the listeners, a press or not: the scroll it may start is
@@ -768,12 +852,19 @@ function onPointerDown(event: PointerEvent): void {
   // The finger is recorded AFTER the brake reads the fling, deliberately: the
   // question the brake asks is whether a PREVIOUS finger's fling is still
   // running here.
-  const braking = element != null && scrollerIsBraking(element);
+  // The brake is a finger's: a pen, a fine pointer, presses at once, even on
+  // a list a finger left moving (FR11).
+  const braking =
+    event.pointerType === 'touch' &&
+    element != null &&
+    scrollerIsBraking(element);
   if (event.pointerType === 'pen') {
     clearPen();
     penDown = true;
   } else {
-    touching = true;
+    // A finger counts as down only where its lift is heard: the touch-only
+    // listeners are on only while the primary pointer is coarse (FR24).
+    touching = isCoarsePointer(window);
   }
   lastTouchTarget = event.target instanceof Node ? event.target : null;
   if (element == null || braking) {
@@ -786,7 +877,7 @@ function onPointerDown(event: PointerEvent): void {
     element,
     gesture: idlePressGesture(),
     pointerId: event.pointerId,
-    ...releaseOf(profile),
+    ...releaseOf(profile, element),
     timer: null,
   };
   apply(
@@ -795,7 +886,11 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
-      delayed: profile.highlightDelay === 'always' || isInsideScroller(element),
+      // A pen presses at once, in a scroll view too: the content-touch delay
+      // waits out a finger's scroll (FR11).
+      delayed:
+        event.pointerType === 'touch' &&
+        (profile.highlightDelay === 'always' || isInsideScroller(element)),
     }),
   );
 }
@@ -1028,43 +1123,93 @@ function onVisibilityChange(): void {
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
 const PASSIVE = {passive: true} as const;
 
+/*
+ * Pointer, touch, drag, scroll and visibility input arrive through the shared
+ * input stream (utils/inputStream.ts): one passive listener per type on the
+ * window's capture phase for every subscriber in the page, which an app's
+ * capture-phase stopPropagation cannot starve, and which hears every
+ * scroller's `scroll` and `scrollend` (neither bubbles). The keyboard stays
+ * on the window's bubble phase, outside the stream: a Space press must see
+ * the target's `preventDefault` (`defaultPrevented`), as `:active` does, and
+ * only the bubble phase has run the target's own listeners.
+ */
+
+/** The stream subscriptions that arm the controller, while it is installed. */
+let arming: (() => void)[] = [];
+/** The stream subscriptions that track a live press, while one is. */
+let trackingSubscriptions: (() => void)[] = [];
+
+const unsubscribeAll = (subscriptions: (() => void)[]): void => {
+  for (const unsubscribe of subscriptions.splice(0)) {
+    unsubscribe();
+  }
+};
+
 /** The two listeners a document carries at rest: they only arm the rest. */
 function addArmingListeners(): void {
-  window.addEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
+  arming = [subscribeInput(window, 'pointerdown', onPointerDown)];
   window.addEventListener('keydown', onKeyDown, PASSIVE);
 }
 
 function removeArmingListeners(): void {
-  window.removeEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
+  unsubscribeAll(arming);
   window.removeEventListener('keydown', onKeyDown);
 }
 
 function addTrackingListeners(): void {
-  window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.addEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.addEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  window.addEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
-  window.addEventListener('touchend', onTouchEnd, PASSIVE_CAPTURE);
-  window.addEventListener('touchcancel', onTouchEnd, PASSIVE_CAPTURE);
-  window.addEventListener('dragstart', onDragStart, PASSIVE_CAPTURE);
-  // `scroll` and `scrollend` do not bubble, so the capture phase is the only
-  // way one listener hears every scroller in the document.
-  document.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.addEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  trackingSubscriptions = [
+    subscribeInput(window, 'pointermove', onPointerMove),
+    subscribeInput(window, 'pointerup', onPointerUp),
+    subscribeInput(window, 'pointercancel', onCancel),
+    subscribeInput(window, 'dragstart', onDragStart),
+    subscribeInput(window, 'scroll', onScroll),
+    subscribeInput(window, 'scrollend', onScrollEnd),
+    subscribeInput(window, 'visibilitychange', onVisibilityChange),
+  ];
+  stopWatchingPointer = watchCoarsePointer(window, followPointer);
+  hearTouch(isCoarsePointer(window));
 }
 
 function removeTrackingListeners(): void {
-  window.removeEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.removeEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.removeEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  window.removeEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
-  window.removeEventListener('touchend', onTouchEnd, PASSIVE_CAPTURE);
-  window.removeEventListener('touchcancel', onTouchEnd, PASSIVE_CAPTURE);
-  window.removeEventListener('dragstart', onDragStart, PASSIVE_CAPTURE);
-  document.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.removeEventListener('scrollend', onScrollEnd, PASSIVE_CAPTURE);
-  document.removeEventListener('visibilitychange', onVisibilityChange);
+  unsubscribeAll(trackingSubscriptions);
+  stopWatchingPointer?.();
+  stopWatchingPointer = null;
+  hearTouch(false);
+}
+
+/** The finger's touch-only subscriptions, while tracked and coarse. */
+let touchSubscriptions: (() => void)[] = [];
+/** Stops following the primary pointer, while a press is tracked. */
+let stopWatchingPointer: (() => void) | null = null;
+
+/**
+ * The finger's touch-only listeners are on only while the primary pointer is
+ * coarse (`spec:AST-094` FR24); where it is fine, a finger's press still ends
+ * through `pointerup` and `pointercancel`.
+ */
+function hearTouch(on: boolean): void {
+  if (on === touchSubscriptions.length > 0) {
+    return;
+  }
+  if (on) {
+    touchSubscriptions = [
+      subscribeInput(window, 'touchcancel', onCancel),
+      subscribeInput(window, 'touchend', onTouchEnd),
+      subscribeInput(window, 'touchcancel', onTouchEnd),
+    ];
+  } else {
+    unsubscribeAll(touchSubscriptions);
+  }
+}
+
+/** The primary pointer turned coarse or fine while a press is tracked. */
+function followPointer(isCoarse: boolean): void {
+  hearTouch(isCoarse);
+  if (!isCoarse && touching) {
+    // Nothing hears the finger's lift any more.
+    touching = false;
+    settle();
+  }
 }
 
 /** Whether the key-release listeners are attached. */
