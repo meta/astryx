@@ -42,8 +42,9 @@ a measured, sourced difference exists.
 
 ## Non-goals
 
-- Pointer (desktop) presentations. Their timing and easing stay with the
-  theme's duration and easing tokens (`architecture:theme-tokens`).
+- Pointer (desktop) presentations' timing and easing, which stay with the
+  theme's duration and easing tokens (`architecture:theme-tokens`). Gestures
+  and press tracking themselves apply to every pointer (FR43).
 - Platform-matched look and feel: glass versus material surfaces, glyphs and
   chrome. This record governs behavior, and touch sizing only as FR42 states.
 - WebKit embedded in a native app and the native Swift package. This record
@@ -181,13 +182,17 @@ a measured, sourced difference exists.
   `module:DropdownMenu/useMenuPress` FR4: a second pointer or `pointercancel`
   ends its gesture with nothing acting, which keeps the page zoomable over an
   open menu.
-- **FR11 — Two press profiles.** Press feedback MUST follow one of two native
+- **FR11 — Three press profiles.** Press feedback MUST follow one of three
   profiles. A control (UIControl) highlights on touch-down outside scroll
   views and activates by the browser's click on a lift inside. On the web a
   control's press ends when the browser takes the touch (FR20), and its
   activation stays the browser's click, except that a toggle under
   `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
   CheckboxListItem) may also complete on a lift after the finger slid off.
+  Under a fine pointer a control uses a third profile with no delay: its
+  press paint starts at once on `pointerdown`, through the same press
+  controller and release fade as a finger's, in place of CSS `:active`; the
+  scroll brake stays touch-only (DEC-21).
   A cell (a table or collection cell) highlights 150 ms after touch-down inside
   a scroll view, drops the highlight when the scroll wins (FR20), and activates on a
   lift inside it with no scroll taking the touch (FR20). A control is inside a scroll view when it sits in a scrollable container,
@@ -199,9 +204,9 @@ a measured, sourced difference exists.
   DR4). On every touch platform this amends
   `design:user-states` DR1 (the pressed overlay during a hold) and DR3 (a held, selected SegmentedControl item keeps its raised selected
   surface; only its press timing follows the control profile) for touch
-  presentations, the press treatment of `family:buttons`, and the last sentence of
-  `module:DropdownMenu/useMenuPress` FR6 (menu rows paint `:active` only under
-  `(hover: hover)`): under a finger, menu rows take the cell profile. A menu whose
+  presentations, the press treatment of `family:buttons`, and
+  `module:DropdownMenu/useMenuPress` FR6: under a finger, menu rows take the
+  cell profile. A menu whose
   rows fit (`module:DropdownMenu/useMenuPress` FR4), so it cannot scroll,
   gives its rows no 150 ms delay: they highlight on touch-down. A list that can
   scroll keeps the delay. A press in a list that no scroll can claim stays
@@ -262,11 +267,8 @@ a measured, sourced difference exists.
   screen-edge pan is attached to an element that lies within the band; on an
   element that reaches beyond it, whose `touch-action` cannot claim per touch, a touch in the band
   decides at FR19's 10 px like every other claim.
-- **FR19 — Claims are made in time and only by an owner.** Recognizers attach only where the primary pointer
-  is coarse (FR13, DEC-6). Where the primary pointer is fine, no recognizer
-  attaches and no touch listener is registered (FR24), so a finger on a
-  touchscreen whose primary pointer is fine gets the browser's defaults for
-  this record's behaviors (`spec:AST-017` FR59, DEC-25). This rule governs
+- **FR19 — Claims are made in time and only by an owner.** Recognizers attach for every pointer, with FR43's
+  exceptions. This rule governs
   this record's behaviors only; `spec:AST-057` keeps its per-event pointer
   read for the row swipe, as its record states. A recognizer that begins MUST claim its touches by cancelling
   `touchmove` through a non-passive listener on its element; a watcher,
@@ -318,14 +320,13 @@ a measured, sourced difference exists.
 
 FR26–FR28 and FR30 apply to every surface that carries the press model of
 `module:DropdownMenu/useMenuPress` (DropdownMenu, ContextMenu, their sub-menus,
-and Selector's listbox, whose options count as rows) when a finger or pen
-drives it and the primary pointer is coarse (FR19); where the primary pointer
-is fine, a finger in a menu keeps today's behavior (`spec:AST-017` FR59,
-DEC-25), and menus make no per-gesture pointer read; FR29 applies to DropdownMenu's trigger under the same
+and Selector's listbox, whose options count as rows) under every pointer
+(FR43); FR29 applies to DropdownMenu's trigger under the same
 condition; FR34 applies to menus;
 FR31 applies to anchored menus and to Popover under a finger, and FR35 to
-the entrances it lists; FR32 and
-FR33 apply to menus only. A mouse keeps today's behavior.
+the entrances it lists; FR32 and FR33 apply to menus only. A mouse keeps
+`module:DropdownMenu/useMenuPress` FR1–FR3 and DEC-3, so a mouse released
+outside a menu closes it.
 
 - **FR26 — The lift decides.** A menu row MUST act when the finger lifts over
   it, never because the press began on it; a press that never left its row is
@@ -444,8 +445,10 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   element's existing always-on suppression stays as it is. On a label or plain
   text whose hold does nothing, such as a checkbox row's label, a long press
   selects natively, with the browser's handles; any other element follows its
-  own record. Keyboard and assistive-technology selection are unchanged, and a
-  mouse keeps its released behavior (`spec:AST-017` FR59; DEC-9).
+  own record. Keyboard and assistive-technology selection are unchanged. A pen's hold
+  acts as a finger's; a mouse makes the context request by a right click, not
+  a long press (FR43), and otherwise keeps its released behavior
+  (`spec:AST-017` FR59; DEC-9).
 
   Guidance: a caller whose menu element carries text a person may want offers
   a Copy action in its menu.
@@ -461,11 +464,15 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 
 ### Resources and compatibility
 
-- **FR24 — Touch work costs nothing where it is not used.** Where the
-  primary pointer is fine (FR19), and while a touch presentation is
-  disabled, no touch-only listener, observer or timer is active, except the
-  released `module:DropdownMenu/useMenuPress` behavior a finger keeps there
-  (its FR9). The number of `document`- or `window`-level
+- **FR24 — Gesture work costs nothing where it is not used.** A component
+  that uses no gesture registers no gesture listener, observer or timer, and
+  while a touch presentation is disabled none is active. Under a fine pointer
+  a component that uses a gesture listens only on its own element and adds
+  document listeners only during a press, removing them at the release (FR43);
+  the shared press controller and the menu press model's stray-click
+  swallower (`module:DropdownMenu/useMenuPress` PR2), each installed once per
+  page, count once and not per component, and a claiming recognizer's `touchmove` listener for a finger
+  (FR19) counts outside this budget. The number of `document`- or `window`-level
   touch listeners MUST NOT grow with the number of component instances, a
   repeated row or cell adds no touch observer of its own, and nothing
   touch-related remains after the last instance unmounts
@@ -497,11 +504,31 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   half the gap, or skipped, so each element stays reachable; an expansion a
   component or module record sets on purpose, such as `component:Thumbnail` AR4's, is
   unaffected. Mobile size increases belong to theme adaptations (DEC-20).
+- **FR43 — Gestures work on the web.** Gestures attach for every pointer, a
+  mouse, a pen, and a finger, not only a coarse primary pointer. These stay
+  off: row swipe actions under a mouse drag, which would take the browser's text
+  selection and native drag, while a trackpad's horizontal scroll swipes a
+  row (`spec:AST-057` AR2, DEC-7); a
+  pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
+  and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
+  neighbor's target. On the web, a pan also
+  takes wheel and trackpad scrolling; a pinch takes a ctrl-wheel; one shared
+  context request answers a finger's or a pen's long press, a right click, and
+  Shift+F10; the
+  press model has a fine-pointer profile with no delay (FR11); and with a
+  mouse, a trackpad, or a pen where the primary pointer is fine a reorder
+  starts on a drag from its handle without a hold, while a pen where the
+  primary pointer is coarse keeps the finger's hold (`spec:AST-103` FR3). Under a fine pointer only a
+  component that uses a gesture listens (FR24), and under reduced motion a
+  release from a mouse, a trackpad, or a pen follows `design:reduced-motion`
+  DR2 on a coarse primary pointer and DR3 otherwise; and gestures add no
+  stylesheet bytes (DEC-21).
 
 ### Platform support
 
 - Supported engines: Astryx's supported browsers (`spec:AST-013`) with touch
-  input, on iOS and Android. UIKit on the reference release is the parity
+  input, on iOS and Android, and, for FR43, desktop browsers with a mouse, a
+  trackpad, or a pen. UIKit on the reference release is the parity
   reference, not a support floor; an older iOS Safari gets the same behavior
   wherever its engine supports it, and Android Chrome gets the same behavior.
   This amends `spec:AST-013` FR3 with an explicit Android Chrome support row
@@ -543,10 +570,16 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   finger; `presentation="popover"` keeps the released behavior (FR25).
 - `module:DropdownMenu/useMenuPress`: the released 500 ms `longPressDelayMs`
   default gives way to FR29's timing; a caller that passes it keeps it (FR25).
-- `module:DropdownMenu/useMenuPress`: its finger rules (FR1–FR3, FR6, FR7
-  and FR9 under a finger) are stated here (FR26–FR30); FR6's last sentence
-  gives way to the cell press profile (FR11); its mouse rules (FR8 and the
-  mouse halves of FR1–FR3) and its non-gesture rules stay in the module.
+- `module:DropdownMenu/useMenuPress`: its finger and pen rules (FR1–FR3, FR6,
+  FR7, FR9, FR11) follow FR26–FR30, FR33, and FR11's profiles under every
+  primary pointer; its mouse rules (the mouse halves of FR1–FR3) and its
+  non-gesture rules stay in the module.
+- `spec:AST-057`: a trackpad's horizontal scroll swipes a row (DEC-7); a
+  mouse drag never does.
+- `architecture:react-component-runtime` INV13: gestures attach for every
+  pointer, within FR24's listener budget.
+- `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
+  FR11's profiles under every pointer, the fine-pointer profile included.
 - Every component under a coarse pointer: no box grows for touch, and a
   touch target reaches 44 px only through an invisible hit area clamped by
   its neighbors, unless a component or module record sets its own (FR42).
@@ -591,15 +624,16 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 | FR15–FR17       | Recognizer unit tests on synthetic streams with explicit timestamps                                                            | exclusive, simultaneous, require-to-fail, nested; a watcher beside a claiming winner; a blocked main thread; a pan at 10 pt per axis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a wrong winner, a late deadline, or a translation that keeps the hysteresis, or a watcher failed or cancelled by a claiming winner fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | FR18–FR22       | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation, a modal scroll lock, a control that keeps its press through a drag; a still finger with sub-pixel jitter over a scroll view; a finger moved 9 px and 10 px straight, and (7, 7) and (8, 8) diagonally; a recognizer on an element whose author `touch-action` is narrower, including one without `pinch-zoom`; a screen-edge pan landing at 40 px and at 41 px from the edge, at 14 px and 15 px of travel, and a horizontal scroll that starts outside the band; a screen-edge pan on an element within the band, and on one that reaches beyond it; a sheet's pull from a list at its top, and from a list scrolled away from its top | a ghost click, a scroll or zoom blocked other than by the author's `touch-action`, or a cancelled unowned touchmove outside FR19's three exceptions, a tap cancelled by sub-pixel movement or by under 10 px of travel, a scroll that does not take the touch at 10 px, or a derived `touch-action` wider than the author's, a screen-edge pan that claims outside its band or before 15 px on an element within the band, or has not claimed at 15 px, or an author scroll outside the band that is blocked, a band claim of `pan-x` on an element that reaches beyond the band, or a 15 px start there, or a scroll-edge pan that cancels a move a scroller could scroll, or begins before 10 pt, fails |
 | FR23            | Haptics tests on the recorded moments                                                                                          | tap, drag, lift                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a haptic outside a native moment fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| FR24            | Resource tests counting listeners, observers and timers                                                                        | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a touch listener on a fine pointer, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR24            | Resource tests counting listeners, observers and timers                                                                        | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a gesture listener in a component that uses no gesture, an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, a second press controller, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR25            | Component tests of each moved default and its `presentation` value                                                             | default; `presentation` set to the released surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a moved default that `presentation` does not restore, or a public threshold, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | FR26–FR28, FR30 | Menu press tests on synthetic touch streams and a real-Chromium touch test                                                     | a slide from one row to another; a lift outside; a cancel; a second finger; edge autoscroll                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | an act on the press-start row, two acts for one gesture, a lift outside that closes, or a lit row after a cancel fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR29            | Trigger tests with explicit timestamps                                                                                         | a press in a fixed bar; a press in scrolling content held 149 and 150 ms; a quick tap in scrolling content; a scroll taking the touch before 150 ms; a drift of 12 and 14 pt; moves before and after the handoff; `presentation="popover"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a fixed-bar press that waits, a held finger's scroll-view open before 150 ms or after a scroll, a quick tap that does not open at its lift, an open past the drift allowance, a lift that acts before the handoff, or a `popover` trigger that opens on press fails                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR31–FR33       | Browser tests and storyboards under a finger                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a surface that does not grow from and shrink into its trigger, a pan outside that leaves a menu open, a Popover whose dismissal changed, a pinch blocked other than by the author's `touch-action`, a tap outside that reaches the page, or a changed mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR34, FR35      | Browser tests and storyboards under a finger                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse; a tap and a drag during an alert's, a sheet's, and a dialog's entrance; a key and a screen reader during an entrance; a pinch during an alert's and a sheet's entrance; a tap and a scroll on the page beside an entering non-modal sheet, which pass                                                                                                                                                                                                                                                                                                                                                    | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a pinch blocked other than by the author's `touch-action`, or a changed mouse path, a held key or assistive-technology activation, a hidden content tree, or a tap or drag during an entrance that closes the presentation, scrolls a held page, moves focus or reaches anything beneath, fails                                                                                                                                                                                                                                      |
 | FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                     | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity, or an action with no keyboard or mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, or a change to native selection elsewhere or to mouse, keyboard, or assistive-technology selection fails                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection; a pen long press; a mouse long press, which makes no context request                                                                                                                                                                                                                                                                                                                                                                                                                              | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, or a change to native selection elsewhere or to mouse, keyboard, or assistive-technology selection fails                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR42            | Default-theme geometry tests under a coarse and a fine pointer, and hit-testing between adjacent targets                       | every component at phone width with a finger and with a mouse; a dense toolbar; a chip and its remove button; a Switch beside a label link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a default-theme box that grows under touch or at phone width other than with its text, or, where no component or module record sets the hit area, a touch target under 44 px where neighbors allow it or a hit area that overlaps a neighbor's target, fails                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| FR43            | Browser tests with a mouse, a trackpad, a pen, a finger, and the keyboard, and resource counts                                 | a pan by drag and by wheel; a ctrl-wheel pinch; a long press, a right click, and Shift+F10; a mouse press; a handle drag; a row swipe with a mouse and a trackpad; a component with no gesture                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a gesture missing under a mouse or pen, a mouse-drag swipe action, a pen pinch, an edge pan under a mouse, a trackpad, or a pen, a press delay under a fine pointer, an idle listener in a component with no gesture, or added stylesheet bytes, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari and Android Chrome devices          | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Decision log
@@ -752,6 +786,21 @@ rows likewise highlight on touch-down is a guess until a short UIMenu on the
 iOS 26.2 simulator measures it.
 
 Rejected: the 150 ms delay on every menu row.
+
+### DEC-21 — Gestures work on the web, not only under a finger
+
+**Reference:** `spec:AST-094/DEC-21`
+**Decider:** `cixzhang`, `2026-10-26`
+
+Most of these gestures work as well with a mouse, a trackpad, or a pen, so
+they stay on for every pointer, with web inputs mapped in: wheel and trackpad
+scrolling for a pan, a ctrl-wheel for a pinch, and right click or Shift+F10
+for a long press. What would fight the browser is off: a mouse drag's swipe
+actions, a pen's pinch, and the screen-edge pan under a mouse, a trackpad, or a pen. The 44 px target is
+touch-only, and none of this adds stylesheet bytes. A mouse press uses the press model with no delay instead of the
+browser's `:active`. The press controller tracks every pointer.
+
+Rejected: keeping gestures and press tracking touch-only.
 
 ### DEC-20 — The default look grows nothing for touch
 
