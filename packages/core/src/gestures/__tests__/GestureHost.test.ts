@@ -3262,6 +3262,45 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     expect(outerStates).toEqual([]);
   });
 
+  it('serves a finger on the group too, and still answers a mouse afterwards', () => {
+    const {group, one} = mount(
+      '<div id="group"><button id="one"></button></div>',
+    );
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const tap = new TapGestureRecognizer();
+    const states: string[] = [];
+    tap.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(group, tap, {actionGroup: true}));
+    pointer('pointerdown', one, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointermove', one, {
+      pointerType: 'touch',
+      x: 11,
+      y: 10,
+      buttons: 1,
+      time: 16,
+    });
+    pointer('pointerup', one, {pointerType: 'touch', x: 11, y: 10, time: 60});
+    expect(states).toEqual(['ended']);
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 400,
+    });
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 460});
+    expect(states).toEqual(['ended', 'ended']);
+  });
+
   it('removes the group listener on detach, and a coarse pointer keeps the usual document listeners instead', () => {
     const {group} = mount('<div id="group"></div>');
     const groupRemoved = vi.spyOn(group, 'removeEventListener');
