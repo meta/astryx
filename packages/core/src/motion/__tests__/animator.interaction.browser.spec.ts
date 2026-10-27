@@ -433,17 +433,23 @@ test('a spring started right before a block plays in full after it', async ({
   const xs = tracked
     .filter(f => f.box != null)
     .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
-  const firstMoving = xs.find(f => f.x > 0.5);
+  // Judged on the first frame after the block, whatever the frames before
+  // it showed: it is at the start of the curve, and the frames after it
+  // move on from there.
+  const first = xs.find(f => f.t >= busy.to);
+  const later = xs.filter(f => f.t >= busy.to + 100);
   test.info().annotations.push({
-    type: 'first moving frame after the block',
+    type: 'first frame after the block',
     description: JSON.stringify({
-      x: firstMoving?.x,
-      after: firstMoving == null ? null : firstMoving.t - busy.to,
+      x: first?.x,
+      after: first == null ? null : first.t - busy.to,
     }),
   });
-  expect(firstMoving).toBeDefined();
+  expect(first).toBeDefined();
   // 400 ms into this spring is 107 px; the start of the curve is a few px.
-  expect(firstMoving?.x ?? Infinity).toBeLessThan(30);
+  expect(first?.x ?? Infinity).toBeLessThan(30);
+  expect(later.length).toBeGreaterThan(0);
+  expect(Math.max(...later.map(f => f.x))).toBeGreaterThan((first?.x ?? 0) + 1);
 });
 
 test('no Layout or Paint runs while it animates', async ({
