@@ -13,7 +13,10 @@
  *   frame in both engines; it keeps fading on every frame while the main
  *   thread is blocked and does no Layout or Paint (Chromium); a RadioList row
  *   stays bare while its circle paints; a storyboard of the release, its trace
- *   asserted
+ *   asserted; with a mouse (spec:AST-094 FR11's fine-pointer profile, FR43) a
+ *   checkbox and a CheckboxList row press through the same model at once and
+ *   release on their host's clock, a right click and a read-only row paint
+ *   nothing, and a radio row keeps its `:active` paint for now
  * @position Interaction evidence for the indicator press layers in
  *   CheckboxInput.tsx and RadioListItem.tsx; the row layers they release
  *   beside are proven in ListRowPress.interaction.browser.spec.ts and
@@ -589,6 +592,43 @@ test('under Reduce Motion a checkbox’s press release is an opacity cross-fade 
   }
 });
 
+/** Every value `data-astryx-press` takes on `owner`, in order, as the page saw it. */
+async function recordPress(owner: Locator): Promise<() => Promise<string[]>> {
+  await owner.evaluate(el => {
+    const seen: string[] = [];
+    (window as unknown as {__pressSeen: string[]}).__pressSeen = seen;
+    new MutationObserver(() => {
+      seen.push(el.getAttribute('data-astryx-press') ?? '');
+    }).observe(el, {attributes: true, attributeFilter: ['data-astryx-press']});
+  });
+  return async () =>
+    owner
+      .page()
+      .evaluate(
+        () => (window as unknown as {__pressSeen: string[]}).__pressSeen,
+      );
+}
+
+/** A CSS time in ms. */
+const timeMs = (value: string) =>
+  value.endsWith('ms')
+    ? Number.parseFloat(value)
+    : Number.parseFloat(value) * 1000;
+
+/** Clicks stop at the window: the press is the subject, not the toggle. */
+async function stopClicks(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    window.addEventListener(
+      'click',
+      event => {
+        event.preventDefault();
+        event.stopPropagation();
+      },
+      true,
+    ),
+  );
+}
+
 test.describe('with a mouse', () => {
   test.use({
     isMobile: false,
@@ -616,8 +656,136 @@ test.describe('with a mouse', () => {
     }, shot.toString('base64'));
   };
 
-  for (const surface of SURFACES) {
-    test(`hover and :active on ${surface.name} paint as before`, async ({
+  /** The element that owns a surface's press: the checkbox's control, or the row. */
+  const ownerOf = (page: Page, surface: Surface) =>
+    surface.story === 'core-checkboxinput--default'
+      ? page.locator('#storybook-root [data-astryx-pressable]').first()
+      : optionRow(page, 'SMS');
+
+  for (const surface of SURFACES.filter(
+    each => each.story !== 'core-radiolist--default',
+  )) {
+    test(`a mouse press on ${surface.name} paints at once through the press model and releases on its host’s clock (FR43)`, async ({
+      page,
+    }) => {
+      await openStory(page, storybook(), surface.story);
+      // A fine-pointer case proves nothing under a coarse primary pointer.
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
+      await stopClicks(page);
+      const layer = surface.layer(page);
+      const owner = ownerOf(page, surface);
+      const target = await surface.target(page).boundingBox();
+      if (target == null) {
+        throw new Error(`${surface.story}: nothing to press`);
+      }
+      const seen = await recordPress(owner);
+      await page.mouse.move(
+        target.x + target.width / 2,
+        target.y + target.height / 2,
+      );
+      await page.mouse.down();
+      // FR11's fine-pointer profile: the press paints at `pointerdown`, with
+      // no delay, through the same controller as a finger's.
+      await expect
+        .poll(async () => owner.getAttribute('data-astryx-press'), {
+          timeout: 100,
+        })
+        .toBe('on');
+      expect(
+        await layer.evaluate(
+          el => getComputedStyle(el, '::after').backgroundImage,
+        ),
+      ).toContain('gradient');
+      await page.mouse.up();
+      // The same release fade as a finger's, on the host's clock.
+      await expect
+        .poll(async () => owner.getAttribute('data-astryx-press'))
+        .toBe('fading');
+      expect(
+        timeMs(
+          await layer.evaluate(
+            el => getComputedStyle(el, '::after').animationDuration,
+          ),
+        ),
+      ).toBe(surface.clock.releaseMs);
+      expect(await seen()).toEqual(expect.arrayContaining(['on', 'fading']));
+    });
+
+    test(`a right click on ${surface.name} paints no press (FR43)`, async ({
+      page,
+    }) => {
+      await openStory(page, storybook(), surface.story);
+      await stopClicks(page);
+      const owner = ownerOf(page, surface);
+      const target = await surface.target(page).boundingBox();
+      if (target == null) {
+        throw new Error(`${surface.story}: nothing to press`);
+      }
+      const seen = await recordPress(owner);
+      await page.mouse.move(
+        target.x + target.width / 2,
+        target.y + target.height / 2,
+      );
+      await page.mouse.down({button: 'right'});
+      await page.waitForTimeout(150);
+      expect(await owner.getAttribute('data-astryx-press')).toBeNull();
+      await page.mouse.up({button: 'right'});
+      expect(await seen()).toEqual([]);
+    });
+  }
+
+  test('a mouse press on a read-only CheckboxList row paints no press (FR43)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-checkboxlist--read-only');
+    await stopClicks(page);
+    const row = page.locator('#storybook-root li').first();
+    const box = await row.boundingBox();
+    if (box == null) {
+      throw new Error('core-checkboxlist--read-only: no row');
+    }
+    // Any press the controller marks inside the row, on any element.
+    await row.evaluate(el => {
+      const seen: string[] = [];
+      (window as unknown as {__readOnlySeen: string[]}).__readOnlySeen = seen;
+      new MutationObserver(records => {
+        for (const record of records) {
+          const value = (record.target as Element).getAttribute(
+            'data-astryx-press',
+          );
+          if (value != null) {
+            seen.push(value);
+          }
+        }
+      }).observe(el, {
+        attributes: true,
+        attributeFilter: ['data-astryx-press'],
+        subtree: true,
+      });
+    });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    const layerImages = await row.evaluate(el =>
+      Array.from(el.querySelectorAll('*')).map(
+        child => getComputedStyle(child, '::after').backgroundImage,
+      ),
+    );
+    await page.mouse.up();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {__readOnlySeen: string[]}).__readOnlySeen,
+      ),
+    ).toEqual([]);
+    expect(layerImages.filter(image => image.includes('gradient'))).toEqual([]);
+  });
+
+  for (const surface of SURFACES.filter(
+    each => each.story === 'core-radiolist--default',
+  )) {
+    test(`hover and :active on ${surface.name} paint as before, until the press controller treats a nested control as a press boundary`, async ({
       page,
     }) => {
       await openStory(page, storybook(), surface.story);
