@@ -123,8 +123,10 @@ function satisfiesComparator(version, token) {
     case '<':
       return cmp < 0;
     case '^':
-      if (t.major > 0) return below(`${t.major + 1}.0.0`);
-      if (t.minor > 0) return below(`0.${t.minor + 1}.0`);
+      // A partial target widens the range to the parts given: `^0` is any
+      // 0.x.y, `^0.0` is any 0.0.y, while `^0.0.3` is locked to the patch.
+      if (t.major > 0 || t.count === 1) return below(`${t.major + 1}.0.0`);
+      if (t.minor > 0 || t.count === 2) return below(`0.${t.minor + 1}.0`);
       return below(`0.0.${t.patch + 1}`);
     case '~':
       return below(t.count >= 2 ? `${t.major}.${t.minor + 1}.0` : `${t.major + 1}.0.0`);
@@ -158,7 +160,13 @@ export function satisfiesRange(version, range) {
     return true;
   }
   return r.split('||').some(union => {
-    const tokens = union.trim().split(/\s+/).filter(Boolean);
+    // A hyphen range `A - B` is the inclusive intersection `>=A <=B`; left
+    // as-is its two bare versions would each read as an exact match that
+    // can never both hold.
+    const normalized = union
+      .trim()
+      .replace(/^(\S+)\s+-\s+(\S+)$/, '>=$1 <=$2');
+    const tokens = normalized.split(/\s+/).filter(Boolean);
     return tokens.length === 0 || tokens.every(tok => satisfiesComparator(version, tok));
   });
 }
