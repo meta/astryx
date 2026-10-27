@@ -1297,6 +1297,10 @@ test('a touch landing 41 px from the edge is outside the band: the edge pan neve
   page,
   browserName,
 }) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
   const driver = await openEdgePan(page, browserName);
   await page.evaluate(() => {
     (document.getElementById('hscroll') as HTMLElement).scrollLeft = 600;
