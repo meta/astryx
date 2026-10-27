@@ -32,7 +32,7 @@ export const docs = {
       name: 'options.menuContent',
       type: 'ReactNode',
       description:
-        "Custom menu content as JSX, as ContextMenu's `menuContent`: ContextMenuItem and its siblings work inside it.",
+        "Custom menu content as JSX, as ContextMenu's `menuContent`: ContextMenuItem and its siblings work inside it. It renders inside the menu with Astryx's own providers; an app's own contexts (a router, a store, a form) do not reach it.",
     },
     {
       name: 'options.label',
@@ -78,6 +78,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Read what `menuContent` needs from your app (a router, a store, a form) in the component, and pass the values in: the menu renders where those contexts do not reach. Use the ContextMenu component when its content must read them itself.',
+      },
+      {
+        guidance: true,
+        description:
           'Keep every action reachable another way too, such as a MoreMenu on the row.',
       },
       {
@@ -113,7 +118,8 @@ export const docsDense = {
   paramDescriptions: {
     ref: 'The element that owns the menu.',
     'options.items': "ContextMenu's rows. Give items or menuContent.",
-    'options.menuContent': 'Custom content as JSX.',
+    'options.menuContent':
+      "Custom content as JSX; an app's own contexts do not reach it.",
     'options.label': 'Names the menu.',
     'options.isDisabled': 'Keeps it from opening.',
     'options.onOpenChange': '(isOpen) => void.',
