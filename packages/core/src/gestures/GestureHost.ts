@@ -450,10 +450,13 @@ function scrollsBy(
   if (room <= 0) {
     return false;
   }
-  const position = Math.abs(
-    isHorizontal ? element.scrollLeft : element.scrollTop,
-  );
-  return delta > 0 ? position < room - 1 : position > 0;
+  // Right to left, scrollLeft runs from 0 at the start to minus the
+  // overflow, and a scroll right moves it toward 0.
+  const isRtl = isHorizontal && isRtlElement(element as HTMLElement);
+  const min = isRtl ? -room : 0;
+  const max = isRtl ? 0 : room;
+  const position = isHorizontal ? element.scrollLeft : element.scrollTop;
+  return delta > 0 ? position < max - 1 : position > min;
 }
 
 /**
@@ -1798,13 +1801,15 @@ export class GestureHost {
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
     // Every scroller under the pointer, the page included, as a finger's
     // probe reads them, without touch-action, which a wheel ignores.
-    const scroll = createNativeScrollProbe(wheel.target, {
+    // What the wheel landed on: at a shadow host's listener the event's
+    // target is the host, and a scroller inside its tree must count.
+    const target = landedOn(wheel);
+    const scroll = createNativeScrollProbe(target, {
       readsTouchAction: false,
     });
     const takers: GestureRecognizer[] = [];
     for (
-      let node: Node | null =
-        wheel.target instanceof Node ? wheel.target : null;
+      let node: Node | null = target instanceof Node ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
@@ -1822,14 +1827,7 @@ export class GestureHost {
         if (
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
-            this.scrollerTakes(
-              wheel.target,
-              node,
-              dx,
-              dy,
-              isHorizontal,
-              view,
-            ) ||
+            this.scrollerTakes(target, node, dx, dy, isHorizontal, view) ||
             // A scroll-edge pan only past every scroller's edge (FR19).
             (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
@@ -1843,7 +1841,7 @@ export class GestureHost {
     }
     const base = {
       pointerType: 'mouse' as const,
-      target: wheel.target,
+      target,
       scroll,
       scrollType: type,
       recognizers: takers,
