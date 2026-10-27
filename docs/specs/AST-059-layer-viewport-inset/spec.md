@@ -35,9 +35,30 @@ review_triggers: [layering, layout, behavior, public-api]
 {
   "scope": "global",
   "triggers": {
-    "layering": ["FR1", "FR2", "FR4", "FR5", "FR7", "FR8", "DEC-1", "DEC-3"],
-    "layout": ["FR1", "FR2", "FR3", "FR4", "FR5", "FR6", "FR8", "DEC-2"],
-    "behavior": ["FR2", "FR4", "FR5", "FR7", "FR8"],
+    "layering": [
+      "FR1",
+      "FR2",
+      "FR4",
+      "FR5",
+      "FR7",
+      "FR8",
+      "FR9",
+      "DEC-1",
+      "DEC-3"
+    ],
+    "layout": [
+      "FR1",
+      "FR2",
+      "FR3",
+      "FR4",
+      "FR5",
+      "FR6",
+      "FR8",
+      "FR9",
+      "DEC-2",
+      "DEC-6"
+    ],
+    "behavior": ["FR2", "FR4", "FR5", "FR7", "FR8", "FR9", "FR10"],
     "public-api": ["FR6", "DEC-4", "DEC-5"]
   }
 }
@@ -45,15 +66,15 @@ review_triggers: [layering, layout, behavior, public-api]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | The layer runtime owns the viewport inset: one gutter definition (FR1), one size cap — the viewport, never the span beside the trigger (FR2, FR3) — one standard fallback order and an anchor-clear order for a layer that keeps its anchor clear (FR4, FR5), and one place an app declares a persistent bar floating over a viewport edge: `LayerProvider`'s `inset`, read by anchored layers and the toast viewport alike (FR6, DEC-4, DEC-5). Popover is an application of the layer that adds styling on top (DEC-1).                                                                                                                                                                                                                                                        |
-| Behavior                | A layer renders at its own size — the caller's explicit size, or its content's — up to the viewport minus its gutters, and never beyond: content that cannot fit the viewport overflows inside the layer, where the composing component scrolls or clips it (FR2, FR3). Content that can wrap fits beside the trigger by wrapping; a size that cannot shrink flips, and fitting neither side it keeps its size and slides along the alignment axis into view (FR4, DEC-2); a tooltip instead goes beside its trigger or to the roomier side (FR4). A layer whose anchor has left the viewport holds its position and its size (FR5, DEC-3). The first frame a layer paints is its settled frame; it never paints and then moves, save the one-frame case FR8 names.              |
-| End-user impact         | A person who opens a 352px menu from a control near the edge of a panel gets a 352px menu, not a 274px one. A long menu on a phone keeps its labels readable instead of squeezing beside its trigger. A layer never ends under a phone navigation bar the app has declared (FR6). Nothing moves for an app that declares no bar.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Builder impact          | `Popover.width` and `DropdownMenu.menuWidth` become ordinary sizes. An app with a floating bar declares it once, as `inset` on the `LayerProvider` it already mounts, beside `toast`; toasts and anchored layers both clear it. Components that compose `useLayer` or `usePopover` inherit the gutter, the caps, and the fallbacks without a record change (FR7).                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Compatibility/readiness | Behavior change, one additive prop. An explicit size near an edge renders at its size instead of shrinking; unwrappable content near an edge flips or slides instead of overflowing its box; prose still wraps beside its trigger (DEC-2). Every anchor-mode layer gains the gutter and caps (FR7). `LayerProvider.inset` defaults to zero on every edge, so an app that declares none renders as before, with or without a provider; an existing `toast.inset` keeps its meaning (DEC-5). Authority: `current`, approved by the owner on 2026-10-03.                                                                                                                                                                                                                            |
-| Review checks           | Reject a second definition of the viewport gutter outside the layer runtime; a `max-inline-size` resolved against the anchor's span; a layer box that can exceed the viewport on either axis; a fallback list authored by a component for an anchor-mode layer; a branch on whether a size was explicit; a slide that continues once the anchor has left the viewport; a `layer` theme target or a theme value standing in for an app's bar; a second place to declare the bar beside `LayerProvider.inset`; a consumer minimum that is not clamped by the runtime's cap; a layer under a default provider that renders differently from one with no provider; a geometry input read after paint and applied, except as FR8 permits; a story that asserts only settled geometry. |
-| Governing rules         | [`architecture:layer-runtime`](../../architecture/layer-runtime.md) INV3, INV5 for anchor-mode placement, fallbacks, and direction, INV10 for what `LayerProvider` is; [`spec:AST-003`](../AST-003/spec.md) FR21–FR23 for the reduced behavior where CSS Anchor Positioning is absent; `component:Popover` FR4, ORD4 for Popover's conditional scrolling, which this record leaves in place.                                                                                                                                                                                                                                                                                                                                                                                     |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | The layer runtime owns the viewport inset: one gutter definition (FR1), one size cap — the viewport, never the span beside the trigger (FR2, FR3) — one standard fallback order and an anchor-clear order for a layer that keeps its anchor clear (FR4, FR5), and one place an app declares a persistent bar floating over a viewport edge: `LayerProvider`'s `inset`, read by anchored layers and the toast viewport alike (FR6, DEC-4, DEC-5). Popover is an application of the layer that adds styling on top (DEC-1).                                                                                                                                                                                                                                                                              |
+| Behavior                | A layer renders at its own size — the caller's explicit size, or its content's — up to the viewport minus its gutters, and never beyond: content that cannot fit the viewport overflows inside the layer, where the composing component scrolls or clips it (FR2, FR3). Content that can wrap fits beside the trigger by wrapping; a size that cannot shrink flips, and fitting neither side it keeps its size and slides along the alignment axis into view (FR4, DEC-2); a tooltip instead goes beside its trigger or to the roomier side (FR4). A layer whose anchor has left the viewport holds its position and its size (FR5, DEC-3). The first frame a layer paints is its settled frame; it never paints and then moves, save the one-frame case and the keyboard cap's change that FR8 names. |
+| End-user impact         | A person who opens a 352px menu from a control near the edge of a panel gets a 352px menu, not a 274px one. A long menu on a phone keeps its labels readable instead of squeezing beside its trigger. A layer never ends under a phone navigation bar the app has declared (FR6). Nothing moves for an app that declares no bar. On a phone, a layer that would run under the software keyboard ends 10 px above it, its content scrolling (FR9).                                                                                                                                                                                                                                                                                                                                                      |
+| Builder impact          | `Popover.width` and `DropdownMenu.menuWidth` become ordinary sizes. An app with a floating bar declares it once, as `inset` on the `LayerProvider` it already mounts, beside `toast`; toasts and anchored layers both clear it. Components that compose `useLayer` or `usePopover` inherit the gutter, the caps, and the fallbacks without a record change (FR7).                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Compatibility/readiness | Behavior change, one additive prop. An explicit size near an edge renders at its size instead of shrinking; unwrappable content near an edge flips or slides instead of overflowing its box; prose still wraps beside its trigger (DEC-2). Every anchor-mode layer gains the gutter and caps (FR7). `LayerProvider.inset` defaults to zero on every edge, so an app that declares none renders as before, with or without a provider; an existing `toast.inset` keeps its meaning (DEC-5). Authority: `current`, approved by the owner on 2026-10-03.                                                                                                                                                                                                                                                  |
+| Review checks           | Reject a second definition of the viewport gutter outside the layer runtime; a `max-inline-size` resolved against the anchor's span; a layer box that can exceed the viewport on either axis; a fallback list authored by a component for an anchor-mode layer; a branch on whether a size was explicit; a slide that continues once the anchor has left the viewport; a `layer` theme target or a theme value standing in for an app's bar; a second place to declare the bar beside `LayerProvider.inset`; a consumer minimum that is not clamped by the runtime's cap; a layer under a default provider that renders differently from one with no provider; a geometry input read after paint and applied, except as FR8 permits; a story that asserts only settled geometry.                       |
+| Governing rules         | [`architecture:layer-runtime`](../../architecture/layer-runtime.md) INV3, INV5 for anchor-mode placement, fallbacks, and direction, INV10 for what `LayerProvider` is; [`spec:AST-003`](../AST-003/spec.md) FR21–FR23 for the reduced behavior where CSS Anchor Positioning is absent; `component:Popover` FR4, ORD4 for Popover's conditional scrolling, which this record leaves in place.                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 This table is a review projection; the body below is authoritative.
 
@@ -123,7 +144,8 @@ the app reaches every layer instead of the components that happen to read it.
   placement axis.** A layer taller than the room both above and below its
   trigger is capped to the viewport and shifted into it. Whether standard
   layers prefer the roomier side is not settled here; a layer that keeps its
-  anchor clear is the one case FR4 settles.
+  anchor clear is the one case FR4 settles, and the software keyboard caps
+  a layer that would run under it (FR9).
 - **Fullscreen Dialog.** It keeps the same gutter value by convention but is
   not an anchor-mode layer; whether the app-declared inset (FR6) reaches it is
   a later decision. The toast viewport does read it (FR6, DEC-5).
@@ -236,7 +258,7 @@ the app reaches every layer instead of the components that happen to read it.
   declaration. The inset is app state, not a theme value (DEC-4).
 - **FR7 — Consumers inherit; a consumer's own size rule cannot defeat the
   cap.** Every component that renders through `useLayer` in anchor mode or
-  through `usePopover` receives FR1–FR6 and FR8 with no record change and no
+  through `usePopover` receives FR1–FR6 and FR8–FR10 with no record change and no
   option to pass. A component that sets its own minimum size — trigger
   matching, a `menuWidth` applied as a minimum — clamps that minimum with the
   runtime's cap expression, because a CSS minimum otherwise wins over a
@@ -246,8 +268,8 @@ the app reaches every layer instead of the components that happen to read it.
   this record — the gutter, the caps, the declared inset, the fallback order —
   is resolved by the browser's style and layout in the same frame as the
   render that produced it; apart from the one case below, the runtime
-  measures nothing after paint to apply them. The runtime makes two
-  observations. Whether the anchor is in view
+  measures nothing after paint to apply them. The runtime makes three
+  observations: the two below and the software keyboard's cap (FR9, FR10). Whether the anchor is in view
   (FR5) is read before the layer's first paint and thereafter only when the
   anchor's visibility changes, so a layer opened while its anchor is already
   out of view holds from its first frame. For a layer that keeps its anchor
@@ -272,8 +294,38 @@ the app reaches every layer instead of the components that happen to read it.
   change in the same frame.
   Latency between an app measuring its own bar and declaring the result is the
   app's; the runtime renders what is declared, when it is declared. Apart from
-  that one-frame correction, a paint-then-shift is a failure of this
-  contract, not a quality concern.
+  that one-frame correction and FR10's change of the keyboard cap, which waits
+  for the keyboard to arrive or a press to finish, a paint-then-shift is a
+  failure of this contract, not a quality concern. The
+  software keyboard's cap (FR9) is read from the layer's own box without its
+  entrance transform, as FR4 reads it, so an entrance in progress never needs a
+  second read: before the first paint when a layer opens with a keyboard up, when the
+  keyboard moves (FR10), and in the commit that
+  brings a layer element the runtime swapped in while the layer is open.
+- **FR9 — The software keyboard caps a layer that would run under it.**
+  While
+  a software keyboard covers the bottom of the viewport, an anchor-mode layer
+  whose block-end edge would run under it keeps its block-start edge and caps
+  its block size so that edge sits 10 px above the keyboard, the clearance
+  UIKit keeps under a popover. Its content overflows inside the layer box,
+  where the composing component scrolls it, and the field being typed into
+  stays in view. A layer the keyboard does not reach, and a layer whose
+  block-end edge the fallback order holds (placed above its trigger), stay as
+  they are. The keyboard's height is the keyboard module's one height
+  (`architecture:react-component-runtime` INV11); no layer measures the
+  keyboard on its own.
+  The cap folds into the block-axis cap (FR2 or FR3, whichever caps the
+  block axis), so the layer box and every
+  surface inside it capped by that definition shrink together. Each layer
+  carries its own cap on its own element: a layer opened inside a capped
+  layer is capped only for its own box, never by its host's.
+- **FR10 — The keyboard cap changes where the keyboard hides the change.**
+  A
+  box's height cannot change on the compositor, so the cap changes once per
+  keyboard movement: when a rising keyboard has arrived, at once as a falling
+  keyboard starts down, and at once for a keyboard that changes without
+  moving. A change that would move the layer under a press in progress inside
+  it waits for that press's click.
 
 ### Platform support
 
@@ -318,8 +370,15 @@ When this ships:
   then applied; the first painted frame is the settled frame. The one
   exception is FR8's one-frame correction for a layer that keeps its anchor
   clear when a same-size anchor moves on screen, in layout or by a scroll.
-- Owning code: add the module that holds the gutter and cap expressions, and
-  `LayerProvider` as the owner of the declared inset.
+- INV11 and INV12 add the software keyboard's cap (FR9) and FR10's timing:
+  the cap is read from the layer's own box without its entrance transform when
+  the keyboard moves, and it changes once per keyboard movement, a permitted
+  paint-then-shift beside the anchor-move frame.
+- Owning code: add the module that holds the gutter and cap expressions,
+  `LayerProvider` as the owner of the declared inset, and the module that
+  owns the software keyboard's cap on an open anchor-mode layer.
+- Change coupling: a keyboard-cap change verifies the cap's timing, a layer
+  opened with the keyboard up, and the layers it leaves alone.
 - Change coupling: the positioning row already names viewport-edge fallbacks;
   add explicit-size, content-size, neither-side-fits, and off-screen-anchor
   states, and the app-declared inset.
@@ -401,6 +460,8 @@ for any row.
 | FR5           | Stories "anchor leaves the viewport" and "anchor already off-screen when the layer opens"; the runtime's anchor-visibility unit suite                                                                                               | Horizontal scroll carries the trigger out of view while the layer is open, then back; a layer opened with its anchor already off-screen                                                                    | The layer slides toward the viewport edge after the anchor is gone, changes size, does not return with its anchor, or opens pinned to the edge                                                          |
 | FR6           | Stories "app-declared inset (floating bar)" and "layer portaled out of its JSX position"; `LayerProvider` and `ToastViewport` unit suites                                                                                           | An 80px bar declared as `inset={{blockEnd: 80}}`; a toast under the same provider; a `toast.inset` override; no provider; a layer hosted outside the paragraph it was rendered in                          | A layer or toast ends under the bar, an unset edge moves anything, a `toast.inset` edge stops overriding, no-provider geometry differs from the default provider's, or a portaled layer loses the inset |
 | FR8           | Every story above (first frame compared with settled); stories "inset changes while the layer is open", "layer opens in the frame the inset arrives", "inset measured by the app", "anchor already off-screen when the layer opens" | The provider's inset changes 80→160 with the layer open; a layer mounted open in the provider's first commit; a bar the app measures before paint and declares; an off-screen anchor at open               | The first frame's rectangle differs from the settled one, or the first frame after a declaration change is not already at the new geometry                                                              |
+| FR9           | `useLayerKeyboardClearance.test.tsx`; Popover's keyboard browser proofs in Chromium and WebKit with a stand-in keyboard; the iOS simulator                                                                                          | A tall Popover below its trigger with a field; a keyboard already up at the open; a short layer; a layer above its trigger                                                                                 | A capped layer ending under the keyboard or more than 10 px above it, an unreached layer that changes, a bottom-held layer that moves, or a layer measuring the keyboard itself                         |
+| FR10          | `useLayerKeyboardClearance.test.tsx`; Popover's keyboard browser proofs                                                                                                                                                             | A rising keyboard before and after it arrives; a falling keyboard; a keyboard that changes at once; a tap on Save as the keyboard falls                                                                    | A cap written while the keyboard rises, kept as it falls, or taken off under a press before its click                                                                                                   |
 | FR1 safe area | A device run: `env(safe-area-inset-*)` is set only by a real device and Chromium emulation does not populate it, so no Storybook story can show it.                                                                                 | Landscape phone with a notch on one side                                                                                                                                                                   | A layer under the notch                                                                                                                                                                                 |
 
 **Verification gap — VG1.** A layer that had to slide (it fit on neither
@@ -508,6 +569,21 @@ provider is a surface under the default provider.
 
 Rejected: a shared inset that the toast cannot override — a toast that must
 clear a control an anchored layer may cover would have no route.
+
+### DEC-6 — The runtime caps a layer above the software keyboard, holding its start edge
+
+**Reference:** `spec:AST-059/DEC-6`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A layer that would run under the software keyboard is capped by the layer
+runtime, for every anchor-mode layer at once, from the keyboard module's one
+height: the keyboard narrows the viewport the way the gutter does, and a rule
+that one component applies leaves every other layer under the keyboard. The
+capped layer keeps its block-start edge and ends 10 px above the keyboard, as
+a UIKit popover does.
+
+Rejected: the keyboard as a declared block-end inset (FR6), because the
+fallback order applies a block inset to both block edges (FR4).
 
 ## Open questions
 
