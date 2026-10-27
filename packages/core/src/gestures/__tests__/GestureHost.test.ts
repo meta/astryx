@@ -72,7 +72,9 @@ function pointer(
     pointerType: string;
     x: number;
     y: number;
+    button?: number;
     buttons?: number;
+    ctrlKey?: boolean;
     time: number;
   },
 ): Event {
@@ -84,8 +86,9 @@ function pointer(
     pointerType: init.pointerType,
     clientX: init.x,
     clientY: init.y,
-    button: 0,
+    button: init.button ?? 0,
     buttons: init.buttons ?? 0,
+    ctrlKey: init.ctrlKey ?? false,
   });
   Object.defineProperty(event, 'timeStamp', {value: init.time});
   target.dispatchEvent(event);
@@ -3719,6 +3722,63 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     mouse('pointerup', box, 10, 80);
     expect(selection.rangeCount).toBe(1);
     expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+
+  it("starts no press for a right click or a ctrl-click on macOS, that platform's context click, and starts one for a ctrl-click elsewhere (FR43)", () => {
+    const {row} = mount('<div id="row"></div>');
+    const fine = fineHost();
+    const consumer = new RecordingConsumer();
+    detachers.push(fine.attachConsumer(row, consumer));
+    const platform = vi.spyOn(navigator, 'platform', 'get');
+    platform.mockReturnValue('MacIntel');
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      button: 2,
+      buttons: 2,
+      time: 0,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      button: 2,
+      time: 80,
+    });
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      ctrlKey: true,
+      time: 500,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      ctrlKey: true,
+      time: 580,
+    });
+    expect(consumer.events).toEqual([]);
+    platform.mockReturnValue('Win32');
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      ctrlKey: true,
+      time: 1000,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      ctrlKey: true,
+      time: 1080,
+    });
+    expect(consumer.events.length).toBeGreaterThan(0);
   });
 
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
