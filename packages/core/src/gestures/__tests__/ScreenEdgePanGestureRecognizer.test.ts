@@ -166,33 +166,6 @@ describe('an in-band touch on a wider element (spec:AST-094 FR18, DEC-13)', () =
   });
 });
 
-describe('off the edge zone', () => {
-  it('decides at 10 px, before the browser commits to a scroll (spec:AST-094 FR19)', () => {
-    const h = createHarness();
-    const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
-    h.environment.view = {width: 390, height: 844};
-    h.finger(1)
-      .down(10, 300, 0, {recognizers: [edge]})
-      .drag(9, 0, 30, 9);
-    expect(edge.state).toBe('possible');
-    h.finger(1).drag(1, 0, 10, 1);
-    expect(h.log[0]).toMatch(/^edge:began@/);
-  });
-
-  it('from several edges, also decides at 10 px off their zones', () => {
-    const h = createHarness();
-    const edge = new ScreenEdgePanGestureRecognizer({
-      name: 'edge',
-      edges: ['left', 'right'],
-    });
-    h.environment.view = {width: 390, height: 844};
-    h.finger(1)
-      .down(10, 300, 0, {recognizers: [edge]})
-      .drag(10, 0, 30, 10);
-    expect(h.log[0]).toMatch(/^edge:began@/);
-  });
-});
-
 describe('a pan from several edges (spec:AST-094 FR18)', () => {
   it('outside every edge zone leaves the browser every touch behavior', () => {
     const edge = new ScreenEdgePanGestureRecognizer({
