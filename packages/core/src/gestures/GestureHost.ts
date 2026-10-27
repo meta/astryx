@@ -734,10 +734,15 @@ export class GestureHost {
     this.usesTouchEvents =
       this.inputMode === 'auto' && view != null && 'ontouchstart' in view;
     const doc = this.doc;
-    doc.addEventListener('touchstart', this.onTouchStart, PASSIVE_CAPTURE);
-    doc.addEventListener('touchmove', this.onTouchMove, PASSIVE_CAPTURE);
-    doc.addEventListener('touchend', this.onTouchEnd, ACTIVE_CAPTURE);
-    doc.addEventListener('touchcancel', this.onTouchCancel, PASSIVE_CAPTURE);
+    // Pointer Events only: a finger comes from its pointer events alone. A
+    // browser that has Touch Events still sends them for the same finger, and
+    // reading both would track it twice (a long press needs one touch).
+    if (this.inputMode === 'auto') {
+      doc.addEventListener('touchstart', this.onTouchStart, PASSIVE_CAPTURE);
+      doc.addEventListener('touchmove', this.onTouchMove, PASSIVE_CAPTURE);
+      doc.addEventListener('touchend', this.onTouchEnd, ACTIVE_CAPTURE);
+      doc.addEventListener('touchcancel', this.onTouchCancel, PASSIVE_CAPTURE);
+    }
     doc.addEventListener('pointerdown', this.onPointerDown, PASSIVE_CAPTURE);
     doc.addEventListener('pointermove', this.onPointerMove, PASSIVE_CAPTURE);
     doc.addEventListener('pointerup', this.onPointerUp, PASSIVE_CAPTURE);

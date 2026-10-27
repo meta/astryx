@@ -3,27 +3,24 @@
 /**
  * @file lab-core-imports.test.mjs
  *
- * Lab may import a core module that core's `exports` do not list only as an
- * internal workspace import, and every such import needs three things or a
- * build fails late: its path in `CORE_INTERNAL_SPECIFIER` (Sandbox's and the
- * docsite's bundles resolve it there), and a `paths` entry in Lab's
- * `tsconfig.json` (its typecheck) and `tsconfig.build.json` (its declaration
- * build). This fails at once, naming the file and the import.
+ * Lab imports core only through what core's `exports` list. Core's internal
+ * modules reach Lab through its `./internal/*` subpath exports
+ * (`architecture:react-component-runtime` INV13), never through a Lab
+ * tsconfig path alias or a bundler resolver around them. This fails at once,
+ * naming the file and the import.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
-import coreInternalModules from './core-internal-modules.cjs';
 
-const {CORE_INTERNAL_SPECIFIER} = coreInternalModules;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const CORE_IMPORT =
   /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](@astryxdesign\/core(?:\/[^'"]*)?)['"]/g;
 
-/** Whether a pattern with at most one `*` (an exports key or a paths key) matches. */
+/** Whether a pattern with at most one `*` (an exports key) matches. */
 function matchesPattern(pattern, value) {
   const star = pattern.indexOf('*');
   if (star === -1) {
@@ -39,26 +36,12 @@ function matchesPattern(pattern, value) {
 }
 
 /**
- * Every problem with Lab's imports of core modules that core does not export.
- * Pure, so the rule can be checked on a made-up package too.
- *
- * @param {{
- *   files: ReadonlyMap<string, string>,
- *   coreExports: readonly string[],
- *   tsconfigPaths: Readonly<Record<string, readonly string[]>>,
- *   internalSpecifier: RegExp,
- * }} input `files` by path, `coreExports` as core's `exports` keys
- *   (`./Button`), `tsconfigPaths` as each Lab tsconfig's `paths` keys, and
- *   `internalSpecifier` the internal module paths core lists
- *   (`CORE_INTERNAL_SPECIFIER`)
- * @returns {string[]}
+ * Every Lab import of core that core's `exports` does not list. Core's
+ * internal modules reach Lab only through its `./internal/*` subpath exports
+ * (`architecture:react-component-runtime` INV13), so an unexported path is a
+ * problem, with no second route around them.
  */
-function findLabCoreImportProblems({
-  files,
-  coreExports,
-  tsconfigPaths,
-  internalSpecifier,
-}) {
+function findLabCoreImportProblems({files, coreExports}) {
   const problems = [];
   for (const [file, source] of files) {
     const text = source
@@ -67,20 +50,10 @@ function findLabCoreImportProblems({
     for (const match of text.matchAll(CORE_IMPORT)) {
       const specifier = match[1];
       const subpath = `.${specifier.slice('@astryxdesign/core'.length)}`;
-      if (coreExports.some(key => matchesPattern(key, subpath))) {
-        continue;
-      }
-      if (!internalSpecifier.test(specifier)) {
+      if (!coreExports.some(key => matchesPattern(key, subpath))) {
         problems.push(
-          `${file}: ${specifier} is neither exported by core nor a listed internal module path; add it to CORE_INTERNAL_SPECIFIER in scripts/core-internal-modules.cjs, with test cases`,
+          `${file}: ${specifier} is not exported by core; import core's internal modules through its ./internal/* subpaths`,
         );
-      }
-      for (const [config, keys] of Object.entries(tsconfigPaths)) {
-        if (!keys.some(key => matchesPattern(key, specifier))) {
-          problems.push(
-            `${file}: ${specifier} has no paths entry in packages/lab/${config}`,
-          );
-        }
       }
     }
   }
@@ -115,8 +88,8 @@ function pathsOf(config) {
   return Object.keys(json.compilerOptions?.paths ?? {});
 }
 
-describe('Lab imports of core modules core does not export', () => {
-  it('are listed internal module paths with both Lab tsconfig paths entries', () => {
+describe('Lab imports of core', () => {
+  it('reach only what core exports', () => {
     const coreExports = Object.keys(
       JSON.parse(
         fs.readFileSync(path.join(root, 'packages/core/package.json'), 'utf8'),
@@ -126,52 +99,39 @@ describe('Lab imports of core modules core does not export', () => {
       findLabCoreImportProblems({
         files: readLabSources(path.join(root, 'packages/lab/src')),
         coreExports,
-        tsconfigPaths: {
-          'tsconfig.json': pathsOf('tsconfig.json'),
-          'tsconfig.build.json': pathsOf('tsconfig.build.json'),
-        },
-        internalSpecifier: CORE_INTERNAL_SPECIFIER,
       }),
     ).toEqual([]);
   });
 
-  it('names the file of an import that is unlisted or missing a paths entry', () => {
+  it("have no tsconfig path alias around core's exports", () => {
+    for (const config of ['tsconfig.json', 'tsconfig.build.json']) {
+      expect(
+        pathsOf(config).filter(key => key.startsWith('@astryxdesign/core')),
+        config,
+      ).toEqual([]);
+    }
+  });
+
+  it('names the file of an import core does not export', () => {
     const files = new Map([
       [
         'packages/lab/src/Pager/Pager.tsx',
         [
           "import {Button} from '@astryxdesign/core/Button';",
           "import {createAnimator} from '@astryxdesign/core/motion/animator';",
-          "import type {PagerState} from '@astryxdesign/core/Pager/pagerState';",
+          "import {usePan} from '@astryxdesign/core/internal/touch';",
           "const strings = import('@astryxdesign/core/locales/en.json');",
           "// import {gone} from '@astryxdesign/core/List/ListReorderHandle';",
         ].join('\n'),
       ],
-      [
-        'packages/lab/src/Sheet/Sheet.tsx',
-        "import {PanGestureRecognizer} from '@astryxdesign/core/gestures';",
-      ],
     ]);
-    const problems = findLabCoreImportProblems({
-      files,
-      coreExports: ['./Button', './locales/*.json'],
-      tsconfigPaths: {
-        'tsconfig.json': [
-          '@astryxdesign/core/motion/*',
-          '@astryxdesign/core/Pager/pagerState',
-        ],
-        'tsconfig.build.json': ['@astryxdesign/core/motion/*'],
-      },
-      // The fixture's own list of internal paths, so a path a later pull
-      // request adds to CORE_INTERNAL_SPECIFIER cannot change this case.
-      internalSpecifier:
-        /^@astryxdesign\/core\/(?:motion|gestures)(?:\/[\w.-]+)*$/,
-    });
-    expect(problems).toEqual([
-      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/Pager/pagerState is neither exported by core nor a listed internal module path; add it to CORE_INTERNAL_SPECIFIER in scripts/core-internal-modules.cjs, with test cases',
-      'packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/Pager/pagerState has no paths entry in packages/lab/tsconfig.build.json',
-      'packages/lab/src/Sheet/Sheet.tsx: @astryxdesign/core/gestures has no paths entry in packages/lab/tsconfig.json',
-      'packages/lab/src/Sheet/Sheet.tsx: @astryxdesign/core/gestures has no paths entry in packages/lab/tsconfig.build.json',
+    expect(
+      findLabCoreImportProblems({
+        files,
+        coreExports: ['./Button', './locales/*.json', './internal/*'],
+      }),
+    ).toEqual([
+      "packages/lab/src/Pager/Pager.tsx: @astryxdesign/core/motion/animator is not exported by core; import core's internal modules through its ./internal/* subpaths",
     ]);
   });
 });

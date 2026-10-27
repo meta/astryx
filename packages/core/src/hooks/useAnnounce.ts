@@ -4,18 +4,30 @@
 
 /**
  * @file useAnnounce.ts
- * @input Uses React useCallback; DOM APIs and one cancellable animation frame per region for a singleton live-region pair
- * @output Exports useAnnounce hook and AnnouncePoliteness type
- * @position Core a11y hook; provides imperative screen-reader announcements
- *   via persistently-mounted polite/assertive live regions; regions are
- *   auto-cleared shortly after announcing so stale status text does not
- *   linger in the accessibility tree
+ * @input Uses React context and useCallback; DOM APIs and cancellable
+ *   animation frames for a singleton live-region pair on the page body and
+ *   one persistent polite/assertive pair inside each open Astryx modal
+ * @output Exports useAnnounce hook and AnnouncePoliteness type; the internal
+ *   modal context, the in-dialog region writer the busy-announcement hook
+ *   uses, and the hook the modal route (`modalAnnounce.ts`, loaded only with
+ *   an Astryx modal) installs itself through
+ * @position Core a11y hook; provides imperative screen-reader announcements.
+ *   A message follows the nearest open native modal enclosing its caller
+ *   (`spec:AST-086` FR14): inside an Astryx modal it is written to that
+ *   dialog's own containers, since the page-body channel is not exposed
+ *   while a native modal is open; otherwise to the shared page-body pair.
+ *   Containers are created empty (FR3), carry the two urgencies (FR5), join
+ *   messages written before the previous is exposed and say an identical
+ *   same-frame repeat once (FR9), and clear shortly after each announcement;
+ *   the route in `modalAnnounce.ts` hands a message still unexposed when its
+ *   modal stops being exposed to the channel exposed after it — the modal
+ *   then on top, or the page body once no modal is open.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useCallback} from 'react';
+import {createContext, use, useCallback, type RefObject} from 'react';
 
 /**
  * Announcement urgency:
@@ -153,7 +165,7 @@ function getRegions(): LiveRegions | null {
   return regions;
 }
 
-function announceMessage(
+export function announceMessage(
   message: string,
   politeness: AnnouncePoliteness,
 ): void {
@@ -198,7 +210,7 @@ function announceMessage(
  * Used when the triggering context goes away (e.g. a search query is cleared),
  * so stale status text does not linger in the accessibility tree.
  */
-function clearRegion(politeness: AnnouncePoliteness): void {
+export function clearRegion(politeness: AnnouncePoliteness): void {
   cancelPendingFrames(politeness);
   cancelScheduledClear(politeness);
   if (!regions) {
@@ -233,8 +245,16 @@ function clearRegion(politeness: AnnouncePoliteness): void {
  * ```
  */
 export function useAnnounce(): AnnounceFn {
+  const modal = use(ModalAnnounceContext);
   return useCallback(
     (message: string, politeness: AnnouncePoliteness = 'polite') => {
+      // Inside an Astryx modal's provider: the modal route decides, per call,
+      // where the caller is heard — `modal` is non-null only where a provider
+      // rendered, and rendering one loads the route.
+      if (modal != null && modalRoute != null) {
+        modalRoute.announce(modal, message, politeness);
+        return;
+      }
       if (!message) {
         // An empty message clears any lingering status from the region,
         // including messages joined but not yet exposed — useful when the
@@ -244,8 +264,340 @@ export function useAnnounce(): AnnounceFn {
       }
       announceMessage(message, politeness);
     },
-    [],
+    [modal],
   );
+}
+
+// =============================================================================
+// Inside an Astryx modal (spec:AST-086 FR14)
+// =============================================================================
+//
+// `useAnnounce` reads the nearest ModalAnnounceProvider's scope. The route a
+// scope implies — exposure, the top-layer order, hand-off and hold on close,
+// the covered rule, deferral while a modal is being presented — lives in
+// `modalAnnounce.ts`, which ModalAnnounceProvider imports and which installs
+// itself here when it loads. A context value is non-null only where a
+// provider rendered, so the route is installed before it is needed, and a
+// component that calls `useAnnounce` but renders no modal never loads it.
+// What stays in this module is what a caller without any Astryx modal still
+// needs: the region writer the busy-announcement hook uses inside a native
+// modal an app renders without Astryx, and the DOM walk that finds it.
+
+const MODAL_REGION_ATTR = 'data-astryx-modal-live-region';
+
+/**
+ * What an Astryx modal tells the hooks beneath it: where its dialog element
+ * is, and the modal above it, so a caller inside a non-modal sheet nested in
+ * a modal still finds the modal.
+ */
+export interface ModalAnnounceScope {
+  dialogRef: RefObject<HTMLDialogElement | null>;
+  // The owner's intent: open (or presented) in this render. A dialog meant
+  // to be open that is not open yet is being presented in this commit.
+  isOpen: boolean;
+  parent: ModalAnnounceScope | null;
+}
+
+export const ModalAnnounceContext = createContext<ModalAnnounceScope | null>(
+  null,
+);
+ModalAnnounceContext.displayName = 'ModalAnnounceContext';
+
+/** The modal route `modalAnnounce.ts` installs when a provider loads it. */
+export interface ModalRoute {
+  /** `useAnnounce` from inside `scope`: route `message` by where it is. */
+  announce(
+    scope: ModalAnnounceScope,
+    message: string,
+    politeness: AnnouncePoliteness,
+  ): void;
+  /** Speak inside `dialog` with the exposure, covered and hold rules. */
+  announceInModal(
+    dialog: HTMLDialogElement,
+    message: string,
+    politeness: AnnouncePoliteness,
+  ): void;
+  /** Withdraw an announcer's share, written or held. */
+  withdrawFromModalPending(
+    dialog: HTMLDialogElement,
+    message: string,
+    politeness: AnnouncePoliteness,
+  ): void;
+}
+
+let modalRoute: ModalRoute | null = null;
+
+/** Called once by `modalAnnounce.ts` as it loads. @internal */
+export function installModalRoute(route: ModalRoute): void {
+  modalRoute = route;
+}
+
+/** Whether `dialog` is open as a native modal right now. */
+export function isOpenModal(
+  dialog: HTMLDialogElement | null | undefined,
+): boolean {
+  return dialog != null && dialog.open && dialog.matches(':modal');
+}
+
+/**
+ * The nearest open native modal dialog enclosing `element` in the DOM, Astryx
+ * or app-rendered. Internal: the busy-announcement hook routes by its owner's
+ * element so a busy start inside a native modal an app renders without Astryx
+ * is still heard inside it (`spec:AST-086` FR14, last sentence).
+ */
+export function enclosingModalDialog(
+  element: Element | null | undefined,
+): HTMLDialogElement | null {
+  let dialog = element?.closest('dialog') ?? null;
+  while (dialog != null) {
+    if (isOpenModal(dialog)) {
+      return dialog;
+    }
+    dialog = dialog.parentElement?.closest('dialog') ?? null;
+  }
+  return null;
+}
+
+/**
+ * Speak `message` through the modal `dialog`'s own live region. With the
+ * modal route loaded (an Astryx modal is in the tree) the route applies its
+ * exposure, covered and hold rules; without it — a native modal an app
+ * renders without Astryx, and no Astryx modal anywhere — the words are
+ * written to the dialog while it is open as a modal, else to the shared
+ * channel. Internal: used by the busy-announcement hook.
+ */
+export function announceInModal(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness = 'polite',
+): void {
+  if (modalRoute != null) {
+    modalRoute.announceInModal(dialog, message, politeness);
+    return;
+  }
+  if (isOpenModal(dialog)) {
+    writeModalRegion(dialog, message, politeness);
+  } else {
+    announceMessage(message, politeness);
+  }
+}
+
+/**
+ * Withdraw one announcer's share of `message` from `dialog` before it is
+ * exposed, written to its region or held by the route for the dialog's
+ * close, so a busy start overtaken by its own outcome is never heard ahead
+ * of it inside a modal (`spec:AST-086` FR8). Internal: used by the
+ * busy-announcement hook's settle function.
+ */
+export function withdrawFromModalPending(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness = 'polite',
+): void {
+  if (modalRoute != null) {
+    modalRoute.withdrawFromModalPending(dialog, message, politeness);
+    return;
+  }
+  withdrawFromModalRegion(dialog, message, politeness);
+}
+
+/** What the route asks of the writer in the write frame. @internal */
+export interface ModalWriteGuard {
+  isExposed: () => boolean;
+  redirect: (joinedMessage: string) => void;
+}
+
+// Each in-dialog region's pending state: the messages written since its text
+// was last exposed, the frame that will expose them joined, the frame after
+// that (text set in one frame is not yet taken by assistive technology in
+// that same frame, so a message arriving before this frame runs still joins
+// rather than wiping the words), and the timer that clears them afterwards.
+interface ModalPending {
+  messages: string[];
+  // Announcers waiting on each message, by text: one withdrawing a message
+  // (a busy start overtaken by its outcome) leaves it for the others.
+  holders: Map<string, number>;
+  frame: number | null;
+  settleFrame: number | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const pendingByRegion = new WeakMap<HTMLElement, ModalPending>();
+
+function cancelPending(pending: ModalPending): void {
+  if (pending.frame != null) {
+    cancelAnimationFrame(pending.frame);
+  }
+  if (pending.settleFrame != null) {
+    cancelAnimationFrame(pending.settleFrame);
+  }
+  if (pending.timer != null) {
+    clearTimeout(pending.timer);
+  }
+}
+
+/** Words written to `target` that assistive technology has not had yet. */
+export function unexposedMessages(target: HTMLElement): string[] {
+  const pending = pendingByRegion.get(target);
+  if (pending == null) {
+    return [];
+  }
+  return pending.frame != null || pending.settleFrame != null
+    ? pending.messages
+    : [];
+}
+
+export function modalRegion(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): HTMLElement | null {
+  return dialog.querySelector<HTMLElement>(
+    `:scope > [${MODAL_REGION_ATTR}="${politeness}"]`,
+  );
+}
+
+/**
+ * The dialog's own live region for one urgency, created empty on first use
+ * and kept as a direct child of the dialog so it survives the dialog's
+ * content re-rendering.
+ */
+function ensureModalRegion(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): HTMLElement {
+  let region = modalRegion(dialog, politeness);
+  if (region == null) {
+    region = document.createElement('div');
+    region.setAttribute(MODAL_REGION_ATTR, politeness);
+    region.setAttribute(
+      'role',
+      politeness === 'assertive' ? 'alert' : 'status',
+    );
+    region.setAttribute('aria-live', politeness);
+    region.setAttribute('aria-atomic', 'true');
+    region.style.cssText = VISUALLY_HIDDEN_CSS;
+    dialog.appendChild(region);
+  }
+  return region;
+}
+
+/**
+ * Write `message` to the modal `dialog`'s own live region for `politeness`,
+ * joining it to messages written there that are not yet exposed and saying
+ * an identical repeat once; a holder count per text lets one announcer take
+ * its share back (`withdrawFromModalPending`). The region-writing core,
+ * shared by the full modal route and by the busy-announcement hook's fallback
+ * for a native modal an app renders without Astryx. `guard`, supplied by the
+ * route, re-checks exposure in the write frame and redirects the joined words
+ * when the dialog stopped being exposed meanwhile.
+ */
+export function writeModalRegion(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness,
+  guard?: ModalWriteGuard,
+): void {
+  const target = ensureModalRegion(dialog, politeness);
+  const unexposed = unexposedMessages(target);
+  const messages = unexposed.includes(message)
+    ? unexposed
+    : [...unexposed, message];
+  const previous = pendingByRegion.get(target);
+  const holders = new Map(
+    unexposed.length > 0 && previous != null ? previous.holders : [],
+  );
+  holders.set(message, (holders.get(message) ?? 0) + 1);
+  if (previous != null) {
+    cancelPending(previous);
+  }
+  // Clearing first guarantees the mutation is observed even when the new
+  // message equals the current text — some AT deduplicate identical content.
+  target.textContent = '';
+  const pending: ModalPending = {
+    messages,
+    holders,
+    frame: null,
+    settleFrame: null,
+    timer: null,
+  };
+  pending.frame = requestAnimationFrame(() => {
+    pending.frame = null;
+    if (guard != null && !guard.isExposed()) {
+      // Stopped being exposed between the call and this frame: the words go
+      // where they will be heard.
+      pendingByRegion.delete(target);
+      guard.redirect(pending.messages.join(' '));
+      return;
+    }
+    target.textContent = pending.messages.join(' ');
+    pending.settleFrame = requestAnimationFrame(() => {
+      pending.settleFrame = null;
+    });
+    pending.timer = setTimeout(() => {
+      target.textContent = '';
+      pendingByRegion.delete(target);
+    }, CLEAR_DELAY_MS);
+  });
+  pendingByRegion.set(target, pending);
+}
+
+/**
+ * Withdraw one announcer's share of `message` from `dialog`'s region before
+ * it is exposed — written but not yet spoken — so a busy start overtaken by
+ * its own outcome is never heard ahead of it (`spec:AST-086` FR8). The
+ * message stays while another announcer holds it. The region half of
+ * `withdrawFromModalPending`; the route also drops words it holds for the
+ * dialog's close.
+ */
+export function withdrawFromModalRegion(
+  dialog: HTMLDialogElement,
+  message: string,
+  politeness: AnnouncePoliteness = 'polite',
+): void {
+  const region = modalRegion(dialog, politeness);
+  const pending = region == null ? undefined : pendingByRegion.get(region);
+  if (
+    region != null &&
+    pending != null &&
+    (pending.frame != null || pending.settleFrame != null)
+  ) {
+    const count = pending.holders.get(message) ?? 0;
+    if (count > 1) {
+      pending.holders.set(message, count - 1);
+    } else if (count === 1) {
+      pending.holders.delete(message);
+      pending.messages = pending.messages.filter(text => text !== message);
+      if (pending.messages.length === 0) {
+        cancelPending(pending);
+        pendingByRegion.delete(region);
+        region.textContent = '';
+      } else if (pending.frame == null) {
+        // Already written this frame, not yet taken: show the rest.
+        region.textContent = pending.messages.join(' ');
+      }
+    }
+  }
+}
+
+/**
+ * Withdraw whatever the dialog's region for `politeness` holds or is about to
+ * hold, as an empty message does on the shared channel. A dialog that never
+ * announced has no region and nothing to clear.
+ */
+export function clearModalRegion(
+  dialog: HTMLDialogElement,
+  politeness: AnnouncePoliteness,
+): void {
+  const region = modalRegion(dialog, politeness);
+  if (region == null) {
+    return;
+  }
+  const pending = pendingByRegion.get(region);
+  if (pending != null) {
+    cancelPending(pending);
+    pendingByRegion.delete(region);
+  }
+  region.textContent = '';
 }
 
 /**
