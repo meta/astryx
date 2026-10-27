@@ -736,6 +736,52 @@
   }
 }
 
+/* ------------------------------------------------------- progress fill ---- */
+
+/* A copy of ProgressBar's track and fill (8px, muted track, accent fill, full
+   radius) whose fill moves with transform instead of width, on the same token
+   and curve core uses, so the pair differs only in technique. */
+.fillTrack {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.fillScale {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform var(--duration-medium) var(--ease-standard);
+}
+
+/* Core's own paint, in Core's layer, so a theme's rule for the
+   ProgressBar targets (the copy carries their classes) wins as it does on
+   the real bar. */
+@layer astryx-base {
+  .fillTrack {
+    background: var(--color-background-muted);
+  }
+
+  .fillScale {
+    background: var(--color-accent);
+  }
+}
+
+[dir='rtl'] .fillScale {
+  transform-origin: right center;
+}
+
+/* Forced colours paint the track and fill as Canvas: Core's fill keeps its
+   shape with a CanvasText outline, and so does the copy. */
+@media (forced-colors: active) {
+  .fillScale {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+}
+
 /* ---------------------------------------------------------------- tint ---- */
 
 /* The Table hover tint, at whatever duration and curve is being argued over.
@@ -749,7 +795,7 @@
 }
 
 .tintRow:hover {
-  background: var(--color-background-hover, var(--color-background-elevated));
+  background-color: var(--color-overlay-hover);
 }
 
 /* NavItem's hover tint (NavTintRig). Before: as shipped, it snaps on where
@@ -783,8 +829,11 @@
   transition-property: background-color;
 }
 
+/* The hover overlay token Astryx ships: the rule used to read two names no
+   theme defines, so the row never tinted and the pane showed nothing to
+   compare. */
 .noopRow:hover {
-  background: var(--color-background-hover, var(--color-background-elevated));
+  background-color: var(--color-overlay-hover);
 }
 
 /* ------------------------------------------------------------- origin ----- */
