@@ -59,6 +59,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   lazy,
   useMemo,
   useRef,
@@ -162,6 +163,11 @@ const styles = stylex.create({
     height: '1px',
     pointerEvents: 'none',
     visibility: 'visible',
+  },
+  // The headless context menu's anchor, at a client point: it lives in the
+  // factory's own container, outside the element (createContextMenu.tsx).
+  cursorAnchorAttached: {
+    position: 'fixed',
   },
   menu: {
     boxSizing: 'border-box',
@@ -357,7 +363,43 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  * </ContextMenu>
  * ```
  */
-export function ContextMenu({
+export function ContextMenu(props: ContextMenuProps) {
+  return <ContextMenuView {...props} />;
+}
+
+/**
+ * A context request the headless context menu forwards to the menu
+ * (createContextMenu.tsx, from gestures/contextRequest.ts): what made it,
+ * and the client point, none for a key or for `open()` without one.
+ * @internal
+ */
+export interface ContextMenuAttachedRequest {
+  readonly kind: 'hold' | 'pointer' | 'keyboard' | 'open';
+  readonly point: {readonly x: number; readonly y: number} | null;
+}
+
+/** @internal How the headless context menu opens and closes the menu. */
+export interface ContextMenuAttachedHandle {
+  open(request: ContextMenuAttachedRequest): void;
+  close(): void;
+}
+
+/**
+ * @internal The headless context menu's element, which is the trigger, and
+ * the handle it opens the menu through. With it, the menu renders no trigger
+ * of its own and listens to nothing: the factory owns the requests.
+ */
+export interface ContextMenuAttachment {
+  readonly element: HTMLElement;
+  readonly handleRef: React.Ref<ContextMenuAttachedHandle | null>;
+}
+
+/**
+ * @internal ContextMenu itself; with `attachment`, the menu of
+ * createContextMenu (spec:AST-107 FR8), so both render one menu.
+ */
+export function ContextMenuView({
+  attachment,
   children,
   menuWidth,
   size = 'md',
@@ -378,7 +420,7 @@ export function ContextMenu({
   onTouchCancel: onTouchCancelProp,
   'data-testid': testId,
   ...rest
-}: ContextMenuProps) {
+}: ContextMenuProps & {attachment?: ContextMenuAttachment}) {
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
@@ -417,6 +459,12 @@ export function ContextMenu({
   const liftAnchorRef = useRef<HTMLElement | null>(null);
   const layerAnchorIdRef = useRef('');
   const triggerRef = useRef<HTMLElement>(null);
+  // The headless context menu's element is the trigger.
+  useIsomorphicLayoutEffect(() => {
+    if (attachment != null) {
+      triggerRef.current = attachment.element;
+    }
+  }, [attachment]);
   // Element focused before the menu opened, restored when it closes so focus
   // does not fall to <body> after Escape or outside-click dismissal.
   const triggerFocusRef = useRef<HTMLElement | null>(null);
@@ -675,6 +723,32 @@ export function ContextMenu({
     [triggerAs],
   );
 
+  // Shows the menu once its anchor is placed, focusing its first row or, for
+  // a finger, the menu itself.
+  const showMenu = useCallback(
+    (focusEl: HTMLElement | null, focusTarget: 'first' | 'menu') => {
+      // Remember the element focused before opening so we can restore it on
+      // close (Escape or outside-click), instead of dropping focus to <body>.
+      triggerFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : focusEl;
+      if (usesBottomSheet) {
+        updateOpenState(true);
+      } else {
+        layer.show();
+        requestAnimationFrame(() => {
+          if (focusTarget === 'menu') {
+            listRef.current?.focus({preventScroll: true});
+          } else {
+            focusFirst();
+          }
+        });
+      }
+    },
+    [layer, focusFirst, listRef, updateOpenState, usesBottomSheet],
+  );
+
   const openAtLocalPoint = useCallback(
     (
       localX: number,
@@ -710,33 +784,49 @@ export function ContextMenu({
           anchorEl.style.removeProperty('translate');
         }
       }
-      // Remember the element focused before opening so we can restore it on
-      // close (Escape or outside-click), instead of dropping focus to <body>.
-      triggerFocusRef.current =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : focusEl;
-      if (usesBottomSheet) {
-        updateOpenState(true);
-      } else {
-        layer.show();
-        requestAnimationFrame(() => {
-          if (focusTarget === 'menu') {
-            listRef.current?.focus({preventScroll: true});
-          } else {
-            focusFirst();
-          }
-        });
-      }
+      showMenu(focusEl, focusTarget);
     },
-    [
-      layer,
-      focusFirst,
-      listRef,
-      updateOpenState,
-      usesBottomSheet,
-      triggerScale,
-    ],
+    [showMenu, triggerScale],
+  );
+
+  // The headless context menu's open (createContextMenu.tsx): the anchor sits
+  // at the client point in the factory's own container.
+  const openAtClientPoint = useCallback(
+    (point: {x: number; y: number}, focusTarget: 'first' | 'menu') => {
+      positionRef.current = {x: point.x, y: point.y};
+      const anchorEl = cursorAnchorRef.current;
+      if (anchorEl != null) {
+        anchorEl.style.left = `${point.x}px`;
+        anchorEl.style.top = `${point.y}px`;
+      }
+      showMenu(triggerRef.current, focusTarget);
+    },
+    [showMenu],
+  );
+
+  useImperativeHandle(
+    attachment?.handleRef,
+    () => ({
+      open: ({kind, point}: ContextMenuAttachedRequest) => {
+        const element = triggerRef.current;
+        if (element == null) {
+          return;
+        }
+        // A key's request, or open() without a point, opens at the element's
+        // bottom-left corner, as a keyboard open of ContextMenu does (menus-8).
+        const rect = element.getBoundingClientRect();
+        // A held finger's compatibility mousedown, sent mid-hold or at the
+        // lift, belongs to the press that opened the menu (spec:AST-094 FR33).
+        openingGestureRef.current = kind === 'hold' ? currentGesture() : null;
+        openAtClientPoint(
+          point ?? {x: rect.left, y: rect.bottom},
+          // A finger's open lights no row until it moves onto one.
+          kind === 'hold' ? 'menu' : 'first',
+        );
+      },
+      close: closeMenu,
+    }),
+    [closeMenu, openAtClientPoint],
   );
 
   // The box the cursor anchor's offsets are measured from: the trigger, which
@@ -1143,11 +1233,70 @@ export function ContextMenu({
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  const triggerElementRef = useMergedRefs(ref, triggerRef);
+  const cursorAnchorElementRef = useMergedRefs(cursorAnchorRef, layer.ref);
+
+  const cursorAnchor = (
+    <span
+      ref={cursorAnchorElementRef}
+      aria-hidden="true"
+      {...mergeProps(
+        stylex.props(
+          styles.cursorAnchor,
+          attachment != null && styles.cursorAnchorAttached,
+        ),
+        {
+          style: {
+            left: `${positionRef.current.x}px`,
+            top: `${positionRef.current.y}px`,
+          },
+        },
+      )}
+    />
+  );
+
+  const menuSurface = usesBottomSheet ? (
+    <Suspense fallback={null}>
+      <LazyMenuBottomSheet
+        isOpen={isOpen}
+        onOpenChange={updateOpenState}
+        label={sheetLabel}>
+        {renderedBottomSheetContent}
+      </LazyMenuBottomSheet>
+    </Suspense>
+  ) : (
+    layer.render(
+      <LayerDepthProvider>{renderedMenu}</LayerDepthProvider>,
+      liftPlacement != null
+        ? {
+            placement: liftPlacement.side,
+            alignment: liftPlacement.alignment,
+            offset: liftPlacement.gap,
+            xstyle: [popoverXstyle],
+          }
+        : {
+            placement: 'below',
+            alignment: 'start',
+            xstyle: [popoverXstyle, layerAnimations.below],
+          },
+    )
+  );
+
+  // The headless context menu's: no trigger of its own, and no listener; the
+  // factory forwards its element's context requests.
+  if (attachment != null) {
+    return (
+      <>
+        {cursorAnchor}
+        {menuSurface}
+      </>
+    );
+  }
 
   return (
     <>
       <TriggerElement
-        ref={useMergedRefs(ref, triggerRef)}
+        ref={triggerElementRef}
         {...triggerProps}
         // Under the touch model the trigger is a pressable surface of core's
         // one press machine (utils/pressFeedback.ts); the touch layer installs
@@ -1168,16 +1317,7 @@ export function ContextMenu({
             : []),
         )}>
         {children}
-        <span
-          ref={useMergedRefs(cursorAnchorRef, layer.ref)}
-          aria-hidden="true"
-          {...mergeProps(stylex.props(styles.cursorAnchor), {
-            style: {
-              left: `${positionRef.current.x}px`,
-              top: `${positionRef.current.y}px`,
-            },
-          })}
-        />
+        {cursorAnchor}
       </TriggerElement>
       {touchModes && !isDisabled ? (
         <ContextMenuTouchLayer
@@ -1190,32 +1330,7 @@ export function ContextMenu({
         />
       ) : null}
 
-      {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
-      ) : (
-        layer.render(
-          <LayerDepthProvider>{renderedMenu}</LayerDepthProvider>,
-          liftPlacement != null
-            ? {
-                placement: liftPlacement.side,
-                alignment: liftPlacement.alignment,
-                offset: liftPlacement.gap,
-                xstyle: [popoverXstyle],
-              }
-            : {
-                placement: 'below',
-                alignment: 'start',
-                xstyle: [popoverXstyle, layerAnimations.below],
-              },
-        )
-      )}
+      {menuSurface}
     </>
   );
 }

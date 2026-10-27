@@ -1,12 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {
   ContextMenu,
   ContextMenuItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioGroup,
   ContextMenuRadioItem,
+  createContextMenu,
+  useContextMenu,
 } from '@astryxdesign/core/ContextMenu';
 import {Divider} from '@astryxdesign/core/Divider';
 import {
@@ -657,4 +659,90 @@ export const TouchLongPressPopover: Story = {
       <div {...stylex.props(touchStyles.card)}>Hold for actions</div>
     </ContextMenu>
   ),
+};
+
+const headlessStyles = stylex.create({
+  list: {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    maxWidth: '320px',
+  },
+  row: {
+    padding: '12px 16px',
+    borderBottomWidth: '1px',
+    borderBottomStyle: 'solid',
+    borderBottomColor: '#e5e7eb',
+    userSelect: 'none',
+  },
+});
+
+/**
+ * Three rows of a list: the second carries a menu from the framework-agnostic
+ * createContextMenu, the third from useContextMenu. The list keeps only `li`
+ * children; the menus render outside it. The log below the list records what
+ * the page saw, for the interaction tests.
+ */
+function HeadlessRows() {
+  const plainRowRef = useRef<HTMLLIElement>(null);
+  const hookRowRef = useRef<HTMLLIElement>(null);
+  const [log, setLog] = useState<ReadonlyArray<string>>([]);
+  const record = (entry: string) => setLog(entries => [...entries, entry]);
+  useEffect(() => {
+    const row = plainRowRef.current;
+    if (row == null) {
+      return;
+    }
+    const menu = createContextMenu(row, {
+      label: 'Inbox actions',
+      onOpenChange: isOpen => record(isOpen ? 'open' : 'close'),
+      items: [
+        {label: 'Archive', onClick: () => record('archive')},
+        {label: 'Delete', variant: 'destructive', onClick: () => {}},
+      ],
+    });
+    return () => menu.destroy();
+  }, []);
+  useContextMenu(hookRowRef, {
+    label: 'Sent actions',
+    items: [{label: 'Forward', onClick: () => record('forward')}],
+  });
+  return (
+    <div>
+      <ul {...stylex.props(headlessStyles.list)} data-testid="headless-list">
+        <li tabIndex={0} {...stylex.props(headlessStyles.row)}>
+          Drafts
+        </li>
+        <li
+          ref={plainRowRef}
+          tabIndex={0}
+          data-testid="headless-row"
+          onClick={() => record('row-click')}
+          {...stylex.props(headlessStyles.row)}>
+          Inbox
+        </li>
+        <li
+          ref={hookRowRef}
+          tabIndex={0}
+          data-testid="hook-row"
+          {...stylex.props(headlessStyles.row)}>
+          Sent
+        </li>
+      </ul>
+      <output data-testid="headless-log">{log.join(',')}</output>
+    </div>
+  );
+}
+
+export const HeadlessOnAListRow: Story = {
+  name: 'Headless / createContextMenu on a list row',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'createContextMenu attaches ContextMenu to an element that is already on the page, here a list row, without React; useContextMenu does the same from a component. A held finger, a right click, Shift+F10 or the context-menu key opens it.',
+      },
+    },
+  },
+  render: () => <HeadlessRows />,
 };

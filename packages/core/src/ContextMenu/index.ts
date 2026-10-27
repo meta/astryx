@@ -3,7 +3,8 @@
 
 /**
  * @file index.ts
- * @output Exports ContextMenu, ContextMenuItem and related types
+ * @output Exports ContextMenu, ContextMenuItem and related types, and the
+ *   headless createContextMenu and useContextMenu (spec:AST-107 FR8)
  * @position Public API entry point
  */
 
@@ -16,6 +17,18 @@ export {
   type ContextMenuOption,
 } from './ContextMenu';
 export type {AdaptivePresentation as MenuPresentation} from '../hooks/useAdaptivePresentation';
+export {
+  createContextMenu,
+  type ContextMenuContentRenderer,
+  type ContextMenuController,
+  type ContextMenuPoint,
+  type CreateContextMenuOptions,
+} from './createContextMenu';
+export {
+  useContextMenu,
+  type UseContextMenuOptions,
+  type UseContextMenuResult,
+} from './useContextMenu';
 
 export {
   DropdownMenuItem as ContextMenuItem,
