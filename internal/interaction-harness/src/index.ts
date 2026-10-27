@@ -14,6 +14,8 @@
 
 export * from './curves';
 export * from './math';
+export * from './output';
 export * from './scripts';
 export * from './story';
+export * from './storyboard';
 export * from './touch';

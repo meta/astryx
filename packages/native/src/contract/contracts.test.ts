@@ -161,7 +161,41 @@ describe('native contracts', () => {
     // `string | boolean`: words, or on (the name) and off.
     expect(avatar!.core.tooltip?.type).toEqual({kind: 'textOrBoolean'});
     expect(avatar!.webOnly.map(prop => prop.name)).toEqual(
-      expect.arrayContaining(['target', 'rel', 'status', 'as']),
+      expect.arrayContaining(['target', 'rel', 'as']),
+    );
+  });
+
+  it('gives Avatar a status slot and AvatarStatusDot its variants and label', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const avatar = contracts.find(contract => contract.name === 'Avatar');
+    expect(avatar!.core.status?.type).toEqual({kind: 'content'});
+    const dot = contracts.find(contract => contract.name === 'AvatarStatusDot');
+    expect(dot).toBeDefined();
+    expect(dot!.core.variant?.type).toEqual({
+      kind: 'enum',
+      values: ['success', 'neutral', 'error'],
+    });
+    expect(dot!.core.label?.type).toEqual({kind: 'string'});
+    expect(dot!.webOnly.map(prop => prop.name)).toContain('icon');
+  });
+
+  it('gives Thumbnail its image, names, states, a press, and a remove action', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const thumbnail = contracts.find(contract => contract.name === 'Thumbnail');
+    expect(thumbnail).toBeDefined();
+    expect(Object.keys(thumbnail!.core)).toEqual([
+      'src',
+      'alt',
+      'label',
+      'onRemove',
+      'onClick',
+      'isLoading',
+      'isDisabled',
+      'showRemoveOn',
+    ]);
+    expect(thumbnail!.core.onRemove?.type).toEqual({kind: 'fn', args: []});
+    expect(thumbnail!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining(['xstyle', 'className', 'style', 'data-testid']),
     );
   });
 
