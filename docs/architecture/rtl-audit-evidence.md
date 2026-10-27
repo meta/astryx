@@ -25,6 +25,7 @@ applies_to:
   ]
 verified_by:
   [
+    .github/scripts/rtl-audit-coarse-hit.browser.test.mjs,
     .github/scripts/rtl-audit-coverage.test.mjs,
     .github/scripts/weekly-rtl-summary.test.mjs,
     .github/scripts/rtl-join.test.mjs,
@@ -68,7 +69,7 @@ deciding_specs: []
 | System behavior         | Every component in the live roster is accounted for; available in-scope stories are rendered LTR and RTL. Results distinguish measured, verified N/A, coverage gap, and behavior failure. Lint and rendered audit prove different claims.                                                                                                                                           |
 | End-user impact         | People reading RTL interfaces are protected by evidence that actually observed mirroring, ordering, placement, geometry, and behavior, rather than by a green report that measured nothing.                                                                                                                                                                                         |
 | Builder impact          | A new or changed component must either be measured by an applicable check or carry an explicit gap; behavior failures have no allowlist. Verified-N/A and pre-existing-debt admission await owner decisions (OQ1, OQ2).                                                                                                                                                             |
-| Compatibility/readiness | INV12–INV16 specify D1 fixture metadata and stable selection, not shipped enforcement. Component-wide N/A admission, historical debt, D7 size enforcement, and required-check rollout remain unresolved.                                                                                                                                                                            |
+| Compatibility/readiness | INV12–INV16 specify D1 fixture metadata and stable selection, not shipped enforcement. Component-wide N/A admission, historical debt, and required-check rollout remain unresolved; D7 enforces each configured native target minimum.                                                                                                                                              |
 | Review checks           | Reject lint standing in for rendered evidence (INV1); an allowlist that relabels a behavior failure (INV3); all-N/A credited as RTL-ready (INV4); a component dropping from the roster because its story moved (INV5); a new dimension without a red/green mutation receipt (INV9); a D1 exclusion on directional controls/cues or missing review-facing disclosure (INV12, INV16). |
 | Governing rules         | No deciding system spec; `architecture:knowledge-contracts` evidence-freshness and human-decision rules apply.                                                                                                                                                                                                                                                                      |
 
@@ -164,8 +165,9 @@ Lint and rendered audit are complementary:
 - **INV10 — Touch-target evidence includes size and alignment.** For a coarse-
   pointer target, proving that the target center matches the visible control is
   insufficient. Browser evidence MUST also measure the effective/native target
-  against the owning component's stated minimum size. Current D7 enforcement
-  checks centering and hit-testing only; size enforcement is an open gap.
+  against the owning component's stated minimum size. D7 enforces both native
+  dimensions alongside centering and hit-testing using each target's configured
+  minimum; it does not assign a universal minimum.
 - **INV11 — Audit state is not product intent.** This architecture owns evidence
   admission and freshness. The human meaning of correct bidirectional behavior
   belongs in `design:bidirectionality`; component contracts own local semantics,
@@ -234,20 +236,21 @@ The audit's `D` identifiers name repository-specific checks, not an external
 internationalization standard. Automatic discovery covers D1, D5, and D6; curated
 story targets supply the other dimensions.
 
-| ID  | Observed relationship                                                        |
-| --- | ---------------------------------------------------------------------------- |
-| D1  | Directional icons mirror or swap once.                                       |
-| D2  | Previous/next controls exchange horizontal order.                            |
-| D3  | Directional interaction or scroll behavior follows the active direction.     |
-| D4  | An overlay or positioned affordance follows its logical side.                |
-| D5  | Positioned elements mirror relative to their parent.                         |
-| D6  | Contextual directional decorations receive exactly one bidi treatment.       |
-| D7  | Coarse-pointer input centers and hit-testing align with the visible wrapper. |
-| D8  | Logical inline padding resolves to mirrored physical edges.                  |
-| D9  | Grouped corners follow the declared logical inline side.                     |
+| ID  | Observed relationship                                                                             |
+| --- | ------------------------------------------------------------------------------------------------- |
+| D1  | Directional icons mirror or swap once.                                                            |
+| D2  | Previous/next controls exchange horizontal order.                                                 |
+| D3  | Directional interaction or scroll behavior follows the active direction.                          |
+| D4  | An overlay or positioned affordance follows its logical side.                                     |
+| D5  | Positioned elements mirror relative to their parent.                                              |
+| D6  | Contextual directional decorations receive exactly one bidi treatment.                            |
+| D7  | Coarse-pointer native input dimensions, centers, and hit-testing meet the owning target contract. |
+| D8  | Logical inline padding resolves to mirrored physical edges.                                       |
+| D9  | Grouped corners follow the declared logical inline side.                                          |
 
-D7's current check does not establish target-size conformance. INV10 owns the
-required evidence distinction; the component/composition contract owns the minimum.
+D7 retains both the native input box and the visible wrapper box. Its
+`minimumTargetSize` width and height come from the curated target's owning
+component/composition contract; absent or invalid dimensions produce an error.
 
 ## Owning code
 
@@ -302,7 +305,7 @@ this record narrows the remaining decision to the options below.
 | INV7             | PR workflow scope tests and weekly-summary tests                                                      | A changed component is skipped or full-roster debt is mistaken for PR-only evidence                                                                                                                                                                    |
 | INV8             | automatic/curated applicability tests                                                                 | A newly applicable dimension leaves a verified-N/A declaration current                                                                                                                                                                                 |
 | INV9             | red/green mutation receipts for each new dimension                                                    | A new dimension has only passing self-confirming tests                                                                                                                                                                                                 |
-| INV10            | none for size today; D7 covers center/hit in LTR/RTL, sm/md                                           | Removing the component's minimum native hit area remains green because D7 never checks size                                                                                                                                                            |
+| INV10            | native width/height mutation fixtures plus D7 center/hit checks in LTR/RTL, sm/md                     | An undersized native target stays green despite conforming wrapper geometry                                                                                                                                                                            |
 | INV12–INV16      | candidate fixture-policy tests and built Storybook mutations; not enforced by the base implementation | reordering the generated story index changes D1; malformed/missing metadata silently skips; a fixture opt-out skips D5/D6 or closes a component gap; an exclusion on directional controls/cues survives semantic review or is omitted from the summary |
 
 ### Implementation state
@@ -329,10 +332,6 @@ human review of an added or changed exemption.
 
 ### Current enforcement gaps
 
-- D7 measures hit-testing and center alignment in LTR/RTL at sm/md under a coarse
-  pointer, but does not fail when the native target falls below the owning
-  component's minimum size. Removing the coarse native-input expansion leaves
-  that center/hit check passing. Size evidence must include the native input box.
 - The reason-only verified-N/A registry becomes stale when an automatic/curated
   dimension becomes applicable, but does not yet bind evidence to source/helper/
   story bytes.

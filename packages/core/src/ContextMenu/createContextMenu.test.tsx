@@ -16,7 +16,7 @@
 import {act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {stableClassName} from '../naming';
+import {dataAttr, stableClassName} from '../naming';
 import {
   createContextMenu,
   type ContextMenuController,
@@ -88,6 +88,12 @@ const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
 /** Whether the menu's popover is showing (the popover mocks above). */
 const isOpen = () =>
   menu()?.closest('[popover]')?.hasAttribute('popover-open') === true;
+/** Whether the menu inside `root` is showing (the popover mocks above). */
+const isOpenIn = (root: ParentNode) =>
+  root
+    .querySelector('[role="menu"]')
+    ?.closest('[popover]')
+    ?.hasAttribute('popover-open') === true;
 const rows = () =>
   Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
 
@@ -140,6 +146,66 @@ describe('createContextMenu', () => {
     await waitFor(() => expect(isOpen()).toBe(false));
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
     expect(document.activeElement).toBe(element);
+  });
+
+  it('Home and End jump to the first and last rows (spec:AST-107 FR8)', async () => {
+    attach({items: [{label: 'Archive'}, {label: 'Move'}, {label: 'Delete'}]});
+    element.focus();
+    press(element, 'F10', {shiftKey: true});
+    await waitFor(() => expect(document.activeElement).toBe(rows()[0]));
+    press(rows()[0], 'End');
+    expect(document.activeElement).toBe(rows()[2]);
+    press(rows()[2], 'Home');
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  it('focus starts on the first enabled row (spec:AST-107 FR8)', async () => {
+    attach({items: [{label: 'Archive', isDisabled: true}, {label: 'Delete'}]});
+    element.focus();
+    press(element, 'F10', {shiftKey: true});
+    expect(isOpen()).toBe(true);
+    await waitFor(() =>
+      expect(document.activeElement?.textContent).toContain('Delete'),
+    );
+  });
+
+  it("lives inside the element's dialog, where a modal dialog leaves it usable", () => {
+    attach({items: [{label: 'Archive'}]});
+    // The element moves into a dialog after the menu is attached.
+    const dialog = document.createElement('dialog');
+    document.body.append(dialog);
+    dialog.append(element);
+    rightClick(element);
+    expect(isOpen()).toBe(true);
+    const host = document.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentElement).toBe(dialog);
+    expect(element.contains(host)).toBe(false);
+    dialog.remove();
+  });
+
+  it("lives inside the element's popover, so opening it leaves that popover open", () => {
+    attach({items: [{label: 'Archive'}]});
+    const popover = document.createElement('div');
+    popover.setAttribute('popover', 'auto');
+    document.body.append(popover);
+    popover.append(element);
+    rightClick(element);
+    const host = document.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentElement).toBe(popover);
+    popover.remove();
+  });
+
+  it("lives inside the element's shadow root, so the menu stays in the element's tree", () => {
+    attach({items: [{label: 'Archive'}]});
+    const shadowHost = document.createElement('div');
+    document.body.append(shadowHost);
+    const shadow = shadowHost.attachShadow({mode: 'open'});
+    shadow.append(element);
+    rightClick(element);
+    expect(isOpenIn(shadow)).toBe(true);
+    const host = shadow.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentNode).toBe(shadow);
+    shadowHost.remove();
   });
 
   it('choosing a row runs it and closes the menu', async () => {

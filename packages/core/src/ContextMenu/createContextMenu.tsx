@@ -13,19 +13,36 @@
  * @position Public factory, framework-agnostic for its caller: ContextMenu's
  *   own menu renders in an internal React root, so a page without React can
  *   attach one, and the two share one implementation. useContextMenu is its
- *   React wrapper (spec:AST-107 FR6)
+ *   React wrapper (spec:AST-107 FR6): it hands the factory a `render` and
+ *   passes later options through updateContextMenu
+ *
+ * The `render` slot publishes what the menu's rows read from inside the menu
+ * (its row context, its open state, its layer and layer depth) for its
+ * container, so content a React caller portals into the container keeps the
+ * rows' behavior: a choice closes the menu, a sub-menu drills in or flies out
+ * above it, and a layer in the rows takes Escape before the menu.
  *
  * The options mean what ContextMenu's props of the same names mean. The menu
  * is ContextMenu's: its rows, keys, typeahead, sub-menus, dismissal and
- * focus return. It lives in a container at the end of the body that carries
- * the theme attributes of the element's themed ancestor, so the element's
- * own markup is untouched (a `li` row keeps its list valid) and an event
- * inside the menu never passes through the element.
+ * focus return. It lives in a container that carries the theme attributes of
+ * the element's themed ancestor, at the end of the element's nearest dialog
+ * or popover, or of its shadow root or the body: the element's own markup is
+ * untouched (a `li` row keeps its list valid), an event inside the menu never
+ * passes through the element, a modal dialog around the element leaves the
+ * menu usable, opening it leaves an open popover around the element open, and
+ * a shadow root's styles reach it.
  */
 
-import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
+import {use, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
+import {
+  DropdownMenuContext,
+  DropdownMenuRootOpenContext,
+  type DropdownMenuContextValue,
+} from '../DropdownMenu/DropdownMenuContext';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {LayerContext, type LayerContextValue} from '../Layer/LayerContext';
+import {LayerDepthContext} from '../Layer/LayerDepthContext';
 import {dataAttr} from '../naming';
 import {
   attachContextMenuRequests,
@@ -83,18 +100,91 @@ export interface ContextMenuController {
   destroy(): void;
 }
 
-/** @internal The React wrapper's extras: React content and a provider bridge. */
-export interface ContextMenuInternals {
-  reactContent?: ReactNode;
-  wrap?: (menu: ReactNode) => ReactNode;
+/**
+ * @internal What a menu's rows read from inside the menu, published for the
+ * `render` slot's container.
+ */
+export interface ContextMenuRowsContext {
+  readonly menu: DropdownMenuContextValue | null;
+  readonly isOpen: boolean | null;
+  readonly layer: LayerContextValue | null;
+  /** The layer depth inside the menu, which ranks a layer in its rows above it. */
+  readonly depth: number;
 }
 
-/** @internal createContextMenu with the hook's extras, and a way to update. */
-export interface InternalContextMenuController extends ContextMenuController {
-  update(
-    options: CreateContextMenuOptions | ContextMenuSharedOptions,
-    internals?: ContextMenuInternals,
-  ): void;
+interface RowsContextEntry {
+  value: ContextMenuRowsContext;
+  readonly listeners: Set<() => void>;
+}
+
+const rowsContexts = new WeakMap<HTMLElement, RowsContextEntry>();
+
+function publishRowsContext(
+  container: HTMLElement,
+  value: ContextMenuRowsContext,
+): void {
+  const entry = rowsContexts.get(container);
+  if (entry == null) {
+    rowsContexts.set(container, {value, listeners: new Set()});
+    return;
+  }
+  entry.value = value;
+  for (const listener of entry.listeners) {
+    listener();
+  }
+}
+
+/** @internal The rows context published for `container`, while its menu is open. */
+export function readRowsContext(
+  container: HTMLElement,
+): ContextMenuRowsContext | null {
+  return rowsContexts.get(container)?.value ?? null;
+}
+
+/** @internal Calls `listener` when `container`'s rows context changes. */
+export function subscribeRowsContext(
+  container: HTMLElement,
+  listener: () => void,
+): () => void {
+  const entry = rowsContexts.get(container);
+  entry?.listeners.add(listener);
+  return () => {
+    entry?.listeners.delete(listener);
+  };
+}
+
+/** The React wrapper's way in: later options, and its Core providers. */
+interface ContextMenuWrapperAccess {
+  update(options: CreateContextMenuOptions): void;
+  bridge(wrap: (menu: ReactNode) => ReactNode): void;
+}
+
+const wrapperAccess = new WeakMap<
+  ContextMenuController,
+  ContextMenuWrapperAccess
+>();
+
+/**
+ * @internal Passes later options to a menu createContextMenu attached
+ * (useContextMenu's path): the factory takes its options once, and creating
+ * it again would close a menu that is open.
+ */
+export function updateContextMenu(
+  controller: ContextMenuController,
+  options: CreateContextMenuOptions,
+): void {
+  wrapperAccess.get(controller)?.update(options);
+}
+
+/**
+ * @internal Carries a React caller's Core providers (theme, layer, link,
+ * i18n) into the menu's own root (useContextMenu's path).
+ */
+export function bridgeContextMenu(
+  controller: ContextMenuController,
+  wrap: (menu: ReactNode) => ReactNode,
+): void {
+  wrapperAccess.get(controller)?.bridge(wrap);
 }
 
 const THEME_ATTRIBUTES = ['data-theme', dataAttr('theme')] as const;
@@ -114,9 +204,40 @@ function mirrorTheme(host: HTMLElement, element: Element): void {
   }
 }
 
-/** The `render` option's content: its callback fills a container. */
+/**
+ * Where the menu's container belongs, in the element's own tree: the end of
+ * its nearest dialog or popover (a modal dialog leaves everything outside it
+ * inert, and a menu outside an open popover would dismiss it), or of its
+ * shadow root (whose styles reach the menu there), or of the body.
+ */
+function containerParentFor(element: Element): ParentNode {
+  const scope = element.parentElement?.closest('dialog, [popover]');
+  if (scope != null) {
+    return scope;
+  }
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root : element.ownerDocument.body;
+}
+
+/**
+ * The `render` option's content: its callback fills a container, and the
+ * container's rows context is published for content a React caller portals
+ * into it.
+ */
 function RenderedContent({render}: {render: ContextMenuContentRenderer}) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const menu = use(DropdownMenuContext);
+  const isOpen = use(DropdownMenuRootOpenContext);
+  const layer = use(LayerContext);
+  const depth = use(LayerDepthContext);
+  // Declared first, so the container's rows context is out before `render`
+  // runs, and follows the menu after.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (container != null) {
+      publishRowsContext(container, {menu, isOpen, layer, depth});
+    }
+  }, [menu, isOpen, layer, depth]);
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (container == null) {
@@ -126,6 +247,7 @@ function RenderedContent({render}: {render: ContextMenuContentRenderer}) {
     return () => {
       cleanup?.();
       container.replaceChildren();
+      rowsContexts.delete(container);
     };
   }, [render]);
   return <div ref={containerRef} />;
@@ -140,7 +262,6 @@ interface Forwarded {
 interface AttachedMenuProps {
   element: HTMLElement;
   options: CreateContextMenuOptions;
-  internals: ContextMenuInternals;
   forwarded: Forwarded | null;
   onOpenChange: (isOpen: boolean) => void;
 }
@@ -149,7 +270,6 @@ interface AttachedMenuProps {
 function AttachedMenu({
   element,
   options,
-  internals,
   forwarded,
   onOpenChange,
 }: AttachedMenuProps) {
@@ -188,9 +308,7 @@ function AttachedMenu({
     <ContextMenuView
       {...shared}
       menuContent={
-        internals.reactContent !== undefined ? (
-          internals.reactContent
-        ) : options.render !== undefined && isMenuOpen ? (
+        options.render !== undefined && isMenuOpen ? (
           <RenderedContent render={options.render} />
         ) : null
       }>
@@ -206,31 +324,32 @@ function AttachedMenu({
  */
 export function createContextMenu(
   element: HTMLElement,
-  options: CreateContextMenuOptions,
+  initialOptions: CreateContextMenuOptions,
 ): ContextMenuController {
-  return createInternalContextMenu(element, options);
-}
-
-/** @internal createContextMenu, plus the React wrapper's update. */
-export function createInternalContextMenu(
-  element: HTMLElement,
-  initialOptions: CreateContextMenuOptions | ContextMenuSharedOptions,
-  initialInternals: ContextMenuInternals = {},
-): InternalContextMenuController {
   const doc = element.ownerDocument;
-  let options = initialOptions as CreateContextMenuOptions;
-  let internals = initialInternals;
+  let options = initialOptions;
+  let wrap: ((menu: ReactNode) => ReactNode) | null = null;
   let forwarded: Forwarded | null = null;
   let seq = 0;
   let isOpen = false;
   let isDestroyed = false;
 
-  // A child of the body, not of the element: an event inside the menu never
-  // passes through the element on its way to the document.
+  // Not a child of the element: an event inside the menu never passes
+  // through the element on its way to the document.
   const host = doc.createElement('div');
   host.setAttribute(dataAttr('context-menu-host'), '');
-  mirrorTheme(host, element);
-  doc.body.append(host);
+  // Each open first moves the container to where the element is now: the
+  // end of its dialog or popover, or of its shadow root or the body
+  // (containerParentFor). A shown menu stays put, since moving a node hides
+  // the popovers in it.
+  const placeHost = () => {
+    mirrorTheme(host, element);
+    const parent = containerParentFor(element);
+    if (parent.lastElementChild !== host) {
+      parent.append(host);
+    }
+  };
+  placeHost();
   const root: Root = createRoot(host);
 
   const onOpenChange = (next: boolean) => {
@@ -249,17 +368,19 @@ export function createInternalContextMenu(
       <AttachedMenu
         element={element}
         options={options}
-        internals={internals}
         forwarded={forwarded}
         onOpenChange={onOpenChange}
       />
     );
-    root.render(internals.wrap != null ? internals.wrap(menu) : menu);
+    root.render(wrap != null ? wrap(menu) : menu);
   };
 
   const forward = (request: ContextMenuForwarded) => {
     if (isDestroyed) {
       return;
+    }
+    if (request !== 'close' && !isOpen) {
+      placeHost();
     }
     seq += 1;
     forwarded = {seq, request};
@@ -273,7 +394,7 @@ export function createInternalContextMenu(
   );
   render();
 
-  return {
+  const controller: ContextMenuController = {
     open(at) {
       requests.open(at);
     },
@@ -297,11 +418,20 @@ export function createInternalContextMenu(
         element.focus();
       }
     },
-    update(nextOptions, nextInternals = internals) {
-      options = nextOptions as CreateContextMenuOptions;
-      internals = nextInternals;
+  };
+  wrapperAccess.set(controller, {
+    update(nextOptions) {
+      options = nextOptions;
       requests.update({isDisabled: options.isDisabled});
       render();
     },
-  };
+    bridge(nextWrap) {
+      if (nextWrap === wrap) {
+        return;
+      }
+      wrap = nextWrap;
+      render();
+    },
+  });
+  return controller;
 }
