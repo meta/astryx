@@ -185,6 +185,32 @@ function useSortedNames(names: string[]) {
 }
 ```
 
+### `@astryx/no-core-internal-import`
+
+Reports imports of Core's internal subpaths (`@astryxdesign/core/internal` and
+`@astryxdesign/core/internal/*`), which are reserved for Astryx's own packages
+and sit outside the compatibility promise (`spec:AST-017` FR21), and of Core's
+internal, gesture, motion and touch-support source (`@astryxdesign/core/gestures`,
+`@astryxdesign/core/motion` and their subpaths, or any path into
+`core/src/{internal,gestures,motion,touch-support}`), which a package outside Core and Lab reaches only through public entries
+(`architecture:react-component-runtime` INV13). It checks `import`,
+`export … from`, `import()`, `require()` and `typeof import()`, a dynamic
+import or require named by a string or a template literal with no expressions. The repo config
+turns it on for every linted file outside `packages/core` and `packages/lab`
+(the global ignores still leave some scripts unlinted), so only Core and Lab
+may import them.
+
+An internal subpath is one file, `packages/core/src/internal/<name>.ts`, whose
+header says it is reserved for Astryx's own packages, undocumented, and outside
+the compatibility promise. It gets its own explicit entry in Core's
+`package.json` `exports` (`"./internal/<name>": {source, types, default}`, never
+a wildcard), listed with the file-module subpaths in `scripts/sync-exports.js`
+(`FILE_MODULE_SUBPATH_EXPORTS`).
+
+It is a custom rule, not a `no-restricted-imports` block: flat config overrides
+a same-named rule per file, so a repo-wide block would undo the layer blocks
+that already use `no-restricted-imports`.
+
 ### `@astryx/no-hardcoded-styles`
 
 Detects hardcoded CSS values in `stylex.create()` that should use Astryx tokens:

@@ -126,6 +126,16 @@ review. It does not claim that one automated pass proves complete accessibility.
   report only; `required` expectations gate new or changed behavior at a layer that
   can objectively verify them. A coverage score, tool capability, or ease of
   automation MUST NOT promote or demote either class.
+  WCAG 2.5.2 (pointer cancellation) is met by cancelling a press that slides
+  off its control before the lift, with one narrow exception: an instantly
+  reversible single-step toggle, where a second activation undoes the first,
+  may complete on a lift after the pointer slid off, meeting 2.5.2 through its
+  undo path. The exception covers Switch, Checkbox, and CheckboxListItem. It
+  does not cover Radio, SegmentedControl, DropdownMenuCheckboxItem (whose menu
+  rows act on nothing after a lift off the row), SelectableCard, or any
+  control that selects rather than toggles; other controls join only by a
+  later decision, and every other control that activates on a lift keeps
+  slide-off cancelling (DEC-5).
 
 ### Completeness and review
 
@@ -221,14 +231,14 @@ or CI gate. Those changes follow in implementation work governed by this record.
 
 ## Verification
 
-| Contract  | Verification                                                                  | Representative states                                                                                     | Mutation or failure expectation                                                                                                                      |
-| --------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR3   | Source and ownership review against WCAG 2.2, APG, and current Astryx records | component-owned A/AA criterion; page-owned criterion; one component with multiple parts                   | A draft WCAG 3.0 statement gates CI, an APG example is treated as universal WCAG, or one component is forced into one pattern                        |
-| FR4–FR9   | Contract schema and runner self-tests                                         | required/advisory; unit/DOM/tree/axe/browser/manual/AT; toggle round trip; component-specific callback    | A check lacks a source or layer, passes from an unsupported harness, depends on private markup, or one-way behavior hides a reverse-path failure     |
-| FR10–FR12 | Completed checklist, positive/negative fixture suite, and independent review  | simple control; composite widget; overlay; page-owned criterion                                           | A dimension disappears silently, a mutation still passes, or review finds an unrecorded contract-encodable requirement                               |
-| FR15      | Adoption review against the component's current role claims                   | a disclosure set adopting required parts only; a composite control adopting arrow keys; a named exception | A required part is skipped without the owning record's reason, or arrow keys are added to independently focusable controls without a named exception |
-| FR13–FR14 | Pull-request template check plus id migration tests                           | new pattern; narrowed expectation; file-only refactor                                                     | Reviewers cannot understand the test from the PR, or an id change orphans bindings and gaps                                                          |
-| Platform  | Real-browser and AST-009 evidence-boundary checks                             | focus navigation; accessibility tree; forced colors; announcement timing                                  | jsdom or a tree snapshot is credited with pixels, browser behavior, or spoken output it cannot observe                                               |
+| Contract  | Verification                                                                  | Representative states                                                                                                                                                                                                 | Mutation or failure expectation                                                                                                                                                                                                        |
+| --------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR3   | Source and ownership review against WCAG 2.2, APG, and current Astryx records | component-owned A/AA criterion; page-owned criterion; one component with multiple parts                                                                                                                               | A draft WCAG 3.0 statement gates CI, an APG example is treated as universal WCAG, or one component is forced into one pattern                                                                                                          |
+| FR4–FR9   | Contract schema and runner self-tests                                         | required/advisory; unit/DOM/tree/axe/browser/manual/AT; toggle round trip; component-specific callback; a slide-off lift on Switch, Checkbox, CheckboxListItem, Radio, SegmentedControl, and DropdownMenuCheckboxItem | A check lacks a source or layer, passes from an unsupported harness, depends on private markup, or one-way behavior hides a reverse-path failure, a slide-off lift that completes a lift-activated control outside the exception fails |
+| FR10–FR12 | Completed checklist, positive/negative fixture suite, and independent review  | simple control; composite widget; overlay; page-owned criterion                                                                                                                                                       | A dimension disappears silently, a mutation still passes, or review finds an unrecorded contract-encodable requirement                                                                                                                 |
+| FR15      | Adoption review against the component's current role claims                   | a disclosure set adopting required parts only; a composite control adopting arrow keys; a named exception                                                                                                             | A required part is skipped without the owning record's reason, or arrow keys are added to independently focusable controls without a named exception                                                                                   |
+| FR13–FR14 | Pull-request template check plus id migration tests                           | new pattern; narrowed expectation; file-only refactor                                                                                                                                                                 | Reviewers cannot understand the test from the PR, or an id change orphans bindings and gaps                                                                                                                                            |
+| Platform  | Real-browser and AST-009 evidence-boundary checks                             | focus navigation; accessibility tree; forced colors; announcement timing                                                                                                                                              | jsdom or a tree snapshot is credited with pixels, browser behavior, or spoken output it cannot observe                                                                                                                                 |
 
 ### Completion criteria
 
@@ -298,6 +308,19 @@ exception rather than losing it.
 Rejected: adopting every part of a pattern wherever its role appears (arrow keys on
 independent controls); adopting nothing until a component matches an APG example in
 full.
+
+### DEC-5 — Reversible toggles may complete after a slide-off
+
+**Reference:** `spec:AST-020/DEC-5`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A Switch or Checkbox that completes on a lift after the finger slid off can be
+undone by activating it again, which WCAG 2.5.2 accepts, and it matches
+UIKit's UISwitch. The exception names its kinds so it cannot widen without a
+decision; controls that select, such as Radio and SegmentedControl, keep
+slide-off cancelling because a second activation does not undo them.
+
+Rejected: slide-off cancelling for every control without exception.
 
 ## Open questions
 
