@@ -142,6 +142,109 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
   await page.evaluate(() => window.__lift.dispose());
 });
 
+test('a lifted list item leaves its list valid: an li holds its spot, so the list keeps only li children, at the item\u2019s size whatever the page styles an li with', async ({
+  page,
+}) => {
+  await open(page);
+  // A rule that would make any other li taller than the row it stands for.
+  await page.addStyleTag({
+    content: 'li:not([id]) { min-height: 100px; padding: 40px 0; }',
+  });
+  const row2 = await page.evaluate(() => {
+    const r = document.getElementById('row2')?.getBoundingClientRect();
+    return r == null ? null : {height: r.height};
+  });
+  const row3Before = await page.evaluate(
+    () => document.getElementById('row3')?.getBoundingClientRect().top ?? -1,
+  );
+  await page.evaluate(() => window.__lift.lift('row2', 0.2));
+  await page.waitForTimeout(400);
+  const read = await page.evaluate(() => {
+    const list = document.getElementById('list');
+    const placeholder = document.querySelector('[data-lift-placeholder]');
+    return {
+      children: [...(list?.children ?? [])].map(child => child.localName),
+      placeholder:
+        placeholder == null
+          ? null
+          : {
+              tag: placeholder.localName,
+              parent: placeholder.parentElement?.id ?? null,
+              hidden: placeholder.getAttribute('aria-hidden'),
+              height: placeholder.getBoundingClientRect().height,
+            },
+      row3: document.getElementById('row3')?.getBoundingClientRect().top ?? -1,
+    };
+  });
+  const detail = JSON.stringify(read);
+  expect(read.children, detail).toEqual(['li', 'li', 'li', 'li', 'li']);
+  expect(read.placeholder, detail).toEqual({
+    tag: 'li',
+    parent: 'list',
+    hidden: 'true',
+    height: row2?.height ?? -1,
+  });
+  expect(read.row3, detail).toBe(row3Before);
+  await page.evaluate(() => window.__lift.dispose());
+});
+
+test('a lifted item of an ordered list leaves the numbers of the items after it as they were', async ({
+  page,
+}) => {
+  await open(page);
+  // An ordered list with its markers outside, and no tint and no shadow: a
+  // later item's marker paints the same while an item is lifted unless its
+  // number changes.
+  const clip = await page.evaluate(() => {
+    const root = document.documentElement.style;
+    root.setProperty('--color-overlay', 'transparent');
+    root.setProperty('--shadow-high', 'none');
+    const panel = document.querySelector<HTMLElement>('.panel');
+    if (panel != null) {
+      panel.style.display = 'none';
+    }
+    const holder = document.createElement('div');
+    holder.style.cssText =
+      'position: absolute; left: 20px; top: 120px; width: 335px;';
+    holder.innerHTML = `<ol id="numbered" style="margin: 0; padding: 0 0 0 48px; list-style: decimal outside; font: 20px monospace; color: rgb(0, 0, 0); background: rgb(255, 255, 255);">${[
+      1, 2, 3, 4, 5,
+    ]
+      .map(
+        i =>
+          `<li id="item${i}" style="display: list-item; height: 44px; line-height: 44px; padding: 0; border: 0; border-radius: 0; background: rgb(255, 255, 255);">Item ${i}</li>`,
+      )
+      .join('')}</ol>`;
+    document.body.append(holder);
+    const list = document.getElementById('numbered')?.getBoundingClientRect();
+    const later = document.getElementById('item5')?.getBoundingClientRect();
+    return list == null || later == null
+      ? null
+      : {
+          x: list.left,
+          y: later.top,
+          width: later.left - list.left,
+          height: later.height,
+        };
+  });
+  if (clip == null) {
+    throw new Error('no ordered list');
+  }
+  const before = await page.screenshot({clip});
+  await page.evaluate(() => window.__lift.lift('item2', 0.2));
+  await page.waitForTimeout(600);
+  const lifted = await page.screenshot({clip});
+  const placeholder = await page.evaluate(() => {
+    const element = document.querySelector('[data-lift-placeholder]');
+    return element == null
+      ? null
+      : {tag: element.localName, display: getComputedStyle(element).display};
+  });
+  // The fifth item still reads "5.".
+  expect(Buffer.compare(lifted, before), JSON.stringify(placeholder)).toBe(0);
+  expect(placeholder?.tag).toBe('li');
+  await page.evaluate(() => window.__lift.dispose());
+});
+
 test('the shadow follows the row on every frame of its lift and of its drop', async ({
   page,
 }) => {

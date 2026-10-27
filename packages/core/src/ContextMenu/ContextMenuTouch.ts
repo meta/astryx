@@ -9,7 +9,7 @@
  *   recognizer (contextMenuPress.ts), the press feedback
  *   (contextMenuPressFeedback.ts) and the lift presentation
  *   (ContextMenuLift.tsx, contextMenuLiftGeometry.ts)
- * @position ContextMenuTouchLayer.tsx, which ContextMenu loads on demand
+ * @position ContextMenuTouchLayer.tsx, which ContextMenu imports
  *   under the touch model, imports its touch behaviour from here only; the
  *   mouse and keyboard paths stay in ContextMenu.tsx
  *
