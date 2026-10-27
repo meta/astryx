@@ -351,6 +351,16 @@ export abstract class GestureRecognizer {
     return this.options.shouldBegin?.(this) ?? true;
   }
 
+  /**
+   * @internal Whether this recognizer holds `touchId` before it begins: the
+   * host then cancels that finger's moves as for a touch a recognizer owns.
+   * None does by default (`spec:AST-094` FR19); a scroll-edge pan holds a
+   * finger pulling away from an edge every scroller under it is at.
+   */
+  protected keepsTouch(_touchId: number): boolean {
+    return false;
+  }
+
   /** UIKit's `canPrevent(_:)`: whether recognizing fails `other`. */
   canPrevent(_other: GestureRecognizer): boolean {
     return true;
