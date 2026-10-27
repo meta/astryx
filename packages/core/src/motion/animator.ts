@@ -172,6 +172,7 @@
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -658,6 +659,9 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
+/** The custom property whose writes make WebKit resolve a moving element. */
+const RESOLVE_PROPERTY = '--astryx-presented';
+
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -899,6 +903,16 @@ export function createAnimator(
   };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
+  /** The element reported to presentation.ts while translate moves. */
+  let presented: Element | null = null;
+  /**
+   * The translate the engine hit-tests the element at while the compositor
+   * moves it: where the animation started, or where a `resolve` left it.
+   */
+  let hitTested = {x: 0, y: 0};
+  /** Counts the style writes that make WebKit resolve the element again. */
+  let resolutions = 0;
+  let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
@@ -996,6 +1010,63 @@ export function createAnimator(
 
   const finalValue = (property: MotionProperty): number =>
     segments.get(property)?.target ?? resting[property];
+
+  /**
+   * Where translate is drawn relative to where the translate animation
+   * started, read live when a touch lands. iOS WebKit keeps the transform it
+   * resolved when the animation went to the compositor (iOS 26.2: the
+   * element's rect and its hit tests stay at the start for the whole curve,
+   * while the computed style is live), until the animation is retired. A
+   * segment whose start still waits for the browser's commit has painted
+   * nothing of its curve yet.
+   */
+  const drawnTranslate = (property: MotionProperty, time: number) => {
+    const segment = segments.get(property);
+    return segment?.group != null && !segment.group.resolved
+      ? segment.at(0)
+      : valueAt(property, time);
+  };
+
+  const presentedSource: PresentedSource = {
+    offset: () => {
+      syncPending();
+      const time = now();
+      return {
+        x: drawnTranslate('x', time) - hitTested.x,
+        y: drawnTranslate('y', time) - hitTested.y,
+      };
+    },
+    resolve: () => {
+      if (target == null) {
+        return;
+      }
+      syncPending();
+      const time = now();
+      // Any style write makes WebKit resolve the element's transform again,
+      // to the value drawn now, where it then stays (iOS 26.2: in the same
+      // task); a custom property changes nothing else.
+      resolutions += 1;
+      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
+    },
+  };
+
+  /** Reports the element while its translate moves (not a pseudo-element's). */
+  const present = (isMoving: boolean) => {
+    const element = isMoving && pseudoElement == null ? target : null;
+    if (element === presented) {
+      return;
+    }
+    unpresent?.();
+    unpresent = null;
+    if (presented instanceof HTMLElement) {
+      presented.style.removeProperty(RESOLVE_PROPERTY);
+    }
+    presented = element;
+    if (element != null) {
+      unpresent = registerPresentedOffset(element, presentedSource);
+    }
+  };
 
   const writeInline = (
     channel: Channel,
@@ -1107,6 +1178,16 @@ export function createAnimator(
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    if (channel === 'translate') {
+      // The animation built below starts from the value at `time` (its first
+      // keyframe); a rebase or a retarget builds a new one, so a new start.
+      hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
+      present(
+        moving.length > 0 &&
+          target != null &&
+          typeof target.animate === 'function',
+      );
+    }
     if (
       moving.length === 0 ||
       target == null ||
@@ -1299,6 +1380,9 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
+      if (channel === 'translate') {
+        present(false);
+      }
       // A pseudo-element holds its resting value, unless the stylesheet
       // takes it back now (a borrowed dip that has ended).
       const handsBack =
@@ -2684,6 +2768,7 @@ export function createAnimator(
         return;
       }
       flushDeferred();
+      present(false);
       if (next == null) {
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
@@ -3374,6 +3459,7 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      present(false);
       handBackBorrow();
       demote();
       cancelSheetWillChangeRead();

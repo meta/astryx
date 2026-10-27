@@ -94,6 +94,8 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   private readonly detector = createLongPressDetector(() => ({
     delayMs: commitMs,
     moveCancelPx: allowableMovement,
+    // UIContextMenuInteraction's tolerance is per axis (the table's M-CM3).
+    isPerAxis: true,
     stages: [{delayMs: menuDisplayMs, onStage: () => this.showMenu()}],
     onLongPress: () => this.commit(),
     scheduler: {

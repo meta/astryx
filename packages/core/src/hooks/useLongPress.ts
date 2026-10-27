@@ -16,9 +16,10 @@
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
  *
  * Detects a single-finger long-press: fires `onLongPress` with the press
- * start point after `delayMs`. Cancels if the finger moves past
- * `moveCancelPx` (treated as a scroll/drag), lifts, or the touch is
- * cancelled. The pending timer is also cleared on unmount.
+ * start point after `delayMs`. Cancels if the finger travels farther than
+ * `moveCancelPx` from where it landed (treated as a scroll/drag), lifts, or
+ * the touch is cancelled. The pending timer is also cleared on unmount. The
+ * defaults are the long-press recognizer's (motion/uikit/longPress.ts).
  *
  * Three ways in, one detector. Spread the touch handlers onto an element, or —
  * when the caller already runs its own pointer-event machine, as
@@ -41,10 +42,15 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
 
-// Default long-press tuning.
-const DEFAULT_DELAY_MS = 500;
-const DEFAULT_MOVE_CANCEL_PX = 10;
+// The long-press numbers have one source, shared with the gesture
+// recognizers (motion/uikit/longPress.ts).
+const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
+const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
 
 /** A later stage of the same hold. */
 export interface LongPressStage {
@@ -81,10 +87,19 @@ export interface LongPressDetectorOptions {
   onLongPress: (point: {x: number; y: number}) => void;
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
-  /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
+  /**
+   * Travel farther than this distance (px) from where the press began
+   * cancels it, as UIKit's `allowableMovement`. Defaults to 10.
+   */
   moveCancelPx?: number;
   /** Later stages of the same hold, in order. */
   stages?: ReadonlyArray<LongPressStage>;
+  /**
+   * Measure the drift on each axis instead of as a distance, as
+   * UIContextMenuInteraction does (motion/uikit/contextMenu.ts: an (11, 11)
+   * drift still opens its menu). @default false, a distance
+   */
+  isPerAxis?: boolean;
   /** The clock; `performance.now()` and window timers by default. */
   scheduler?: LongPressScheduler;
 }
@@ -158,10 +173,17 @@ export function createLongPressDetector(
     if (from == null) {
       return false;
     }
-    const limit = read().moveCancelPx ?? DEFAULT_MOVE_CANCEL_PX;
+    const options = read();
+    const limit = options.moveCancelPx ?? DEFAULT_MOVE_CANCEL_PX;
+    const dx = Math.abs(point.x - from.x);
+    const dy = Math.abs(point.y - from.y);
+    // A distance, as UIKit measures a long press's `allowableMovement`: a
+    // (7, 7) drift keeps the press, a (7.2, 7.2) one ends it. A context
+    // menu's tolerance is per axis.
     if (
-      Math.abs(point.x - from.x) > limit ||
-      Math.abs(point.y - from.y) > limit
+      options.isPerAxis === true
+        ? Math.max(dx, dy) > limit
+        : Math.hypot(dx, dy) > limit
     ) {
       // Treat as a scroll/drag, not a long-press.
       cancel();
@@ -179,7 +201,10 @@ export interface UseLongPressOptions {
   disabled?: boolean;
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
-  /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
+  /**
+   * Travel farther than this distance (px) from where the press began
+   * cancels it, as UIKit's `allowableMovement`. Defaults to 10.
+   */
   moveCancelPx?: number;
   /** Later stages of the same hold, in order (each after `delayMs`). */
   stages?: ReadonlyArray<LongPressStage>;

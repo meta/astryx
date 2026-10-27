@@ -4,24 +4,28 @@
  * @file bareFixture.ts
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page with nothing attached: the document's gesture host and the
- *   recognizers (pan, screen-edge pan, tap, long press) on `window.__api`, for a test to attach what it needs, and
+ *   recognizers (pan, screen-edge pan, tap, long press) and the context
+ *   request on `window.__api`, for a test to attach what it needs, and
  *   `window.__pageTouch`, the count of touch listeners on the window and the
  *   document right now
  * @position Browser fixture of gestures.browser.spec.ts for the checks that
  *   need a page with no other gesture on it (FR19, FR24); test-only
  */
 
+import {attachContextRequest} from '../../contextRequest';
 import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../../ScreenEdgePanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {lockSelection} from '../../../utils/selectionLock';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 
 declare global {
   interface Window {
     __pageTouch: number;
+    __requests: string[];
     __api: {
+      attachContextRequest: typeof attachContextRequest;
       host: ReturnType<typeof getGestureHost>;
       LongPressGestureRecognizer: typeof LongPressGestureRecognizer;
       PanGestureRecognizer: typeof PanGestureRecognizer;
@@ -87,7 +91,9 @@ EventTarget.prototype.removeEventListener = function (
 };
 
 document.body.style.margin = '0';
+window.__requests = [];
 window.__api = {
+  attachContextRequest,
   host: getGestureHost(document),
   LongPressGestureRecognizer,
   PanGestureRecognizer,

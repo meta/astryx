@@ -48,7 +48,8 @@ import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
 import {timing} from '../motion/uikit/timing';
 import {travel} from './geometry';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
-import {TapGestureRecognizer} from './TapGestureRecognizer';
+import {internals} from './recognizerInternals';
+import type {TapGestureRecognizer} from './TapGestureRecognizer';
 import type {GestureTouch, TouchConsumer} from './types';
 
 export type ControlEvent =
@@ -162,13 +163,17 @@ export const PRESS_PROFILES = {
 
 export type PressProfileName = keyof typeof PRESS_PROFILES;
 
-/** UIButton's rule: an ancestor's single-finger single tap. */
+/**
+ * UIButton's rule: an ancestor's single-finger single tap. The tap is told
+ * apart by its family rather than its class, so press tracking never ships
+ * TapGestureRecognizer.
+ */
 function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
-  return (
-    recognizer instanceof TapGestureRecognizer &&
-    recognizer.numberOfTapsRequired === 1 &&
-    recognizer.numberOfTouchesRequired === 1
-  );
+  if (internals(recognizer).family !== 'tap') {
+    return false;
+  }
+  const tap = recognizer as TapGestureRecognizer;
+  return tap.numberOfTapsRequired === 1 && tap.numberOfTouchesRequired === 1;
 }
 
 export class PressTracker implements TouchConsumer {
@@ -208,7 +213,9 @@ export class PressTracker implements TouchConsumer {
     if (
       this.touchId != null ||
       this.options.isEnabled?.() === false ||
-      this.options.isBraking?.(touch) === true
+      // The scroll brake is a finger's (`spec:AST-094` FR11, DEC-21).
+      (touch.pointerType === 'touch' &&
+        this.options.isBraking?.(touch) === true)
     ) {
       return;
     }
@@ -335,10 +342,6 @@ export class PressTracker implements TouchConsumer {
   }
 
   private emit(event: ControlEvent, touch: GestureTouch): void {
-    // A finger where the primary pointer is fine gets press feedback only.
-    if (touch.isFeedbackOnly === true) {
-      return;
-    }
     this.options.onControlEvent?.(event, touch);
   }
 

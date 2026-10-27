@@ -48,6 +48,7 @@ import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation
 import {COMPACT_QUERY, TOUCH_QUERY} from '../utils/touchPresentation';
 import {HAPTIC_VIBRATION_PATTERNS} from '../motion/uikit';
 import {contextMenu} from '../motion/uikit/contextMenu';
+import {disarmClickGuard} from '../utils/clickGuard';
 
 // The touch sheet is loaded lazily; resolve its modules once up front, so
 // ContextMenu's own lazy sheet renders within the cases' waitFor.
@@ -1063,8 +1064,10 @@ describe.each([
       expect(
         document.querySelector('[data-astryx-context-menu-lift]'),
       ).not.toBeNull();
-      // The menu's own focus move (one frame) is not the lift's.
+      // The menu's own focus move (one frame) is not the lift's, and the
+      // click guard's window after the lift is the page's, not the lift's.
       advance(20);
+      disarmClickGuard(document);
       const beforeUnmount = vi.getTimerCount();
       view.unmount();
       expect(

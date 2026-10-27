@@ -222,7 +222,6 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
-          ...(input.isFeedbackOnly === true ? {isFeedbackOnly: true} : {}),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
@@ -649,6 +648,7 @@ export class GestureArena {
       return;
     }
     internals(recognizer).pending = null;
+    // apply() gives back any claim it held (releaseClaim), waiting or not.
     this.apply(recognizer, 'failed');
     this.reviewPending();
   }

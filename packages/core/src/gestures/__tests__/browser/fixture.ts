@@ -15,9 +15,10 @@ import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {lockSelection} from '../../../utils/selectionLock';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
 import {PressTracker} from '../../PressTracker';
+import {holdPageScroll} from '../../pageHold';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 import {internals} from '../../recognizerInternals';
 
@@ -240,7 +241,7 @@ host.attachConsumer(
 // A scroll lock's page hold, held on demand: every one-finger pan would
 // scroll the page.
 (window as unknown as {__holdPage: () => () => void}).__holdPage = () =>
-  host.holdPageScroll(() => true);
+  holdPageScroll(document, () => true);
 
 for (const type of ['click', 'mousedown']) {
   document.addEventListener(
