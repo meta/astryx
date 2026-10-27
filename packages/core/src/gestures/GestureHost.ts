@@ -18,9 +18,9 @@
  *   passive `pointerdown` listener and the page has none; a press on it (a
  *   mouse's primary button, a pen, or a finger, whose `pointerdown` comes
  *   before its `touchstart`) installs the host's page listeners, which go
- *   once that press's contacts end (FR24). There a finger's claim rests on
- *   `touch-action`: an element's blocking `touchmove` listener stays a
- *   coarse pointer's, so the element keeps its one listener.
+ *   once that press's contacts end (FR24). Under every pointer, an element
+ *   whose recognizer claims a moving finger also keeps its blocking
+ *   `touchmove`, a listener FR24 counts apart from the press's one.
  * - A press consumer takes a mouse press as a press (DEC-21): PressTracker's
  *   fine-pointer profile paints at once and brakes no scroll (FR11).
  * - The host follows the query (a tablet docking or undocking a mouse):
