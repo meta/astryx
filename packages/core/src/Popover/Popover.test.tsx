@@ -1327,3 +1327,98 @@ describe('Popover', () => {
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
   });
 });
+
+describe('Popover focus region (DEC-9)', () => {
+  function Page({isModal}: {isModal: boolean}) {
+    return (
+      <div>
+        <Popover
+          isModal={isModal}
+          hasCloseButton={false}
+          label="Details"
+          content={
+            <>
+              <button type="button">First inside</button>
+              <button type="button">Last inside</button>
+            </>
+          }>
+          <button type="button">Open details</button>
+        </Popover>
+        <button type="button">Elsewhere 1</button>
+        <button type="button">Elsewhere 2</button>
+      </div>
+    );
+  }
+
+  async function openDetails() {
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+    // A pointer press focuses the trigger before its click opens the popover.
+    trigger.focus();
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'First inside', hidden: true}),
+      ).toHaveFocus(),
+    );
+  }
+
+  describe.each([
+    ['non-modal', false],
+    ['modal', true],
+  ])('%s', (_name, isModal) => {
+    it('leaves a Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 1'}).focus();
+      await user.tab();
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 2'})).toHaveFocus();
+    });
+
+    it('leaves a Shift+Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 2'}).focus();
+      await user.tab({shift: true});
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
+    });
+
+    it('cycles Tab and Shift+Tab inside the open popover', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+      const first = screen.getByRole('button', {
+        name: 'First inside',
+        hidden: true,
+      });
+      const last = screen.getByRole('button', {
+        name: 'Last inside',
+        hidden: true,
+      });
+
+      await user.tab();
+      expect(last).toHaveFocus();
+      await user.tab();
+      expect(first).toHaveFocus();
+      await user.tab({shift: true});
+      expect(last).toHaveFocus();
+    });
+
+    it('closes on Escape from inside and returns focus to the trigger', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      await user.keyboard('{Escape}');
+
+      const trigger = screen.getByRole('button', {name: 'Open details'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+  });
+});
