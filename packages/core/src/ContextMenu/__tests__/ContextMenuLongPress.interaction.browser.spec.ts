@@ -388,6 +388,20 @@ test('a finger lifted after the commit gets the menu at the lift, and sends no c
   page,
 }) => {
   const {driver, center} = await openTouchStory(page);
+  // A busy page: 40 ms of other work in the lift's own task, after the page
+  // notes the lift and before the menu's show.
+  await page.evaluate(() => {
+    addEventListener(
+      'touchend',
+      () => {
+        const end = performance.now() + 40;
+        while (performance.now() < end) {
+          // The page's other work.
+        }
+      },
+      {capture: true, once: true},
+    );
+  });
   await driver.play(hold(center, 530));
   await page.waitForTimeout(300);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
