@@ -24,7 +24,11 @@ import {UIKIT_CONTROL} from '../motion/uikit/gestures';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
 import {PressTracker, type PressTrackerOptions} from './PressTracker';
-import {useAttachment, useIsUnmountedRef} from './useAttachment';
+import {
+  isSyncingGestures,
+  useAttachment,
+  useIsUnmountedRef,
+} from './useAttachment';
 
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
@@ -66,6 +70,26 @@ export function usePressTracker(
   });
   const isUnmountedRef = useIsUnmountedRef();
   const {perEventPointer = false} = options;
+  // Calls a caller callback: never while an Effect releases the tracker or
+  // after unmount. While any gesture hook's isEnabled sync runs (turning off
+  // a recognizer the press waits on resolves the press in that arena pass,
+  // inside the Effect), the call waits for a microtask after it, in order,
+  // so the press still ends, un-highlighted, outside the Effect
+  // (react-component-runtime INV2).
+  const [deliver] = useState(() => (call: () => void) => {
+    if (isReleasingRef.current || isUnmountedRef.current) {
+      return;
+    }
+    if (!isSyncingGestures()) {
+      call();
+      return;
+    }
+    queueMicrotask(() => {
+      if (!isUnmountedRef.current) {
+        call();
+      }
+    });
+  });
   // One tracker for the component's life, reading its profile through the
   // options ref: a profile change never rebuilds it, so a press in progress
   // survives it (the change applies from the tracker's next read).
@@ -79,16 +103,10 @@ export function usePressTracker(
         get view() {
           return refRef.current.current;
         },
-        onControlEvent: (event, touch) => {
-          if (!isReleasingRef.current && !isUnmountedRef.current) {
-            optionsRef.current.onControlEvent?.(event, touch);
-          }
-        },
-        onHighlightChange: isHighlighted => {
-          if (!isReleasingRef.current && !isUnmountedRef.current) {
-            optionsRef.current.onHighlightChange?.(isHighlighted);
-          }
-        },
+        onControlEvent: (event, touch) =>
+          deliver(() => optionsRef.current.onControlEvent?.(event, touch)),
+        onHighlightChange: isHighlighted =>
+          deliver(() => optionsRef.current.onHighlightChange?.(isHighlighted)),
         trackingExpansion: options.trackingExpansion,
         get highlightDelay() {
           return optionsRef.current.highlightDelay;

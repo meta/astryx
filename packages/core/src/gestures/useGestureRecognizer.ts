@@ -27,13 +27,21 @@ import {useEffect, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
-import {useAttachment, useIsUnmountedRef} from './useAttachment';
+import {
+  isSyncingGestures,
+  syncingGestures,
+  useAttachment,
+  useIsUnmountedRef,
+} from './useAttachment';
+import {internals} from './recognizerInternals';
 
 export interface UseGestureRecognizerOptions {
   /**
    * Live toggle; turning it off mid-gesture cancels the gesture. That cancel
    * does not call `onGesture`: it comes from the render that turned the
-   * recognizer off, and the code that turned it off already knows.
+   * recognizer off, and the code that turned it off already knows. A
+   * recognizer that required this one to fail resolves just after that
+   * render and reports as usual.
    * @default true
    */
   isEnabled?: boolean;
@@ -48,15 +56,21 @@ export interface UseGestureRecognizerOptions {
 }
 
 /**
- * How many hooks are driving a recognizer from an Effect right now: an
- * `isEnabled` sync, or the detach of a replaced node that cancels a gesture
- * in flight. The arena pass either starts can reach other recognizers (one
- * that required the disabled one to fail recognizes in it), so while it runs
- * no hook's listener calls its caller's callback (react-component-runtime
- * INV2, INV3). Their later transitions report from the input events that
- * cause them.
+ * Runs `body` with the recognizer's arena leaving what it unblocks to the
+ * next pass, outside the Effect (GestureArena.deferResolution). A recognizer
+ * that has met no touch has no arena, and nothing waits on it.
  */
-let syncingDepth = 0;
+function deferringResolution(
+  recognizer: GestureRecognizer,
+  body: () => void,
+): void {
+  const {arena} = internals(recognizer);
+  if (arena == null) {
+    body();
+    return;
+  }
+  arena.deferResolution(body);
+}
 
 /**
  * Attach a recognizer to the element behind `ref`.
@@ -98,7 +112,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   useEffect(
     () =>
       recognizer.addListener(current => {
-        if (!isUnmountedRef.current && syncingDepth === 0) {
+        if (!isUnmountedRef.current && !isSyncingGestures()) {
           onGestureRef.current?.(current);
         }
       }),
@@ -109,12 +123,11 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   // under the guard, so disabling cancels a gesture in flight before its
   // attachment goes.
   useIsomorphicLayoutEffect(() => {
-    syncingDepth += 1;
-    try {
-      recognizer.setEnabled(isEnabled);
-    } finally {
-      syncingDepth -= 1;
-    }
+    syncingGestures(() => {
+      deferringResolution(recognizer, () => {
+        recognizer.setEnabled(isEnabled);
+      });
+    });
   }, [recognizer, isEnabled]);
 
   // Syncs the document's gesture host with the element behind `ref`. A
@@ -135,12 +148,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
         {manageStyle, perEventPointer},
       );
       return () => {
-        syncingDepth += 1;
-        try {
-          detach();
-        } finally {
-          syncingDepth -= 1;
-        }
+        syncingGestures(() => deferringResolution(recognizer, detach));
       };
     },
     `${manageStyle}:${perEventPointer}:${isEnabled}`,
