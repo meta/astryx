@@ -1,4 +1,4 @@
-Results for "icon set" (20 of 366)
+Results for "icon set" (20 of 367)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc

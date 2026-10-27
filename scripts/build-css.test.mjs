@@ -467,14 +467,25 @@ describe('build-css astryx.css', () => {
       }
     });
 
-    it('raises the rows to the iOS table heights only under a finger', () => {
-      const heights = rules().filter(rule =>
-        /\{min-height:(52|62)px\}/.test(rule),
+    it('gives an interactive row its hit layer only under a finger, and no row a new height', () => {
+      // Its top and bottom edges, grown by the insets utils/hitArea.ts measures
+      // (utils/touchHitArea.stylex.ts, component:List FR10).
+      const edges = rules().filter(rule =>
+        /::after\{(top|bottom):calc\(var\(--astryx-hit-inset-(top|bottom), ?0px\) ?\* ?-1\)\}/.test(
+          rule,
+        ),
       );
-      expect(heights).toHaveLength(2);
-      for (const rule of heights) {
+      const sides = new Set(
+        edges.map(rule => /::after\{(top|bottom):/.exec(rule)[1]),
+      );
+      expect([...sides].sort()).toEqual(['bottom', 'top']);
+      for (const rule of edges) {
         expect(rule).toMatch(TOUCH_GATED);
       }
+      // Row height and geometry stay as they are, under every pointer.
+      expect(
+        rules().filter(rule => /\{min-height:(52|62)px\}/.test(rule)),
+      ).toEqual([]);
     });
 
     it("leaves the tree chevron's transition off only under a finger, where the expansion turns it", () => {

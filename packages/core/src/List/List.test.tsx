@@ -51,8 +51,7 @@ function touchGatedRules(el: Element): {touch: string[]; other: string[]} {
 import {List} from './List';
 import {ListItem} from './ListItem';
 import {ListMarkerScope} from './ListContext';
-import {listRowConsts} from './listRow.stylex';
-import {list} from '../motion/uikit/list';
+import {HIT_INSET_PROPERTIES} from '../utils/hitArea';
 
 describe('List', () => {
   it('forwards ListItem align to its Item row unchanged', () => {
@@ -593,90 +592,51 @@ describe('List', () => {
   });
 
   // ===========================================================================
-  // Touch row heights
+  // Touch hit area (component:List FR10)
   // ===========================================================================
 
-  /**
-   * The row's min-heights split by the touch gate: inside
-   * `@media (pointer: coarse)` (TOUCH_QUERY), or anywhere else.
-   */
-  function minHeights(el: Element): {touch: string[]; other: string[]} {
-    const classes = el.className
-      .split(/\s+/)
-      .filter(Boolean)
-      .map(name => `.${name}`);
-    const out = {touch: [] as string[], other: [] as string[]};
-    const visit = (rules: CSSRuleList, touch: boolean) => {
-      for (const rule of Array.from(rules)) {
-        if (rule instanceof CSSStyleRule) {
-          if (
-            classes.some(cls => rule.selectorText.startsWith(cls)) &&
-            rule.style.minHeight !== ''
-          ) {
-            (touch ? out.touch : out.other).push(rule.style.minHeight);
-          }
-          continue;
-        }
-        const nested = (rule as CSSGroupingRule).cssRules;
-        if (nested == null) {
-          continue;
-        }
-        const condition = (rule as CSSConditionRule).conditionText ?? '';
-        visit(nested, touch || condition.includes('pointer: coarse'));
-      }
-    };
-    for (const sheet of Array.from(document.styleSheets)) {
-      visit(sheet.cssRules, false);
-    }
-    return out;
-  }
+  /** The rules among `rules` whose selector reaches the row's `::after`. */
+  const afterRules = (rules: string[]): string[] =>
+    rules.filter(rule => rule.slice(0, rule.indexOf('{')).includes('::after'));
 
-  it('mirrors the constants table’s touch row heights for the stylesheet', () => {
-    expect(listRowConsts.touchRowHeight).toBe(`${list.metrics.rowHeight}px`);
-    expect(listRowConsts.touchSubtitleRowHeight).toBe(
-      `${list.metrics.subtitleRowHeight}px`,
-    );
-  });
-
-  it('gives rows UIKit’s table heights under a finger only, on every touch platform', () => {
+  it('gives an interactive, enabled row an invisible hit layer under a finger only', () => {
     render(
-      <>
-        <List>
-          <ListItem label="One line" />
-          <ListItem label="Two lines" description="A description" />
-        </List>
-        <List density="compact">
-          <ListItem label="Compact" description="Still dense" />
-        </List>
-        <List density="spacious">
-          <ListItem label="Spacious" />
-          <ListItem label="Spacious two" description="A description" />
-        </List>
-      </>,
-    );
-    const row = (text: string) => screen.getByText(text).closest('li')!;
-    expect(minHeights(row('One line')).touch).toEqual(['52px']);
-    expect(minHeights(row('Two lines')).touch).toEqual(['62px']);
-    // A compact list is the dense case: it keeps its density.
-    expect(minHeights(row('Compact')).touch).toEqual([]);
-    // Spacious keeps its own padding over the same minimums.
-    expect(minHeights(row('Spacious')).touch).toEqual(['52px']);
-    expect(minHeights(row('Spacious two')).touch).toEqual(['62px']);
-    // Nothing outside the touch gate: a mouse keeps today's heights.
-    expect(minHeights(row('One line')).other).toEqual([]);
-  });
-
-  it('keeps a compact list’s density under a finger, interactive or read-only', () => {
-    render(
-      <List density="compact">
+      <List>
+        <ListItem label="Pressable" onClick={() => {}} />
+        <ListItem label="Link" href="#settings" />
         <ListItem label="Read-only" />
-        <ListItem label="Interactive" onClick={() => {}} />
-        <ListItem label="Described" description="Still dense" />
+        <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
-    for (const text of ['Read-only', 'Interactive', 'Described']) {
-      const row = screen.getByText(text).closest('li')!;
-      expect(minHeights(row)).toEqual({touch: [], other: []});
+    const row = (text: string) => screen.getByText(text).closest('li')!;
+    for (const text of ['Pressable', 'Link']) {
+      const {touch, other} = touchGatedRules(row(text));
+      const layer = afterRules(touch).join('\n');
+      // Positioned past the row by the measured insets, clipped to the band
+      // outside the row's own box, and painting nothing.
+      expect(layer).toContain('position: absolute');
+      expect(layer).toMatch(/clip-path: polygon\(evenodd/);
+      for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+        expect(layer).toMatch(
+          new RegExp(
+            `${side}: calc\\(var\\(${HIT_INSET_PROPERTIES[side]}, ?0px\\) \\* -1\\)`,
+          ),
+        );
+      }
+      expect(layer).not.toMatch(/background|border|box-shadow|outline|z-index/);
+      // At rest the row's stacking stays as it was: only a press isolates it
+      // (the press layer, utils/rowPressLayer.ts).
+      for (const rule of touch.filter(r => r.includes('isolation'))) {
+        expect(rule.slice(0, rule.indexOf('{'))).toContain(
+          '[data-astryx-press',
+        );
+      }
+      // With a mouse: no pseudo-element.
+      expect(afterRules(other)).toEqual([]);
+    }
+    // A row with nothing to press offers no target.
+    for (const text of ['Read-only', 'Disabled']) {
+      expect(afterRules(touchGatedRules(row(text)).touch)).toEqual([]);
     }
   });
 

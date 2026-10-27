@@ -41,6 +41,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {MOUSE_DRAG_SLOP} from '../listReorderEngine';
@@ -343,6 +344,39 @@ describe('List reorderable', () => {
         handle.style.getPropertyValue(`--astryx-hit-inset-${side}`),
         side,
       ).toMatch(/px$/);
+    }
+  });
+
+  it("starts the hit area's observers only where the primary pointer is coarse (spec:AST-094 FR24)", () => {
+    const observed: Element[] = [];
+    class Recording {
+      observe(target: Element) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Recording);
+    vi.stubGlobal('ResizeObserver', Recording);
+    const resizes = vi.spyOn(window, 'addEventListener');
+    try {
+      stubPrimaryPointer(false);
+      const fine = render(<ReorderableRows initial={['A', 'B']} />);
+      expect(observed).not.toContain(handleOf('A'));
+      expect(resizes.mock.calls.filter(([type]) => type === 'resize')).toEqual(
+        [],
+      );
+      fine.unmount();
+      // The positive control: under a finger it watches the handle.
+      stubPrimaryPointer(true);
+      render(<ReorderableRows initial={['A', 'B']} />);
+      expect(observed).toContain(handleOf('A'));
+    } finally {
+      resizes.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 
@@ -979,6 +1013,49 @@ describe('List reorderable', () => {
     }
   });
 
+  it("starts the hint buttons' hit area only where the primary pointer is coarse (spec:AST-094 FR24)", async () => {
+    const observed: Element[] = [];
+    class Recording {
+      observe(target: Element) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Recording);
+    vi.stubGlobal('ResizeObserver', Recording);
+    try {
+      const user = userEvent.setup();
+      const hintButtons = () =>
+        ['Move up', 'Move down', 'Done'].map(
+          name => hintButton(name) as HTMLElement,
+        );
+      stubPrimaryPointer(false);
+      const fine = render(
+        <ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />,
+      );
+      handleOf('Sent').focus();
+      await user.keyboard(' ');
+      for (const button of hintButtons()) {
+        expect(observed).not.toContain(button);
+      }
+      fine.unmount();
+      // The positive control: under a finger it watches them.
+      stubPrimaryPointer(true);
+      render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
+      handleOf('Sent').focus();
+      await user.keyboard(' ');
+      for (const button of hintButtons()) {
+        await waitFor(() => expect(observed).toContain(button));
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('takes an Escape that reaches the dismissal stack with the focus in the hint: the mode ends, and a layer below stays open', async () => {
     const user = userEvent.setup();
     const outer = vi.fn();
@@ -1399,6 +1476,84 @@ describe('List reorderable', () => {
     ).toEqual([]);
     unmount();
     added.mockRestore();
+  });
+
+  it('a hold on the handle opens no row menu, and a hold elsewhere on the row opens it (spec:AST-103)', () => {
+    vi.useFakeTimers();
+    const show = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    try {
+      render(
+        <ContextMenu label="Row actions" items={[{label: 'Move Inbox'}]}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+            <ListItem itemKey="sent" label="Sent" />
+          </List>
+        </ContextMenu>,
+      );
+      const handle = handleOf('Inbox');
+      show.mockClear();
+      // Held past the menu's long press: the handle's hold is the row's, not
+      // the menu's.
+      fireEvent.touchStart(handle, {touches: [{clientX: 300, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      fireEvent.touchEnd(handle, {touches: []});
+      expect(show).not.toHaveBeenCalled();
+      // A finger's long press on the handle sends the menu no context
+      // request either.
+      const request = new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(request, 'pointerType', {value: 'touch'});
+      act(() => {
+        handle.dispatchEvent(request);
+      });
+      expect(request.defaultPrevented).toBe(true);
+      expect(show).not.toHaveBeenCalled();
+      // A hold on the row's label opens the row's menu.
+      const label = screen.getByText('Inbox');
+      fireEvent.touchStart(label, {touches: [{clientX: 40, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.touchEnd(label, {touches: []});
+      expect(show).toHaveBeenCalled();
+    } finally {
+      show.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the handle's touch from a row menu without hiding it from the gesture host or capture listeners", () => {
+    // The handle stops its touchstart in React's bubble phase. The gesture
+    // host and its recognizers listen in the capture phase (on the document
+    // and on armed elements), so they still see every touch that starts on
+    // the handle, as does any capture-phase listener.
+    stubPrimaryPointer(true);
+    render(
+      <ContextMenu label="Row actions" items={[{label: 'Move Inbox'}]}>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+          <ListItem itemKey="sent" label="Sent" />
+        </List>
+      </ContextMenu>,
+    );
+    const handle = handleOf('Inbox');
+    const captured = vi.fn();
+    document.addEventListener('touchstart', captured, {capture: true});
+    const host = getGestureHost(document);
+    try {
+      const touch = {identifier: 0, clientX: 300, clientY: 20, target: handle};
+      fireEvent.touchStart(handle, {touches: [touch], changedTouches: [touch]});
+      expect(captured).toHaveBeenCalledTimes(1);
+      expect(host.fingersDown()).toBe(1);
+      fireEvent.touchEnd(handle, {touches: [], changedTouches: [touch]});
+      expect(host.fingersDown()).toBe(0);
+    } finally {
+      document.removeEventListener('touchstart', captured, {capture: true});
+    }
   });
 
   it('does not activate an interactive row from its handle', async () => {

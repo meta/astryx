@@ -378,6 +378,20 @@ export function ListReorderHandle({
       // The row's own pointer handling (its swipe) never sees the handle's
       // presses: the list's listeners have them, before this.
       onPointerDown={event => event.stopPropagation()}
+      // A hold on the handle picks the row up, and only a hold elsewhere on
+      // the row opens the row's menu (spec:AST-103): a menu around the row
+      // never starts its long press from the handle, and a finger's long
+      // press there sends it no context request. A mouse's right click on
+      // the handle still reaches it.
+      onTouchStart={event => event.stopPropagation()}
+      onContextMenu={event => {
+        if (
+          (event.nativeEvent as Partial<PointerEvent>).pointerType === 'touch'
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       {...focusOutlineProps.focusVisible(styles.handle)}
     />
   );

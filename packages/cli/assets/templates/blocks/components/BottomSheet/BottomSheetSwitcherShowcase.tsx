@@ -3,7 +3,7 @@
 'use client';
 
 import {useState} from 'react';
-import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -15,20 +15,35 @@ import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 
 type NotificationSheetHeight = 'hug' | 'capped';
 
-interface NotificationOverviewSheetProps {
+/**
+ * Each step is a standalone sheet. Closing the open step and opening the
+ * next one in the same update (one `step` state value) replaces it in place.
+ */
+interface StepSheetProps {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  hasScrim: boolean;
   height: NotificationSheetHeight;
+}
+
+interface NotificationOverviewSheetProps extends StepSheetProps {
   onCancel: () => void;
   onContinue: () => void;
 }
 
 function NotificationOverviewSheet({
+  isOpen,
+  onOpenChange,
+  hasScrim,
   height,
   onCancel,
   onContinue,
 }: NotificationOverviewSheetProps) {
   return (
     <BottomSheet
-      sheetId="overview"
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      hasScrim={hasScrim}
       label="Set up notifications"
       height={height}>
       <Section padding={4}>
@@ -74,13 +89,15 @@ function NotificationOverviewSheet({
   );
 }
 
-interface NotificationFrequencySheetProps {
-  height: NotificationSheetHeight;
+interface NotificationFrequencySheetProps extends StepSheetProps {
   onBack: () => void;
   onContinue: () => void;
 }
 
 function NotificationFrequencySheet({
+  isOpen,
+  onOpenChange,
+  hasScrim,
   height,
   onBack,
   onContinue,
@@ -89,7 +106,9 @@ function NotificationFrequencySheet({
 
   return (
     <BottomSheet
-      sheetId="frequency"
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      hasScrim={hasScrim}
       label="Notification frequency"
       height={height}>
       <Section padding={4}>
@@ -120,13 +139,15 @@ function NotificationFrequencySheet({
   );
 }
 
-interface NotificationChannelsSheetProps {
-  height: NotificationSheetHeight;
+interface NotificationChannelsSheetProps extends StepSheetProps {
   onBack: () => void;
   onFinish: () => void;
 }
 
 function NotificationChannelsSheet({
+  isOpen,
+  onOpenChange,
+  hasScrim,
   height,
   onBack,
   onFinish,
@@ -137,7 +158,9 @@ function NotificationChannelsSheet({
 
   return (
     <BottomSheet
-      sheetId="channels"
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      hasScrim={hasScrim}
       label="Notification channels"
       height={height}>
       <Section padding={4}>
@@ -175,47 +198,55 @@ function NotificationChannelsSheet({
   );
 }
 
-interface MultiStepSwitcherExampleProps {
+type Step = 'overview' | 'frequency' | 'channels' | null;
+
+interface MultiStepExampleProps {
   height: NotificationSheetHeight;
   hasScrim?: boolean;
 }
 
-function MultiStepSwitcherExample({
-  height,
-  hasScrim = true,
-}: MultiStepSwitcherExampleProps) {
-  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+function MultiStepExample({height, hasScrim = true}: MultiStepExampleProps) {
+  // One state value names the open step. Moving on closes one sheet and
+  // opens the next in the same update, which replaces it in place.
+  const [step, setStep] = useState<Step>(null);
+  const stepProps = (id: Step) => ({
+    isOpen: step === id,
+    onOpenChange: (isOpen: boolean) => {
+      // Clear the step only if it is still the open one: a step that closes
+      // because the person moved on must not undo the move.
+      if (!isOpen) {
+        setStep(current => (current === id ? null : current));
+      }
+    },
+    hasScrim,
+    height,
+  });
 
   return (
     <>
       <Button
         label="Set up notifications"
-        onClick={() => setActiveSheet('overview')}
+        onClick={() => setStep('overview')}
       />
-      <BottomSheetSwitcher
-        activeSheet={activeSheet}
-        onActiveSheetChange={setActiveSheet}
-        hasScrim={hasScrim}>
-        <NotificationOverviewSheet
-          height={height}
-          onCancel={() => setActiveSheet(null)}
-          onContinue={() => setActiveSheet('frequency')}
-        />
-        <NotificationFrequencySheet
-          height={height}
-          onBack={() => setActiveSheet('overview')}
-          onContinue={() => setActiveSheet('channels')}
-        />
-        <NotificationChannelsSheet
-          height={height}
-          onBack={() => setActiveSheet('frequency')}
-          onFinish={() => setActiveSheet(null)}
-        />
-      </BottomSheetSwitcher>
+      <NotificationOverviewSheet
+        {...stepProps('overview')}
+        onCancel={() => setStep(null)}
+        onContinue={() => setStep('frequency')}
+      />
+      <NotificationFrequencySheet
+        {...stepProps('frequency')}
+        onBack={() => setStep('overview')}
+        onContinue={() => setStep('channels')}
+      />
+      <NotificationChannelsSheet
+        {...stepProps('channels')}
+        onBack={() => setStep('frequency')}
+        onFinish={() => setStep(null)}
+      />
     </>
   );
 }
 
 export default function BottomSheetSwitcherShowcase() {
-  return <MultiStepSwitcherExample height="hug" />;
+  return <MultiStepExample height="hug" />;
 }
