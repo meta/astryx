@@ -131,6 +131,21 @@ test('a ContextMenu inside a shadow root stays open as its opening long press li
   });
   await expect(menu).toBeVisible();
 
+  // The tap on the host comes once the presentation has run: until it
+  // completes, the layer's input hold (spec:AST-094 FR35) drops every tap.
+  await page.evaluate(async () => {
+    await Promise.all(
+      document.getAnimations().map(async animation =>
+        animation.finished.then(
+          () => undefined,
+          () => undefined,
+        ),
+      ),
+    );
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{x: hostPadding.x, y: hostPadding.y, id: 2}],
