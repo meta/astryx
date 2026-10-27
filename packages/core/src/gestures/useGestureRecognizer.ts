@@ -42,6 +42,13 @@ export interface UseGestureRecognizerOptions {
   isEnabled?: boolean;
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
+  /**
+   * The element is an action group, sibling actions a held pointer slides
+   * across (`family:action-groups` FR5): the host serves it where the
+   * primary pointer is fine too (`AttachOptions.actionGroup`).
+   * @default false
+   */
+  actionGroup?: boolean;
 }
 
 /**
@@ -99,7 +106,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
   useIsomorphicLayoutEffect(() => {
     onGestureRef.current = onGesture;
   });
-  const {isEnabled = true, manageStyle = true} = options;
+  const {isEnabled = true, manageStyle = true, actionGroup = false} = options;
   const isUnmountedRef = useIsUnmountedRef();
 
   // Syncs the recognizer's target-action listener with this component. The
@@ -144,7 +151,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
       const detach = getGestureHost(element.ownerDocument).attach(
         element,
         recognizer,
-        {manageStyle},
+        {manageStyle, actionGroup},
       );
       return () => {
         syncingDepth += 1;
@@ -155,7 +162,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
         }
       };
     },
-    `${manageStyle}:${isEnabled}`,
+    `${manageStyle}:${isEnabled}:${actionGroup}`,
   );
 
   return recognizer;
