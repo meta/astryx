@@ -340,7 +340,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
   return (
     target instanceof HTMLElement &&
     target.matches(
-      'textarea, [contenteditable="true"], [role="textbox"], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
+      'textarea, [contenteditable="true"], [role="textbox"], [role="combobox"][contenteditable], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
     )
   );
 }
