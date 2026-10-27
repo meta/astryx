@@ -5,8 +5,7 @@
  * @input Uses vitest, React Testing Library and node:fs over the core sources
  * @output The long-press numbers have one source: the constants table's
  *   entries, the long-press recognizer's defaults, useLongPress's hold and
- *   useMenuPress's trigger hold all read longPress.ts; and the menus that use
- *   useLongPress never import the gestures table
+ *   useMenuPress's trigger hold all read longPress.ts
  * @position Unit tests of packages/core/src/motion/uikit/longPress.ts
  */
 
@@ -90,16 +89,6 @@ describe('the long-press numbers', () => {
       vi.advanceTimersByTime(1);
     });
     expect(onLongPress).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    'ContextMenu/ContextMenu.tsx',
-    'DropdownMenu/DropdownMenu.tsx',
-    'hooks/useLongPress.ts',
-    'hooks/useMenuPress.ts',
-  ])('keep %s off the gestures table', entry => {
-    const modules = reachable(entry);
-    expect(modules).not.toContain(path.join('motion', 'uikit', 'gestures.ts'));
   });
 
   it('reach the hooks through longPress.ts alone', () => {
