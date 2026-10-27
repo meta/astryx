@@ -320,6 +320,89 @@ test.describe('under a finger', () => {
   });
 });
 
+test.describe('a row that reorders and has a menu', () => {
+  test.beforeEach(async ({page, browserName}) => {
+    await openStory(page, storybook(), 'core-list--reorder-from-your-ui');
+    test.skip(
+      !(await isTouch(page)),
+      'this engine reports a fine primary pointer; the touch hold applies under (pointer: coarse)',
+    );
+    test.skip(
+      browserName !== 'chromium',
+      'the held finger lifts through Chromium CDP',
+    );
+  });
+
+  /** A finger held still at `at` for `ms`, read while it is down, then lifted. */
+  async function holdStill(
+    page: Page,
+    at: {x: number; y: number},
+    ms: number,
+  ): Promise<{picked: boolean; menu: boolean}> {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        {x: at.x, y: at.y, id: 0, radiusX: 1, radiusY: 1, force: 1},
+      ],
+    });
+    await page.waitForTimeout(ms);
+    const held = await page.evaluate(() => ({
+      picked: document.querySelector('[data-astryx-reorder-preview]') != null,
+      menu: Array.from(document.querySelectorAll('[role="menu"]')).some(
+        element => element.getBoundingClientRect().height > 0,
+      ),
+    }));
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    return held;
+  }
+
+  const menuShown = async (page: Page) =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('[role="menu"]')).some(
+        element => element.getBoundingClientRect().height > 0,
+      ),
+    );
+
+  test('a hold on the reorder handle picks the row up and opens no menu', async ({
+    page,
+  }) => {
+    const order = await labels(page);
+    const {at} = await handleOf(page, 'Inbox');
+    // Held still past the row menu's long press (500 ms).
+    const held = await holdStill(page, at, 800);
+    expect(held.picked).toBe(true);
+    expect(held.menu).toBe(false);
+    await page.waitForTimeout(SETTLE_MS);
+    expect(await menuShown(page)).toBe(false);
+    expect(await labels(page)).toEqual(order);
+  });
+
+  test('a hold anywhere else on the row opens its menu and picks nothing up', async ({
+    page,
+  }) => {
+    const row = page
+      .locator('#storybook-root li:not([data-astryx-leaving])')
+      .filter({hasText: 'Inbox'})
+      .first();
+    const box = await row.boundingBox();
+    if (box == null) {
+      throw new Error('no row');
+    }
+    const held = await holdStill(
+      page,
+      {x: box.x + 40, y: box.y + box.height / 2},
+      800,
+    );
+    expect(held.picked).toBe(false);
+    expect(held.menu).toBe(true);
+    await page.keyboard.press('Escape');
+  });
+});
+
 test('a flick on a handle scrolls the page and moves nothing', async ({
   page,
 }) => {

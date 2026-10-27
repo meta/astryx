@@ -258,9 +258,11 @@ presses nothing.
   | Recognizers on the element                        | `touch-action`      |
   | ------------------------------------------------- | ------------------- |
   | tap, long press                                   | `manipulation`      |
-  | horizontal pan or swipe, horizontal edge pan      | `pan-y pinch-zoom`  |
+  | horizontal pan or swipe                           | `pan-y pinch-zoom`  |
+  | horizontal edge pan on a strip within its band    | `pan-y pinch-zoom`  |
   | vertical pan or swipe                             | `pan-x pinch-zoom`  |
   | one-way pan, pan with `scrollEdge`                | left as is (`auto`) |
+  | edge pan on a view wider than its band            | left as is (`auto`) |
   | free pan                                          | `pinch-zoom`        |
   | pinch or rotation                                 | `pan-x pan-y`       |
   | pinch or rotation together with a free pan        | `none`              |
@@ -318,7 +320,10 @@ presses nothing.
 - **Claim at the begin.** A pan claims its touch only as it begins, at
   UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
   a scroll at 10–11 px; a drag the browser took first stays the browser's
-  (FR14).
+  (FR14). One exception: a `scrollEdge` pan cancels its finger's moves from
+  the first one while every scroller under the finger is at its edge and
+  the finger pulls away from it, the pan's own way (the browser could only
+  rubber-band there); it still begins at 10 pt.
   Measured in Mobile Safari (iOS 26.2): `touchmove` arrives from the first
   pixel; on a scrollable element WebKit commits to scrolling at 10 to 11 px
   (the last cancelable `touchmove` at 10 px), and cancelling every
@@ -355,7 +360,9 @@ presses nothing.
 finger. This is the sheet over its own list: the pan begins only if nothing
 under the touch could scroll for that movement, the finger landed at the
 edge and pulls away from it. The browser has not committed yet, so beginning
-claims the touch and the content never moves.
+claims the touch and the content never moves. From the first move that
+pulls away from such an edge the pan already holds the finger, so its moves
+are cancelled before it begins and the page does not rubber-band either.
 
 Who gets a drag is decided once, when it begins, as in UIKit: a drag that
 began as a scroll stays the scroll view's for its whole length (it scrolls

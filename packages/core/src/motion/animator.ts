@@ -1445,8 +1445,9 @@ export function createAnimator(
   /**
    * Reads sheetWillChange in a task of its own, so a later promotion reads no
    * style in its own task. Skipped while a promotion of ours is written,
-   * which the read would see; demote asks again. A pseudo-element's
-   * promotion is its own property, with nothing to read.
+   * which the read would see (demote asks again), and for a node out of the
+   * document. A pseudo-element's promotion is its own property, with
+   * nothing to read.
    */
   const readSheetWillChangeLater = () => {
     cancelSheetWillChangeRead();
@@ -1457,7 +1458,11 @@ export function createAnimator(
     const element = target;
     sheetReadTimer = setTimeout(() => {
       sheetReadTimer = null;
-      if (target === element && promoted.size === 0) {
+      // A node out of the document has no style to read, and reading one
+      // still costs a style pass: a shared animator (animatorFor) is never
+      // detached, so its node can leave with this read waiting. Skipped, the
+      // read waits for a promotion that needs it.
+      if (target === element && promoted.size === 0 && element.isConnected) {
         readSheetWillChange(element);
       }
     }, 0);

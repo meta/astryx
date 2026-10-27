@@ -20,6 +20,7 @@ import {
   type HitInsets,
   type HitRect,
   NO_HIT_INSETS,
+  resetHitAreaForTests,
   resolveHitTarget,
   watchHitArea,
   writeHitInsets,
@@ -56,6 +57,13 @@ describe('clampedHitInsets', () => {
     ).toEqual({top: 10, right: 4, bottom: 10, left: 10});
   });
 
+  it('stops at half the gap to a neighbour that does not grow itself (a long link)', () => {
+    // A 32 × 20 switch 8 px from a link wider and taller than 44 px.
+    expect(
+      clampedHitInsets(rect(100, 100, 32, 20), [rect(140, 88, 120, 44)]).right,
+    ).toBe(4);
+  });
+
   it('does not grow toward a neighbour it touches', () => {
     expect(
       clampedHitInsets(rect(100, 100, 24, 24), [rect(124, 100, 24, 24)]).right,
@@ -86,6 +94,26 @@ describe('clampedHitInsets', () => {
     expect(a.bottom + insetsA.bottom).toBeLessThanOrEqual(b.top - insetsB.top);
   });
 
+  it('cuts the same side as a diagonal neighbour of another size, so the two areas never overlap', () => {
+    const small = rect(100, 100, 16, 16);
+    // 12 px across and 14 px down.
+    const wide = rect(128, 130, 32, 20);
+    const a = clampedHitInsets(small, [wide]);
+    const b = clampedHitInsets(wide, [small]);
+    expect(small.bottom + a.bottom).toBeLessThanOrEqual(wide.top - b.top);
+    expect(a.bottom).toBe(7);
+    expect(b.top).toBe(7);
+  });
+
+  it('cuts a wide and a tall diagonal pair whose full areas would meet', () => {
+    const square = rect(100, 100, 32, 32);
+    // 4 px across and 12 px down.
+    const wide = rect(136, 144, 40, 24);
+    const a = clampedHitInsets(square, [wide]);
+    const b = clampedHitInsets(wide, [square]);
+    expect(square.bottom + a.bottom).toBeLessThanOrEqual(wide.top - b.top);
+  });
+
   it('ignores a neighbour that overlaps the target (an ancestor or an overlay)', () => {
     expect(
       clampedHitInsets(rect(100, 100, 24, 24), [rect(90, 90, 200, 60)]),
@@ -105,6 +133,12 @@ describe('resolveHitTarget', () => {
   it('extends each button toward 44 px where nothing is near', () => {
     expect(resolveHitTarget(-7, 14, toolbar)).toBe(0);
     expect(resolveHitTarget(14, 35, toolbar)).toBe(0);
+  });
+
+  it('gives a corner touch to the nearer of two diagonal targets', () => {
+    const pair: HitRect[] = [rect(100, 100, 24, 24), rect(128, 130, 24, 24)];
+    // 9.2 px from the first, 4 px from the second.
+    expect(resolveHitTarget(133, 126, pair)).toBe(1);
   });
 
   it('answers -1 beyond every hit area', () => {
@@ -208,6 +242,8 @@ describe('watchHitArea', () => {
   });
 
   afterEach(() => {
+    resetHitAreaForTests();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
   });
@@ -226,6 +262,41 @@ describe('watchHitArea', () => {
     flush();
     expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
     stop();
+  });
+
+  it('counts a pressable row root as a neighbour: two rows 2 px apart each take 1 px of the gap, and their areas never overlap', () => {
+    // A list's rows: the row root is the target (Item's pressable root), and
+    // its own control is only the label column, inside the row's padding.
+    document.body.innerHTML =
+      '<ul>' +
+      '<li id="first" data-astryx-pressable=""><button id="first-label">Inbox</button></li>' +
+      '<li id="second" data-astryx-pressable=""><button id="second-label">Sent</button></li>' +
+      '</ul>';
+    const first = byId('first');
+    const second = byId('second');
+    place(first, rect(0, 100, 300, 36));
+    place(byId('first-label'), rect(40, 108, 220, 20));
+    place(second, rect(0, 138, 300, 36));
+    place(byId('second-label'), rect(40, 146, 220, 20));
+    const firstHeard: HitInsets[] = [];
+    const secondHeard: HitInsets[] = [];
+    const stops = [
+      watchHitArea(first, insets => firstHeard.push(insets)),
+      watchHitArea(second, insets => secondHeard.push(insets)),
+    ];
+    try {
+      show(first, second);
+      flush();
+      // Each 36 px row grows toward 44 px, but toward the other only by half
+      // the 2 px gap between the rows.
+      expect(firstHeard).toEqual([{top: 4, right: 0, bottom: 1, left: 0}]);
+      expect(secondHeard).toEqual([{top: 1, right: 0, bottom: 4, left: 0}]);
+      expect(136 + firstHeard[0].bottom).toBeLessThanOrEqual(
+        138 - secondHeard[0].top,
+      );
+    } finally {
+      stops.forEach(stop => stop());
+    }
   });
 
   it('measures nothing off screen', () => {
@@ -263,6 +334,56 @@ describe('watchHitArea', () => {
     stops.forEach(stop => stop());
   });
 
+  it('counts a neighbour up to 44 px away for a small target, so two 8 px dots 24 px apart meet in the middle', () => {
+    const control = byId('switch');
+    const other = byId('other');
+    place(control, rect(100, 100, 8, 8));
+    place(other, rect(132, 100, 8, 8));
+    place(byId('link'), rect(400, 400, 60, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(heard.at(-1)?.right).toBe(12);
+    stop();
+  });
+
+  it('gives a second watch of the same element its insets', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    const first = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    const heard: HitInsets[] = [];
+    const second = watchHitArea(control, insets => heard.push(insets));
+    flush();
+    expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
+    first();
+    second();
+  });
+
+  it('carries controls past the frame budget to the next frame, measuring at least one a frame', () => {
+    const controls = ['switch', 'other'].map(byId);
+    place(controls[0], rect(100, 100, 24, 24));
+    place(controls[1], rect(400, 400, 24, 24));
+    // Every clock read is 5 ms later: each frame's budget is spent after one
+    // control.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 5));
+    const heard: string[] = [];
+    const stops = controls.map(element =>
+      watchHitArea(element, () => heard.push(element.id)),
+    );
+    show(...controls);
+    flush();
+    expect(heard).toEqual(['switch']);
+    expect(frames).toHaveLength(1);
+    flush();
+    expect(heard).toEqual(['switch', 'other']);
+    expect(frames).toHaveLength(0);
+    stops.forEach(stop => stop());
+  });
+
   it('measures nothing where the primary pointer is fine, and returns to 0 when it turns fine', () => {
     coarse = false;
     const control = byId('switch');
@@ -273,15 +394,154 @@ describe('watchHitArea', () => {
     flush();
     expect(heard).toEqual([]);
     expect(log).toEqual([]);
-    // The pointer turns coarse, then fine again.
+    // The pointer turns coarse (the observers start, and the visibility
+    // observer's first notice comes), then fine again.
     coarse = true;
     pointerListeners.forEach(listener => listener());
+    show(control);
     flush();
     expect(heard).toEqual([{top: 10, right: 10, bottom: 10, left: 10}]);
     coarse = false;
     pointerListeners.forEach(listener => listener());
     expect(heard.at(-1)).toEqual(NO_HIT_INSETS);
     stop();
+  });
+
+  it('re-measures once its parent’s text settles after a change that moves a neighbour without resizing the control', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(heard.at(-1)?.right).toBe(10);
+    // The label beside the switch shortens, and the link moves to 8 px away.
+    place(link, rect(132, 100, 60, 24));
+    (control.parentElement as HTMLElement).lastChild!.textContent = ' Wi';
+    await Promise.resolve();
+    vi.advanceTimersByTime(100);
+    flush();
+    expect(heard.at(-1)?.right).toBe(4);
+    stop();
+    vi.useRealTimers();
+  });
+
+  it('swallows the click of a touch that a fresh measurement puts nearer a neighbour, and only that one', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    const touch = (x: number) => {
+      const press = new Event('pointerdown', {bubbles: true});
+      Object.assign(press, {pointerType: 'touch', clientX: x, clientY: 112});
+      control.dispatchEvent(press);
+    };
+    const click = () => {
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      control.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    // 6 px right of the switch: inside the old area, 2 px from the link.
+    touch(130);
+    expect(click()).toBe(true);
+    // One-shot: the next click is the control's.
+    expect(click()).toBe(false);
+    // A touch with no click leaves nothing behind for the next touch.
+    touch(130);
+    touch(110);
+    expect(click()).toBe(false);
+    // A keyboard activation (detail 0) after a touch with no click goes
+    // through, and so does a click after the browser cancelled the touch.
+    touch(130);
+    const key = new MouseEvent('click', {bubbles: true, cancelable: true});
+    control.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(false);
+    touch(130);
+    control.dispatchEvent(new Event('pointercancel', {bubbles: true}));
+    expect(click()).toBe(false);
+    // A press elsewhere (the control's label) ends it before its click.
+    touch(130);
+    link.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(click()).toBe(false);
+    stop();
+  });
+
+  it('runs no observer or window listener for hit areas while the primary pointer is fine', () => {
+    coarse = false;
+    const constructed = vi.fn();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor() {
+          constructed();
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const onWindow = vi.spyOn(window, 'addEventListener');
+    const onElement = vi.spyOn(byId('switch'), 'addEventListener');
+    const stop = watchHitArea(byId('switch'), () => {});
+    expect(constructed).not.toHaveBeenCalled();
+    expect(onWindow).not.toHaveBeenCalled();
+    expect(onElement).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('listens for presses once, on the document: a watched control, row or handle gets no listener of its own (spec:AST-103 FR5)', () => {
+    const elements = ['switch', 'other'].map(byId);
+    const onElements = elements.map(element =>
+      vi.spyOn(element, 'addEventListener'),
+    );
+    const onDocument = vi.spyOn(document, 'addEventListener');
+    const stops = elements.map(element => watchHitArea(element, () => {}));
+    for (const spy of onElements) {
+      expect(spy).not.toHaveBeenCalled();
+    }
+    expect(
+      onDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
+    ).toHaveLength(1);
+    stops.forEach(stop => stop());
+  });
+
+  it('leaves nothing behind after resetHitAreaForTests, even from a watch never stopped', () => {
+    watchHitArea(byId('switch'), () => {});
+    const offDocument = vi.spyOn(document, 'removeEventListener');
+    resetHitAreaForTests();
+    expect(
+      offDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
+    ).toHaveLength(1);
+    coarse = false;
+    const onDocument = vi.spyOn(document, 'addEventListener');
+    const stop = watchHitArea(byId('other'), () => {});
+    expect(onDocument).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('reads the pointer query at each watch, so a watch never left behind keeps a stale coarse answer', () => {
+    const left = watchHitArea(byId('switch'), () => {});
+    // The environment's pointer turns fine through a new query object (a
+    // test's stub), and the earlier watch never stopped.
+    coarse = false;
+    const other = byId('other');
+    const onElement = vi.spyOn(other, 'addEventListener');
+    const stop = watchHitArea(other, () => {});
+    expect(onElement).not.toHaveBeenCalled();
+    stop();
+    left();
   });
 
   it('stops hearing a control after its function runs', () => {
