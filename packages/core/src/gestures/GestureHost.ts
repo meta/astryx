@@ -819,16 +819,15 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    // Where the primary pointer is fine, an element keeps one listener, its
-    // press's (syncArmed, FR24): `touch-action` leaves the browser the
-    // rest, and the page's listeners come with the press.
+    // For every pointer: a finger's claim cancels its moves here (FR19), a
+    // listener FR24 counts outside the one-listener budget a fine pointer's
+    // element keeps for its press (syncArmed).
     const needsListener =
-      this.isCoarse &&
-      (registration.recognizers.some(
+      registration.recognizers.some(
         recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
       ) ||
-        (registration.consumer?.keepsTouch != null &&
-          registration.consumer.isEnabled?.() !== false));
+      (registration.consumer?.keepsTouch != null &&
+        registration.consumer.isEnabled?.() !== false);
     // The blocking listener sits on the element itself (FR19: a scroll that
     // starts elsewhere never waits on it), but every element shares the
     // host's one handler, which routes through the arena.
