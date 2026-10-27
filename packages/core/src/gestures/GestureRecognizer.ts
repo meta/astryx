@@ -42,7 +42,7 @@ import {DEFAULT_ENVIRONMENT} from './types';
 /**
  * Turns text selection and the touch callout off on `elements` (and on a
  * non-text input `target` inside one) for one held press; returns the undo.
- * gestures/selectionLock.ts's `lockSelection` is the one implementation.
+ * utils/selectionLock.ts's `lockSelection` is the one implementation.
  */
 export type SelectionLock = (
   elements: Iterable<Element>,
@@ -66,7 +66,7 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * For a hold that does something (a slider's thumb, a switch's or a
    * segmented control's drag): the lock that turns text selection and the
    * touch callout off on this recognizer's element for each held press
-   * (`spec:AST-094` FR41). Pass `lockSelection` from gestures/selectionLock.ts;
+   * (`spec:AST-094` FR41). Pass `lockSelection` from utils/selectionLock.ts;
    * the host calls it and never imports it, so a component without such a
    * hold does not bundle it. Content under a sheet's or a pager's pan stays
    * selectable, so there is none by default; a mouse keeps desktop selection

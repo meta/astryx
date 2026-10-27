@@ -55,9 +55,11 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {
   IDLE_MENU_PRESS,
   menuPressStep,
@@ -70,6 +72,13 @@ import {useLongPress, type UseLongPressHandlers} from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
+import {
+  __resetClickGuardForTest,
+  armClickGuard,
+  CLICK_GUARD_WINDOW_MS,
+  withoutClickGuard,
+} from '../utils/clickGuard';
 
 /** Marks a menu root that carries this press model. */
 export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
@@ -83,10 +92,27 @@ const MENU_PRESS_ROOT_SELECTOR = `[${MENU_PRESS_MARKER}]`;
  */
 export const MENU_PRESS_SURFACE_ATTR = 'data-astryx-menu-press-surface';
 
-/** How long after a tracked release the browser's click is still swallowed. */
-export const MENU_PRESS_STRAY_CLICK_MS = 400;
+/**
+ * How long after a tracked release the browser's click is still swallowed:
+ * the shared click guard's window (utils/clickGuard.ts).
+ */
+export const MENU_PRESS_STRAY_CLICK_MS = CLICK_GUARD_WINDOW_MS;
 /** How long a finger must rest on the trigger before the menu opens under it. */
-export const MENU_PRESS_LONG_PRESS_MS = 500;
+export const MENU_PRESS_LONG_PRESS_MS = LONG_PRESS_DURATION_MS;
+/**
+ * How far a finger held on a DropdownMenu trigger may move before the open,
+ * in CSS px, where the primary pointer is coarse: `spec:AST-094` FR29's
+ * drift allowance (FR2's table: unmeasured, a 12 pt move still opened).
+ * Where it is fine, and on ContextMenu, the long press's own allowable
+ * movement stays.
+ */
+export const MENU_PRESS_TRIGGER_DRIFT_PX = 13;
+
+const viewOrNull = () => (typeof window === 'undefined' ? null : window);
+const subscribeCoarsePointer = (onChange: () => void) =>
+  watchCoarsePointer(viewOrNull(), onChange);
+const readCoarsePointer = () => isCoarsePointer(viewOrNull());
+const readServerCoarsePointer = () => false;
 /** Distance from a scrolling menu's edge within which a resting pointer scrolls. */
 export const MENU_PRESS_AUTOSCROLL_ZONE_PX = 24;
 const AUTOSCROLL_STEP_PX = 6;
@@ -97,7 +123,8 @@ const FOCUSABLE_ROW_SELECTOR =
 const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 
 // =============================================================================
-// Module state: the activation mark and the stray-click swallower
+// Module state: the activation mark (the stray-click swallower is the
+// shared click guard, utils/clickGuard.ts)
 // =============================================================================
 
 let isModelActivation = false;
@@ -112,68 +139,9 @@ export function isMenuPressActivation(): boolean {
   return isModelActivation;
 }
 
-interface StrayClickSwallower {
-  doc: Document;
-  isArmed: boolean;
-  timer: ReturnType<typeof setTimeout> | null;
-}
-
-let swallower: StrayClickSwallower | null = null;
-
-function disarmStrayClick(): void {
-  if (swallower == null) {
-    return;
-  }
-  swallower.isArmed = false;
-  if (swallower.timer != null) {
-    clearTimeout(swallower.timer);
-    swallower.timer = null;
-  }
-}
-
-function onWindowClickCapture(event: MouseEvent): void {
-  if (swallower == null || !swallower.isArmed) {
-    return;
-  }
-  // A keyboard's or a screen reader's activation reports detail 0, as does the
-  // model's own dispatch. Those are never the browser's stray click.
-  if (event.detail === 0 || isModelActivation) {
-    return;
-  }
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  disarmStrayClick();
-}
-
-function armStrayClick(doc: Document): void {
-  const view = doc.defaultView;
-  if (view == null) {
-    return;
-  }
-  if (swallower == null || swallower.doc !== doc) {
-    if (swallower != null) {
-      swallower.doc.defaultView?.removeEventListener(
-        'click',
-        onWindowClickCapture,
-        true,
-      );
-      swallower.doc.removeEventListener('pointerdown', disarmStrayClick, true);
-    }
-    // The window, capture phase: ahead of React's root listener and of any
-    // document listener, so no framework sees the click.
-    view.addEventListener('click', onWindowClickCapture, true);
-    // The next press is a new gesture; its click must never be eaten.
-    doc.addEventListener('pointerdown', disarmStrayClick, true);
-    swallower = {doc, isArmed: false, timer: null};
-  }
-  disarmStrayClick();
-  swallower.isArmed = true;
-  swallower.timer = setTimeout(disarmStrayClick, MENU_PRESS_STRAY_CLICK_MS);
-}
-
-/** Test-only: forget an armed swallower between cases. */
+/** Test-only: forget an armed click guard between cases. */
 export function __resetMenuPressForTest(): void {
-  disarmStrayClick();
+  __resetClickGuardForTest();
 }
 
 // =============================================================================
@@ -480,36 +448,39 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const activate = useCallback((row: HTMLElement, release: PointerEvent) => {
-    const {onActivate} = optionsRef.current;
-    isModelActivation = true;
-    try {
-      if (onActivate != null) {
-        onActivate(row, release);
-        return;
+    // Every click this dispatches passes the shared click guard.
+    withoutClickGuard(() => {
+      const {onActivate} = optionsRef.current;
+      isModelActivation = true;
+      try {
+        if (onActivate != null) {
+          onActivate(row, release);
+          return;
+        }
+        // The row acts as its own click would. `detail: 0` marks a dispatched
+        // activation, as a keyboard's does, so the click guard lets
+        // it through; the button and modifiers are the release's.
+        row.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            detail: 0,
+            button: release.button,
+            clientX: release.clientX,
+            clientY: release.clientY,
+            screenX: release.screenX,
+            screenY: release.screenY,
+            ctrlKey: release.ctrlKey,
+            shiftKey: release.shiftKey,
+            altKey: release.altKey,
+            metaKey: release.metaKey,
+          }),
+        );
+      } finally {
+        isModelActivation = false;
       }
-      // The row acts as its own click would. `detail: 0` marks a dispatched
-      // activation, as a keyboard's does, so the stray-click swallower lets
-      // it through; the button and modifiers are the release's.
-      row.dispatchEvent(
-        new MouseEvent('click', {
-          bubbles: true,
-          cancelable: true,
-          composed: true,
-          detail: 0,
-          button: release.button,
-          clientX: release.clientX,
-          clientY: release.clientY,
-          screenX: release.screenX,
-          screenY: release.screenY,
-          ctrlKey: release.ctrlKey,
-          shiftKey: release.shiftKey,
-          altKey: release.altKey,
-          metaKey: release.metaKey,
-        }),
-      );
-    } finally {
-      isModelActivation = false;
-    }
+    });
   }, []);
 
   // Declared before `step` so the mutual recursion through refs type-checks.
@@ -547,7 +518,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         case 'act': {
           // Detach before acting: the activation usually closes the menu.
           endGesture();
-          armStrayClick(doc);
+          armClickGuard(doc);
           if (native != null) {
             activate(effect.row, native);
           }
@@ -556,7 +527,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         case 'settle': {
           endGesture();
           if (effect.stray) {
-            armStrayClick(doc);
+            armClickGuard(doc);
           }
           if (effect.dismiss) {
             optionsRef.current.onDismiss?.();
@@ -663,8 +634,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         lastPointerEventRef.current = event;
         const gesture = gestureRef.current;
         if (gesture.phase === 'triggerPress') {
-          // A finger that travels is scrolling, not holding. The tolerance is
-          // the shared hook's, so it cannot drift from ContextMenu's.
+          // A finger that travels past FR29's drift allowance is scrolling,
+          // not holding.
           const isPending = longPressApiRef.current?.moveTo({
             x: event.clientX,
             y: event.clientY,
@@ -769,9 +740,19 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // onto its trigger, driven here from the pointer stream this model already
   // observes. Its touch handlers go unused; the hold duration, the movement
   // tolerance and the timer are what matter, and they now have one home.
+  // FR29's drift allowance is a finger's where the primary pointer is
+  // coarse; where it is fine, the shared tolerance stays (useMenuPress FR9).
+  const isPrimaryPointerCoarse = useSyncExternalStore(
+    subscribeCoarsePointer,
+    readCoarsePointer,
+    readServerCoarsePointer,
+  );
   longPressApiRef.current = useLongPress({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
+    moveCancelPx: isPrimaryPointerCoarse
+      ? MENU_PRESS_TRIGGER_DRIFT_PX
+      : undefined,
   });
 
   // --- Handlers ------------------------------------------------------------

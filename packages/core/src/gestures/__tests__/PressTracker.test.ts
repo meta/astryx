@@ -260,3 +260,50 @@ describe('PressTracker in the arena', () => {
     expect(double.state).toBe('possible');
   });
 });
+
+describe('PressTracker under a fine pointer (spec:AST-094 FR11, DEC-21)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('paints a mouse or a pen press at once, inside a scroller too: the fine profile has no delay', () => {
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const {events, highlights, tracker, h} = setup();
+      h.finger(1).down(150, 120, 0, {
+        recognizers: [],
+        consumer: tracker,
+        pointerType,
+        scroll: scrollProbe(() => true),
+      });
+      expect(highlights).toEqual([true]);
+      h.finger(1).up(80);
+      expect(events).toEqual(['touchDown', 'touchUpInside']);
+    }
+  });
+
+  it('brakes only a finger: a mouse press on a scroller a flick set moving still presses', () => {
+    const events: ControlEvent[] = [];
+    const highlights: boolean[] = [];
+    const tracker = new PressTracker({
+      getBounds: () => BOUNDS,
+      onControlEvent: event => events.push(event),
+      onHighlightChange: value => highlights.push(value),
+      isBraking: () => true,
+    });
+    const h = createHarness();
+    h.finger(1).down(150, 120, 0, {recognizers: [], consumer: tracker});
+    h.finger(1).up(80);
+    expect(events).toEqual([]);
+    h.finger(2).down(150, 120, 400, {
+      recognizers: [],
+      consumer: tracker,
+      pointerType: 'mouse',
+    });
+    expect(highlights).toEqual([true]);
+    h.finger(2).up(480);
+    expect(events).toEqual(['touchDown', 'touchUpInside']);
+  });
+});

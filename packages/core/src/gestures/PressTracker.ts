@@ -213,7 +213,9 @@ export class PressTracker implements TouchConsumer {
     if (
       this.touchId != null ||
       this.options.isEnabled?.() === false ||
-      this.options.isBraking?.(touch) === true
+      // The scroll brake is a finger's (`spec:AST-094` FR11, DEC-21).
+      (touch.pointerType === 'touch' &&
+        this.options.isBraking?.(touch) === true)
     ) {
       return;
     }
@@ -340,10 +342,6 @@ export class PressTracker implements TouchConsumer {
   }
 
   private emit(event: ControlEvent, touch: GestureTouch): void {
-    // A finger where the primary pointer is fine gets press feedback only.
-    if (touch.isFeedbackOnly === true) {
-      return;
-    }
     this.options.onControlEvent?.(event, touch);
   }
 

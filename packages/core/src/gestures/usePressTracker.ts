@@ -35,12 +35,9 @@ export type UsePressTrackerOptions = Omit<
   'getBounds' | 'view'
 > & {
   /**
-   * The control paints press feedback per event, so its tracker attaches
-   * even where the primary pointer is fine, with no warning (an FR19
-   * exception for press feedback only, pending in `spec:AST-094`'s
-   * amendment): there a finger's press is painted and nothing else (no
-   * control event, nothing kept), and a mouse or pen press is not taken.
-   * @default false
+   * Accepted and ignored: every attachment reads each event's pointer
+   * (`spec:AST-094` FR43). Kept so callers written before FR43 compile.
+   * @deprecated
    */
   perEventPointer?: boolean;
 };
@@ -98,8 +95,12 @@ export function usePressTracker(
   const [tracker] = useState(
     () =>
       new PressTracker({
-        getBounds: () =>
-          refRef.current.current?.getBoundingClientRect() ?? null,
+        getBounds: () => {
+          const element = refRef.current.current;
+          return element == null
+            ? null
+            : getGestureHost(element.ownerDocument).presentedRect(element);
+        },
         get view() {
           return refRef.current.current;
         },
@@ -149,8 +150,7 @@ export function usePressTracker(
 
   // Syncs the host's press consumer with the element behind `ref`.
   // Releasing the element (a replaced node, unmount) disposes the press,
-  // which un-highlights a control it was holding; a changed perEventPointer
-  // re-attaches it.
+  // which un-highlights a control it was holding.
   const attachment = useMemo(
     () => ({tracker, perEventPointer}),
     [tracker, perEventPointer],

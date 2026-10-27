@@ -31,7 +31,7 @@
  *
  * A surface's hold does nothing, so it keeps the browser's long-press text
  * selection (`spec:AST-094` FR41); only an element whose hold does something
- * suppresses it, through the gesture host (gestures/selectionLock.ts).
+ * suppresses it, through the gesture host (utils/selectionLock.ts).
  *
  * Its one touch-only listener, `touchcancel`, is on only while the primary
  * pointer is coarse (coarsePointer.ts, `spec:AST-094` FR24).
@@ -54,6 +54,7 @@ import {
   pressGestureStep,
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {subscribeInput} from './inputStream';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -488,10 +489,11 @@ function onVisibilityChange(): void {
   }
 }
 
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+/** The input stream subscriptions while installed. */
+let unsubscribers: (() => void)[] = [];
 
-/** Whether the touch-only `touchcancel` listener is on. */
-let hearsTouchCancel = false;
+/** The touch-only `touchcancel` subscription, while the pointer is coarse. */
+let stopTouchCancel: (() => void) | null = null;
 let stopWatchingPointer: (() => void) | null = null;
 
 /**
@@ -500,14 +502,14 @@ let stopWatchingPointer: (() => void) | null = null;
  * through `pointercancel`.
  */
 function hearTouchCancel(on: boolean): void {
-  if (on === hearsTouchCancel) {
+  if (on === (stopTouchCancel != null)) {
     return;
   }
-  hearsTouchCancel = on;
   if (on) {
-    window.addEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
+    stopTouchCancel = subscribeInput(window, 'touchcancel', onCancel);
   } else {
-    window.removeEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
+    stopTouchCancel?.();
+    stopTouchCancel = null;
   }
 }
 
@@ -524,33 +526,34 @@ function armTouchCancel(): void {
   hearTouchCancel(isCoarsePointer(window));
 }
 
+// Every listener is passive and on the window's capture phase, through the
+// shared input stream (utils/inputStream.ts): a page of pressables blocks no
+// scroll, and an app's capture-phase stopPropagation at the document cannot
+// starve the controller.
 function addListeners(): void {
-  window.addEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
-  window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.addEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.addEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag has
-  // taken the gesture, but a right-click is a mouse act this controller never
-  // tracks, and listening for it would read as a takeover of the browser's
-  // own menu.
-  window.addEventListener('dragstart', onCancel, PASSIVE_CAPTURE);
-  // `scroll` does not bubble, so the capture phase is the only way one
-  // listener hears every scroller in the document.
-  document.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  unsubscribers = [
+    subscribeInput(window, 'pointerdown', onPointerDown),
+    subscribeInput(window, 'pointermove', onPointerMove),
+    subscribeInput(window, 'pointerup', onPointerUp),
+    subscribeInput(window, 'pointercancel', onCancel),
+    // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag
+    // has taken the gesture, but a right-click is a mouse act this controller
+    // never tracks, and listening for it would read as a takeover of the
+    // browser's own menu.
+    subscribeInput(window, 'dragstart', onCancel),
+    // `scroll` does not bubble; the capture phase hears every scroller.
+    subscribeInput(window, 'scroll', onScroll),
+    subscribeInput(window, 'visibilitychange', onVisibilityChange),
+  ];
 }
 
 function removeListeners(): void {
-  window.removeEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
-  window.removeEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.removeEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.removeEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
+  for (const unsubscribe of unsubscribers.splice(0)) {
+    unsubscribe();
+  }
   stopWatchingPointer?.();
   stopWatchingPointer = null;
   hearTouchCancel(false);
-  window.removeEventListener('dragstart', onCancel, PASSIVE_CAPTURE);
-  document.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.removeEventListener('visibilitychange', onVisibilityChange);
 }
 
 /**
