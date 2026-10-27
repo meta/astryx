@@ -18,6 +18,7 @@ import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {ManualClock, RecordingConsumer} from './harness';
@@ -189,6 +190,26 @@ afterEach(() => {
 });
 
 describe('GestureHost', () => {
+  it("measures a screen-edge pan's view, so an edge-zone strip takes the axis at UIKit's 15 px, not 10 (spec:AST-094 FR18)", () => {
+    const {strip} = mount('<div id="strip"></div>');
+    strip.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 0, y: 0, width: 40, height: 800});
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    detachers.push(host.attach(strip, pan));
+    const down = {id: 1, x: 5, y: 300};
+    touch('touchstart', strip, [down], [down], 0);
+    const at14 = {...down, x: 19};
+    touch('touchmove', strip, [at14], [at14], 16);
+    expect(pan.state).toBe('possible');
+    const at15 = {...down, x: 20};
+    touch('touchmove', strip, [at15], [at15], 32);
+    expect(pan.state).toBe('began');
+    touch('touchend', strip, [at15], [], 48);
+  });
+
   it('tells a recognizer tracking a finger about a second finger on plain page content, and leaves that finger to the page (spec:AST-094 FR28)', () => {
     const {box} = mount('<div id="box"></div><p id="page">text</p>');
     const page = document.getElementById('page')!;
