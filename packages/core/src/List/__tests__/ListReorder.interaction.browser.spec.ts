@@ -1607,7 +1607,7 @@ test('a held finger locks text selection on the handle, and the lift unlocks it'
   await expect.poll(refuses).toBe(false);
 });
 
-test("the handle keeps a small control's size; a finger's target reaches 44 pt short of the next handle's, its ring clears its lines, and its row is no taller for it", async ({
+test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
   page,
 }) => {
   await open(page);
@@ -1648,6 +1648,11 @@ test("the handle keeps a small control's size; a finger's target reaches 44 pt s
       next == null
         ? Number.POSITIVE_INFINITY
         : next.getBoundingClientRect().top - hitInset(next, 'top');
+    // From this handle to the next one, top to top.
+    const pitch =
+      next == null
+        ? Number.POSITIVE_INFINITY
+        : next.getBoundingClientRect().top - box.top;
     // A point in the hit layer outside the visible handle, above it.
     const probe = document.elementFromPoint(
       box.left + box.width / 2,
@@ -1675,6 +1680,7 @@ test("the handle keeps a small control's size; a finger's target reaches 44 pt s
       hitHeight: hit.bottom - hit.top,
       hitWidth: hit.right - hit.left,
       gapToNext: nextTop - hit.bottom,
+      pitch,
       probeHits: probe === element,
       // The ring's inner edge to the lines, above and below.
       above: glyph.top - (box.top + inset),
@@ -1687,11 +1693,19 @@ test("the handle keeps a small control's size; a finger's target reaches 44 pt s
   // a finger).
   expect(geometry.width).toBeLessThan(44);
   expect(geometry.height).toBeLessThan(44);
-  // A finger's target: 44 pt, through the invisible hit layer, and it never
-  // reaches into the next handle's.
-  expect(geometry.hitHeight).toBeCloseTo(44, 0);
+  // A finger's target: toward 44 pt, through the invisible hit layer. Where
+  // the next handle sits closer than that, the target stops where it meets
+  // the next handle's, halfway, and never reaches into it; the first row's
+  // has no neighbour above, so it grows the whole way there.
+  expect(geometry.hitHeight).toBeLessThanOrEqual(44.5);
+  expect(geometry.hitHeight).toBeGreaterThanOrEqual(
+    Math.min(44, geometry.pitch) - 0.5,
+  );
   expect(geometry.hitWidth).toBeCloseTo(44, 0);
   expect(geometry.gapToNext).toBeGreaterThanOrEqual(-0.5);
+  if (geometry.pitch < 44) {
+    expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
+  }
   expect(geometry.probeHits).toBe(true);
   // The ring clears the lines above and below.
   expect(geometry.above).toBeGreaterThan(0);
