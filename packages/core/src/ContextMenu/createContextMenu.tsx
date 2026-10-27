@@ -26,10 +26,11 @@
  * is ContextMenu's: its rows, keys, typeahead, sub-menus, dismissal and
  * focus return. It lives in a container that carries the theme attributes of
  * the element's themed ancestor, at the end of the element's nearest dialog
- * or popover, or of the body: the element's own markup is untouched (a `li`
- * row keeps its list valid), an event inside the menu never passes through
- * the element, a modal dialog around the element leaves the menu usable, and
- * opening it leaves an open popover around the element open.
+ * or popover, or of its shadow root or the body: the element's own markup is
+ * untouched (a `li` row keeps its list valid), an event inside the menu never
+ * passes through the element, a modal dialog around the element leaves the
+ * menu usable, opening it leaves an open popover around the element open, and
+ * a shadow root's styles reach it.
  */
 
 import {use, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
@@ -198,15 +199,18 @@ function mirrorTheme(host: HTMLElement, element: Element): void {
 }
 
 /**
- * Where the menu's container belongs: the end of the element's nearest
- * dialog or popover (a modal dialog leaves everything outside it inert, and a
- * menu outside an open popover would dismiss it), or of the body.
+ * Where the menu's container belongs, in the element's own tree: the end of
+ * its nearest dialog or popover (a modal dialog leaves everything outside it
+ * inert, and a menu outside an open popover would dismiss it), or of its
+ * shadow root (whose styles reach the menu there), or of the body.
  */
-function containerParentFor(element: Element): Element {
-  return (
-    element.parentElement?.closest('dialog, [popover]') ??
-    element.ownerDocument.body
-  );
+function containerParentFor(element: Element): ParentNode {
+  const scope = element.parentElement?.closest('dialog, [popover]');
+  if (scope != null) {
+    return scope;
+  }
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot ? root : element.ownerDocument.body;
 }
 
 /**
@@ -329,8 +333,9 @@ export function createContextMenu(
   const host = doc.createElement('div');
   host.setAttribute(dataAttr('context-menu-host'), '');
   // Each open first moves the container to where the element is now: the
-  // end of its dialog or popover, or of the body (containerParentFor). A
-  // shown menu stays put, since moving a node hides the popovers in it.
+  // end of its dialog or popover, or of its shadow root or the body
+  // (containerParentFor). A shown menu stays put, since moving a node hides
+  // the popovers in it.
   const placeHost = () => {
     mirrorTheme(host, element);
     const parent = containerParentFor(element);
