@@ -1293,6 +1293,53 @@ for (const run of [
   });
 }
 
+/**
+ * A screen-edge pan on an element that reaches beyond its band (200 px wide,
+ * from the left edge), over the same horizontal scroller.
+ */
+async function openWideEdgePan(page: Page, engine: string): Promise<Driver> {
+  const driver = await openBare(page, engine);
+  await page.evaluate(() => {
+    const {host, ScreenEdgePanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="hscroll" style="height: 300px; overflow-x: auto; overscroll-behavior: contain">
+        <div style="width: 3000px; height: 300px; background: linear-gradient(90deg, #eef, #cce)">wide</div>
+      </div>
+      <div id="edge" style="position: fixed; left: 0; top: 0; width: 200px; height: 300px"></div>`;
+    const edges: string[] = [];
+    (window as unknown as {__edge: string[]}).__edge = edges;
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    pan.addTransitionListener((_current, _from, to) => edges.push(to));
+    host.attach(document.getElementById('edge') as HTMLElement, pan);
+  });
+  return driver;
+}
+
+for (const run of [
+  {travel: 9, begins: false},
+  {travel: 10, begins: true},
+]) {
+  test(`a screen-edge pan on an element wider than its band ${run.begins ? 'claims at' : 'has not claimed at'} ${run.travel} px of travel from a touch in the band (spec:AST-094 FR18–FR22, DEC-22)`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openWideEdgePan(page, browserName);
+    await logTouchMoves(page);
+    await driver.play(
+      drag({x: 20, y: 150}, {x: 20 + run.travel, y: 150}, 7, false),
+    );
+    await page.waitForTimeout(100);
+    const edges = await page.evaluate(
+      () => (window as unknown as {__edge: string[]}).__edge,
+    );
+    expect(edges.includes('began')).toBe(run.begins);
+    await driver.play([{t: 0, down: []}]);
+  });
+}
+
 test('a touch landing 41 px from the edge is outside the band: the edge pan never begins, and the horizontal scroll it starts is not blocked (spec:AST-094 FR18–FR22)', async ({
   page,
   browserName,
