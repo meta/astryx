@@ -984,6 +984,30 @@ function fineTouch(target: HTMLElement, event: Event): Event {
   return event;
 }
 
+/**
+ * One wheel step at an explicit time: pixel deltas (`deltaMode` 0), as a
+ * trackpad's scroll or Chromium's mouse wheel sends them.
+ */
+function wheelAt(
+  target: HTMLElement,
+  time: number,
+  deltaY: number,
+): WheelEvent {
+  const event = new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    deltaX: 0,
+    deltaY,
+    deltaMode: 0,
+    clientX: 10,
+    clientY: 10,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: time});
+  fineClockLatest = Math.max(fineClockLatest, time);
+  target.dispatchEvent(event);
+  return event;
+}
+
 /** A browser's touchcancel for one finger, after its pointercancel. */
 function fineTouchCancel(
   target: HTMLElement,
@@ -1130,6 +1154,38 @@ describe('Toast swipe dismissal', () => {
     } finally {
       clock.restore();
     }
+  });
+
+  it('dismisses on a trackpad scroll toward the edge, and leaves a mouse wheel notch to the page (spec:AST-094 FR43)', async () => {
+    const {visualToast, onHide} = renderSwipeToast();
+    // A mouse wheel's notch (100 px at once) is the page's: a notch that
+    // crosses the card while the page scrolls never dismisses it.
+    let start = fineClockStart();
+    const notch = wheelAt(visualToast, start, -100);
+    expect(notch.defaultPrevented).toBe(false);
+    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
+    expect(onHide).not.toHaveBeenCalled();
+
+    // A trackpad scroll moving the content down, toward a bottom toast's
+    // edge: the card moves with it and leaves 100 ms after the last step.
+    start = fineClockStart();
+    const steps: WheelEvent[] = [];
+    act(() => {
+      for (let i = 0; i < 8; i += 1) {
+        steps.push(wheelAt(visualToast, start + i * 16, -8));
+      }
+    });
+    expect(steps.every(step => step.defaultPrevented)).toBe(true);
+    expect(
+      Number.parseFloat(visualToast.style.getPropertyValue('--_toast-swipe-y')),
+    ).toBeGreaterThan(40);
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
+    expect(onHide).toHaveBeenCalledWith('manual');
   });
 
   it('dismisses a fast flick below the distance threshold', () => {
@@ -3912,6 +3968,35 @@ describe('Toast swipe dismissal under a finger', () => {
       retractTarget({top: 0, bottom: 80}, window.innerHeight, 1),
     );
     expect(onHide).not.toHaveBeenCalled();
+    await afterRetract();
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('follows a trackpad scroll toward the edge with the banner swipe, and dismisses on its release (spec:AST-094 FR43)', async () => {
+    const {visualToast, onHide} = await renderSwipeToast();
+    // 64 px of content moving down, toward a bottom toast's edge, at
+    // 0.5 px/ms: the card follows, then the scroll's release flicks it away.
+    const start = strokeStart();
+    act(() => {
+      for (let i = 0; i < 8; i += 1) {
+        const event = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaY: -8,
+          deltaMode: 0,
+          clientX: 10,
+          clientY: 10,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: start + i * 16});
+        strokeClock = Math.max(strokeClock, start + i * 16);
+        visualToast.dispatchEvent(event);
+      }
+    });
+    expect(cardY(visualToast)).toBeCloseTo(0.55 * (64 - 14), 5);
+    // Ended 100 ms after the last step; then the retract.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 150));
+    });
     await afterRetract();
     expect(onHide).toHaveBeenCalledWith('manual');
   });

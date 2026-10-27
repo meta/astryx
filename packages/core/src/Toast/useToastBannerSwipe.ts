@@ -24,8 +24,9 @@
  * keeps its own swipe (useToastGesture):
  *
  * - it is a one-way pan toward the Toast's edge, for every pointer (a
- *   finger, a pen and a mouse, spec:AST-094 FR43; a mouse or pen drag it
- *   claims selects no text), on the shared gesture system (../gestures). It
+ *   finger, a pen and a mouse, and a trackpad's scroll but not a mouse
+ *   wheel's notches, spec:AST-094 FR43; a mouse or pen drag it claims
+ *   selects no text), on the shared gesture system (../gestures). It
  *   begins, and takes the touch from the browser, at UIKit's pan hysteresis
  *   toward the edge when the drag is `toast.axisRatio` times more vertical
  *   than horizontal; nothing claims the touch earlier (a pan starts at
@@ -177,6 +178,10 @@ export function useToastBannerSwipe(
         direction: panDirection(options.direction),
         // Every pointer (spec:AST-094 FR43): once the pan claims a mouse or a
         // pen drag, the host clears and holds off text selection (FR41).
+        // A trackpad's scroll moves the card as a finger does (FR43). A
+        // mouse wheel's notches stay the page's: one notch is past the dismiss
+        // distance, so any page scroll that crossed the card would dismiss it.
+        allowedScrollTypes: ['continuous'],
         axisRatio: toast.axisRatio,
         maximumNumberOfTouches: 1,
         shouldReceiveTouch: (_recognizer, touch) => {

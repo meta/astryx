@@ -54,6 +54,7 @@ import {
   thawTimers,
   timeline,
   touchDriver,
+  webInputDriver,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -935,6 +936,55 @@ test.describe('with a fine pointer', () => {
     expect(await selected()).toBe('');
     await page.mouse.up();
     await expect(page.locator('.astryx-toast')).toHaveCount(0);
+  });
+
+  test('a trackpad scroll toward the edge swipes the toast away, and a mouse wheel notch leaves it to the page (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-toast--mobile-swipe-to-dismiss');
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    const driver = await webInputDriver(page);
+    await page.getByRole('button', {name: 'Show toast'}).click();
+    const card = page.locator('.astryx-toast').first();
+    await expect(card).toBeVisible();
+    await waitForRest(card);
+    const box = await card.boundingBox();
+    if (box == null) {
+      throw new Error('no toast');
+    }
+    const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    // A mouse wheel's notch (100 px at once): the card stays where it is.
+    await driver.wheel({...at, dy: 100});
+    await page.waitForTimeout(200);
+    expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
+    await expect(page.locator('.astryx-toast')).toHaveCount(1);
+    // A trackpad scroll moving the content up, toward this top toast's edge,
+    // with the cursor still: the card moves with it, out from under the
+    // cursor, and leaves once the scroll stops. The card's offset is sampled
+    // every frame in the page, so the steps go out back to back (a gap of
+    // 100 ms would end the scroll gesture).
+    await card.evaluate(el => {
+      const w = window as unknown as {__minY: number};
+      w.__minY = 0;
+      const sample = () => {
+        if (!el.isConnected) {
+          return;
+        }
+        const y = new DOMMatrixReadOnly(getComputedStyle(el).transform).f;
+        w.__minY = Math.min(w.__minY, y);
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    for (let i = 0; i < 6; i += 1) {
+      await driver.wheel({...at, dy: 16});
+    }
+    await expect(page.locator('.astryx-toast')).toHaveCount(0);
+    expect(
+      await page.evaluate(() => (window as unknown as {__minY: number}).__minY),
+    ).toBeLessThan(-40);
   });
 
   /**
