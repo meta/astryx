@@ -142,6 +142,27 @@ describe('createContextMenu', () => {
     expect(document.activeElement).toBe(element);
   });
 
+  it('Home and End jump to the first and last rows (spec:AST-107 FR8)', async () => {
+    attach({items: [{label: 'Archive'}, {label: 'Move'}, {label: 'Delete'}]});
+    element.focus();
+    press(element, 'F10', {shiftKey: true});
+    await waitFor(() => expect(document.activeElement).toBe(rows()[0]));
+    press(rows()[0], 'End');
+    expect(document.activeElement).toBe(rows()[2]);
+    press(rows()[2], 'Home');
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  it('focus starts on the first enabled row (spec:AST-107 FR8)', async () => {
+    attach({items: [{label: 'Archive', isDisabled: true}, {label: 'Delete'}]});
+    element.focus();
+    press(element, 'F10', {shiftKey: true});
+    expect(isOpen()).toBe(true);
+    await waitFor(() =>
+      expect(document.activeElement?.textContent).toContain('Delete'),
+    );
+  });
+
   it('choosing a row runs it and closes the menu', async () => {
     const onArchive = vi.fn();
     attach({items: [{label: 'Archive', onClick: onArchive}]});

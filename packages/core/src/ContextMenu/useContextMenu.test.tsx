@@ -4,9 +4,11 @@
  * @file useContextMenu.test.tsx
  * @input vitest (jsdom), Testing Library, useContextMenu in a component
  * @output Checks the hook over createContextMenu (spec:AST-107 FR8, FR6): it
- *   attaches to the ref'd element, renders `items` or a ReactNode
- *   `menuContent` with the caller's Core providers, opens and closes from
- *   what it returns, follows `isDisabled`, and unmounting removes it all
+ *   attaches to the ref'd element through the public factory, handing it a
+ *   `render` for a ReactNode `menuContent` (with the caller's Core providers,
+ *   and rows that keep the menu's behavior) or `items`, opens and closes from
+ *   what it returns, follows `isDisabled` and `presentation`, and unmounting
+ *   removes it all
  * @position Testing for useContextMenu.tsx
  */
 
@@ -14,9 +16,27 @@ import {act, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {use, useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
 import {LayerContext} from '../Layer/LayerContext';
 import {dataAttr} from '../naming';
+import {createContextMenu} from './createContextMenu';
 import {useContextMenu, type UseContextMenuOptions} from './useContextMenu';
+
+// The real factory, watched: the hook must go through it.
+vi.mock('./createContextMenu', async importOriginal => {
+  const actual = await importOriginal<typeof import('./createContextMenu')>();
+  return {...actual, createContextMenu: vi.fn(actual.createContextMenu)};
+});
+
+/** The options the public factory takes (spec:AST-107 FR8). */
+const FACTORY_OPTIONS = new Set([
+  'items',
+  'render',
+  'label',
+  'isDisabled',
+  'onOpenChange',
+  'presentation',
+]);
 
 beforeEach(() => {
   HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
@@ -107,6 +127,58 @@ describe('useContextMenu', () => {
       screen.getByRole('menuitem', {name: 'Custom', hidden: true}),
     ).not.toBeNull();
     expect(screen.queryByTestId('bridged')).not.toBeNull();
+  });
+
+  it('hands the public createContextMenu a `render` for menuContent, and nothing else (spec:AST-107 FR8, FR6)', () => {
+    vi.mocked(createContextMenu).mockClear();
+    render(
+      <Row
+        label="Inbox actions"
+        menuContent={
+          <div role="menuitem" tabIndex={-1}>
+            Custom
+          </div>
+        }
+      />,
+    );
+    expect(vi.mocked(createContextMenu)).toHaveBeenCalledTimes(1);
+    const [element, options] = vi.mocked(createContextMenu).mock.calls[0] ?? [];
+    expect(element).toBe(screen.getByText('Inbox'));
+    expect(
+      Object.keys(options ?? {}).filter(key => !FACTORY_OPTIONS.has(key)),
+    ).toEqual([]);
+    expect(typeof options?.render).toBe('function');
+    expect(options?.items).toBeUndefined();
+    expect(options?.label).toBe('Inbox actions');
+  });
+
+  it('passes `presentation` to the factory, as ContextMenu does', () => {
+    vi.mocked(createContextMenu).mockClear();
+    render(<Row presentation="popover" items={[{label: 'Archive'}]} />);
+    expect(vi.mocked(createContextMenu).mock.calls[0]?.[1]).toMatchObject({
+      presentation: 'popover',
+    });
+  });
+
+  it("a DropdownMenuItem in menuContent keeps the menu's behavior: choosing it closes the menu", async () => {
+    const onArchive = vi.fn();
+    render(
+      <Row
+        menuContent={<DropdownMenuItem label="Archive" onClick={onArchive} />}
+      />,
+    );
+    rightClick(screen.getByText('Inbox'));
+    expect(isOpen()).toBe(true);
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
+      ),
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole('menuitem', {name: 'Archive', hidden: true}));
+    expect(onArchive).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(isOpen()).toBe(false));
   });
 
   it('open() and close() drive the menu', () => {
