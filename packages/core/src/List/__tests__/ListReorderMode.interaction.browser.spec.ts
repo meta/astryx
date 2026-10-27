@@ -38,15 +38,21 @@ const START_STORY = 'core-list--reorder-from-your-ui';
 const ROWS = ['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash'];
 const HOLD_MS = reorder.claim.delayMs + 80;
 
+/**
+ * The list's rows, without the reorder's insertion line and drag preview:
+ * inert, aria-hidden ghosts of the list (`data-astryx-leaving`).
+ */
+const ROW = '#storybook-root li:not([data-astryx-leaving])';
+
 const row = (page: Page, label: string) =>
-  page.locator('#storybook-root li').filter({hasText: label}).first();
+  page.locator(ROW).filter({hasText: label}).first();
 
 const handle = (page: Page, label: string) =>
   page.getByRole('button', {name: `Reorder ${label}`, exact: true});
 
 const labels = async (page: Page) =>
   page
-    .locator('#storybook-root li')
+    .locator(ROW)
     .evaluateAll(rows => rows.map(element => element.textContent ?? ''));
 
 const translateY = async (element: Locator) =>
@@ -87,6 +93,109 @@ test.describe('with a mouse', () => {
     expect(
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
+
+  /**
+   * The open anchored hint: its surface (the theme roles it wears), its
+   * anchoring (the layer's placement rules), and where it sits against the
+   * element it is anchored to (the element whose `anchor-name` its
+   * `position-anchor` names): the gap below it, and which of its edges the
+   * hint lines up with (`start`, or `end` where the start would leave the
+   * viewport).
+   */
+  const openHint = async (page: Page) =>
+    page.evaluate(() => {
+      const hint = Array.from(
+        document.querySelectorAll<HTMLElement>('[popover]'),
+      ).find(element => element.matches(':popover-open'));
+      if (hint == null) {
+        return null;
+      }
+      const name = getComputedStyle(hint)
+        .getPropertyValue('position-anchor')
+        .trim();
+      const anchor = Array.from(
+        document.querySelectorAll<HTMLElement>('*'),
+      ).find(element =>
+        element.style
+          .getPropertyValue('anchor-name')
+          .split(',')
+          .map(part => part.trim())
+          .includes(name),
+      );
+      if (anchor == null) {
+        return null;
+      }
+      const box = hint.getBoundingClientRect();
+      const anchorBox = anchor.getBoundingClientRect();
+      const style = getComputedStyle(hint);
+      return {
+        below: box.top - anchorBox.bottom,
+        edge:
+          Math.abs(box.left - anchorBox.left) < 0.5
+            ? 'start'
+            : Math.abs(box.right - anchorBox.right) < 0.5
+              ? 'end'
+              : 'none',
+        inView: box.left >= 0 && box.right <= window.innerWidth,
+        anchoring: {
+          positionArea: style.getPropertyValue('position-area'),
+          positionTryFallbacks: style.getPropertyValue(
+            'position-try-fallbacks',
+          ),
+          marginBlockStart: style.marginBlockStart,
+        },
+        surface: {
+          backgroundColor: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          boxShadow: style.boxShadow,
+          color: style.color,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          padding: style.padding,
+          position: style.position,
+        },
+      };
+    });
+
+  test("reorder mode's hint sits where Core's keyboard hint does and wears the same surface", async ({
+    page,
+  }) => {
+    // Core's keyboard hint: a tab list reached with the keyboard.
+    await openStory(page, storybook(), 'core-tablist--default');
+    await expectFinePointer(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(async () => openHint(page)).not.toBeNull();
+    await page.waitForTimeout(300);
+    const keyboard = await openHint(page);
+    // Reorder mode's hint, below the handle whose row is in the mode. The
+    // list is narrowed so its handles, at the rows' end, are as far from the
+    // viewport's edge as the tab list is: each hint has the room to line up
+    // with its anchor's start, and the layer flips neither.
+    await openStory(page, storybook(), STORY);
+    await page.evaluate(() => {
+      const root = document.getElementById('storybook-root');
+      if (root != null) {
+        root.style.width = '420px';
+      }
+    });
+    await handle(page, 'Inbox').focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('button', {name: 'Done'})).toBeVisible();
+    await page.waitForTimeout(300);
+    const reorderHint = await openHint(page);
+    // The same layer, anchoring and theme roles (spec:AST-103, FR4 hint): the
+    // same surface, the same placement rules, the same gap below the anchor,
+    // and the same edge to line up with.
+    expect(reorderHint?.surface).toEqual(keyboard?.surface);
+    expect(reorderHint?.anchoring).toEqual(keyboard?.anchoring);
+    expect(
+      Math.abs((reorderHint?.below ?? Number.NaN) - (keyboard?.below ?? 0)),
+    ).toBeLessThan(0.5);
+    expect(keyboard?.edge).toBe('start');
+    expect(reorderHint?.edge).toBe('start');
+    expect(reorderHint?.inView).toBe(true);
+    await page.keyboard.press('Escape');
+  });
 
   test("a mouse click on a handle turns on reorder mode and shows its hint's moves and Done, and announces no drop", async ({
     page,
@@ -287,70 +396,125 @@ test.describe('with a finger', () => {
     await expect(page.getByRole('button', {name: 'Done'})).toBeHidden();
   });
 
-  test("each of the hint's buttons is a 44 px target centered on what it shows, and none covers its neighbour", async ({
+  test("each of the hint's buttons keeps its size, and its touch target grows toward 44 px without covering its neighbour", async ({
     page,
     browserName,
   }) => {
-    // design:bidirectionality DR8: a target stays centered on its visible
-    // control, keeps the required size, and never makes part of another
-    // control clickable as itself.
+    // No control grows for a finger: where the primary pointer is coarse a
+    // target reaches toward 44 px through an invisible hit layer, each side
+    // stopping at half the gap to a neighbouring target, so a tap always goes
+    // to the nearer one (Cindy's size rule; design:bidirectionality DR8).
     await open(page);
     await handle(page, 'Sent').focus();
     await page.keyboard.press('Enter');
     await expect(handle(page, 'Sent')).toHaveAttribute('aria-pressed', 'true');
     const names = ['Move up', 'Move down', 'Done'];
-    const boxes = [];
     for (const name of names) {
-      const button = page.getByRole('button', {name});
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      if (box == null) {
-        throw new Error(`no box for ${name}`);
-      }
-      // What it shows: the glyph (its first element) or its text.
-      const glyph = await button.evaluate(element => {
-        const rect = (
-          element.firstElementChild ?? element
-        ).getBoundingClientRect();
-        return {left: rect.left, right: rect.right};
-      });
-      boxes.push({name, box, glyph});
+      await expect(page.getByRole('button', {name})).toBeVisible();
     }
-    for (const {name, box, glyph} of boxes) {
-      expect(box.width, `${name} is 44 px wide`).toBeGreaterThanOrEqual(44);
-      // Centered on what it shows (within a pixel).
+    // The hit layer's insets are written a frame after the hint shows.
+    await expect
+      .poll(async () =>
+        page
+          .getByRole('button', {name: 'Move up'})
+          .evaluate(element =>
+            getComputedStyle(element)
+              .getPropertyValue('--astryx-hit-inset-top')
+              .trim(),
+          ),
+      )
+      .not.toBe('');
+    const targets = await page.evaluate(
+      list =>
+        list.map(name => {
+          const element = Array.from(document.querySelectorAll('button')).find(
+            button =>
+              button.getAttribute('aria-label') === name ||
+              button.textContent?.trim() === name,
+          );
+          if (element == null) {
+            throw new Error(`no ${name}`);
+          }
+          const style = getComputedStyle(element);
+          const inset = (side: string) =>
+            parseFloat(style.getPropertyValue(`--astryx-hit-inset-${side}`)) ||
+            0;
+          const box = element.getBoundingClientRect();
+          const glyph = (
+            element.firstElementChild ?? element
+          ).getBoundingClientRect();
+          return {
+            name,
+            box: {
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+            },
+            hit: {
+              left: box.left - inset('left'),
+              right: box.right + inset('right'),
+              top: box.top - inset('top'),
+              bottom: box.bottom + inset('bottom'),
+            },
+            glyph: {left: glyph.left, right: glyph.right},
+          };
+        }),
+      names,
+    );
+    for (const {name, box, hit} of targets) {
+      // Its own size: no wider for a finger.
+      expect(box.right - box.left, `${name} keeps its size`).toBeLessThan(44);
+      // The hit layer only grows, and never past 44 px.
       expect(
-        Math.abs(box.x + box.width / 2 - (glyph.left + glyph.right) / 2),
-        `${name} is centered on its glyph`,
-      ).toBeLessThanOrEqual(1);
+        hit.right - hit.left,
+        `${name} target width`,
+      ).toBeGreaterThanOrEqual(box.right - box.left);
+      expect(hit.bottom - hit.top).toBeGreaterThanOrEqual(box.bottom - box.top);
+      expect(hit.right - hit.left).toBeLessThanOrEqual(44.5);
+      expect(hit.bottom - hit.top).toBeLessThanOrEqual(44.5);
     }
-    // Every point of each glyph hits its own button: no neighbour's target
-    // covers it.
-    for (const {name, box, glyph} of boxes) {
-      const y = box.y + box.height / 2;
-      for (const x of [glyph.left + 1, glyph.right - 1]) {
-        const hit = await page.evaluate(
-          ([px, py]) =>
-            document
-              .elementFromPoint(px, py)
-              ?.closest('button')
-              ?.getAttribute('aria-label') ??
-            document.elementFromPoint(px, py)?.closest('button')?.textContent ??
-            null,
+    // Neighbouring targets meet at most halfway: none covers the next.
+    for (let index = 0; index + 1 < targets.length; index += 1) {
+      expect(
+        targets[index].hit.right,
+        `${targets[index].name} stops short of ${targets[index + 1].name}`,
+      ).toBeLessThanOrEqual(targets[index + 1].hit.left + 0.5);
+    }
+    // Every point of each glyph, and the edge of each target, hits its own
+    // button.
+    for (const {name, box, hit, glyph} of targets) {
+      const y = (box.top + box.bottom) / 2;
+      for (const x of [
+        glyph.left + 1,
+        glyph.right - 1,
+        hit.left + 1,
+        hit.right - 1,
+      ]) {
+        const label = await page.evaluate(
+          ([px, py]) => {
+            const button = document.elementFromPoint(px, py)?.closest('button');
+            return (
+              button?.getAttribute('aria-label') ??
+              button?.textContent?.trim() ??
+              null
+            );
+          },
           [x, y] as const,
         );
-        expect(hit, `${name} at x=${x.toFixed(1)}`).toBe(name);
+        expect(label, `${name} at x=${x.toFixed(1)}`).toBe(name);
       }
     }
-    // The 8 px of the up glyph nearest Move down move the row up (a tap
-    // activates a button everywhere but Linux WebKit's injected touches).
+    // A tap in Move up's target just past its visible edge, nearer it than
+    // Move down, moves the row up (a tap activates a button everywhere but
+    // Linux WebKit's injected touches).
     if (browserName === 'webkit') {
       return;
     }
-    const [up] = boxes;
+    const [up] = targets;
     const driver = await touchDriver(page);
     await driver.play(
-      tap({x: up.glyph.right - 4, y: up.box.y + up.box.height / 2}),
+      tap({x: up.hit.right - 1, y: (up.box.top + up.box.bottom) / 2}),
     );
     await expect
       .poll(async () => labels(page))

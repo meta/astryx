@@ -110,9 +110,9 @@ export const docs = {
     },
     {
       name: 'itemKey',
-      type: 'string',
+      type: 'string | number',
       description:
-        "The row's item key in a reorderable List (List reorderable), a string from the data: the key the reorderable object's onReorder reports and isReorderable is asked about. A row without one has no reorder handle and keeps its place. Separate from React's key. No effect elsewhere.",
+        "The row's item key in a reorderable List (List reorderable), a string or a number from the data (the shape Table's idKey returns): the key the reorderable object's onReorder reports as given and isReorderable is asked about. A row without one has no reorder handle and keeps its place. Separate from React's key. No effect elsewhere.",
     },
     {
       name: 'swipeActions',

@@ -42,6 +42,7 @@ import {
   type SpringDescription,
 } from '../motion/spring';
 import {registerReorderTable, reorder} from '../motion/uikit/reorder';
+import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {
   animateRow,
   animatorFor,
@@ -105,6 +106,17 @@ export const touchMotion = {
     return durationBounceOf(
       toSpring(resolveMotion(list, reorder.slide.spring)),
     );
+  },
+  /**
+   * The rows' glide to their new places once a move commits (a drop, a
+   * reorder mode move): coordinated layout movement, so it plays the one
+   * shared settle role, `springs.settle` (spec:AST-105 FR4, the role
+   * useAnimatedLayout plays), read once when the glide starts. Registers the
+   * springs table first (once).
+   */
+  glideBase(list: HTMLElement): DurationBounce {
+    registerSpringsTable();
+    return durationBounceOf(toSpring(resolveMotion(list, springs.settle)));
   },
   /** A row the dragged row passes slides to `y` on `spring`. */
   slide(

@@ -56,6 +56,7 @@ import {useLayerDismissal} from '../../Layer/useLayerDismissal';
 import {motionRole} from '../../motion/roles';
 import {getGestureHost} from '../../gestures/GestureHost';
 import {pointerQuery} from '../../gestures/__tests__/pointerQuery';
+import {touchMotion} from '../ListReorderTouch';
 
 function moveKey<T extends Key>(
   items: ReadonlyArray<T>,
@@ -144,8 +145,11 @@ function mouseDrag(handle: Element, from: number, to: number) {
   fireEvent.pointerMove(handle, {...MOUSE, clientY: to});
 }
 
+/** The rows' labels, without what the reorder draws over them. */
 const labels = () =>
-  Array.from(document.querySelectorAll('li')).map(row => row.textContent);
+  Array.from(document.querySelectorAll('li:not([data-astryx-leaving])')).map(
+    row => row.textContent,
+  );
 
 const handleOf = (label: string) =>
   screen.getByRole('button', {name: `Reorder ${label}`});
@@ -325,6 +329,23 @@ describe('List reorderable', () => {
     }
   });
 
+  it("gives a finger's target as an invisible hit layer, not a bigger handle: the hit area writes its insets where the primary pointer is coarse", async () => {
+    stubPrimaryPointer(true);
+    render(<ReorderableRows initial={['A', 'B']} />);
+    const handle = handleOf('A');
+    await waitFor(() =>
+      expect(handle.style.getPropertyValue('--astryx-hit-inset-top')).toMatch(
+        /px$/,
+      ),
+    );
+    for (const side of ['right', 'bottom', 'left']) {
+      expect(
+        handle.style.getPropertyValue(`--astryx-hit-inset-${side}`),
+        side,
+      ).toMatch(/px$/);
+    }
+  });
+
   it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
@@ -488,6 +509,28 @@ describe('List reorderable', () => {
     // Out of the mode, the arrows move nothing.
     await user.keyboard('{ArrowUp}');
     expect(onReorder).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks a key move's new place with the insertion line until the mode ends (design:ordered-collection-reordering)", async () => {
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const handle = handleOf('Inbox');
+    handle.focus();
+    await user.keyboard(' ');
+    // No line before a move.
+    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    await user.keyboard('{ArrowDown}');
+    layOut(list);
+    await user.keyboard('{ArrowDown}');
+    expect(labels()).toEqual(['Sent', 'Drafts', 'Inbox']);
+    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
+    expect(line).not.toBeNull();
+    expect(line).not.toHaveAttribute('hidden');
+    expect(line).toHaveAttribute('aria-hidden', 'true');
+    await user.keyboard('{Escape}');
+    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
   });
 
   it('moves nothing with the arrows outside reorder mode', async () => {
@@ -681,21 +724,31 @@ describe('List reorderable', () => {
     expect(handle).toHaveFocus();
   });
 
-  it('takes the item key as a string (spec:AST-103 FR1)', async () => {
+  it('reports the item key as given, a string or a number (spec:AST-103 FR1)', async () => {
     const user = userEvent.setup();
     const onReorder = vi.fn();
-    render(
-      <List reorderable={createReorderable<string>({onReorder})}>
-        <ListItem itemKey="7" label="Seven" />
-        <ListItem itemKey="8" label="Eight" />
+    const {rerender} = render(
+      <List reorderable={createReorderable<number>({onReorder})}>
+        <ListItem itemKey={7} label="Seven" />
+        <ListItem itemKey={8} label="Eight" />
       </List>,
     );
     handleOf('Seven').focus();
     await user.keyboard(' {ArrowDown}');
-    expect(onReorder).toHaveBeenCalledWith({key: '7', to: 1});
-    // A number is no item key.
-    // @ts-expect-error: ListItem's itemKey is a string.
-    void (<ListItem itemKey={7} label="Seven" />);
+    expect(onReorder).toHaveBeenLastCalledWith({key: 7, to: 1});
+    await user.keyboard('{Escape}');
+    rerender(
+      <List reorderable={createReorderable<string>({onReorder})}>
+        <ListItem itemKey="a" label="Alpha" />
+        <ListItem itemKey="b" label="Beta" />
+      </List>,
+    );
+    handleOf('Alpha').focus();
+    await user.keyboard(' {ArrowDown}');
+    expect(onReorder).toHaveBeenLastCalledWith({key: 'a', to: 1});
+    // The key has Table's idKey shape: a string or a number, nothing else.
+    // @ts-expect-error: a bigint is no item key.
+    void (<ListItem itemKey={7n} label="Seven" />);
   });
 
   it('keeps reorder mode when the object is made anew, and calls the latest onReorder', async () => {
@@ -909,6 +962,23 @@ describe('List reorderable', () => {
     expect(hintButton('Move down')).toBeNull();
   });
 
+  it("gives the hint's buttons a finger's target as an invisible hit layer: the hit area writes their insets where the primary pointer is coarse", async () => {
+    stubPrimaryPointer(true);
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
+    handleOf('Sent').focus();
+    await user.keyboard(' ');
+    for (const name of ['Move up', 'Move down', 'Done']) {
+      const button = hintButton(name) as HTMLElement;
+      await waitFor(() =>
+        expect(
+          button.style.getPropertyValue('--astryx-hit-inset-top'),
+          name,
+        ).toMatch(/px$/),
+      );
+    }
+  });
+
   it('takes an Escape that reaches the dismissal stack with the focus in the hint: the mode ends, and a layer below stays open', async () => {
     const user = userEvent.setup();
     const outer = vi.fn();
@@ -1052,6 +1122,84 @@ describe('List reorderable', () => {
     );
   });
 
+  it('keeps the other rows still during a drag: the source dims in place, a preview follows the pointer, and an insertion line marks the drop position (design:ordered-collection-reordering)', async () => {
+    stubPrimaryPointer(false);
+    const onReorder = vi.fn();
+    render(<ReorderableRows initial={['A', 'B', 'C']} onReorder={onReorder} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const [a, b, c] = Array.from(list.querySelectorAll('li'));
+    mouseDrag(handleOf('A'), 322, 322 + 70);
+    // The rows the drag passes stay where they are.
+    for (const row of [a, b, c]) {
+      expect(['', '0px 0px', 'none']).toContain(row.style.translate);
+    }
+    // The source stays in its place, dimmed.
+    expect(a).toHaveAttribute('data-astryx-reorder-source');
+    // A preview of it follows the pointer, hidden from assistive technology.
+    const preview = list.querySelector<HTMLElement>(
+      '[data-astryx-reorder-preview]',
+    );
+    expect(preview).not.toBeNull();
+    expect(preview).toHaveAttribute('aria-hidden', 'true');
+    expect(preview!.textContent).toBe(a.textContent);
+    // The same item, moving: the row's reduced emphasis, not raised (DR2).
+    expect(preview!.style.opacity).toBe(a.style.opacity);
+    expect(preview!.style.boxShadow).toBe('none');
+    expect(preview!.style.translate).toBe('0px 70px');
+    // The line sits after C, where A would land (position 2 of 0-2).
+    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
+    expect(line).not.toBeNull();
+    expect(line).not.toHaveAttribute('hidden');
+    expect(line!.style.translate).toBe('0px 131px');
+    // The drop rearranges the rows and takes the preview and line away.
+    act(() => {
+      fireEvent.pointerUp(handleOf('A'), {...MOUSE, clientY: 322 + 70});
+    });
+    expect(onReorder).toHaveBeenCalledWith({key: 'A', to: 2});
+    expect(labels()).toEqual(['B', 'C', 'A']);
+    expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
+    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+  });
+
+  it('announces Done when a drag ends reorder mode, keeping its moves', async () => {
+    stubPrimaryPointer(false);
+    render(<ReorderableRows initial={['A', 'B', 'C']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const handle = handleOf('A');
+    fireEvent.click(handle);
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    mouseDrag(handle, 322, 322 + 70);
+    expect(handle).toHaveAttribute('aria-pressed', 'false');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent('Done, A at position 1 of 3'),
+    );
+    act(() => {
+      fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+    });
+  });
+
+  it('restores a cancelled drag at once: no preview, no line, the source undimmed, nothing moved', async () => {
+    stubPrimaryPointer(false);
+    const onReorder = vi.fn();
+    render(<ReorderableRows initial={['A', 'B', 'C']} onReorder={onReorder} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const a = list.querySelector('li')!;
+    mouseDrag(handleOf('A'), 322, 322 + 70);
+    expect(list.querySelector('[data-astryx-reorder-preview]')).not.toBeNull();
+    act(() => {
+      fireEvent.pointerCancel(handleOf('A'), {...MOUSE, clientY: 322 + 70});
+    });
+    expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
+    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(labels()).toEqual(['A', 'B', 'C']);
+  });
+
   it.each([
     ['its row is disabled', {isDisabled: ['A']}],
     ['its row stops being reorderable', {fixed: ['A']}],
@@ -1110,6 +1258,22 @@ describe('List reorderable', () => {
       expect(labels()).toEqual(['A', 'B', 'C']);
     },
   );
+
+  it("plays a committed move's glide on the shared settle role, springs.settle (spec:AST-105 FR4)", async () => {
+    stubPrimaryPointer(true);
+    const glide = vi.spyOn(touchMotion, 'glideBase');
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['A', 'B', 'C']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    const handle = handleOf('A');
+    handle.focus();
+    await user.keyboard(' {ArrowDown}');
+    await waitFor(() => expect(glide).toHaveBeenCalled());
+    expect(glide.mock.results[0]?.value).toEqual({duration: 0.5, bounce: 0});
+    expect(motionRole('springs.settle')).toBeDefined();
+    glide.mockRestore();
+  });
 
   it("keeps the slides' spring an internal constant: touch motion has no theme surface", () => {
     const drag = (coarse: boolean) => {

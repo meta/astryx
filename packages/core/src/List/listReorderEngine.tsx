@@ -14,9 +14,11 @@
  *   Core's keyboard hints share (hooks/anchoredHint.tsx)
  * @output `listReorderEngine`, the machinery a reorderable object carries:
  *   the reorder session of a List, its Host and its handle. A drag from a
- *   handle moves the row with the finger, the rows it passes slide out of its
- *   way, the list autoscrolls near the scroll edges, and the drop springs the
- *   row into its position and reports the move once. Activating a handle without
+ *   handle leaves the rows in place: the row dims where it is, a preview of
+ *   it follows the pointer, an insertion line marks where it would land, and
+ *   the list autoscrolls near the scroll edges; the drop reports the move
+ *   once and the rows rearrange, the dragged one gliding from where its
+ *   preview was. A cancelled drag restores everything at once. Activating a handle without
  *   a drag (a click, Space or Enter) turns on reorder mode for its row: each
  *   arrow moves it a place at once (one report each), announced with its
  *   place and neighbours, and Escape or another activation ends the mode,
@@ -26,31 +28,30 @@
  *   imports it, so a List without `reorderable` loads none of it (FR2);
  *   ListReorderHandle drives it from each row's handle
  *
- * UIKit's edit-mode reorder (iOS 26.2, measured), which this follows: nothing
- * changes when the drag begins (no lift); the row follows the finger one to
- * one, its centre stopping at the scroll view's edges; the rows between its
- * place and its position slide on the table spring, shorter while autoscrolling;
- * the drop springs it from rest into its position, the spring's duration scaled
- * by the distance left; autoscroll is a 20 ms timer whose step grows with how
- * far the row's edge is past the scroll edge. With a mouse (the theme's
- * presentation) the same model runs without motion: rows jump to their
- * places.
+ * The drag's look is design:ordered-collection-reordering's: the surrounding
+ * rows stay still until the drop, the source is dimmed in place, a preview
+ * follows the pointer one to one (its centre stopping at the scroll view's
+ * edges) and an accent insertion line, shared by pointer and keyboard,
+ * marks the candidate position. UIKit's edit-mode reorder (iOS 26.2,
+ * measured) supplies the clocks: the hold, the rows' glide to their new
+ * places on the table spring after the drop, and autoscroll, a 20 ms timer
+ * whose step grows with how far the preview's edge is past the scroll edge.
+ * With a mouse (the theme's presentation) or Reduce Motion the rows jump to
+ * their new places.
  *
  * HOW IT RUNS. Everything after the drag begins is imperative: no React
  * render and no layout read until the drop. The begin reads each row's
- * layout once; each move writes one `translate` on the dragged row (the
- * shared per-element animator's `set`), and a position change starts one spring
- * per displaced row on the compositor. The list root carries
+ * layout once; each move writes one `translate` on the preview (the shared
+ * per-element animator's `set`), and a position change writes one on the
+ * insertion line. The list root carries
  * `data-astryx-reordering` from the begin until the commit that applies the
  * drop, so the List's update motion (useListUpdateMotion) leaves that commit
- * to the reorder: after it, each row's old layout place is put back with an
- * inverse offset and its running spring continues from where it is
- * (its value and its target move with the layout, its spring and velocity
- * stay), so the drop never restarts.
- * If `onReorder` does not commit a new order by the end of the task, every
- * row springs back to its place. Reorder mode (spec:AST-103 FR4) reports
- * each key's move at once; once it commits, under a finger's presentation,
- * the rows slide from their old places to their new ones.
+ * to the reorder: after it, each row's old layout place (the dragged row's,
+ * where its preview was dropped) is put back with an inverse offset that
+ * glides to 0. If `onReorder` does not commit a new order by the end of the
+ * task, nothing has moved and nothing does. Reorder mode (spec:AST-103 FR4)
+ * reports each key's move at once; once it commits, under a finger's
+ * presentation, the rows slide from their old places to their new ones.
  * The listeners are the list's, not each row's (FR5): one pointerdown
  * listener for a mouse and, where the primary pointer is coarse, one hold
  * recognizer that receives only the touches that begin on this list's
@@ -87,7 +88,6 @@ import {colorVars, fontWeightVars, spacingVars} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 import {reorder} from '../motion/uikit/reorder';
-import type {DurationBounce} from '../motion/spring';
 import {
   animatorFor,
   isMoving,
@@ -97,6 +97,7 @@ import {
 } from '../utils/rowMotion';
 import {edgeAutoscroll, type EdgeAutoscroll} from '../utils/edgeAutoscroll';
 import {useTouchPresentation} from '../utils/touchPresentation';
+import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 import {devWarn} from '../utils/devWarning';
 import {GHOST_ATTRIBUTE} from './useListUpdateMotion';
 import {
@@ -116,11 +117,8 @@ import {
 import {
   autoscrollStep,
   clampTop,
-  offsetsFor,
   dropPosition,
   settleSpring,
-  slideSpring,
-  positionTop,
   type ReorderGeometry,
 } from './reorderModel';
 
@@ -211,6 +209,104 @@ function boundsOf(movable: ReadonlyArray<boolean>): boolean[] {
     bounds[index] = true;
   }
   return bounds;
+}
+
+/** Marks the dragged row, dimmed in its place while the drag runs. */
+export const SOURCE_ATTRIBUTE = 'data-astryx-reorder-source';
+/** Marks the preview of the dragged row that follows the pointer. */
+export const PREVIEW_ATTRIBUTE = 'data-astryx-reorder-preview';
+/** Marks the insertion line at the drop position. */
+export const LINE_ATTRIBUTE = 'data-astryx-reorder-line';
+
+/**
+ * The temporary reduced emphasis the dragged row and its preview share
+ * (design:ordered-collection-reordering DR2): the same item, moving, and
+ * not raised.
+ */
+const MOVING_OPACITY = '0.6';
+/** The insertion line's thickness, px. */
+const LINE_THICKNESS = 2;
+
+/**
+ * An element the drag draws over the list: a ghost to the list's order and
+ * its update motion, inert and hidden from assistive technology.
+ */
+function overlay(element: HTMLElement, marker: string): HTMLElement {
+  element.setAttribute(marker, '');
+  element.setAttribute(GHOST_ATTRIBUTE, '');
+  element.setAttribute('aria-hidden', 'true');
+  element.inert = true;
+  Object.assign(element.style, {
+    position: 'absolute',
+    margin: '0',
+    pointerEvents: 'none',
+    zIndex: '2',
+    translate: '0px 0px',
+  });
+  return element;
+}
+
+/**
+ * The preview: a copy of `row` at its place, with the same reduced emphasis
+ * as the row and no elevation (DR2).
+ */
+function previewOf(row: HTMLElement, top: number, background: string | null) {
+  const preview = row.cloneNode(true) as HTMLElement;
+  preview.removeAttribute('id');
+  for (const element of preview.querySelectorAll('[id]')) {
+    element.removeAttribute('id');
+  }
+  overlay(preview, PREVIEW_ATTRIBUTE);
+  Object.assign(preview.style, {
+    top: `${top}px`,
+    insetInlineStart: `${row.offsetLeft}px`,
+    inlineSize: `${row.offsetWidth}px`,
+    boxSizing: 'border-box',
+    boxShadow: 'none',
+    opacity: MOVING_OPACITY,
+  });
+  if (background != null) {
+    preview.style.backgroundColor = background;
+  }
+  return preview;
+}
+
+/** The insertion line, as wide as `row`, hidden until a position differs. */
+function lineFor(row: HTMLElement): HTMLElement {
+  const line = overlay(
+    row.ownerDocument.createElement(row.tagName === 'LI' ? 'li' : 'div'),
+    LINE_ATTRIBUTE,
+  );
+  Object.assign(line.style, {
+    top: '0px',
+    insetInlineStart: `${row.offsetLeft}px`,
+    inlineSize: `${row.offsetWidth}px`,
+    blockSize: `${LINE_THICKNESS}px`,
+    borderRadius: `${LINE_THICKNESS / 2}px`,
+    backgroundColor: 'var(--color-accent)',
+    listStyle: 'none',
+  });
+  line.hidden = true;
+  return line;
+}
+
+/**
+ * Where the insertion line's centre sits for the dragged row at `position`:
+ * in the gap before the row it would land above, or after the one it would
+ * land below. Null at its own place: nothing moves.
+ */
+function lineCenter(
+  geometry: ReorderGeometry,
+  dragged: number,
+  position: number,
+): number | null {
+  if (position === dragged) {
+    return null;
+  }
+  const target = geometry.rows[position];
+  return position < dragged
+    ? target.top - geometry.gap / 2
+    : target.top + target.height + geometry.gap / 2;
 }
 
 /** A row's layout top inside the list (transforms ignored). */
@@ -318,13 +414,12 @@ interface DragSession {
   readonly edge: EdgeAutoscroll;
   /** Points per tick of the running autoscroll; 0 when none. */
   step: number;
-  /**
-   * The slides' spring under the list's theme, read at the begin; null with
-   * a mouse, whose rows take their places at once.
-   */
-  readonly slide: DurationBounce | null;
   /** The dragged row's inline stacking before the drag. */
   readonly restore: RowRestore;
+  /** The copy of the dragged row that follows the pointer. */
+  readonly preview: HTMLElement;
+  /** The insertion line at the drop position. */
+  readonly line: HTMLElement;
 }
 
 /** The inline values a drag overrides until its rows rest. */
@@ -332,6 +427,10 @@ interface RowRestore {
   /** The dragged row's stacking and background. */
   readonly zIndex: string;
   readonly backgroundColor: string;
+  /** The dragged row's opacity, dimmed while the drag runs. */
+  readonly opacity: string;
+  /** The list's position, made a containing block for the overlays. */
+  readonly listPosition: string;
   /** The session's rows, whose identity offsets go once they rest. */
   readonly rows: ReadonlyArray<HTMLElement>;
 }
@@ -342,6 +441,8 @@ interface PendingDrop {
   readonly rows: ReadonlyArray<HTMLElement>;
   readonly tops: ReadonlyArray<number>;
   readonly dragged: number;
+  /** Where the preview was at the drop: the dragged row glides from there. */
+  readonly droppedTop: number;
   readonly restore: RowRestore;
 }
 
@@ -483,6 +584,13 @@ export class ListReorderController implements ListReorderSession {
    */
   private isMovingByKey = false;
   /**
+   * Reorder mode's insertion line: after a key move it marks the edge the
+   * row came in through, at its new place, until the mode ends.
+   */
+  private modeLine: {line: HTMLElement; listPosition: string} | null = null;
+  /** The direction of the last key move in reorder mode, for its line. */
+  private lastStep: -1 | 1 | null = null;
+  /**
    * Until when the handle takes back the focus the UI that started the mode
    * with `start` hands back (a menu that closes restores its trigger's).
    */
@@ -591,6 +699,8 @@ export class ListReorderController implements ListReorderSession {
       return;
     }
     this.modeHandle = handle;
+    this.lastStep = null;
+    this.clearModeLine();
     for (const listener of [...this.modeListeners]) {
       listener();
     }
@@ -901,8 +1011,10 @@ export class ListReorderController implements ListReorderSession {
     if (list == null || this.session != null) {
       return false;
     }
-    // A drag ends reorder mode, keeping its moves.
-    this.setMode(null);
+    // A drag ends reorder mode, keeping its moves, and says so.
+    if (this.modeHandle != null) {
+      this.endMode();
+    }
     // A drop still waiting for its commit is settled where it is.
     this.flushPending();
     const rows = rowsOf(list);
@@ -936,10 +1048,15 @@ export class ListReorderController implements ListReorderSession {
     const restore: RowRestore = {
       zIndex: row.style.zIndex,
       backgroundColor: row.style.backgroundColor,
+      opacity: row.style.opacity,
+      listPosition: list.style.position,
       rows,
     };
-    // Opaque, as a table cell is: the rows it passes stay under it. A row
-    // without its own background takes the surface's behind the list.
+    // The rows stay where they are until the drop
+    // (design:ordered-collection-reordering): the dragged row is dimmed in
+    // its place, a preview of it follows the pointer, and an insertion line
+    // marks where it would land. The preview has a background, as the row
+    // does: a row without its own takes the surface's behind the list.
     const background = isTransparent(getComputedStyle(row).backgroundColor)
       ? surfaceColor(list)
       : null;
@@ -948,10 +1065,14 @@ export class ListReorderController implements ListReorderSession {
         element.style.translate = '0px 0px';
       }
     }
-    row.style.zIndex = '1';
-    if (background != null) {
-      row.style.backgroundColor = background;
+    if (getComputedStyle(list).position === 'static') {
+      list.style.position = 'relative';
     }
+    const preview = previewOf(row, tops[dragged], background);
+    const line = lineFor(row);
+    list.append(preview, line);
+    row.setAttribute(SOURCE_ATTRIBUTE, '');
+    row.style.opacity = MOVING_OPACITY;
     list.setAttribute(REORDERING_ATTRIBUTE, '');
     const session: DragSession = {
       list,
@@ -978,12 +1099,13 @@ export class ListReorderController implements ListReorderSession {
         apply: delta => this.scrollBy(session, delta),
       }),
       step: 0,
-      slide: this.animates ? touchMotion.slideBase(list) : null,
       restore,
+      preview,
+      line,
     };
     this.session = session;
     // Rows still sliding from an earlier drag go to their places.
-    this.moveTo(dragged, true);
+    this.moveTo(dragged);
     this.track(y);
     this.announce(
       this.messages?.pickedUp(dragged + 1, rows.length) ?? '',
@@ -1017,50 +1139,32 @@ export class ListReorderController implements ListReorderSession {
     const row = geometry.rows[dragged];
     const origin = session.origin - session.scrolled;
     const top = this.draggedTop(session, y);
-    animatorFor(session.rows[dragged]).set({y: top - (origin + row.top)});
+    animatorFor(session.preview).set({y: top - (origin + row.top)});
     const position = dropPosition(
       geometry,
       dragged,
       top + row.height / 2 - origin,
     );
     if (position !== session.position) {
-      this.moveTo(position, false);
+      this.moveTo(position);
     }
     this.autoscroll(top, row.height);
   }
 
-  /** Slides the rows the dragged row displaces at `position` to their places. */
-  private moveTo(position: number, force: boolean): void {
+  /** Puts the insertion line where the dragged row would land at `position`. */
+  private moveTo(position: number): void {
     const session = this.session;
     if (session == null) {
       return;
     }
     session.position = position;
-    const offsets = offsetsFor(session.geometry, session.dragged, position);
-    const at = motionNow();
-    const spring =
-      session.slide == null ? null : slideSpring(session.step, session.slide);
-    for (const [index, offset] of offsets.entries()) {
-      if (
-        index === session.dragged ||
-        (!force && offset === session.offsets[index])
-      ) {
-        continue;
-      }
-      const element = session.rows[index];
-      session.offsets[index] = offset;
-      if (force && Math.abs(shownY(element, at) - offset) < MIN_MOVE_PX) {
-        continue;
-      }
-      if (spring != null) {
-        touchMotion.slide(element, offset, spring, at);
-      } else {
-        animatorFor(element).set({y: offset});
-      }
+    const center = lineCenter(session.geometry, session.dragged, position);
+    session.line.hidden = center == null;
+    if (center != null) {
+      session.line.style.translate = `0px ${center - LINE_THICKNESS / 2}px`;
     }
     // A pointer drag announces its pick-up and its drop, not each place it
-    // passes: announcing each crossed position is noisy, and a live region's
-    // text change is a layout while the drag runs on the compositor.
+    // passes: announcing each crossed position is noisy.
   }
 
   /**
@@ -1135,20 +1239,11 @@ export class ListReorderController implements ListReorderSession {
     this.stopAutoscroll(session);
     const {geometry, dragged, position, rows, list} = session;
     const element = rows[dragged];
-    const target =
-      positionTop(geometry, dragged, position) - geometry.rows[dragged].top;
-    const at = motionNow();
-    if (this.animates) {
-      const distance = target - shownY(element, at);
-      touchMotion.settle(
-        element,
-        target,
-        settleSpring(distance, geometry.rows[dragged].height),
-        at,
-      );
-    } else {
-      animatorFor(element).set({y: target});
-    }
+    // Where the preview is now: on the commit the dragged row glides from
+    // there into its new place, and the rows it passed to theirs.
+    const droppedTop =
+      geometry.rows[dragged].top + shownY(session.preview, motionNow());
+    this.clearOverlays(session);
     const dropped = this.messages?.dropped(position + 1, rows.length) ?? '';
     const key = this.keyOf(element);
     const options = this.options;
@@ -1174,6 +1269,7 @@ export class ListReorderController implements ListReorderSession {
       rows,
       tops: session.tops,
       dragged,
+      droppedTop,
       restore: session.restore,
     };
     options.onReorder({key, to: position});
@@ -1197,6 +1293,9 @@ export class ListReorderController implements ListReorderSession {
     }
     this.session = null;
     this.stopAutoscroll(session);
+    // Nothing moved: the preview and the line go and the row is itself again
+    // at once (design:ordered-collection-reordering).
+    this.clearOverlays(session);
     this.springBack(
       session.list,
       session.rows,
@@ -1206,6 +1305,16 @@ export class ListReorderController implements ListReorderSession {
     this.announce(
       this.messages?.cancelled(session.dragged + 1, session.rows.length) ?? '',
     );
+  }
+
+  /** Takes the preview and the line away and undims the dragged row. */
+  private clearOverlays(session: DragSession): void {
+    session.preview.remove();
+    session.line.remove();
+    const row = session.rows[session.dragged];
+    row.removeAttribute(SOURCE_ATTRIBUTE);
+    row.style.opacity = session.restore.opacity;
+    session.list.style.position = session.restore.listPosition;
   }
 
   private springBack(
@@ -1228,7 +1337,7 @@ export class ListReorderController implements ListReorderSession {
       const spring =
         index === dragged
           ? settleSpring(value, element.offsetHeight)
-          : slideSpring(0, touchMotion.slideBase(list));
+          : touchMotion.glideBase(list);
       touchMotion.home(element, spring, at, index === dragged);
     }
     list.removeAttribute(REORDERING_ATTRIBUTE);
@@ -1346,9 +1455,10 @@ export class ListReorderController implements ListReorderSession {
       this.slideCommitted(move);
     }
     // A reorder mode move has landed (or nothing waits): its handle keeps
-    // the focus.
+    // the focus, and the insertion line marks the row's new place.
     if (this.announcement == null) {
       this.restoreFocus();
+      this.placeModeLine(list);
     }
   }
 
@@ -1366,12 +1476,7 @@ export class ListReorderController implements ListReorderSession {
       }
       // A row still sliding from the previous move goes on from where it is
       // shown, as a drop's rows do.
-      touchMotion.follow(
-        element,
-        shift,
-        slideSpring(0, touchMotion.slideBase(list)),
-        at,
-      );
+      touchMotion.follow(element, shift, touchMotion.glideBase(list), at);
     }
     list.removeAttribute(REORDERING_ATTRIBUTE);
   }
@@ -1383,7 +1488,11 @@ export class ListReorderController implements ListReorderSession {
       if (element.parentElement !== list) {
         continue;
       }
-      const shift = pending.tops[index] - layoutTop(element, list);
+      // The dragged row glides from where its preview was dropped, the rows
+      // it passed from their old places.
+      const from =
+        index === pending.dragged ? pending.droppedTop : pending.tops[index];
+      const shift = from - layoutTop(element, list);
       const value = shownY(element, at);
       if (Math.abs(value + shift) < MIN_MOVE_PX && !isMoving(element)) {
         animatorFor(element).set({y: 0});
@@ -1397,12 +1506,7 @@ export class ListReorderController implements ListReorderSession {
         // Every row's place after the drop is its new layout place, so each
         // running spring (the drop's settle, a row's slide) goes on to 0 from
         // the shifted value.
-        touchMotion.follow(
-          element,
-          shift,
-          slideSpring(0, touchMotion.slideBase(list)),
-          at,
-        );
+        touchMotion.follow(element, shift, touchMotion.glideBase(list), at);
       } else {
         animatorFor(element).set({y: 0});
         releaseMotion(element, 'translate');
@@ -1410,6 +1514,60 @@ export class ListReorderController implements ListReorderSession {
     }
     list.removeAttribute(REORDERING_ATTRIBUTE);
     this.restWhenDone(pending.rows[pending.dragged], pending.restore);
+  }
+
+  /**
+   * Reorder mode's insertion line, at the edge the mode's row came in
+   * through on its last key move (the gap above it after a move up, below
+   * it after a move down), shared with the pointer drag's
+   * (design:ordered-collection-reordering). None before a move.
+   */
+  private placeModeLine(list: HTMLElement): void {
+    const row = this.rowOf(this.modeHandle);
+    if (row == null || this.lastStep == null) {
+      this.clearModeLine();
+      return;
+    }
+    const rows = rowsOf(list);
+    const index = rows.indexOf(row);
+    const top = layoutTop(row, list);
+    const bottom = top + row.offsetHeight;
+    const neighbour = rows[index + this.lastStep];
+    const gap =
+      neighbour == null
+        ? 0
+        : this.lastStep < 0
+          ? Math.max(
+              0,
+              top - (layoutTop(neighbour, list) + neighbour.offsetHeight),
+            )
+          : Math.max(0, layoutTop(neighbour, list) - bottom);
+    const center = this.lastStep < 0 ? top - gap / 2 : bottom + gap / 2;
+    if (this.modeLine == null || !this.modeLine.line.isConnected) {
+      const listPosition = list.style.position;
+      if (getComputedStyle(list).position === 'static') {
+        list.style.position = 'relative';
+      }
+      const line = lineFor(row);
+      list.append(line);
+      this.modeLine = {line, listPosition};
+    }
+    const {line} = this.modeLine;
+    line.hidden = false;
+    line.style.translate = `0px ${center - LINE_THICKNESS / 2}px`;
+  }
+
+  private clearModeLine(): void {
+    const modeLine = this.modeLine;
+    if (modeLine == null) {
+      return;
+    }
+    this.modeLine = null;
+    const list = modeLine.line.parentElement;
+    modeLine.line.remove();
+    if (list != null) {
+      list.style.position = modeLine.listPosition;
+    }
   }
 
   /**
@@ -1503,6 +1661,7 @@ export class ListReorderController implements ListReorderSession {
     order.splice(to, 0, row);
     this.focusRow = row;
     this.isMovingByKey = true;
+    this.lastStep = delta;
     this.announceWhenCommitted({
       row,
       to,
@@ -1704,17 +1863,14 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
 }
 
 const hintStyles = stylex.create({
-  // A glyph or Done: the hint's text, with nothing of a button's own. Under
-  // a finger each is 44 px wide, so a glyph's target is centered on it and
-  // never covers its neighbour (design:bidirectionality DR8), and its
-  // target reaches 44 px tall without growing the hint's height.
+  // A glyph or Done: the hint's text, with nothing of a button's own, the
+  // same size under every pointer. A finger's 44 px target is the invisible
+  // hit layer below, grown by the insets the hit area writes where the
+  // primary pointer is coarse, each side capped at half the gap to a
+  // neighbouring target (utils/hitArea.ts), so it never covers one.
   button: {
     position: 'relative',
     display: 'inline-flex',
-    minWidth: {
-      default: null,
-      '@media (pointer: coarse)': 44,
-    },
     alignItems: 'center',
     justifyContent: 'center',
     margin: 0,
@@ -1730,14 +1886,13 @@ const hintStyles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
+    // SYNC: utils/hitArea.ts HIT_INSET_PROPERTIES (StyleX reads no
+    // imported value).
     '::after': {
       content: '""',
       position: 'absolute',
-      insetBlock: {
-        default: 0,
-        '@media (pointer: coarse)': 'min(0px, calc((100% - 44px) / 2))',
-      },
-      insetInline: 0,
+      inset:
+        'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
     },
   },
   done: {
@@ -1762,8 +1917,19 @@ function HintButton({
   isText?: boolean;
   children: ReactNode;
 }) {
+  const ref = useRef<HTMLButtonElement | null>(null);
+  // A finger's target: the hit area watches the button where the primary
+  // pointer is coarse and writes how far its hit layer may grow.
+  useIsomorphicLayoutEffect(() => {
+    const button = ref.current;
+    if (button == null) {
+      return undefined;
+    }
+    return watchHitArea(button, insets => writeHitInsets(button, insets));
+  }, []);
   return (
     <button
+      ref={ref}
       type="button"
       tabIndex={-1}
       aria-label={label}

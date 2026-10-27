@@ -101,10 +101,11 @@ export interface ListProps extends BaseProps<
    * nothing.
    *
    * On a touch screen a finger held still on a handle for a moment picks up
-   * its row (a flick on it still scrolls); the row follows the finger, the
-   * rows it passes slide out of its way, the list scrolls near the edges, and
-   * on release the row settles into its new place, the way an iOS table
-   * reorders. A mouse drags a handle at once. Without a drag, activating a
+   * its row (a flick on it still scrolls); the row stays in its place,
+   * dimmed, while a copy of it follows the finger and an accent line marks
+   * where it would land, the other rows stay still, the list scrolls near the
+   * edges, and on release the rows rearrange. A mouse drags a handle at once,
+   * the same way. Without a drag, activating a
    * handle (a click, Space or Enter) turns on reorder mode for its row: each
    * arrow key moves it a place at once, reported and announced with its place
    * and neighbours, and Escape or another activation ends the mode, keeping

@@ -46,10 +46,9 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
-import {
-  focusOutlineProps,
-  ownRingContainerStyles,
-} from '../utils/focusOutline.stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {ownRingContainerStyles} from './ownRing.stylex';
+import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 import {useTranslator} from '../i18n/useTranslator';
 import {devWarn} from '../utils/devWarning';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
@@ -61,8 +60,12 @@ import {
 } from './listReorderContext';
 import type {ListReorderController} from './listReorderEngine';
 
-/** A touch target's side: the handle's width and height. */
-const HANDLE_SIZE = 44;
+/**
+ * The handle's side, for every pointer: a small control's size. A finger's
+ * 44 px target is an invisible coarse-only hit layer, clamped so it never
+ * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ */
+const HANDLE_SIZE = 28;
 /** The three lines' height: the handle's share of its row's height. */
 const LINES_HEIGHT = 14;
 /** The lines' length and thickness, and the distance between them. */
@@ -72,12 +75,12 @@ const LINE_GAP = (LINES_HEIGHT - LINE_THICKNESS) / 2;
 
 const styles = stylex.create({
   handle: {
-    // A touch target on each side, centred on its row, with the lines in its
-    // middle. It takes only the lines' height in the row's layout (the
-    // negative block margins), so a compact row stays compact; the target and
-    // its focus ring reach past that into the row's padding, never past it:
-    // no further than the row's own inline inset, so a flush row's handle
-    // stays inside the list's clip.
+    // Centred on its row, with the lines in its middle. It takes only the
+    // lines' height in the row's layout (the negative block margins), so a
+    // compact row stays compact; the handle and its focus ring reach past
+    // that into the row's padding, never past it: no further than the row's
+    // own inline inset, so a flush row's handle stays inside the list's clip.
+    position: 'relative',
     alignSelf: 'center',
     display: 'flex',
     alignItems: 'center',
@@ -153,6 +156,17 @@ const styles = stylex.create({
       boxShadow: `0 -${LINE_GAP}px currentColor, 0 ${LINE_GAP}px currentColor`,
       forcedColorAdjust: 'none',
       pointerEvents: 'none',
+    },
+    // The coarse-only hit layer: invisible, grown toward 44 px by the insets
+    // the hit area writes where the primary pointer is coarse (0 elsewhere),
+    // each side capped at half the gap to a neighbouring target.
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      // SYNC: utils/hitArea.ts HIT_INSET_PROPERTIES (StyleX reads no
+      // imported value).
+      inset:
+        'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
     },
   },
 });
@@ -259,6 +273,15 @@ export function ListReorderHandle({
   useEffect(() => {
     rowRef.current = controller?.rowOf(ref.current) ?? null;
   });
+  // A finger's target: the hit area watches the handle where the primary
+  // pointer is coarse and writes how far its hit layer may grow.
+  useIsomorphicLayoutEffect(() => {
+    const handle = ref.current;
+    if (handle == null) {
+      return undefined;
+    }
+    return watchHitArea(handle, insets => writeHitInsets(handle, insets));
+  }, []);
   // A handle that stops taking gestures mid-drag (its row disabled or no
   // longer reorderable, the handle gone) sends a drag of its row home,
   // whichever pointer or key drives it.

@@ -141,12 +141,12 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 
   /**
    * The row's item key in a reorderable List (`List reorderable`), a string
-   * from the data: the key the reorderable object's `onReorder` reports and
-   * `isReorderable` is asked about. A row without one has no reorder handle.
-   * Separate from React's `key`, which stays React's own. No effect
-   * elsewhere.
+   * or a number from the data (the shape Table's `idKey` returns): the key
+   * the reorderable object's `onReorder` reports as given and `isReorderable`
+   * is asked about. A row without one has no reorder handle. Separate from
+   * React's `key`, which stays React's own. No effect elsewhere.
    */
-  itemKey?: string;
+  itemKey?: string | number;
 
   /**
    * Swipe actions for touch, passed through to `Item` unchanged: the verbs a

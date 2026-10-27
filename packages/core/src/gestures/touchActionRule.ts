@@ -5,8 +5,9 @@
  * @input An element and the touch-action its recognizers derive
  * @output Exports markTouchAction and unmarkTouchAction: the element carries
  *   the derived value in TOUCH_ACTION_ATTRIBUTE, and its document or shadow
- *   root holds one zero-specificity rule per value, so any author rule or
- *   inline value outranks the host's (`spec:AST-094` FR18, DEC-8)
+ *   root holds one zero-specificity rule per value in the first cascade
+ *   layer (`reset`), so any author rule, in any layer or none, or inline
+ *   value outranks the host's (`spec:AST-094` FR18, DEC-8)
  * @position The gesture host's touch-action writer (GestureHost.ts)
  *
  * The mark is set as a recognizer attaches, so a subtree that mounts with
@@ -21,6 +22,14 @@
 
 /** The attribute that carries the host's derived touch-action. */
 export const TOUCH_ACTION_ATTRIBUTE = 'data-astryx-touch-action';
+
+/**
+ * The cascade layer the rules sit in: the first in the order every package
+ * stylesheet declares (`spec:AST-080` FR3), so an author rule in any later
+ * layer, or in none, outranks them. Unlayered, they would outrank every
+ * layered author rule.
+ */
+const RULE_LAYER = 'reset';
 
 type RuleRoot = Document | ShadowRoot;
 
@@ -83,7 +92,7 @@ export function markTouchAction(element: Element, value: string): boolean {
   if (!entry.values.has(value)) {
     entry.values.add(value);
     entry.css += `:where([${TOUCH_ACTION_ATTRIBUTE}="${value}"]){touch-action:${value}}`;
-    entry.write(entry.css);
+    entry.write(`@layer ${RULE_LAYER}{${entry.css}}`);
   }
   if (element.getAttribute(TOUCH_ACTION_ATTRIBUTE) !== value) {
     element.setAttribute(TOUCH_ACTION_ATTRIBUTE, value);

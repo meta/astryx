@@ -7,7 +7,9 @@
  *   delay from the UIKit constants table (motion/uikit/reorder.ts)
  * @output Interaction proofs for a reorderable List under a finger
  *   (spec:AST-103 verification): a hold on a handle then a drag moves the row
- *   and the drop settles it into its new place; a flick on a handle scrolls
+ *   and the drop settles it into its new place; while the finger holds the
+ *   drag the rows stay still, the source dims, a preview follows and an
+ *   insertion line marks the drop position; a flick on a handle scrolls
  *   and moves nothing; a cancelled drag puts the row back; with Reduce Motion
  *   the drop takes its place without travel; and a flush row's handle stays
  *   inside the list
@@ -16,7 +18,7 @@
  *   context (./touchStory.ts)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '@playwright/test';
 import {
   flick,
   holdThenDrag,
@@ -24,15 +26,23 @@ import {
   touchDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
+import {springs} from '../../motion/uikit/springs';
 import {openStory} from './touchStory';
 
 const storybook = withStorybook(test);
 
 /** Past the claim delay: the hold claims the drag. */
 const HOLD_MS = reorder.claim.delayMs + 150;
-/** Long enough for any drop's spring to settle. */
-const SETTLE_MS = reorder.settle.maxDuration * 1000 + 300;
+/**
+ * Long enough for a drop's glide to settle: it plays the shared settle role,
+ * springs.settle (spec:AST-105 FR4).
+ */
+const SETTLE_MS =
+  solveSpring(toSpring(springs.settle), {from: 0, to: 1}).settleTime(0.001) *
+    1000 +
+  300;
 
 const isTouch = async (page: Page) =>
   page.evaluate(() => matchMedia('(pointer: coarse)').matches);
@@ -40,7 +50,7 @@ const isTouch = async (page: Page) =>
 /** The story's row labels, in order. */
 async function labels(page: Page): Promise<string[]> {
   return page
-    .locator('#storybook-root li')
+    .locator('#storybook-root li:not([data-astryx-leaving])')
     .evaluateAll(rows => rows.map(row => row.textContent?.trim() ?? ''));
 }
 
@@ -61,17 +71,55 @@ async function handleOf(page: Page, label: string) {
   };
 }
 
+/**
+ * A hold on `at` then a drag to `to`, all but the lift, sent through
+ * Chromium's CDP on the script's own clock: the harness's player takes only
+ * scripts that end with every finger lifted. Resolves when the lift would
+ * have come, with the session that ends the touch.
+ */
+async function holdAndDragWithoutLift(
+  page: Page,
+  at: {x: number; y: number},
+  to: {x: number; y: number},
+): Promise<CDPSession> {
+  const events = toTouchEvents(
+    holdThenDrag(at, to, {holdMs: HOLD_MS, durationMs: 400, restMs: 120}),
+  );
+  const lift = events[events.length - 1];
+  const cdp = await page.context().newCDPSession(page);
+  let now = 0;
+  for (const step of events.slice(0, -1)) {
+    await page.waitForTimeout(step.t - now);
+    now = step.t;
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: step.type,
+      touchPoints: step.fingers.map(f => ({
+        x: f.x,
+        y: f.y,
+        id: f.id,
+        radiusX: 1,
+        radiusY: 1,
+        force: 1,
+      })),
+    });
+  }
+  await page.waitForTimeout(lift.t - now);
+  return cdp;
+}
+
 /** The layout top of each row, by label, once nothing animates. */
 async function settledTops(page: Page): Promise<Record<string, number>> {
-  return page.locator('#storybook-root li').evaluateAll(rows => {
-    const tops: Record<string, number> = {};
-    for (const row of rows) {
-      tops[row.textContent?.trim() ?? ''] = Math.round(
-        row.getBoundingClientRect().top,
-      );
-    }
-    return tops;
-  });
+  return page
+    .locator('#storybook-root li:not([data-astryx-leaving])')
+    .evaluateAll(rows => {
+      const tops: Record<string, number> = {};
+      for (const row of rows) {
+        tops[row.textContent?.trim() ?? ''] = Math.round(
+          row.getBoundingClientRect().top,
+        );
+      }
+      return tops;
+    });
 }
 
 test.describe('under a finger', () => {
@@ -121,6 +169,68 @@ test.describe('under a finger', () => {
     ).toBe(false);
   });
 
+  test('while the finger holds a drag, the rows stay still: the source dims in place, a preview follows, and an insertion line marks the drop position', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the held finger lifts through Chromium CDP',
+    );
+    const before = await settledTops(page);
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    const cdp = await holdAndDragWithoutLift(page, at, {
+      x: at.x,
+      y: at.y + rowHeight * 2,
+    });
+    expect(await settledTops(page)).toEqual(before);
+    const state = await page.evaluate(() => {
+      const source = document.querySelector<HTMLElement>(
+        '[data-astryx-reorder-source]',
+      );
+      const preview = document.querySelector<HTMLElement>(
+        '[data-astryx-reorder-preview]',
+      );
+      const line = document.querySelector<HTMLElement>(
+        '[data-astryx-reorder-line]',
+      );
+      return {
+        sourceOpacity: source == null ? null : getComputedStyle(source).opacity,
+        previewTop: preview?.getBoundingClientRect().top ?? null,
+        lineShown: line != null && !line.hidden,
+        lineTop: line?.getBoundingClientRect().top ?? null,
+      };
+    });
+    expect(Number(state.sourceOpacity)).toBeLessThan(1);
+    expect(state.previewTop).toBeGreaterThan(before.Inbox + rowHeight);
+    expect(state.lineShown).toBe(true);
+    // In the gap after Drafts, where Inbox would land.
+    expect(
+      Math.abs((state.lineTop ?? Number.NaN) - (before.Drafts + rowHeight)),
+    ).toBeLessThan(4);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await page.waitForTimeout(SETTLE_MS);
+    expect(await labels(page)).toEqual([
+      'Sent',
+      'Drafts',
+      'Inbox',
+      'Archive',
+      'Spam',
+      'Trash',
+    ]);
+    expect(
+      await page.evaluate(
+        () =>
+          document.querySelector(
+            '[data-astryx-reorder-preview], [data-astryx-reorder-line]',
+          ) == null,
+      ),
+    ).toBe(true);
+  });
+
   test('a cancelled drag puts the row back and moves nothing', async ({
     page,
     browserName,
@@ -131,35 +241,11 @@ test.describe('under a finger', () => {
     );
     const before = await settledTops(page);
     const {at, rowHeight} = await handleOf(page, 'Inbox');
-    // The drag without its lift, sent through CDP on the script's own clock:
-    // the harness's player takes only scripts that end with every finger
-    // lifted. The cancel comes when the lift would have.
-    const events = toTouchEvents(
-      holdThenDrag(
-        at,
-        {x: at.x, y: at.y + rowHeight * 2},
-        {holdMs: HOLD_MS, durationMs: 400, restMs: 120},
-      ),
-    );
-    const lift = events[events.length - 1];
-    const cdp = await page.context().newCDPSession(page);
-    let now = 0;
-    for (const step of events.slice(0, -1)) {
-      await page.waitForTimeout(step.t - now);
-      now = step.t;
-      await cdp.send('Input.dispatchTouchEvent', {
-        type: step.type,
-        touchPoints: step.fingers.map(f => ({
-          x: f.x,
-          y: f.y,
-          id: f.id,
-          radiusX: 1,
-          radiusY: 1,
-          force: 1,
-        })),
-      });
-    }
-    await page.waitForTimeout(lift.t - now);
+    // The cancel comes when the lift would have.
+    const cdp = await holdAndDragWithoutLift(page, at, {
+      x: at.x,
+      y: at.y + rowHeight * 2,
+    });
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchCancel',
       touchPoints: [],
@@ -206,6 +292,9 @@ test.describe('under a finger', () => {
       'Trash',
     ]);
     expect((await settledTops(page)).Inbox).toBe(before.Drafts);
+    // Nothing travels. A running animation may only fade: the rows the drop
+    // passed take Reduce Motion's opacity dip in their new places
+    // (design:reduced-motion), and none moves.
     expect(
       await page
         .locator('#storybook-root li')
@@ -213,7 +302,18 @@ test.describe('under a finger', () => {
           rows.some(row =>
             row
               .getAnimations({subtree: true})
-              .some(animation => animation.playState === 'running'),
+              .some(
+                animation =>
+                  animation.playState === 'running' &&
+                  animation.effect instanceof KeyframeEffect &&
+                  animation.effect
+                    .getKeyframes()
+                    .some(frame =>
+                      ['translate', 'transform', 'top', 'insetBlockStart'].some(
+                        property => frame[property] != null,
+                      ),
+                    ),
+              ),
           ),
         ),
     ).toBe(false);
