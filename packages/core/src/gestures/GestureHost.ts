@@ -209,8 +209,9 @@ export interface GestureHostOptions {
   /**
    * Whether the primary pointer is coarse (a phone, a tablet). Gestures
    * attach for every pointer (`spec:AST-094` FR43); where it is fine, an
-   * element that uses a gesture keeps one passive `pointerdown` listener and
-   * the page's listeners last only a press (FR24).
+   * element that uses a gesture keeps one passive `pointerdown` listener
+   * (beside a claiming recognizer's blocking `touchmove`, FR19) and the
+   * page's listeners last only a press (FR24).
    * @default `(pointer: coarse)` on the document's window
    */
   isPrimaryPointerCoarse?: () => boolean;
