@@ -256,6 +256,70 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
     expect(screen.getByTestId('outside')).not.toHaveFocus();
   });
 
+  it('leaves Tab alone when focus is outside a trap with tabbable controls', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="inside">
+          Inside
+        </button>
+      </Trap>,
+    );
+    const outside = screen.getByTestId('outside');
+    const next = screen.getByTestId('focus-first');
+    outside.focus();
+
+    // The browser moves focus on to the next page control after an unhandled
+    // Tab; the trap must not pull that focus into itself.
+    expect(fireEvent.keyDown(outside, {key: 'Tab'})).toBe(true);
+    next.focus();
+
+    expect(next).toHaveFocus();
+    expect(screen.getByTestId('inside')).not.toHaveFocus();
+  });
+
+  it('wraps Tab from an SVG control that is the last tabbable inside the trap', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <svg tabIndex={0} data-testid="svg-control" aria-label="Chart point">
+          <circle r={4} />
+        </svg>
+      </Trap>,
+    );
+    const svgControl = screen.getByTestId('svg-control');
+    (svgControl as unknown as SVGElement).focus();
+    expect(svgControl).toHaveFocus();
+
+    expect(fireEvent.keyDown(svgControl, {key: 'Tab'})).toBe(false);
+    expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('pulls focus back in when a Tab from inside leaves the trap', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="inside">
+          Inside
+        </button>
+      </Trap>,
+    );
+    const first = screen.getByTestId('first');
+    first.focus();
+
+    // A Tab the trap does not wrap itself, where focus still leaves the
+    // container: the escaped focus is redirected back inside.
+    fireEvent.keyDown(first, {key: 'Tab'});
+    screen.getByTestId('focus-first').focus();
+
+    expect(screen.getByTestId('trap')).toContainElement(
+      document.activeElement as HTMLElement,
+    );
+  });
+
   it('leaves Tab alone when focus is outside a trap with no tabbable controls', () => {
     render(
       <Trap>
