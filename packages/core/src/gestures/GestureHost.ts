@@ -1877,21 +1877,24 @@ export class GestureHost {
       recognizers: takers,
       consumer: null,
     };
-    if (kind === 'pan') {
-      const id = this.nextId++;
-      this.arena.began([
-        {...base, id, x: wheel.clientX, y: wheel.clientY, time},
-      ]);
-      return {...kept, ids: [id], takers};
-    }
-    const gesture: WheelGesture = {
-      ...kept,
-      ids: [this.nextId++, this.nextId++],
-      takers,
-    };
+    const ids =
+      kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
+    const gesture: WheelGesture = {...kept, ids, takers};
     this.arena.began(
-      this.pinchContacts(gesture, time).map(input => ({...base, ...input})),
+      kind === 'pan'
+        ? [{...base, id: ids[0], x: wheel.clientX, y: wheel.clientY, time}]
+        : this.pinchContacts(gesture, time).map(input => ({
+            ...base,
+            ...input,
+          })),
     );
+    // Every recognizer it was offered to may decline it (its own
+    // shouldReceiveTouch): then nobody took the wheel, and it scrolls the
+    // page from its first step, as with no gesture system.
+    if (ids.every(id => this.arena.participantsOf(id).length === 0)) {
+      this.arena.cancelled(ids, time);
+      return kept;
+    }
     return gesture;
   }
 
