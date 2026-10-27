@@ -83,18 +83,34 @@ async function openTouchStory(
     const w = window as unknown as {
       __menuShownAt?: number | null;
       __liftHandledAt?: number | null;
+      __liftOrder?: string[];
     };
     w.__menuShownAt = null;
     w.__liftHandledAt = null;
+    // What happened after the lift, in order: the menu's show, the next task
+    // and the next frame. A show in the lift's own task comes before both,
+    // however long that task runs.
+    w.__liftOrder = [];
+    const onLift = () => {
+      if (w.__liftHandledAt != null) {
+        return;
+      }
+      w.__liftHandledAt = performance.now();
+      const order = w.__liftOrder ?? [];
+      const next = new MessageChannel();
+      next.port1.onmessage = () => {
+        order.push('next task');
+      };
+      next.port2.postMessage(null);
+      requestAnimationFrame(() => {
+        order.push('next frame');
+      });
+    };
     // When the page gets to the lift (the event's own timestamp is the
-    // hardware's, or the script's): the menu shows in the same task.
-    addEventListener(
-      'touchend',
-      () => {
-        w.__liftHandledAt = performance.now();
-      },
-      {capture: true, passive: true},
-    );
+    // hardware's, or the script's), from whichever of the finger's pointer
+    // and touch events comes first.
+    addEventListener('pointerup', onLift, {capture: true, passive: true});
+    addEventListener('touchend', onLift, {capture: true, passive: true});
     const show = HTMLElement.prototype.showPopover;
     HTMLElement.prototype.showPopover = function (
       this: HTMLElement,
@@ -105,6 +121,9 @@ async function openTouchStory(
         this.matches('[role="menu"]') ||
         this.querySelector('[role="menu"]') != null
       ) {
+        if (w.__menuShownAt == null && w.__liftHandledAt != null) {
+          w.__liftOrder?.push('show');
+        }
         w.__menuShownAt ??= performance.now();
       }
       return show.apply(this, args);
@@ -405,18 +424,25 @@ test('a finger lifted after the commit gets the menu at the lift, and sends no c
   await driver.play(hold(center, 530));
   await page.waitForTimeout(300);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
-  const {lift, shown} = await page.evaluate(() => {
+  const {lift, shown, order} = await page.evaluate(() => {
     const w = window as unknown as {
       __menuShownAt?: number | null;
       __liftHandledAt?: number | null;
+      __liftOrder?: string[];
     };
-    return {lift: w.__liftHandledAt ?? null, shown: w.__menuShownAt ?? null};
+    return {
+      lift: w.__liftHandledAt ?? null,
+      shown: w.__menuShownAt ?? null,
+      order: w.__liftOrder ?? [],
+    };
   });
   expect(lift).not.toBeNull();
   expect(shown).not.toBeNull();
-  // In the lift's own task: after it, and before the next frame could paint.
+  // In the lift's own task: after the lift, and before the next task and the
+  // next frame, however long the task runs.
   expect((shown as number) - (lift as number)).toBeGreaterThanOrEqual(0);
-  expect((shown as number) - (lift as number)).toBeLessThan(1000 / 60);
+  expect(order[0]).toBe('show');
+  expect([...order].sort()).toEqual(['next frame', 'next task', 'show']);
   const log = await readInputLog(page);
   const end = log.filter(record => record.type === 'touchend').at(-1);
   expect(end?.defaultPrevented, JSON.stringify(log)).toBe(true);
