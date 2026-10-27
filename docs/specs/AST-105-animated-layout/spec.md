@@ -97,6 +97,15 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   `containerRef` animate together on one shared motion role. Fixed and stuck
   sticky elements stay put, the glide never scrolls the area, and Reduce
   Motion is respected."
+- **FR8 — Two elements can swap in place.** An area can swap one element for
+  another in the same place, such as a skeleton for its content: the two
+  overlap so the area is never empty, a short show delay keeps a fast load
+  from flashing the first, and a direction carries a forward or back page
+  change. The swap shares FR4's one motion. Under reduced motion it follows
+  `design:reduced-motion` DR1–DR3: an opacity-only cross-fade under a coarse
+  primary pointer, an immediate change otherwise. Layer exits stay with the
+  layer runtime's exit copy (`architecture:layer-runtime` INV14). The swap is
+  internal; the hook's public contract is unchanged.
 
 ## Coverage
 
@@ -139,6 +148,8 @@ Out of coverage, each taking its final place at once:
   the first adopters, and their docs gain the `animatedLayout` prop.
 - Core gains the `useAnimatedLayout` export and its documentation (FR7).
 - `architecture:react-component-runtime` INV12 produces the glide.
+- `architecture:react-component-runtime` INV12 also gains the in-place swap
+  (FR8); no component swaps yet.
 
 ## Verification
 
@@ -148,6 +159,7 @@ Out of coverage, each taking its final place at once:
 | FR3, Coverage | Real-browser tests, one per Coverage row                                                                   | each Coverage row; mixed Astryx and plain content; two changes in one frame; an area scrolled mid-list | an element that behaves other than its row says, an element moved twice for one frame, content past the area that moves, or the area scrolling fails |
 | FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers                                                            | starting on different frames or reading different motion, a component-specific timing, or Reduce Motion applied to one and not the other fails       |
 | FR5           | Fine-pointer before-and-after evidence on each adopting pull request, from the component's Storybook story | a mouse on each adopting component                                                                     | a glide missing under a mouse, or an adopting pull request without that evidence, fails                                                              |
+| FR8           | Unit tests of the swap and real-browser proofs of its adopters                                             | a fast load, a slow load, a forward and a back page change, Reduce Motion                              | an empty area during a swap, a placeholder flashed for a fast load, travel under Reduce Motion, a layer exit played by it, or a public export fails  |
 
 ## Decision log
 
