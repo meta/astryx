@@ -158,16 +158,26 @@ describe('BottomSheetPanel', () => {
   });
 
   it('completes immediately when the rendered transition is disabled', () => {
-    vi.mocked(matchMedia).mockReturnValue({
-      matches: true,
-      media: '(prefers-reduced-motion: reduce)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    });
+    // The stylesheet decides reduced motion (its transform transition
+    // collapses under the preference); the gesture hook no longer pins an
+    // inline `none` for it, so this models a rendered `transition: none`
+    // directly, as a mid-drag reconcile writes.
+    const nativeGetComputedStyle = window.getComputedStyle;
+    const spy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const declaration = nativeGetComputedStyle(element, pseudo);
+        if (
+          element instanceof HTMLElement &&
+          element.classList.contains('astryx-bottom-sheet')
+        ) {
+          Object.defineProperty(declaration, 'transition', {
+            value: 'none',
+            configurable: true,
+          });
+        }
+        return declaration;
+      });
     const onMotionComplete = vi.fn();
     render(
       <BottomSheetPanel
@@ -182,6 +192,7 @@ describe('BottomSheetPanel', () => {
     );
 
     expect(onMotionComplete).toHaveBeenCalledWith('entering');
+    spy.mockRestore();
   });
 
   it('derives its transition backstop from the rendered timing', () => {
