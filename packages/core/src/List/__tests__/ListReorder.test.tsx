@@ -335,6 +335,39 @@ describe('List reorderable', () => {
     }
   });
 
+  it("starts the hit area's observers only where the primary pointer is coarse (spec:AST-094 FR24)", () => {
+    const observed: Element[] = [];
+    class Recording {
+      observe(target: Element) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Recording);
+    vi.stubGlobal('ResizeObserver', Recording);
+    const resizes = vi.spyOn(window, 'addEventListener');
+    try {
+      stubPrimaryPointer(false);
+      const fine = render(<ReorderableRows initial={['A', 'B']} />);
+      expect(observed).not.toContain(handleOf('A'));
+      expect(resizes.mock.calls.filter(([type]) => type === 'resize')).toEqual(
+        [],
+      );
+      fine.unmount();
+      // The positive control: under a finger it watches the handle.
+      stubPrimaryPointer(true);
+      render(<ReorderableRows initial={['A', 'B']} />);
+      expect(observed).toContain(handleOf('A'));
+    } finally {
+      resizes.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
