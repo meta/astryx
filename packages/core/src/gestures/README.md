@@ -49,7 +49,10 @@ function Sheet() {
 - `isEnabled: false` mid-gesture ends the gesture without calling the
   listener, since the handler that turned it off owns that end (no consumer
   callback from an Effect). A handler that wants UIKit's `.cancelled` calls
-  `recognizer.setEnabled(false)` itself, which reports it at once. After
+  `recognizer.setEnabled(false)` itself, which reports it at once. A
+  recognizer that required it to fail (a single tap waiting on a double
+  tap) resolves just after that render, and its listener reports as usual;
+  so does one waiting on a recognizer whose node a render replaced. After
   unmount the listener hears nothing, not even the cancellation of a
   gesture the unmount ended.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
