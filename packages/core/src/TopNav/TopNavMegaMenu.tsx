@@ -120,7 +120,11 @@ const styles = stylex.create({
   chevronOpen: {
     transform: 'rotate(180deg)',
   },
-  // Animation styles applied to the layer's popover element.
+  // Animation styles applied to the layer's popover element. Under
+  // `prefers-reduced-motion: reduce` the panel never rises (design:reduced-motion
+  // DR1): on a touch screen it cross-fades, 200 ms on easeInOut whatever the
+  // theme's duration (DR2, DR4), and with a mouse it opens and closes at once
+  // (DR3).
   panelAnimation: {
     opacity: {
       default: 0,
@@ -129,10 +133,23 @@ const styles = stylex.create({
     transform: {
       default: 'translateY(-4px)',
       ':popover-open': 'translateY(0)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
     },
-    transitionProperty: 'opacity, transform, overlay, display',
-    transitionDuration: durationVars['--duration-medium-min'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionProperty: {
+      default: 'opacity, transform, overlay, display',
+      '@media (prefers-reduced-motion: reduce)': 'opacity, overlay, display',
+    },
+    transitionDuration: {
+      default: durationVars['--duration-medium-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'cubic-bezier(0.42, 0, 0.58, 1)',
+    },
     transitionBehavior: 'allow-discrete',
     '@starting-style': {
       opacity: 0,
