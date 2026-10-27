@@ -315,9 +315,22 @@ function isPointerKind(type: string): type is PointerKind {
 }
 
 /**
- * An event's time on the arena's clock (`performance.now()`). Some engines
- * and DOM emulators stamp events in epoch milliseconds instead.
+ * What an event, or one of its touches, landed on. Inside an open shadow root
+ * the document's listeners see the shadow host, in `event.target` and in a
+ * touch's `target` alike, while the composed path starts at the element
+ * itself. A touch whose target is not the event's (another finger) keeps its
+ * own.
  */
+function landedOn(
+  event: Event,
+  retargeted: EventTarget | null = event.target,
+): EventTarget | null {
+  if (retargeted !== event.target) {
+    return retargeted;
+  }
+  return event.composedPath()[0] ?? retargeted;
+}
+
 /**
  * How long after its last event a wheel gesture ends, ms: the web reports no
  * wheel phases, so a quiet wheel is a lifted one. Provisional (owner
@@ -436,6 +449,10 @@ function scrollsBy(
   return delta > 0 ? position < room - 1 : position > 0;
 }
 
+/**
+ * An event's time on the arena's clock (`performance.now()`). Some engines
+ * and DOM emulators stamp events in epoch milliseconds instead.
+ */
 function eventTime(event: Event): number {
   const time = event.timeStamp;
   if (
@@ -1914,7 +1931,10 @@ export class GestureHost {
       if (previous != null) {
         stale.push(previous);
       }
-      const native = touch.target instanceof Node ? touch.target : event.target;
+      const native =
+        touch.target instanceof Node
+          ? landedOn(event, touch.target)
+          : landedOn(event);
       const target = this.presentedTarget(native, touch.clientX, touch.clientY);
       const {recognizers, consumer, consumerElement} = this.participantsAt(
         target,
@@ -1983,8 +2003,9 @@ export class GestureHost {
     }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
-    if (event.target instanceof Node) {
-      this.lastTouch = {target: event.target, time};
+    const landed = landedOn(event);
+    if (landed instanceof Node) {
+      this.lastTouch = {target: landed, time};
     }
   };
 
@@ -2174,8 +2195,9 @@ export class GestureHost {
       }
     }
     // The lift is when momentum starts: the clock the brake wants most.
-    if (event.target instanceof Node) {
-      this.lastTouch = {target: event.target, time};
+    const landed = landedOn(event);
+    if (landed instanceof Node) {
+      this.lastTouch = {target: landed, time};
     }
     const dispositions =
       inputs.length > 0
@@ -2532,7 +2554,7 @@ export class GestureHost {
       this.pairPointer(event.pointerId, {
         x: event.clientX,
         y: event.clientY,
-        target: event.target,
+        target: landedOn(event),
       });
       return;
     }
@@ -2541,11 +2563,8 @@ export class GestureHost {
     if (event.pointerType === 'mouse' && !isPrimaryClick(event)) {
       return;
     }
-    const target = this.presentedTarget(
-      event.target,
-      event.clientX,
-      event.clientY,
-    );
+    const landed = landedOn(event);
+    const target = this.presentedTarget(landed, event.clientX, event.clientY);
     const {recognizers, consumer, consumerElement} = this.participantsAt(
       target,
       event.pointerType,
@@ -2555,7 +2574,7 @@ export class GestureHost {
     }
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
-    if (target !== event.target && target != null) {
+    if (target !== landed && target != null) {
       this.retargeted.set(id, {x: event.clientX, y: event.clientY, target});
     }
     this.arena.began([
@@ -2688,7 +2707,7 @@ export class GestureHost {
         touch.pointerType !== 'touch' ||
         touch.phase === 'ended' ||
         touch.phase === 'cancelled' ||
-        touch.target !== event.target
+        touch.target !== landedOn(event)
       ) {
         continue;
       }
@@ -2710,7 +2729,7 @@ export class GestureHost {
     if (!isPointerKind(event.pointerType)) {
       return;
     }
-    const {hovers} = this.participantsAt(event.target, null);
+    const {hovers} = this.participantsAt(landedOn(event), null);
     const next = new Set(hovers.filter(hover => hover.isEnabled));
     const previous = this.hovered.get(event.pointerId) ?? new Set();
     if (next.size === 0 && previous.size === 0) {

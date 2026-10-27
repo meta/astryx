@@ -1199,8 +1199,15 @@ test.describe('where the primary pointer is fine', () => {
     // Past the pan's start, then up over the text above the card.
     await page.mouse.move(x + 30, y - 10, {steps: 4});
     await page.mouse.move(x + 60, card.y - 80, {steps: 12});
-    const during = await page.evaluate(() =>
-      String(window.getSelection() ?? '').trim(),
+    // selectionchange is dispatched as its own task: read the page once it
+    // has run, as the next frame would paint it.
+    const during = await page.evaluate(
+      async () =>
+        new Promise<string>(resolve => {
+          requestAnimationFrame(() =>
+            resolve(String(window.getSelection() ?? '').trim()),
+          );
+        }),
     );
     await page.mouse.up();
     const after = await page.evaluate(() =>
