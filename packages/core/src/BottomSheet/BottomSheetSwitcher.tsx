@@ -4,7 +4,7 @@
 
 /**
  * @file BottomSheetSwitcher.tsx
- * @input Uses React context, StyleX, shared layer dismissal, BottomSheetSwitcherContext
+ * @input Uses React context, StyleX, shared layer dismissal, the modal outlet registry, the private bottom-sheet stack, BottomSheetSwitcherContext, BottomSheetHostContext
  * @output Exports BottomSheetSwitcher and BottomSheetSwitcherProps
  * @position Core switcher for mutually exclusive BottomSheet flows
  *
@@ -15,11 +15,13 @@
  * down at the same time until their top edges align; otherwise it stays
  * stationary. The previous sheet fades only after both motions complete.
  *
- * Every child sheet owns a native `<dialog>`, exactly like a standalone
- * sheet: a scrim flow presents each sheet with showModal(), a no-scrim flow
- * with show(). The browser then does what a modal dialog does -- the page is
- * inert, focus stays in the top-layer dialog, Escape and the platform close
- * arrive as `cancel`. The switcher is the coordinator: it decides which
+ * Every child sheet owns a native `<dialog>`: a scrim flow presents each
+ * sheet with showModal(), as a standalone modal sheet does, and a no-scrim
+ * flow with show() inside the flow wrapper (a standalone no-scrim sheet is a
+ * manual popover in the top layer instead; this deprecated path keeps its
+ * released hosting). For a modal flow the browser then does what a modal
+ * dialog does -- the page is inert, focus stays in the top-layer dialog,
+ * Escape and the platform close arrive as `cancel`. The switcher is the coordinator: it decides which
  * sheet dialog is presented, retained, or hidden, keeps one scrim painted
  * across a handoff (the retained sheet's backdrop until it fades, then the
  * new sheet's, swapped without a fade), holds the flow's one page scroll
@@ -43,8 +45,26 @@
  * Every other dialog prop and handler, `onCancel` included, applies to every
  * sheet dialog; the browser raises `cancel` on the dialog it presents.
  *
+ * A scrim flow is one level of the private bottom-sheet stack
+ * (bottomSheetStack.ts) while it is visible: it stacks over, or under, other
+ * modal sheets in open order, recedes as a whole when covered, and switching
+ * its step in place never changes its position. The level is realized by the
+ * active step's dialog; on a handoff the registry is told the dialog changed
+ * so the sheets above the flow stay above its new dialog. A flow stacked
+ * above another sheet keeps every step backdrop clear; a flow beneath owns
+ * the stack's one scrim and hands it between its own steps as it always did.
+ * A switcher step is never paired in a replace: the flow replaces its own
+ * steps. A flow rendered in another sheet's content leaves and returns with
+ * that sheet, like a standalone sheet, without its state being written. A
+ * modal flow's host dialog is a toast outlet like a standalone scrim sheet's
+ * (Layer/modalOutlet.ts), following the handoff. The switcher is deprecated
+ * in favour of standalone step sheets.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
+ * - /packages/core/src/BottomSheet/bottomSheetStack.ts
+ * - /packages/core/src/BottomSheet/BottomSheetHostContext.ts
+ * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.spec.md
@@ -55,7 +75,9 @@
  */
 
 import {
+  use,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -74,6 +96,26 @@ import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
+import {useModalOutlet} from '../Layer/modalOutlet';
+import {BottomSheetHostContext} from './BottomSheetHostContext';
+import {
+  BOTTOM_SHEET_STACK_DEFAULT_VIEW,
+  cancelScrimWrite,
+  closeDialogKeepingFocus,
+  focusSheetPanel,
+  getBottomSheetBeneath,
+  isClosingTogether,
+  notifyBottomSheetHostChanged,
+  presentStepModally,
+  presentWithClearScrim,
+  registerBottomSheet,
+  reportClosedTogether,
+  sealBottomSheetBatch,
+  setBottomSheetOpen,
+  writeScrimOpacity,
+  type BottomSheetScrimWrite,
+  type BottomSheetStackView,
+} from './bottomSheetStack';
 import {
   BottomSheetSwitcherContext,
   type BottomSheetSwitcherContextValue,
@@ -203,6 +245,15 @@ function takeOverScrim(dialog: HTMLDialogElement, opacity: number): void {
   dialog.style.removeProperty('--_sheet-scrim-duration');
 }
 
+/**
+ * @deprecated Write each step as its own `BottomSheet` with `isOpen`, driven
+ * by one state value that names the open step; closing the top sheet and
+ * opening the next in the same update, from inside the open step, runs the
+ * same replace handoff (see BottomSheet, "Replacing a sheet"). Keeps working until a future minor
+ * release removes it: on its own as released (plus two fixes: a toast raised
+ * from a step now renders above the flow and can be pressed, and reduced motion
+ * follows design:reduced-motion), as one stack level when stacked.
+ */
 export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
   /**
    * Ref resolved to the native dialog hosting the flow: the active sheet's
@@ -243,18 +294,28 @@ export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
  * in its own native dialog. During a handoff the previous panel stays visible
  * and inert beneath the entering panel, then fades after motion completes.
  *
- * @example
+ * @deprecated Write each step as its own `BottomSheet` with `isOpen`, driven
+ * by one state value that names the open step:
+ *
  * ```
- * <BottomSheetSwitcher
- *   activeSheet={activeSheet}
- *   onActiveSheetChange={setActiveSheet}>
- *   <BottomSheet sheetId="details" label="Details">…</BottomSheet>
- *   <BottomSheet sheetId="confirm" label="Confirm">…</BottomSheet>
- * </BottomSheetSwitcher>
+ * const [step, setStep] = useState(null);
+ * const close = own => isOpen => !isOpen && setStep(c => (c === own ? null : c));
+ * <BottomSheet isOpen={step === 'details'} onOpenChange={close('details')} label="Details">…</BottomSheet>
+ * <BottomSheet isOpen={step === 'confirm'} onOpenChange={close('confirm')} label="Confirm">…</BottomSheet>
  * ```
+ *
+ * Closing the top sheet and opening the next in the same update, from a
+ * control inside the open step, runs the same replace handoff, with no
+ * `sheetId` and no switcher, for modal and `hasScrim={false}` flows alike; a
+ * step changed from outside the flow's sheets closes and opens with the
+ * sheets' own motion. The switcher keeps working until a future
+ * minor release removes it: on its own as released (plus two fixes: a toast
+ * raised from a step now renders above the flow and can be pressed, and reduced
+ * motion follows design:reduced-motion), and as one level of the stack when
+ * stacked with other sheets.
  */
 export function BottomSheetSwitcher({
-  activeSheet,
+  activeSheet: activeSheetProp,
   onActiveSheetChange,
   hasScrim = true,
   children,
@@ -267,6 +328,14 @@ export function BottomSheetSwitcher({
   xstyle,
   ...restDialogProps
 }: BottomSheetSwitcherProps) {
+  // A flow rendered in another sheet's content is part of that sheet, as a
+  // standalone sheet is: it is presented only while its host is open, leaves
+  // with it, and comes back with it if its own `activeSheet` still names a
+  // step (see BottomSheetHostContext). The consumer's state is never written
+  // for it; with the host closed the flow simply reads as closed.
+  const host = use(BottomSheetHostContext);
+  const isHostOpen = host?.isOpen ?? true;
+  const activeSheet = isHostOpen ? activeSheetProp : null;
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,
@@ -275,6 +344,7 @@ export function BottomSheetSwitcher({
     xstyle,
   });
   const hostDialogRef = useRef<HTMLDialogElement | null>(null);
+  const flowRef = useRef<HTMLDivElement | null>(null);
   const sheetDialogsRef = useRef(new Map<string, HTMLDialogElement>());
   // Sheet ids in the order their dialogs mounted (tree order on first mount).
   // State, not a ref: the resting host below is rendered -- it carries the
@@ -293,6 +363,27 @@ export function BottomSheetSwitcher({
   const committedActiveSheetRef = useRef(activeSheet);
   const scrimOpacityRef = useRef(1);
   const scrimOwnerRef = useRef<string | null>(null);
+  // The flow's place in the stack of presented modal sheets; default until
+  // the stack reports, in the commit that presents the flow. The whole flow
+  // is one level, keyed once for its lifetime, so a handoff keeps its rank.
+  const stackKeyRef = useRef<object>({});
+  const [stackView, setStackView] = useState<BottomSheetStackView>(
+    BOTTOM_SHEET_STACK_DEFAULT_VIEW,
+  );
+  const stackViewRef = useRef(stackView);
+  stackViewRef.current = stackView;
+  const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
+  // What the flow's place in the stack was when it left the registry: its
+  // depth and the open sheet beneath it. React runs the registration
+  // effect's cleanup before the focus-return effect below in the same
+  // commit, so by then the registry no longer knows the flow; the cleanup
+  // records what the return needs.
+  const leftStackRef = useRef<{
+    depth: number;
+    revealed: {element: HTMLDialogElement; focus: () => void} | null;
+    closingTogether: boolean;
+  } | null>(null);
   const [sheetPurposes, setSheetPurposes] = useState<
     ReadonlyMap<string, DialogPurpose>
   >(() => new Map());
@@ -344,6 +435,13 @@ export function BottomSheetSwitcher({
   // keeps it through a handoff so the entering dialog, presented above it in
   // the top layer, does not dim the previous panel beneath its own backdrop.
   const scrimOwnerSheet = presentedRetainedSheet ?? presentedActiveSheet;
+  // Whether the flow's one scrim is the stack's visible scrim. A flow stacked
+  // above another sheet keeps every step backdrop clear: the sheet beneath
+  // dims the page, and a second dim would double it.
+  const flowOwnsStackScrim = !stackView.isStacked || stackView.ownsScrim;
+  const isFlowOpen = activeSheet != null;
+  const isFlowOpenRef = useRef(isFlowOpen);
+  isFlowOpenRef.current = isFlowOpen;
   const isFlowClosing = isFlowVisible && activeSheet == null;
   const activeSheetPurpose =
     (activeSheet == null ? null : sheetPurposes.get(activeSheet)) ?? 'info';
@@ -392,7 +490,11 @@ export function BottomSheetSwitcher({
     escapeBehavior: allowsEscapeDismiss ? 'close' : 'block',
     onDismiss: dismissOnEscape,
     getContainer: () => hostDialogRef.current,
-    isPresent: () => hostDialogRef.current?.open ?? false,
+    // A covered flow stands down from dismissal while a sheet covers it, so
+    // Escape and the platform close request reach the top sheet; see the
+    // standalone host.
+    isPresent: () =>
+      (hostDialogRef.current?.open ?? false) && !stackViewRef.current.isCovered,
   });
 
   // Point the consumer ref and the dismissal registration at the host dialog.
@@ -415,7 +517,13 @@ export function BottomSheetSwitcher({
       hostSheet == null
         ? (sheetDialogsRef.current.values().next().value ?? null)
         : (sheetDialogsRef.current.get(hostSheet) ?? null);
+    const previousHost = hostDialogRef.current;
     hostDialogRef.current = host;
+    if (host != null && host !== previousHost) {
+      // The level's dialog changed on a handoff; the registry puts the
+      // sheets above the flow back above its new dialog.
+      notifyBottomSheetHostChanged(stackKeyRef.current);
+    }
     const attached = attachedRef.current;
     if (attached?.host === host && attached.ref === ref) {
       return;
@@ -439,6 +547,22 @@ export function BottomSheetSwitcher({
       attachedRef.current = null;
     },
     [],
+  );
+
+  // The flow's host dialog is an outlet for app-global surfaces (toasts)
+  // while the flow is a modal one, as a standalone scrim sheet's dialog is
+  // (`component:BottomSheet` FR13): every open scrim sheet supplies one, the
+  // latest among sheets follows the stack, and a Dialog supplied later stays
+  // above. The host changes on a handoff, so the supply follows `hostSheet`;
+  // the retained step's dialog, inert and fading, is never the outlet. A
+  // closing flow stops supplying at once, as a closing sheet does. Passive:
+  // it runs after the layout effects that present the step dialogs.
+  useModalOutlet(
+    hostDialogRef,
+    isModal && isFlowOpen,
+    stackView.isTop || !stackView.isStacked,
+    'bottom-sheet',
+    hostSheet,
   );
 
   // Focus return is native per dialog: each showModal() records the focused
@@ -465,16 +589,138 @@ export function BottomSheetSwitcher({
       }
       return;
     }
+    const left = leftStackRef.current;
+    leftStackRef.current = null;
     if (modalFlowRef.current) {
-      // Like the browser's own return on close(), without scrolling: the
-      // page kept its scroll offset under the lock, and an opener scrolled
-      // out of view must not drag the page back to itself.
-      triggerRef.current?.focus({preventScroll: true});
+      const depth = left?.depth ?? stackViewRef.current.depth;
+      if (depth > 0) {
+        // Closed from code beneath open sheets: focus stays in the sheet on
+        // top; the flow's own close must not pull it back to the opener.
+      } else if (left?.closingTogether) {
+        // Closing together with the other sheets of its stack ("Close all"):
+        // the registry returns focus once, after the last dialog has left.
+        reportClosedTogether(stackKeyRef.current);
+      } else {
+        // With a sheet still open beneath the flow, focus returns into that
+        // sheet: to the opener when it is there, else to the sheet's panel.
+        // Otherwise, like the browser's own return on close(), without
+        // scrolling: the page kept its scroll offset under the lock, and an
+        // opener scrolled out of view must not drag the page back to itself.
+        const revealed =
+          left?.revealed ?? getBottomSheetBeneath(stackKeyRef.current);
+        const trigger = triggerRef.current;
+        if (
+          revealed != null &&
+          (trigger == null || !revealed.element.contains(trigger))
+        ) {
+          revealed.focus();
+        } else {
+          trigger?.focus({preventScroll: true});
+        }
+      }
     }
     triggerRef.current = null;
     modalFlowRef.current = false;
     presentationOrderRef.current.clear();
   }, [hasScrim, isFlowVisible]);
+
+  // A scrim flow is one level of the bottom-sheet stack while it is visible.
+  // The step hosts present their own dialogs; the registry re-presents the
+  // level's dialog only to restore open order, moves focus into the active
+  // panel when the flow lands on top, and reports the flow's view (top,
+  // covered, depth, scrim ownership). Switching the step never
+  // re-registers, so a switch in place keeps the flow's position.
+  useLayoutEffect(() => {
+    if (!isFlowVisible || !hasScrim) {
+      return;
+    }
+    const key = stackKeyRef.current;
+    const unregister = registerBottomSheet(
+      {
+        key,
+        getElement: () => hostDialogRef.current,
+        // The flow wrapper contains every step dialog, so it orders the flow
+        // against sheets opened in the same commit whichever step is active.
+        getTreeAnchor: () => flowRef.current,
+        show: () => {
+          const dialog = hostDialogRef.current;
+          if (dialog == null || dialog.open) {
+            return;
+          }
+          const hostId = [...sheetDialogsRef.current].find(
+            ([, candidate]) => candidate === dialog,
+          )?.[0];
+          if (hostId != null) {
+            onBeforeSheetPresent(hostId);
+          }
+          const ownsFlowScrim =
+            hostId != null && hostId === scrimOwnerRef.current;
+          const view = stackViewRef.current;
+          if (ownsFlowScrim && (!view.isStacked || view.ownsScrim)) {
+            dialog.style.setProperty(
+              '--_sheet-scrim-opacity',
+              String(scrimOpacityRef.current),
+            );
+            presentStepModally(dialog);
+          } else {
+            presentWithClearScrim(dialog);
+          }
+        },
+        hide: () => closeDialogKeepingFocus(hostDialogRef.current),
+        getReturnTarget: () => triggerRef.current,
+        focus: reason => {
+          const active = committedActiveSheetRef.current;
+          const panel =
+            active == null ? undefined : sheetElementsRef.current.get(active);
+          focusSheetPanel(panel ?? null, reason, true);
+        },
+        onView: view => {
+          const previous = stackViewRef.current;
+          stackViewRef.current = view;
+          setStackView(view);
+          // A change of the stack's scrim owner lands with no fade on the
+          // flow's own owner dialog; see writeScrimOpacity.
+          const owner =
+            scrimOwnerRef.current == null
+              ? null
+              : (sheetDialogsRef.current.get(scrimOwnerRef.current) ?? null);
+          if (owner == null) {
+            return;
+          }
+          const ownsNow = !view.isStacked || view.ownsScrim;
+          const ownedBefore = !previous.isStacked || previous.ownsScrim;
+          if (isFlowOpenRef.current && ownsNow !== ownedBefore) {
+            writeScrimOpacity(
+              owner,
+              ownsNow && scrimOpacityRef.current > 0 ? '1' : '0',
+              scrimWriteRef.current,
+            );
+          } else if (!isFlowOpenRef.current && view.isScrimTakenOver) {
+            writeScrimOpacity(owner, '0', scrimWriteRef.current);
+          }
+        },
+      },
+      isFlowOpenRef.current,
+    );
+    return () => {
+      // Read before the entry leaves: the focus-return effect runs after.
+      leftStackRef.current = {
+        depth: stackViewRef.current.depth,
+        revealed: getBottomSheetBeneath(key),
+        closingTogether: isClosingTogether(key),
+      };
+      unregister();
+    };
+  }, [hasScrim, isFlowVisible, onBeforeSheetPresent]);
+  useLayoutEffect(() => {
+    if (isFlowVisible && hasScrim) {
+      setBottomSheetOpen(stackKeyRef.current, isFlowOpen);
+    }
+  }, [hasScrim, isFlowOpen, isFlowVisible]);
+  // Closes a batch of same-commit opens; see sealBottomSheetBatch.
+  useEffect(() => {
+    sealBottomSheetBatch();
+  });
 
   const getSheetPhase = useCallback(
     (sheetId: string): BottomSheetSwitcherPhase => {
@@ -681,11 +927,14 @@ export function BottomSheetSwitcher({
   // When ownership moves — the retained dialog has faded and closes, or a
   // rapid replacement hides it — the new owner takes the value without a
   // fade, in the same layout pass that closes the old one.
+  // A flow stacked above another sheet keeps every backdrop clear: the
+  // stack's owner beneath dims the page (`flowOwnsStackScrim`).
   const applyScrimOpacity = useCallback(() => {
     const owner =
       scrimOwnerSheet == null
         ? null
         : (sheetDialogsRef.current.get(scrimOwnerSheet) ?? null);
+    const value = flowOwnsStackScrim ? scrimOpacityRef.current : 0;
     // A fresh open keeps the backdrop's @starting-style fade; only a hand
     // from one presented dialog to another swaps without one.
     const ownerChanged =
@@ -695,18 +944,15 @@ export function BottomSheetSwitcher({
     for (const [sheetId, dialog] of sheetDialogsRef.current) {
       if (dialog === owner) {
         if (ownerChanged && dialog.open) {
-          takeOverScrim(dialog, scrimOpacityRef.current);
+          takeOverScrim(dialog, value);
         } else {
-          dialog.style.setProperty(
-            '--_sheet-scrim-opacity',
-            String(scrimOpacityRef.current),
-          );
+          dialog.style.setProperty('--_sheet-scrim-opacity', String(value));
         }
       } else if (sheetId !== scrimOwnerSheet) {
         dialog.style.setProperty('--_sheet-scrim-opacity', '0');
       }
     }
-  }, [scrimOwnerSheet]);
+  }, [flowOwnsStackScrim, scrimOwnerSheet]);
   const onSheetScrimOpacityChange = useCallback(
     (sheetId: string, opacity: number) => {
       // A pointer captured by the outgoing sheet can keep delivering gesture
@@ -802,6 +1048,7 @@ export function BottomSheetSwitcher({
       onSheetEnterStart,
       onSheetTransitionComplete,
       onSheetScrimOpacityChange,
+      stackView,
       dialogProps,
       onDialogCancel,
       onDialogClick,
@@ -828,12 +1075,14 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetElement,
       registerSheetPurpose,
+      stackView,
     ],
   );
 
   return (
     <BottomSheetSwitcherContext value={contextValue}>
       <div
+        ref={flowRef}
         {...stylex.props(
           styles.flow,
           !hasScrim && isFlowVisible && styles.flowNonModal,
