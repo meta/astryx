@@ -973,6 +973,25 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
+test("scroll edge: at the top the sheet cancels the pull's moves from the first one, before it begins (spec:AST-094 FR19, DEC-18)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await logTouchMoves(page);
+  const start = await center(page, 'sheetBody');
+  await driver.play(drag(start, {x: start.x, y: start.y + 24}));
+  const moves = await readTouchMoves(page);
+  // WebKit sends the first move at 2 px, well before the sheet's 10 px begin;
+  // Chromium sends none inside its own 15 px slop. Every move the page sees
+  // is cancelled, the first one included.
+  expect(moves.length).toBeGreaterThan(0);
+  expect(moves).toEqual(moves.map(() => true));
+  const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
+  expect(sheet[0]?.state).toBe('began');
+  expect(await scrollTop(page, 'sheetBody')).toBe(0);
+});
+
 test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({
   page,
   browserName,
