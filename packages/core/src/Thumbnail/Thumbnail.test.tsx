@@ -7,9 +7,12 @@ import {Thumbnail} from './Thumbnail';
 import {
   afterPaintsPress,
   hasReleaseFade,
+  keepsPressOutsideCoarse,
   pressArmsShadowedByDefault,
   readsPressStrength,
+  releasesOnLayer,
 } from '../__tests__/pressState';
+import {button as uikitButton} from '../motion/uikit/button';
 
 describe('Thumbnail', () => {
   it('renders an image when src is provided', () => {
@@ -368,6 +371,13 @@ describe('Thumbnail pressed state (touch)', () => {
       throw new Error('the interactive thumbnail carries no pressable marker');
     }
     expect(hasReleaseFade(surface)).toBe(true);
+    // Under a coarse primary pointer the `::after`'s opacity releases the
+    // press on a control's clock (the compositor); under any other the
+    // card keeps the strength's release it always had (the desktop rule).
+    expect(
+      releasesOnLayer(surface, '::after', uikitButton.highlight.releaseMs),
+    ).toBe(true);
+    expect(keepsPressOutsideCoarse(surface, '::after')).toBe(true);
     expect(readsPressStrength(surface, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(surface)).toBe(true);
     expect(afterPaintsPress(surface, '[data-astryx-press="on"]')).toBe(true);

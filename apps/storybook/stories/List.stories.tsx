@@ -7,7 +7,7 @@
  * @position Storybook demonstrations for List consumers
  */
 
-import {useState} from 'react';
+import {useRef, useState, type MouseEvent} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -18,6 +18,12 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Switch} from '@astryxdesign/core/Switch';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
+import {Button} from '@astryxdesign/core/Button';
+// The selection hold is internal to core (no public API records it yet).
+import {
+  holdSelection,
+  type SelectionHold as RowSelectionHold,
+} from '../../../packages/core/src/List/selectionHold';
 import {
   Cog6ToothIcon,
   BellIcon,
@@ -404,6 +410,121 @@ export const HeaderInFlexParent: Story = {
         story:
           'Demonstrates the list with a header inside a flex parent. ' +
           'The header should appear above the list, not beside it.',
+      },
+    },
+  },
+};
+
+function SelectionHoldDemo() {
+  const hold = useRef<RowSelectionHold | null>(null);
+  const slider = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const push = (label: string) => (event: MouseEvent) => {
+    // In the same task as the activation that pushes.
+    hold.current = holdSelection(event.target);
+    setProgress(0);
+    setOpen(label);
+  };
+  const settle = async (
+    to: 0 | 1,
+    timing?: Parameters<RowSelectionHold['animate']>[1],
+    {followSlider = false}: {followSlider?: boolean} = {},
+  ) => {
+    const current = hold.current;
+    // A slow pop shows where it is on the slider (written to the input, no
+    // render per frame), so a finger that takes the slider over mid-flight
+    // continues from the value on screen. (Off for the regular pop, whose
+    // proof counts every paint.)
+    const following = {frame: 0};
+    const follow = () => {
+      if (current != null && slider.current != null) {
+        slider.current.value = String(current.presentation());
+      }
+      following.frame = requestAnimationFrame(follow);
+    };
+    if (followSlider) {
+      following.frame = requestAnimationFrame(follow);
+    }
+    // No hold under a mouse: the screen just pops.
+    const arrived = current == null || (await current.animate(to, timing));
+    cancelAnimationFrame(following.frame);
+    if (!arrived) {
+      // Interrupted (a finger took the progress over mid-flight): the hold
+      // stays where the finger left it.
+      return;
+    }
+    if (to === 1) {
+      setOpen(null);
+      current?.end(true);
+      current?.focus({preventScroll: true});
+      hold.current = null;
+    } else {
+      current?.end(false);
+      setProgress(0);
+    }
+  };
+  return (
+    <VStack gap={4}>
+      <List hasDividers>
+        {['Inbox', 'Sent', 'Drafts'].map(label => (
+          <ListItem
+            key={label}
+            label={label}
+            onClick={push(label)}
+            endContent={<Icon icon={ChevronRightIcon} />}
+          />
+        ))}
+      </List>
+      {open != null && (
+        <VStack gap={2} data-testid="pushed-screen">
+          <Text type="label">{open} (pushed)</Text>
+          <Button label="Back" onClick={() => void settle(1)} />
+          <Button
+            label="Back, slowly"
+            onClick={() =>
+              void settle(
+                1,
+                {durationMs: 3000, curve: [0, 0, 1, 1]},
+                {followSlider: true},
+              )
+            }
+          />
+          <label>
+            Pop progress
+            <input
+              ref={slider}
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={progress}
+              onChange={event => {
+                const value = Number(event.target.value);
+                setProgress(value);
+                hold.current?.setProgress(value);
+              }}
+            />
+          </label>
+          <Button label="Finish pop" onClick={() => void settle(1)} />
+          <Button label="Cancel pop" onClick={() => void settle(0)} />
+        </VStack>
+      )}
+    </VStack>
+  );
+}
+
+export const SelectionHold: Story = {
+  render: () => <SelectionHoldDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A row tapped to push stays selected while the pushed screen covers it ' +
+          'and deselects as the screen pops (UIKit’s push from a table row), ' +
+          'driven here by buttons standing in for a navigation stack: Back runs ' +
+          'the in-transition deselect, the slider scrubs it like an edge swipe, ' +
+          'and Cancel selects the row again.',
       },
     },
   },

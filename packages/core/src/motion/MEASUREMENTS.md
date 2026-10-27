@@ -270,3 +270,13 @@ fades in, with Prefer Cross-Fade Transitions on or off.
 | M-CM4 | Reduce Motion press feedback    | Probe app with Reduce Motion on: long press, then dismiss                                                                   | press feedback, lift and dismiss animations under Reduce Motion                                                                                                                           | A, B   |
 | M-CM5 | Commit haptic stand-in          | An Android device: `navigator.vibrate` patterns against the platform's HapticFeedbackConstants for the context-click moment | the pattern that matches; not a UIKit parity value (as M-G18)                                                                                                                             | H      |
 | M-CM6 | Press thresholds                | Probe app: repeated long presses at random vsync phases                                                                     | from touch receipt and from the HID timestamp, the tick before and the tick at the press observer's began and at the click commit; the intersection pins the 150 ms and 400 ms thresholds | C      |
+
+## Lists (UITableView, UICollectionView lists)
+
+Subject "list L": an inset-grouped `UITableView`, a plain `UITableView` and a
+`UICollectionView` list (`UICollectionViewListCell`, default background
+configuration) in a UIKit host app; Settings for the built-in check.
+
+| ID     | Scene                | Gesture                                                                                                           | Extract                                                                                                                                                                                                      | Method |
+| ------ | -------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| M-LI01 | † list L (all three) | touch a cell, hold 1 s, lift; programmatic `deselectRow(at:animated: true)` and `deselectItem(at:animated: true)` | every `CAAnimation` added in the cell's subtree at highlight, unhighlight and deselect (key path, from / to, duration, timing function, fill); selected-background alpha per frame for 600 ms after the lift | A, C   |
