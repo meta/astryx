@@ -447,6 +447,15 @@ keeps its press for a hold-repeat keeps its long press, right click and
 Shift+F10 its own. A right click or a ctrl-click on macOS starts no press.
 The request listens on its own element only, and only while enabled.
 
+A hold can come in two stages (`hold: {commitMs, requestMs}`, reported by
+`onHold`): it commits when the still finger claims its touch, then requests
+at `requestMs`, a deadline on the host's clock. With `requestOnLift`, a lift
+between the two requests at the lift, as UIKit opens a context menu then;
+without it, that lift cancels the hold. A finger that drifts past the hold's
+`allowableMovement` (UIKit's long press, 10 px as a distance, by default; a
+context menu's tolerance on each axis with `isPerAxis`) fails the hold before
+the commit and cancels it at once after it, before the request.
+
 ## Time
 
 Every input carries its own timestamp (`event.timeStamp`), and timers are

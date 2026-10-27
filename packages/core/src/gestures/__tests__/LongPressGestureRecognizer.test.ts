@@ -41,6 +41,32 @@ describe('LongPressGestureRecognizer', () => {
     expect(press.location()).toEqual({x: 300, y: 300});
   });
 
+  it('measures the movement tolerance on each axis when isPerAxis is set, as a context menu does: (11, 11) keeps an 11.5 px press, (12, 0) fails it', () => {
+    const inside = createHarness();
+    const a = new LongPressGestureRecognizer({
+      name: 'a',
+      allowableMovement: 11.5,
+      isPerAxis: true,
+    });
+    inside
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [a]})
+      .move(11, 11, 100);
+    inside.advance(500);
+    expect(a.state).toBe('began');
+    const outside = createHarness();
+    const b = new LongPressGestureRecognizer({
+      name: 'b',
+      allowableMovement: 11.5,
+      isPerAxis: true,
+    });
+    outside
+      .finger(1)
+      .down(0, 0, 0, {recognizers: [b]})
+      .move(12, 0, 100);
+    expect(b.state).toBe('failed');
+  });
+
   it('measures the movement tolerance as a distance, not per axis', () => {
     const inside = createHarness();
     const a = new LongPressGestureRecognizer({name: 'a'});

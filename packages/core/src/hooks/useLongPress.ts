@@ -111,7 +111,11 @@ export interface LongPressDetector {
    * scheduler's clock (an event's timestamp); the deadlines count from it.
    * Defaults to now.
    */
-  start(point: {x: number; y: number}, time?: number): void;
+  start(
+    point: {x: number; y: number},
+    time?: number,
+    tolerance?: LongPressTolerance,
+  ): void;
   /**
    * Report the pointer's new position. Past `moveCancelPx` the press is off.
    * Returns whether a press is still tracked.
@@ -130,14 +134,21 @@ export function createLongPressDetector(
   read: () => LongPressDetectorOptions,
 ): LongPressDetector {
   let from: {x: number; y: number} | null = null;
+  // The press in progress's tolerance, when its caller chose one at start.
+  let pressTolerance: LongPressTolerance | null = null;
   let cancelTimer: (() => void) | null = null;
   const cancel = () => {
     cancelTimer?.();
     cancelTimer = null;
     from = null;
   };
-  const start = (point: {x: number; y: number}, time?: number) => {
+  const start = (
+    point: {x: number; y: number},
+    time?: number,
+    tolerance?: LongPressTolerance,
+  ) => {
     cancel();
+    pressTolerance = tolerance ?? null;
     const options = read();
     const scheduler = options.scheduler ?? WINDOW_SCHEDULER;
     const origin = time ?? scheduler.now();
@@ -174,16 +185,19 @@ export function createLongPressDetector(
       return false;
     }
     const options = read();
-    const limit = options.moveCancelPx ?? DEFAULT_MOVE_CANCEL_PX;
+    // This press's own tolerance when its caller chose one at start.
+    const limit =
+      pressTolerance?.moveCancelPx ??
+      options.moveCancelPx ??
+      DEFAULT_MOVE_CANCEL_PX;
     const dx = Math.abs(point.x - from.x);
     const dy = Math.abs(point.y - from.y);
-    // A distance, as UIKit measures a long press's `allowableMovement`: a
-    // (7, 7) drift keeps the press, a (7.2, 7.2) one ends it. A context
-    // menu's tolerance is per axis.
+    // On either axis, as documented (ContextMenu's measured hold, the menu
+    // trigger's released behavior); a distance with `isPerAxis: false`.
     if (
-      options.isPerAxis === true
-        ? Math.max(dx, dy) > limit
-        : Math.hypot(dx, dy) > limit
+      options.isPerAxis === false
+        ? Math.hypot(dx, dy) > limit
+        : Math.max(dx, dy) > limit
     ) {
       // Treat as a scroll/drag, not a long-press.
       cancel();
@@ -192,6 +206,11 @@ export function createLongPressDetector(
     return true;
   };
   return {start, moveTo, cancel};
+}
+
+/** A press's own movement tolerance, for a caller that decides it as the press starts. */
+export interface LongPressTolerance {
+  moveCancelPx?: number;
 }
 
 export interface UseLongPressOptions {
@@ -220,7 +239,11 @@ export interface UseLongPressHandlers {
    * pointer events rather than the touch handlers above. `time` is when the
    * press started (`performance.now()` clock); defaults to now.
    */
-  start: (point: {x: number; y: number}, time?: number) => void;
+  start: (
+    point: {x: number; y: number},
+    time?: number,
+    tolerance?: LongPressTolerance,
+  ) => void;
   /**
    * Report the pointer's new position. Past `moveCancelPx` the press is off.
    * Returns whether a press is still pending, so a caller running its own
@@ -242,11 +265,15 @@ export function useLongPress(
   );
 
   const start = useCallback(
-    (point: {x: number; y: number}, time?: number) => {
+    (
+      point: {x: number; y: number},
+      time?: number,
+      tolerance?: LongPressTolerance,
+    ) => {
       if (optionsRef.current.disabled === true) {
         return;
       }
-      detector.start(point, time);
+      detector.start(point, time, tolerance);
     },
     [detector],
   );
