@@ -31,6 +31,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useIndicator} from '../Indicator';
 import {Item, type ItemAlign} from '../Item';
 import {themeProps} from '../utils/themeProps';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -148,6 +149,10 @@ const rowStyles = stylex.create({
     // strength still lands on the row, which is where the layer over the
     // circle reads it.
     backgroundImage: 'none',
+    // ...and the row's touch press layer (Item's `cell`): no box.
+    '::before': {
+      content: 'none',
+    },
   },
   // The mouse press (a finger's lives on `data-astryx-press`): the row is
   // pressed, but not through a nested link or button, which keep their own
@@ -395,6 +400,10 @@ export function RadioListItem({
           // the painting row element (Item), the same element that carries the
           // theme target, so a theme's hover styling stays in step with the tint.
           !isDisabled && indicatorScope,
+          // The row owns the strength the circle's layer reads, and its
+          // release (Item's touch layer drops the row's own under a finger:
+          // this row has no layer of its own, so it keeps the release).
+          !isDisabled && interactionOverlayStyles.pressedAlpha,
           // Restore the bare default look: zero Item's padding/radius and its
           // interactive hover/press background. Applied after Item's own base
           // styles so it wins within the base layer; a `radio-list-item` theme

@@ -10,7 +10,6 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {PRESS_GESTURE_MEMORY_MS} from '../../utils/pressFeedback';
 import {PRESS_SLOP_PX} from '../../utils/pressGesture';
 import {press} from './timing';
 import {
@@ -61,12 +60,11 @@ describe('UIKIT_GESTURES', () => {
   });
 
   it('holds the press entries to the press model, one value per use', () => {
-    // The touch press model (utils/pressGesture.ts, utils/pressFeedback.ts)
-    // and the table name the same clocks: they cannot drift apart.
+    // The touch press model (utils/pressGesture.ts) and the table name the
+    // same slop: they cannot drift apart. The press feedback brakes on a
+    // fling until its own scrollend, with no time window, so the momentum
+    // memory is the gesture host's alone.
     expect(UIKIT_GESTURES.press.slop.value).toBe(PRESS_SLOP_PX);
-    expect(UIKIT_GESTURES.press.momentumMemory.value).toBe(
-      PRESS_GESTURE_MEMORY_MS,
-    );
     // Written as numbers in the table so each group bundles alone.
     expect(UIKIT_PRESS.quickTapFlash.value).toBe(press.flashMs);
     expect(UIKIT_PRESS.scrollBrake.value).toBe(press.scrollBrakeMs);
