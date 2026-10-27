@@ -407,13 +407,35 @@ describe('build-css astryx.css', () => {
       );
       expect(paints.length).toBeGreaterThanOrEqual(10);
       // Not the hover strength: under a finger there is no hover to land on,
-      // and a paint that stepped there would still have to step off.
+      // and a paint that stepped there would still have to step off. Only a
+      // hovering pointer's own hover paints beneath the fading image: on the
+      // `fading` arm, in a `:hover` rule under `(hover: hover)`.
       const arms = lines().filter(line =>
         /\[data-astryx-press="(?:on|fading)"\]/.test(line),
       );
-      expect(arms.some(line => line.includes('--color-overlay-hover'))).toBe(
-        false,
+      const hoverArms = arms.filter(line =>
+        line.includes('--color-overlay-hover'),
       );
+      expect(hoverArms.length).toBeGreaterThan(0);
+      for (const line of hoverArms) {
+        expect(line).toContain('[data-astryx-press="fading"]');
+        expect(line).toContain(':hover');
+        expect(line).toMatch(/\(hover: ?hover\)/);
+        expect(line).not.toContain('[data-astryx-press="on"]');
+      }
+      // A coarse pointer that can also hover still yields the release to the
+      // button's compositor layer: its `none` arm is not narrowed to pointers
+      // that cannot hover.
+      const coarseYield = arms.filter(
+        line =>
+          line.includes('[data-astryx-press="fading"]') &&
+          /background-image:\s*none/.test(line) &&
+          /\(pointer: ?coarse\)/.test(line),
+      );
+      expect(coarseYield.length).toBeGreaterThan(0);
+      expect(
+        coarseYield.filter(line => /not \(hover: ?hover\)/.test(line)),
+      ).toEqual([]);
     });
   });
   describe('the press releases under reduced motion (design:reduced-motion)', () => {
