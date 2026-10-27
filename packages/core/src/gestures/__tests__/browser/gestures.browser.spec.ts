@@ -938,6 +938,49 @@ test('a zero-delay hold that brings its own lock turns selection off only for a 
   expect(held.lens).toEqual([true, false]);
 });
 
+test('one context request per gesture from a finger held still, a right click and Shift+F10, each naming its input (spec:AST-094 FR43)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {attachContextRequest} = window.__api;
+    document.body.innerHTML =
+      '<div id="row" tabindex="0" style="height: 80px">Row</div>';
+    attachContextRequest(document.getElementById('row') as HTMLElement, {
+      onRequest: request =>
+        window.__requests.push(
+          `${request.kind}:${request.pointerType ?? 'none'}`,
+        ),
+    });
+  });
+  const at = await center(page, 'row');
+  // Held past the long press: one request. Android fires its own context
+  // menu during the hold too, as a touch's; that one is refused, not
+  // requested again.
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  await page.waitForTimeout(900);
+  const nativeMenuRefused = await page.evaluate(() => {
+    const menu = new PointerEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      pointerType: 'touch',
+    });
+    document.getElementById('row')?.dispatchEvent(menu);
+    return menu.defaultPrevented;
+  });
+  await driver.play([{t: 0, down: []}]);
+  expect(nativeMenuRefused).toBe(true);
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  await page.focus('#row');
+  await page.keyboard.press('Shift+F10');
+  expect(await page.evaluate(() => window.__requests)).toEqual([
+    'hold:touch',
+    'pointer:mouse',
+    'keyboard:none',
+  ]);
+});
+
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
   page,
   browserName,
