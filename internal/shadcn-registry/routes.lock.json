@@ -3745,6 +3745,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-context-menu",
+      "path": "hooks/create-context-menu",
+      "aliases": []
+    },
+    {
       "name": "hook-use-announce",
       "path": "hooks/use-announce",
       "aliases": []
@@ -3782,6 +3787,11 @@
     {
       "name": "hook-use-container-reveal",
       "path": "hooks/use-container-reveal",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-context-menu",
+      "path": "hooks/use-context-menu",
       "aliases": []
     },
     {
