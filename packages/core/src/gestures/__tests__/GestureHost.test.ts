@@ -1239,6 +1239,25 @@ describe('GestureHost', () => {
     expect(takenAfter(8, 8)).toBe(true);
   });
 
+  it('lets a scroll take a finger inside an open shadow root too, comparing it with the scroller along the flat tree (spec:AST-094 FR20)', () => {
+    const {list, outer} = mount('<div id="list"><div id="outer"></div></div>');
+    const shadow = outer.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<div id="row">x</div>';
+    const row = shadow.getElementById('row') as HTMLElement;
+    const consumer = new RecordingConsumer();
+    detachers.push(host.attachConsumer(row, consumer));
+    // At the document, a touch's target is the shadow host.
+    const finger = {id: 1, x: 10, y: 10, target: outer};
+    touch('touchstart', row, [finger], [finger], 0);
+    const moved = {...finger, y: 22};
+    touch('touchmove', row, [moved], [moved], 16);
+    list.dispatchEvent(new Event('scroll'));
+    expect(consumer.events.some(event => event.startsWith('cancelled'))).toBe(
+      true,
+    );
+    touch('touchend', row, [moved], [], 32);
+  });
+
   it("leaves a still finger's press and click alone when the page scrolls under it", () => {
     const {list, button} = mount(
       '<div id="list"><button id="button">Go</button></div>',
@@ -1641,6 +1660,45 @@ describe('GestureHost', () => {
       pointer.set(true);
       list.dispatchEvent(new Event('scroll'));
       expect(isFingerScroll(host, list)).toBe(false);
+    });
+
+    it('reads a scroll under a finger inside an open shadow root as the finger’s, comparing them along the flat tree', () => {
+      const {list, outer} = mount(
+        '<div id="list"><div id="outer"></div></div>',
+      );
+      const shadow = outer.attachShadow({mode: 'open'});
+      shadow.innerHTML = '<div id="row">x</div>';
+      const row = shadow.getElementById('row') as HTMLElement;
+      detachers.push(watchFingerScrolls(host, list));
+      const finger = {id: 1, x: 10, y: 10, target: outer};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(isFingerScroll(host, list)).toBe(true);
+    });
+
+    it('arms the scroll brake for a flick by a finger inside an open shadow root, and brakes a touch there, comparing along the flat tree', () => {
+      const {list, outer} = mount(
+        '<div id="list"><div id="outer"></div></div>',
+      );
+      const shadow = outer.attachShadow({mode: 'open'});
+      shadow.innerHTML = '<div id="row">x</div>';
+      const row = shadow.getElementById('row') as HTMLElement;
+      const consumer = new RecordingConsumer();
+      detachers.push(host.attachConsumer(row, consumer));
+      const finger = {id: 1, x: 10, y: 10, target: outer};
+      touch('touchstart', row, [finger], [finger], 0);
+      const moved = {...finger, y: 40};
+      touch('touchmove', row, [moved], [moved], 16);
+      // Each scroll at its own time, on the touches' clock.
+      const scroll = (time: number) => {
+        const event = new Event('scroll');
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        list.dispatchEvent(event);
+      };
+      scroll(24);
+      touch('touchend', row, [moved], [], 32);
+      scroll(48);
+      expect(host.isScrollBraking(row)).toBe(true);
     });
 
     it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
@@ -3680,5 +3738,54 @@ describe('Touch Events from a browser that exposes no ontouchstart', () => {
     touch('touchstart', box, [finger], [finger], 0);
     host.arena.advanceTime(600);
     expect(press.state).toBe('began');
+  });
+
+  it("cancels a claimed pan's touchmove there too: the finger read from its pointer events is the one the move reports", () => {
+    let owner: object | null = window;
+    let descriptor: PropertyDescriptor | undefined;
+    while (owner != null) {
+      descriptor = Object.getOwnPropertyDescriptor(owner, 'ontouchstart');
+      if (descriptor != null) {
+        break;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+    }
+    if (owner != null && descriptor != null) {
+      const from = owner;
+      const saved = descriptor;
+      delete (from as {ontouchstart?: unknown}).ontouchstart;
+      detachers.push(() => Object.defineProperty(from, 'ontouchstart', saved));
+    }
+    expect('ontouchstart' in window).toBe(false);
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(host.attach(box, pan));
+    const finger = {id: 1, x: 10, y: 10};
+    pointer('pointerdown', box, {
+      id: 7,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    for (const [x, time] of [
+      [30, 16],
+      [50, 32],
+    ] as const) {
+      pointer('pointermove', box, {
+        id: 7,
+        pointerType: 'touch',
+        x,
+        y: 10,
+        buttons: 1,
+        time,
+      });
+    }
+    expect(['began', 'changed']).toContain(pan.state);
+    const moved = {...finger, x: 50};
+    const move = touch('touchmove', box, [moved], [moved], 32);
+    expect(move.defaultPrevented).toBe(true);
   });
 });
