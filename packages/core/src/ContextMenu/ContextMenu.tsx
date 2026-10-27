@@ -3,14 +3,15 @@
 
 /**
  * @file ContextMenu.tsx
- * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, the presentation resolver (usePresentation), the headless
- *   context menu's request core (contextMenuRequests.ts: the trigger's
- *   context request), and the touch layer (ContextMenuTouchLayer: the press
- *   feedback and the lift presentation)
+ * @input Uses React, StyleX, the headless context menu (createContextMenu.tsx,
+ *   which ContextMenu is built on, and contextMenuRows.tsx for its rows),
+ *   useLayer, shared layer dismissal, BottomSheet, useListFocus, the
+ *   presentation resolver (usePresentation), and the touch layer
+ *   (ContextMenuTouchLayer: the press feedback and the lift presentation)
  * @output Exports ContextMenu with cursor-popover, touch-lift and touch-sheet
- *   presentations
- * @position Core implementation; consumed by index.ts
+ *   presentations, and, internally, ContextMenuView: the menu createContextMenu
+ *   renders for its element
+ * @position Core implementation; consumed by index.ts and createContextMenu.tsx
  *
  * Right-click context menu positioned at the cursor. The cursor point is
  * captured as an offset *inside the trigger* and materialized as a 1px
@@ -20,10 +21,13 @@
  * under the cursor.
  * Reuses DropdownMenu item rendering and keyboard navigation.
  *
- * ContextMenu is built on the headless context menu (spec:AST-107 FR8, FR7):
- * its trigger's context request (a held finger or pen, a right click,
- * Shift+F10 or the context-menu key, once per gesture) opens it, through the
- * request core createContextMenu uses too.
+ * ContextMenu is built on createContextMenu (spec:AST-107 FR8, FR7). It renders
+ * its trigger and attaches the factory to it: the factory renders the menu
+ * beside the trigger, opens it on the trigger's context request (a held
+ * finger or pen, a right click, Shift+F10 or the context-menu key, once per
+ * gesture) and runs the touch model on it. `items` go to the factory as they
+ * are; `menuContent` renders in ContextMenu's own tree and is portaled into
+ * the menu, so the caller's contexts reach it.
  *
  * Under a finger (a coarse primary pointer: one touch model on every touch
  * device, iOS and Android alike) the trigger behaves like UIKit's
@@ -54,6 +58,8 @@
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
  * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
+ * - /packages/core/src/ContextMenu/createContextMenu.tsx (the factory it is built on)
+ * - /packages/core/src/ContextMenu/contextMenuRows.tsx (its rows in the menu)
  * - /packages/core/src/ContextMenu/contextMenuRequests.ts (the request core)
  * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
  * - /packages/core/src/ContextMenu/ContextMenuLift.tsx (lift presentation)
@@ -74,7 +80,7 @@ import React, {
   Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
-import {flushSync} from 'react-dom';
+import {createPortal, flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Heading} from '../Heading';
@@ -103,7 +109,7 @@ import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
 import type {ContextRequestOptions} from '../gestures/contextRequest';
 import {contextMenu} from '../motion/uikit/contextMenu';
-import {pressableProps} from '../utils/pressFeedback';
+import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -115,11 +121,25 @@ import {
   type ContextMenuTouchHandle,
   type LiftedMenuPlacement,
 } from './ContextMenuTouchLayer';
-import {
-  attachContextMenuRequests,
-  type ContextMenuForwarded,
+import type {
+  ContextMenuForwarded,
+  ContextMenuRequestOptions,
 } from './contextMenuRequests';
 import type {ContextMenuLiftResult} from './ContextMenuLift';
+import {
+  createMenuRowsSlot,
+  MenuRows,
+  useCoreBridge,
+  type MenuRowsSlot,
+} from './contextMenuRows';
+import {
+  bridgeContextMenu,
+  createContextMenu,
+  updateContextMenu,
+  viewContextMenu,
+  type ContextMenuController,
+  type CreateContextMenuOptions,
+} from './createContextMenu';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {
   colorVars,
@@ -145,11 +165,11 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 
 /**
- * UIContextMenuInteraction's hold (contextMenu.press, measured on iOS 26.2):
- * the commit at 400 ms, the menu at 735 ms or at a lift after the commit, and
- * a drift tolerance on each axis.
+ * @internal UIContextMenuInteraction's hold (contextMenu.press, measured on
+ * iOS 26.2): the commit at 400 ms, the menu at 735 ms or at a lift after the
+ * commit, and a drift tolerance on each axis.
  */
-const TOUCH_HOLD = {
+export const CONTEXT_MENU_TOUCH_HOLD = {
   commitMs: contextMenu.press.commitMs,
   requestMs: contextMenu.press.menuDisplayMs,
   requestOnLift: true,
@@ -174,6 +194,12 @@ const styles = stylex.create({
     WebkitTouchCallout: 'none',
     WebkitUserSelect: 'none',
     userSelect: 'none',
+  },
+  // Where ContextMenu's menu lives: beside its trigger, in its own tree, so
+  // the menu takes what the trigger's place gives it (the theme, the
+  // direction, an enclosing dialog, popover or shadow root). It has no box.
+  menuSlot: {
+    display: 'contents',
   },
   // 1px anchor placed at the cursor point within the trigger. The menu is
   // anchored to this element, so it sits under the cursor yet is positioned
@@ -390,7 +416,177 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  * ```
  */
 export function ContextMenu(props: ContextMenuProps) {
-  return <ContextMenuView {...props} />;
+  const {
+    children,
+    triggerAs = 'div',
+    triggerXstyle,
+    ref,
+    label,
+    isDisabled,
+    onOpenChange,
+    presentation,
+    size,
+    menuWidth,
+    className,
+    style,
+    xstyle,
+    'data-testid': testId,
+    ...rest
+  } = props;
+  // The union means exactly one of items/menuContent exists in rest; take
+  // both out so the trigger gets DOM attributes only.
+  const {items, menuContent, ...triggerProps} = rest as {
+    items?: ContextMenuOption[];
+    menuContent?: ReactNode;
+  } & Omit<typeof rest, 'items' | 'menuContent'>;
+  const hasContent = menuContent !== undefined;
+  const triggerRef = useRef<HTMLElement>(null);
+  const triggerElementRef = useMergedRefs(ref, triggerRef);
+  // The 1px cursor anchor lives inside the trigger, so the menu follows the
+  // content on scroll (#3465); the menu places it.
+  const cursorAnchorRef = useRef<HTMLSpanElement>(null);
+  // The menu's container lives here, beside the trigger.
+  const [menuSlot, setMenuSlot] = useState<HTMLSpanElement | null>(null);
+  const bridge = useCoreBridge();
+  // `menuContent` renders here, in ContextMenu's own tree (so the caller's
+  // contexts reach it), into a host the menu's container adopts. The host is
+  // a detached element, made once the menu has a place to live.
+  const slot = useMemo<MenuRowsSlot | null>(
+    () =>
+      hasContent && menuSlot != null
+        ? createMenuRowsSlot(menuSlot.ownerDocument)
+        : null,
+    [hasContent, menuSlot],
+  );
+  const controllerRef = useRef<ContextMenuController | null>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const handleOpenChange = useCallback((isOpen: boolean) => {
+    onOpenChangeRef.current?.(isOpen);
+  }, []);
+  const factoryOptions = (
+    rowsSlot: MenuRowsSlot | null,
+  ): CreateContextMenuOptions => {
+    const shared = {
+      label,
+      isDisabled,
+      onOpenChange: handleOpenChange,
+      presentation,
+    };
+    return rowsSlot != null
+      ? {...shared, render: rowsSlot.render}
+      : {...shared, items: items ?? []};
+  };
+  const view: ContextMenuViewExtras = {
+    size,
+    menuWidth,
+    className,
+    style,
+    xstyle,
+    cursorAnchor: cursorAnchorRef.current,
+    isInline: triggerAs === 'span',
+  };
+  const latestRef = useRef({factoryOptions, view, bridge});
+
+  useIsomorphicLayoutEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+    latestRef.current = {factoryOptions, view, bridge};
+    const controller = controllerRef.current;
+    if (controller == null) {
+      return;
+    }
+    updateContextMenu(controller, factoryOptions(slot));
+    bridgeContextMenu(controller, bridge);
+    viewContextMenu(controller, {
+      ...view,
+      cursorAnchor: cursorAnchorRef.current,
+      containerParent: menuSlot,
+    });
+  });
+
+  // ContextMenu is built on the public headless context menu (spec:AST-107
+  // FR8, FR7): its trigger is the element createContextMenu attaches to.
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (trigger == null || menuSlot == null || (hasContent && slot == null)) {
+      return;
+    }
+    const latest = latestRef.current;
+    const controller = createContextMenu(trigger, latest.factoryOptions(slot));
+    bridgeContextMenu(controller, latest.bridge);
+    viewContextMenu(controller, {
+      ...latest.view,
+      cursorAnchor: cursorAnchorRef.current,
+      containerParent: menuSlot,
+    });
+    controllerRef.current = controller;
+    return () => {
+      controller.destroy();
+      slot?.host.remove();
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+      }
+    };
+  }, [hasContent, menuSlot, slot, triggerAs]);
+
+  // An inline trigger (`span`) lets prose own a context menu without
+  // breaking its flow.
+  const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
+  return (
+    <>
+      <TriggerElement
+        ref={triggerElementRef}
+        {...triggerProps}
+        data-testid={testId}
+        {...stylex.props(
+          styles.trigger,
+          ...(triggerXstyle
+            ? Array.isArray(triggerXstyle)
+              ? triggerXstyle
+              : [triggerXstyle]
+            : []),
+        )}>
+        {children}
+        {/* At the trigger's corner until the menu places it, so it never
+            hangs past the trigger's bottom edge (a scroll box would count
+            it). The values never change, so a render writes nothing over
+            the menu's placement. */}
+        <span
+          ref={cursorAnchorRef}
+          aria-hidden="true"
+          {...mergeProps(stylex.props(styles.cursorAnchor), {
+            style: CURSOR_ANCHOR_START,
+          })}
+        />
+      </TriggerElement>
+      <span ref={setMenuSlot} {...stylex.props(styles.menuSlot)} />
+      {slot != null
+        ? createPortal(
+            <MenuRows slot={slot}>{menuContent}</MenuRows>,
+            slot.host,
+          )
+        : null}
+    </>
+  );
+}
+
+/** The cursor anchor's place before the menu first places it. */
+const CURSOR_ANCHOR_START = {left: '0px', top: '0px'} as const;
+
+/**
+ * @internal What ContextMenu tells its menu beyond the factory's options: the
+ * menu's size, width and styles, the cursor anchor inside its trigger, and
+ * whether the trigger is inline (createContextMenu.tsx, viewContextMenu).
+ */
+export interface ContextMenuViewExtras {
+  size?: 'sm' | 'md' | 'lg';
+  menuWidth?: number | string;
+  className?: string;
+  style?: React.CSSProperties;
+  xstyle?: StyleXStyles | StyleXStyles[];
+  cursorAnchor?: HTMLElement | null;
+  isInline?: boolean;
+  /** Where the menu's container goes: beside ContextMenu's trigger. */
+  containerParent?: Element | null;
 }
 
 /**
@@ -412,41 +608,56 @@ export interface ContextMenuAttachedHandle {
 
 /**
  * @internal The headless context menu's element, which is the trigger, and
- * the handle it opens the menu through. With it, the menu renders no trigger
- * of its own and listens to nothing: the factory owns the requests.
+ * the handle createContextMenu's own open() and close() reach the menu
+ * through.
  */
 export interface ContextMenuAttachment {
   readonly element: HTMLElement;
   readonly handleRef: React.Ref<ContextMenuAttachedHandle | null>;
+  /**
+   * Gives the element's context request (which createContextMenu attaches)
+   * the menu's hold: UIKit's timeline under the touch model, and the haptic
+   * at its commit.
+   */
+  readonly configureRequests: (
+    config: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'>,
+  ) => void;
+}
+
+/** @internal The menu createContextMenu renders for its element. */
+export interface ContextMenuViewProps extends ContextMenuViewExtras {
+  attachment: ContextMenuAttachment;
+  items?: ContextMenuOption[];
+  menuContent?: ReactNode;
+  label?: string;
+  isDisabled?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
+  presentation?: AdaptivePresentation;
 }
 
 /**
- * @internal ContextMenu itself; with `attachment`, the menu of
- * createContextMenu (spec:AST-107 FR8), so both render one menu.
+ * @internal ContextMenu's menu, attached to an element: the menu of
+ * createContextMenu (spec:AST-107 FR8), which ContextMenu is built on. It
+ * attaches the element's context request, runs the touch model on it (press
+ * feedback, UIKit's timeline, the lift), and opens at the cursor anchor
+ * inside the element (ContextMenu's) or at a client point (a plain element).
  */
 export function ContextMenuView({
   attachment,
-  children,
   menuWidth,
   size = 'md',
   label: labelFromProps,
   isDisabled = false,
   onOpenChange,
   presentation,
-  triggerAs = 'div',
-  ref,
   className,
   style,
   xstyle,
-  triggerXstyle,
-  onContextMenu: onContextMenuProp,
-  onTouchStart: onTouchStartProp,
-  onTouchMove: onTouchMoveProp,
-  onTouchEnd: onTouchEndProp,
-  onTouchCancel: onTouchCancelProp,
-  'data-testid': testId,
-  ...rest
-}: ContextMenuProps & {attachment?: ContextMenuAttachment}) {
+  cursorAnchor: anchorInElement = null,
+  isInline = false,
+  items: itemsProp,
+  menuContent: menuContentProp,
+}: ContextMenuViewProps) {
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
@@ -458,17 +669,6 @@ export function ContextMenuView({
   // The theme's compact definition, for the one-time read at the open.
   const compact = useCompactDefinition();
   const usesBottomSheet = surface === 'bottom-sheet';
-  // Separate content props (union discriminant) from DOM pass-through attrs.
-  // The union means exactly one of items/menuContent exists in rest; destructure
-  // both so triggerProps contains only DOM-safe attributes.
-  const {
-    items: itemsProp,
-    menuContent: menuContentProp,
-    ...triggerProps
-  } = rest as {items?: ContextMenuOption[]; menuContent?: ReactNode} & Omit<
-    typeof rest,
-    'items' | 'menuContent'
-  >;
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
 
@@ -738,7 +938,7 @@ export function ContextMenuView({
   const triggerScale = useCallback(
     (rect: DOMRect): {x: number; y: number} => {
       const trigger = triggerRef.current;
-      if (trigger == null || triggerAs === 'span') {
+      if (trigger == null || isInline) {
         return {x: 1, y: 1};
       }
       return {
@@ -746,7 +946,7 @@ export function ContextMenuView({
         y: trigger.offsetHeight > 0 ? rect.height / trigger.offsetHeight : 1,
       };
     },
-    [triggerAs],
+    [isInline],
   );
 
   // Shows the menu once its anchor is placed, focusing its first row or, for
@@ -830,29 +1030,24 @@ export function ContextMenuView({
     [showMenu],
   );
 
+  // What reaches the menu: the element's requests and the factory's own
+  // open() and close() (set below, with the touch path).
+  const onForwardedRef = useRef<(forwarded: ContextMenuForwarded) => void>(
+    () => {},
+  );
+  // createContextMenu's own open(at) and close() take the same path as the
+  // element's requests.
   useImperativeHandle(
-    attachment?.handleRef,
+    attachment.handleRef,
     () => ({
-      open: ({kind, point}: ContextMenuAttachedRequest) => {
-        const element = triggerRef.current;
-        if (element == null) {
-          return;
-        }
-        // A key's request, or open() without a point, opens at the element's
-        // bottom-left corner, as a keyboard open of ContextMenu does (menus-8).
-        const rect = element.getBoundingClientRect();
-        // A held finger's compatibility mousedown, sent mid-hold or at the
-        // lift, belongs to the press that opened the menu (spec:AST-094 FR33).
-        openingGestureRef.current = kind === 'hold' ? currentGesture() : null;
-        openAtClientPoint(
-          point ?? {x: rect.left, y: rect.bottom},
-          // A finger's open lights no row until it moves onto one.
-          kind === 'hold' ? 'menu' : 'first',
-        );
+      open: (request: ContextMenuAttachedRequest) => {
+        onForwardedRef.current(request);
       },
-      close: closeMenu,
+      close: () => {
+        onForwardedRef.current('close');
+      },
     }),
-    [closeMenu, openAtClientPoint],
+    [],
   );
 
   // The box the cursor anchor's offsets are measured from: the trigger, which
@@ -971,7 +1166,7 @@ export function ContextMenuView({
         touch != null &&
         trigger != null &&
         !usesBottomSheet &&
-        triggerAs !== 'span' &&
+        !isInline &&
         opensUnderFinger
       ) {
         // The lift grows on from where the press feedback left the trigger,
@@ -1000,17 +1195,24 @@ export function ContextMenuView({
           return;
         }
       }
-      // Otherwise the menu opens under the finger (openAtLocalPoint cancels
-      // the trigger's scale at the anchor).
+      // Otherwise the menu opens under the finger: at the anchor inside the
+      // element (openAtLocalPoint cancels the trigger's scale there), or at
+      // the client point.
+      if (anchorInElement == null) {
+        openAtClientPoint(point, 'menu');
+        return;
+      }
       const local = toTriggerLocal(point);
       openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
     },
     [
+      anchorInElement,
       compact,
+      isInline,
+      openAtClientPoint,
       openAtLocalPoint,
       presentation,
       toTriggerLocal,
-      triggerAs,
       usesBottomSheet,
     ],
   );
@@ -1020,15 +1222,12 @@ export function ContextMenuView({
   // pinning the page moves neither.)
   useScrollLock(isOpen && isTouchOpen && !usesBottomSheet);
 
-  // ContextMenu is built on the headless context menu's request core
-  // (contextMenuRequests.ts, spec:AST-107 FR8): its trigger's context request
-  // (a held finger or pen, a right click, Shift+F10 or the context-menu key,
-  // once per gesture) reaches the menu here. Under the touch model the hold
+  // The element's context request (a held finger or pen, a right click,
+  // Shift+F10 or the context-menu key, once per gesture), through the request
+  // core (contextMenuRequests.ts, spec:AST-107 FR8), and the factory's own
+  // open() and close() reach the menu here. Under the touch model the hold
   // runs on UIContextMenuInteraction's timeline; otherwise a finger's hold
   // opens the menu at 500 ms, as before (public-component-api INV16).
-  const onForwardedRef = useRef<(forwarded: ContextMenuForwarded) => void>(
-    () => {},
-  );
   onForwardedRef.current = forwarded => {
     if (forwarded === 'close') {
       closeMenu();
@@ -1046,6 +1245,17 @@ export function ContextMenuView({
     // belongs to the press that opened the menu (spec:AST-094 FR33).
     openingGestureRef.current = kind === 'hold' ? currentGesture() : null;
     const rect = getAnchorBaseRect();
+    if (anchorInElement == null) {
+      // A plain element: the factory's own anchor, at the client point, or
+      // at the element's bottom-left corner for a key or open() without a
+      // point (menus-8). A finger's open lights no row until it moves onto
+      // one.
+      openAtClientPoint(
+        point ?? {x: rect?.left ?? 0, y: rect?.bottom ?? 0},
+        kind === 'hold' ? 'menu' : 'first',
+      );
+      return;
+    }
     if (point == null || rect == null) {
       // A key's request, or open() without a point: the trigger's
       // bottom-left corner, so the menu is reachable without a pointer
@@ -1069,31 +1279,31 @@ export function ContextMenuView({
       touchHandleRef.current?.commit();
     }
   };
+  // The element's request runs the menu's hold: UIKit's timeline under the
+  // touch model, today's long press otherwise.
   useEffect(() => {
-    const trigger = triggerRef.current;
-    if (trigger == null || attachment != null) {
+    attachment.configureRequests({
+      hold: touchModes ? CONTEXT_MENU_TOUCH_HOLD : undefined,
+      onHold: phase => onHoldRef.current(phase),
+    });
+  }, [attachment, touchModes]);
+  // Under the touch model the element is a pressable surface of core's one
+  // press machine (utils/pressFeedback.ts): the touch layer installs the
+  // machine, and its press feedback follows the pressed state.
+  useEffect(() => {
+    const element = attachment.element;
+    if (
+      !touchModes ||
+      isDisabled ||
+      element.hasAttribute(PRESSABLE_ATTRIBUTE)
+    ) {
       return;
     }
-    const requests = attachContextMenuRequests(
-      trigger,
-      {
-        isDisabled,
-        hold: touchModes ? TOUCH_HOLD : undefined,
-        onHold: phase => onHoldRef.current(phase),
-      },
-      forwarded => {
-        // The open commits in the request's own task, before the next input,
-        // as React commits a request it dispatches itself. A request comes
-        // from a listener on the trigger, and inside a shadow root
-        // `window.event` is unset there, so React cannot tell it is a
-        // discrete input: it would commit the open in a later task, and a
-        // press outside in between would find no listener.
-        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the open must commit before the next input, inside a shadow root too
-        flushSync(() => onForwardedRef.current(forwarded));
-      },
-    );
-    return () => requests.destroy();
-  }, [attachment, isDisabled, touchModes, triggerAs]);
+    element.setAttribute(PRESSABLE_ATTRIBUTE, '');
+    return () => {
+      element.removeAttribute(PRESSABLE_ATTRIBUTE);
+    };
+  }, [attachment, isDisabled, touchModes]);
 
   const popoverXstyle = menuWidth
     ? styles.popoverCustomWidth(menuWidth)
@@ -1225,30 +1435,37 @@ export function ContextMenuView({
       renderedMenu
     );
 
-  // An inline trigger (`span`) lets prose own a context menu without
-  // breaking its flow.
-  const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
-  const triggerElementRef = useMergedRefs(ref, triggerRef);
   const cursorAnchorElementRef = useMergedRefs(cursorAnchorRef, layer.ref);
+  // ContextMenu's anchor lives inside its trigger (so the menu follows the
+  // content on scroll); the layer anchors the menu to it.
+  useIsomorphicLayoutEffect(() => {
+    if (anchorInElement == null) {
+      return;
+    }
+    cursorAnchorElementRef(anchorInElement);
+    return () => {
+      cursorAnchorElementRef(null);
+    };
+  }, [anchorInElement, cursorAnchorElementRef]);
 
-  const cursorAnchor = (
-    <span
-      ref={cursorAnchorElementRef}
-      aria-hidden="true"
-      {...mergeProps(
-        stylex.props(
-          styles.cursorAnchor,
-          attachment != null && styles.cursorAnchorAttached,
-        ),
-        {
-          style: {
-            left: `${positionRef.current.x}px`,
-            top: `${positionRef.current.y}px`,
+  // A plain element's anchor: the factory's own, at a client point, in the
+  // factory's container outside the element.
+  const ownCursorAnchor =
+    anchorInElement == null ? (
+      <span
+        ref={cursorAnchorElementRef}
+        aria-hidden="true"
+        {...mergeProps(
+          stylex.props(styles.cursorAnchor, styles.cursorAnchorAttached),
+          {
+            style: {
+              left: `${positionRef.current.x}px`,
+              top: `${positionRef.current.y}px`,
+            },
           },
-        },
-      )}
-    />
-  );
+        )}
+      />
+    ) : null;
 
   const menuSurface = usesBottomSheet ? (
     <Suspense fallback={null}>
@@ -1277,55 +1494,18 @@ export function ContextMenuView({
     )
   );
 
-  // The headless context menu's: no trigger of its own, and no listener; the
-  // factory forwards its element's context requests.
-  if (attachment != null) {
-    return (
-      <>
-        {cursorAnchor}
-        {menuSurface}
-      </>
-    );
-  }
-
   return (
     <>
-      <TriggerElement
-        ref={triggerElementRef}
-        {...triggerProps}
-        // Under the touch model the trigger is a pressable surface of core's
-        // one press machine (utils/pressFeedback.ts); the touch layer installs
-        // the machine and its press feedback follows the pressed state.
-        {...(touchModes ? pressableProps : null)}
-        // Consumer handlers are notified; the context request, not these,
-        // opens the menu.
-        onContextMenu={onContextMenuProp}
-        onTouchStart={onTouchStartProp}
-        onTouchMove={onTouchMoveProp}
-        onTouchEnd={onTouchEndProp}
-        onTouchCancel={onTouchCancelProp}
-        data-testid={testId}
-        {...stylex.props(
-          styles.trigger,
-          ...(triggerXstyle
-            ? Array.isArray(triggerXstyle)
-              ? triggerXstyle
-              : [triggerXstyle]
-            : []),
-        )}>
-        {children}
-        {cursorAnchor}
-      </TriggerElement>
+      {ownCursorAnchor}
       {touchModes && !isDisabled ? (
         <ContextMenuTouchLayer
           triggerRef={triggerRef}
-          isShown={triggerAs !== 'span'}
-          triggerKey={triggerAs}
+          isShown={!isInline}
+          triggerKey={attachment.element}
           onHandleChange={setTouchHandle}
           onBackdropTap={closeMenu}
         />
       ) : null}
-
       {menuSurface}
     </>
   );

@@ -10,8 +10,7 @@
  *   (spec:AST-107 FR8). It attaches the element's context request
  *   (gestures/contextRequest.ts) and forwards each request, and `open(at)`
  *   and `close()`, to whoever renders the menu; `destroy` detaches it
- * @position Shared by createContextMenu (which renders ContextMenu's menu in
- *   its own root) and ContextMenu (which renders it in its own tree): one
+ * @position Used by createContextMenu, which ContextMenu is built on: one
  *   request path for both
  */
 

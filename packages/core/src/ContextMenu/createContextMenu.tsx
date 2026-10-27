@@ -12,9 +12,13 @@
  *   every listener and node it added (spec:AST-107 FR8)
  * @position Public factory, framework-agnostic for its caller: ContextMenu's
  *   own menu renders in an internal React root, so a page without React can
- *   attach one, and the two share one implementation. useContextMenu is its
- *   React wrapper (spec:AST-107 FR6): it hands the factory a `render` and
- *   passes later options through updateContextMenu
+ *   attach one. ContextMenu is built on it (spec:AST-107 FR8, FR7), and
+ *   useContextMenu is its React wrapper (FR6); both hand it a `render` for
+ *   React rows (contextMenuRows.tsx) and pass later options through
+ *   updateContextMenu
+ *
+ * Under the touch model the element's hold runs on UIKit's timeline, with
+ * ContextMenu's press feedback and, on a block element, the lift.
  *
  * The `render` slot publishes what the menu's rows read from inside the menu
  * (its row context, its open state, its layer and layer depth) for its
@@ -43,14 +47,21 @@ import {
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {LayerContext, type LayerContextValue} from '../Layer/LayerContext';
 import {LayerDepthContext} from '../Layer/LayerDepthContext';
+import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
+import {readPresentation} from '../utils/presentation';
 import {dataAttr} from '../naming';
+import {flushSync} from 'react-dom';
 import {
   attachContextMenuRequests,
   type ContextMenuForwarded,
+  type ContextMenuRequestOptions,
 } from './contextMenuRequests';
 import {
+  CONTEXT_MENU_TOUCH_HOLD,
   ContextMenuView,
+  type ContextMenuViewExtras,
   type ContextMenuAttachedHandle,
+  type ContextMenuAttachment,
   type ContextMenuAttachedRequest,
   type ContextMenuOption,
 } from './ContextMenu';
@@ -153,10 +164,14 @@ export function subscribeRowsContext(
   };
 }
 
-/** The React wrapper's way in: later options, and its Core providers. */
+/**
+ * The React callers' way in (useContextMenu, ContextMenu): later options,
+ * their Core providers, and ContextMenu's own surface.
+ */
 interface ContextMenuWrapperAccess {
   update(options: CreateContextMenuOptions): void;
   bridge(wrap: (menu: ReactNode) => ReactNode): void;
+  view(view: ContextMenuViewExtras): void;
 }
 
 const wrapperAccess = new WeakMap<
@@ -177,8 +192,20 @@ export function updateContextMenu(
 }
 
 /**
+ * @internal ContextMenu's own surface for the menu it is built on: the
+ * menu's size, width and styles, the cursor anchor inside its trigger, and
+ * whether the trigger is inline.
+ */
+export function viewContextMenu(
+  controller: ContextMenuController,
+  view: ContextMenuViewExtras,
+): void {
+  wrapperAccess.get(controller)?.view(view);
+}
+
+/**
  * @internal Carries a React caller's Core providers (theme, layer, link,
- * i18n) into the menu's own root (useContextMenu's path).
+ * i18n) into the menu's own root (useContextMenu's and ContextMenu's path).
  */
 export function bridgeContextMenu(
   controller: ContextMenuController,
@@ -262,26 +289,41 @@ interface Forwarded {
 interface AttachedMenuProps {
   element: HTMLElement;
   options: CreateContextMenuOptions;
+  view: ContextMenuViewExtras;
   forwarded: Forwarded | null;
+  /** The menu's hold, for the element's context request. */
+  configureRequests: ContextMenuAttachment['configureRequests'];
   onOpenChange: (isOpen: boolean) => void;
 }
 
-/** ContextMenu's menu, attached to the element, driven by forwarded requests. */
+/**
+ * ContextMenu's menu, attached to the element: it attaches the element's
+ * context request itself, and open() and close() reach it as forwarded
+ * requests.
+ */
 function AttachedMenu({
   element,
   options,
+  view,
   forwarded,
+  configureRequests,
   onOpenChange,
 }: AttachedMenuProps) {
   const handleRef = useRef<ContextMenuAttachedHandle | null>(null);
-  const [attachment] = useState(() => ({element, handleRef}));
-  // `render` fills the menu each time it opens, and its cleanup
-  // runs as it closes (the menu has no exit animation to keep it for).
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const handleOpenChange = (next: boolean) => {
-    setIsMenuOpen(next);
-    onOpenChange(next);
-  };
+  const [attachment] = useState<ContextMenuAttachment>(() => ({
+    element,
+    handleRef,
+    configureRequests,
+  }));
+  // A plain element that lays out inline keeps the menu at the finger, as
+  // ContextMenu's inline trigger does: it has no preview to lift.
+  const [isInlineElement] = useState(
+    () =>
+      element.ownerDocument.defaultView
+        ?.getComputedStyle(element)
+        .display.startsWith('inline') ?? false,
+  );
+  const handleOpenChange = onOpenChange;
   useLayoutEffect(() => {
     if (forwarded == null) {
       return;
@@ -293,27 +335,28 @@ function AttachedMenu({
     }
   }, [forwarded]);
   const shared = {
+    isInline: isInlineElement,
+    ...view,
     attachment,
     label: options.label,
     isDisabled: options.isDisabled,
     presentation: options.presentation,
     onOpenChange: handleOpenChange,
   };
-  // The element is the trigger, so the menu has no children of its own.
   return options.items !== undefined ? (
-    <ContextMenuView {...shared} items={[...options.items]}>
-      {null}
-    </ContextMenuView>
+    <ContextMenuView {...shared} items={[...options.items]} />
   ) : (
     <ContextMenuView
       {...shared}
+      // `render` fills the menu's container once, as the menu is attached,
+      // and its cleanup runs as it is destroyed: the rows stay in the closed
+      // menu, as ContextMenu's do.
       menuContent={
-        options.render !== undefined && isMenuOpen ? (
+        options.render !== undefined ? (
           <RenderedContent render={options.render} />
         ) : null
-      }>
-      {null}
-    </ContextMenuView>
+      }
+    />
   );
 }
 
@@ -329,6 +372,7 @@ export function createContextMenu(
   const doc = element.ownerDocument;
   let options = initialOptions;
   let wrap: ((menu: ReactNode) => ReactNode) | null = null;
+  let view: ContextMenuViewExtras = {};
   let forwarded: Forwarded | null = null;
   let seq = 0;
   let isOpen = false;
@@ -338,18 +382,27 @@ export function createContextMenu(
   // through the element on its way to the document.
   const host = doc.createElement('div');
   host.setAttribute(dataAttr('context-menu-host'), '');
+  // No box of its own: the menu is in the top layer, and an empty block
+  // beside an inline trigger would break its line.
+  host.style.display = 'contents';
   // Each open first moves the container to where the element is now: the
   // end of its dialog or popover, or of its shadow root or the body
   // (containerParentFor). A shown menu stays put, since moving a node hides
   // the popovers in it.
   const placeHost = () => {
     mirrorTheme(host, element);
-    const parent = containerParentFor(element);
+    // ContextMenu gives its menu a place beside its trigger.
+    const parent = view.containerParent ?? containerParentFor(element);
     if (parent.lastElementChild !== host) {
       parent.append(host);
     }
   };
   placeHost();
+  const beforeOpen = () => {
+    if (!isOpen && !isDestroyed) {
+      placeHost();
+    }
+  };
   const root: Root = createRoot(host);
 
   const onOpenChange = (next: boolean) => {
@@ -368,7 +421,9 @@ export function createContextMenu(
       <AttachedMenu
         element={element}
         options={options}
+        view={view}
         forwarded={forwarded}
+        configureRequests={configureRequests}
         onOpenChange={onOpenChange}
       />
     );
@@ -379,27 +434,59 @@ export function createContextMenu(
     if (isDestroyed) {
       return;
     }
-    if (request !== 'close' && !isOpen) {
-      placeHost();
+    if (request !== 'close') {
+      beforeOpen();
     }
     seq += 1;
     forwarded = {seq, request};
     render();
   };
 
+  // The element's context request, from the start, with UIKit's timeline
+  // where the touch model applies; the menu refines its hold once it renders
+  // (the theme's compact definition, and the haptic at the commit).
+  let requestConfig: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'> = {
+    hold: readPresentation(options.presentation, {
+      whenOmitted: 'touch',
+      view: doc.defaultView,
+      compact: DEFAULT_COMPACT_DEFINITION,
+    }).touchModes
+      ? CONTEXT_MENU_TOUCH_HOLD
+      : undefined,
+  };
   const requests = attachContextMenuRequests(
     element,
-    {isDisabled: options.isDisabled},
-    forward,
+    {isDisabled: options.isDisabled, ...requestConfig},
+    request => {
+      // A close comes from disabling the menu, inside a render's effects.
+      if (request === 'close') {
+        forward(request);
+        return;
+      }
+      // An open comes from a listener on the element, and commits in the
+      // request's own task, before the next input, as React commits a
+      // request it dispatches itself: inside a shadow root `window.event` is
+      // unset there, so React cannot tell it is a discrete input, and would
+      // commit the open in a later task, where a press outside in between
+      // would find no listener.
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the open must commit before the next input, inside a shadow root too
+      flushSync(() => forward(request));
+    },
   );
+  function configureRequests(
+    config: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'>,
+  ) {
+    requestConfig = config;
+    requests.update({isDisabled: options.isDisabled, ...requestConfig});
+  }
   render();
 
   const controller: ContextMenuController = {
     open(at) {
-      requests.open(at);
+      forward({kind: 'open', point: at ?? null});
     },
     close() {
-      requests.close();
+      forward('close');
     },
     destroy() {
       if (isDestroyed) {
@@ -422,7 +509,14 @@ export function createContextMenu(
   wrapperAccess.set(controller, {
     update(nextOptions) {
       options = nextOptions;
-      requests.update({isDisabled: options.isDisabled});
+      requests.update({isDisabled: options.isDisabled, ...requestConfig});
+      render();
+    },
+    view(nextView) {
+      view = nextView;
+      if (!isOpen) {
+        placeHost();
+      }
       render();
     },
     bridge(nextWrap) {
