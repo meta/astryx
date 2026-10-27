@@ -1528,6 +1528,32 @@ export class GestureHost {
    * listener is installed. A recognizer that must not begin under a second
    * finger reads it in `shouldBegin`.
    */
+  /**
+   * @internal Whether a press consumer that keeps its press (a hold-repeat
+   * control, `keepsTouch`) sits on the path from `target` up to `boundary`,
+   * both included: such a control keeps its long press, right click and
+   * Shift+F10 its own (contextRequest.ts, `spec:AST-094` FR43).
+   */
+  keepsPressBetween(target: unknown, boundary: Element): boolean {
+    for (
+      let node: Node | null = target instanceof Node ? target : null;
+      node != null;
+      node = parentAcrossShadow(node)
+    ) {
+      if (!(node instanceof Element)) {
+        continue;
+      }
+      const consumer = this.registry.get(node)?.consumer;
+      if (consumer?.keepsTouch != null && consumer.isEnabled?.() !== false) {
+        return true;
+      }
+      if (node === boundary) {
+        break;
+      }
+    }
+    return false;
+  }
+
   fingersDown(): number {
     return this.fingerTargets.length;
   }

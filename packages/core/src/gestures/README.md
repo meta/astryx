@@ -429,6 +429,22 @@ anywhere (often on a plain row no recognizer is on) fails a pan limited to
 one finger, so the two fingers zoom the page (WCAG 1.4.4) instead of the pan
 claiming them midway.
 
+## Context requests
+
+`attachContextRequest(element, {onRequest})` (`contextRequest.ts`, internal)
+is the one request a context menu answers (`spec:AST-094` FR43): a finger or
+a pen held still for UIKit's long press, a pointer's context click (a right
+click, a ctrl-click on macOS, a pen's barrel button), or Shift+F10 and the
+context-menu key. Each gesture makes one request, reporting its `kind`
+(`hold`, `pointer`, `keyboard`), its pointer, and its point (none from
+the keyboard). The hold is an arena participant, so it loses to a claim
+another recognizer made on that finger first (a reorder handle's hold); the
+browser's own menu that a held finger or a key also fires is refused, never
+requested again; and a mouse held still makes no request. A control that
+keeps its press for a hold-repeat keeps its long press, right click and
+Shift+F10 its own. A right click or a ctrl-click on macOS starts no press.
+The request listens on its own element only, and only while enabled.
+
 ## Time
 
 Every input carries its own timestamp (`event.timeStamp`), and timers are
