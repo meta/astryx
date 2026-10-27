@@ -83,6 +83,30 @@ describe('Chart accessible name', () => {
     ).toBeInTheDocument();
   });
 
+  it('ignores xDomain for a categorical x-axis', () => {
+    const {container} = render(
+      <Chart
+        data={data}
+        xKey="month"
+        series={[bar('revenue')]}
+        xDomain={[0, 10]}
+      />,
+    );
+    reportWidth(600);
+
+    // xDomain is documented as ignored for band scales: the categories must
+    // still drive the axis and the bars must still render.
+    expect(screen.getByText('Jan')).toBeInTheDocument();
+    expect(screen.getByText('Mar')).toBeInTheDocument();
+    const plot = container.querySelector('g[clip-path]');
+    expect(plot).not.toBeNull();
+    const bars = Array.from(plot!.querySelectorAll('path'));
+    expect(bars).toHaveLength(3);
+    for (const path of bars) {
+      expect(path.getAttribute('d')).not.toContain('NaN');
+    }
+  });
+
   it('prefers the title prop as the accessible name', () => {
     render(
       <Chart

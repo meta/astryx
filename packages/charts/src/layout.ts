@@ -114,10 +114,12 @@ export function computeLayout({
     xValues.length > 0 && xValues.every(v => typeof v === 'number');
 
   let xScale: ChartScale;
-  if (xDomain && isFiniteDomain(xDomain)) {
+  if (xDomain && isFiniteDomain(xDomain) && (isNumericX || data.length === 0)) {
     // Explicit domain is authoritative (no .nice()) — enables a stable
     // streaming window and a valid scale even when `data` is empty. Trusted
     // only when finite; a NaN/Infinity domain would collapse the scale.
+    // Ignored for categorical x, as documented: a linear scale over string
+    // categories would resolve every mark to NaN and draw nothing.
     xScale = scaleLinear().domain(xDomain).range([0, width]);
   } else if (isNumericX) {
     // NaN passes `typeof === 'number'`, so derive the extent defensively.
