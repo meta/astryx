@@ -12,12 +12,14 @@
  * @position Testing for useContextMenu.tsx
  */
 
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {use, useRef} from 'react';
+import {use, useRef, useState} from 'react';
+import {createPortal} from 'react-dom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
 import {LayerContext} from '../Layer/LayerContext';
+import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {dataAttr} from '../naming';
 import {createContextMenu} from './createContextMenu';
 import {useContextMenu, type UseContextMenuOptions} from './useContextMenu';
@@ -83,6 +85,29 @@ const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
 /** Whether the menu's popover is showing (the popover mocks above). */
 const isOpen = () =>
   menu()?.closest('[popover]')?.hasAttribute('popover-open') === true;
+
+/** A layer inside the menu's content, portaled outside the menu's DOM. */
+function NestedDismissibleLayer({onDismiss}: {onDismiss: () => void}) {
+  const [isLayerOpen, setIsLayerOpen] = useState(true);
+  const containerRef = useRef<HTMLButtonElement>(null);
+  useLayerDismissal({
+    isActive: isLayerOpen,
+    onDismiss: () => {
+      setIsLayerOpen(false);
+      onDismiss();
+    },
+    getContainer: () => containerRef.current,
+  });
+  // Only the layer depth inside the menu can rank it above the menu.
+  return isLayerOpen
+    ? createPortal(
+        <button ref={containerRef} type="button">
+          Nested layer
+        </button>,
+        document.body,
+      )
+    : null;
+}
 
 function Probe() {
   return use(LayerContext) != null ? <span data-testid="bridged" /> : null;
@@ -180,6 +205,27 @@ describe('useContextMenu', () => {
     await userEvent.setup().keyboard('{Enter}');
     expect(onArchive).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(isOpen()).toBe(false));
+  });
+
+  it('a layer inside menuContent takes Escape before the menu, as in ContextMenu', () => {
+    const onNestedDismiss = vi.fn();
+    render(
+      <Row
+        menuContent={<NestedDismissibleLayer onDismiss={onNestedDismiss} />}
+      />,
+    );
+    rightClick(screen.getByText('Inbox'));
+    expect(isOpen()).toBe(true);
+    const nested = screen.getByRole('button', {
+      name: 'Nested layer',
+      hidden: true,
+    });
+    nested.focus();
+    fireEvent.keyDown(nested, {key: 'Escape'});
+    expect(onNestedDismiss).toHaveBeenCalledOnce();
+    expect(isOpen()).toBe(true);
+    fireEvent.keyDown(document, {key: 'Escape'});
+    expect(isOpen()).toBe(false);
   });
 
   it('open() and close() drive the menu', () => {
