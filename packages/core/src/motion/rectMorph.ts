@@ -355,8 +355,20 @@ export interface RectMorphPlayOptions {
   fadeSpring?: SpringDescription;
   /** For the animator's Reduced Motion: a touch drag's release starts it. */
   touchRelease?: AnimateOptions['touchRelease'];
-  /** For the animator's Reduced Motion: what a cross-fade treats it as. */
-  crossfadeAs?: AnimateOptions['crossfadeAs'];
+  /**
+   * For the animator's Reduced Motion: what a cross-fade treats it as. A path
+   * with no opacity of its own is an entrance on a present and an exit on a
+   * dismissal by default; `'move'` keeps the animator's own dip for an
+   * element that stays visible and only moves (a sub-menu's parent card), so
+   * it fades out, lands and fades back in instead of cutting out.
+   */
+  crossfadeAs?: AnimateOptions['crossfadeAs'] | 'move';
+  /**
+   * When the curves start: `'presented'` holds the element at its first
+   * values until two frames have presented it, so a surface that appears
+   * late plays the whole curve (the animator's `start`).
+   */
+  start?: AnimateOptions['start'];
 }
 
 /**
@@ -406,7 +418,7 @@ export interface RectMorph {
    * as laid out, with none of the morph's inline properties.
    */
   reset(): void;
-  /** `reset`, then releases the element's animator. */
+  /** `reset`, then releases the element's animator unless the caller handed it. */
   dispose(): void;
 }
 
@@ -425,13 +437,20 @@ function defaultNow(): number {
  * // …on close, with a copy placed where the menu stands:
  * morph.dismiss(path, springs.menuClose, {target: copy});
  * ```
+ *
+ * An element that already has an animator (a zoom stage's pinch and pan)
+ * hands it in `animator`: the morph plays on it, so the two share the
+ * element's channels, and `dispose` leaves it to its owner.
  */
 export function createRectMorph(
   element: HTMLElement,
-  options: Pick<AnimatorOptions, 'now' | 'requestFrame'> = {},
+  {
+    animator: given,
+    ...options
+  }: Pick<AnimatorOptions, 'now' | 'requestFrame'> & {animator?: Animator} = {},
 ): RectMorph {
   const now = options.now ?? defaultNow;
-  const animator = createAnimator(element, options);
+  const animator = given ?? createAnimator(element, options);
   /** The box the element's transform is relative to, once it has one. */
   let box: MorphRect | null = null;
   let presenting: MotionHandle | null = null;
@@ -501,18 +520,22 @@ export function createRectMorph(
   // cross-fade nothing to read, and it would start the motion on the source
   // rect and dip. Such a path says which way it goes, so the cross-fade
   // lands at rest on a present and fades out in place on a dismissal
-  // (design:reduced-motion); a caller's own `crossfadeAs` still wins.
+  // (design:reduced-motion); a caller's own `crossfadeAs` still wins, and
+  // `'move'` keeps the animator's dip for an element that only moves.
   const playOptions = (
     play: RectMorphPlayOptions,
     path: MorphPath,
     direction: 'entrance' | 'exit' = 'entrance',
   ): AnimateOptions => ({
     ...(play.touchRelease != null ? {touchRelease: play.touchRelease} : null),
-    ...(play.crossfadeAs != null
-      ? {crossfadeAs: play.crossfadeAs}
-      : path.opacityAt == null
-        ? {crossfadeAs: direction}
-        : null),
+    ...(play.start != null ? {start: play.start} : null),
+    ...(play.crossfadeAs === 'move'
+      ? null
+      : play.crossfadeAs != null
+        ? {crossfadeAs: play.crossfadeAs}
+        : path.opacityAt == null
+          ? {crossfadeAs: direction}
+          : null),
   });
 
   // The springs go through `resolveMotion` on the element that plays them.
@@ -660,7 +683,9 @@ export function createRectMorph(
     reset,
     dispose() {
       reset();
-      animator.dispose();
+      if (given == null) {
+        animator.dispose();
+      }
     },
   };
 }
