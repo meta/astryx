@@ -240,7 +240,7 @@ presses nothing.
   disabled recognizer or consumer, registers nothing; after a consumer's
   `isEnabled()` changes, `host.update(element)` re-syncs. The screen-edge
   pan stays off under a mouse, a trackpad and a pen (its recognizer allows
-  touches only, unless the caller allows another pointer), and a pinch
+  touches only; it takes no `allowedPointerTypes`), and a pinch
   never mixes a pen with a finger (a recognizer takes one kind of pointer
   at a time) (FR43). A press tracker takes a mouse press as a press, with
   the fine-pointer profile: it paints at once, inside a scroller too, and
@@ -436,9 +436,14 @@ claiming them midway.
 A recognizer takes scroll input only where it allows that scroll type
 (`allowedScrollTypes`, UIKit's `allowedScrollTypesMask`): `continuous`
 for a trackpad's two-finger scroll, `discrete` for a mouse wheel's notches
-(`spec:AST-094` FR43). A pan allows none by default, as in UIKit, so its
-element gets no wheel listener and the page scrolls over it; a component that
-wants a trackpad's scroll opts in. The web reports no wheel phases or device:
+(`spec:AST-094` FR43). On the web a pan also takes wheel and trackpad
+scrolling (FR43), so a pan and a pinch allow both by default and their
+element gets the one wheel listener; a pan whose caller passes
+`allowedScrollTypes: []` opts out, and the screen-edge pan takes none, as
+it takes no mouse, trackpad or pen (FR43). A control's thumb, a slider's or
+a switch's, tracks as a control, not a pan, and takes no wheel, so a page
+scroll over it never changes its value. The web reports no wheel phases or
+device:
 a line- or page-mode delta, or a whole 100 or 120 px notch on one axis, reads
 as a mouse wheel, anything else as a trackpad.
 

@@ -18,9 +18,9 @@
  *   passive `pointerdown` listener and the page has none; a press on it (a
  *   mouse's primary button, a pen, or a finger, whose `pointerdown` comes
  *   before its `touchstart`) installs the host's page listeners, which go
- *   once that press's contacts end (FR24). There a finger's claim rests on
- *   `touch-action`: an element's blocking `touchmove` listener stays a
- *   coarse pointer's, so the element keeps its one listener.
+ *   once that press's contacts end (FR24). Under every pointer, an element
+ *   whose recognizer claims a moving finger also keeps its blocking
+ *   `touchmove`, a listener FR24 counts apart from the press's one.
  * - A press consumer takes a mouse press as a press (DEC-21): PressTracker's
  *   fine-pointer profile paints at once and brakes no scroll (FR11).
  * - The host follows the query (a tablet docking or undocking a mouse):
@@ -47,7 +47,8 @@
  *   removed target never strands a gesture.
  * - Mice and pens come from Pointer Events, with coalesced samples for
  *   velocity. A pen on an iPad also produces `stylus` touches; those are left
- *   to the pointer path.
+ *   to the pointer path, except that a claimed pen's stylus touches are
+ *   cancelled as a finger's, its touchend included (FR21).
  * - `pointercancel` on a finger is the browser saying it took that finger
  *   for its own pan or zoom; so is a `touchmove` that can no longer be
  *   cancelled where `touch-action` let the browser pan, and a scroll above
@@ -295,6 +296,12 @@ function isPanRecognizer(
 
 type StylusTouch = Touch & {touchType?: string};
 
+function hasStylusTouch(event: TouchEvent): boolean {
+  return touchesOf(event.changedTouches).some(
+    touch => (touch as StylusTouch).touchType === 'stylus',
+  );
+}
+
 interface PlacedContact {
   readonly x: number;
   readonly y: number;
@@ -450,10 +457,27 @@ function scrollsBy(
   if (room <= 0) {
     return false;
   }
-  const position = Math.abs(
-    isHorizontal ? element.scrollLeft : element.scrollTop,
-  );
-  return delta > 0 ? position < room - 1 : position > 0;
+  // Right to left, scrollLeft runs from 0 at the start to minus the
+  // overflow, and a scroll right moves it toward 0. A scroller a pixel
+  // short of either end, where Chromium stops one, is at that end.
+  const isRtl = isHorizontal && isRtlElement(element as HTMLElement);
+  const min = isRtl ? -room : 0;
+  const max = isRtl ? 0 : room;
+  const position = isHorizontal ? element.scrollLeft : element.scrollTop;
+  return delta > 0 ? position < max - 1 : position > min + 1;
+}
+
+/**
+ * Whether `node` is `ancestor` or below it along the flat tree: across an open
+ * shadow root to its host, which `Node.contains` does not follow.
+ */
+function containsAlongFlatTree(ancestor: Node, node: Node): boolean {
+  for (let at: Node | null = node; at != null; at = parentAcrossShadow(at)) {
+    if (at === ancestor) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -532,6 +556,11 @@ export class GestureHost {
   private readonly processed = new WeakSet<Event>();
   /** pointerId → arena id, for live mouse and pen contacts. */
   private readonly pointerIds = new Map<number, number>();
+  /**
+   * A pen whose lift a recognizer claimed, until its stylus touchend: an
+   * iPad sends the pen's pointer events first (FR21, FR43).
+   */
+  private isPenLiftClaimed = false;
   /** Fingers whose first uncancelable `touchmove` was already judged. */
   private readonly judgedUncancelable = new Set<number>();
   /**
@@ -914,7 +943,7 @@ export class GestureHost {
     return (
       last != null &&
       this.arena.now() - last.time < window &&
-      last.scroller.contains(node)
+      containsAlongFlatTree(last.scroller, node)
     );
   }
 
@@ -1010,7 +1039,11 @@ export class GestureHost {
     // the element wait for the main thread.
     const needsWheel = registration.recognizers.some(
       recognizer =>
-        recognizer.isEnabled && recognizer.allowedScrollTypes.size > 0,
+        recognizer.isEnabled &&
+        recognizer.allowedScrollTypes.size > 0 &&
+        // A wheel drives a pan or a pinch only.
+        (internals(recognizer).family === 'pan' ||
+          internals(recognizer).family === 'pinch'),
     );
     if (needsWheel && !registration.hasWheelListener) {
       element.addEventListener('wheel', this.onWheel, {passive: false});
@@ -1607,9 +1640,9 @@ export class GestureHost {
    * stepper's hold-repeat). Anything whose hold does nothing, a plain
    * press-tracked control or row included, keeps the browser's long-press
    * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
-   * lock only where the primary pointer is coarse (locksSelectionFor), so
-   * desktop selection is untouched, and only once the arena has admitted
-   * the contact: `recognizers` and `consumer` are the ones that took it.
+   * lock for a finger or a pen under any primary pointer, never for a mouse
+   * (locksSelectionFor), and only once the arena has admitted the contact:
+   * `recognizers` and `consumer` are the ones that took it.
    */
   private lockSelection(
     id: number,
@@ -1798,13 +1831,15 @@ export class GestureHost {
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
     // Every scroller under the pointer, the page included, as a finger's
     // probe reads them, without touch-action, which a wheel ignores.
-    const scroll = createNativeScrollProbe(wheel.target, {
+    // What the wheel landed on: at a shadow host's listener the event's
+    // target is the host, and a scroller inside its tree must count.
+    const target = landedOn(wheel);
+    const scroll = createNativeScrollProbe(target, {
       readsTouchAction: false,
     });
     const takers: GestureRecognizer[] = [];
     for (
-      let node: Node | null =
-        wheel.target instanceof Node ? wheel.target : null;
+      let node: Node | null = target instanceof Node ? target : null;
       node != null;
       node = parentAcrossShadow(node)
     ) {
@@ -1822,14 +1857,7 @@ export class GestureHost {
         if (
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
-            this.scrollerTakes(
-              wheel.target,
-              node,
-              dx,
-              dy,
-              isHorizontal,
-              view,
-            ) ||
+            this.scrollerTakes(target, node, dx, dy, isHorizontal, view) ||
             // A scroll-edge pan only past every scroller's edge (FR19).
             (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
@@ -1843,7 +1871,7 @@ export class GestureHost {
     }
     const base = {
       pointerType: 'mouse' as const,
-      target: wheel.target,
+      target,
       scroll,
       scrollType: type,
       recognizers: takers,
@@ -2053,7 +2081,7 @@ export class GestureHost {
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
-      if (locksSelectionFor('touch', this.doc.defaultView)) {
+      if (locksSelectionFor('touch')) {
         toLock.push({id, target, consumerElement});
       }
       // The finger's events keep going to what the engine hit.
@@ -2223,9 +2251,9 @@ export class GestureHost {
     for (const touch of moved) {
       const id =
         this.touchIds.get(touch.identifier) ??
-        (this.inputMode === 'pointer-events'
-          ? this.pointerFingerAt(touch)
-          : undefined);
+        // Where fingers come from pointer events (inputMode 'pointer-events',
+        // or 'auto' with no ontouchstart), the touch is matched to its pointer.
+        (this.usesTouchEvents ? undefined : this.pointerFingerAt(touch));
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
@@ -2245,7 +2273,7 @@ export class GestureHost {
         return;
       }
     }
-    if (moved.some(touch => (touch as StylusTouch).touchType === 'stylus')) {
+    if (hasStylusTouch(event)) {
       for (const id of this.pointerIds.values()) {
         if (this.arena.isClaimed(id)) {
           // A pen whose pointer a recognizer owns: its stylus touches too,
@@ -2260,6 +2288,17 @@ export class GestureHost {
   private readonly onTouchEnd = (event: TouchEvent): void => {
     this.releaseArmedPress();
     this.noteFingersDown(event);
+    if (hasStylusTouch(event)) {
+      // A pen's lift is its pointer's: the stylus touchend only refuses the
+      // compatibility mouse events and click when a gesture took the pen.
+      const isClaimed =
+        this.isPenLiftClaimed ||
+        [...this.pointerIds.values()].some(id => this.arena.isClaimed(id));
+      this.isPenLiftClaimed = false;
+      if (isClaimed && event.cancelable) {
+        event.preventDefault();
+      }
+    }
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
     if (!this.usesTouchEvents || !this.takeEvent(event)) {
@@ -2647,6 +2686,10 @@ export class GestureHost {
       return;
     }
     this.exitHover(event.pointerId);
+    if (event.pointerType === 'pen') {
+      // A new pen press: no earlier lift's stylus touchend is still owed.
+      this.isPenLiftClaimed = false;
+    }
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       this.pairPointer(event.pointerId, {
         x: event.clientX,
@@ -2687,7 +2730,7 @@ export class GestureHost {
         consumer,
       },
     ]);
-    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
+    if (locksSelectionFor(event.pointerType)) {
       // The presented target: what the pen is on, where the engine's own
       // hit test may still see the motion's start.
       this.lockSelection(
@@ -2761,6 +2804,9 @@ export class GestureHost {
     );
     if (!clicked && needsSuppression(dispositions)) {
       armClickGuard(this.doc);
+    }
+    if (event.pointerType === 'pen' && this.usesTouchEvents) {
+      this.isPenLiftClaimed = clicked || needsSuppression(dispositions);
     }
   };
 
@@ -2950,7 +2996,7 @@ export class GestureHost {
     if (
       last != null &&
       time - last.time < UIKIT_PRESS.momentumMemory.value &&
-      scroller.contains(last.target)
+      containsAlongFlatTree(scroller, last.target)
     ) {
       this.lastScroll = {scroller, time};
     }
@@ -2967,7 +3013,7 @@ export class GestureHost {
       }
       if (
         touch.target instanceof Node &&
-        scroller.contains(touch.target) &&
+        containsAlongFlatTree(scroller, touch.target) &&
         // Only a pan this finger drove takes the touch: the browser starts
         // one only once the finger has travelled its slop. A scroll under a
         // finger that has not (scrollIntoView, a transcript pinned to its

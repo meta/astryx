@@ -46,9 +46,14 @@ import type {GestureEventContext, GestureTouch} from './types';
 export type ScreenEdge =
   'left' | 'right' | 'top' | 'bottom' | 'leading' | 'trailing';
 
+/**
+ * A screen-edge pan is a finger's: it takes no `allowedPointerTypes` and no
+ * `allowedScrollTypes`, so neither a mouse, a trackpad nor a pen drives it
+ * (`spec:AST-094` FR43). An edge pan on web input is a record change first.
+ */
 export interface ScreenEdgePanGestureRecognizerOptions extends Omit<
   PanGestureRecognizerOptions,
-  'direction'
+  'direction' | 'allowedPointerTypes' | 'allowedScrollTypes'
 > {
   /** The edges a touch may start from. @default ['leading'] */
   edges?: ReadonlyArray<ScreenEdge>;
@@ -73,10 +78,12 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
     super({
       maximumNumberOfTouches: 1,
       hysteresis: UIKIT_SCREEN_EDGE_PAN.hysteresis.value,
-      // A finger's: under a mouse, a trackpad or a pen the screen-edge pan
-      // stays off (`spec:AST-094` FR43), unless the caller allows one.
-      allowedPointerTypes: ['touch'],
       ...options,
+      // A finger's only: under a mouse, a trackpad or a pen the screen-edge
+      // pan stays off (`spec:AST-094` FR43), whatever a caller passes, and
+      // it takes no wheel or trackpad scrolling.
+      allowedPointerTypes: ['touch'],
+      allowedScrollTypes: [],
     });
     this.edges = options.edges ?? ['leading'];
     this.edgeRegion =
