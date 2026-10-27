@@ -18,7 +18,13 @@
  * - /packages/core/src/Table/useTableRowExpansion.doc.mjs
  */
 
-import {useMemo, useRef, type ReactNode} from 'react';
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   spacingVars,
@@ -29,6 +35,8 @@ import {
   easeVars,
 } from '../../../theme/tokens.stylex';
 import {tableRowMarker} from '../../table.stylex';
+import {panelDividerFor} from '../../rowDivider';
+import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
@@ -216,16 +224,19 @@ const dividerStyles = stylex.create({
   expandedRowCell: {
     borderBottomWidth: 0,
   },
+  // The row's divider, carried down: its row's themed or app-set border
+  // reaches the panel through `--_table-panel-divider-*` on the panel's cell
+  // (set after each commit, see ExpansionPanelCell), the tokens otherwise.
   panelCell: {
     borderBottomWidth: {
-      default: borderVars['--border-width'],
+      default: `var(--_table-panel-divider-width, ${borderVars['--border-width']})`,
       // Same rule TableCell uses: no trailing line under the last row of the
       // table. Scoped to the marker so <tbody>, also a :last-child, does not
       // match and suppress every panel's border.
       [stylex.when.ancestor(':last-child', tableRowMarker)]: '0',
     },
-    borderBottomStyle: 'solid',
-    borderBottomColor: colorVars['--color-border'],
+    borderBottomStyle: 'var(--_table-panel-divider-style, solid)',
+    borderBottomColor: `var(--_table-panel-divider-color, ${colorVars['--color-border']})`,
   },
 });
 
@@ -336,6 +347,73 @@ function ExpansionChevron({
   );
 }
 
+const PANEL_DIVIDER_PROPERTIES = [
+  '--_table-panel-divider-width',
+  '--_table-panel-divider-style',
+  '--_table-panel-divider-color',
+] as const;
+
+/**
+ * Carries the row's divider onto a panel cell where an override makes it
+ * differ from what the panel paints on its own (the divider tokens, in CSS),
+ * and carries nothing otherwise, so a later token or theme change reaches
+ * the panel the way it reaches the row.
+ */
+function carryPanelDivider(cell: HTMLTableCellElement): void {
+  const row = cell.parentElement?.previousElementSibling;
+  const edge = row == null ? null : panelDividerFor(row);
+  if (edge == null) {
+    return;
+  }
+  // What the panel paints with nothing carried.
+  const carried = PANEL_DIVIDER_PROPERTIES.map(name =>
+    cell.style.getPropertyValue(name),
+  );
+  if (carried.some(value => value !== '')) {
+    for (const name of PANEL_DIVIDER_PROPERTIES) {
+      cell.style.removeProperty(name);
+    }
+  }
+  const own = getComputedStyle(cell);
+  const isOverride =
+    edge.color !== own.borderBottomColor ||
+    edge.style !== own.borderBottomStyle ||
+    (edge.width !== 'initial' && edge.width !== own.borderBottomWidth);
+  if (!isOverride) {
+    return;
+  }
+  const next = [edge.width, edge.style, edge.color];
+  PANEL_DIVIDER_PROPERTIES.forEach((name, index) => {
+    cell.style.setProperty(name, next[index]);
+  });
+}
+
+/**
+ * One per table: when the colour mode or the theme changes (a Theme's, or
+ * the operating system's mode under `system`) the open panels' carried
+ * dividers are read again. The panels register their cells with the hook.
+ */
+function PanelDividerModeWatch({
+  cellsRef,
+}: {
+  cellsRef: RefObject<Set<HTMLTableCellElement>>;
+}) {
+  const {mode} = useTheme();
+  const themeName = useThemeName();
+  const lastRef = useRef({mode, themeName});
+  useLayoutEffect(() => {
+    const last = lastRef.current;
+    if (last.mode === mode && last.themeName === themeName) {
+      return;
+    }
+    lastRef.current = {mode, themeName};
+    for (const cell of cellsRef.current) {
+      carryPanelDivider(cell);
+    }
+  }, [mode, themeName, cellsRef]);
+  return null;
+}
+
 /**
  * The detail panel's cell. A component rather than a bare `<td>` so it can
  * read the table's density and divider mode off the context — to indent itself
@@ -345,15 +423,39 @@ function ExpansionChevron({
  */
 function ExpansionPanelCell({
   colSpan,
+  cellsRef,
   children,
 }: {
   colSpan: number;
+  cellsRef: RefObject<Set<HTMLTableCellElement>>;
   children: ReactNode;
 }) {
   const ctx = useTableContext();
   const hasRowDividers = ctx?.dividers === 'rows' || ctx?.dividers === 'grid';
+  const cellRef = useRef<HTMLTableCellElement>(null);
+  // The panel carries its row's divider (a theme's `table-cell` border or an
+  // app's own never reach this cell, which is not one of the row's cells).
+  // Read after each commit, and on a colour-mode change by the table's one
+  // PanelDividerModeWatch.
+  useLayoutEffect(() => {
+    if (hasRowDividers && cellRef.current != null) {
+      carryPanelDivider(cellRef.current);
+    }
+  });
+  useLayoutEffect(() => {
+    const cell = cellRef.current;
+    if (cell == null || !hasRowDividers) {
+      return;
+    }
+    const cells = cellsRef.current;
+    cells.add(cell);
+    return () => {
+      cells.delete(cell);
+    };
+  }, [cellsRef, hasRowDividers]);
   return (
     <td
+      ref={cellRef}
       colSpan={colSpan}
       {...stylex.props(
         expansionStyles.expandedCell,
@@ -414,6 +516,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
   // Final rendered column count, captured in transformColumns (pipeline step
   // 1) and read in transformBodyRow for the detail panel's colSpan.
   const columnCountRef = useRef(1);
+  // The open panels' cells, for the table's one colour-mode watch.
+  const panelCellsRef = useRef(new Set<HTMLTableCellElement>());
 
   const expansionColumn = useMemo(
     (): TableColumn<T> => ({
@@ -448,6 +552,15 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
+      // One colour-mode watch per table for the open panels' dividers.
+      transformTableContext(children: ReactNode): ReactNode {
+        return (
+          <>
+            {children}
+            <PanelDividerModeWatch cellsRef={panelCellsRef} />
+          </>
+        );
+      },
       transformColumns(columns: TableColumn<T>[]) {
         const withExpansion = [expansionColumn, ...columns];
         columnCountRef.current = withExpansion.length;
@@ -591,7 +704,9 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
               tableRowMarker,
               panelVariant === 'muted' && expansionStyles.expandedRow,
             )}>
-            <ExpansionPanelCell colSpan={columnCountRef.current}>
+            <ExpansionPanelCell
+              colSpan={columnCountRef.current}
+              cellsRef={panelCellsRef}>
               {renderExpanded(item)}
             </ExpansionPanelCell>
           </tr>

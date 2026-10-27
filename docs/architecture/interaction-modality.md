@@ -36,7 +36,7 @@ deciding_specs: [spec:AST-100/DEC-1]
 {
   "scope": "global",
   "triggers": {
-    "interaction": ["INV1", "INV2", "INV3", "INV4", "INV7", "INV8"]
+    "interaction": ["INV1", "INV2", "INV3", "INV4", "INV7", "INV8", "INV11"]
   }
 }
 ```
@@ -165,6 +165,19 @@ work.
   threshold compares the tracker's release velocity. Lab keeps no copy of
   it: no Lab component has its own sample buffer, velocity math, or release
   filter, so Lab reports the same velocity as Core for the same motion.
+- **INV11 — Hover intent is a recognizer setting.** The hover recognizer,
+  `HoverGestureRecognizer`, takes `intent: {enterMs, exitMs, group}`: an entry delay
+  against brush-over, which an owner's record may set to zero, an exit guard, and a
+  group across which a pointer moving from one open trigger to the next shows
+  the next at once. Keyboard focus shows at once, and a finger is never gated
+  or served by it: intent answers mouse and pen hover only. The hover recognizer attaches only for hover-capable
+  pointers, since a finger cannot hover, and registers no touch listener. `useTooltip`,
+  `useHoverCard`, and `useMenuHover` take their hover timing from it;
+  `useContainerReveal` keeps its CSS-only dwell (`component:Thumbnail` PR1) and
+  takes only its delay values from the owner's intent. Enter and exit animation, hover tint, and the default delay
+  itself stay with their owners. The setting adds no module and is internal
+  (`spec:AST-017` FR21).
+
 - **INV12 — Native scroll reports progress.** The native-scroll module also
   reports progress: `progress(range)` turns a scroll position into a value from
   0 to 1 over a range, an element's span or a distance, with its edges, and a
@@ -238,10 +251,13 @@ is asked to carry a new decision.
   lifetimes, and focus-paint ownership.
 - `architecture:react-component-runtime` owns shared lifecycle and resource
   mechanisms. This record owns only the cross-cutting modality-path,
-  no-stale-interaction-outcome, gesture-velocity-source, and
-  scroll-progress-source (INV12) requirements.
+  no-stale-interaction-outcome, gesture-velocity-source, hover-intent
+  (INV11), and scroll-progress-source (INV12) requirements.
 - The Core velocity tracker and its release filter (INV10) — the one source of
   gesture velocity for Core components; not exported.
+- The hover recognizer, `HoverGestureRecognizer`, and its `intent` setting
+  (INV11) — the one source of hover-show timing for Core components; not
+  exported.
 - The native-scroll module's progress and its subscription (INV12) — the one
   source of scroll progress for Core components; not exported.
 
@@ -266,6 +282,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                                                          | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                                                                                                                                                    |
 | INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory                                                     | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority                                                                                                                                |
 | INV10      | Source boundary check over Core and Lab, a Lab-to-Core comparison on one recorded stream, and release-filter unit tests over recorded iOS pan and scroll-view streams | A Core component with its own sample buffer, velocity math, or release filter; a Lab component with its own sample buffer, velocity math, or release filter; a Lab component reporting a different velocity than Core for the same stream; an export of the tracker; a non-zero release after a still pause |
+| INV11      | Unit tests of the hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard                                         | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
 | INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                        | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
 
 Real-browser evidence is required when the behavior depends on

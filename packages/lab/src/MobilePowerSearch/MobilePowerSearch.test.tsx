@@ -63,6 +63,18 @@ beforeEach(async () => {
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
   }
+  // jsdom has no showModal(), so an open dialog never matches `:modal`; stand
+  // in for the sheets the browser presents modally, so `useAnnounce` routes
+  // into the open sheet's dialog as it does in a browser.
+  const matches = Element.prototype.matches;
+  vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    return selector === ':modal'
+      ? this instanceof HTMLDialogElement && this.open
+      : matches.call(this, selector);
+  });
   vi.stubGlobal(
     'matchMedia',
     vi.fn().mockReturnValue({
@@ -90,9 +102,10 @@ beforeEach(async () => {
   );
   window.scrollTo = vi.fn();
   // The shared page-body live regions outlive a test and clear on a 2s
-  // timer, and a previous test's announcement may still be a frame away;
-  // let it land, then start this test with the regions empty.
-  await new Promise(resolve => setTimeout(resolve, 0));
+  // timer, and a previous test's announcement may still be a frame away —
+  // or, for words a closing modal dialog hands on to the page body, two; let
+  // them land, then start this test with the regions empty.
+  await new Promise(resolve => setTimeout(resolve, 20));
   for (const region of document.querySelectorAll(
     'body > [data-astryx-live-region]',
   )) {
@@ -102,6 +115,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 // =============================================================================
@@ -330,6 +344,24 @@ function setup(
   return {onChange, ...result};
 }
 
+/**
+ * The polite live region `useAnnounce` keeps inside an open sheet's dialog,
+ * created on the first message delivered there; read inside `waitFor`.
+ */
+function sheetRegion(): HTMLElement {
+  const region = sheet().querySelector<HTMLElement>(
+    ':scope > [data-astryx-modal-live-region="polite"]',
+  );
+  if (!region) {
+    throw new Error('no live region inside the open sheet yet');
+  }
+  return region;
+}
+
+const pageRegionText = () =>
+  document.querySelector('body > [data-astryx-live-region="polite"]')
+    ?.textContent ?? '';
+
 function trigger(): HTMLElement {
   return document.querySelector<HTMLElement>('[aria-haspopup="dialog"]')!;
 }
@@ -524,11 +556,14 @@ describe('MobilePowerSearch trigger', () => {
     expect(getComputedStyle(button).position).toBe('absolute');
   });
 
-  it('does not open when disabled', () => {
+  it('does not open when disabled, and the trigger stays focusable through aria-disabled rather than native disabled', () => {
     setup({isDisabled: true});
     openSheet();
     expect(isSheetOpen()).toBe(false);
-    expect(trigger()).toBeDisabled();
+    expect(trigger()).not.toBeDisabled();
+    expect(trigger()).toHaveAttribute('aria-disabled', 'true');
+    trigger().focus();
+    expect(trigger()).toHaveFocus();
   });
 
   it('keeps the trigger focusable when a disabled reason is given', () => {
@@ -626,18 +661,9 @@ describe('MobilePowerSearch trigger', () => {
     expect(pageRegion()?.textContent).toBe('1 result');
   });
 
-  it('routes a result count change to the live region inside the open sheet, which stays mounted and empty until then', async () => {
-    const pageRegion = () =>
-      document.querySelector('body > [aria-live="polite"]');
+  it('routes a result count change to the live region useAnnounce keeps inside the open sheet, not the page body', async () => {
     const {rerender} = setup({resultCount: 12});
     openSheet();
-    const region = within(sheet()).getByTestId(
-      'mobile-power-search-sheet-status',
-    );
-    expect(region).toHaveAttribute('role', 'status');
-    expect(region).toHaveAttribute('aria-live', 'polite');
-    expect(region.textContent).toBe('');
-    expect(sheet().contains(region)).toBe(true);
     rerender(
       <MobilePowerSearch
         config={config}
@@ -646,9 +672,10 @@ describe('MobilePowerSearch trigger', () => {
         resultCount={3}
       />,
     );
-    await waitFor(() => expect(region.textContent).toBe('3 results'));
+    await waitFor(() => expect(sheetRegion().textContent).toBe('3 results'));
+    expect(sheetRegion()).toHaveAttribute('aria-live', 'polite');
     // The page-body channel, which a native modal hides, is left alone.
-    expect(pageRegion()?.textContent ?? '').toBe('');
+    expect(pageRegionText()).toBe('');
   });
 
   it('forwards display-only props to token overrides', () => {
@@ -744,13 +771,53 @@ describe('MobilePowerSearch Filters sheet', () => {
     expect(within(field()).queryByText('Open')).toBeNull();
   });
 
-  it('clears every removable filter but keeps read-only ones', () => {
+  it('Clear all removes every filter, read-only ones included, as the Core field does (DEC-3), and announces it once the flow has closed', async () => {
     const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
     const {onChange} = setup({filters: [authorFilter, pinned]});
     openSheet();
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
-    expect(onChange).toHaveBeenCalledWith([pinned], 'remove', 0);
+    expect(onChange).toHaveBeenCalledWith([], 'remove', 1);
     expect(isSheetOpen()).toBe(false);
+    // Nothing is spoken while the dialog is still exiting; the trigger's
+    // focus after the exit is the signal.
+    expect(pageRegionText()).toBe('');
+    settleSheets();
+    trigger().focus();
+    await waitFor(() => expect(pageRegionText()).toBe('All filters removed'));
+  });
+
+  it('Clear all with a result count that changes in the same commit speaks both once the flow has closed', async () => {
+    function CountFollowsFilters() {
+      const [filters, setFilters] = useState<PowerSearchFilter[]>([
+        openFilter,
+        authorFilter,
+      ]);
+      return (
+        <MobilePowerSearch
+          config={config}
+          filters={filters}
+          onChange={next => setFilters([...next])}
+          resultCount={filters.length * 10}
+        />
+      );
+    }
+    render(<CountFollowsFilters />);
+    openSheet();
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
+    expect(isSheetOpen()).toBe(false);
+    settleSheets();
+    trigger().focus();
+    await waitFor(() =>
+      expect(pageRegionText()).toBe('All filters removed. 0 results'),
+    );
+  });
+
+  it('shows Clear all when every filter is read-only, since Clear all removes those too', () => {
+    const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
+    const {onChange} = setup({filters: [pinned]});
+    openSheet();
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
+    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
   });
 
   it('respects hasClear', () => {
@@ -1379,9 +1446,10 @@ describe('MobilePowerSearch value sheet', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('disables edit actions when an open editor becomes disabled', () => {
+  it('closes the flow when the field becomes disabled while a step is open, and does not reopen it when re-enabled', () => {
     const {rerender} = setup({filters: [openFilter]});
     openEditFlow('Status is Open');
+    expect(isSheetOpen()).toBe(true);
     rerender(
       <MobilePowerSearch
         config={config}
@@ -1390,14 +1458,21 @@ describe('MobilePowerSearch value sheet', () => {
         isDisabled
       />,
     );
-    expect(within(sheet()).getByRole('button', {name: 'Apply'})).toBeDisabled();
-    expect(
-      within(sheet()).getByRole('button', {name: 'Remove'}),
-    ).toBeDisabled();
-    expect(within(sheet()).getByRole('button', {name: 'Cancel'})).toBeEnabled();
-    expect(
-      within(sheet()).getByRole('radio', {name: 'Status is'}),
-    ).toBeDisabled();
+    expect(isSheetOpen()).toBe(false);
+    // The trigger is never natively disabled, so the closing flow can hand
+    // focus back to it instead of the page body.
+    settleSheets();
+    expect(trigger()).toHaveFocus();
+    expect(trigger()).toHaveAttribute('aria-disabled', 'true');
+    expect(trigger()).not.toBeDisabled();
+    rerender(
+      <MobilePowerSearch
+        config={config}
+        filters={[openFilter]}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(isSheetOpen()).toBe(false);
   });
 
   it('commits the complete filter returned by a custom editor', () => {
@@ -1690,15 +1765,10 @@ describe('MobilePowerSearch content search', () => {
     // The add is announced inside the sheet the flow is now on, not on the
     // page body, which assistive technology does not expose under a native
     // modal dialog.
-    const region = within(sheet()).getByTestId(
-      'mobile-power-search-sheet-status',
-    );
     await waitFor(() =>
-      expect(region.textContent).toBe('Added "release notes"'),
+      expect(sheetRegion().textContent).toBe('Added "release notes"'),
     );
-    expect(
-      document.querySelector('body > [aria-live="polite"]')?.textContent ?? '',
-    ).toBe('');
+    expect(pageRegionText()).toBe('');
   });
 
   it('announces both the add and a result count that follows the filters in the same commit, joined in the sheet region', async () => {
@@ -1726,15 +1796,12 @@ describe('MobilePowerSearch content search', () => {
       within(sheet()).getByRole('button', {name: '"release notes"'}),
     );
     await waitFor(() => expect(isSheetOpen()).toBe(true));
-    const region = within(sheet()).getByTestId(
-      'mobile-power-search-sheet-status',
-    );
     await waitFor(() =>
-      expect(region.textContent).toBe('Added "release notes" 20 results'),
+      expect(sheetRegion().textContent).toBe(
+        'Added "release notes" 20 results',
+      ),
     );
-    expect(
-      document.querySelector('body > [aria-live="polite"]')?.textContent ?? '',
-    ).toBe('');
+    expect(pageRegionText()).toBe('');
   });
 
   it('adds a value suggestion from Enter and announces it', () => {
@@ -1956,11 +2023,12 @@ describe('MobilePowerSearch value types', () => {
     expect(input).toHaveValue('March 10, 2024');
   });
 
-  it('date_absolute (date and time): a date-time input is rendered', () => {
+  it('date_absolute with isDateOnly: false gets the date-only editor, as the Core editor does (DEC-3)', () => {
     setupValues();
     openAddFlow();
     tapRow('Updated');
-    expect(within(sheet()).getByLabelText('Date and time')).toBeTruthy();
+    expect(within(sheet()).queryByLabelText('Date and time')).toBeNull();
+    expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toBeTruthy();
   });
 
   it('date_relative: rows stage a single relative value', () => {
@@ -2136,28 +2204,80 @@ describe('MobilePowerSearch timezone', () => {
     value: {type: 'date_absolute', unixSeconds: BOUNDARY_SECONDS},
   };
 
-  it.each([
-    ['Asia/Tokyo', 'Mar 10, 2024', 'March 10, 2024'],
-    ['Pacific/Honolulu', 'Mar 9, 2024', 'March 9, 2024'],
-  ])(
-    'formats the token, the row and the editor in %s',
-    (timezoneID, compact, long) => {
-      setup({config: valueTypesConfig, filters: [dateFilter], timezoneID});
-      const tokenValue = within(field()).getByText(new RegExp(compact));
-      expect(tokenValue).toHaveStyle({fontWeight: 'var(--font-weight-bold)'});
-      openSheet();
-      const row = within(sheet()).getByRole('button', {
-        name: new RegExp(`^Created is after ${compact}`),
-      });
-      expect(within(row).getByText(new RegExp(compact))).toHaveStyle({
-        fontWeight: 'var(--font-weight-bold)',
-      });
-      fireEvent.click(row);
-      expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
-        long,
-      );
-    },
-  );
+  // The browser's zone is pinned west of Greenwich, so the instant's day
+  // there (March 9) differs from its UTC day (March 10) and a regression to
+  // the UTC day on tokens or rows fails on a UTC runner too.
+  describe('in a browser zone west of Greenwich', () => {
+    const originalTZ = process.env.TZ;
+    beforeEach(() => {
+      process.env.TZ = 'America/Los_Angeles';
+    });
+    afterEach(() => {
+      if (originalTZ === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTZ;
+      }
+    });
+
+    it.each([['Asia/Tokyo'], ['Pacific/Honolulu'], [undefined]])(
+      'formats the token and the row exactly as the Core token does — the day in the browser zone, no time — and the editor reads the UTC day, whatever timezoneID says (DEC-3, FR11, FR12): %s',
+      timezoneID => {
+        // Core's token: `formatDateAbsoluteCompact` in the browser's zone.
+        expect(
+          new Intl.DateTimeFormat('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            calendar: 'gregory',
+          }).format(BOUNDARY_SECONDS * 1000),
+        ).toBe('Mar 9, 2024');
+        setup({config: valueTypesConfig, filters: [dateFilter], timezoneID});
+        const tokenValue = within(field()).getByText('Mar 9, 2024');
+        expect(tokenValue).toHaveStyle({
+          fontWeight: 'var(--font-weight-bold)',
+        });
+        expect(tokenValue.textContent).not.toMatch(/\d:\d\d/);
+        openSheet();
+        const row = within(sheet()).getByRole('button', {
+          name: 'Created is after Mar 9, 2024',
+        });
+        expect(within(row).getByText('Mar 9, 2024')).toHaveStyle({
+          fontWeight: 'var(--font-weight-bold)',
+        });
+        fireEvent.click(row);
+        // 03:00 UTC on March 10: the editor reads the UTC day, in Tokyo and
+        // Honolulu alike.
+        expect(
+          within(sheet()).getByRole('combobox', {name: 'Date'}),
+        ).toHaveValue('March 10, 2024');
+      },
+    );
+  });
+
+  it('a picked day is stored as its UTC midnight, as the Core editor stores it (DEC-3)', () => {
+    const {onChange} = setup({config: valueTypesConfig, filters: []});
+    openAddFlow();
+    tapRow('Created');
+    const input = within(sheet()).getByRole('combobox', {name: 'Date'});
+    fireEvent.change(input, {target: {value: 'March 9, 2024'}});
+    fireEvent.blur(input);
+    addFilter();
+    expect(onChange).toHaveBeenCalledWith(
+      [
+        {
+          field: 'created',
+          operator: 'after',
+          value: {
+            type: 'date_absolute',
+            unixSeconds: Date.UTC(2024, 2, 9) / 1000,
+          },
+        },
+      ],
+      'add',
+      0,
+    );
+  });
 
   it('converts a picked day to midnight in the configured zone', () => {
     expect(isoDateToUnixSeconds('2024-03-09', 'Pacific/Honolulu')).toBe(
@@ -2181,6 +2301,393 @@ describe('MobilePowerSearch timezone', () => {
         'Pacific/Honolulu',
       ),
     ).toBe(BOUNDARY_SECONDS);
+  });
+});
+
+// =============================================================================
+// Core parity
+// =============================================================================
+
+describe('MobilePowerSearch Core parity', () => {
+  const third: PowerSearchFilter = {
+    field: 'status',
+    operator: 'isNot',
+    value: {type: 'enum', value: 'closed'},
+  };
+  const legacyFilter: PowerSearchFilter = {
+    field: 'legacy',
+    operator: 'was',
+    value: {type: 'string', value: 'x'},
+  };
+  function Harness({
+    filters,
+    cfg = config,
+    hasClear,
+  }: {
+    filters: ReadonlyArray<PowerSearchFilter>;
+    cfg?: PowerSearchConfig;
+    hasClear?: boolean;
+  }) {
+    return (
+      <MobilePowerSearch
+        config={cfg}
+        filters={filters}
+        onChange={() => {}}
+        hasClear={hasClear}
+      />
+    );
+  }
+
+  describe('a controlled update that removes the focused control re-homes focus over the button rows', () => {
+    it('moves focus from a removed Filters row to the row that followed it, counting only button rows', () => {
+      const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
+      const fourth: PowerSearchFilter = {
+        field: 'author',
+        operator: 'is',
+        value: {type: 'string', value: 'Grace'},
+      };
+      const {rerender} = render(
+        <Harness filters={[pinned, authorFilter, third, fourth]} />,
+      );
+      openSheet();
+      within(sheet()).getByRole('button', {name: 'Author is Ada'}).focus();
+      rerender(<Harness filters={[pinned, third, fourth]} />);
+      // The row that followed it — not one row too far for the plain row.
+      expect(
+        within(sheet()).getByRole('button', {name: 'Status is not Closed'}),
+      ).toHaveFocus();
+      // The last button row removed: the new last one takes focus.
+      within(sheet()).getByRole('button', {name: 'Author is Grace'}).focus();
+      rerender(<Harness filters={[pinned, third]} />);
+      expect(
+        within(sheet()).getByRole('button', {name: 'Status is not Closed'}),
+      ).toHaveFocus();
+    });
+
+    it('moves focus from Clear all, gone with the last filter, to Add filter', () => {
+      const {rerender} = render(<Harness filters={[openFilter]} hasClear />);
+      openSheet();
+      within(sheet()).getByRole('button', {name: 'Clear all'}).focus();
+      rerender(<Harness filters={[]} hasClear />);
+      expect(
+        within(sheet()).queryByRole('button', {name: 'Clear all'}),
+      ).toBeNull();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Add filter'}),
+      ).toHaveFocus();
+    });
+
+    it("moves focus from a dropped field's row in Add filter to a remaining row", () => {
+      const {rerender} = render(<Harness filters={[]} />);
+      openAddFlow();
+      within(sheet()).getByRole('button', {name: 'Author'}).focus();
+      rerender(
+        <Harness
+          filters={[]}
+          cfg={{
+            ...config,
+            fields: config.fields.filter(f => f.key !== 'author'),
+          }}
+        />,
+      );
+      expect(
+        within(sheet()).queryByRole('button', {name: 'Author'}),
+      ).toBeNull();
+      const focused = document.activeElement as HTMLElement;
+      expect(focused.closest('li')).not.toBeNull();
+      expect(sheet().contains(focused)).toBe(true);
+    });
+  });
+
+  describe('rows keyed by filter identity', () => {
+    it('keeps focus on the same filter when the parent reorders the filters, with the same objects and with clones', () => {
+      const {rerender} = render(
+        <Harness filters={[openFilter, authorFilter, third]} />,
+      );
+      openSheet();
+      const authorRow = within(sheet()).getByRole('button', {
+        name: 'Author is Ada',
+      });
+      authorRow.focus();
+      rerender(<Harness filters={[third, openFilter, authorFilter]} />);
+      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
+        authorRow,
+      );
+      expect(authorRow).toHaveFocus();
+      rerender(
+        <Harness filters={[{...authorFilter}, {...third}, {...openFilter}]} />,
+      );
+      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
+        authorRow,
+      );
+      expect(authorRow).toHaveFocus();
+    });
+
+    it('keeps focus on the same filter when the parent removes a filter above it', () => {
+      const {rerender} = render(
+        <Harness filters={[openFilter, authorFilter, third]} />,
+      );
+      openSheet();
+      const authorRow = within(sheet()).getByRole('button', {
+        name: 'Author is Ada',
+      });
+      authorRow.focus();
+      rerender(<Harness filters={[authorFilter, third]} />);
+      expect(authorRow).toHaveFocus();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Status is not Closed'}),
+      ).not.toHaveFocus();
+    });
+  });
+
+  describe('a filter the config no longer knows', () => {
+    it('lists it by its raw keys on the trigger and in the Filters sheet, titles its step the same way, and lets Remove take it out', () => {
+      function Removable() {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter, legacyFilter]);
+        return (
+          <MobilePowerSearch
+            config={config}
+            filters={filters}
+            onChange={next => setFilters(next)}
+          />
+        );
+      }
+      render(<Removable />);
+      expect(within(field()).getByText('legacy: was')).toBeTruthy();
+      openSheet();
+      const row = within(sheet()).getByRole('button', {name: 'legacy was'});
+      fireEvent.click(row);
+      expect(
+        within(sheet()).getByRole('heading', {name: 'legacy was'}),
+      ).toBeTruthy();
+      expect(sheet()).toHaveAttribute('aria-label', 'legacy was');
+      expect(
+        within(sheet()).getByText('This filter is no longer available'),
+      ).toBeTruthy();
+      expect(within(sheet()).queryByRole('button', {name: 'Apply'})).toBeNull();
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+      expect(
+        within(sheet()).queryByRole('button', {name: 'legacy was'}),
+      ).toBeNull();
+      // The nearest remaining row that is a button takes focus.
+      expect(
+        within(sheet()).getByRole('button', {name: 'Status is Open'}),
+      ).toHaveFocus();
+    });
+
+    it('reads the field label next to the raw operator key when only the operator is gone', () => {
+      const staleOperator: PowerSearchFilter = {
+        field: 'author',
+        operator: 'was',
+        value: {type: 'string', value: 'Ada'},
+      };
+      setup({filters: [staleOperator]});
+      openSheet();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Author was'}),
+      ).toBeTruthy();
+    });
+  });
+
+  describe('the unavailable state', () => {
+    it('moves focus to Remove when a controlled config update removes the edited operator, and announces it in the sheet', async () => {
+      const {rerender} = setup({filters: [openFilter]});
+      openEditFlow('Status is Open');
+      within(sheet()).getByRole('radio', {name: 'Status is not'}).focus();
+      rerender(
+        <MobilePowerSearch
+          config={{
+            ...config,
+            fields: config.fields.map(f =>
+              f.key === 'status'
+                ? {...f, operators: f.operators.filter(o => o.key !== 'is')}
+                : f,
+            ),
+          }}
+          filters={[openFilter]}
+          onChange={vi.fn()}
+        />,
+      );
+      expect(
+        within(sheet()).getByText('This filter is no longer available'),
+      ).toBeTruthy();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Remove'}),
+      ).toHaveFocus();
+      await waitFor(() =>
+        expect(sheetRegion().textContent).toBe(
+          'This filter is no longer available',
+        ),
+      );
+    });
+  });
+
+  describe('Apply and Cancel after a controlled update', () => {
+    it('Apply with the edited filter gone writes nothing and focuses the nearest remaining row, else Add filter', () => {
+      const onChange = vi.fn();
+      const {rerender} = render(
+        <MobilePowerSearch
+          config={config}
+          filters={[openFilter, authorFilter, third]}
+          onChange={onChange}
+        />,
+      );
+      openEditFlow('Author is Ada');
+      rerender(
+        <MobilePowerSearch
+          config={config}
+          filters={[openFilter, third]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Apply'}));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Status is not Closed'}),
+      ).toHaveFocus();
+    });
+
+    it('Cancel from creation after the opening field was removed focuses the first control of Add filter', () => {
+      const {rerender} = render(<Harness filters={[]} />);
+      openAddFlow();
+      tapRow('Author');
+      rerender(
+        <Harness
+          filters={[]}
+          cfg={{
+            ...config,
+            fields: config.fields.filter(f => f.key !== 'author'),
+          }}
+        />,
+      );
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+      expect(
+        within(sheet()).getByRole('heading', {name: 'Add filter'}),
+      ).toBeTruthy();
+      const focused = document.activeElement as HTMLElement;
+      expect(focused.closest('li')).not.toBeNull();
+      expect(sheet().contains(focused)).toBe(true);
+    });
+  });
+
+  describe('announcements inside the open sheet', () => {
+    it('announces "Removed {label}" in the Filters sheet after Remove, as the Core token does', async () => {
+      function Removable() {
+        const [filters, setFilters] = useState<
+          ReadonlyArray<PowerSearchFilter>
+        >([openFilter, authorFilter]);
+        return (
+          <MobilePowerSearch
+            config={config}
+            filters={filters}
+            onChange={next => setFilters(next)}
+          />
+        );
+      }
+      render(<Removable />);
+      openEditFlow('Author is Ada');
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+      await waitFor(() =>
+        expect(sheetRegion().textContent).toBe('Removed Author is Ada'),
+      );
+      expect(pageRegionText()).toBe('');
+    });
+
+    it('speaks "No filters match your search" from its rendered element once per query, and not for an empty query', async () => {
+      const many: PowerSearchConfig = {
+        name: 'Many',
+        fields: Array.from({length: 9}, (_, i) => ({
+          key: `f${i}`,
+          label: `Field ${i}`,
+          operators: [
+            {key: 'is', label: 'is', value: {type: 'string' as const}},
+          ],
+        })),
+      };
+      setup({config: many});
+      openSheet();
+      const search = within(sheet()).getByRole('textbox', {
+        name: 'Search filters',
+      });
+      fireEvent.change(search, {target: {value: 'nope'}});
+      expect(
+        within(sheet()).getByText('No filters match your search'),
+      ).toBeTruthy();
+      await waitFor(() =>
+        expect(sheetRegion().textContent).toBe('No filters match your search'),
+      );
+      fireEvent.change(search, {target: {value: ''}});
+      // The message is gone from the body; only the live region still holds
+      // the words it spoke.
+      expect(
+        within(sheet()).queryByText('No filters match your search', {
+          ignore:
+            '[data-astryx-modal-live-region] *, [data-astryx-modal-live-region]',
+        }),
+      ).toBeNull();
+      expect(
+        within(sheet()).getAllByRole('button', {name: /^Field/}),
+      ).toHaveLength(9);
+    });
+
+    it('shows no "no match" message for a config with no field', () => {
+      setup({config: {name: 'Empty', fields: []}});
+      openSheet();
+      expect(
+        within(sheet()).getByRole('heading', {name: 'Add filter'}),
+      ).toBeTruthy();
+      expect(
+        within(sheet()).queryByText('No filters match your search'),
+      ).toBeNull();
+    });
+
+    it("keeps the content searchbox's aria-controls pointing at an element while nothing lists", () => {
+      setup({config: contentSearchConfig});
+      openSheet();
+      const input = within(sheet()).getByRole('searchbox', {name: 'Search'});
+      const controlled = () =>
+        document.getElementById(input.getAttribute('aria-controls') as string);
+      expect(controlled()).not.toBeNull();
+      fireEvent.change(input, {target: {value: 'zzzz-nothing-matches'}});
+      expect(controlled()).not.toBeNull();
+      expect(sheet().contains(controlled())).toBe(true);
+    });
+  });
+
+  describe('the trigger', () => {
+    it('does not open the flow for a tap on the end lane, where endContent keeps its own taps', () => {
+      const onAction = vi.fn();
+      setup({
+        filters: [openFilter],
+        endContent: (
+          <button type="button" onClick={onAction}>
+            Save view
+          </button>
+        ),
+      });
+      fireEvent.click(screen.getByRole('button', {name: 'Save view'}));
+      expect(onAction).toHaveBeenCalledTimes(1);
+      expect(isSheetOpen()).toBe(false);
+      // A tap on a token still opens it.
+      fireEvent.click(within(field()).getByText('Open'));
+      expect(isSheetOpen()).toBe(true);
+    });
+
+    it('fires onBlur when the flow opens and onFocus when it closes, once each', () => {
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      setup({filters: [openFilter], onFocus, onBlur});
+      openSheet();
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Done'}));
+      settleSheets();
+      expect(trigger()).toHaveFocus();
+      expect(onFocus).toHaveBeenCalledTimes(2);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    });
   });
 });
 
