@@ -13,16 +13,34 @@ import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {useToast} from '@astryxdesign/core/Toast';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 
+/**
+ * Deprecated. A `BottomSheetSwitcher` flow used on its own behaves as
+ * released, and when it is stacked with other sheets it is one level of the
+ * bottom-sheet stack; a future minor release removes it. These stories stay
+ * as its documentation. New
+ * flows write each step as a standalone `BottomSheet` driven by one state
+ * value — see the `Core/BottomSheetReplace` stories, which mirror these one
+ * to one with the replacement.
+ */
 const meta: Meta<typeof BottomSheetSwitcher> = {
-  title: 'Core/BottomSheetSwitcher',
+  title: 'Core/BottomSheetSwitcher (deprecated)',
+  // The title carries the lifecycle; the ids stay what the browser specs,
+  // the docs, and existing links use.
+  id: 'core-bottomsheetswitcher',
   component: BottomSheetSwitcher,
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
     docs: {
       story: {inline: false, height: '560px'},
+      description: {
+        component:
+          'Deprecated: write each step as its own BottomSheet with isOpen, controlled by one state value that names the open step; the same replace handoff runs between steps. A switcher flow used on its own behaves as released (with two fixes: a toast raised from a step renders above the flow and can be pressed, and under reduced motion its steps follow the reduced-motion rule); stacked with other sheets, it is one level of the stack (it recedes and is blocked when covered and shares the one scrim). A future minor release removes it. The Core/BottomSheetReplace stories show each of these flows rebuilt with the replacement.',
+      },
     },
   },
   argTypes: {
@@ -338,6 +356,250 @@ function MultiStepSwitcherExample({
   );
 }
 
+/**
+ * The deprecated switcher stacked with standalone sheets: one level of the
+ * stack, by `component:BottomSheet` FR12. "Over" opens the flow from a
+ * control inside a standalone sheet, so the sheet recedes beneath the flow
+ * and keeps the one scrim; "under" opens a standalone Help sheet from a step,
+ * so the whole flow recedes beneath it and its step backdrops stay clear.
+ */
+function StackedSwitcherExample({flowIsOver}: {flowIsOver: boolean}) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const toast = useToast();
+  const flow = (
+    <BottomSheetSwitcher
+      activeSheet={activeSheet}
+      onActiveSheetChange={setActiveSheet}>
+      <BottomSheet sheetId="overview" label="Set up notifications" height="hug">
+        <Section padding={4}>
+          <VStack gap={4}>
+            <VStack gap={1}>
+              <Heading level={3}>Set up notifications</Heading>
+              <Text type="supporting" color="secondary">
+                Step 1 of 2
+              </Text>
+            </VStack>
+            <HStack gap={2} hAlign="end">
+              <Button
+                label="Toast from step"
+                variant="ghost"
+                onClick={() =>
+                  toast({body: 'Toast from the step', isAutoHide: false})
+                }
+              />
+              {!flowIsOver && (
+                <Button
+                  label="Help"
+                  variant="secondary"
+                  onClick={() => setIsHelpOpen(true)}
+                />
+              )}
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onClick={() => setActiveSheet(null)}
+              />
+              <Button
+                label="Continue"
+                onClick={() => setActiveSheet('frequency')}
+              />
+            </HStack>
+          </VStack>
+        </Section>
+      </BottomSheet>
+      <BottomSheet sheetId="frequency" label="Frequency" height="hug">
+        <Section padding={4}>
+          <VStack gap={4}>
+            <VStack gap={1}>
+              <Heading level={3}>Frequency</Heading>
+              <Text type="supporting" color="secondary">
+                Step 2 of 2
+              </Text>
+            </VStack>
+            <HStack gap={2} hAlign="end">
+              <Button
+                label="Back"
+                variant="secondary"
+                onClick={() => setActiveSheet('overview')}
+              />
+              <Button label="Done" onClick={() => setActiveSheet(null)} />
+            </HStack>
+          </VStack>
+        </Section>
+      </BottomSheet>
+    </BottomSheetSwitcher>
+  );
+  if (flowIsOver) {
+    return (
+      <>
+        <Button label="Open settings" onClick={() => setIsSheetOpen(true)} />
+        <BottomSheet
+          isOpen={isSheetOpen}
+          onOpenChange={setIsSheetOpen}
+          label="Settings"
+          height="capped">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Settings</Heading>
+              <Text>
+                A standalone sheet. The deprecated flow opened from here stacks
+                on top of it; this sheet recedes and keeps the one scrim.
+              </Text>
+              <HStack gap={2}>
+                <Button
+                  label="Set up notifications"
+                  onClick={() => setActiveSheet('overview')}
+                />
+                {/* Closes the host. While the flow is open above it, the
+                    browser's modal blocking keeps this control out of reach
+                    (the flow's dialog is modal), so that scenario — the
+                    host closed from code, as a route change would — is
+                    driven by the real-browser check; a person reaches it
+                    before the flow opens and after a step closes it. */}
+                <Button
+                  label="Close settings"
+                  variant="secondary"
+                  onClick={() => setIsSheetOpen(false)}
+                />
+              </HStack>
+            </VStack>
+          </Section>
+          {flow}
+        </BottomSheet>
+      </>
+    );
+  }
+  return (
+    <>
+      <Button
+        label="Set up notifications"
+        onClick={() => setActiveSheet('overview')}
+      />
+      {flow}
+      <BottomSheet
+        isOpen={isHelpOpen}
+        onOpenChange={setIsHelpOpen}
+        label="Help"
+        height="hug">
+        <Section padding={4}>
+          <VStack gap={4}>
+            <Heading level={3}>Help</Heading>
+            <Text>
+              A standalone sheet opened from a step. The whole deprecated flow
+              recedes beneath it as one level; this sheet's backdrop stays clear
+              because the flow owns the stack's scrim.
+            </Text>
+            <HStack gap={2} hAlign="end">
+              <Button label="Got it" onClick={() => setIsHelpOpen(false)} />
+            </HStack>
+          </VStack>
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * A note sheet with a text field sits over a deprecated flow whose step
+ * advances from code — a timer here, a background completion in an app.
+ * The flow's level becomes a new dialog beneath the note sheet, so the
+ * registry puts the note sheet back on top; the field being typed in keeps
+ * focus through that, and every keystroke lands in it.
+ */
+function TypingOverAdvancingFlowExample() {
+  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [isArmed, setIsArmed] = useState(false);
+  const toast = useToast();
+  return (
+    <>
+      <Button
+        label="Set up notifications"
+        onClick={() => setActiveSheet('overview')}
+      />
+      <BottomSheetSwitcher
+        activeSheet={activeSheet}
+        onActiveSheetChange={setActiveSheet}>
+        <BottomSheet
+          sheetId="overview"
+          label="Set up notifications"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Set up notifications</Heading>
+              <Text type="supporting" color="secondary">
+                Step 1 of 2. Add a note, then type: the flow moves to step 2 on
+                its own two seconds after the note opens.
+              </Text>
+              <HStack gap={2} hAlign="end">
+                <Button
+                  label="Add a note"
+                  onClick={() => {
+                    setIsNoteOpen(true);
+                    if (!isArmed) {
+                      setIsArmed(true);
+                      setTimeout(() => setActiveSheet('frequency'), 2000);
+                    }
+                  }}
+                />
+                <Button
+                  label="Continue"
+                  variant="primary"
+                  onClick={() => setActiveSheet('frequency')}
+                />
+              </HStack>
+            </VStack>
+          </Section>
+        </BottomSheet>
+        <BottomSheet
+          sheetId="frequency"
+          label="Notification frequency"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Notification frequency</Heading>
+              <Text type="supporting" color="secondary">
+                Step 2 of 2
+              </Text>
+              <HStack gap={2} hAlign="end">
+                <Button label="Done" onClick={() => setActiveSheet(null)} />
+              </HStack>
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </BottomSheetSwitcher>
+      <BottomSheet
+        isOpen={isNoteOpen}
+        onOpenChange={setIsNoteOpen}
+        label="Note"
+        height="hug">
+        <Section padding={4}>
+          <VStack gap={4}>
+            <Heading level={3}>Note</Heading>
+            <TextInput
+              label="Note"
+              value={note}
+              onChange={setNote}
+              hasAutoFocus
+            />
+            <HStack gap={2} hAlign="end">
+              <Button
+                label="Toast from note"
+                variant="secondary"
+                onClick={() => toast({body: 'Note toast', isAutoHide: false})}
+              />
+              <Button label="Save" onClick={() => setIsNoteOpen(false)} />
+            </HStack>
+          </VStack>
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
 const openFlow: NonNullable<Story['play']> = async ({canvasElement}) => {
   const trigger = canvasElement.querySelector('button');
   if (trigger instanceof HTMLElement) {
@@ -374,4 +636,19 @@ export const NarrowViewport: Story = {
   parameters: {viewport: {defaultViewport: 'mobile1'}},
   render: () => <MultiStepSwitcherExample height="hug" />,
   play: openFlow,
+};
+
+export const StackedOverASheet: Story = {
+  name: 'Stacked over a standalone sheet',
+  render: () => <StackedSwitcherExample flowIsOver />,
+};
+
+export const StackedUnderASheet: Story = {
+  name: 'Stacked under a standalone sheet',
+  render: () => <StackedSwitcherExample flowIsOver={false} />,
+};
+
+export const TypingOverAdvancingFlow: Story = {
+  name: 'Typing in a sheet over a flow that advances from code',
+  render: () => <TypingOverAdvancingFlowExample />,
 };
