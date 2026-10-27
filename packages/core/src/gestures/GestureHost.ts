@@ -458,12 +458,13 @@ function scrollsBy(
     return false;
   }
   // Right to left, scrollLeft runs from 0 at the start to minus the
-  // overflow, and a scroll right moves it toward 0.
+  // overflow, and a scroll right moves it toward 0. A scroller a pixel
+  // short of either end, where Chromium stops one, is at that end.
   const isRtl = isHorizontal && isRtlElement(element as HTMLElement);
   const min = isRtl ? -room : 0;
   const max = isRtl ? 0 : room;
   const position = isHorizontal ? element.scrollLeft : element.scrollTop;
-  return delta > 0 ? position < max - 1 : position > min;
+  return delta > 0 ? position < max - 1 : position > min + 1;
 }
 
 /**
