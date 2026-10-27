@@ -26,8 +26,9 @@
  *   once with no motion; under Reduce Motion the rows stay still during the
  *   drag and the drop and a key move cross-fade in place within 200 ms; in
  *   RTL the handle is on the left and the drag keeps x; a focused handle
- *   shows one whole ring, clear of its lines, on a 44 pt target that makes
- *   its row no taller; a held finger locks text selection on the handle
+ *   shows one whole ring, clear of its lines; it keeps a small control's
+ *   size while a finger's target reaches 44 pt, short of the next handle's,
+ *   and makes its row no taller; a held finger locks text selection on the handle
  *   until the lift, and a mouse sees a plain button's styles; a pinned first
  *   row bounds a drag; storyboards of a drag and a drop. Reorder mode's own
  *   proofs (keys, a mouse click, taps alone, start(key) and the hint) are in
@@ -1545,18 +1546,52 @@ test('a held finger locks text selection on the handle, and the lift unlocks it'
   await expect.poll(refuses).toBe(false);
 });
 
-test('the handle is a 44 pt target whose ring clears its lines, and its row is no taller for it', async ({
+test("the handle keeps a small control's size; a finger's target reaches 44 pt short of the next handle's, its ring clears its lines, and its row is no taller for it", async ({
   page,
 }) => {
   await open(page);
   await page.keyboard.press('Shift');
   await handle(page, 'Inbox').focus();
+  // Where the primary pointer is coarse the handle's hit layer takes the
+  // insets the shared hit area writes, a frame after layout.
+  await expect
+    .poll(async () =>
+      handle(page, 'Inbox').evaluate(element =>
+        getComputedStyle(element)
+          .getPropertyValue('--astryx-hit-inset-top')
+          .trim(),
+      ),
+    )
+    .not.toBe('');
   const geometry = await handle(page, 'Inbox').evaluate(element => {
     const row = element.closest('li') as HTMLElement;
     const style = getComputedStyle(element);
     const inset =
       -parseFloat(style.outlineOffset) || parseFloat(style.outlineWidth);
     const box = element.getBoundingClientRect();
+    const hitInset = (target: Element, side: string) =>
+      parseFloat(
+        getComputedStyle(target).getPropertyValue(`--astryx-hit-inset-${side}`),
+      ) || 0;
+    const hit = {
+      top: box.top - hitInset(element, 'top'),
+      bottom: box.bottom + hitInset(element, 'bottom'),
+      left: box.left - hitInset(element, 'left'),
+      right: box.right + hitInset(element, 'right'),
+    };
+    // The next row's handle and the top of its target.
+    const next = row.nextElementSibling?.querySelector<HTMLElement>(
+      '[data-astryx-list-reorder]',
+    );
+    const nextTop =
+      next == null
+        ? Number.POSITIVE_INFINITY
+        : next.getBoundingClientRect().top - hitInset(next, 'top');
+    // A point in the hit layer outside the visible handle, above it.
+    const probe = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top - (box.top - hit.top) / 2,
+    );
     // The lines are the handle's ::before: one bar centred in it, and a
     // shadow of it on each side.
     const lines = getComputedStyle(element, '::before');
@@ -1576,6 +1611,10 @@ test('the handle is a 44 pt target whose ring clears its lines, and its row is n
     return {
       width: box.width,
       height: box.height,
+      hitHeight: hit.bottom - hit.top,
+      hitWidth: hit.right - hit.left,
+      gapToNext: nextTop - hit.bottom,
+      probeHits: probe === element,
       // The ring's inner edge to the lines, above and below.
       above: glyph.top - (box.top + inset),
       below: box.bottom - inset - glyph.bottom,
@@ -1583,10 +1622,19 @@ test('the handle is a 44 pt target whose ring clears its lines, and its row is n
       withoutHandle,
     };
   });
-  expect(geometry.width).toBeCloseTo(44, 0);
-  expect(geometry.height).toBeCloseTo(44, 0);
-  expect(geometry.above).toBeGreaterThanOrEqual(8);
-  expect(geometry.below).toBeGreaterThanOrEqual(8);
+  // A small control for every pointer, as on a desktop (no control grows for
+  // a finger).
+  expect(geometry.width).toBeLessThan(44);
+  expect(geometry.height).toBeLessThan(44);
+  // A finger's target: 44 pt, through the invisible hit layer, and it never
+  // reaches into the next handle's.
+  expect(geometry.hitHeight).toBeCloseTo(44, 0);
+  expect(geometry.hitWidth).toBeCloseTo(44, 0);
+  expect(geometry.gapToNext).toBeGreaterThanOrEqual(-0.5);
+  expect(geometry.probeHits).toBe(true);
+  // The ring clears the lines above and below.
+  expect(geometry.above).toBeGreaterThan(0);
+  expect(geometry.below).toBeGreaterThan(0);
   // The handle takes only its lines' height in the row's layout: the row is
   // as tall with it as without it.
   expect(geometry.withHandle).toBeCloseTo(geometry.withoutHandle, 1);
