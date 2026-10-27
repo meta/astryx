@@ -369,13 +369,17 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * scroller under it is at its edge and the finger pulls away from that
    * edge, the pan's own way (`spec:AST-094` FR19, DEC-18):
    * the browser would only rubber-band there. It still begins at its
-   * hysteresis; a move the content can still scroll stays the browser's.
+   * hysteresis; a move the content can still scroll stays the browser's,
+   * and so does every move while a second finger is down (a pinch).
    */
   protected override keepsTouch(touchId: number): boolean {
     const touch = this.touches.get(touchId);
     if (
       !this.scrollEdge ||
       this.state !== 'possible' ||
+      // A lone finger only: two fingers before a claim are the page's pinch
+      // (spec:AST-094 FR10).
+      this.touches.size !== 1 ||
       touch == null ||
       touch.pointerType !== 'touch' ||
       touch.takenByBrowser
