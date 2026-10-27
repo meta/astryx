@@ -8,7 +8,8 @@
  *   FR8): a held finger, a right click and Shift+F10 each open it once on a
  *   list row; its lift clicks nothing; a key focuses the first row; Escape
  *   returns focus to the row; a choice runs once and the row hears no click;
- *   the list keeps only its `li` rows; useContextMenu opens the same menu
+ *   the list keeps only its `li` rows; useContextMenu opens the same menu,
+ *   and its `menuContent` rows act once under a mouse and close the menu
  * @position Run with `pnpm test:interaction createContextMenu`
  */
 
@@ -85,7 +86,7 @@ test('a choice runs once and closes the menu, the row hears no click, and the li
     await page
       .getByTestId('headless-list')
       .evaluate(list => Array.from(list.children, child => child.localName)),
-  ).toEqual(['li', 'li', 'li']);
+  ).toEqual(['li', 'li', 'li', 'li']);
   await page.getByRole('menuitem', {name: 'Archive'}).click();
   await expect(page.getByRole('menu', {name: 'Inbox actions'})).toBeHidden();
   await expect(log(page)).toHaveText('open,archive,close');
@@ -100,4 +101,21 @@ test('useContextMenu opens the same menu from a component (spec:AST-107 FR8)', a
   await expect(page.getByRole('menu', {name: 'Sent actions'})).toBeVisible();
   await page.getByRole('menuitem', {name: 'Forward'}).click();
   await expect(log(page)).toHaveText('forward');
+});
+
+test("useContextMenu's menuContent rows act once under a mouse, and choosing one closes the menu (spec:AST-107 FR8)", async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  const at = await centerOf(page, 'hook-content-row');
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  const menu = page.getByRole('menu', {name: 'Archive actions'});
+  await expect(menu).toBeVisible();
+  await expect.poll(async () => focusedRole(page)).toBe('menuitem');
+  // A press and a release on the row: the release acts, and the browser's
+  // own click after it acts on nothing.
+  await page.getByRole('menuitem', {name: 'Restore'}).click();
+  await expect(menu).toBeHidden();
+  await page.waitForTimeout(300);
+  await expect(log(page)).toHaveText('restore');
 });

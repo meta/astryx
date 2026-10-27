@@ -8,9 +8,13 @@
  *   ReactNode `menuContent`
  * @output useContextMenu: the React wrapper over createContextMenu,
  *   returning `{open, close}` (spec:AST-107 FR8, FR6)
- * @position Public hook; it delegates entirely to the factory and has no
- *   behavior of its own. The menu renders in the factory's root with the
- *   caller's Core providers carried over (theme, layer, link, i18n)
+ * @position Public hook over the public factory: it hands createContextMenu
+ *   a `render` that portals `menuContent` into the menu's container, carries
+ *   the caller's Core providers (theme, layer, link, i18n) into the menu, and
+ *   passes later options through updateContextMenu. `menuContent` stays
+ *   rendered, in a root the hook owns, into a host the container adopts
+ *   while the menu is open, so its first enabled row is there when focus
+ *   starts; its rows read the menu's own row context, open state and layer
  */
 
 import {
@@ -20,19 +24,32 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from 'react';
+import {createPortal} from 'react-dom';
+import {createRoot} from 'react-dom/client';
+import {
+  DropdownMenuContext,
+  DropdownMenuRootOpenContext,
+} from '../DropdownMenu/DropdownMenuContext';
+import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {InternationalizationContext} from '../i18n/InternationalizationContext';
 import {LayerContext} from '../Layer/LayerContext';
 import {LinkContext} from '../Link/LinkContext';
 import {ThemeContext} from '../theme/useTheme';
 import type {ContextMenuOption} from './ContextMenu';
 import {
-  createInternalContextMenu,
-  type ContextMenuInternals,
+  bridgeContextMenu,
+  createContextMenu,
+  readRowsContext,
+  subscribeRowsContext,
+  updateContextMenu,
+  type ContextMenuController,
   type ContextMenuPoint,
-  type InternalContextMenuController,
+  type ContextMenuRowsContext,
+  type CreateContextMenuOptions,
 } from './createContextMenu';
 
 interface UseContextMenuSharedOptions {
@@ -42,6 +59,8 @@ interface UseContextMenuSharedOptions {
   isDisabled?: boolean;
   /** Called with true when the menu opens and false when it closes. */
   onOpenChange?: (isOpen: boolean) => void;
+  /** Where the menu appears, as ContextMenu's `presentation`. */
+  presentation?: AdaptivePresentation;
 }
 
 export type UseContextMenuOptions = UseContextMenuSharedOptions &
@@ -58,6 +77,104 @@ export interface UseContextMenuResult {
   close: () => void;
 }
 
+type Wrap = (menu: ReactNode) => ReactNode;
+
+interface RowsStore {
+  subscribe(listener: () => void): () => void;
+  get(): ContextMenuRowsContext | null;
+}
+
+/** `menuContent`, kept rendered into a host the menu's container adopts. */
+interface MenuContentPortal {
+  /** The factory's `render`: the container adopts the host while open. */
+  readonly render: (container: HTMLElement) => () => void;
+  /** Renders `content` with the caller's providers. */
+  draw(content: ReactNode, wrap: Wrap): void;
+  unmount(): void;
+}
+
+function createMenuContentPortal(doc: Document): MenuContentPortal {
+  const host = doc.createElement('div');
+  const root = createRoot(doc.createElement('div'));
+  let rows: ContextMenuRowsContext | null = null;
+  const listeners = new Set<() => void>();
+  const notify = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+  const store: RowsStore = {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    get: () => rows,
+  };
+  return {
+    render(container) {
+      container.append(host);
+      rows = readRowsContext(container);
+      const stop = subscribeRowsContext(container, () => {
+        rows = readRowsContext(container);
+        notify();
+      });
+      notify();
+      return () => {
+        stop();
+        rows = null;
+        notify();
+        host.remove();
+      };
+    },
+    draw(content, wrap) {
+      root.render(
+        createPortal(wrap(<MenuRows store={store}>{content}</MenuRows>), host),
+      );
+    },
+    unmount() {
+      root.unmount();
+      host.remove();
+    },
+  };
+}
+
+/**
+ * Gives `menuContent`'s rows what they read from inside the menu while it is
+ * open: its row context (a choice closes it, a sub-menu drills in), its open
+ * state and its layer (a flyout stacks above it).
+ */
+function MenuRows({store, children}: {store: RowsStore; children: ReactNode}) {
+  const rows = useSyncExternalStore(store.subscribe, store.get, store.get);
+  const callerLayer = use(LayerContext);
+  return (
+    <LayerContext value={rows?.layer ?? callerLayer}>
+      <DropdownMenuContext value={rows?.menu ?? null}>
+        <DropdownMenuRootOpenContext value={rows?.isOpen ?? false}>
+          {children}
+        </DropdownMenuRootOpenContext>
+      </DropdownMenuContext>
+    </LayerContext>
+  );
+}
+
+function factoryOptions(
+  options: UseContextMenuOptions,
+  onOpenChange: (isOpen: boolean) => void,
+  portal: MenuContentPortal | null,
+): CreateContextMenuOptions {
+  const shared = {
+    label: options.label,
+    isDisabled: options.isDisabled,
+    onOpenChange,
+    presentation: options.presentation,
+  };
+  return portal != null
+    ? {...shared, render: portal.render}
+    : {...shared, items: options.items ?? []};
+}
+
 /**
  * Attaches a context menu to the element `ref` points at (spec:AST-107 FR8):
  * it opens on that element's context request, and unmounting removes it.
@@ -70,8 +187,8 @@ export function useContextMenu(
   const layer = use(LayerContext);
   const link = use(LinkContext);
   const intl = use(InternationalizationContext);
-  const wrap = useCallback(
-    (menu: ReactNode): ReactNode => (
+  const wrap = useCallback<Wrap>(
+    menu => (
       <InternationalizationContext value={intl}>
         <ThemeContext value={theme}>
           <LayerContext value={layer}>
@@ -82,18 +199,29 @@ export function useContextMenu(
     ),
     [intl, theme, layer, link],
   );
-  const {menuContent, ...shared} = options;
-  const factoryOptions = menuContent === undefined ? options : shared;
-  const internals: ContextMenuInternals = useMemo(
-    () => ({reactContent: menuContent, wrap}),
-    [menuContent, wrap],
-  );
-  const latestRef = useRef({factoryOptions, internals});
-  const controllerRef = useRef<InternalContextMenuController | null>(null);
+  const hasContent = options.menuContent !== undefined;
+  const latestRef = useRef({options, wrap});
+  const controllerRef = useRef<ContextMenuController | null>(null);
+  const portalRef = useRef<MenuContentPortal | null>(null);
+  const handleOpenChange = useCallback((isOpen: boolean) => {
+    latestRef.current.options.onOpenChange?.(isOpen);
+  }, []);
 
   useLayoutEffect(() => {
-    latestRef.current = {factoryOptions, internals};
-    controllerRef.current?.update(factoryOptions, internals);
+    latestRef.current = {options, wrap};
+    const controller = controllerRef.current;
+    if (controller == null) {
+      return;
+    }
+    const portal = portalRef.current;
+    updateContextMenu(
+      controller,
+      factoryOptions(options, handleOpenChange, portal),
+    );
+    bridgeContextMenu(controller, wrap);
+    if (portal != null) {
+      portal.draw(options.menuContent, wrap);
+    }
   });
 
   useEffect(() => {
@@ -102,19 +230,26 @@ export function useContextMenu(
       return;
     }
     const latest = latestRef.current;
-    const controller = createInternalContextMenu(
+    const portal = hasContent
+      ? createMenuContentPortal(element.ownerDocument)
+      : null;
+    portal?.draw(latest.options.menuContent, latest.wrap);
+    const controller = createContextMenu(
       element,
-      latest.factoryOptions,
-      latest.internals,
+      factoryOptions(latest.options, handleOpenChange, portal),
     );
+    bridgeContextMenu(controller, latest.wrap);
     controllerRef.current = controller;
+    portalRef.current = portal;
     return () => {
       controller.destroy();
+      portal?.unmount();
       if (controllerRef.current === controller) {
         controllerRef.current = null;
+        portalRef.current = null;
       }
     };
-  }, [ref]);
+  }, [ref, hasContent, handleOpenChange]);
 
   return useMemo(
     () => ({

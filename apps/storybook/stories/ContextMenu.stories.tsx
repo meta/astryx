@@ -686,6 +686,7 @@ const headlessStyles = stylex.create({
 function HeadlessRows() {
   const plainRowRef = useRef<HTMLLIElement>(null);
   const hookRowRef = useRef<HTMLLIElement>(null);
+  const contentRowRef = useRef<HTMLLIElement>(null);
   const [log, setLog] = useState<ReadonlyArray<string>>([]);
   const record = (entry: string) => setLog(entries => [...entries, entry]);
   useEffect(() => {
@@ -707,6 +708,12 @@ function HeadlessRows() {
     label: 'Sent actions',
     items: [{label: 'Forward', onClick: () => record('forward')}],
   });
+  useContextMenu(contentRowRef, {
+    label: 'Archive actions',
+    menuContent: (
+      <ContextMenuItem label="Restore" onClick={() => record('restore')} />
+    ),
+  });
   return (
     <div>
       <ul {...stylex.props(headlessStyles.list)} data-testid="headless-list">
@@ -727,6 +734,13 @@ function HeadlessRows() {
           data-testid="hook-row"
           {...stylex.props(headlessStyles.row)}>
           Sent
+        </li>
+        <li
+          ref={contentRowRef}
+          tabIndex={0}
+          data-testid="hook-content-row"
+          {...stylex.props(headlessStyles.row)}>
+          Archive
         </li>
       </ul>
       <output data-testid="headless-log">{log.join(',')}</output>

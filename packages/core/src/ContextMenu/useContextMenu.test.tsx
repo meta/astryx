@@ -174,9 +174,10 @@ describe('useContextMenu', () => {
         screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
       ),
     );
-    await userEvent
-      .setup()
-      .click(screen.getByRole('menuitem', {name: 'Archive', hidden: true}));
+    // A key chooses the row: jsdom's pointer click lands on a row the close
+    // has already taken out of the page, which no browser does (the browser
+    // check is the interaction spec's).
+    await userEvent.setup().keyboard('{Enter}');
     expect(onArchive).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(isOpen()).toBe(false));
   });
