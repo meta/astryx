@@ -203,6 +203,43 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     );
   });
 
+  it('arms nothing else for a recognizer that takes only scroll input (no pointer types): where the primary pointer is fine its element gets the wheel listener alone, and no finger, mouse or pen starts it', () => {
+    const {content} = mount('<div id="content"></div>');
+    const added = vi.spyOn(content, 'addEventListener');
+    const pan = new PanGestureRecognizer({
+      direction: 'vertical',
+      allowedPointerTypes: [],
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(content, pan));
+    expect(
+      (added.mock.calls as unknown[][]).map(call => String(call[0])),
+    ).toEqual(['wheel']);
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      for (const [type, y] of [
+        ['pointerdown', 10],
+        ['pointermove', 40],
+        ['pointermove', 80],
+        ['pointerup', 80],
+      ] as const) {
+        content.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 7,
+            pointerType,
+            clientX: 10,
+            clientY: y,
+            buttons: type === 'pointerup' ? 0 : 1,
+          }),
+        );
+      }
+    }
+    expect(states).toEqual([]);
+  });
+
   it("takes no wheel for a pan that allows no scroll type, UIKit's default: its element gets no wheel listener, and the page scrolls", () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
