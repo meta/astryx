@@ -2947,20 +2947,26 @@ describe('Toast swipe dismissal under a finger', () => {
       move = touchEvent('touchmove', 140);
     });
     expect(move!.defaultPrevented).toBe(false);
+    act(() => {
+      touchEvent('touchend', 140);
+    });
     expect(onHide).not.toHaveBeenCalled();
 
     act(() => {
       touchEvent('touchstart', 100);
     });
-    Object.defineProperty(
-      (move = new Event('touchmove', {bubbles: true, cancelable: true})),
-      'changedTouches',
-      {value: [{identifier: 31, clientX: 80, clientY: 104}]},
-    );
+    // A sideways move lists every finger on the screen, as a browser's does.
+    const sideways = {identifier: 31, clientX: 80, clientY: 104};
+    move = new Event('touchmove', {bubbles: true, cancelable: true});
+    Object.defineProperty(move, 'touches', {value: [sideways]});
+    Object.defineProperty(move, 'changedTouches', {value: [sideways]});
     act(() => {
       visualToast.dispatchEvent(move);
     });
     expect(move.defaultPrevented).toBe(false);
+    act(() => {
+      touchEvent('touchend', 104);
+    });
 
     act(() => {
       touchEvent('touchstart', 100);
