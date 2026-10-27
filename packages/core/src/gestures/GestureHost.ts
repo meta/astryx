@@ -1267,7 +1267,13 @@ export class GestureHost {
       for (const [element, registration] of this.registry) {
         const consumer = registration.consumer;
         if (
-          registration.recognizers.some(recognizer => recognizer.isEnabled) ||
+          registration.recognizers.some(
+            recognizer =>
+              recognizer.isEnabled &&
+              // One that takes only scroll input has no press to arm.
+              (recognizer.allowedPointerTypes == null ||
+                recognizer.allowedPointerTypes.size > 0),
+          ) ||
           (consumer != null && consumer.isEnabled?.() !== false)
         ) {
           wanted.add(element);
