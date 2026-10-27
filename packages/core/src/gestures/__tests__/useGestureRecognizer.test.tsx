@@ -215,7 +215,7 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 6, x: 30, y: 0}, 32, true);
   });
 
-  it("attaches a recognizer that reads each event's pointer where the primary pointer is fine (spec:AST-057)", () => {
+  it('attaches a recognizer for every pointer: a mouse drag pans where the primary pointer is fine (spec:AST-094 FR43)', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -226,16 +226,30 @@ describe('useGestureRecognizer', () => {
           ref,
           () => new PanGestureRecognizer({direction: 'horizontal'}),
           onPan,
-          {perEventPointer: true},
         );
         return <div data-testid="surface" ref={ref} />;
       }
       const {getByTestId, unmount} = render(<Swipe />);
       const surface = getByTestId('surface');
-      touch('touchstart', surface, {id: 9, x: 0, y: 0}, 0);
-      touch('touchmove', surface, {id: 9, x: 30, y: 0}, 16);
+      const mouse = (type: string, x: number, time: number) => {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 9,
+          pointerType: 'mouse',
+          clientX: x,
+          clientY: 0,
+          button: 0,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        surface.dispatchEvent(event);
+      };
+      mouse('pointerdown', 0, 0);
+      mouse('pointermove', 30, 16);
       expect(onPan).toHaveBeenCalled();
-      touch('touchend', surface, {id: 9, x: 30, y: 0}, 32, true);
+      mouse('pointerup', 30, 32);
       unmount();
       expect(warn).not.toHaveBeenCalled();
     } finally {
@@ -324,13 +338,8 @@ describe('useGestureRecognizer', () => {
     expect(states).toEqual(['ended']);
   });
 
-  it('attaches an action group, which the host serves under a fine pointer: a mouse press on one of its actions reaches the recognizer (family:action-groups FR5)', () => {
-    // A document whose host was never told the pointer is coarse (jsdom's
-    // frames have no matchMedia): a fine primary pointer.
-    const frame = document.createElement('iframe');
-    document.body.append(frame);
-    const frameDocument = frame.contentDocument as Document;
-    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+  it('serves a mouse press under a fine pointer, on an action group or not (family:action-groups FR5; spec:AST-094 FR43)', () => {
+    const primary = pointerQuery(false);
     const states: string[] = [];
     function Group({actionGroup}: {actionGroup: boolean}) {
       const ref = useRef<HTMLDivElement>(null);
@@ -355,7 +364,7 @@ describe('useGestureRecognizer', () => {
         ['pointerdown', 1],
         ['pointerup', 0],
       ] as const) {
-        const event = new frameWindow.PointerEvent(type, {
+        const event = new PointerEvent(type, {
           bubbles: true,
           cancelable: true,
           composed: true,
@@ -373,20 +382,19 @@ describe('useGestureRecognizer', () => {
     try {
       const {getByTestId, rerender, unmount} = render(
         <Group actionGroup={false} />,
-        {container: frameDocument.body, baseElement: frameDocument.body},
       );
       const action = getByTestId('action');
-      // Not a group: under a fine pointer the host serves nothing.
+      // Not a group: served too, as every attachment (FR43).
       press(action, 1, 0);
-      expect(states).toEqual([]);
+      expect(states).toEqual(['ended']);
       act(() => {
         rerender(<Group actionGroup />);
       });
       press(action, 2, 1000);
-      expect(states).toEqual(['ended']);
+      expect(states).toEqual(['ended', 'ended']);
       unmount();
     } finally {
-      frame.remove();
+      primary.restore();
     }
   });
 
@@ -621,7 +629,7 @@ describe('usePressTracker', () => {
     expect(events).toEqual(seenEvents);
   });
 
-  it('attaches a per-event press tracker where the primary pointer is fine, which takes no mouse press there, beside one that stays inactive', () => {
+  it('gives a press tracker a mouse press where the primary pointer is fine, with or without perEventPointer (spec:AST-094 FR43, DEC-21)', () => {
     const pointer = pointerQuery(false);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -671,14 +679,13 @@ describe('usePressTracker', () => {
       boundsOf(stepper, 44, 44);
       mouse('pointerdown', stepper, 1);
       mouse('pointerup', stepper, 1);
-      // Its press feedback is for a finger (spec:AST-094 FR19): a mouse
-      // keeps the desktop's handling.
-      expect(held).toEqual([]);
+      // A mouse press is a press (DEC-21).
+      expect(held).toEqual(['touchDown', 'touchUpInside']);
       const other = getByTestId('other');
       boundsOf(other, 44, 44);
       mouse('pointerdown', other, 2);
       mouse('pointerup', other, 2);
-      expect(inactive).toEqual([]);
+      expect(inactive).toEqual(['touchDown', 'touchUpInside']);
     } finally {
       warn.mockRestore();
       pointer.restore();
