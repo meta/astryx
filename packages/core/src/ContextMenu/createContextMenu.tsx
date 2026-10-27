@@ -24,10 +24,12 @@
  *
  * The options mean what ContextMenu's props of the same names mean. The menu
  * is ContextMenu's: its rows, keys, typeahead, sub-menus, dismissal and
- * focus return. It lives in a container at the end of the body that carries
- * the theme attributes of the element's themed ancestor, so the element's
- * own markup is untouched (a `li` row keeps its list valid) and an event
- * inside the menu never passes through the element.
+ * focus return. It lives in a container that carries the theme attributes of
+ * the element's themed ancestor, at the end of the element's nearest dialog
+ * or popover, or of the body: the element's own markup is untouched (a `li`
+ * row keeps its list valid), an event inside the menu never passes through
+ * the element, a modal dialog around the element leaves the menu usable, and
+ * opening it leaves an open popover around the element open.
  */
 
 import {use, useLayoutEffect, useRef, useState, type ReactNode} from 'react';
@@ -196,6 +198,18 @@ function mirrorTheme(host: HTMLElement, element: Element): void {
 }
 
 /**
+ * Where the menu's container belongs: the end of the element's nearest
+ * dialog or popover (a modal dialog leaves everything outside it inert, and a
+ * menu outside an open popover would dismiss it), or of the body.
+ */
+function containerParentFor(element: Element): Element {
+  return (
+    element.parentElement?.closest('dialog, [popover]') ??
+    element.ownerDocument.body
+  );
+}
+
+/**
  * The `render` option's content: its callback fills a container, and the
  * container's rows context is published for content a React caller portals
  * into it.
@@ -310,12 +324,21 @@ export function createContextMenu(
   let isDestroyed = false;
   let detachRequest: () => void = () => {};
 
-  // A child of the body, not of the element: an event inside the menu never
-  // passes through the element on its way to the document.
+  // Not a child of the element: an event inside the menu never passes
+  // through the element on its way to the document.
   const host = doc.createElement('div');
   host.setAttribute(dataAttr('context-menu-host'), '');
-  mirrorTheme(host, element);
-  doc.body.append(host);
+  // Each open first moves the container to where the element is now: the
+  // end of its dialog or popover, or of the body (containerParentFor). A
+  // shown menu stays put, since moving a node hides the popovers in it.
+  const placeHost = () => {
+    mirrorTheme(host, element);
+    const parent = containerParentFor(element);
+    if (parent.lastElementChild !== host) {
+      parent.append(host);
+    }
+  };
+  placeHost();
   const root: Root = createRoot(host);
 
   const onOpenChange = (next: boolean) => {
@@ -344,6 +367,9 @@ export function createContextMenu(
   const forward = (request: Forwarded['request']) => {
     if (isDestroyed) {
       return;
+    }
+    if (request !== 'close' && !isOpen) {
+      placeHost();
     }
     seq += 1;
     forwarded = {seq, request};
