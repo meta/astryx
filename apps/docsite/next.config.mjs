@@ -9,13 +9,8 @@
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
-import {existsSync, readFileSync, readdirSync, realpathSync} from 'node:fs';
-import {createRequire} from 'node:module';
+import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolve} from 'node:path';
-
-const coreInternalModules = createRequire(import.meta.url)(
-  '../../scripts/core-internal-modules.cjs',
-);
 
 const playgroundCookieCompatibility = readFileSync(
   resolve(
@@ -161,28 +156,6 @@ const nextConfig = {
         {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
       ];
     }
-    // Lab's build imports core's internal motion and gesture modules by their
-    // module paths, which core's "exports" do not list. Resolve each to the
-    // file core's own built components import, so a page keeps one gesture
-    // host and one animator per element.
-    const coreDir = realpathSync(
-      resolve(import.meta.dirname, 'node_modules/@astryxdesign/core'),
-    );
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        coreInternalModules.CORE_INTERNAL_SPECIFIER,
-        resource => {
-          const file = coreInternalModules.resolveCoreInternal(
-            resource.request,
-            {coreDir},
-          );
-          if (file != null) {
-            resource.request = file;
-          }
-        },
-      ),
-    );
-
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
     const themesDir = resolve(import.meta.dirname, '../../packages/themes');

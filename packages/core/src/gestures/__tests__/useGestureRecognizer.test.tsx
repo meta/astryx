@@ -324,6 +324,72 @@ describe('useGestureRecognizer', () => {
     expect(states).toEqual(['ended']);
   });
 
+  it('attaches an action group, which the host serves under a fine pointer: a mouse press on one of its actions reaches the recognizer (family:action-groups FR5)', () => {
+    // A document whose host was never told the pointer is coarse (jsdom's
+    // frames have no matchMedia): a fine primary pointer.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    const states: string[] = [];
+    function Group({actionGroup}: {actionGroup: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        recognizer => {
+          states.push(recognizer.state);
+        },
+        {actionGroup},
+      );
+      return (
+        <div data-testid="group" ref={ref}>
+          <button data-testid="action" type="button">
+            OK
+          </button>
+        </div>
+      );
+    }
+    const press = (target: Element, pointerId: number, time: number) => {
+      for (const [type, buttons] of [
+        ['pointerdown', 1],
+        ['pointerup', 0],
+      ] as const) {
+        const event = new frameWindow.PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId,
+          pointerType: 'mouse',
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          buttons,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        target.dispatchEvent(event);
+      }
+    };
+    try {
+      const {getByTestId, rerender, unmount} = render(
+        <Group actionGroup={false} />,
+        {container: frameDocument.body, baseElement: frameDocument.body},
+      );
+      const action = getByTestId('action');
+      // Not a group: under a fine pointer the host serves nothing.
+      press(action, 1, 0);
+      expect(states).toEqual([]);
+      act(() => {
+        rerender(<Group actionGroup />);
+      });
+      press(action, 2, 1000);
+      expect(states).toEqual(['ended']);
+      unmount();
+    } finally {
+      frame.remove();
+    }
+  });
+
   it('attaches nothing while disabled: no touch-action, no gesture (FR24)', async () => {
     const states: string[] = [];
     const {getByTestId, rerender} = render(
