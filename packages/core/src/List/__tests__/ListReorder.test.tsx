@@ -561,17 +561,21 @@ describe('List reorderable', () => {
     handle.focus();
     await user.keyboard(' ');
     // No line before a move.
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
     await user.keyboard('{ArrowDown}');
     layOut(list);
     await user.keyboard('{ArrowDown}');
     expect(labels()).toEqual(['Sent', 'Drafts', 'Inbox']);
-    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
-    expect(line).not.toBeNull();
-    expect(line).not.toHaveAttribute('hidden');
-    expect(line).toHaveAttribute('aria-hidden', 'true');
+    // The line is the list's own pseudo-element, placed by its custom
+    // properties: no element joins the list (component-style-authoring INV7).
+    expect(list).toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toMatch(
+      /px$/,
+    );
+    expect(list.children).toHaveLength(3);
     await user.keyboard('{Escape}');
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toBe('');
   });
 
   it('moves nothing with the arrows outside reorder mode', async () => {
@@ -1042,6 +1046,7 @@ describe('List reorderable', () => {
     const list = screen.getByRole('list');
     layOut(list);
     const [a, b, c] = Array.from(list.querySelectorAll('li'));
+    const restCount = a.querySelectorAll('*').length;
     mouseDrag(handleOf('A'), 322, 322 + 70);
     // The rows the drag passes stay where they are.
     for (const row of [a, b, c]) {
@@ -1060,11 +1065,21 @@ describe('List reorderable', () => {
     expect(preview!.style.opacity).toBe(a.style.opacity);
     expect(preview!.style.boxShadow).toBe('none');
     expect(preview!.style.translate).toBe('0px 70px');
-    // The line sits after C, where A would land (position 2 of 0-2).
-    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
-    expect(line).not.toBeNull();
-    expect(line).not.toHaveAttribute('hidden');
-    expect(line!.style.translate).toBe('0px 131px');
+    // The preview, the one transient copy, sits right before its source: its
+    // counter reads the source's number in a numbered list, the source counts
+    // nothing while it is picked up, and the last row keeps :last-child.
+    expect(preview!.nextElementSibling).toBe(a);
+    expect(a.style.counterIncrement).toBe('none');
+    // The line sits after C, where A would land (position 2 of 0-2): the
+    // list's own pseudo-element, so the list holds the rows and the preview
+    // only (component-style-authoring INV7), and the picked-up row holds what
+    // it held at rest (spec:AST-103 FR5).
+    expect(list).toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toBe(
+      '131px',
+    );
+    expect(list.children).toHaveLength(4);
+    expect(a.querySelectorAll('*')).toHaveLength(restCount);
     // The drop rearranges the rows and takes the preview and line away.
     act(() => {
       fireEvent.pointerUp(handleOf('A'), {...MOUSE, clientY: 322 + 70});
@@ -1072,8 +1087,11 @@ describe('List reorderable', () => {
     expect(onReorder).toHaveBeenCalledWith({key: 'A', to: 2});
     expect(labels()).toEqual(['B', 'C', 'A']);
     expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
+    expect(list.children).toHaveLength(3);
+    expect(a.querySelectorAll('*')).toHaveLength(restCount);
     expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+    expect(a.style.counterIncrement).toBe('');
   });
 
   it('announces Done when a drag ends reorder mode, keeping its moves', async () => {
@@ -1107,8 +1125,9 @@ describe('List reorderable', () => {
       fireEvent.pointerCancel(handleOf('A'), {...MOUSE, clientY: 322 + 70});
     });
     expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
     expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+    expect(a.style.counterIncrement).toBe('');
     expect(onReorder).not.toHaveBeenCalled();
     expect(labels()).toEqual(['A', 'B', 'C']);
   });

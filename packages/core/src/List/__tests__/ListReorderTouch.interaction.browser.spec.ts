@@ -191,14 +191,20 @@ test.describe('under a finger', () => {
       const preview = document.querySelector<HTMLElement>(
         '[data-astryx-reorder-preview]',
       );
-      const line = document.querySelector<HTMLElement>(
-        '[data-astryx-reorder-line]',
-      );
+      // The insertion line is the list's own ::after (no element joins the
+      // list), placed by a translate from the list's padding box.
+      const list = document.querySelector<HTMLElement>('#storybook-root ul');
+      const line = list == null ? null : getComputedStyle(list, '::after');
+      const lineY =
+        line == null ? Number.NaN : parseFloat(line.translate.split(' ')[1]);
       return {
         sourceOpacity: source == null ? null : getComputedStyle(source).opacity,
         previewTop: preview?.getBoundingClientRect().top ?? null,
-        lineShown: line != null && !line.hidden,
-        lineTop: line?.getBoundingClientRect().top ?? null,
+        lineShown: line != null && line.display !== 'none',
+        lineTop:
+          list == null
+            ? null
+            : list.getBoundingClientRect().top + list.clientTop + lineY,
       };
     });
     expect(Number(state.sourceOpacity)).toBeLessThan(1);

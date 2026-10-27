@@ -194,6 +194,44 @@ const styles = stylex.create({
  */
 export const reorderRowStyle = ownRingContainerStyles.focusWithin;
 
+/** The insertion line's thickness, px (the engine centres it on a gap). */
+export const INSERTION_LINE_THICKNESS = 2;
+
+const listStyles = stylex.create({
+  // The insertion line (design:ordered-collection-reordering): the list's own
+  // pseudo-element, decoration with no semantic role, so no element joins the
+  // list (architecture:component-style-authoring INV7). The engine shows it
+  // with `data-astryx-reorder-line` on the list and places it with the list's
+  // custom properties: its top (`--astryx-reorder-line-y`, a compositor
+  // translate) and its inline start and size (the dragged row's).
+  list: {
+    '::after': {
+      content: '""',
+      display: {
+        default: 'none',
+        '[data-astryx-reorder-line]': 'block',
+      },
+      position: 'absolute',
+      top: 0,
+      insetInlineStart: 'var(--astryx-reorder-line-start, 0px)',
+      inlineSize: 'var(--astryx-reorder-line-size, 0px)',
+      blockSize: INSERTION_LINE_THICKNESS,
+      borderRadius: INSERTION_LINE_THICKNESS / 2,
+      backgroundColor: {
+        default: colorVars['--color-accent'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      forcedColorAdjust: 'none',
+      translate: '0 var(--astryx-reorder-line-y, 0px)',
+      pointerEvents: 'none',
+      zIndex: 2,
+    },
+  },
+});
+
+/** The style of a reorderable list (List applies it): its insertion line. */
+export const reorderListStyle = listStyles.list;
+
 /**
  * The text a label shows: its strings and numbers, through its elements'
  * children, with runs of space collapsed. Empty when it shows none (an icon,
