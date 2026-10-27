@@ -66,6 +66,7 @@ import {
   type ProgressChannel,
 } from './progress';
 import type {SpringDescription} from './spring';
+import {resolveMotion} from './resolveMotion';
 
 /**
  * A box in viewport px.
@@ -427,7 +428,7 @@ function defaultNow(): number {
  */
 export function createRectMorph(
   element: HTMLElement,
-  options: Pick<AnimatorOptions, 'now'> = {},
+  options: Pick<AnimatorOptions, 'now' | 'requestFrame'> = {},
 ): RectMorph {
   const now = options.now ?? defaultNow;
   const animator = createAnimator(element, options);
@@ -494,21 +495,39 @@ export function createRectMorph(
     }
   };
 
-  const playOptions = (play: RectMorphPlayOptions): AnimateOptions => ({
+  // A path with no opacity of its own gives the animator's Reduced Motion
+  // cross-fade nothing to read, and it would start the motion on the source
+  // rect and dip. Such a path says which way it goes, so the cross-fade
+  // lands at rest on a present and fades out in place on a dismissal
+  // (design:reduced-motion); a caller's own `crossfadeAs` still wins.
+  const playOptions = (
+    play: RectMorphPlayOptions,
+    path: MorphPath,
+    direction: 'entrance' | 'exit' = 'entrance',
+  ): AnimateOptions => ({
     ...(play.touchRelease != null ? {touchRelease: play.touchRelease} : null),
-    ...(play.crossfadeAs != null ? {crossfadeAs: play.crossfadeAs} : null),
+    ...(play.crossfadeAs != null
+      ? {crossfadeAs: play.crossfadeAs}
+      : path.opacityAt == null
+        ? {crossfadeAs: direction}
+        : null),
   });
 
+  // The springs go through `resolveMotion` on the element that plays them.
+  // While the touch motion roles stay internal (spec:AST-094 DEC-11), a role
+  // resolves to its table value and reads no style, so the morph plays the
+  // table's spring as given, and a caller's bare spring likewise.
   const curvesFor = (
+    on: Element,
     path: MorphPath,
     spring: SpringDescription,
     play: RectMorphPlayOptions,
     velocity: number,
   ) => {
-    const progress = progressCurve(spring, {velocity});
+    const progress = progressCurve(resolveMotion(on, spring), {velocity});
     const fade =
       play.fadeSpring != null
-        ? progressCurve(play.fadeSpring, {velocity})
+        ? progressCurve(resolveMotion(on, play.fadeSpring), {velocity})
         : progress;
     return morphCurves(path, progress, fade);
   };
@@ -538,8 +557,8 @@ export function createRectMorph(
     element.style.setProperty('transform-origin', '0px 0px');
     animator.set(startValues(start, opacity));
     const handle = animator.play(
-      curvesFor(start, spring, play, velocity),
-      playOptions(play),
+      curvesFor(element, start, spring, play, velocity),
+      playOptions(play, start),
     );
     presenting = handle;
     void handle.finished.then(done => {
@@ -565,7 +584,16 @@ export function createRectMorph(
     const velocity =
       play.velocity ??
       presentedProgressVelocity(from.animator, channelsOf(back), at);
-    endExit();
+    // The same copy handed again continues on it: it keeps its animator, and
+    // its release runs once, when the dismissal still running ends. Any other
+    // target ends the dismissal in flight first.
+    const continuing =
+      exiting != null && exiting.target === target ? exiting : null;
+    if (continuing != null) {
+      exiting = null;
+    } else {
+      endExit();
+    }
     presenting = null;
     const onElement = target === element;
     if (onElement) {
@@ -575,13 +603,15 @@ export function createRectMorph(
       // The element is hidden as it closes: leave it as laid out.
       restoreElement();
     }
-    const closing = onElement ? animator : createAnimator(target, options);
+    const closing = onElement
+      ? animator
+      : (continuing?.animator ?? createAnimator(target, options));
     target.style.setProperty('transform-origin', '0px 0px');
     // The copy starts as the element shows now, whatever its clone kept.
     closing.set(startValues(back, opacity));
     const handle = closing.play(
-      curvesFor(back, spring, play, velocity),
-      playOptions(play),
+      curvesFor(target, back, spring, play, velocity),
+      playOptions(play, back, 'exit'),
     );
     const current = {
       target,

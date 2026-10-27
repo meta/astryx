@@ -1,20 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file ContextMenuTouchLayerPending.test.tsx
- * @input vitest (jsdom), Testing Library, ContextMenu, a module mock whose
- *   touch layer never finishes loading
- * @output Checks that a finger held before the touch layer attaches still
- *   opens the menu, through today's 500 ms long press
- * @position Testing for ContextMenu.tsx and lazyContextMenuTouchLayer.ts
+ * @file ContextMenuTouchLayerStatic.test.tsx
+ * @input vitest (jsdom), Testing Library, ContextMenu under a coarse pointer
+ * @output Checks that a finger landing on the first render already runs
+ *   UIKit's timeline: the touch layer is part of ContextMenu, not a load away
+ * @position Testing for ContextMenu.tsx and ContextMenuTouchLayer.tsx
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeAll, beforeEach, expect, it, vi} from 'vitest';
 import type {ContextMenu as ContextMenuComponent} from './ContextMenu';
-
-// The layer's module never arrives: the page a slow network gives a finger.
-vi.mock('./ContextMenuTouchLayer', async () => new Promise(() => {}));
 
 let ContextMenu: typeof ContextMenuComponent;
 
@@ -46,7 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('a finger held before the touch layer attaches still opens the menu at 500 ms', () => {
+it('a finger that lands on the first render runs UIKit’s timeline: no menu at 500 ms, the menu at 735 ms', () => {
   vi.useFakeTimers();
   render(
     <ContextMenu items={[{label: 'Item 1'}]} data-testid="touch">
@@ -54,16 +50,21 @@ it('a finger held before the touch layer attaches still opens the menu at 500 ms
     </ContextMenu>,
   );
   const trigger = screen.getByTestId('touch');
+  // The press recognizer is on the trigger from the first commit.
+  expect(trigger).toHaveAttribute('data-astryx-pressable');
+  fireEvent.pointerDown(trigger, {
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: 20,
+    clientY: 20,
+  });
   fireEvent.touchStart(trigger, {
     touches: [{identifier: 1, clientX: 20, clientY: 20}],
   });
   act(() => {
-    vi.advanceTimersByTime(499);
+    vi.advanceTimersByTime(500);
   });
+  // Today's 500 ms long press never runs under the touch model.
   expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
-  act(() => {
-    vi.advanceTimersByTime(1);
-  });
-  expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
-  fireEvent.touchEnd(trigger, {touches: []});
 });

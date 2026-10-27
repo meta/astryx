@@ -209,6 +209,23 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
+test('a finger that lands as soon as the card shows gets UIKit’s timeline, however slowly scripts arrive: no menu at 500 ms, the menu at 735 ms', async ({
+  page,
+}) => {
+  // A slow phone network: a touch layer fetched on its own would arrive 8 s
+  // after the page.
+  await page.route(/ContextMenuTouchLayer[^/]*\.js/u, async route => {
+    await new Promise(resolve => setTimeout(resolve, 8000));
+    await route.continue();
+  });
+  const {driver, center} = await openTouchStory(page);
+  await driver.play(hold(center, menuDisplayMs + 200));
+  const start = await touchStartedAt(page);
+  const shown = await menuShownAt(page);
+  expect(shown, 'the menu never showed').not.toBeNull();
+  expect((shown as number) - start).toBeGreaterThanOrEqual(menuDisplayMs);
+});
+
 test('with presentation="popover" a finger keeps today’s long press: the menu at 500 ms, with no growth and no iOS timeline', async ({
   page,
 }) => {

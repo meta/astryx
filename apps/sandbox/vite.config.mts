@@ -15,7 +15,6 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import stylexResolution from '../../scripts/stylex-module-resolution.cjs';
-import coreInternalModules from '../../scripts/core-internal-modules.cjs';
 import {categories} from './src/app/sandboxPages';
 import {
   discoverRoutes,
@@ -33,29 +32,6 @@ let routes = discoverRoutes(
   path.join(appDir, 'src/app'),
   categories.map(category => category.slug),
 );
-
-/**
- * Lab's build imports core's internal motion and gesture modules by their
- * module paths, which core's `exports` do not list. Resolve each to the file
- * core's own built components import (its source under ASTRYX_SOURCE), so the
- * page keeps one gesture host and one animator per element.
- */
-function coreInternalModulePaths(): Plugin {
-  const coreDir = fs.realpathSync(
-    path.join(appDir, 'node_modules/@astryxdesign/core'),
-  );
-  const source = process.env.ASTRYX_SOURCE === '1';
-  return {
-    name: 'sandbox-core-internal-modules',
-    enforce: 'pre',
-    resolveId(specifier) {
-      return coreInternalModules.resolveCoreInternal(specifier, {
-        coreDir,
-        source,
-      });
-    },
-  };
-}
 
 function staticRoutes(): Plugin {
   const id = '\0virtual:sandbox-routes';
@@ -236,7 +212,6 @@ export default defineConfig({
         ],
       },
     }),
-    coreInternalModulePaths(),
     staticRoutes(),
   ],
   resolve: {
