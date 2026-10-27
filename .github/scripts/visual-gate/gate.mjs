@@ -58,6 +58,7 @@ import {
   resolvePrVisualTotalShotLimit,
   storiesInPackages,
   summarizeBaselineAccounting,
+  visualComponentScope,
   withThemeMetadata,
 } from './lib/plan.mjs';
 import {renderReport} from './lib/report.mjs';
@@ -99,14 +100,25 @@ const sample = flag('sample') ? Number(flag('sample')) : null;
 /** Restrict the plan to story ids containing any of these — for debugging a shot, never for a gate run. */
 const only = (flag('only') ?? '').split(',').filter(Boolean);
 /** For the `component` tier: the components a PR touched. */
-const components = (flag('components') ?? '').split(',').filter(Boolean);
+let components = (flag('components') ?? '').split(',').filter(Boolean);
+/**
+ * For the `component` tier: the folders the touched modules reach (reverse
+ * dependents, spec:AST-030 FR13), audited where they have a stable story.
+ */
+const dependents = (flag('dependents') ?? '').split(',').filter(Boolean);
+/**
+ * Exit code that asks the caller for the whole plan instead: nothing the scope
+ * reaches has a stable story. An over-budget focused plan writes the
+ * `skipped` verdict, which the workflow also answers with the whole plan.
+ */
+const BROADEN_EXIT_CODE = 3;
 /** For the `theme-matrix` tier: only these shipped themes changed. */
 const matrixThemes = (flag('themes') ?? '').split(',').filter(Boolean);
 const explicitMaxShots = has('max-shots') ? flag('max-shots') : null;
 if (has('max-shots') && explicitMaxShots === undefined) {
   throw new Error('--max-shots requires a value.');
 }
-const maxShots = resolvePrVisualTotalShotLimit({
+let maxShots = resolvePrVisualTotalShotLimit({
   explicitMaxShots,
   components,
   matrixThemes,
@@ -130,6 +142,7 @@ if (
     has('no-scout') ||
     planFile ||
     components.length ||
+    dependents.length ||
     matrixThemes.length ||
     only.length ||
     sample)
@@ -227,6 +240,27 @@ async function plan({scoutOnly = false} = {}) {
     config.defaultTheme,
   );
   const themeStories = baselineVisualStories(stories, baselineManifest);
+  if (dependents.length > 0) {
+    const scope = visualComponentScope(stories, components, dependents);
+    if (scope.dropped.length > 0) {
+      console.log(`Reverse dependents with no stable story: ${scope.dropped.join(', ')}`);
+    }
+    components = scope.components;
+    if (components.length === 0) {
+      // Nothing the scope reaches has a stable story: the caller runs the
+      // whole plan rather than an empty one.
+      console.log('No touched component or reverse dependent has a stable story; asking for the whole plan.');
+      process.exit(BROADEN_EXIT_CODE);
+    }
+    maxShots = resolvePrVisualTotalShotLimit({
+      explicitMaxShots,
+      components,
+      matrixThemes,
+      tiers,
+      configuredLimit: config.prVisualShotLimit,
+      safetyLimit: config.visualPlanSafetyLimit,
+    });
+  }
 
   let observations;
   const scouts =
