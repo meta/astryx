@@ -7,15 +7,7 @@
     "declaration": true,
     "declarationMap": true,
     "emitDeclarationOnly": true,
-    "sourceMap": false,
-    "paths": {
-      "@astryxdesign/core/motion/*": ["../core/dist/motion/*"],
-      "@astryxdesign/core/gestures": ["../core/dist/gestures/index"],
-      "@astryxdesign/core/gestures/*": ["../core/dist/gestures/*"],
-      "@astryxdesign/core/utils/touchPresentation": [
-        "../core/dist/utils/touchPresentation"
-      ]
-    }
+    "sourceMap": false
   },
   "include": ["src"],
   "exclude": [
