@@ -48,6 +48,13 @@ export interface UseGestureRecognizerOptions {
    * host's AttachOptions. @default false
    */
   perEventPointer?: boolean;
+  /**
+   * The element is an action group, sibling actions a held pointer slides
+   * across (`family:action-groups` FR5): the host serves it where the
+   * primary pointer is fine too (`AttachOptions.actionGroup`).
+   * @default false
+   */
+  actionGroup?: boolean;
 }
 
 /**
@@ -109,6 +116,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
     isEnabled = true,
     manageStyle = true,
     perEventPointer = false,
+    actionGroup = false,
   } = options;
   const isUnmountedRef = useIsUnmountedRef();
 
@@ -154,7 +162,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
       const detach = getGestureHost(element.ownerDocument).attach(
         element,
         recognizer,
-        {manageStyle, perEventPointer},
+        {manageStyle, perEventPointer, actionGroup},
       );
       return () => {
         syncingDepth += 1;
@@ -165,7 +173,7 @@ export function useGestureRecognizer<R extends GestureRecognizer>(
         }
       };
     },
-    `${manageStyle}:${perEventPointer}:${isEnabled}`,
+    `${manageStyle}:${perEventPointer}:${isEnabled}:${actionGroup}`,
   );
 
   return recognizer;
