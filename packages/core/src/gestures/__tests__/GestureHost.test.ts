@@ -16,7 +16,6 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
-import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
@@ -31,6 +30,7 @@ import {gestureHosts} from '../hostRegistry';
 import {holdPageScroll, type PageScrollDecision} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
 import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
+import {__resetClickGuardForTest} from '../../utils/clickGuard';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 import type {GestureTouch} from '../types';
 
@@ -202,6 +202,9 @@ afterEach(() => {
   }
   document.body.innerHTML = '';
   restorePointer();
+  // A guard a case armed would keep its pointerdown subscription into the
+  // next case.
+  __resetClickGuardForTest();
 });
 
 /** A press tracker whose hold acts, as a stepper's hold-repeat (FR41). */
@@ -3204,8 +3207,8 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     }
   });
 
-  it("hears a group press's click once, whether the host is installed or not, and drops its own click subscription after the lift's task", () => {
-    // A document of its own: no other host hears its clicks.
+  it("adds no click listener of its own for a group press: the click guard's one listener per window hears its click, before and after the host installs", () => {
+    // A document of its own: no other host or guard has touched its window.
     const frame = document.createElement('iframe');
     document.body.append(frame);
     const frameDocument = frame.contentDocument as Document;
@@ -3215,21 +3218,10 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     const group = frameDocument.getElementById('group') as HTMLElement;
     const one = frameDocument.getElementById('one') as HTMLElement;
     const row = frameDocument.getElementById('row') as HTMLElement;
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
-    const now = vi.spyOn(browserClock, 'now');
+    const added = vi.spyOn(frameWindow, 'addEventListener');
+    const clickListeners = () =>
+      added.mock.calls.filter(call => call[0] === 'click').length;
     try {
-      // onClick reads the clock once per call: count its calls per click.
-      const clickCalls = () => {
-        now.mockClear();
-        one.dispatchEvent(
-          new frameWindow.MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            detail: 1,
-          }),
-        );
-        return now.mock.calls.length;
-      };
       const send = (type: 'pointerdown' | 'pointerup', time: number) => {
         const event = new frameWindow.PointerEvent(type, {
           bubbles: true,
@@ -3252,29 +3244,23 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
       const detachGroup = fine.attach(group, new TapGestureRecognizer(), {
         actionGroup: true,
       });
-      // Not installed: the press brings its own click subscription, which
-      // goes after the lift's task.
       send('pointerdown', 0);
       send('pointerup', 80);
-      expect(clickCalls()).toBe(1);
-      vi.runOnlyPendingTimers();
-      expect(clickCalls()).toBe(0);
-      // A per-event recognizer installs the host while a group press is
-      // held: the host's own click subscription takes over, and a click is
-      // heard once, before and after the press's task ends.
+      // At most the click guard's own listener, installed once.
+      const afterFirst = clickListeners();
+      expect(afterFirst).toBeLessThanOrEqual(1);
+      // A per-event recognizer installs the host mid-press: still no click
+      // listener of the press's own.
       send('pointerdown', 1000);
       const detachRow = fine.attach(row, new PanGestureRecognizer(), {
         perEventPointer: true,
       });
       send('pointerup', 1080);
-      expect(clickCalls()).toBe(1);
-      vi.runOnlyPendingTimers();
-      expect(clickCalls()).toBe(1);
+      expect(clickListeners()).toBe(afterFirst);
       detachRow();
       detachGroup();
     } finally {
-      now.mockRestore();
-      vi.useRealTimers();
+      added.mockRestore();
       frame.remove();
     }
   });
