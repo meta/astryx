@@ -7,19 +7,19 @@
  *   watchCoarsePointer: whether the primary pointer is coarse, and when it
  *   changes
  * @position The coarse-pointer gate of packages/core/src/gestures and of
- *   the press controller (utils/pressFeedback.ts): touch-only work registers
- *   only while it holds
+ *   the press controller (pressFeedback.ts): touch-only work registers only
+ *   while it holds
  *
  * Touch work runs only where the primary pointer is coarse; where it is
  * fine, no recognizer attaches and no touch-only listener is registered, so
  * a finger on a touchscreen whose primary pointer is fine gets the browser's
  * defaults (`spec:AST-094` FR19, FR24). The query is TOUCH_QUERY
- * (utils/touchPresentation.ts), spelled here because that module brings
+ * (touchPresentation.ts), spelled here because that module brings
  * React; a test keeps the two equal. The answer can change while the page is
  * open (a tablet docking a mouse), so a holder watches it.
  *
- * SYNC: When modified, update utils/touchPresentation.ts (TOUCH_QUERY) and
- * __tests__/coarsePointer.test.ts.
+ * SYNC: When modified, update touchPresentation.ts (TOUCH_QUERY) and
+ * coarsePointer.test.ts.
  */
 
 /** TOUCH_QUERY: the primary pointer is coarse. */

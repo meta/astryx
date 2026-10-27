@@ -30,7 +30,7 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {use, useRef, type ReactNode} from 'react';
+import {use, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -43,6 +43,7 @@ import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
 import {CheckboxInput} from '../CheckboxInput';
 import {mergeProps} from '../utils';
+import {ItemTrailingContext} from '../Item/ItemTrailingContext';
 import {Item} from '../Item';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
@@ -428,18 +429,42 @@ export function ListItem({
   }, []);
   // In a reorderable List: a trailing handle, or a row that stays put.
   const reorder = ctx?.reorder;
-  const reorderHandle =
-    reorder &&
+  const hasHandle =
+    reorder != null &&
     itemKey != null &&
-    (reorder.options.isReorderable?.(itemKey) ?? true) ? (
-      <reorder.session.Handle
-        label={label}
-        itemKey={itemKey}
-        isDisabled={isDisabled}
-        rowLabel={restProps['aria-label']}
-        rowLabelledBy={restProps['aria-labelledby']}
-      />
-    ) : null;
+    (reorder.options.isReorderable?.(itemKey) ?? true);
+  // The handle is the one element reordering adds to a row (spec:AST-103
+  // FR5): with end content it joins the end slot; without, it is the row's
+  // own child (ItemTrailingContext), since an end slot of its own would be a
+  // second element.
+  const isHandleInRow = hasHandle && endContent == null;
+  const rowLabel = restProps['aria-label'];
+  const rowLabelledBy = restProps['aria-labelledby'];
+  const rowAlign = isHandleInRow ? (align ?? 'center') : undefined;
+  const Handle = reorder?.session.Handle;
+  const reorderHandle = useMemo(
+    () =>
+      hasHandle && Handle != null && itemKey != null ? (
+        <Handle
+          label={label}
+          itemKey={itemKey}
+          isDisabled={isDisabled}
+          rowLabel={rowLabel}
+          rowLabelledBy={rowLabelledBy}
+          rowAlign={rowAlign}
+        />
+      ) : null,
+    [
+      Handle,
+      hasHandle,
+      isDisabled,
+      itemKey,
+      label,
+      rowAlign,
+      rowLabel,
+      rowLabelledBy,
+    ],
+  );
   // Under a finger, an interactive row's hit target grows toward the touch
   // target where its neighbors leave room, with no visual or layout change
   // (component:List FR10): useTouchHitArea keeps the row's insets live, and
@@ -496,53 +521,60 @@ export function ListItem({
       <reorder.session.RowName row={rowRef} label={label} />
     ) : null;
 
+  const row = (
+    <Item
+      as="li"
+      ref={mergedRef}
+      marker={marker}
+      startContent={startContent}
+      label={label}
+      description={description}
+      endContent={
+        reorderHandle != null && !isHandleInRow ? (
+          <>
+            {endContent}
+            {reorderHandle}
+          </>
+        ) : (
+          endContent
+        )
+      }
+      onClick={onClick}
+      interactiveRef={interactiveRef}
+      href={href}
+      target={target as '_blank' | '_self'}
+      rel={rel}
+      isDisabled={isDisabled}
+      isSelected={isSelected}
+      align={align}
+      density={density}
+      xstyle={
+        [
+          hasMarkers && styles.withCounter,
+          styles.travelling,
+          hasDividers && styles.withDivider,
+          hasDividers && embeddedStyles.noRadius,
+          isTouchTarget && touchHitAreaStyles.layer,
+          edge === 'flush' && styles.edgeFlush,
+          edge === 'outset' && styles.edgeOutset,
+          edge === 'bleed' && styles.edgeBleed,
+          // A focused handle rings itself; the row's focus-within ring stays
+          // off for it (two rings, and the list clips the row's sides).
+          reorderHandle && reorder?.session.rowStyle,
+          xstyle,
+        ] as StyleXStyles
+      }
+      {...mergeProps(themeProps('list-item'), {className, style})}
+      {...restProps}
+    />
+  );
   return (
     <>
-      <Item
-        as="li"
-        ref={mergedRef}
-        marker={marker}
-        startContent={startContent}
-        label={label}
-        description={description}
-        endContent={
-          reorderHandle ? (
-            <>
-              {endContent}
-              {reorderHandle}
-            </>
-          ) : (
-            endContent
-          )
-        }
-        onClick={onClick}
-        interactiveRef={interactiveRef}
-        href={href}
-        target={target as '_blank' | '_self'}
-        rel={rel}
-        isDisabled={isDisabled}
-        isSelected={isSelected}
-        align={align}
-        density={density}
-        xstyle={
-          [
-            hasMarkers && styles.withCounter,
-            styles.travelling,
-            hasDividers && styles.withDivider,
-            hasDividers && embeddedStyles.noRadius,
-            isTouchTarget && touchHitAreaStyles.layer,
-            edge === 'flush' && styles.edgeFlush,
-            edge === 'outset' && styles.edgeOutset,
-            edge === 'bleed' && styles.edgeBleed,
-            // A focused handle rings itself; the row's focus-within ring stays
-            // off for it (two rings, and the list clips the row's sides).
-            reorderHandle && reorder?.session.rowStyle,
-            xstyle,
-          ] as StyleXStyles
-        }
-        {...mergeProps(themeProps('list-item'), {className, style})}
-        {...restProps}
-      />
+      {/* One shape whether or not the handle is the row's own child, so the
+          row keeps its element when that changes. */}
+      <ItemTrailingContext value={isHandleInRow ? reorderHandle : null}>
+        {row}
+      </ItemTrailingContext>
       {reorderName}
     </>
   );

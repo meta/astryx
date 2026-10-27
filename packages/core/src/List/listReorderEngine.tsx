@@ -102,8 +102,10 @@ import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 import {devWarn} from '../utils/devWarning';
 import {GHOST_ATTRIBUTE} from './useListUpdateMotion';
 import {
+  INSERTION_LINE_THICKNESS,
   ListReorderHandle,
   ListReorderRowName,
+  reorderListStyle,
   reorderRowStyle,
 } from './ListReorderHandle';
 import {attachTouchHold, touchMotion} from './ListReorderTouch';
@@ -119,7 +121,6 @@ import {
   autoscrollStep,
   clampTop,
   dropPosition,
-  settleSpring,
   type ReorderGeometry,
 } from './reorderModel';
 
@@ -226,7 +227,6 @@ export const LINE_ATTRIBUTE = 'data-astryx-reorder-line';
  */
 const MOVING_OPACITY = '0.6';
 /** The insertion line's thickness, px. */
-const LINE_THICKNESS = 2;
 
 /**
  * An element the drag draws over the list: a ghost to the list's order and
@@ -272,23 +272,28 @@ function previewOf(row: HTMLElement, top: number, background: string | null) {
   return preview;
 }
 
-/** The insertion line, as wide as `row`, hidden until a position differs. */
-function lineFor(row: HTMLElement): HTMLElement {
-  const line = overlay(
-    row.ownerDocument.createElement(row.tagName === 'LI' ? 'li' : 'div'),
-    LINE_ATTRIBUTE,
-  );
-  Object.assign(line.style, {
-    top: '0px',
-    insetInlineStart: `${row.offsetLeft}px`,
-    inlineSize: `${row.offsetWidth}px`,
-    blockSize: `${LINE_THICKNESS}px`,
-    borderRadius: `${LINE_THICKNESS / 2}px`,
-    backgroundColor: 'var(--color-accent)',
-    listStyle: 'none',
-  });
-  line.hidden = true;
-  return line;
+/** The list's custom properties that place its insertion line. */
+const LINE_Y = '--astryx-reorder-line-y';
+const LINE_START = '--astryx-reorder-line-start';
+const LINE_SIZE = '--astryx-reorder-line-size';
+
+/**
+ * Shows the list's insertion line (its pseudo-element, reorderListStyle)
+ * across `row`'s width, centred on `center` in list coordinates.
+ */
+function showLine(list: HTMLElement, row: HTMLElement, center: number): void {
+  list.style.setProperty(LINE_START, `${row.offsetLeft}px`);
+  list.style.setProperty(LINE_SIZE, `${row.offsetWidth}px`);
+  list.style.setProperty(LINE_Y, `${center - INSERTION_LINE_THICKNESS / 2}px`);
+  list.setAttribute(LINE_ATTRIBUTE, '');
+}
+
+/** Hides the list's insertion line and clears what placed it. */
+function hideLine(list: HTMLElement): void {
+  list.removeAttribute(LINE_ATTRIBUTE);
+  for (const property of [LINE_Y, LINE_START, LINE_SIZE]) {
+    list.style.removeProperty(property);
+  }
 }
 
 /**
@@ -419,8 +424,6 @@ interface DragSession {
   readonly restore: RowRestore;
   /** The copy of the dragged row that follows the pointer. */
   readonly preview: HTMLElement;
-  /** The insertion line at the drop position. */
-  readonly line: HTMLElement;
 }
 
 /** The inline values a drag overrides until its rows rest. */
@@ -430,6 +433,11 @@ interface RowRestore {
   readonly backgroundColor: string;
   /** The dragged row's opacity, dimmed while the drag runs. */
   readonly opacity: string;
+  /**
+   * The dragged row's counter increment, off while its preview counts for it
+   * (a numbered list's number).
+   */
+  readonly counterIncrement: string;
   /** The list's position, made a containing block for the overlays. */
   readonly listPosition: string;
   /** The session's rows, whose identity offsets go once they rest. */
@@ -567,6 +575,7 @@ export class ListReorderController implements ListReorderSession {
   readonly Handle = ListReorderHandle;
   readonly RowName = ListReorderRowName;
   readonly rowStyle = reorderRowStyle;
+  readonly listStyle = reorderListStyle;
   options: ListReorderOptions | null = null;
   announce: AnnounceFn = () => {};
   messages: ReorderMessages | null = null;
@@ -598,7 +607,7 @@ export class ListReorderController implements ListReorderSession {
    * Reorder mode's insertion line: after a key move it marks the edge the
    * row came in through, at its new place, until the mode ends.
    */
-  private modeLine: {line: HTMLElement; listPosition: string} | null = null;
+  private modeLine: {list: HTMLElement; listPosition: string} | null = null;
   /** The direction of the last key move in reorder mode, for its line. */
   private lastStep: -1 | 1 | null = null;
   /**
@@ -1081,6 +1090,7 @@ export class ListReorderController implements ListReorderSession {
       zIndex: row.style.zIndex,
       backgroundColor: row.style.backgroundColor,
       opacity: row.style.opacity,
+      counterIncrement: row.style.counterIncrement,
       listPosition: list.style.position,
       rows,
     };
@@ -1101,8 +1111,11 @@ export class ListReorderController implements ListReorderSession {
       list.style.position = 'relative';
     }
     const preview = previewOf(row, tops[dragged], background);
-    const line = lineFor(row);
-    list.append(preview, line);
+    // Right before its source: the preview counts for it, so in a numbered
+    // list it reads the source's number, and every other row keeps its place
+    // among its siblings (the last row its :last-child).
+    row.before(preview);
+    row.style.counterIncrement = 'none';
     row.setAttribute(SOURCE_ATTRIBUTE, '');
     row.style.opacity = MOVING_OPACITY;
     list.setAttribute(REORDERING_ATTRIBUTE, '');
@@ -1133,7 +1146,6 @@ export class ListReorderController implements ListReorderSession {
       step: 0,
       restore,
       preview,
-      line,
     };
     this.session = session;
     // Rows still sliding from an earlier drag go to their places.
@@ -1191,9 +1203,10 @@ export class ListReorderController implements ListReorderSession {
     }
     session.position = position;
     const center = lineCenter(session.geometry, session.dragged, position);
-    session.line.hidden = center == null;
-    if (center != null) {
-      session.line.style.translate = `0px ${center - LINE_THICKNESS / 2}px`;
+    if (center == null) {
+      hideLine(session.list);
+    } else {
+      showLine(session.list, session.rows[session.dragged], center);
     }
     // A pointer drag announces its pick-up and its drop, not each place it
     // passes: announcing each crossed position is noisy.
@@ -1346,10 +1359,11 @@ export class ListReorderController implements ListReorderSession {
   /** Takes the preview and the line away and undims the dragged row. */
   private clearOverlays(session: DragSession): void {
     session.preview.remove();
-    session.line.remove();
+    hideLine(session.list);
     const row = session.rows[session.dragged];
     row.removeAttribute(SOURCE_ATTRIBUTE);
     row.style.opacity = session.restore.opacity;
+    row.style.counterIncrement = session.restore.counterIncrement;
     session.list.style.position = session.restore.listPosition;
   }
 
@@ -1360,7 +1374,7 @@ export class ListReorderController implements ListReorderSession {
     restore: RowRestore,
   ): void {
     const at = motionNow();
-    for (const [index, element] of rows.entries()) {
+    for (const element of rows) {
       const value = shownY(element, at);
       if (Math.abs(value) < MIN_MOVE_PX && !isMoving(element)) {
         continue;
@@ -1370,11 +1384,10 @@ export class ListReorderController implements ListReorderSession {
         releaseMotion(element, 'translate');
         continue;
       }
-      const spring =
-        index === dragged
-          ? settleSpring(value, element.offsetHeight)
-          : touchMotion.glideBase(list);
-      touchMotion.home(element, spring, at, index === dragged);
+      // A row still gliding (a drop's or a key move's glide) goes on home on
+      // the shared settle role from where it is shown, at the speed it has
+      // (spec:AST-094 FR4, FR6).
+      touchMotion.home(element, touchMotion.glideBase(list), at, false);
     }
     list.removeAttribute(REORDERING_ATTRIBUTE);
     this.restWhenDone(rows[dragged], restore);
@@ -1590,18 +1603,15 @@ export class ListReorderController implements ListReorderSession {
             )
           : Math.max(0, layoutTop(neighbour, list) - bottom);
     const center = this.lastStep < 0 ? top - gap / 2 : bottom + gap / 2;
-    if (this.modeLine == null || !this.modeLine.line.isConnected) {
+    if (this.modeLine?.list !== list) {
+      this.clearModeLine();
       const listPosition = list.style.position;
       if (getComputedStyle(list).position === 'static') {
         list.style.position = 'relative';
       }
-      const line = lineFor(row);
-      list.append(line);
-      this.modeLine = {line, listPosition};
+      this.modeLine = {list, listPosition};
     }
-    const {line} = this.modeLine;
-    line.hidden = false;
-    line.style.translate = `0px ${center - LINE_THICKNESS / 2}px`;
+    showLine(list, row, center);
   }
 
   private clearModeLine(): void {
@@ -1610,11 +1620,8 @@ export class ListReorderController implements ListReorderSession {
       return;
     }
     this.modeLine = null;
-    const list = modeLine.line.parentElement;
-    modeLine.line.remove();
-    if (list != null) {
-      list.style.position = modeLine.listPosition;
-    }
+    hideLine(modeLine.list);
+    modeLine.list.style.position = modeLine.listPosition;
   }
 
   /**
