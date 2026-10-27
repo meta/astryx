@@ -253,6 +253,96 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
   expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
+test('under Reduce Motion, a dip held before its first frame lands once the hold is finished', async ({
+  page,
+}) => {
+  // A sampler can pause a call's animations before the browser starts them
+  // (the interaction harness's hold landing ahead of the call's first frame
+  // under load, or a page pausing every animation). Its release with finish
+  // ends the held fade out; with no animator call after it, the dip still
+  // lands and fades back in.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await open(page);
+  await page.evaluate(travel => {
+    window.animator.animate(
+      {x: travel},
+      {spring: Motion.springs.navigationPush},
+    );
+    // In the call's own task, ahead of its first frame.
+    const held = document.getAnimations();
+    for (const animation of held) {
+      animation.pause();
+    }
+    (window as unknown as {held: Animation[]}).held = held;
+  }, TRAVEL);
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => setTimeout(resolve, 40)),
+        ),
+      ),
+  );
+  await page.evaluate(() => {
+    for (const animation of (window as unknown as {held: Animation[]}).held) {
+      animation.finish();
+    }
+  });
+  // Read from the page only: an animator call would look for the start again.
+  const read = async () =>
+    page.evaluate(() => {
+      const box = document.getElementById('box') as HTMLElement;
+      const style = getComputedStyle(box);
+      return {opacity: Number(style.opacity), translate: style.translate};
+    });
+  await expect
+    .poll(read, {timeout: 2000})
+    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+});
+
+test('under Reduce Motion, a dip held before its first frame lands once the hold is resumed', async ({
+  page,
+}) => {
+  // The hold's release without finish plays the held fade out again: the
+  // browser starts it then, and the dip lands and fades back in on the clock
+  // it resumed on, with no animator call after the release.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await open(page);
+  await page.evaluate(travel => {
+    window.animator.animate(
+      {x: travel},
+      {spring: Motion.springs.navigationPush},
+    );
+    const held = document.getAnimations();
+    for (const animation of held) {
+      animation.pause();
+    }
+    (window as unknown as {held: Animation[]}).held = held;
+  }, TRAVEL);
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => setTimeout(resolve, 40)),
+        ),
+      ),
+  );
+  await page.evaluate(() => {
+    for (const animation of (window as unknown as {held: Animation[]}).held) {
+      animation.play();
+    }
+  });
+  const read = async () =>
+    page.evaluate(() => {
+      const box = document.getElementById('box') as HTMLElement;
+      const style = getComputedStyle(box);
+      return {opacity: Number(style.opacity), translate: style.translate};
+    });
+  await expect
+    .poll(read, {timeout: 2000})
+    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+});
+
 test('a spring started right before a block plays in full after it', async ({
   page,
   browserName,
