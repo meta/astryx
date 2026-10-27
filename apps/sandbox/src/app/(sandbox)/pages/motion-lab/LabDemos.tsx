@@ -1043,28 +1043,60 @@ export function LoopRig({policy}: {policy: 'today' | 'delete' | 'degrade'}) {
 
 // --- table tint (the 150ms rows) ---------------------------------------------
 
-export function TintRig({mode}: {mode: Mode}) {
+const TINT_ROWS = [
+  ['Quarterly report', 'Draft', '2 min ago'],
+  ['Design review', 'Scheduled', '1 h ago'],
+  ['Launch checklist', 'In progress', '3 h ago'],
+  ['Onboarding flow', 'Shipped', 'Yesterday'],
+  ['Pricing page', 'Draft', 'Yesterday'],
+  ['Support macros', 'In review', '2 days ago'],
+  ['Search ranking', 'Blocked', '3 days ago'],
+  ['Release notes', 'Shipped', 'Last week'],
+];
+
+/**
+ * Table rows' hover tint, over enough rows that sweeping the pointer down the
+ * table shows what the duration costs. `before` is Table today (a hardcoded
+ * 150ms on the CSS default curve); `after` reads the state token and changes at
+ * once under Reduce Motion (design:reduced-motion DR3); `none` deletes the
+ * transition, which is the option the rubric asks the preview to make visible.
+ */
+export function TintRig({mode}: {mode: Mode | 'none'}) {
+  const rowClass =
+    mode === 'none'
+      ? `${styles.tintRow} ${styles.tintRowNone}`
+      : mode === 'after'
+        ? `${styles.tintRow} ${styles.tintRowToken}`
+        : styles.tintRow;
   return (
     <VStack gap={1} {...stylex.props(sx.full)}>
-      {['Row one', 'Row two', 'Row three'].map(row => (
-        <div
-          key={row}
-          className={styles.tintRow}
-          style={
-            mode === 'after'
-              ? {
-                  ['--tint-duration' as string]: 'var(--lab-duration-state)',
-                  ['--tint-ease' as string]: 'var(--ease-state)',
-                }
-              : undefined
-          }>
-          <Text type="supporting">{row}</Text>
-        </div>
-      ))}
+      <table className={styles.tintTable}>
+        <tbody>
+          {TINT_ROWS.map(([name, status, updated]) => (
+            <tr key={name} className={rowClass}>
+              <td>
+                <Text type="supporting">{name}</Text>
+              </td>
+              <td>
+                <Text type="supporting" color="secondary">
+                  {status}
+                </Text>
+              </td>
+              <td>
+                <Text type="supporting" color="secondary">
+                  {updated}
+                </Text>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <Hint>
         {mode === 'before'
-          ? 'Hardcoded 150ms with the CSS default curve.'
-          : 'The state token, at 175ms with --ease-state.'}
+          ? 'Hardcoded 150ms with the CSS default curve. A literal: no token, rail switch or device setting reaches it, so it fades the same everywhere.'
+          : mode === 'after'
+            ? 'The state token with --ease-state. When the device asks for reduced motion, the tint changes at once on every rail setting (design:reduced-motion DR3): the colour still says which row is under the pointer.'
+            : "No transition at all: the tint is immediate, whatever the rail or the device's reduced-motion setting. Sweep the pointer down the table and compare it with the fades."}
       </Hint>
     </VStack>
   );
