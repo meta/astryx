@@ -30,7 +30,7 @@ import {createNativeScrollProbe} from '../nativeScroll';
 import {gestureHosts} from '../hostRegistry';
 import {holdPageScroll, type PageScrollDecision} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
-import {COARSE_POINTER_QUERY} from '../coarsePointer';
+import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 import type {GestureTouch} from '../types';
 
