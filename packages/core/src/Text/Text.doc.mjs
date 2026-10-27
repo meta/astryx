@@ -217,7 +217,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Expect `maxLines` to truncate an external `Link` child. Its inline-flex icon layout escapes an ancestor clamp; give the Link its own `maxLines` (a plain Link child is clamped fine).',
+          'Expect `maxLines` to truncate a `Link` child whose children include elements, such as an external link icon. That inline-flex layout escapes an ancestor clamp; give the Link its own `maxLines` (a Link whose children are only text is clamped fine).',
       },
     ],
   },
@@ -277,7 +277,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Expect `maxLines` to truncate an external `Link` child. Its inline-flex icon layout escapes an ancestor clamp; give the Link its own `maxLines` (a plain Link child is clamped fine).',
+          'Expect `maxLines` to truncate a `Link` child whose children include elements, such as an external link icon. That inline-flex layout escapes an ancestor clamp; give the Link its own `maxLines` (a Link whose children are only text is clamped fine).',
       },
     ],
   },
