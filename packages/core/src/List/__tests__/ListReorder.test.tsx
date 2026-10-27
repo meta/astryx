@@ -1012,6 +1012,49 @@ describe('List reorderable', () => {
     }
   });
 
+  it("starts the hint buttons' hit area only where the primary pointer is coarse (spec:AST-094 FR24)", async () => {
+    const observed: Element[] = [];
+    class Recording {
+      observe(target: Element) {
+        observed.push(target);
+      }
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', Recording);
+    vi.stubGlobal('ResizeObserver', Recording);
+    try {
+      const user = userEvent.setup();
+      const hintButtons = () =>
+        ['Move up', 'Move down', 'Done'].map(
+          name => hintButton(name) as HTMLElement,
+        );
+      stubPrimaryPointer(false);
+      const fine = render(
+        <ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />,
+      );
+      handleOf('Sent').focus();
+      await user.keyboard(' ');
+      for (const button of hintButtons()) {
+        expect(observed).not.toContain(button);
+      }
+      fine.unmount();
+      // The positive control: under a finger it watches them.
+      stubPrimaryPointer(true);
+      render(<ReorderableRows initial={['Inbox', 'Sent', 'Drafts']} />);
+      handleOf('Sent').focus();
+      await user.keyboard(' ');
+      for (const button of hintButtons()) {
+        await waitFor(() => expect(observed).toContain(button));
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('takes an Escape that reaches the dismissal stack with the focus in the hint: the mode ends, and a layer below stays open', async () => {
     const user = userEvent.setup();
     const outer = vi.fn();
