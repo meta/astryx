@@ -31,7 +31,6 @@
  * iOS query matches utils/touchPresentation.ts.
  */
 
-import {isCoarsePointer} from './coarsePointer';
 import {parentAcrossShadow} from './flatTree';
 
 /** What a held finger must not start on a control or a cell. */
@@ -54,16 +53,12 @@ const TEXT_ENTRY_TYPES = new Set([
 
 /**
  * Whether a contact of this pointer kind takes the lock: a finger or a pen,
- * and only where the primary pointer is coarse (a phone, an iPad and its
- * pencil). Where the primary pointer is fine (a laptop's touchscreen, a
- * desktop pen tablet), a finger and a pen get the browser's defaults, as a
- * mouse does (`spec:AST-094` FR19, `spec:AST-017` FR59). A mouse never does.
+ * under any primary pointer, a laptop's touchscreen and a desktop pen tablet
+ * included, since a pen's hold acts as a finger's (`spec:AST-094` FR41). A
+ * mouse never does: it keeps its released behavior (`spec:AST-017` FR59).
  */
-export function locksSelectionFor(
-  pointerType: string,
-  view: Window | null | undefined,
-): boolean {
-  return pointerType !== 'mouse' && isCoarsePointer(view);
+export function locksSelectionFor(pointerType: string): boolean {
+  return pointerType !== 'mouse';
 }
 
 /** Locked elements, how many contacts hold each, and what to restore. */
