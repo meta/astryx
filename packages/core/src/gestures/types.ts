@@ -131,6 +131,13 @@ export interface GestureEventContext {
 export interface GestureEnvironment {
   viewportSize(): {readonly width: number; readonly height: number};
   isRtl(view: unknown): boolean;
+  /**
+   * The size of a recognizer's view, or null when it has none to measure.
+   * A screen-edge pan reads it to tell an edge zone from a wider view.
+   */
+  viewSize?(
+    view: unknown,
+  ): {readonly width: number; readonly height: number} | null;
 }
 
 export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
@@ -142,6 +149,13 @@ export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
   },
   isRtl() {
     return false;
+  },
+  viewSize(view) {
+    if (typeof Element === 'undefined' || !(view instanceof Element)) {
+      return null;
+    }
+    const {width, height} = view.getBoundingClientRect();
+    return {width, height};
   },
 };
 

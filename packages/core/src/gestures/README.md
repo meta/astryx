@@ -49,9 +49,16 @@ function Sheet() {
 - `isEnabled: false` mid-gesture ends the gesture without calling the
   listener, since the handler that turned it off owns that end (no consumer
   callback from an Effect). A handler that wants UIKit's `.cancelled` calls
-  `recognizer.setEnabled(false)` itself, which reports it at once. After
+  `recognizer.setEnabled(false)` itself, which reports it at once. A
+  recognizer that required it to fail (a single tap waiting on a double
+  tap) resolves just after that render, and its listener reports as usual;
+  so does one waiting on a recognizer whose node a render replaced. After
   unmount the listener hears nothing, not even the cancellation of a
   gesture the unmount ended.
+- `actionGroup: true` attaches the element as an action group, sibling
+  actions a held pointer slides across, which the host serves where the
+  primary pointer is fine too (`family:action-groups` FR5). Changing it
+  attaches the element again.
 - `usePressTracker(ref, options)` gives an element `UIControl` touch tracking
   (see below). It follows its element the same way, takes `isBraking` (by
   default the host's: a touch that stops a flick presses nothing), and keeps
@@ -86,8 +93,8 @@ A recognizer created with `claimsTouches: false` is a watcher (a tab bar
 that minimizes while the page scrolls): it never claims, so its element gets
 only passive listeners and a scroll never waits for it; it prevents no other
 recognizer and none prevents it; and it follows a touch the browser takes
-for a scroll to the lift. Attach it with `manageStyle: false` to leave the
-element's `touch-action` alone.
+for a scroll to the lift. It adds nothing to the element's derived
+`touch-action`.
 
 Every recognizer also has UIKit's switches: `isEnabled` (use `setEnabled`;
 turning it off mid-gesture cancels), `cancelsTouchesInView` (default true),
