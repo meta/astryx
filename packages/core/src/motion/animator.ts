@@ -2084,10 +2084,7 @@ export function createAnimator(
           .filter(segment => segment.owner === owner)
           .map(segment => segment.start + segment.duration);
         owner.timer = setTimeout(
-          () => {
-            owner.timer = null;
-            settle(owner, true);
-          },
+          () => settleAtEnd(owner),
           Math.max(0, Math.max(start, ...ends) - now()),
         );
       }
@@ -2125,6 +2122,39 @@ export function createAnimator(
     owner.resolve(finished);
   };
 
+  /**
+   * A handle whose curves have reached their end on the wall clock finishes,
+   * unless a sampler holds one of its animations (paused, or sought back):
+   * then it waits on that animation's own time, as retiring does
+   * (scheduleRetire), so `finished` never resolves under motion still on
+   * screen.
+   */
+  const settleAtEnd = (owner: HandleState) => {
+    owner.timer = null;
+    let wait = 0;
+    for (const [channel, animation] of running) {
+      if (
+        !CHANNELS[channel].some(
+          property => segments.get(property)?.owner === owner,
+        )
+      ) {
+        continue;
+      }
+      const remaining = remainingCurve(animation);
+      if (remaining != null && remaining > 0) {
+        wait = Math.max(
+          wait,
+          animation.playState === 'paused' ? RETIRE_RECHECK_MS : remaining,
+        );
+      }
+    }
+    if (wait > 0) {
+      owner.timer = setTimeout(() => settleAtEnd(owner), wait);
+      return;
+    }
+    settle(owner, true);
+  };
+
   const makeHandle = (
     owner: HandleState,
     properties: MotionProperty[],
@@ -2148,10 +2178,7 @@ export function createAnimator(
       // Interruptions settle false as they happen (interrupt); reaching the
       // end untouched is completion.
       owner.timer = setTimeout(
-        () => {
-          owner.timer = null;
-          settle(owner, true);
-        },
+        () => settleAtEnd(owner),
         Math.max(0, end - now()),
       );
     }
@@ -2609,10 +2636,7 @@ export function createAnimator(
       settle(owner, true);
     } else {
       owner.timer = setTimeout(
-        () => {
-          owner.timer = null;
-          settle(owner, true);
-        },
+        () => settleAtEnd(owner),
         Math.max(0, end - now()),
       );
     }
@@ -3382,10 +3406,7 @@ export function createAnimator(
           }
         }
         owner.timer = setTimeout(
-          () => {
-            owner.timer = null;
-            settle(owner, true);
-          },
+          () => settleAtEnd(owner),
           Math.max(0, end - now()),
         );
       }

@@ -1629,6 +1629,52 @@ describe('finished', () => {
     await expect(c.finished).resolves.toBe(false);
   });
 
+  it('waits while a sampler holds the animation past the curve\u2019s end', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    await advance(16);
+    // A harness pauses it (holdAnimations) and keeps it held well past the
+    // end of the curve on the wall clock: the motion has not ended.
+    const [animation] = live('translate');
+    animation.paused = true;
+    await advance(5000);
+    expect(result).toBeUndefined();
+  });
+
+  it('resolves true once a held animation resumes and reaches its end', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    await advance(16);
+    const [animation] = live('translate');
+    animation.paused = true;
+    await advance(5000);
+    animation.paused = false;
+    await advance(1000);
+    expect(result).toBe(true);
+  });
+
+  it('resolves on time for an animation nobody holds', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    const end = (handle.curve('x')?.duration ?? NaN) * 1000;
+    await advance(end - 50);
+    expect(result).toBeUndefined();
+    await advance(100);
+    expect(result).toBe(true);
+  });
+
   it('dispose cancels and settles everything', async () => {
     const {animator} = setup();
     const handle = animator.animate(
