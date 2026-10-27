@@ -625,4 +625,43 @@ describe('Link display', () => {
     expect(displayDeclarationsFor(anchor)).toContain('inline');
     expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
   });
+
+  it('stays inline for labels assembled with a false or nullish conditional', () => {
+    const condition = false;
+    const {container, rerender} = render(
+      <Link href="/docs">Docs{condition && ' (new)'}</Link>,
+    );
+    let anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(<Link href="/docs">Docs{null}</Link>);
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(<Link href="/docs">Docs{undefined}</Link>);
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
+
+  it('stays inline for a Fragment wrapping only text, boxed for a Fragment with an element', () => {
+    const {container, rerender} = render(
+      <Link href="/docs">
+        <>Fragment text</>
+      </Link>,
+    );
+    let anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(
+      <Link href="/docs">
+        <>
+          Fragment <span>element</span>
+        </>
+      </Link>,
+    );
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
+  });
 });

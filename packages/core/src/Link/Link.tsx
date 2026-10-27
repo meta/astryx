@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {Fragment, isValidElement, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -293,11 +293,24 @@ export interface LinkProps extends BaseProps<
  * computes and paints a visible keyboard focus outline.
  */
 function isTextOnly(content: ReactNode): boolean {
-  if (typeof content === 'string' || typeof content === 'number') {
+  if (
+    typeof content === 'string' ||
+    typeof content === 'number' ||
+    typeof content === 'boolean' ||
+    content === null ||
+    content === undefined
+  ) {
+    // Text, numbers, and non-rendering children (false, null, undefined) all
+    // participate in the surrounding line boxes.
     return true;
   }
   if (Array.isArray(content)) {
     return content.every(isTextOnly);
+  }
+  if (isValidElement(content) && content.type === Fragment) {
+    // A Fragment renders its children directly, so it is text-only exactly
+    // when those children are.
+    return isTextOnly((content.props as {children?: ReactNode}).children);
   }
   return false;
 }
