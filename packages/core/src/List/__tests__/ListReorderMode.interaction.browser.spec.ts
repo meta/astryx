@@ -38,15 +38,21 @@ const START_STORY = 'core-list--reorder-from-your-ui';
 const ROWS = ['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash'];
 const HOLD_MS = reorder.claim.delayMs + 80;
 
+/**
+ * The list's rows, without the reorder's insertion line and drag preview:
+ * inert, aria-hidden ghosts of the list (`data-astryx-leaving`).
+ */
+const ROW = '#storybook-root li:not([data-astryx-leaving])';
+
 const row = (page: Page, label: string) =>
-  page.locator('#storybook-root li').filter({hasText: label}).first();
+  page.locator(ROW).filter({hasText: label}).first();
 
 const handle = (page: Page, label: string) =>
   page.getByRole('button', {name: `Reorder ${label}`, exact: true});
 
 const labels = async (page: Page) =>
   page
-    .locator('#storybook-root li')
+    .locator(ROW)
     .evaluateAll(rows => rows.map(element => element.textContent ?? ''));
 
 const translateY = async (element: Locator) =>
