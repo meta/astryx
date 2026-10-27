@@ -14,6 +14,7 @@ import {act, render, screen, fireEvent} from '@testing-library/react';
 import {createRef, useState} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
+import {resetBottomSheetStackForTests} from './bottomSheetStack';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -25,6 +26,7 @@ const SNAP_POINTS: ReadonlyArray<number> = [0.14, 0.5, 0.92];
 
 // jsdom doesn't implement <dialog> open/close or pointer capture; stub them.
 beforeEach(() => {
+  resetBottomSheetStackForTests();
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
   ) {
@@ -32,6 +34,14 @@ beforeEach(() => {
   });
   HTMLDialogElement.prototype.show = vi.fn(function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
+  });
+  // A non-modal sheet is a manual popover; jsdom's stand-ins keep the same
+  // `open` marker the dialog paths use (the Drawer tests do the same).
+  HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+    this.setAttribute('open', '');
+  });
+  HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+    this.removeAttribute('open');
   });
   HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
     this.removeAttribute('open');
@@ -219,19 +229,24 @@ function getHandle(): HTMLElement {
 
 // Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
-function drag(handle: HTMLElement, points: {y: number}[]) {
+function drag(
+  handle: HTMLElement,
+  points: {y: number}[],
+  pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
+) {
   const [down, ...rest] = points;
   fireEvent.pointerDown(handle, {
     pointerId: 1,
     clientY: down.y,
     button: 0,
     isPrimary: true,
+    pointerType,
   });
   for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y});
+    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
   }
   const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y});
+  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
 }
 
 function fireTimedPointer(
@@ -583,7 +598,7 @@ describe('BottomSheet', () => {
   });
 
   describe('hasScrim={false} (non-modal)', () => {
-    it('opens non-modally: show() instead of showModal(), no aria-modal', () => {
+    it('opens non-modally: a manual popover instead of showModal(), no aria-modal', () => {
       render(
         <BottomSheet
           isOpen
@@ -593,9 +608,313 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      expect(HTMLDialogElement.prototype.show).toHaveBeenCalled();
+      // In the top layer as a manual popover (no light dismiss, no backdrop)
+      // so sheets order by presentation without a page-level z-index.
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(HTMLDialogElement.prototype.show).not.toHaveBeenCalled();
       expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toHaveAttribute('popover', 'manual');
       expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-modal');
+    });
+
+    it('focuses the panel, as show() did, when the browser focuses the popover on show (an engine whose show() lands on the panel container)', () => {
+      // Chromium's `show()` focusing steps land on the panel (tabindex -1,
+      // no ring); `showPopover()` lands on the first control and draws a
+      // ring. The sheet puts focus on the panel so a lone non-modal sheet
+      // focuses exactly as it did. The engine is told apart by what its
+      // `show()` does: here it focuses the tabindex -1 container.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('[tabindex="-1"]')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        // The popover focusing steps: the autofocus delegate when there is
+        // one, else (as Chromium does) the first control.
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      try {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        const events: string[] = [];
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            <button
+              type="button"
+              onFocus={() => events.push('focus')}
+              onBlur={() => events.push('blur')}>
+              First action
+            </button>
+          </BottomSheet>,
+        );
+        expect(document.activeElement).toBe(getSheet());
+        // The control is never focused on the way to the panel, so a field
+        // validating on blur would not fire.
+        expect(events).toEqual([]);
+        expect(getSheet()).not.toHaveAttribute('autofocus');
+        opener.remove();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('measures the engine inside its own dialog, so a first non-modal sheet opened inside an open modal does not cache the wrong answer', () => {
+      // A browser moves no focus into a dialog that sits under an open
+      // modal's inertness. The stub models that for `show()`: a dialog
+      // appended to the body while a modal outside it is open focuses
+      // nothing; one inside the modal (or with no modal open) focuses its
+      // tabindex -1 container, as Chromium's show() does.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        const modal = Array.from(
+          document.querySelectorAll<HTMLDialogElement>(
+            'dialog[open][aria-modal="true"]',
+          ),
+        ).find(d => !d.contains(this));
+        if (modal != null) {
+          return;
+        }
+        this.querySelector<HTMLElement>('[tabindex="-1"]')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      function App() {
+        const [isModalOpen, setIsModalOpen] = useState(true);
+        const [isHintOpen, setIsHintOpen] = useState(false);
+        const [isLoneOpen, setIsLoneOpen] = useState(false);
+        return (
+          <>
+            <BottomSheet
+              isOpen={isModalOpen}
+              onOpenChange={setIsModalOpen}
+              label="Settings">
+              <button type="button" onClick={() => setIsHintOpen(true)}>
+                Show hint
+              </button>
+              <button type="button" onClick={() => setIsModalOpen(false)}>
+                Done
+              </button>
+              <BottomSheet
+                isOpen={isHintOpen}
+                onOpenChange={setIsHintOpen}
+                hasScrim={false}
+                label="Hint">
+                <button type="button">Got it</button>
+              </BottomSheet>
+            </BottomSheet>
+            <button type="button" onClick={() => setIsLoneOpen(true)}>
+              Open filters
+            </button>
+            <BottomSheet
+              isOpen={isLoneOpen}
+              onOpenChange={setIsLoneOpen}
+              hasScrim={false}
+              label="Filters">
+              <button type="button">First action</button>
+            </BottomSheet>
+          </>
+        );
+      }
+      try {
+        render(<App />);
+        // The first non-modal sheet of the page opens inside the open modal:
+        // the engine is measured there, where show() can move focus.
+        fireEvent.click(screen.getByRole('button', {name: 'Show hint'}));
+        const hint = screen.getByRole('dialog', {name: 'Hint'});
+        expect(document.activeElement).toBe(
+          hint.querySelector('.astryx-bottom-sheet'),
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+        // A later lone non-modal sheet focuses as show() would: the panel.
+        fireEvent.click(screen.getByRole('button', {name: 'Open filters'}));
+        const filters = screen.getByRole('dialog', {name: 'Filters'});
+        expect(document.activeElement).toBe(
+          filters.querySelector('.astryx-bottom-sheet'),
+        );
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('leaves focus on the first control, as show() did, in an engine whose show() skips the panel container', () => {
+      // Firefox's `show()` and `showPopover()` both land on the first
+      // control in the sheet. Nothing is re-targeted, so a lone non-modal
+      // sheet focuses as it did with `show()` there too.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      try {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            <button type="button">First action</button>
+          </BottomSheet>,
+        );
+        expect(document.activeElement).toBe(
+          screen.getByRole('button', {name: 'First action'}),
+        );
+        expect(getSheet()).not.toHaveAttribute('autofocus');
+        opener.remove();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('returns focus to its opener on close when the person was still in the sheet', () => {
+      const opener = document.createElement('button');
+      opener.textContent = 'Open';
+      document.body.appendChild(opener);
+      opener.focus();
+      try {
+        render(<ExitHarness hasScrim={false} />);
+        // The person moved into the sheet (e.g. tabbed to its control).
+        screen.getByRole('button', {name: 'Close sheet'}).focus();
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        finishSheetExit();
+        expect(screen.getByRole('dialog', {hidden: true})).not.toHaveAttribute(
+          'open',
+        );
+        expect(document.activeElement).toBe(opener);
+      } finally {
+        opener.remove();
+      }
+    });
+
+    it('always focuses finalFocusRef on close, even when focus had left the sheet', () => {
+      const elsewhere = document.createElement('input');
+      const target = document.createElement('button');
+      target.textContent = 'Target';
+      document.body.append(elsewhere, target);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      function Harness() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close from page
+            </button>
+            <BottomSheet
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              hasScrim={false}
+              finalFocusRef={finalFocusRef}
+              label="Filters">
+              Content
+            </BottomSheet>
+          </>
+        );
+      }
+      try {
+        render(<Harness />);
+        // The page stayed live: the person moved on, then a page control
+        // closed the sheet. The explicit target still receives focus.
+        elsewhere.focus();
+        fireEvent.click(screen.getByRole('button', {name: 'Close from page'}));
+        finishSheetExit();
+        expect(document.activeElement).toBe(target);
+      } finally {
+        elsewhere.remove();
+        target.remove();
+      }
+    });
+
+    it('leaves focus where the person took it when the sheet closes from the page', () => {
+      const opener = document.createElement('button');
+      const elsewhere = document.createElement('input');
+      document.body.append(opener, elsewhere);
+      opener.focus();
+      try {
+        render(<ExitHarness hasScrim={false} />);
+        // The page stayed live: the person moved on, then the sheet closed
+        // (a timer, a page control).
+        elsewhere.focus();
+        fireEvent.click(screen.getByRole('button', {name: 'Close sheet'}));
+        finishSheetExit();
+        expect(document.activeElement).toBe(elsewhere);
+      } finally {
+        opener.remove();
+        elsewhere.remove();
+      }
+    });
+
+    it('leaves focus alone when the browser does not move it on show', () => {
+      const opener = document.createElement('button');
+      document.body.appendChild(opener);
+      opener.focus();
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={false}>
+          <button type="button">First action</button>
+        </BottomSheet>,
+      );
+      expect(document.activeElement).toBe(opener);
+      opener.remove();
+    });
+
+    it('falls back to show() below the Popover API support floor', () => {
+      const showPopover = HTMLElement.prototype.showPopover;
+      // @ts-expect-error -- emulate a browser without the Popover API
+      delete HTMLElement.prototype.showPopover;
+      try {
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            Content
+          </BottomSheet>,
+        );
+        expect(HTMLDialogElement.prototype.show).toHaveBeenCalled();
+        expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+      }
     });
 
     it('does not dismiss when the shell (dialog element itself) is clicked', () => {
@@ -2581,6 +2900,150 @@ describe('BottomSheet', () => {
         </BottomSheet>,
       );
       expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    function stubReducedMotion(coarse: boolean) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches:
+            query === '(prefers-reduced-motion: reduce)' ||
+            (coarse &&
+              query ===
+                '(prefers-reduced-motion: reduce) and (pointer: coarse)'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    }
+
+    function Controlled() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <button type="button" onClick={() => setIsOpen(false)}>
+            Close
+          </button>
+        </BottomSheet>
+      );
+    }
+
+    it("a touch swipe dismissal under reduced motion fades out in place on a fine pointer (design:reduced-motion DR2, a touch drag's release)", () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      // Exiting: a transform end does not close the dialog, the fade does.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a touch swipe dismissal does not outlive the sheet: reopened and closed from a control, it leaves at once again', () => {
+      stubReducedMotion(false);
+      function Reopenable() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(true)}>
+              Open
+            </button>
+            <BottomSheet
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              label="Filters">
+              <button type="button" onClick={() => setIsOpen(false)}>
+                Close
+              </button>
+            </BottomSheet>
+          </>
+        );
+      }
+      render(<Reopenable />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      // A control dismissal: its collapsed transform end closes the dialog.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a refused touch swipe spends its request: a guarded onOpenChange keeps the sheet open, and the next close from a control leaves at once', () => {
+      stubReducedMotion(false);
+      function Guarded() {
+        const [isOpen, setIsOpen] = useState(true);
+        const [isGuarded, setIsGuarded] = useState(true);
+        return (
+          <BottomSheet
+            isOpen={isOpen}
+            // The documented replacement for the switcher's onCancel: ignore
+            // implicit closes while the step must stay open.
+            onOpenChange={next => {
+              if (!next && isGuarded) {
+                return;
+              }
+              setIsOpen(next);
+            }}
+            label="Filters">
+            <button type="button" onClick={() => setIsGuarded(false)}>
+              Unlock
+            </button>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close
+            </button>
+          </BottomSheet>
+        );
+      }
+      render(<Guarded />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      // Refused: the sheet stays open.
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Unlock'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      // A control close: its collapsed transform end closes the dialog; the
+      // spent swipe request does not turn it into a cross-fade.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a mouse drag dismissal under reduced motion on a fine pointer leaves at once (DR3): a mouse or pen drag is not a touch drag', () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'mouse');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a dismissal from a control under reduced motion on a fine pointer leaves at once (DR3): its (collapsed) transform end closes the dialog', () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a dismissal from a control under reduced motion on a coarse pointer fades out (DR2)', () => {
+      stubReducedMotion(true);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
     });
   });
 
