@@ -65,7 +65,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Detects a single-finger press-and-hold and reports where it happened, so touch users can reach affordances that a pointer gets from right-click. iOS Safari never synthesizes a contextmenu event on long-press, which makes this the only touch route into a cursor-positioned surface such as ContextMenu. The press cancels on movement, lift, multi-touch or unmount.',
+      'Detects a single-finger press-and-hold and reports where it happened, so touch users can reach affordances that a pointer gets from right-click. iOS Safari never synthesizes a contextmenu event on long-press, which makes this the touch route into a cursor-positioned surface you build; ContextMenu and createContextMenu open on their trigger\u2019s own context request, a held finger included. The press cancels on movement, lift, multi-touch or unmount.',
     bestPractices: [
       {
         guidance: true,

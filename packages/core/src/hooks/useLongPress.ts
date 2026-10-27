@@ -10,8 +10,7 @@
  *   driven by hand for a caller already observing pointer events; the
  *   detector itself (createLongPressDetector) for a caller with its own clock
  * @position Core hook for long-press invocation; used by `useMenuPress` for
- *   the held-finger menu open, and (as createLongPressDetector, on the gesture
- *   arena's clock) by ContextMenu's press recognizer
+ *   the held-finger menu open
  *
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
  *
