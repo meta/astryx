@@ -95,6 +95,61 @@ afterEach(() => {
 });
 
 describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
+  it('latches a wheel gesture to the pan that took it, as a browser latches a scroller: a step that lands outside the moved element still drives the pan and is prevented, until the gesture ends', () => {
+    const {wrapper, card} = mount(
+      '<div id="wrapper"><div id="card"></div></div>',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(card, pan));
+    const added = vi.spyOn(document, 'addEventListener');
+    expect(wheel(card, {dx: 16, time: 0}).defaultPrevented).toBe(true);
+    expect(wheel(card, {dx: 16, time: 16}).defaultPrevented).toBe(true);
+    expect(states).toEqual(['began', 'changed']);
+    const afterTwo = pan.translation().x;
+    // The card has moved out from under a still cursor: the next steps land
+    // on the wrapper.
+    for (const time of [32, 48, 64, 80]) {
+      expect(wheel(wrapper, {dx: 16, time}).defaultPrevented).toBe(true);
+    }
+    expect(pan.translation().x).toBe(afterTwo - 64);
+    expect(states.at(-1)).toBe('changed');
+    expect(
+      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toHaveLength(1);
+    const removed = vi.spyOn(document, 'removeEventListener');
+    clock.runDue(80 + 100);
+    expect(states.slice(-2)).toEqual(['ended', 'possible']);
+    expect(
+      (removed.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toHaveLength(1);
+    // Over: a wheel on the wrapper is the page's again.
+    expect(wheel(wrapper, {dx: 16, time: 400}).defaultPrevented).toBe(false);
+  });
+
+  it("ends a wheel gesture whose pan is detached mid-gesture at once, and takes the document's wheel listener with it (FR24)", () => {
+    const {card} = mount('<div id="card"></div>');
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const detach = host.attach(card, pan);
+    wheel(card, {dx: 16, time: 0});
+    wheel(card, {dx: 16, time: 16});
+    expect(pan.state).toBe('changed');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    detach();
+    expect(
+      (removed.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toHaveLength(1);
+    expect(wheel(document.body, {dx: 16, time: 32}).defaultPrevented).toBe(
+      false,
+    );
+  });
+
   it("takes no wheel for a pan that allows no scroll type, UIKit's default: its element gets no wheel listener, and the page scrolls", () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');

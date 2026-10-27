@@ -1216,6 +1216,51 @@ test.describe('where the primary pointer is fine', () => {
     expect([during, after]).toEqual(['', '']);
   });
 
+  test('a wheel gesture stays with the pan that took it when the pan moves its element from under a still cursor, as a browser latches a scroller (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="wrapper" style="height: 120px; width: 400px"><div id="card" style="height: 120px; width: 60px; background: #ccc">card</div></div><div style="height: 10px; width: 3000px"></div>';
+      const card = document.getElementById('card') as HTMLElement;
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedScrollTypes: ['continuous'],
+      });
+      // The card follows the pan, as a swipe would move it.
+      pan.addTransitionListener((_recognizer, _from, to) => {
+        card.style.transform = `translateX(${pan.translation().x}px)`;
+        window.__wheelLog.push(`pan:${to}:${Math.round(pan.translation().x)}`);
+      });
+      host.attach(card, pan);
+    });
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const card = await center(page, 'card');
+    // Six 16 px steps at a still cursor: the card leaves it after two.
+    for (let step = 0; step < 6; step += 1) {
+      await driver.wheel({...card, dx: 16});
+    }
+    await page.waitForTimeout(250);
+    const pan = await page.evaluate(() =>
+      window.__wheelLog.filter(entry => entry.startsWith('pan:')),
+    );
+    const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
+    // Every step after the first moved the card, and none scrolled the page.
+    expect(moved).toHaveLength(5);
+    expect(pan.slice(-2).map(entry => entry.split(':')[1])).toEqual([
+      'ended',
+      'possible',
+    ]);
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+  });
+
   test('a pan that allows scroll input follows a real wheel along its axis and keeps the page still, a wheel across it scrolls the page, and a pinch follows a ctrl-wheel (spec:AST-094 FR43)', async ({
     page,
   }) => {
