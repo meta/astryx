@@ -59,6 +59,40 @@ const TRAVEL = 300;
 const MARKER_INSET = 8;
 
 // A real navigation (not setContent): the page keeps its own window.
+/**
+ * Waits until the box runs no animation, on the animations' own clock: each
+ * one it runs has finished, including one the animator starts when an earlier
+ * one ends (the fade back in after a dip's fade out). A wall-clock timeout
+ * would fail a page whose main thread runs late; this waits for the motion
+ * itself, and the test's own timeout still bounds it.
+ */
+async function settled(page: Page) {
+  await page.evaluate(async () => {
+    const box = document.getElementById('box') as HTMLElement;
+    const running = () =>
+      box
+        .getAnimations()
+        .filter(animation => animation.playState === 'running');
+    for (;;) {
+      const now = running();
+      if (now.length > 0) {
+        await Promise.all(
+          now.map(async animation => animation.finished.catch(() => undefined)),
+        );
+        continue;
+      }
+      // An animation that just ended starts the next step from its handler,
+      // within a frame.
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => setTimeout(resolve, 0)),
+      );
+      if (running().length === 0) {
+        return;
+      }
+    }
+  });
+}
+
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -295,9 +329,8 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('under Reduce Motion, a dip held before its first frame lands once the hold is resumed', async ({
@@ -338,9 +371,8 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('a spring started right before a block plays in full after it', async ({
