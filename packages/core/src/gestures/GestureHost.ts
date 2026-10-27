@@ -365,6 +365,8 @@ const WHEEL_PINCH_SPAN = 100;
 /** A wheel gesture: the contacts it drives in the arena, or none where the page keeps it. */
 interface WheelGesture {
   readonly kind: 'pan' | 'pinch';
+  /** A mouse wheel's notches, or a trackpad's continuous scroll. */
+  readonly scrollType: ScrollType;
   readonly ids: ReadonlyArray<number>;
   /** A pan's contact, or a pinch's center. */
   x: number;
@@ -1786,6 +1788,7 @@ export class GestureHost {
       this.endWheel();
       gesture = {
         kind,
+        scrollType: scrollTypeOf(wheel),
         ids: [],
         x: wheel.clientX,
         y: wheel.clientY,
@@ -1833,8 +1836,10 @@ export class GestureHost {
     dy: number,
     time: number,
   ): WheelGesture {
+    const type = scrollTypeOf(wheel);
     const kept: WheelGesture = {
       kind,
+      scrollType: type,
       ids: [],
       x: wheel.clientX,
       y: wheel.clientY,
@@ -1847,7 +1852,6 @@ export class GestureHost {
     if (this.arena.touches.length > 0 || (dx === 0 && dy === 0)) {
       return kept;
     }
-    const type = scrollTypeOf(wheel);
     const view = this.doc.defaultView;
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
     // Every scroller under the pointer, the page included, as a finger's
@@ -2000,10 +2004,18 @@ export class GestureHost {
     if (gesture.ids.length === 0) {
       return;
     }
+    // A trackpad's scroll releases at its last wheel, with its speed: its
+    // momentum arrives as more wheel. A mouse wheel's notches release still,
+    // past the velocity's stillness interval, so position alone decides
+    // where a pan settles (the coordinator's ruling; FR43 is silent).
+    const time =
+      gesture.scrollType === 'discrete'
+        ? gesture.last + WHEEL_END_MS
+        : gesture.last;
     this.arena.ended(
       gesture.kind === 'pan'
-        ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time: gesture.last}]
-        : this.pinchContacts(gesture, gesture.last),
+        ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]
+        : this.pinchContacts(gesture, time),
     );
   }
 
