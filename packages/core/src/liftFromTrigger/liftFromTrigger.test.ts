@@ -10,7 +10,9 @@
  *   unmount puts back exactly what the source had inline and takes the rest
  *   away; nothing of it (an element, a document listener, a timer) outlives
  *   it over repeated lifts; the gutter it reads; the holds it takes; taps on
- *   its backdrop
+ *   its backdrop. And the zoom's copy (liftCopy): one copy of the source's
+ *   picture in the caller's host at the source's box while the source hides
+ *   in place, and a drop that leaves the page as it was
  * @position Testing; the motion, the top layer and the counts in real
  *   engines are proven in __tests__/liftFromTrigger.interaction.browser.spec.ts
  */
@@ -20,6 +22,7 @@ import * as inputHold from '../Layer/inputHold';
 import {
   createLiftFromTrigger,
   type LiftFromTriggerOptions,
+  liftCopy,
 } from './liftFromTrigger';
 
 vi.mock('../Layer/inputHold', async importOriginal => ({
@@ -407,5 +410,135 @@ describe('lift', () => {
     pointer('pointerup', 2);
     expect(onBackdropTap).toHaveBeenCalledTimes(1);
     lift.dispose();
+  });
+});
+
+describe('liftCopy', () => {
+  /**
+   * A viewer's host over the page, and a grid of thumbnails: one a button
+   * around a picture, one a bare picture with its own inline visibility, one
+   * that shows no picture.
+   */
+  function renderGrid() {
+    document.body.innerHTML = `
+      <div id="host"></div>
+      <ul id="grid">
+        <li><button id="thumb" type="button"><img src="https://example.test/a-thumb.jpg" alt="A"></button></li>
+        <li><img id="bare" src="https://example.test/b-thumb.jpg" alt="B" style="visibility: visible"></li>
+        <li><div id="plain">C</div></li>
+      </ul>`;
+    const host = document.getElementById('host') as HTMLElement;
+    place(host, 0, 0, 390, 844);
+    const thumb = document.getElementById('thumb') as HTMLElement;
+    thumb.style.borderRadius = '12px';
+    place(thumb, 40, 300, 100, 100);
+    const bare = document.getElementById('bare') as HTMLElement;
+    place(bare, 150, 300, 100, 100);
+    const plain = document.getElementById('plain') as HTMLElement;
+    place(plain, 260, 300, 100, 100);
+    return {host, thumb, bare, plain};
+  }
+
+  it("places one copy of the source's picture in the host at the source's box (aspect fill, its corners, inert, hidden from assistive technology); the source hides in place and nothing else is added", () => {
+    const {host, thumb} = renderGrid();
+    const before = count();
+    const copy = liftCopy(thumb, {host});
+    expect(copy).not.toBeNull();
+    expect(count()).toBe(before + 1);
+    const element = copy?.element as HTMLImageElement;
+    expect(element.parentElement).toBe(host);
+    expect(element.localName).toBe('img');
+    expect(element.src).toBe('https://example.test/a-thumb.jpg');
+    expect(element.alt).toBe('');
+    expect(element.getAttribute('aria-hidden')).toBe('true');
+    expect(element.hasAttribute('data-astryx-lift-copy')).toBe(true);
+    expect([
+      element.style.position,
+      element.style.left,
+      element.style.top,
+      element.style.width,
+      element.style.height,
+    ]).toEqual(['absolute', '40px', '300px', '100px', '100px']);
+    expect(element.style.objectFit).toBe('cover');
+    expect(element.style.borderRadius).toBe('12px');
+    expect(element.style.pointerEvents).toBe('none');
+    expect(copy?.box).toEqual({x: 40, y: 300, width: 100, height: 100});
+    // The source hides where it is: it keeps its layout, so no placeholder.
+    expect(thumb.style.visibility).toBe('hidden');
+    expect(thumb.parentElement?.children).toHaveLength(1);
+    copy?.drop();
+  });
+
+  it("lays the copy out against the host's own box: its offset, borders and scroll", () => {
+    const {host, thumb} = renderGrid();
+    place(host, 10, 20, 300, 600);
+    Object.defineProperty(host, 'clientLeft', {value: 2, configurable: true});
+    Object.defineProperty(host, 'clientTop', {value: 3, configurable: true});
+    Object.defineProperty(host, 'scrollLeft', {value: 5, configurable: true});
+    Object.defineProperty(host, 'scrollTop', {value: 7, configurable: true});
+    const copy = liftCopy(thumb, {host});
+    expect([copy?.element.style.left, copy?.element.style.top]).toEqual([
+      '33px',
+      '284px',
+    ]);
+    copy?.drop();
+  });
+
+  it("takes an image source's own picture, or `src` for a source that shows none", () => {
+    const {host, bare, plain} = renderGrid();
+    const fromImage = liftCopy(bare, {host, src: 'https://example.test/b.jpg'});
+    expect(fromImage?.element.src).toBe('https://example.test/b-thumb.jpg');
+    fromImage?.drop();
+    const fromSrc = liftCopy(plain, {host, src: 'https://example.test/c.jpg'});
+    expect(fromSrc?.element.src).toBe('https://example.test/c.jpg');
+    fromSrc?.drop();
+  });
+
+  it('a drop takes the copy away and shows the source as it was; a second drop does nothing', () => {
+    const {host, thumb, bare} = renderGrid();
+    const before = count();
+    const copy = liftCopy(thumb, {host});
+    const other = liftCopy(bare, {host});
+    copy?.drop();
+    copy?.drop();
+    expect(thumb.style.visibility).toBe('');
+    expect(thumb.getAttribute('style')).not.toContain('visibility');
+    expect(bare.style.visibility).toBe('hidden');
+    other?.drop();
+    // Its own inline visibility comes back.
+    expect(bare.style.visibility).toBe('visible');
+    expect(count()).toBe(before);
+    expect(host.children).toHaveLength(0);
+  });
+
+  it('two copies of one source: it shows again only when the last of them drops', () => {
+    const {host, thumb} = renderGrid();
+    const opening = liftCopy(thumb, {host});
+    const closing = liftCopy(thumb, {host});
+    expect(host.children).toHaveLength(2);
+    opening?.drop();
+    expect(thumb.style.visibility).toBe('hidden');
+    closing?.drop();
+    expect(thumb.style.visibility).toBe('');
+  });
+
+  it('`attribute` names the mark on the copy', () => {
+    const {host, thumb} = renderGrid();
+    const copy = liftCopy(thumb, {host, attribute: 'data-lightbox-portal'});
+    expect(copy?.element.hasAttribute('data-lightbox-portal')).toBe(true);
+    expect(copy?.element.hasAttribute('data-astryx-lift-copy')).toBe(false);
+    copy?.drop();
+  });
+
+  it('changes nothing for a source that is not in the page or has no box', () => {
+    const {host, thumb} = renderGrid();
+    const before = count();
+    const detached = document.createElement('img');
+    place(detached, 0, 0, 100, 100);
+    expect(liftCopy(detached, {host})).toBeNull();
+    place(thumb, 40, 300, 0, 0);
+    expect(liftCopy(thumb, {host})).toBeNull();
+    expect(thumb.style.visibility).toBe('');
+    expect(count()).toBe(before);
   });
 });
