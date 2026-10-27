@@ -17,12 +17,34 @@ import {fileURLToPath} from 'node:url';
 import {ensureCoreBuilt} from '../packages/cli/clients/cli/commands/ensure-core-built.mjs';
 
 /**
- * The release clock, read off its one source: `pressConsts.releaseMs` in
- * utils/interactionOverlay.stylex.ts, which both the stylesheet (at build
- * time) and the controller (at run time) take it from. The module itself
- * cannot be imported here, since a StyleX source file only runs compiled.
+ * The release clocks, read off their one source: `pressConsts` in
+ * utils/interactionOverlay.stylex.ts (`releaseMs`, a cell's deselect, and
+ * `controlReleaseMs`, a control's), which both the stylesheet (at build
+ * time) and the controller's profile table (at run time) take them from. The
+ * module itself cannot be imported here, since a StyleX source file only
+ * runs compiled.
  */
-async function readReleaseMs() {
+/**
+ * The Reduce Motion fade's duration, off its one source:
+ * `reducedMotionFadeConsts.duration` in motion/reducedMotion.stylex.ts.
+ */
+async function readReducedMotionFadeMs() {
+  const source = await fs.readFile(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../packages/core/src/motion/reducedMotion.stylex.ts',
+    ),
+    'utf8',
+  );
+  const block = source.slice(source.indexOf('reducedMotionFadeConsts'));
+  const match = block.match(/duration:\s*'(\d+)ms'/);
+  if (match == null) {
+    throw new Error('reducedMotionFadeConsts.duration not found');
+  }
+  return Number(match[1]);
+}
+
+async function readReleaseClocks() {
   const source = await fs.readFile(
     path.join(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -30,13 +52,21 @@ async function readReleaseMs() {
     ),
     'utf8',
   );
-  const match = source.match(/releaseMs:\s*(\d+)/);
-  if (match == null) {
+  const controlSource = await fs.readFile(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../packages/core/src/utils/controlPressLayer.stylex.ts',
+    ),
+    'utf8',
+  );
+  const cell = source.match(/\breleaseMs:\s*(\d+)/);
+  const control = controlSource.match(/\bcontrolReleaseMs:\s*(\d+)/);
+  if (cell == null || control == null) {
     throw new Error(
-      'pressConsts.releaseMs not found in interactionOverlay.stylex.ts',
+      'pressConsts.releaseMs / controlPressConsts.controlReleaseMs not found',
     );
   }
-  return Number(match[1]);
+  return {cell: Number(cell[1]), control: Number(control[1])};
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -242,7 +272,16 @@ describe('build-css astryx.css', () => {
   describe('the touch press release (utils/interactionOverlay.stylex.ts)', () => {
     /** `.2s`, `200ms`, `0.2s` → 200. */
     const toMs = value => {
-      const match = value.trim().match(/^([\d.]+)(ms|s)$/);
+      // Capped under reduced motion: `min(<clock>, 200ms)`.
+      const capped = /^min\((.+),\s*([\d.]+m?s)\)$/.exec(value.trim());
+      if (capped != null) {
+        return Math.min(toMs(capped[1]), toMs(capped[2]));
+      }
+      // The release plays a theme motion role: `var(--motion-…, 200ms)`.
+      const role = value.trim().match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
+      const match = (role == null ? value : role[1])
+        .trim()
+        .match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
         : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
@@ -266,18 +305,67 @@ describe('build-css astryx.css', () => {
         /@keyframes ([\w-]+)\{from\{--astryx-press-alpha:1;?\}to\{--astryx-press-alpha:0;?\}\}/,
       );
       expect(keyframes).not.toBeNull();
-      const fading = lines().filter(line =>
-        line.includes('[data-astryx-press="fading"]'),
+      // The overlay's arms on the element itself; the compositor press
+      // layers' `::before` and `::after` arms have their own block below.
+      const fading = lines().filter(
+        line =>
+          line.includes('[data-astryx-press="fading"]') &&
+          !line.includes('::before') &&
+          !line.includes('::after') &&
+          // Reduced motion's own clock is checked in its block below.
+          !line.includes('prefers-reduced-motion'),
       );
       expect(
         fading.some(line => line.includes(`animation-name:${keyframes[1]}`)),
       ).toBe(true);
-      const durations = fading
-        .map(line => line.match(/animation-duration:\s*([^;}]+)/))
-        .filter(Boolean)
-        .map(match => toMs(match[1]));
-      // One clock, the one the controller removes the attribute on.
-      expect(durations).toEqual([await readReleaseMs()]);
+      const durationsOf = rules =>
+        rules
+          .map(line => line.match(/animation-duration:\s*([^;}]+)/))
+          .filter(Boolean)
+          .map(match => toMs(match[1]));
+      const coarse = line => line.trim().startsWith('@media (pointer: coarse)');
+      // Under a coarse primary pointer, one clock per profile, the ones the
+      // controller removes the attribute on: a control's by default, a
+      // cell's where the marker says `cell`.
+      const clocks = await readReleaseClocks();
+      // A mouse or Space press the controller paints on a touch-first device
+      // keeps the deselect clock (`[data-astryx-press-input]`).
+      const input = line => line.includes('[data-astryx-press-input]');
+      expect(
+        [
+          ...durationsOf(fading.filter(line => coarse(line) && !input(line))),
+        ].sort((a, b) => a - b),
+      ).toEqual([clocks.cell, clocks.control].sort((a, b) => a - b));
+      expect(
+        durationsOf(fading.filter(line => coarse(line) && input(line))),
+      ).toEqual([clocks.cell]);
+      // With any other pointer, the one clock it always had: the deselect's
+      // (the desktop rule, `spec:AST-017` FR59/DEC-25).
+      expect(durationsOf(fading.filter(line => !coarse(line)))).toEqual([
+        clocks.cell,
+      ]);
+      const cellArm = fading.filter(line =>
+        line.includes('[data-astryx-pressable="cell"]'),
+      );
+      expect(
+        cellArm
+          .map(line => line.match(/animation-duration:\s*([^;}]+)/))
+          .filter(Boolean)
+          .map(match => toMs(match[1])),
+      ).toEqual([clocks.cell]);
+      // Under Reduce Motion the fading arm follows design:reduced-motion
+      // instead (DR2's fade, utils/pressPaintReducedMotion.test.ts), in its
+      // own media blocks: every such clock is the policy's fade.
+      const reduced = lines().filter(
+        line =>
+          line.includes('[data-astryx-press="fading"]') &&
+          !line.includes('::before') &&
+          !line.includes('::after') &&
+          line.includes('prefers-reduced-motion'),
+      );
+      expect([...new Set(durationsOf(reduced))]).toEqual([
+        await readReducedMotionFadeMs(),
+      ]);
       // The onset is instant: nothing animates on the on arm.
       const on = lines().filter(line =>
         line.includes('[data-astryx-press="on"]'),
@@ -291,8 +379,12 @@ describe('build-css astryx.css', () => {
       // press's strength, declared by the shared overlay styles on the element
       // the controller writes to. StyleX deduplicates the identical
       // declaration across the variants, so the shipped sheet carries it once.
-      const declarations = lines().filter(line =>
-        /\{--_press-paint:/.test(line),
+      // (The compositor press layer's rows turn this paint off with
+      // `--_press-paint: transparent`; that declaration is its own, below.)
+      const declarations = lines().filter(
+        line =>
+          /\{--_press-paint:/.test(line) &&
+          !/\{--_press-paint:transparent/.test(line),
       );
       expect(declarations).toHaveLength(1);
       expect(declarations[0]).toContain('var(--color-overlay-pressed)');
@@ -322,6 +414,311 @@ describe('build-css astryx.css', () => {
       expect(arms.some(line => line.includes('--color-overlay-hover'))).toBe(
         false,
       );
+    });
+  });
+  describe('the press releases under reduced motion (design:reduced-motion)', () => {
+    const toMs = value => {
+      const match = value.trim().match(/^([\d.]+)(ms|s)$/);
+      return match == null
+        ? Number.NaN
+        : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+    };
+    const durationMs = value => toMs(value);
+    const durationOf = line =>
+      line.match(/animation-duration:\s*([^;}]+)/)?.[1] ?? null;
+    /** A control's release clock: UIButton's, 250 ms (`button.highlight`). */
+    const isControlClock = line => {
+      const duration = durationOf(line);
+      return duration != null && toMs(duration) === 250;
+    };
+    const kindOf = line =>
+      line.includes('::before')
+        ? '::before'
+        : line.includes('::after')
+          ? '::after'
+          : 'host';
+    const COARSE =
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
+    const OTHER =
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))';
+    const fadingLines = () =>
+      astryxCss
+        .split('\n')
+        .filter(line => line.includes('[data-astryx-press="fading"]'));
+    /** How much StyleX padded a rule's specificity (its selector only). */
+    const weight = line => {
+      const selector = line
+        .trim()
+        .replace(/^@media[^{]*\{/, '')
+        .split('{')[0];
+      const first = selector.match(/^\.[\w-]+/)?.[0] ?? '';
+      const repeats = first ? selector.split(first).length - 1 : 0;
+      return (selector.match(/:not\(#\\#\)/g) ?? []).length + repeats;
+    };
+
+    it('cross-fades every control release in 200 ms or less where the primary pointer is coarse (DR2)', () => {
+      const long = fadingLines().filter(line => {
+        const duration = durationOf(line);
+        return (
+          duration != null &&
+          !line.includes('prefers-reduced-motion') &&
+          durationMs(duration) > 200
+        );
+      });
+      expect(new Set(long.map(kindOf))).toEqual(
+        new Set(['host', '::before', '::after']),
+      );
+      for (const kind of ['host', '::before', '::after']) {
+        const reduced = fadingLines().filter(
+          line =>
+            line.includes(COARSE) &&
+            kindOf(line) === kind &&
+            /animation-duration:/.test(line),
+        );
+        expect(reduced.length, kind).toBeGreaterThan(0);
+        for (const line of reduced) {
+          expect(durationMs(durationOf(line)), line).toBeLessThanOrEqual(200);
+        }
+      }
+    });
+
+    it('releases every control at once with any other pointer: no animation, the rest state on the fading arm (DR3)', () => {
+      const other = fadingLines().filter(line => line.includes(OTHER));
+      // The host's release, which runs with any pointer, stops...
+      const stops = other.filter(
+        line => kindOf(line) === 'host' && /animation-name:none/.test(line),
+      );
+      expect(stops.length).toBeGreaterThan(0);
+      // ...and outranks the release it replaces.
+      const releases = fadingLines().filter(
+        line =>
+          !line.includes('prefers-reduced-motion') &&
+          kindOf(line) === 'host' &&
+          /animation-name:(?!none)/.test(line),
+      );
+      for (const release of releases) {
+        expect(Math.max(...stops.map(weight)), release).toBeGreaterThanOrEqual(
+          weight(release),
+        );
+      }
+      expect(
+        other.some(
+          line =>
+            kindOf(line) === 'host' && /--astryx-press-alpha:0/.test(line),
+        ),
+      ).toBe(true);
+      // A control's layer release (a button's `::before`, a card's
+      // `::after`, on UIButton's clock) runs only under a coarse primary
+      // pointer, so it never runs with any other.
+      const layerReleases = fadingLines().filter(
+        line =>
+          kindOf(line) !== 'host' &&
+          !line.includes('prefers-reduced-motion') &&
+          isControlClock(line),
+      );
+      expect(layerReleases.length).toBeGreaterThan(0);
+      for (const line of layerReleases) {
+        expect(line.trim(), line).toMatch(/^@media \(pointer: coarse\)\{/);
+      }
+    });
+
+    it('adds nothing for any other pointer than a coarse primary one (the desktop rule)', async () => {
+      // `spec:AST-017` FR59/DEC-25: touch work leaves a fine pointer's behavior as
+      // it is. UIButton's release clock and curve, and the button's
+      // `isolation`, apply only behind the coarse gate.
+      const source = await fs.readFile(
+        path.join(ROOT, 'packages/core/src/utils/controlPressLayer.stylex.ts'),
+        'utf8',
+      );
+      const ms = Number(source.match(/controlReleaseMs:\s*(\d+)/)[1]);
+      const points = source
+        .match(/controlReleaseEase:\s*'([^']+)'/)[1]
+        .match(/-?\d*\.?\d+/g)
+        .map(point => String(Number(point)).replace(/^0\./, '.'));
+      const curve = `animation-timing-function:cubic-bezier(${points.join(',')})`;
+      const isClock = line =>
+        isControlClock(line) && durationMs(durationOf(line)) === ms;
+      const gated = line => /^@media \(pointer: coarse\)\{/.test(line.trim());
+      const lines = astryxCss
+        .split('\n')
+        .filter(line => !line.includes('prefers-reduced-motion'));
+      // The curve as written in the stylesheet, minified or not.
+      const hasCurve = line =>
+        line
+          .replace(/\s+/g, '')
+          .replace(/([(,])0\./g, '$1.')
+          .includes(curve);
+      const control = lines.filter(line => isClock(line) || hasCurve(line));
+      expect(control.some(isClock)).toBe(true);
+      expect(control.some(hasCurve)).toBe(true);
+      expect(control.filter(line => !gated(line))).toEqual([]);
+      expect(
+        lines.some(line => gated(line) && /\{isolation:isolate\}/.test(line)),
+      ).toBe(true);
+    });
+  });
+
+  describe('the compositor press layer (rowPressLayer.ts `cell`)', () => {
+    /** The cell clock and curve, read off their one stylesheet source. */
+    async function readLayerConsts() {
+      const source = await fs.readFile(
+        path.join(ROOT, 'packages/core/src/utils/rowPressLayer.stylex.ts'),
+        'utf8',
+      );
+      const ms = source.match(/cellReleaseMs:\s*(\d+)/);
+      const ease = source.match(/cellReleaseEase:\s*'([^']+)'/);
+      if (ms == null || ease == null) {
+        throw new Error('cellPressConsts not found in rowPressLayer.stylex.ts');
+      }
+      return {
+        ms: Number(ms[1]),
+        points: ease[1].match(/-?\d*\.?\d+/g).map(Number),
+      };
+    }
+    const toMs = value => {
+      // Capped under reduced motion: `min(<clock>, 200ms)`.
+      const capped = /^min\((.+),\s*([\d.]+m?s)\)$/.exec(value.trim());
+      if (capped != null) {
+        return Math.min(toMs(capped[1]), toMs(capped[2]));
+      }
+      // The release plays a theme motion role: `var(--motion-…, 200ms)`.
+      const role = value.trim().match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
+      const match = (role == null ? value : role[1])
+        .trim()
+        .match(/^([\d.]+)(ms|s)$/);
+      return match == null
+        ? Number.NaN
+        : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+    };
+    const layerLines = arm =>
+      astryxCss
+        .split('\n')
+        .filter(line => line.includes(arm) && line.includes('::before'));
+
+    it('releases with an opacity keyframe animation on the cell clock and curve', async () => {
+      // Opacity, the property engines run on the compositor: the release
+      // keeps fading while script runs.
+      const keyframes = astryxCss.match(
+        /@keyframes ([\w-]+)\{from\{opacity:1;?\}to\{opacity:0;?\}\}/,
+      );
+      expect(keyframes).not.toBeNull();
+      const fading = layerLines('[data-astryx-press="fading"]');
+      expect(
+        fading.some(line => line.includes(`animation-name:${keyframes[1]}`)),
+      ).toBe(true);
+      const {ms, points} = await readLayerConsts();
+      const durations = fading
+        .map(line => line.match(/animation-duration:\s*([^;}]+)/))
+        .filter(Boolean)
+        .map(match => toMs(match[1]));
+      // The control layer (Button) releases on its own clock beside it.
+      expect(durations).toContain(ms);
+      const curves = fading
+        .map(line => line.match(/animation-timing-function:\s*([^;}]+)/))
+        .filter(Boolean)
+        .map(match => match[1].match(/-?\d*\.?\d+/g).map(Number));
+      expect(curves).toContainEqual(points);
+    });
+
+    it('lets the motion animator promote the layer it animates', () => {
+      expect(astryxCss).toMatch(
+        /::before\{[^}]*will-change:var\(--astryx-motion-will-change-before,\s*auto\)/,
+      );
+    });
+
+    it('shows the layer at once on the on arm, and rests it at 0 on the fading arm under its release', () => {
+      const on = layerLines('[data-astryx-press="on"]');
+      expect(on.some(line => /\{opacity:1;?\}/.test(line))).toBe(true);
+      expect(on.some(line => line.includes('animation'))).toBe(false);
+      // Nothing of the layer at rest (a row's own `::before` is untouched):
+      // its opacity is only ever a press arm's.
+      const fading = layerLines('[data-astryx-press="fading"]');
+      expect(fading.some(line => /\{opacity:0;?\}/.test(line))).toBe(true);
+    });
+
+    /** The control clock and curve, read off the same stylesheet source. */
+    async function readControlConsts() {
+      const source = await fs.readFile(
+        path.join(ROOT, 'packages/core/src/utils/controlPressLayer.stylex.ts'),
+        'utf8',
+      );
+      const ms = source.match(/controlReleaseMs:\s*(\d+)/);
+      const ease = source.match(/controlReleaseEase:\s*'([^']+)'/);
+      if (ms == null || ease == null) {
+        throw new Error(
+          'control release not found in controlPressLayer.stylex.ts',
+        );
+      }
+      return {
+        ms: Number(ms[1]),
+        points: ease[1].match(/-?\d*\.?\d+/g).map(Number),
+      };
+    }
+
+    it.each(['::before', '::after'])(
+      'releases a control (%s) with an opacity keyframe animation on the control clock and curve',
+      async pseudo => {
+        const keyframes = astryxCss.match(
+          /@keyframes ([\w-]+)\{from\{opacity:1;?\}to\{opacity:0;?\}\}/,
+        );
+        expect(keyframes).not.toBeNull();
+        const {ms, points} = await readControlConsts();
+        const fading = astryxCss
+          .split('\n')
+          .filter(
+            line =>
+              line.includes('[data-astryx-press="fading"]') &&
+              line.includes(pseudo),
+          );
+        expect(
+          fading.some(line => line.includes(`animation-name:${keyframes[1]}`)),
+        ).toBe(true);
+        const durations = fading
+          .map(line => line.match(/animation-duration:\s*([^;}]+)/))
+          .filter(Boolean)
+          .map(match => toMs(match[1]));
+        expect(durations).toContain(ms);
+        const curves = fading
+          .map(line => line.match(/animation-timing-function:\s*([^;}]+)/))
+          .filter(Boolean)
+          .map(match => match[1].match(/-?\d*\.?\d+/g).map(Number));
+        expect(curves).toContainEqual(points);
+      },
+    );
+  });
+
+  describe("the list rows' touch arms (List, TreeList)", () => {
+    /**
+     * A rule the build puts inside the touch gate (TOUCH_QUERY,
+     * utils/touchPresentation.ts): a coarse primary pointer, iOS and Android
+     * alike, never a mouse. No engine condition: one touch model.
+     */
+    const TOUCH_GATED = /^@media \(pointer: coarse\)\{(?!@supports)/;
+    const rules = () => astryxCss.split('\n').map(line => line.trim());
+    /** Rules that hide a divider or reach the press layer over one. */
+    const dividerArms = state =>
+      rules().filter(
+        rule =>
+          rule.includes(`[data-astryx-press="${state}"]`) &&
+          (rule.includes('{border-bottom-color:transparent}') ||
+            rule.includes('::before{bottom:')),
+      );
+
+    it('hides the dividers beside a pressed row, and reaches its layer over them, only under a finger', () => {
+      const arms = dividerArms('on');
+      // Its own divider, the one above, the layer's reach, the last row's.
+      expect(arms.length).toBeGreaterThanOrEqual(4);
+      for (const rule of arms) {
+        expect(rule).toMatch(TOUCH_GATED);
+      }
+    });
+
+    it('keeps them hidden around a row held through a navigation push the same way', () => {
+      const arms = dividerArms('held');
+      expect(arms.length).toBeGreaterThanOrEqual(4);
+      for (const rule of arms) {
+        expect(rule).toMatch(TOUCH_GATED);
+      }
     });
   });
 

@@ -31,6 +31,7 @@ import {
   docStem,
   findComponentReadme,
   findComponentSource,
+  findExportedComponentSource,
   findExternalComponentDoc,
   findIntegrationComponent,
   integrationMemberEntry,
@@ -431,13 +432,14 @@ export function legacyExternalKeeps(cwd, dirName, owners) {
 
 /**
  * The core source file for `dirName` (the no-scope `--source` path reads core
- * directly — it does NOT fall back to externals or fuzzy search).
+ * directly — it does NOT fall back to externals or fuzzy search). Only the
+ * file that exports the component or hook of that exact name counts.
  * @param {string} coreDir
  * @param {string} dirName
  * @returns {string | null}
  */
 export function resolveCoreSourcePath(coreDir, dirName) {
-  return findComponentSource(coreDir, dirName);
+  return findExportedComponentSource(coreDir, dirName);
 }
 
 /**
@@ -487,7 +489,14 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
         results.length > topTied.length ? results[topTied.length].score : 0;
       const gap = topScore - secondScore;
 
-      if (topScore >= 90 && topTied.length === 1 && gap >= 20) {
+      // Names are case-sensitive: a name that matches a component only by
+      // case (`badge` for Badge) is not that component. It gets the
+      // suggestion, not the doc.
+      const caseOnly =
+        topTied.length === 1 &&
+        topTied[0].name !== dirName &&
+        topTied[0].name.toLowerCase() === dirName.toLowerCase();
+      if (!caseOnly && topScore >= 90 && topTied.length === 1 && gap >= 20) {
         resolvedName = topTied[0].name;
         readmePath = findComponentReadme(coreDir, resolvedName);
         resolvedOwnerPackage = CORE_PACKAGE;
