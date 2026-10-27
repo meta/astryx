@@ -31,6 +31,12 @@
  *   for its own pan or zoom; so is a `touchmove` that can no longer be
  *   cancelled where `touch-action` let the browser pan, and a scroll above
  *   the touch.
+ * - Where the primary pointer is fine the host listens for nothing
+ *   (`spec:AST-094` FR19, FR24) except an action group
+ *   (`AttachOptions.actionGroup`, `family:action-groups` FR5): one passive
+ *   `pointerdown` listener on the group, and document listeners only while
+ *   its press is held, removed at the release. Only the group's own
+ *   recognizers and consumer take that press.
  *
  * WHAT THE BROWSER IS TOLD
  *
@@ -98,6 +104,10 @@ interface Registration {
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
   manageStyle: boolean;
+  /** An action group (`family:action-groups` FR5). */
+  actionGroup: boolean;
+  /** The group's passive `pointerdown` listener under a fine pointer. */
+  groupDownListener: EventListener | null;
 }
 
 export interface GestureHostOptions {
@@ -112,7 +122,8 @@ export interface GestureHostOptions {
   onTransition?: GestureArenaOptions['onTransition'];
   /**
    * Whether the primary pointer is coarse (a phone, a tablet). Where it is
-   * fine, the host registers no listener at all (`spec:AST-094` FR19, FR24).
+   * fine, the host registers no listener at all (`spec:AST-094` FR19, FR24),
+   * except an action group's own (`AttachOptions.actionGroup`).
    * @default `(pointer: coarse)` on the document's window
    */
   isPrimaryPointerCoarse?: () => boolean;
@@ -121,6 +132,14 @@ export interface GestureHostOptions {
 export interface AttachOptions {
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
+  /**
+   * The element is an action group, sibling actions a held pointer slides
+   * across (`family:action-groups` FR5). Where the primary pointer is fine,
+   * the host still serves it, and nothing else: one passive `pointerdown`
+   * listener on the element, and document listeners only while a press is
+   * held (`spec:AST-094` FR19, FR24). @default false
+   */
+  actionGroup?: boolean;
 }
 
 const STYLE_PROPERTIES: Record<keyof GestureHostStyle, string> = {
@@ -275,6 +294,15 @@ export class GestureHost {
       isRtl: view =>
         view instanceof Element &&
         doc.defaultView?.getComputedStyle(view).direction === 'rtl',
+      // A screen-edge pan tells its edge zone from a wider view by its size
+      // (spec:AST-094 FR18).
+      viewSize: view => {
+        if (!(view instanceof Element)) {
+          return null;
+        }
+        const {width, height} = view.getBoundingClientRect();
+        return {width, height};
+      },
     };
     this.arena = new GestureArena({
       clock: options.clock ?? browserClock,
@@ -311,6 +339,7 @@ export class GestureHost {
   ): () => void {
     const registration = this.registrationFor(element);
     registration.manageStyle = options.manageStyle ?? registration.manageStyle;
+    registration.actionGroup = options.actionGroup ?? registration.actionGroup;
     recognizer.view = element;
     if (recognizer instanceof HoverGestureRecognizer) {
       registration.hovers.push(recognizer);
@@ -420,6 +449,8 @@ export class GestureHost {
         touchMoveListener: null,
         savedStyle: new Map(),
         manageStyle: true,
+        actionGroup: false,
+        groupDownListener: null,
       };
       this.registry.set(element, registration);
     }
@@ -441,6 +472,25 @@ export class GestureHost {
     } else if (!needsListener && registration.touchMoveListener != null) {
       element.removeEventListener('touchmove', registration.touchMoveListener);
       registration.touchMoveListener = null;
+    }
+    // An action group under a fine pointer: its one idle listener.
+    const needsGroupListener =
+      registration.actionGroup &&
+      !this.isPrimaryPointerCoarse() &&
+      (registration.recognizers.some(r => r.isEnabled) ||
+        (registration.consumer != null &&
+          registration.consumer.isEnabled?.() !== false));
+    if (needsGroupListener && registration.groupDownListener == null) {
+      const listener: EventListener = event =>
+        this.beginGroupPress(event as PointerEvent, registration);
+      registration.groupDownListener = listener;
+      element.addEventListener('pointerdown', listener, {passive: true});
+    } else if (!needsGroupListener && registration.groupDownListener != null) {
+      element.removeEventListener(
+        'pointerdown',
+        registration.groupDownListener,
+      );
+      registration.groupDownListener = null;
     }
   }
 
@@ -487,6 +537,13 @@ export class GestureHost {
     }
     if (registration.touchMoveListener != null) {
       element.removeEventListener('touchmove', registration.touchMoveListener);
+    }
+    if (registration.groupDownListener != null) {
+      element.removeEventListener(
+        'pointerdown',
+        registration.groupDownListener,
+      );
+      registration.groupDownListener = null;
     }
     this.registry.delete(element);
     this.syncListeners();
@@ -1188,6 +1245,140 @@ export class GestureHost {
       },
     ]);
   };
+
+  /** The pointer of the group press being served under a fine pointer. */
+  private groupPressPointer: number | null = null;
+
+  /**
+   * A press on an action group under a fine pointer (`family:action-groups`
+   * FR5): the group's recognizers and consumer take it, nothing else on the
+   * path does (`spec:AST-094` FR19), and the document listens only until it
+   * lifts (FR24). Where the primary pointer is coarse the host's own
+   * listeners serve the group, as every other recognizer.
+   */
+  private beginGroupPress(
+    event: PointerEvent,
+    registration: Registration,
+  ): void {
+    if (
+      this.isInstalled ||
+      this.groupPressPointer != null ||
+      !isPointerKind(event.pointerType) ||
+      (event.pointerType === 'mouse' && event.button !== 0)
+    ) {
+      return;
+    }
+    const recognizers = registration.recognizers.filter(
+      r => r.isEnabled && r.acceptsTouchInput,
+    );
+    const consumer =
+      registration.consumer != null &&
+      registration.consumer.isEnabled?.() !== false
+        ? registration.consumer
+        : null;
+    if (recognizers.length === 0 && consumer == null) {
+      return;
+    }
+    this.disarmSwallower();
+    const id = this.nextId++;
+    this.pointerIds.set(event.pointerId, id);
+    this.groupPressPointer = event.pointerId;
+    this.listenForGroupPress(true);
+    this.arena.began([
+      {
+        id,
+        x: event.clientX,
+        y: event.clientY,
+        time: eventTime(event),
+        pointerType: event.pointerType,
+        target: event.target,
+        scroll: createNativeScrollProbe(event.target),
+        recognizers,
+        consumer,
+      },
+    ]);
+  }
+
+  /** The document listeners one group press needs while it is held. */
+  private listenForGroupPress(isListening: boolean): void {
+    const doc = this.doc;
+    const view = doc.defaultView;
+    if (isListening) {
+      doc.addEventListener('pointermove', this.onGroupPointer, PASSIVE_CAPTURE);
+      doc.addEventListener('pointerup', this.onGroupPointer, PASSIVE_CAPTURE);
+      doc.addEventListener(
+        'pointercancel',
+        this.onGroupPointer,
+        PASSIVE_CAPTURE,
+      );
+      view?.addEventListener('blur', this.onGroupBlur);
+      // The click a lift owes is the press's too: claimed presses swallow it.
+      view?.addEventListener('click', this.onClick, ACTIVE_CAPTURE);
+    } else {
+      doc.removeEventListener(
+        'pointermove',
+        this.onGroupPointer,
+        PASSIVE_CAPTURE,
+      );
+      doc.removeEventListener(
+        'pointerup',
+        this.onGroupPointer,
+        PASSIVE_CAPTURE,
+      );
+      doc.removeEventListener(
+        'pointercancel',
+        this.onGroupPointer,
+        PASSIVE_CAPTURE,
+      );
+      view?.removeEventListener('blur', this.onGroupBlur);
+    }
+  }
+
+  private readonly onGroupPointer = (event: PointerEvent): void => {
+    if (event.pointerId !== this.groupPressPointer) {
+      return;
+    }
+    if (event.type === 'pointermove') {
+      this.onPointerMove(event);
+      return;
+    }
+    if (event.type === 'pointerup') {
+      this.onPointerUp(event);
+    } else {
+      this.onPointerCancel(event);
+    }
+    this.endGroupPress();
+  };
+
+  private readonly onGroupBlur = (): void => {
+    const pointer = this.groupPressPointer;
+    const id = pointer == null ? undefined : this.pointerIds.get(pointer);
+    if (pointer != null && id != null) {
+      this.pointerIds.delete(pointer);
+      this.arena.cancelled([id], this.arena.now());
+    }
+    this.endGroupPress();
+  };
+
+  /**
+   * The press lifted: its document listeners go now; the click listener stays
+   * for the click the lift dispatches in the same task, then goes too.
+   */
+  private endGroupPress(): void {
+    this.groupPressPointer = null;
+    this.listenForGroupPress(false);
+    const view = this.doc.defaultView;
+    const removeClick = () => {
+      if (!this.isInstalled) {
+        view?.removeEventListener('click', this.onClick, ACTIVE_CAPTURE);
+      }
+    };
+    if (view != null && typeof view.setTimeout === 'function') {
+      view.setTimeout(removeClick, 0);
+    } else {
+      removeClick();
+    }
+  }
 
   private readonly onPointerMove = (event: PointerEvent): void => {
     if (event.pointerType === 'touch' && this.usesTouchEvents) {

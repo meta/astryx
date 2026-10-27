@@ -4,6 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
 import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -45,6 +46,41 @@ interface NotificationOverviewSheetProps {
   height: NotificationSheetHeight;
   onCancel: () => void;
   onContinue: () => void;
+}
+
+/**
+ * A status message sent as the step hands over. Rendered inside the step's
+ * sheet, so `useAnnounce` follows that sheet's dialog (spec:AST-086 FR14): the
+ * words are delivered inside the open modal rather than to the page body the
+ * modal hides, and a close that is really a hand-over keeps them there.
+ */
+function ContinueWithStatus({onContinue}: {onContinue: () => void}) {
+  const announce = useAnnounce();
+  return (
+    <Button
+      label="Continue"
+      onClick={() => {
+        announce('Overview saved');
+        onContinue();
+      }}
+    />
+  );
+}
+
+/**
+ * A status message that leaves the person on this step: after going back to
+ * it while the next step still fades out, this step is the modal on top and
+ * the words are heard inside it (spec:AST-086 FR14).
+ */
+function SaveDraft() {
+  const announce = useAnnounce();
+  return (
+    <Button
+      label="Save draft"
+      variant="ghost"
+      onClick={() => announce('Draft saved')}
+    />
+  );
 }
 
 function NotificationOverviewSheet({
@@ -91,8 +127,9 @@ function NotificationOverviewSheet({
             </VStack>
           </VStack>
           <HStack gap={2} hAlign="end">
+            <SaveDraft />
             <Button label="Cancel" variant="secondary" onClick={onCancel} />
-            <Button label="Continue" onClick={onContinue} />
+            <ContinueWithStatus onContinue={onContinue} />
           </HStack>
         </VStack>
       </Section>

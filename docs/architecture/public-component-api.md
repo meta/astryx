@@ -136,7 +136,10 @@ guidance owns the process used to propose and test APIs.
   return, utility signature, default, or operation reachable from a supported
   package path is public even when its source comment, filename, or current use
   calls it internal. Privacy requires removing the export or moving the capability
-  behind a non-exported boundary.
+  behind a non-exported boundary. Core's `./internal/*` subpaths are the one
+  exception: reachable, but reserved for Core and Lab, undocumented, versioned
+  in lockstep with Core, limited by lint to those two packages, and outside
+  the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
   `architecture:knowledge-contracts`. Tests, a Changeset, or a generated manifest
@@ -271,7 +274,7 @@ copy the component matrix.
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                          | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                  |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                      | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                |
 | INV11                   | Public-API admission review plus owning theming/component tests                      | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                      |
-| INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping         | A reachable supporting type or behavior is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                                                      |
+| INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping         | A reachable supporting type or behavior outside `./internal/*` is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                               |
 | INV14                   | `AppShell.test.tsx`                                                                  | A component hardcodes a divergent point or treats equality as below                                                                                                                                                                                                                           |
 | INV15                   | Public-API review of the generated declaration inventory                             | A part or StyleX-typed styling prop ships without class-name and inline-style counterparts on the same element                                                                                                                                                                                |
 | INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice |
