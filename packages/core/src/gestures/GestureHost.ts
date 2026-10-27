@@ -312,10 +312,6 @@ function isPointerKind(type: string): type is PointerKind {
 }
 
 /**
- * An event's time on the arena's clock (`performance.now()`). Some engines
- * and DOM emulators stamp events in epoch milliseconds instead.
- */
-/**
  * What an event, or one of its touches, landed on. Inside an open shadow root
  * the document's listeners see the shadow host, in `event.target` and in a
  * touch's `target` alike, while the composed path starts at the element
@@ -332,6 +328,10 @@ function landedOn(
   return event.composedPath()[0] ?? retargeted;
 }
 
+/**
+ * An event's time on the arena's clock (`performance.now()`). Some engines
+ * and DOM emulators stamp events in epoch milliseconds instead.
+ */
 function eventTime(event: Event): number {
   const time = event.timeStamp;
   if (
