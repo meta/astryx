@@ -42,8 +42,6 @@ import {subscribeInput} from './inputStream';
 export const CLICK_GUARD_WINDOW_MS = 400;
 
 interface Guard {
-  /** The window the guard listens on. */
-  readonly view: Window;
   readonly unsubscribers: (() => void)[];
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -83,7 +81,7 @@ export function armClickGuard(doc: Document): void {
   }
   disarmClickGuard(doc);
   listenForClicks(view);
-  const guard: Guard = {view, unsubscribers: [], timer: null};
+  const guard: Guard = {unsubscribers: [], timer: null};
   guards.set(doc, guard);
   guard.unsubscribers.push(
     // The next press is a new gesture: its click must never be eaten.
@@ -101,15 +99,6 @@ export function disarmClickGuard(doc: Document): void {
   guards.delete(doc);
   if (guard.timer != null) {
     clearTimeout(guard.timer);
-  }
-  // A window that went away (a closed frame, a test environment torn down
-  // between files) took its listeners with it: there is nothing to remove,
-  // and its listener methods may be gone.
-  if (
-    doc.defaultView !== guard.view ||
-    typeof guard.view.removeEventListener !== 'function'
-  ) {
-    return;
   }
   for (const unsubscribe of guard.unsubscribers) {
     unsubscribe();
