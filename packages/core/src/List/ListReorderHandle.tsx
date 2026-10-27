@@ -45,7 +45,7 @@ import {
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars, typeScaleVars} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {ownRingContainerStyles} from './ownRing.stylex';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
@@ -169,6 +169,23 @@ const styles = stylex.create({
         'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
     },
   },
+  // The row's own child (a row without end content, spec:AST-103 FR5): it
+  // ends the row, as the end slot would, and aligns as the row's `align`
+  // would align that slot.
+  inRow: {
+    marginInlineStart: 'auto',
+  },
+  // `start`: at the top of the row's content.
+  inRowStart: {
+    alignSelf: 'flex-start',
+  },
+  // `first-line`: centred on the label's first line, a line of body text at
+  // the top of the row's content (the line Item's first-line slots centre
+  // on). Its layout height stays the lines' height (the end margin).
+  inRowFirstLine: {
+    alignSelf: 'flex-start',
+    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${HANDLE_SIZE}px) / 2)`,
+  },
 });
 
 /**
@@ -230,6 +247,7 @@ export function ListReorderHandle({
   isDisabled = false,
   rowLabel,
   rowLabelledBy,
+  rowAlign,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useTranslator();
@@ -392,7 +410,12 @@ export function ListReorderHandle({
           event.stopPropagation();
         }
       }}
-      {...focusOutlineProps.focusVisible(styles.handle)}
+      {...focusOutlineProps.focusVisible(
+        styles.handle,
+        rowAlign != null && styles.inRow,
+        rowAlign === 'start' && styles.inRowStart,
+        rowAlign === 'first-line' && styles.inRowFirstLine,
+      )}
     />
   );
 }

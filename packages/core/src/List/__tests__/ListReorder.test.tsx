@@ -368,6 +368,25 @@ describe('List reorderable', () => {
     }
   });
 
+  it('adds only the handle to a row without end content: no end-slot wrapper (spec:AST-103 FR5)', () => {
+    const rows = (reorderable?: Reorderable) => (
+      <List reorderable={reorderable}>
+        <ListItem itemKey="inbox" label="Inbox" />
+        <ListItem itemKey="sent" label="Sent" align="first-line" />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    const before = [inbox, sent].map(row => row.querySelectorAll('*').length);
+    rerender(rows(createReorderable({onReorder: () => {}})));
+    expect(inbox.querySelectorAll('*').length).toBe(before[0] + 1);
+    expect(sent.querySelectorAll('*').length).toBe(before[1] + 1);
+    // The handle is the row's own child, after the label.
+    expect(handleOf('Inbox').parentElement).toBe(inbox);
+    expect(handleOf('Sent').parentElement).toBe(sent);
+  });
+
   it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
