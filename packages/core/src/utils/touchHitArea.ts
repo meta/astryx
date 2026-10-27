@@ -5,14 +5,15 @@
 /**
  * @file touchHitArea.ts
  * @input An element ref and whether the element takes taps, the shared touch
- *   hit area (utils/hitArea.ts), the theme's touch target size
- *   (`--size-touch-target`), and the Web Animations running around the
- *   element
+ *   hit area (utils/hitArea.ts), the page's touch target size
+ *   (`--size-touch-target`, in px, rem or em), read again when the primary
+ *   pointer (touchQueries.ts) or the theme (ThemeContext) changes, and the
+ *   Web Animations running around the element
  * @output Exports `useTouchHitArea`, which keeps an element's hit insets live
  *   for its invisible layer (`touchHitAreaStyles.layer`,
  *   utils/touchHitArea.stylex.ts), and `touchTargetSize`
  * @position Core-internal hook for the coarse-only 44 px target
- *   (`spec:AST-094` FR43): List rows (ListItem) use it, and so can any
+ *   (`spec:AST-094` FR42): List rows (ListItem) use it, and so can any
  *   control whose target grows under a finger without growing its box
  *
  * Under a coarse primary pointer the shared utility measures how far the
@@ -33,24 +34,49 @@
  * touchHitArea.test.tsx.
  */
 
-import {useEffect, type RefObject} from 'react';
+import {use, useEffect, type RefObject} from 'react';
+import {useMediaQuery} from '../hooks/useMediaQuery';
+import {ThemeContext} from '../theme/useTheme';
 import {MIN_TOUCH_TARGET, watchHitArea, writeHitInsets} from './hitArea';
+import {TOUCH_QUERY} from './touchQueries';
 
 /**
- * The theme's touch target size in px (`--size-touch-target`), read under a
- * finger only; the 44 px minimum otherwise.
+ * A length in px, in the units a theme writes a size in: px, rem (the root's
+ * font size) or em (the font size of the element the size applies to).
+ * Anything else is not a length here (NaN).
+ */
+function lengthInPx(value: string, element: Element, view: Window): number {
+  const match = /^(\d*\.?\d+)(px|rem|em)$/.exec(value);
+  if (match == null) {
+    return Number.NaN;
+  }
+  const amount = Number(match[1]);
+  if (match[2] === 'px') {
+    return amount;
+  }
+  const reference =
+    match[2] === 'rem' ? element.ownerDocument.documentElement : element;
+  return amount * Number.parseFloat(view.getComputedStyle(reference).fontSize);
+}
+
+/**
+ * The touch target size in px: 44 (`spec:AST-094` FR42), or more where the
+ * page sets `--size-touch-target` larger (in px, rem or em), read under a
+ * finger only. A smaller value never lowers the target below 44.
  */
 export function touchTargetSize(element: Element): number {
   const view = element.ownerDocument.defaultView;
-  if (view?.matchMedia?.('(pointer: coarse)').matches !== true) {
+  if (view?.matchMedia?.(TOUCH_QUERY).matches !== true) {
     return MIN_TOUCH_TARGET;
   }
   const value = view
     .getComputedStyle(element)
     .getPropertyValue('--size-touch-target')
     .trim();
-  const size = value.endsWith('px') ? Number.parseFloat(value) : Number.NaN;
-  return Number.isFinite(size) && size > 0 ? size : MIN_TOUCH_TARGET;
+  const size = lengthInPx(value, element, view);
+  return Number.isFinite(size)
+    ? Math.max(MIN_TOUCH_TARGET, size)
+    : MIN_TOUCH_TARGET;
 }
 
 /**
@@ -126,6 +152,10 @@ export function useTouchHitArea(
   ref: RefObject<HTMLElement | null>,
   enabled: boolean,
 ): void {
+  // The size is read again when the primary pointer or the theme changes: a
+  // theme sets it, possibly under a coarse pointer only.
+  const isCoarse = useMediaQuery(TOUCH_QUERY);
+  const theme = use(ThemeContext);
   // External system (`architecture:react-component-runtime` INV3): the shared
   // touch hit area (utils/hitArea.ts), which measures the element against its
   // neighbors and writes its insets on it; the cleanup stops the watch.
@@ -135,5 +165,5 @@ export function useTouchHitArea(
       return undefined;
     }
     return watchAtRest(element, touchTargetSize(element));
-  }, [enabled, ref]);
+  }, [enabled, ref, isCoarse, theme]);
 }

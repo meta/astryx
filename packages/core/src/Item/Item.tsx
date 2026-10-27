@@ -743,6 +743,26 @@ export function Item({
     if (target.closest('button, a, input, select, textarea')) {
       return;
     }
+    if (onClick == null && href != null && !isLinkRoot) {
+      // A link row's own box follows its link: a click in its padding, or a
+      // tap in its touch hit area under a finger, goes to the row's anchor
+      // with its modifier keys, so the link component and the browser decide
+      // the destination and the tab as for a click on the label.
+      (e.currentTarget as HTMLElement)
+        .querySelector<HTMLElement>('[data-astryx-row-link]')
+        ?.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: e.ctrlKey,
+            metaKey: e.metaKey,
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            button: e.button,
+          }),
+        );
+      return;
+    }
     onClick?.(e);
   };
 
@@ -776,6 +796,7 @@ export function Item({
           href={href}
           target={target}
           rel={rel}
+          data-astryx-row-link=""
           aria-disabled={isDisabled || undefined}
           tabIndex={isDisabled ? -1 : undefined}
           {...stylex.props(
