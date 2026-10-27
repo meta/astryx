@@ -81,6 +81,26 @@ async function armCompatClick(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Resolves two frames after every running animation on the page has
+ * finished: the presentation's, which ends the layer's input hold.
+ */
+async function presentationSettled(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await Promise.all(
+      document.getAnimations().map(async animation =>
+        animation.finished.then(
+          () => undefined,
+          () => undefined,
+        ),
+      ),
+    );
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  });
+}
+
 async function compatClickDelivered(page: Page): Promise<void> {
   await page.evaluate(
     async () =>
@@ -108,7 +128,10 @@ test('the long press that opens the menu leaves it open as the finger lifts', as
   await compatClickDelivered(page);
   await expect(menu).toBeVisible();
 
-  // A tap outside still closes it.
+  // A tap outside still closes it, once the presentation has run: until it
+  // completes, a tap reaches nothing (the layer's input hold, as UIKit drops
+  // a touch while a presentation runs).
+  await presentationSettled(page);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{x: 5, y: 5, id: 2}],
