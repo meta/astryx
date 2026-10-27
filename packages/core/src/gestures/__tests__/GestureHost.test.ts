@@ -3594,3 +3594,41 @@ describe("inputMode 'pointer-events'", () => {
     ).toBe(true);
   });
 });
+
+describe('Touch Events from a browser that exposes no ontouchstart', () => {
+  it('takes a finger once, from its pointer events, so a one-finger long press recognizes (touch emulation turned on after load)', () => {
+    // Chromium fixes `ontouchstart` when the page is created; turning touch
+    // emulation on later sends Touch Events without it.
+    let owner: object | null = window;
+    let descriptor: PropertyDescriptor | undefined;
+    while (owner != null) {
+      descriptor = Object.getOwnPropertyDescriptor(owner, 'ontouchstart');
+      if (descriptor != null) {
+        break;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+    }
+    if (owner != null && descriptor != null) {
+      const from = owner;
+      const saved = descriptor;
+      delete (from as {ontouchstart?: unknown}).ontouchstart;
+      detachers.push(() => Object.defineProperty(from, 'ontouchstart', saved));
+    }
+    expect('ontouchstart' in window).toBe(false);
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    detachers.push(host.attach(box, press));
+    const finger = {id: 1, x: 10, y: 10};
+    pointer('pointerdown', box, {
+      id: 7,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    host.arena.advanceTime(600);
+    expect(press.state).toBe('began');
+  });
+});
