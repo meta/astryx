@@ -32,7 +32,7 @@
  * 0.30, radius 20, no offset, shaped by the view's pixels). A block trigger
  * lifts; an inline one keeps the cursor menu. The menu grows out of the
  * press from `contextMenu.lift.morphStartWidth`, in its own aspect, on
- * `morphSpring` (the module's rect morph: translate, scale and opacity only,
+ * `springs.contextMenuMorph` (the module's rect morph: translate, scale and opacity only,
  * so UIKit's blob and the content's blur and clip are not played).
 
  *
@@ -57,10 +57,11 @@ import {registerSpringsTable, springs} from '../motion/uikit/springs';
 const LIFT = contextMenu.lift;
 
 /**
- * The lift's springs, as measured: the preview grows and the tint fades in
- * on `springs.contextMenuLift`, the menu enters and the shadow rises and
- * fades on `morphSpring`. The close: the menu shrinks back into the press on
- * `springs.menuClose`, the spring a menu's close plays on (`spec:AST-094`
+ * The lift's springs, as measured, each an internal motion role
+ * (`spec:AST-094` FR4): the preview grows and the tint fades in on
+ * `springs.contextMenuLift`, the menu enters and the shadow rises and fades on
+ * `springs.contextMenuMorph`. The close: the menu shrinks back into the press
+ * on `springs.menuClose`, the spring a menu's close plays on (`spec:AST-094`
  * FR31), while the preview returns and the tint clears on UIKit's measured
  * dismissal, `springs.contextMenuDismiss` (the same spring).
  */
@@ -68,9 +69,9 @@ const MOTION: LiftFromTriggerMotion = {
   lift: springs.contextMenuLift,
   drop: springs.contextMenuDismiss,
   clear: springs.contextMenuDismiss,
-  shadowIn: LIFT.morphSpring,
-  shadowOut: LIFT.morphSpring,
-  surfaceIn: LIFT.morphSpring,
+  shadowIn: springs.contextMenuMorph,
+  shadowOut: springs.contextMenuMorph,
+  surfaceIn: springs.contextMenuMorph,
   surfaceOut: springs.menuClose,
 };
 
@@ -127,9 +128,9 @@ export function useContextMenuLift(
         if (trigger == null) {
           return null;
         }
-        // The springs' tables register before the first motion (idempotent):
-        // `springs.menuClose` resolves through its role (spec:AST-094 FR4);
-        // every other spring is its table's.
+        // The springs' tables register before the first motion (idempotent),
+        // so every spring the lift plays resolves through its role
+        // (spec:AST-094 FR4).
         registerContextMenuTable();
         registerSpringsTable();
         return lift.lift(trigger, {

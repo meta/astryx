@@ -12,8 +12,8 @@
  * @position The context-menu domain of the UIKit constants table
  *   (motion/uikit), imported by ContextMenu's own modules and not re-exported
  *   from the table's barrel, so only a page that animates a context menu
- *   loads it; its lift and dismissal springs are `springs.contextMenuLift`
- *   and `springs.contextMenuDismiss`
+ *   loads it; its springs are the motion roles `springs.contextMenuLift`,
+ *   `springs.contextMenuDismiss` and `springs.contextMenuMorph`
  *
  * A context menu is not a plain long press. On iOS 26.2 a finger resting on
  * the view starts a press feedback after 150 ms: a copy of the view grows
@@ -230,20 +230,8 @@ export const contextMenu = {
      */
     menuGap: 16,
     /**
-     * The menu's entrance and the copy's shadow fade move on this spring; the
-     * preview's growth and the backdrop's fade take `springs.contextMenuLift`
-     * (0.32, 0.8: fitted to the backdrop's alpha, rms 0.0004, and to the
-     * preview's width, 0.05 pt).
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, per-frame morph and platter layers, Oct 23 2026: the
-     *   menu content's opacity, blur and scale, the morph container's centre
-     *   and the preview shadow's opacity each fit (0.30, 0.80), rms ≤ 0.001;
-     *   the issued UIViewSpringAnimationBehaviorSettings are (0.8, 0.3)
-     */
-    morphSpring: {response: 0.3, dampingRatio: 0.8},
-    /**
      * The menu grows out of the finger: it starts this wide (pt), centered
-     * on the press point and in its own aspect, and grows on `morphSpring`
+     * on the press point and in its own aspect, and grows on `springs.contextMenuMorph`
      * into its frame as it fades in.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, the morph container's frame per frame for a 3-action

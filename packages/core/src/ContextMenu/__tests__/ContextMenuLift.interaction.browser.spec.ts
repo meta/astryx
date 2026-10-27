@@ -13,7 +13,7 @@
  *   bottom gets its menu above; a card at the left edge lifts 16 px in with
  *   its menu flush; the card grows on from the press, and the backdrop fades
  *   in, on springs.contextMenuLift frame by frame; the menu fades in on
- *   morphSpring with no blur; closing returns the card to the page as it was
+ *   springs.contextMenuMorph with no blur; closing returns the card to the page as it was
  *   and clears the backdrop; the card keeps growing on every frame through a
  *   blocked main thread; under Reduce Motion the card cross-fades in place;
  *   a storyboard of the lift
@@ -606,7 +606,7 @@ test('the card grows on from the press, and the backdrop fades in, on springs.co
   expect(Math.max(...samples.map(s => s.scale))).toBeGreaterThan(1.13);
 });
 
-test('the menu grows out of the finger on morphSpring, translate, scale and opacity only: at the press at first, its frame at rest, nothing left inline (AST-094 FR5)', async ({
+test('the menu grows out of the finger on springs.contextMenuMorph, translate, scale and opacity only: at the press at first, its frame at rest, nothing left inline (AST-094 FR5)', async ({
   page,
 }) => {
   const {driver, center} = await openLiftStory(page);
@@ -656,7 +656,7 @@ test('the menu grows out of the finger on morphSpring, translate, scale and opac
   const end = await read(600);
   await releaseAnimations(page);
   await playing;
-  const curve = solveSpring(toSpring(contextMenu.lift.morphSpring), {
+  const curve = solveSpring(toSpring(springs.contextMenuMorph), {
     from: 0,
     to: 1,
   });

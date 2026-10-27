@@ -173,7 +173,7 @@ describe('the lift’s springs against UIKit’s measured frames (iOS 26.2, 200 
   });
 
   it('the menu content fades in on morphSpring (opacity rms < 0.01); its blur is not played, since only transform and opacity move (spec:AST-094 FR5)', () => {
-    const {morphSpring} = contextMenu.lift;
+    const morphSpring = springs.contextMenuMorph;
     const opacity = errors(
       row => row[3],
       ms => at(morphSpring, 0, 1, UIKIT_LIFT_STARTS.menuOpacity, ms),
