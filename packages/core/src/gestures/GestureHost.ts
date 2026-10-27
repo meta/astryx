@@ -160,7 +160,7 @@ import {
   withoutClickGuard,
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
-import {locksSelectionFor} from '../utils/selectionLock';
+import {lockDragSelection, locksSelectionFor} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 import {
@@ -490,6 +490,7 @@ export class GestureHost {
       environment,
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
+      onClaim: ids => this.lockClaimedDrags(ids),
     });
     const view = doc.defaultView;
     // A test may pass its own read; otherwise the one coarse-pointer gate,
@@ -1459,6 +1460,41 @@ export class GestureHost {
           release();
         }
       });
+    }
+  }
+
+  /**
+   * A mouse or a pen that a recognizer claims for a continuous gesture (a
+   * pan's drag) takes no text selection from then on (`spec:AST-094` FR43,
+   * FR41): its drag started selecting before the claim, so that selection
+   * goes and the claiming recognizers' elements refuse one until the pointer
+   * lifts, as a held finger's do. A tap claims only at its lift, so a click
+   * keeps the selection it made. A finger keeps the touch-down lock alone.
+   */
+  private lockClaimedDrags(ids: ReadonlyArray<number>): void {
+    for (const id of ids) {
+      if (this.lockedBy.has(id)) {
+        continue;
+      }
+      const touch = this.arena.touches.find(each => each.id === id);
+      if (touch == null || touch.pointerType === 'touch') {
+        continue;
+      }
+      const elements = new Set<Element>();
+      for (const recognizer of this.arena.participantsOf(id)) {
+        if (
+          (recognizer.state === 'began' || recognizer.state === 'changed') &&
+          recognizer.view instanceof Element
+        ) {
+          elements.add(recognizer.view);
+        }
+      }
+      if (elements.size > 0) {
+        this.lockedBy.set(
+          id,
+          lockDragSelection(elements, this.doc.defaultView),
+        );
+      }
     }
   }
 
