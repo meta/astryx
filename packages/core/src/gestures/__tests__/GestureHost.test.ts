@@ -459,7 +459,8 @@ describe('GestureHost', () => {
         .map(call => call[0])
         .filter(t => /^(touch|pointer)/.test(t));
     // A fine primary pointer: nothing on the page while idle, and on the
-    // element only the one listener its press needs (FR24), no touchmove.
+    // element the one listener its press needs, plus the claiming pan's
+    // blocking touchmove, which FR24 counts outside that budget (FR19).
     const fine = new GestureHost(document, {
       clock,
       isPrimaryPointerCoarse: () => false,
@@ -467,7 +468,10 @@ describe('GestureHost', () => {
     const boxAdded = vi.spyOn(box, 'addEventListener');
     const detachFine = fine.attach(box, new PanGestureRecognizer());
     expect(types(added)).toEqual([]);
-    expect(boxAdded.mock.calls.map(call => call[0])).toEqual(['pointerdown']);
+    expect(boxAdded.mock.calls.map(call => call[0]).sort()).toEqual([
+      'pointerdown',
+      'touchmove',
+    ]);
     detachFine();
     boxAdded.mockClear();
     // A coarse one, with only a disabled recognizer: still nothing.
@@ -3489,7 +3493,12 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     );
     expect(gestureListeners(added)).toEqual([]);
     expect(gestureListeners(viewAdded)).toEqual([]);
-    expect(gestureListeners(boxAdded)).toEqual(['pointerdown']);
+    // The pan's blocking touchmove for a finger's claim counts outside the
+    // one-listener budget (FR24, FR19).
+    expect(gestureListeners(boxAdded).sort()).toEqual([
+      'pointerdown',
+      'touchmove',
+    ]);
     expect(gestureListeners(rowAdded)).toEqual(['pointerdown']);
   });
 
