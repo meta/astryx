@@ -19,6 +19,8 @@ import {
   kebab,
   planFor,
   parseRouting,
+  IGNORED_RECORD_SEGMENTS,
+  isKnowledgeRecord,
   selectSpecs,
   specOwners,
 } from './a11y-pr-contracts.mjs';
@@ -200,6 +202,39 @@ describe('selectSpecs', () => {
     expect(
       pr([tokens], {changedPaths: ['x/apps/storybook/stories/Combo.tsx']}),
     ).toEqual([]);
+  });
+
+  it('runs no spec for a changed knowledge record alone', () => {
+    const record = 'packages/core/src/Chat/ChatLayout.spec.md';
+    expect(pr(all, {changedPaths: [record]})).toEqual([always.file]);
+    const pattern = spec(
+      'internal/a11y-spec/src/patterns/accordion.chromium.spec.ts',
+      ['// @pr-a11y scope ^packages/core/src/Collapsible/'],
+    );
+    expect(
+      pr([pattern], {
+        changedPaths: ['packages/core/src/Collapsible/Collapsible.spec.md'],
+      }),
+    ).toEqual([]);
+    // Code beside the record still selects the spec.
+    expect(
+      pr(all, {
+        changedPaths: [record, 'packages/core/src/Chat/ChatLayout.tsx'],
+      }),
+    ).toEqual([always.file, scoped.file]);
+  });
+
+  it('still runs a spec for a fixture, test, or generated .spec.md', () => {
+    for (const file of [
+      'packages/core/src/Chat/__fixtures__/ChatLayout.spec.md',
+      'packages/core/src/Chat/__tests__/ChatLayout.spec.md',
+      'packages/core/src/Chat/ChatLayout.generated.spec.md',
+    ]) {
+      expect(pr(all, {changedPaths: [file]}), file).toEqual([
+        always.file,
+        scoped.file,
+      ]);
+    }
   });
 
   it('runs every scoped spec when the changed files are unknown', () => {
@@ -458,5 +493,30 @@ describe('repository specs', () => {
         file,
       ).not.toThrow();
     }
+  });
+});
+
+describe('isKnowledgeRecord', () => {
+  it('skips the same folders as the knowledge record discovery', async () => {
+    const {IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS} =
+      await import('./knowledge-paths.cjs');
+    expect([...IGNORED_RECORD_SEGMENTS].sort()).toEqual(
+      [...IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS].sort(),
+    );
+  });
+
+  it('treats a component record as a record and its fixtures as not', () => {
+    expect(isKnowledgeRecord('packages/core/src/Chat/ChatLayout.spec.md')).toBe(
+      true,
+    );
+    expect(
+      isKnowledgeRecord('packages/core/src/Chat/.hidden/ChatLayout.spec.md'),
+    ).toBe(false);
+    expect(
+      isKnowledgeRecord('packages/core/src/Collapsible/.Collapsible.spec.md'),
+    ).toBe(false);
+    expect(isKnowledgeRecord('packages/core/src/Chat/ChatLayout.tsx')).toBe(
+      false,
+    );
   });
 });
