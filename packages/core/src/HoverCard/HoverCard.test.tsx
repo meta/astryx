@@ -458,6 +458,24 @@ describe('HoverCard', () => {
     });
   });
 
+  it('does not open on trigger focus while controlled closed', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <HoverCard
+        isOpen={false}
+        onOpenChange={onOpenChange}
+        content={<span>Card content</span>}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+
+    // Hover is already refused; keyboard focus must be refused the same way.
+    fireEvent.focusIn(trigger);
+    expect(screen.queryByText('Card content')).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('does not render content initially', () => {
     const {container} = render(
       <HoverCard content={<span>Card content</span>}>
