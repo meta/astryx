@@ -14,18 +14,18 @@
  *   elevation follows, and the drop moves it; a flick on a handle scrolls instead; the preview follows the finger
  *   one to one and stops at the list's end while the row stays put; the rows
  *   stay still during the drag while the insertion line marks each gap the
- *   finger reaches; the drop glides the row from where its preview was, and
- *   the rows it passed from their old places, on the shared settle spring
- *   from rest,
- *   even from a finger that lifts moving (told apart from a glide that took
- *   the release velocity); a cancelled drag restores everything at once and
+ *   finger reaches; the drop glides the row from where its preview was on
+ *   the shared settle spring, starting at the finger's release velocity
+ *   (spec:AST-094 FR6, FR38; told apart from a glide from rest), and the
+ *   rows it passed from their old places from rest; a cancelled drag
+ *   restores everything at once and
  *   commits nothing; the page autoscrolls by whole points every 20 ms near
  *   the edge; a second finger does not break the drag; a pinch that starts
  *   on a handle zooms; the drop's glides keep moving while the main thread
  *   is blocked; a drag does no Layout or Paint per move; a mouse drags at
  *   once with no motion; under Reduce Motion the rows stay still during the
  *   drag and the drop and a key move cross-fade in place within 200 ms; in
- *   RTL the handle is on the left and the drag keeps x; a focused handle
+ *   RTL the handle is on the left and the preview keeps x; a focused handle
  *   shows one whole ring, clear of its lines; it keeps a small control's
  *   size while a finger's target reaches 44 pt, short of the next handle's,
  *   and makes its row no taller; a held finger locks text selection on the handle
@@ -51,7 +51,6 @@ import {
   openStory,
   pinch,
   releaseAnimations,
-  releaseVelocity,
   seekAnimations,
   startScreencast,
   tap,
@@ -65,7 +64,9 @@ import {
   type BusyWindow,
   type Point,
   type TouchEventStep,
+  type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {VelocityTracker} from '../../gestures/VelocityTracker';
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
 import {springs} from '../../motion/uikit/springs';
@@ -452,8 +453,44 @@ function fitLag(
 }
 
 /**
- * The settle a release velocity would start (spec:AST-094 FR6, FR38), in
- * px from the row's start, for comparison with the measured one from rest.
+ * What the reorder reads from `script`'s finger as this engine delivers it
+ * (WebKit's injected touches carry whole pixels): how far it moved from
+ * where it picked the row up, and its release velocity along y in px/s,
+ * from the gestures' one VelocityTracker, one sample per event.
+ */
+function deliveredRelease(
+  script: TouchScript,
+  wholePixels: boolean,
+): {travelled: number; velocity: number} {
+  const delivered = (value: number) =>
+    wholePixels ? Math.round(value) : value;
+  const tracker = new VelocityTracker();
+  let first: number | null = null;
+  let last = 0;
+  let lift = 0;
+  for (const frame of script) {
+    const finger = frame.fingers.find(f => f.id === 0);
+    if (finger == null) {
+      if (first != null) {
+        lift = frame.t;
+        break;
+      }
+      continue;
+    }
+    const y = delivered(finger.y);
+    first ??= y;
+    last = y;
+    tracker.add(delivered(finger.x), y, frame.t);
+  }
+  return {
+    travelled: last - (first ?? last),
+    velocity: tracker.velocity(lift).y,
+  };
+}
+
+/**
+ * The glide a release velocity starts (spec:AST-094 FR6, FR38), in px from
+ * the row's start.
  */
 function handoffCurve(
   duration: number,
@@ -469,8 +506,9 @@ function handoffCurve(
   return ms => curve.value(ms / 1000);
 }
 
-test('the drop glides the row from where its preview was into its new place on the shared settle spring, from rest, even from a moving finger, and the rows it passed to theirs', async ({
+test('the drop glides the row from where its preview was into its new place on the shared settle spring, starting at the release velocity, and the rows it passed to theirs from rest', async ({
   page,
+  browserName,
 }, testInfo) => {
   await open(page);
   const {pitch} = await pitchOf(page);
@@ -487,14 +525,19 @@ test('the drop glides the row from where its preview was into its new place on t
   // shared settle role, springs.settle (spec:AST-105 FR4).
   const duration = springs.settle.duration;
   const progress = tableProgress(duration);
-  // The finger lifts while it moves, so a glide that took its velocity would
-  // leave from the release moving, not from rest.
+  // The finger lifts while it moves: the glide leaves at its velocity
+  // (spec:AST-094 FR6, FR38), not from rest.
   const script = drag(
     from,
     {x: from.x, y: from.y + travel},
     {holdMs: HOLD_MS, durationMs: 100},
   );
-  const velocity = releaseVelocity(script).y;
+  // Where the preview was and how fast the finger moved, as the reorder read
+  // them from the touches this engine delivered.
+  const {travelled, velocity} = deliveredRelease(
+    script,
+    browserName === 'webkit',
+  );
   await driver.play(script, {
     onEvent: async (step: TouchEventStep) => {
       if (step.type !== 'touchEnd') {
@@ -510,18 +553,18 @@ test('the drop glides the row from where its preview was into its new place on t
     },
   });
   // Inbox lands in slot 1, one pitch down; it leaves from where its preview
-  // was, `travel` down, and glides the rest on the settle spring.
-  const curve = (t: number) => travel + (pitch - travel) * progress.at(t);
+  // was, `travelled` down, at the finger's velocity, and glides the rest on
+  // the settle spring.
+  const handoffAt = handoffCurve(duration, travelled, pitch, velocity);
   // The commit that applies the drop lands a few ms into it and continues the
   // same curve from there: the held animation starts that much into the
-  // glide. The lag is fitted to every sample (a spring from rest is flat at
-  // its start, so its first sample cannot place it).
-  const {lag} = fitLag(samples, curve);
-  const comparison = compareCurve(samples, t => curve(t + lag), 0.5);
-  // A glide that took the release velocity misses the samples at any lag.
-  const handoff = fitLag(
+  // glide. The lag is fitted to every sample.
+  const {lag} = fitLag(samples, handoffAt);
+  const comparison = compareCurve(samples, t => handoffAt(t + lag), 0.5);
+  // A glide from rest misses the samples at any lag.
+  const fromRest = fitLag(
     samples,
-    handoffCurve(duration, travel, pitch, velocity),
+    t => travelled + (pitch - travelled) * progress.at(t),
   );
   // Sent, which Inbox passed, glides from its old place to its new one, one
   // pitch up, on the same spring.
@@ -534,11 +577,12 @@ test('the drop glides the row from where its preview was into its new place on t
           duration,
           pitch,
           travel,
+          travelled,
           velocity,
           lag,
           samples,
           comparison,
-          handoff,
+          fromRest,
           passed,
           sentFit,
         },
@@ -549,12 +593,15 @@ test('the drop glides the row from where its preview was into its new place on t
     testInfo,
   );
   expect(velocity).toBeGreaterThan(150);
-  expect(samples[0].value).toBeCloseTo(travel, 0);
+  // It leaves from the preview's place (up to the commit's lag at that speed).
+  expect(Math.abs(samples[0].value - travelled)).toBeLessThan(
+    (velocity * 30) / 1000 + 0.5,
+  );
   expect(lag).toBeLessThan(30);
   expect(comparison.maxError, JSON.stringify(comparison.worst)).toBeLessThan(
     0.5,
   );
-  expect(handoff.maxError).toBeGreaterThan(2);
+  expect(fromRest.maxError).toBeGreaterThan(2);
   expect(sentFit.maxError).toBeLessThan(0.5);
   await expect
     .poll(async () => labels(page))
@@ -1353,7 +1400,7 @@ test.describe('with Reduce Motion', () => {
 });
 
 test.describe('right to left', () => {
-  test('the handle sits at the row end on the left, and a hold then drag reorders with x fixed', async ({
+  test("the handle sits at the row end on the left, and a hold then drag reorders with the preview's x fixed", async ({
     page,
   }) => {
     await page.goto(
@@ -1379,7 +1426,9 @@ test.describe('right to left', () => {
     const {pitch} = await pitchOf(page);
     const from = await centerOf(handle(page, 'Inbox'));
     const driver = await touchDriver(page);
-    const xs: string[] = [];
+    // The preview's left edge against the dimmed source row's, while the
+    // finger also moves sideways (the rows themselves stay still).
+    const xs: (number | null)[] = [];
     await driver.play(
       drag(
         from,
@@ -1394,8 +1443,16 @@ test.describe('right to left', () => {
         onEvent: async (step: TouchEventStep) => {
           if (step.type === 'touchMove' && step.t > HOLD_MS + 60) {
             xs.push(
-              await row(page, 'Inbox').evaluate(
-                el => getComputedStyle(el).translate.split(' ')[0] ?? '',
+              await page.evaluate(
+                ({preview, source}) => {
+                  const moving = document.querySelector(preview);
+                  const still = document.querySelector(source);
+                  return moving == null || still == null
+                    ? null
+                    : moving.getBoundingClientRect().left -
+                        still.getBoundingClientRect().left;
+                },
+                {preview: PREVIEW, source: '[data-astryx-reorder-source]'},
               ),
             );
           }
@@ -1405,9 +1462,13 @@ test.describe('right to left', () => {
     await expect
       .poll(async () => labels(page))
       .toEqual(['Sent', 'Drafts', 'Inbox', 'Archive', 'Spam', 'Trash']);
-    // A sideways component is ignored: the row moves along y only.
+    // A sideways component is ignored: the preview moves along y only, over
+    // the source row's x.
     expect(xs.length).toBeGreaterThan(3);
-    expect(xs.every(x => x === '0px' || x === 'none' || x === '')).toBe(true);
+    for (const x of xs) {
+      expect(x).not.toBeNull();
+      expect(Math.abs(x ?? Infinity)).toBeLessThanOrEqual(0.5);
+    }
   });
 });
 
