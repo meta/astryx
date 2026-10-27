@@ -3923,6 +3923,43 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     expect(later.defaultPrevented).toBe(false);
   });
 
+  for (const ending of ['pointercancel', 'blur', 'detach'] as const) {
+    it(`lifts the document-wide selection hold at once when a claimed mouse press ends in a ${ending}: no mouseup or click follows a cancel (FR41: "lifted at the lift or a cancel")`, () => {
+      const {box, outside} = mount(
+        '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
+      );
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const detach = fine.attach(box, pan);
+      detachers.push(detach);
+      let time = 0;
+      for (const [type, x] of [
+        ['pointerdown', 10],
+        ['pointermove', 30],
+        ['pointermove', 50],
+      ] as const) {
+        time += 16;
+        pointer(type, box, {pointerType: 'mouse', x, y: 10, buttons: 1, time});
+      }
+      expect(['began', 'changed']).toContain(pan.state);
+      if (ending === 'pointercancel') {
+        pointer('pointercancel', document.body, {
+          pointerType: 'mouse',
+          x: 50,
+          y: 10,
+          time: time + 16,
+        });
+      } else if (ending === 'blur') {
+        window.dispatchEvent(new Event('blur'));
+      } else {
+        detach();
+      }
+      const later = new Event('selectstart', {bubbles: true, cancelable: true});
+      outside.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(false);
+    });
+  }
+
   it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
     const {box} = mount('<div id="box">Some selected text</div>');
     const fine = fineHost();
