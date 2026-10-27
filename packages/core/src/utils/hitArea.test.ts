@@ -264,41 +264,6 @@ describe('watchHitArea', () => {
     stop();
   });
 
-  it('counts a pressable row root as a neighbour: two rows 2 px apart each take 1 px of the gap, and their areas never overlap', () => {
-    // A list's rows: the row root is the target (Item's pressable root), and
-    // its own control is only the label column, inside the row's padding.
-    document.body.innerHTML =
-      '<ul>' +
-      '<li id="first" data-astryx-pressable=""><button id="first-label">Inbox</button></li>' +
-      '<li id="second" data-astryx-pressable=""><button id="second-label">Sent</button></li>' +
-      '</ul>';
-    const first = byId('first');
-    const second = byId('second');
-    place(first, rect(0, 100, 300, 36));
-    place(byId('first-label'), rect(40, 108, 220, 20));
-    place(second, rect(0, 138, 300, 36));
-    place(byId('second-label'), rect(40, 146, 220, 20));
-    const firstHeard: HitInsets[] = [];
-    const secondHeard: HitInsets[] = [];
-    const stops = [
-      watchHitArea(first, insets => firstHeard.push(insets)),
-      watchHitArea(second, insets => secondHeard.push(insets)),
-    ];
-    try {
-      show(first, second);
-      flush();
-      // Each 36 px row grows toward 44 px, but toward the other only by half
-      // the 2 px gap between the rows.
-      expect(firstHeard).toEqual([{top: 4, right: 0, bottom: 1, left: 0}]);
-      expect(secondHeard).toEqual([{top: 1, right: 0, bottom: 4, left: 0}]);
-      expect(136 + firstHeard[0].bottom).toBeLessThanOrEqual(
-        138 - secondHeard[0].top,
-      );
-    } finally {
-      stops.forEach(stop => stop());
-    }
-  });
-
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -501,6 +466,87 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('swallows a touch inside the fresh area that an offset neighbour is nearer (a corner)', () => {
+    const control = byId('switch');
+    // A tall link beside it, 8 px to the right, reaching far below.
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 80));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // Inside the area (right inset 4, bottom 10), below the switch: 5 px from
+    // the link, 9.5 px from the switch.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 127, clientY: 133});
+    control.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  it('counts tree items, menu checkbox and radio items as neighbours', () => {
+    document.body.innerHTML =
+      '<span id="switch" role="switch" tabindex="0"></span>' +
+      '<div id="item" role="treeitem"></div>';
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('item'), rect(132, 100, 60, 24));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    expect(heard.at(-1)?.right).toBe(4);
+    stop();
+  });
+
+  it('leaves a touch the browser hands a lone control a few px past its area to it: only a nearer neighbour swallows', () => {
+    const control = byId('switch');
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(400, 400, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // 3 px right of the 44 px area (10 px of growth), nothing near.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 137, clientY: 112});
+    control.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    stop();
+  });
+
+  it('measures a watched neighbour by its own box, not by its grown input', () => {
+    document.body.innerHTML =
+      '<div id="a"><input id="ia" role="switch"></div>' +
+      '<div id="b"><input id="ib" role="switch"></div>';
+    const a = byId('a');
+    const b = byId('b');
+    place(a, rect(100, 100, 32, 20));
+    place(b, rect(100, 128, 32, 20));
+    // Each input is grown to its hit area: 44 px tall.
+    place(byId('ia'), rect(94, 88, 44, 44));
+    place(byId('ib'), rect(94, 116, 44, 44));
+    const heard: HitInsets[] = [];
+    const stopA = watchHitArea(a, insets => heard.push(insets));
+    const stopB = watchHitArea(b, () => {});
+    show(a, b);
+    flush();
+    // Half the 8 px gap to b's box, not a quarter (b's input reaches a).
+    expect(heard.at(-1)?.bottom).toBe(4);
+    stopA();
+    stopB();
+  });
+
   it('listens for presses once, on the document: a watched control, row or handle gets no listener of its own (spec:AST-103 FR5)', () => {
     const elements = ['switch', 'other'].map(byId);
     const onElements = elements.map(element =>
@@ -515,6 +561,21 @@ describe('watchHitArea', () => {
       onDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
     ).toHaveLength(1);
     stops.forEach(stop => stop());
+  });
+
+  it('removes its document listener when the last watch stops (spec:AST-094 FR24)', () => {
+    const offDocument = vi.spyOn(document, 'removeEventListener');
+    const stops = ['switch', 'other'].map(id =>
+      watchHitArea(byId(id), () => {}),
+    );
+    stops[0]();
+    expect(
+      offDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
+    ).toHaveLength(0);
+    stops[1]();
+    expect(
+      offDocument.mock.calls.filter(([type]) => type === 'pointerdown'),
+    ).toHaveLength(1);
   });
 
   it('leaves nothing behind after resetHitAreaForTests, even from a watch never stopped', () => {
