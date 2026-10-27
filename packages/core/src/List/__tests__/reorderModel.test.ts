@@ -5,9 +5,9 @@
  * @input reorderModel.ts and the UIKit reorder values (motion/uikit/reorder.ts)
  * @output Unit proofs of the reorder model against the UIKit lab measurements
  *   (iOS 26.2 simulator, a table of 44 pt rows with rows 6 and 9 at 88 pt):
- *   the drop positions of a measured drag, the movable range, the displaced
- *   rows' offsets, the position's place, the drop's spring durations, the slides'
- *   shortening while autoscrolling and the autoscroll steps
+ *   the drop positions of a measured drag, the movable range that only the
+ *   fixed rows ending a list bound, the autoscroll steps and the tracking
+ *   clamp
  * @position Tests for List/reorderModel.ts
  */
 
@@ -17,12 +17,7 @@ import {
   autoscrollStep,
   clampTop,
   movableRange,
-  moveIndex,
-  offsetsFor,
   dropPosition,
-  settleSpring,
-  slideSpring,
-  positionTop,
   type ReorderGeometry,
   type ReorderRow,
 } from '../reorderModel';
@@ -132,101 +127,33 @@ describe('dropPosition', () => {
     expect(dropPosition(geometry, 0, 42.5)).toBe(1);
   });
 
-  it('stops at a fixed row', () => {
-    const geometry = table([44, 44, 44, 44, 44], {fixed: [3]});
-    expect(dropPosition(geometry, 0, 1000)).toBe(2);
-    expect(dropPosition(geometry, 4, -1000)).toBe(4);
+  it('stops at a fixed row that ends the list and passes one in the middle', () => {
+    // spec:AST-103 FR1, FR4: only a rejected row at either end bounds the
+    // drop range; one in the middle is passed over, as reorder mode's keys
+    // pass it.
+    const ends = table([44, 44, 44, 44, 44], {fixed: [0, 4]});
+    expect(dropPosition(ends, 2, 1000)).toBe(3);
+    expect(dropPosition(ends, 2, -1000)).toBe(1);
+    const middle = table([44, 44, 44, 44, 44], {fixed: [2]});
+    expect(dropPosition(middle, 0, 1000)).toBe(4);
+    expect(dropPosition(middle, 4, -1000)).toBe(0);
   });
 });
 
 describe('movableRange', () => {
-  it('is bounded by the nearest fixed rows', () => {
-    const {rows} = table([44, 44, 44, 44, 44, 44], {fixed: [1, 4]});
-    expect(movableRange(rows, 2)).toEqual({start: 2, end: 3});
-    expect(movableRange(rows, 0)).toEqual({start: 0, end: 0});
-    expect(movableRange(rows, 5)).toEqual({start: 5, end: 5});
+  it('is bounded only by the fixed rows that end the list', () => {
+    // Runs of fixed rows at either end bound the range.
+    const {rows} = table([44, 44, 44, 44, 44, 44], {fixed: [0, 1, 5]});
+    expect(movableRange(rows, 3)).toEqual({start: 2, end: 4});
+    // A fixed row in the middle is passed over (spec:AST-103 FR1, FR4).
+    const middle = table([44, 44, 44, 44, 44, 44], {fixed: [1, 4]}).rows;
+    expect(movableRange(middle, 2)).toEqual({start: 0, end: 5});
+    expect(movableRange(middle, 0)).toEqual({start: 0, end: 5});
+    expect(movableRange(middle, 5)).toEqual({start: 0, end: 5});
     expect(movableRange(table([44, 44, 44]).rows, 1)).toEqual({
       start: 0,
       end: 2,
     });
-  });
-});
-
-describe('offsetsFor and positionTop', () => {
-  it('moves the rows between the place and the position by the dragged row', () => {
-    expect(offsetsFor(MEASURED, 3, 5).slice(0, 8)).toEqual([
-      0, 0, 0, 0, -44, -44, 0, 0,
-    ]);
-    expect(offsetsFor(MEASURED, 6, 4).slice(0, 8)).toEqual([
-      0, 0, 0, 0, 88, 88, 0, 0,
-    ]);
-    const gapped = table([40, 40, 40], {gap: 4});
-    expect(offsetsFor(gapped, 0, 2)).toEqual([0, -44, -44]);
-  });
-
-  it('places the dragged row where the displaced rows leave room', () => {
-    // Row 3 to position 6 (past the 88 pt row): 3 × 44 + 44 + 88 … row 6's
-    // bottom (352) minus its own 44.
-    expect(positionTop(MEASURED, 3, 6)).toBe(308);
-    expect(positionTop(MEASURED, 3, 1)).toBe(44);
-    expect(positionTop(MEASURED, 3, 3)).toBe(132);
-    const gapped = table([40, 40, 40], {gap: 4});
-    expect(positionTop(gapped, 0, 2)).toBe(88);
-    expect(positionTop(gapped, 2, 0)).toBe(0);
-  });
-
-  it('orders the rows after a move', () => {
-    expect(moveIndex(5, 1, 3)).toEqual([0, 2, 3, 1, 4]);
-    expect(moveIndex(5, 4, 0)).toEqual([4, 0, 1, 2, 3]);
-  });
-});
-
-describe('settleSpring', () => {
-  it('scales the measured drop durations by the distance up to half the row', () => {
-    // 44 pt row released 12 pt from its position: 0.1636 s.
-    expect(settleSpring(12, 44).duration).toBeCloseTo(0.1636, 4);
-    // 88 pt row released 12 / 22 / 33 / 43 pt away.
-    const measured: ReadonlyArray<[number, number]> = [
-      [12, 0.0818],
-      [22, 0.15],
-      [33, 0.225],
-      [43, 0.2932],
-    ];
-    for (const [distance, duration] of measured) {
-      expect(settleSpring(distance, 88).duration).toBeCloseTo(duration, 3);
-      expect(settleSpring(-distance, 88).duration).toBeCloseTo(duration, 3);
-    }
-    expect(settleSpring(200, 44)).toEqual({
-      duration: reorder.settle.maxDuration,
-      bounce: 0,
-    });
-  });
-
-  it('never makes a spring shorter than a frame', () => {
-    expect(settleSpring(0, 44).duration).toBeCloseTo(1 / 60, 6);
-  });
-});
-
-describe('slideSpring', () => {
-  it('is the table spring at rest and shortens with the autoscroll step', () => {
-    expect(slideSpring()).toEqual({duration: 0.3, bounce: 0});
-    // Measured: 0.24 / 0.21 / 0.18 / 0.03 s at 2 / 3 / 4 / 9 pt per tick.
-    expect(slideSpring(2).duration).toBeCloseTo(0.24, 6);
-    expect(slideSpring(3).duration).toBeCloseTo(0.21, 6);
-    expect(slideSpring(4).duration).toBeCloseTo(0.18, 6);
-    expect(slideSpring(9).duration).toBeCloseTo(0.03, 6);
-    expect(slideSpring(10).duration).toBeCloseTo(1 / 60, 6);
-  });
-
-  it("shortens a theme's spring for the role the same way", () => {
-    expect(slideSpring(0, {duration: 0.5, bounce: 0.1})).toEqual({
-      duration: 0.5,
-      bounce: 0.1,
-    });
-    expect(slideSpring(2, {duration: 0.5, bounce: 0.1}).duration).toBeCloseTo(
-      0.44,
-      6,
-    );
   });
 });
 

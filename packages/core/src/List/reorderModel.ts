@@ -4,23 +4,26 @@
  * @file reorderModel.ts
  * @input A list's row geometry (layout tops and heights inside the list) and
  *   the reorder values of the UIKit constants table (motion/uikit/reorder.ts)
- * @output Pure functions of a UIKit table's edit-mode reorder: the position a
- *   dragged row proposes, the offsets of the rows that make room, the dragged
- *   row's place in its position, the movable range between fixed rows, the drop's
- *   and the slides' springs, the autoscroll step and the tracking clamp
- * @position List internals; listReorderEngine.tsx drives a drag with them. No
- *   DOM, no React: unit tested against the UIKit lab measurements
+ * @output Pure functions of a reorder's drag: the position a dragged row proposes
+ *   (where the insertion cue goes), the movable range that a fixed row at
+ *   either end of the list bounds, the autoscroll step and the tracking clamp
+ * @position List internals; List/listReorderEngine.tsx drives a drag with
+ *   them. No DOM, no React: unit tested against the UIKit lab measurements
  *
- * UIKit's rules (iOS 26.2, measured): the drop position changes when the
- * dragged row's centre crosses a row boundary of the layout WITHOUT the
- * dragged row, with no hysteresis; the rows between the dragged row's place
- * and its position each move by the dragged row's height; the drop goes to the
- * current position, from rest, on a spring whose duration scales with the
- * remaining distance; autoscroll moves a whole number of points per tick,
- * more the deeper the dragged row's edge is past the scroll view's edge.
+ * The rows stay still during a drag while an insertion cue marks the
+ * drop position (design:ordered-collection-reordering DR3), so the model
+ * proposes drop positions and moves no row. The rule: a row below the dragged row
+ * changes places once the dragged row's centre passes that row's far edge less
+ * the dragged row's height, and never before that row's near edge; a row
+ * above mirrors it; boundaries sit in the middle of a gap, with no
+ * hysteresis. Measured on UIKit (iOS 26.2): a 44 pt row moving down past 44
+ * and 88 pt rows and back over them. GUESS, until M-RO27 measures them
+ * (motion/MEASUREMENTS.md): a short row moving up past a taller row above
+ * its place, and a tall row moving past a shorter one. Autoscroll moves a
+ * whole number of points per tick, more the deeper the dragged row's edge is
+ * past the scroll view's edge (measured).
  */
 
-import type {DurationBounce} from '../motion/spring';
 import {reorder} from '../motion/uikit/reorder';
 
 /** One row: its layout top inside the list, its height, and whether it stays put. */
@@ -38,54 +41,36 @@ export interface ReorderGeometry {
 }
 
 /**
- * A spring a numerically tiny duration would make near infinitely stiff: one
- * 60 Hz frame is the shortest a motion lasts. A numerical guard, not a UIKit
- * value (UIKit's shortest measured drop was 0.08 s).
- */
-const MIN_SPRING_SECONDS = 1 / 60;
-
-/** How far a row that `dragged` displaces moves: its height plus the gap. */
-export function displacement(
-  geometry: ReorderGeometry,
-  dragged: number,
-): number {
-  return geometry.rows[dragged].height + geometry.gap;
-}
-
-/**
- * The positions `dragged` can take: the rows between the nearest fixed rows above
- * and below it (a fixed row is a barrier, as UIKit's retargeting delegate
- * makes one).
+ * The positions `dragged` can take: all of them but those of the fixed rows that
+ * end the list. A run of fixed rows at either end bounds the range; a fixed row
+ * in the middle is passed over, as reorder mode's keys pass it
+ * (spec:AST-103 FR1, FR4).
  */
 export function movableRange(
   rows: ReadonlyArray<ReorderRow>,
   dragged: number,
 ): {start: number; end: number} {
   let start = 0;
-  let end = rows.length - 1;
-  for (let index = dragged - 1; index >= 0; index -= 1) {
-    if (rows[index].isFixed) {
-      start = index + 1;
-      break;
-    }
+  while (start < dragged && rows[start].isFixed) {
+    start += 1;
   }
-  for (let index = dragged + 1; index < rows.length; index += 1) {
-    if (rows[index].isFixed) {
-      end = index - 1;
-      break;
-    }
+  let end = rows.length - 1;
+  while (end > dragged && rows[end].isFixed) {
+    end -= 1;
   }
   return {start, end};
 }
 
 /**
- * The position the dragged row proposes for its centre, in list coordinates. A row
- * below it changes places once the centre passes that row's far edge less the
- * dragged row's height — for equal rows, the neighbour's near edge, half a row
- * (measured); a short row passing an 88 pt row travels that row's height. A row
- * above mirrors it. Either way the centre must first pass the neighbour's near
- * edge, so a tall row never starts past a short neighbour (its centre travels
- * at least half its own height). Boundaries sit in the middle of a gap.
+ * The position the dragged row proposes for its centre, in list coordinates: where
+ * the insertion cue goes. A row below it changes places once the centre passes
+ * that row's far edge less the dragged row's height: for equal rows, the
+ * neighbour's near edge, half a row, and for a 44 pt row passing an 88 pt row
+ * below its place, that row's height (both measured). A row above mirrors it
+ * (GUESS for unequal rows, M-RO27). Either way the centre must first pass the
+ * neighbour's near edge, so a tall row never starts past a short neighbour
+ * (its centre travels at least half its own height; GUESS, M-RO27).
+ * Boundaries sit in the middle of a gap.
  */
 export function dropPosition(
   geometry: ReorderGeometry,
@@ -110,94 +95,6 @@ export function dropPosition(
   }
   const {start, end} = movableRange(rows, dragged);
   return Math.min(end, Math.max(start, position));
-}
-
-/**
- * The offset of every row while `dragged` sits at `position`: the rows between
- * its place and the position move by its height plus the gap, toward its place;
- * every other row stays. The dragged row's own entry is 0 (it follows the
- * finger).
- */
-export function offsetsFor(
-  geometry: ReorderGeometry,
-  dragged: number,
-  position: number,
-): number[] {
-  const shift = displacement(geometry, dragged);
-  return geometry.rows.map((_, index) => {
-    if (index === dragged) {
-      return 0;
-    }
-    if (position > dragged && index > dragged && index <= position) {
-      return -shift;
-    }
-    if (position < dragged && index < dragged && index >= position) {
-      return shift;
-    }
-    return 0;
-  });
-}
-
-/** The dragged row's layout top once it sits at `position`. */
-export function positionTop(
-  geometry: ReorderGeometry,
-  dragged: number,
-  position: number,
-): number {
-  const {rows} = geometry;
-  if (position <= dragged) {
-    return rows[position].top;
-  }
-  // Below its place: the rows up to the position moved up by its extent, and it
-  // sits right after the last of them.
-  const last = rows[position];
-  return last.top + last.height - rows[dragged].height;
-}
-
-/** Where `from` lands at `to`: the order of the rows' indices after the move. */
-export function moveIndex(count: number, from: number, to: number): number[] {
-  const order = Array.from({length: count}, (_, index) => index);
-  const [moved] = order.splice(from, 1);
-  order.splice(to, 0, moved);
-  return order;
-}
-
-/**
- * The drop's spring: `springDuration` scaled by the remaining distance up to
- * half the dragged row's height, bounce 0 (UIKit starts it from rest).
- */
-export function settleSpring(
-  distance: number,
-  rowHeight: number,
-): DurationBounce {
-  const full = rowHeight * reorder.settle.fullDistanceRowFraction;
-  const fraction = full <= 0 ? 1 : Math.min(1, Math.abs(distance) / full);
-  return {
-    duration: Math.max(
-      MIN_SPRING_SECONDS,
-      reorder.settle.maxDuration * fraction,
-    ),
-    bounce: 0,
-  };
-}
-
-/**
- * The slide of a row that makes room, shorter while the list autoscrolls by
- * `step` points per tick. `spring` is the table's, or a theme's value for its
- * role (`resolveMotion`).
- */
-export function slideSpring(
-  step = 0,
-  spring: DurationBounce = reorder.slide.spring,
-): DurationBounce {
-  const {autoscrollShorteningPerStep} = reorder.slide;
-  return {
-    duration: Math.max(
-      MIN_SPRING_SECONDS,
-      spring.duration - autoscrollShorteningPerStep * step,
-    ),
-    bounce: spring.bounce,
-  };
 }
 
 /**
