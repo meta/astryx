@@ -44,20 +44,26 @@
  * component that paints a press carries {@link PRESSABLE_ATTRIBUTE}, so all of
  * them change together.
  *
- * Where the primary pointer is fine (a desktop), the controller ignores the
- * mouse and the keyboard: CSS `:active` keeps their press, as it always has,
- * and the mouse path costs nothing. Under a finger the `:active` arm is
- * dropped by the CSS (`@media (pointer: coarse)`) and this writes
- * `data-astryx-press="on"` when the press is believed and
- * `data-astryx-press="fading"` for the release's exit.
+ A FINE POINTER'S PRESS, a mouse's or a pen's, goes through this controller
+ * on every device (`spec:AST-094` FR11, FR43, DEC-21): it paints at once on
+ * `pointerdown` (no scroller can claim it, so nothing waits and no brake
+ * applies), holds while the button is down (a mouse's press, like
+ * `:active`, through a drag off the surface), and fades at the release on a
+ * finger's clock on that device, in place of the browser's `:active`. A
+ * right click and a ctrl-click on macOS paint nothing (primaryClick.ts). A
+ * finger's press writes `data-astryx-press="on"` when the press is believed
+ * and `data-astryx-press="fading"` for the release's exit.
  *
- * That query reads the PRIMARY pointer, so on a phone or a tablet the
- * stylesheet drops `:active` for every press, including a mouse or trackpad
- * click and a Space press on a focused button. There, the controller paints
- * those too: at once (no scroller can claim a mouse button or a key, so
- * nothing waits), held while the button or key is down, and faded at the
- * release, the way a finger's press leaves. The query is the stylesheet's
- * own, so the two cannot disagree about which presses are the controller's.
+ * A Space press keeps its path: where the primary pointer is fine, the
+ * browser's `:active` paints it; on a phone or a tablet, where the
+ * stylesheet drops `:active` (`@media (pointer: coarse)` reads the PRIMARY
+ * pointer), the controller paints it, at once, held while the key is down,
+ * and faded on the deselect clock. The query is the stylesheet's own, so the
+ * two cannot disagree about which key presses are the controller's.
+ *
+ * A native control inside a surface (a link or a button in a row's
+ * description) takes its own press, for every pointer: the surface stays at
+ * rest.
  *
  * A surface's hold does nothing, so it keeps the browser's long-press text
  * selection (`spec:AST-094` FR41); only an element whose hold does something
@@ -88,6 +94,7 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {controlPressConsts} from './controlPressLayer.stylex';
 import {subscribeInput} from './inputStream';
+import {isPrimaryClick} from './primaryClick';
 import {TOUCH_QUERY} from './touchPresentation';
 
 /**
@@ -572,12 +579,25 @@ function apply(slot: Slot, step: PressStep): void {
  * disabled surface takes it and paints nothing, so a press on a disabled
  * control does not light the row around it.
  */
+/**
+ * A native control nested in a pressable surface: a press on it is the
+ * control's own, not the surface's.
+ */
+const NESTED_CONTROL = 'a[href], button, [role="button"], [role="link"]';
+
 function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {
     return null;
   }
   const found = target.closest(`[${PRESSABLE_ATTRIBUTE}]`);
   if (!(found instanceof HTMLElement) || found.matches(DISABLED)) {
+    return null;
+  }
+  // A native control inside the surface (a link or a button in a row's
+  // description) takes its own press, for every pointer: the rule
+  // RadioListItem's `:active:not(:has(...))` arm kept for a mouse.
+  const control = target.closest(NESTED_CONTROL);
+  if (control != null && control !== found && found.contains(control)) {
     return null;
   }
   return found;
@@ -662,9 +682,11 @@ function releaseOf(profile: PressProfile): Pick<PressProfile, 'releaseMs'> {
 }
 
 /**
- * Whether presses with a mouse or a key are the controller's to paint here.
- * Asked at each such press: rendering a pressable never queries the pointer,
- * so a layout that must not depend on it stays independent.
+ * Whether the stylesheet drops `:active` here (a coarse primary pointer): a
+ * Space press is then the controller's to paint, and every release takes its
+ * profile's clock. Asked at each such press: rendering a pressable never
+ * queries the pointer, so a layout that must not depend on it stays
+ * independent.
  */
 function stylesheetDroppedActive(): boolean {
   // The shared touch resolver's key (`spec:AST-012` FR2): the condition the
@@ -708,19 +730,22 @@ function pressButton(
   }
   takeOver(finger, element);
   track();
-  // A mouse or a key keeps the fine pointer's 200 ms release on any surface;
-  // the marker tells the stylesheet's release arms the same.
+  // A mouse's release is a finger's on this device (FR11). A key keeps the
+  // fine pointer's 200 ms release on any surface, and the marker tells the
+  // stylesheet's release arms the same.
   button.live = {
     element,
     gesture: idlePressGesture(),
     pointerId,
-    releaseMs: PRESS_PROFILES.cell.releaseMs,
+    releaseMs:
+      pointerId == null
+        ? PRESS_PROFILES.cell.releaseMs
+        : releaseOf(profileOf(element)).releaseMs,
     timer: null,
   };
-  element.setAttribute(
-    PRESS_INPUT_ATTRIBUTE,
-    pointerId == null ? 'key' : 'mouse',
-  );
+  if (pointerId == null) {
+    element.setAttribute(PRESS_INPUT_ATTRIBUTE, 'key');
+  }
   holdKey(pointerId == null);
   apply(button, pressGestureStep(button.live.gesture, {kind: 'buttonDown'}));
 }
@@ -746,13 +771,18 @@ function cancelButton(): void {
 
 function onPointerDown(event: PointerEvent): void {
   if (event.pointerType === 'mouse') {
-    // A mouse already has hover and keeps `:active` where the primary pointer
-    // is fine; the touch treatment's CSS is inside `@media (pointer: coarse)`.
-    // Not tracking it there keeps desktop identical and costs the mouse path
-    // nothing. Only the primary button: that is the press `:active` paints.
-    if (event.button === 0 && stylesheetDroppedActive()) {
+    // A mouse is a fine pointer: its press paints at once, through this
+    // controller and the release fade a finger's has, in place of the
+    // browser's `:active` (`spec:AST-094` FR11, FR43, DEC-21). Only a
+    // primary click: a right click and a ctrl-click on macOS ask for the
+    // context menu.
+    if (isPrimaryClick(event)) {
       pressButton(event.target, event.pointerId);
     }
+    return;
+  }
+  if (event.pointerType === 'pen' && !isPrimaryClick(event)) {
+    // A pen's barrel or eraser button: not a press.
     return;
   }
   // Any finger arms the listeners, a press or not: the scroll it may start is
@@ -778,7 +808,12 @@ function onPointerDown(event: PointerEvent): void {
   // The finger is recorded AFTER the brake reads the fling, deliberately: the
   // question the brake asks is whether a PREVIOUS finger's fling is still
   // running here.
-  const braking = element != null && scrollerIsBraking(element);
+  // The brake is a finger's: a pen, a fine pointer, presses at once, even on
+  // a list a finger left moving (FR11).
+  const braking =
+    event.pointerType === 'touch' &&
+    element != null &&
+    scrollerIsBraking(element);
   if (event.pointerType === 'pen') {
     clearPen();
     penDown = true;
@@ -807,7 +842,11 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
-      delayed: profile.highlightDelay === 'always' || isInsideScroller(element),
+      // A pen presses at once, in a scroll view too: the content-touch delay
+      // waits out a finger's scroll (FR11).
+      delayed:
+        event.pointerType === 'touch' &&
+        (profile.highlightDelay === 'always' || isInsideScroller(element)),
     }),
   );
 }

@@ -27,16 +27,16 @@
  * press the same generated specificity; StyleX's native pseudo-state ordering
  * then emits `:active` last.
  *
- * TWO POINTERS, TWO PRESS MODELS. A mouse keeps `:active`. A finger does not:
- * on iOS Safari `:active` paints on the touch itself and can outlive the start
- * of a scroll, so under `@media (pointer: coarse)` the bare `:active` arm is
- * dropped and the press is written by the touch press controller
- * (`utils/pressFeedback.ts`) as `data-astryx-press="on"` once the press is
- * believed (150 ms, no travel, no scroll) and `data-astryx-press="fading"` for the
- * 200 ms release. The query reads the PRIMARY pointer, so on a phone or tablet
- * a mouse, trackpad or Space-key press loses `:active` too; the controller
- * writes the same attribute for those, at once. The two arms paint those
- * through ONE number:
+ ONE PRESS MODEL. The press controller (`utils/pressFeedback.ts`) writes
+ * every pointer's press: a finger's as `data-astryx-press="on"` once the press
+ * is believed (150 ms, no travel, no scroll), a mouse's or a pen's at once on
+ * `pointerdown` (`spec:AST-094` FR11, DEC-21), and `data-astryx-press="fading"`
+ * for the release. `:active` stays for a Space press where the primary
+ * pointer is fine; under `@media (pointer: coarse)` the bare `:active` arm is
+ * dropped (on iOS Safari it paints on the touch itself and can outlive the
+ * start of a scroll), and the controller writes a Space press too. While the
+ * controller paints, the colour arms yield to its image, so a press never
+ * paints twice. The arms paint through ONE number:
  *
  *  - `--astryx-press-alpha` is the press's strength, 0 to 1. It is a
  *    registered custom property (`@property`, syntax `<number>`, declared once

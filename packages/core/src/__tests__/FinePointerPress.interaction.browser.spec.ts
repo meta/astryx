@@ -208,11 +208,10 @@ test.describe('with a mouse', () => {
   });
 
   test.describe('under reduced motion', () => {
-    test.use({reducedMotion: 'reduce'});
-
     test("a mouse's release completes at once: no release animation runs", async ({
       page,
     }) => {
+      await page.emulateMedia({reducedMotion: 'reduce'});
       await openStory(page, storybook(), 'core-list--interactive');
       const row = page.locator('li[data-astryx-pressable]').first();
       await mouseDownOn(page, row);

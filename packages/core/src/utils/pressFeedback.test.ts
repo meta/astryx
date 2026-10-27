@@ -254,16 +254,6 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('leaves a mouse press to `:active` where the primary pointer is fine', () => {
-    // The test environment is a desktop: `(pointer: coarse)` does not match,
-    // so the stylesheet keeps `:active` for the mouse and the controller
-    // stays out of its way.
-    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
-    press(rows[0], 'pointerdown', 10, 10, 'mouse');
-    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
-    expect(pressedRow()).toBe(-1);
-  });
-
   it('leaves a Space press to `:active` where the primary pointer is fine', () => {
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const button = pressable('button');
@@ -642,13 +632,13 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps a mouse or Space press on the fine pointer's 200 ms release, even on a control", () => {
-    const control = document.createElement('button');
-    control.setAttribute(PRESSABLE_ATTRIBUTE, '');
-    rows[1].appendChild(control);
-    press(control, 'pointerdown', 10, 100, 'mouse');
-    expect(control.getAttribute(PRESS_INPUT_ATTRIBUTE)).toBe('mouse');
-    press(control, 'pointerup', 10, 100, 'mouse');
+  it("keeps a Space press on the fine pointer's 200 ms release, even on a control", () => {
+    // A mouse's release is a finger's (spec:AST-094 FR11); a key keeps its
+    // own path (the "a fine pointer's press" block below).
+    const control = focusedButton(rows[1]);
+    key(control, 'keydown');
+    expect(control.getAttribute(PRESS_INPUT_ATTRIBUTE)).toBe('key');
+    key(control, 'keyup');
     expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
     vi.advanceTimersByTime(PRESS_FADE_MS);
     expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
@@ -1017,15 +1007,6 @@ describe("a fine pointer's press: at once, the finger's release, no brake (spec:
     } finally {
       platform.mockRestore();
     }
-  });
-
-  it("leaves a Space press under a fine pointer on its own path: the browser's `:active` paints it", () => {
-    const button = control(rows[1]);
-    button.focus();
-    button.dispatchEvent(
-      new KeyboardEvent('keydown', {key: ' ', bubbles: true, cancelable: true}),
-    );
-    expect(button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 });
 
