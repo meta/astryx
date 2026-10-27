@@ -12,7 +12,7 @@
  */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {lockSelection} from './selectionLock';
+import {lockSelection, locksSelectionFor} from './selectionLock';
 
 /** Make `CSS.supports` answer as iOS WebKit does for its touch callout. */
 function asIosWebKit(): () => void {
@@ -90,5 +90,29 @@ describe('lockSelection elsewhere', () => {
     expect(refuses(get('label'))).toBe(true);
     second();
     expect(refuses(get('label'))).toBe(false);
+  });
+});
+
+describe('locksSelectionFor', () => {
+  /** A window whose primary pointer is coarse or fine. */
+  function viewWith(isCoarse: boolean): Window {
+    return {
+      matchMedia: (query: string) =>
+        ({
+          matches: query.includes('coarse') ? isCoarse : !isCoarse,
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    } as unknown as Window;
+  }
+
+  it('locks for a finger and a pen under any primary pointer, a touchscreen laptop’s included, and never for a mouse (spec:AST-094 FR41)', () => {
+    for (const isCoarse of [true, false]) {
+      const view = viewWith(isCoarse);
+      expect(locksSelectionFor('touch', view)).toBe(true);
+      expect(locksSelectionFor('pen', view)).toBe(true);
+      expect(locksSelectionFor('mouse', view)).toBe(false);
+    }
   });
 });
