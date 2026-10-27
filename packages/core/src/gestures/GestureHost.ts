@@ -294,6 +294,15 @@ export class GestureHost {
       isRtl: view =>
         view instanceof Element &&
         doc.defaultView?.getComputedStyle(view).direction === 'rtl',
+      // A screen-edge pan tells its edge zone from a wider view by its size
+      // (spec:AST-094 FR18).
+      viewSize: view => {
+        if (!(view instanceof Element)) {
+          return null;
+        }
+        const {width, height} = view.getBoundingClientRect();
+        return {width, height};
+      },
     };
     this.arena = new GestureArena({
       clock: options.clock ?? browserClock,
