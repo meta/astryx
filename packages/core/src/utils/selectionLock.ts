@@ -110,6 +110,46 @@ export function lockSelection(
       }
     };
   }
+  return lockStyles(set);
+}
+
+/**
+ * Refuse a selection on `elements` with inline styles, on every engine, until
+ * the returned function runs: a mouse or a pen drag a recognizer claimed has
+ * already started selecting when it claims, which only the styles stop, so
+ * the selection it started is cleared first (`spec:AST-094` FR43, FR41).
+ * Idempotent release.
+ */
+export function lockDragSelection(
+  elements: Iterable<Element>,
+  view: Window | null | undefined,
+): () => void {
+  view?.getSelection()?.removeAllRanges();
+  const set = new Set(elements);
+  const refuse = (event: Event) => {
+    if (!isTextEntry(event.target)) {
+      event.preventDefault();
+    }
+  };
+  for (const element of set) {
+    element.addEventListener('selectstart', refuse);
+  }
+  const unlockStyles = lockStyles(set);
+  let isReleased = false;
+  return () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    for (const element of set) {
+      element.removeEventListener('selectstart', refuse);
+    }
+    unlockStyles();
+  };
+}
+
+/** The selection-lock styles on `set`, refcounted per element; idempotent release. */
+function lockStyles(set: ReadonlySet<Element>): () => void {
   const locked: Element[] = [];
   for (const element of set) {
     const style = styleOf(element);

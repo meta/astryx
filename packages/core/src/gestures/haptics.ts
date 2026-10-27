@@ -43,7 +43,7 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
+import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 
 export {HAPTIC_SWITCH_ATTRIBUTE};
 
