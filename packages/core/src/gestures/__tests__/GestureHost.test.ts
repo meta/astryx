@@ -1316,3 +1316,128 @@ describe('GestureHost', () => {
     expect(host.arena.touches).toEqual([]);
   });
 });
+
+describe('an action group under a fine pointer (family:action-groups FR5; spec:AST-094 FR19, FR24)', () => {
+  const listenerTypes = (spy: ReturnType<typeof vi.spyOn>) =>
+    (spy.mock.calls as unknown[][])
+      .map(call => call[0] as string)
+      .filter(t => /^(touch|pointer|click|blur|scroll|contextmenu)/.test(t));
+
+  it('keeps one passive pointerdown listener on the group while idle, and none for a recognizer that is not a group', () => {
+    const {group, other} = mount(
+      '<div id="group"><button id="one"></button></div><div id="other"></div>',
+    );
+    const added = vi.spyOn(document, 'addEventListener');
+    const viewAdded = vi.spyOn(window, 'addEventListener');
+    const groupAdded = vi.spyOn(group, 'addEventListener');
+    const otherAdded = vi.spyOn(other, 'addEventListener');
+    added.mockClear();
+    viewAdded.mockClear();
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    detachers.push(
+      fine.attach(group, new TapGestureRecognizer(), {actionGroup: true}),
+      fine.attach(other, new TapGestureRecognizer()),
+    );
+    expect(listenerTypes(added)).toEqual([]);
+    expect(listenerTypes(viewAdded)).toEqual([]);
+    expect(groupAdded.mock.calls).toEqual([
+      ['pointerdown', expect.any(Function), {passive: true}],
+    ]);
+    expect(otherAdded).not.toHaveBeenCalled();
+  });
+
+  it('adds document listeners only during a press, removes them at the release, and serves the press to the group', () => {
+    const {group, one} = mount(
+      '<div id="group"><button id="one"></button></div>',
+    );
+    const added = vi.spyOn(document, 'addEventListener');
+    const removed = vi.spyOn(document, 'removeEventListener');
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const tap = new TapGestureRecognizer();
+    const states: string[] = [];
+    tap.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(group, tap, {actionGroup: true}));
+    added.mockClear();
+    removed.mockClear();
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    expect(listenerTypes(added)).toEqual(
+      expect.arrayContaining(['pointermove', 'pointerup', 'pointercancel']),
+    );
+    expect(listenerTypes(removed)).toEqual([]);
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 80});
+    expect(states).toContain('ended');
+    for (const type of ['pointermove', 'pointerup', 'pointercancel']) {
+      expect(listenerTypes(removed)).toContain(type);
+    }
+  });
+
+  it('serves only the group: a recognizer that is not a group, on the press path, takes no part', () => {
+    const {outer, group, one} = mount(
+      '<div id="outer"><div id="group"><button id="one"></button></div></div>',
+    );
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const groupTap = new TapGestureRecognizer();
+    const outerTap = new TapGestureRecognizer();
+    const outerStates: string[] = [];
+    outerTap.addListener(r => outerStates.push(r.state));
+    detachers.push(
+      fine.attach(group, groupTap, {actionGroup: true}),
+      fine.attach(outer, outerTap),
+    );
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 80});
+    expect(outerStates).toEqual([]);
+  });
+
+  it('removes the group listener on detach, and a coarse pointer keeps the usual document listeners instead', () => {
+    const {group} = mount('<div id="group"></div>');
+    const groupRemoved = vi.spyOn(group, 'removeEventListener');
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const detach = fine.attach(group, new TapGestureRecognizer(), {
+      actionGroup: true,
+    });
+    detach();
+    expect(groupRemoved).toHaveBeenCalledWith(
+      'pointerdown',
+      expect.any(Function),
+    );
+    const groupAdded = vi.spyOn(group, 'addEventListener');
+    const added = vi.spyOn(document, 'addEventListener');
+    added.mockClear();
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    detachers.push(
+      coarse.attach(group, new TapGestureRecognizer(), {actionGroup: true}),
+    );
+    expect(listenerTypes(added)).toContain('pointerdown');
+    expect(
+      groupAdded.mock.calls.filter(call => call[0] === 'pointerdown'),
+    ).toEqual([]);
+  });
+});
