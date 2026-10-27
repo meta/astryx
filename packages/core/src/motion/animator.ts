@@ -936,8 +936,7 @@ export function createAnimator(
    * started, read live when a touch lands. iOS WebKit keeps the transform it
    * resolved when the animation went to the compositor (iOS 26.2: the
    * element's rect and its hit tests stay at the start for the whole curve,
-   * though the inline style holds the end and the computed style is live),
-   * until the animation is retired. A segment whose start still waits for
+   * while the computed style is live), until the animation is retired. A segment whose start still waits for
    * the browser's commit has painted nothing of its curve yet.
    */
   const drawnTranslate = (property: MotionProperty, time: number) => {
