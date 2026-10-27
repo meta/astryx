@@ -135,7 +135,7 @@ import {
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
+import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
@@ -160,7 +160,8 @@ import {
   withoutClickGuard,
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
-import {locksSelectionFor} from '../utils/selectionLock';
+import {isPrimaryClick} from '../utils/primaryClick';
+import {lockDragSelection, locksSelectionFor} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 import {
@@ -209,8 +210,9 @@ export interface GestureHostOptions {
   /**
    * Whether the primary pointer is coarse (a phone, a tablet). Gestures
    * attach for every pointer (`spec:AST-094` FR43); where it is fine, an
-   * element that uses a gesture keeps one passive `pointerdown` listener and
-   * the page's listeners last only a press (FR24).
+   * element that uses a gesture keeps one passive `pointerdown` listener
+   * (beside a claiming recognizer's blocking `touchmove`, FR19) and the
+   * page's listeners last only a press (FR24).
    * @default `(pointer: coarse)` on the document's window
    */
   isPrimaryPointerCoarse?: () => boolean;
@@ -490,6 +492,7 @@ export class GestureHost {
       environment,
       onDeferredClick: (touch, allowed) => this.replayClick(touch, allowed),
       onTransition: options.onTransition,
+      onClaim: ids => this.lockClaimedDrags(ids),
     });
     const view = doc.defaultView;
     // A test may pass its own read; otherwise the one coarse-pointer gate,
@@ -819,16 +822,15 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    // Where the primary pointer is fine, an element keeps one listener, its
-    // press's (syncArmed, FR24): `touch-action` leaves the browser the
-    // rest, and the page's listeners come with the press.
+    // For every pointer: a finger's claim cancels its moves here (FR19), a
+    // listener FR24 counts outside the one-listener budget a fine pointer's
+    // element keeps for its press (syncArmed).
     const needsListener =
-      this.isCoarse &&
-      (registration.recognizers.some(
+      registration.recognizers.some(
         recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
       ) ||
-        (registration.consumer?.keepsTouch != null &&
-          registration.consumer.isEnabled?.() !== false));
+      (registration.consumer?.keepsTouch != null &&
+        registration.consumer.isEnabled?.() !== false);
     // The blocking listener sits on the element itself (FR19: a scroll that
     // starts elsewhere never waits on it), but every element shares the
     // host's one handler, which routes through the arena.
@@ -1127,7 +1129,7 @@ export class GestureHost {
     if (
       this.isInstalled ||
       !isPointerKind(press.pointerType) ||
-      (press.pointerType === 'mouse' && press.button !== 0)
+      (press.pointerType === 'mouse' && !isPrimaryClick(press))
     ) {
       return;
     }
@@ -1463,6 +1465,41 @@ export class GestureHost {
     }
   }
 
+  /**
+   * A mouse or a pen that a recognizer claims for a continuous gesture (a
+   * pan's drag) takes no text selection from then on (`spec:AST-094` FR43,
+   * FR41): its drag started selecting before the claim, so that selection
+   * goes and the claiming recognizers' elements refuse one until the pointer
+   * lifts, as a held finger's do. A tap claims only at its lift, so a click
+   * keeps the selection it made. A finger keeps the touch-down lock alone.
+   */
+  private lockClaimedDrags(ids: ReadonlyArray<number>): void {
+    for (const id of ids) {
+      if (this.lockedBy.has(id)) {
+        continue;
+      }
+      const touch = this.arena.touches.find(each => each.id === id);
+      if (touch == null || touch.pointerType === 'touch') {
+        continue;
+      }
+      const elements = new Set<Element>();
+      for (const recognizer of this.arena.participantsOf(id)) {
+        if (
+          (recognizer.state === 'began' || recognizer.state === 'changed') &&
+          recognizer.view instanceof Element
+        ) {
+          elements.add(recognizer.view);
+        }
+      }
+      if (elements.size > 0) {
+        this.lockedBy.set(
+          id,
+          lockDragSelection(elements, this.doc.defaultView),
+        );
+      }
+    }
+  }
+
   /** Undo `lockSelection` for a contact that ended; idempotent. */
   private unlockSelection(id: number): void {
     this.lockedBy.get(id)?.();
@@ -1506,7 +1543,9 @@ export class GestureHost {
 
   private readonly onTouchStart = (event: TouchEvent): void => {
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     if (this.fingerTargets.length > 1) {
@@ -1609,7 +1648,9 @@ export class GestureHost {
 
   private readonly onTouchMove = (event: TouchEvent): void => {
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     this.dropFingersNotDown(event);
@@ -1759,7 +1800,9 @@ export class GestureHost {
   private readonly onTouchEnd = (event: TouchEvent): void => {
     this.releaseArmedPress();
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     this.dropFingersNotDown(event);
@@ -1837,7 +1880,9 @@ export class GestureHost {
   private readonly onTouchCancel = (event: TouchEvent): void => {
     this.releaseArmedPress();
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     const listed = touchesOf(event.changedTouches);
@@ -2148,7 +2193,9 @@ export class GestureHost {
       });
       return;
     }
-    if (event.pointerType === 'mouse' && event.button !== 0) {
+    // A right click, or a ctrl-click on macOS (its context click), starts no
+    // press (FR43).
+    if (event.pointerType === 'mouse' && !isPrimaryClick(event)) {
       return;
     }
     const target = this.presentedTarget(

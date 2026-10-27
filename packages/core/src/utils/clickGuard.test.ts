@@ -16,7 +16,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {GestureHost} from '../gestures/GestureHost';
 import {coarsePrimaryPointer} from '../gestures/__tests__/pointerQuery';
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../gestures/hapticSwitch';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {MENU_PRESS_STRAY_CLICK_MS} from '../hooks/useMenuPress';
 import {

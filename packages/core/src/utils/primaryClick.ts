@@ -2,34 +2,27 @@
 
 /**
  * @file primaryClick.ts
- * @input A pointer event's button and ctrl key, and the platform
+ * @input A mouse or pen button press: its `button` and `ctrlKey`
  * @output Exports isPrimaryClick
- * @position Core-internal utility, not exported from `@astryxdesign/core/utils`:
- *   the one answer to whether a press is a click, for every consumer of
- *   pointer input (the press controller, utils/pressFeedback.ts)
+ * @position Internal util, the one primary-click rule: the gesture host
+ *   starts a press only for one, and the press controller paints only one;
+ *   platform detection is utils/isApplePlatform.ts
  *
- * A press is a primary click when it is the main button (a mouse's left
- * button, a pen's tip, a finger) and not a ctrl-click on macOS, which opens
- * the context menu there as a right click does (`spec:AST-094` FR43).
- *
- * SYNC: When modified, update primaryClick.test.ts.
+ * Deliberately absent from utils/index.ts: packages/core/src/index.ts does
+ * `export * from './utils'`, so naming it there would publish it as API.
  */
 
-interface ClickLike {
+import {isApplePlatform} from './isApplePlatform';
+
+/**
+ * Whether a button press is a primary click: the main button, and not a
+ * ctrl-click on macOS or iPadOS, which is that platform's context click
+ * (`spec:AST-094` FR43). A right click, a pen's barrel button and a macOS
+ * ctrl-click start no press.
+ */
+export function isPrimaryClick(event: {
   readonly button: number;
   readonly ctrlKey: boolean;
-}
-
-/** Whether `event` presses as a click rather than asking for a context menu. */
-export function isPrimaryClick(event: ClickLike): boolean {
-  return event.button === 0 && !(event.ctrlKey && isMacPlatform());
-}
-
-function isMacPlatform(): boolean {
-  if (typeof navigator === 'undefined') {
-    return false;
-  }
-  const hints = (navigator as Navigator & {userAgentData?: {platform?: string}})
-    .userAgentData;
-  return /mac/i.test(hints?.platform ?? navigator.platform ?? '');
+}): boolean {
+  return event.button === 0 && !(event.ctrlKey && isApplePlatform());
 }

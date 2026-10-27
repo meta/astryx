@@ -72,7 +72,9 @@ function pointer(
     pointerType: string;
     x: number;
     y: number;
+    button?: number;
     buttons?: number;
+    ctrlKey?: boolean;
     time: number;
   },
 ): Event {
@@ -84,8 +86,9 @@ function pointer(
     pointerType: init.pointerType,
     clientX: init.x,
     clientY: init.y,
-    button: 0,
+    button: init.button ?? 0,
     buttons: init.buttons ?? 0,
+    ctrlKey: init.ctrlKey ?? false,
   });
   Object.defineProperty(event, 'timeStamp', {value: init.time});
   target.dispatchEvent(event);
@@ -459,7 +462,8 @@ describe('GestureHost', () => {
         .map(call => call[0])
         .filter(t => /^(touch|pointer)/.test(t));
     // A fine primary pointer: nothing on the page while idle, and on the
-    // element only the one listener its press needs (FR24), no touchmove.
+    // element the one listener its press needs, plus the claiming pan's
+    // blocking touchmove, which FR24 counts outside that budget (FR19).
     const fine = new GestureHost(document, {
       clock,
       isPrimaryPointerCoarse: () => false,
@@ -467,7 +471,10 @@ describe('GestureHost', () => {
     const boxAdded = vi.spyOn(box, 'addEventListener');
     const detachFine = fine.attach(box, new PanGestureRecognizer());
     expect(types(added)).toEqual([]);
-    expect(boxAdded.mock.calls.map(call => call[0])).toEqual(['pointerdown']);
+    expect(boxAdded.mock.calls.map(call => call[0]).sort()).toEqual([
+      'pointerdown',
+      'touchmove',
+    ]);
     detachFine();
     boxAdded.mockClear();
     // A coarse one, with only a disabled recognizer: still nothing.
@@ -3489,7 +3496,12 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     );
     expect(gestureListeners(added)).toEqual([]);
     expect(gestureListeners(viewAdded)).toEqual([]);
-    expect(gestureListeners(boxAdded)).toEqual(['pointerdown']);
+    // The pan's blocking touchmove for a finger's claim counts outside the
+    // one-listener budget (FR24, FR19).
+    expect(gestureListeners(boxAdded).sort()).toEqual([
+      'pointerdown',
+      'touchmove',
+    ]);
     expect(gestureListeners(rowAdded)).toEqual(['pointerdown']);
   });
 
@@ -3594,6 +3606,181 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     );
   });
 
+  it("keeps a claiming recognizer's blocking touchmove listener on its element under a fine pointer, outside FR24's one-listener budget, so a touchscreen laptop's finger claims as on a phone (FR19)", () => {
+    const {box, tapper} = mount('<div id="box"></div><div id="tapper"></div>');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const tapperAdded = vi.spyOn(tapper, 'addEventListener');
+    for (const spy of [boxAdded, tapperAdded]) {
+      spy.mockClear();
+    }
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+      fine.attach(tapper, new TapGestureRecognizer()),
+    );
+    expect(
+      (boxAdded.mock.calls as unknown[][]).filter(
+        call => call[0] === 'touchmove',
+      ),
+    ).toEqual([['touchmove', expect.any(Function), {passive: false}]]);
+    // A tap claims only at its lift: still only its one listener.
+    expect(gestureListeners(tapperAdded)).toEqual(['pointerdown']);
+  });
+
+  it('claims a finger for a one-way pan under a fine pointer through its blocking touchmove, as the pan leaves the browser every direction (FR24, FR19)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    boxAdded.mockClear();
+    const fine = fineHost();
+    // A one-way pan (a toast's swipe) leaves all four directions native, so
+    // no touch-action stops the browser's pan: only cancelling moves does,
+    // through a listener the element carries before the finger lands (the
+    // browser decides at touchstart whether a move can be cancelled).
+    const swipe = new PanGestureRecognizer({name: 'swipe', direction: 'right'});
+    detachers.push(fine.attach(box, swipe));
+    expect(box.getAttribute('data-astryx-touch-action')).toBeNull();
+    expect(
+      (boxAdded.mock.calls as unknown[][]).filter(
+        call => call[0] === 'touchmove',
+      ),
+    ).toEqual([['touchmove', expect.any(Function), {passive: false}]]);
+    const finger = {id: 3, x: 5, y: 5};
+    pointer('pointerdown', box, {
+      id: 9,
+      pointerType: 'touch',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    let last: Event | null = null;
+    for (const [x, time] of [
+      [20, 16],
+      [40, 32],
+      [60, 48],
+    ] as const) {
+      pointer('pointermove', box, {
+        id: 9,
+        pointerType: 'touch',
+        x,
+        y: 5,
+        buttons: 1,
+        time,
+      });
+      const moved = {id: 3, x, y: 5};
+      last = touch('touchmove', box, [moved], [moved], time);
+    }
+    expect(['began', 'changed']).toContain(swipe.state);
+    expect(last?.defaultPrevented).toBe(true);
+  });
+
+  it('takes no text selection once a mouse or a pen pan claims: the selection its drag started goes, and its element refuses one until the lift (FR43, FR41)', async () => {
+    const {box} = mount('<div id="box">Some text a drag would select</div>');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      // The drag selects text before the pan claims at 10 px.
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(box);
+      selection.addRange(range);
+      time += 1000;
+      for (const [type, x, buttons] of [
+        ['pointerdown', 10, 1],
+        ['pointermove', 30, 1],
+        ['pointermove', 50, 1],
+      ] as const) {
+        time += 16;
+        pointer(type, box, {pointerType, x, y: 10, buttons, time});
+      }
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(selection.rangeCount).toBe(0);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      box.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
+      await Promise.resolve();
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
+    const {box} = mount('<div id="box">Some selected text</div>');
+    const fine = fineHost();
+    detachers.push(fine.attach(box, new TapGestureRecognizer()));
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(box);
+    selection.addRange(range);
+    mouse('pointerdown', box, 10, 0);
+    mouse('pointerup', box, 10, 80);
+    expect(selection.rangeCount).toBe(1);
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+
+  it("starts no press for a right click or a ctrl-click on macOS, that platform's context click, and starts one for a ctrl-click elsewhere (FR43)", () => {
+    const {row} = mount('<div id="row"></div>');
+    const fine = fineHost();
+    const consumer = new RecordingConsumer();
+    detachers.push(fine.attachConsumer(row, consumer));
+    const platform = vi.spyOn(navigator, 'platform', 'get');
+    platform.mockReturnValue('MacIntel');
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      button: 2,
+      buttons: 2,
+      time: 0,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      button: 2,
+      time: 80,
+    });
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      ctrlKey: true,
+      time: 500,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      ctrlKey: true,
+      time: 580,
+    });
+    expect(consumer.events).toEqual([]);
+    platform.mockReturnValue('Win32');
+    pointer('pointerdown', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      ctrlKey: true,
+      time: 1000,
+    });
+    pointer('pointerup', row, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      ctrlKey: true,
+      time: 1080,
+    });
+    expect(consumer.events.length).toBeGreaterThan(0);
+  });
+
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     detachers.push(() => warn.mockRestore());
@@ -3609,5 +3796,43 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     );
     expect(gestureListeners(boxAdded)).toEqual(gestureListeners(rowAdded));
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('Touch Events from a browser that exposes no ontouchstart', () => {
+  it('takes a finger once, from its pointer events, so a one-finger long press recognizes (touch emulation turned on after load)', () => {
+    // Chromium fixes `ontouchstart` when the page is created; turning touch
+    // emulation on later sends Touch Events without it.
+    let owner: object | null = window;
+    let descriptor: PropertyDescriptor | undefined;
+    while (owner != null) {
+      descriptor = Object.getOwnPropertyDescriptor(owner, 'ontouchstart');
+      if (descriptor != null) {
+        break;
+      }
+      owner = Object.getPrototypeOf(owner) as object | null;
+    }
+    if (owner != null && descriptor != null) {
+      const from = owner;
+      const saved = descriptor;
+      delete (from as {ontouchstart?: unknown}).ontouchstart;
+      detachers.push(() => Object.defineProperty(from, 'ontouchstart', saved));
+    }
+    expect('ontouchstart' in window).toBe(false);
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    detachers.push(host.attach(box, press));
+    const finger = {id: 1, x: 10, y: 10};
+    pointer('pointerdown', box, {
+      id: 7,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    host.arena.advanceTime(600);
+    expect(press.state).toBe('began');
   });
 });
