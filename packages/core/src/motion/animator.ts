@@ -459,7 +459,12 @@ interface HandleState {
  * dip, the fade back in.
  */
 interface Landing {
-  readonly owner: HandleState;
+  /**
+   * The call that settles when the landing (and its fade back in) ends; a
+   * call that joins the dip takes it over, and the call it replaces is
+   * carried.
+   */
+  owner: HandleState;
   /** ms after the call's start. */
   readonly at: number;
   readonly values: Map<MotionProperty, number>;
@@ -499,6 +504,8 @@ interface ReducedPlan {
   > | null;
   /** The stylesheet opacity a dip borrowed (no call owns opacity). */
   readonly borrowed?: number | null;
+  /** The call joins the waiting dip (see the planner's `joins`). */
+  readonly joins?: boolean;
 }
 
 const PROPERTIES: ReadonlyArray<MotionProperty> = [
@@ -798,6 +805,15 @@ export function createAnimator(
   let ownWillChange: string | null = null;
   /** The stylesheet's will-change when there is no inline value. */
   let sheetWillChange = '';
+  /**
+   * Whether sheetWillChange holds a read of the element's current style: it
+   * is read in the task after the element is attached, and again after each
+   * demotion, so a promotion (a drag's first move) reads no style in its
+   * own task.
+   */
+  let sheetWillChangeRead = false;
+  /** The pending read of sheetWillChange, cancelled with its element. */
+  let sheetReadTimer: ReturnType<typeof setTimeout> | null = null;
   let demoteTimer: ReturnType<typeof setTimeout> | null = null;
   /** A pseudo-element is promoted through a custom property on its host. */
   const promotionProperty =
@@ -1381,13 +1397,12 @@ export function createAnimator(
     if (ownWillChange == null) {
       ownWillChange = element.style.willChange;
       // Without an inline value, the stylesheet's reasons stay alongside the
-      // promotion's (read once, as the promotion starts).
-      sheetWillChange =
-        ownWillChange === ''
-          ? (element.ownerDocument.defaultView
-              ?.getComputedStyle(element)
-              .getPropertyValue('will-change') ?? '')
-          : '';
+      // promotion's. They were read in the task after the element was
+      // attached; a promotion that comes first (an element attached in this
+      // task that moves at once) reads them now.
+      if (ownWillChange === '' && !sheetWillChangeRead) {
+        readSheetWillChange(element);
+      }
     }
     const base = ownWillChange !== '' ? ownWillChange : sheetWillChange;
     const own = base === 'auto' ? '' : base;
@@ -1396,6 +1411,43 @@ export function createAnimator(
       .map(reason => reason.trim())
       .filter(reason => reason !== '' && !promoted.has(reason as Channel));
     element.style.willChange = [...reasons, ...promoted].join(', ');
+  };
+
+  /** Reads the element's own will-change while no promotion of ours is written. */
+  const readSheetWillChange = (element: HTMLElement) => {
+    sheetWillChange =
+      element.ownerDocument.defaultView
+        ?.getComputedStyle(element)
+        .getPropertyValue('will-change') ?? '';
+    sheetWillChangeRead = true;
+  };
+
+  /**
+   * Reads sheetWillChange in a task of its own, so a later promotion reads no
+   * style in its own task. Skipped while a promotion of ours is written,
+   * which the read would see; demote asks again. A pseudo-element's
+   * promotion is its own property, with nothing to read.
+   */
+  const readSheetWillChangeLater = () => {
+    cancelSheetWillChangeRead();
+    sheetWillChangeRead = false;
+    if (target == null || promotionProperty != null) {
+      return;
+    }
+    const element = target;
+    sheetReadTimer = setTimeout(() => {
+      sheetReadTimer = null;
+      if (target === element && promoted.size === 0) {
+        readSheetWillChange(element);
+      }
+    }, 0);
+  };
+
+  const cancelSheetWillChangeRead = () => {
+    if (sheetReadTimer != null) {
+      clearTimeout(sheetReadTimer);
+      sheetReadTimer = null;
+    }
   };
 
   /**
@@ -1452,6 +1504,8 @@ export function createAnimator(
     promoted.clear();
     if (target != null) {
       writePromotion(target);
+      // Its stylesheet may have changed its will-change since.
+      readSheetWillChangeLater();
     }
   };
 
@@ -1773,6 +1827,7 @@ export function createAnimator(
     finished: Promise<boolean>,
     time: number,
     group: StartGroup | null = null,
+    settlesWithLanding = false,
   ): MotionHandle => {
     const ends = properties.map(p => {
       const segment = segments.get(p);
@@ -1781,7 +1836,9 @@ export function createAnimator(
         : time;
     });
     const end = Math.max(time, ...ends);
-    if (properties.length === 0 || end <= time) {
+    if (settlesWithLanding) {
+      // The landing it joined settles it.
+    } else if (properties.length === 0 || end <= time) {
       settle(owner, true);
     } else {
       // Interruptions settle false as they happen (interrupt); reaching the
@@ -2007,6 +2064,27 @@ export function createAnimator(
     return {carried, owners};
   };
 
+  /**
+   * A call joins the newest waiting dip: it takes the landing over and
+   * settles when the dip ends, and the call it replaces lands with it. Each
+   * value keeps the call whose move it is.
+   */
+  const joinWaitingDip = (owner: HandleState) => {
+    const dip = [...landings].reverse().find(landing => landing.fadeIn != null);
+    if (dip == null) {
+      settle(owner, true);
+      return;
+    }
+    for (const property of dip.values.keys()) {
+      if (!dip.owners.has(property)) {
+        dip.owners.set(property, dip.owner);
+      }
+    }
+    dip.carried.push(dip.owner);
+    carriedOwners.add(dip.owner);
+    dip.owner = owner;
+  };
+
   /** Where opacity is heading: past a waiting landing's fade back in. */
   const opacityHeading = (): number => {
     let to = finalValue('opacity');
@@ -2223,6 +2301,9 @@ export function createAnimator(
     get hasPendingLanding() {
       return landings.size > 0;
     },
+    get hasWaitingDip() {
+      return [...landings].some(landing => landing.fadeIn != null);
+    },
   };
 
   /**
@@ -2262,6 +2343,7 @@ export function createAnimator(
       holds: plan.holds,
       landing: plan.landing,
       borrowed: plan.borrowed,
+      joins: plan.joins,
     };
   };
 
@@ -2367,6 +2449,9 @@ export function createAnimator(
       }
       const held = heldIdentity;
       target = next;
+      // A new node: its own will-change is read again.
+      cancelSheetWillChangeRead();
+      sheetWillChangeRead = false;
       if (target == null) {
         return;
       }
@@ -2403,6 +2488,7 @@ export function createAnimator(
         }
       }
       flushReleases();
+      readSheetWillChangeLater();
     },
 
     get(property, time = now()) {
@@ -2504,7 +2590,13 @@ export function createAnimator(
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
       }
-      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.joins === true) {
+        joinWaitingDip(owner);
+      }
+      const handle =
+        plan?.joins === true
+          ? makeHandle(owner, ['opacity'], finished, time, group, true)
+          : makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, adopted);
       }
@@ -2602,7 +2694,13 @@ export function createAnimator(
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
       }
-      const handle = makeHandle(owner, changed, finished, time, group);
+      if (plan?.joins === true) {
+        joinWaitingDip(owner);
+      }
+      const handle =
+        plan?.joins === true
+          ? makeHandle(owner, ['opacity'], finished, time, group, true)
+          : makeHandle(owner, changed, finished, time, group);
       if (plan?.landing != null) {
         scheduleLanding(owner, handle.started, plan.landing, adopted);
       }
@@ -2876,6 +2974,7 @@ export function createAnimator(
       retireTimers.clear();
       handBackBorrow();
       demote();
+      cancelSheetWillChangeRead();
       target = null;
     },
   };

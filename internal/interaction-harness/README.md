@@ -148,7 +148,9 @@ deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
 screencast's intervals (two dropped frames), and at least 90% of the frames it
 delivered in the judged part presenting a new position (one miss is always
-allowed; a frame it did not deliver is a gap, for the stall check). Pass
+allowed; a frame it did not deliver is a gap, for the stall check, unless
+it delivered fewer than four frames there: then the judged part's span counts
+every frame, so one late frame is not "1 of 1 moved"). Pass
 `maxMedianFrameMs` (20 at 60 Hz) only in a proof that claims display rate.
 `verdict.failures` names each miss with its numbers, and `summary` carries the
 raw numbers for the report. Frames are judged in presentation order: a loaded
@@ -174,7 +176,7 @@ still presents. `startCompositorTrace(page)`, started with the screencast and
 stopped after the block, records when the compositor presented each frame
 (`Display::FrameDisplayed`); pass it as `presented`. The record is
 browser-wide (its frames carry no page identity), so it throws when another
-page is open as it starts or stops. A gap between two moved
+page is open as it starts or stops, or opened while it ran. A gap between two moved
 frames with nothing delivered inside it is then measured between the
 compositor's own frames: the frames it presented there count as presented
 (`recorderSkipped`, in the summary), and a gap it did not present through is
