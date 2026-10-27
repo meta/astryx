@@ -83,9 +83,11 @@ describe('the gestures module graph', () => {
 
   it('reaches the press tracker from usePressTracker, and haptics from its own entry', () => {
     expect(reachable('usePressTracker.ts')).toContain('PressTracker.ts');
-    expect(reachable('haptics.ts')).toContain('hapticSwitch.ts');
-    // The host shares only the switch's attribute with haptics.
-    expect(reachable('GestureHost.ts')).toContain('hapticSwitch.ts');
+    // The host shares only the switch's attribute with haptics, from utils/,
+    // where the click guard reads it too.
+    expect(reachable('haptics.ts')).toContain('../utils/hapticSwitch.ts');
+    expect(reachable('GestureHost.ts')).toContain('../utils/hapticSwitch.ts');
+    expect(reachable('GestureHost.ts')).not.toContain('hapticSwitch.ts');
   });
 
   it.each([
