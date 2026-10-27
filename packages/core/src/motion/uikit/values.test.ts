@@ -101,11 +101,16 @@ describe('UIKit constants table through the motion math', () => {
     // The table records the curve the touch press model ships with; this pins
     // the two together so neither drifts alone. It reads the curve the
     // overlay's fading arm ships (the rule StyleX injects), so it holds
-    // however the stylesheet spells the value.
+    // however the stylesheet spells the value. A control's release under a
+    // coarse primary pointer plays UIButton's own curve, and Reduce Motion
+    // plays the policy's fade (each pinned beside its source), so the arm
+    // read here is the one outside those media: the deselect's.
     const element = document.createElement('div');
     element.className =
       stylex.props(interactionOverlayStyles.backgroundColor).className ?? '';
-    const curves = rulesDeclaredFor(element)
+    const curves = rulesDeclaredFor(element, {
+      outsideMedia: /pointer: coarse|prefers-reduced-motion/,
+    })
       .filter(rule =>
         rule
           .slice(0, rule.indexOf('{'))

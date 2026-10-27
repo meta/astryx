@@ -2,7 +2,7 @@
 
 /**
  * @file pressGesture.ts
- * @input A press gesture's current phase and one pointer or timer event
+ * @input A press gesture's current phase and one pointer, key or timer event
  * @output Exports the press state machine (pressGestureStep, idlePressGesture),
  *   its clocks (PRESS_ONSET_MS, PRESS_SLOP_PX, PRESS_FLASH_MS, PRESS_FADE_MS,
  *   PRESS_SCROLL_BRAKE_MS) and their types
@@ -17,6 +17,19 @@
  * things: measured on iOS 26.2, it paints within 14 ms of the touch and was
  * still painted 1.6 s into a scroll. So on a coarse pointer the pressed state
  * is owned here, in JavaScript, and `:active` keeps only the mouse.
+ *
+ * The stylesheet drops `:active` by the PRIMARY pointer, so a mouse, trackpad
+ * or Space key on such a device has lost `:active` too. Their presses come
+ * here as `buttonDown`: painted at once, held through any travel, faded on
+ * release like a finger's.
+ *
+ * A CONTROL OUTSIDE A SCROLLER does not wait at all. UIKit delays a touch
+ * only for a view inside a scroll view (`delaysContentTouches`); a UIControl
+ * anywhere else highlights in the frame the finger lands. The controller
+ * says which touch is which (`down`'s `delayed`, from the surface's profile
+ * and its ancestors), and an undelayed touch goes straight to `pressed`.
+ * Everything after that is the same machine: travel past the slop or a
+ * cancel ends it with no fade, the lift fades it.
  *
  * Every constant below was measured against the real Settings and Contacts
  * apps on an iPhone simulator, driven with real HID touches at 60 fps, before
@@ -92,9 +105,13 @@ export type PressPaint = 'none' | 'on' | 'fading';
  * until the finger lifts and a new one starts, so a finger that stops moving,
  * or comes back to the control it started on, paints nothing. That is the
  * difference between this and `:active`.
+ *
+ * `buttonHeld` is a press made with a mouse button or the Space key. No
+ * scroller can claim one, so it paints at once, travel does not end it, and
+ * only the release does.
  */
 export type PressPhase =
-  'idle' | 'armed' | 'pressed' | 'flash' | 'fading' | 'dead';
+  'idle' | 'armed' | 'pressed' | 'buttonHeld' | 'flash' | 'fading' | 'dead';
 
 export interface PressGesture {
   readonly phase: PressPhase;
@@ -104,7 +121,23 @@ export interface PressGesture {
 }
 
 export type PressEvent =
-  | {kind: 'down'; x: number; y: number}
+  | {
+      kind: 'down';
+      x: number;
+      y: number;
+      /**
+       * Whether this touch waits {@link PRESS_ONSET_MS} before it paints:
+       * a cell or a control inside a scroller (`spec:AST-094` FR11).
+       * Defaults to `true`.
+       */
+      delayed?: boolean;
+    }
+  /**
+   * A mouse button or the Space key went down on the surface. The
+   * controller sends this only where the stylesheet has dropped `:active`
+   * (a coarse primary pointer), which would otherwise paint it.
+   */
+  | {kind: 'buttonDown'}
   /** A touch point moved. Coordinates are client-space, like the origin. */
   | {kind: 'move'; x: number; y: number}
   | {kind: 'up'}
@@ -160,12 +193,30 @@ export function pressGestureStep(
   event: PressEvent,
 ): PressStep {
   if (event.kind === 'down') {
+    // A control with no scroller above it: nothing can turn this touch into a
+    // scroll, so it paints in the frame it lands, as a UIControl highlights.
+    if (event.delayed === false) {
+      return {
+        gesture: {originX: event.x, originY: event.y, phase: 'pressed'},
+        paint: 'on',
+        timer: null,
+      };
+    }
     // A new touch always starts armed and painting nothing, whatever the last
     // gesture ended as. This is the only way out of `dead`.
     return {
       gesture: {originX: event.x, originY: event.y, phase: 'armed'},
       paint: 'none',
       timer: 'onset',
+    };
+  }
+  if (event.kind === 'buttonDown') {
+    // Nothing can turn a mouse button or a key into a scroll, so there is
+    // nothing to wait for: paint now, as `:active` does on a desktop.
+    return {
+      gesture: {originX: 0, originY: 0, phase: 'buttonHeld'},
+      paint: 'on',
+      timer: null,
     };
   }
 
@@ -208,6 +259,20 @@ export function pressGestureStep(
       // A release fades.
       if (event.kind === 'up') {
         return step(gesture, 'fading', 'fading', 'fade');
+      }
+      return {gesture, paint: 'on', timer: null};
+
+    case 'buttonHeld':
+      // Travel is not a scroll here (a mouse dragged off a button keeps its
+      // `:active` until the button comes up), so only the release ends the
+      // press, with the same fade a finger's release gets.
+      if (event.kind === 'up') {
+        return step(gesture, 'fading', 'fading', 'fade');
+      }
+      // The platform took it (a drag began, the pointer was cancelled): the
+      // paint goes at once, as for a finger.
+      if (event.kind === 'cancel') {
+        return step(gesture, 'dead', 'none', null);
       }
       return {gesture, paint: 'on', timer: null};
 
