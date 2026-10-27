@@ -460,6 +460,19 @@ function scrollsBy(
 }
 
 /**
+ * Whether `node` is `ancestor` or below it along the flat tree: across an open
+ * shadow root to its host, which `Node.contains` does not follow.
+ */
+function containsAlongFlatTree(ancestor: Node, node: Node): boolean {
+  for (let at: Node | null = node; at != null; at = parentAcrossShadow(at)) {
+    if (at === ancestor) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * An event's time on the arena's clock (`performance.now()`). Some engines
  * and DOM emulators stamp events in epoch milliseconds instead.
  */
@@ -917,7 +930,7 @@ export class GestureHost {
     return (
       last != null &&
       this.arena.now() - last.time < window &&
-      last.scroller.contains(node)
+      containsAlongFlatTree(last.scroller, node)
     );
   }
 
@@ -2221,9 +2234,9 @@ export class GestureHost {
     for (const touch of moved) {
       const id =
         this.touchIds.get(touch.identifier) ??
-        (this.inputMode === 'pointer-events'
-          ? this.pointerFingerAt(touch)
-          : undefined);
+        // Where fingers come from pointer events (inputMode 'pointer-events',
+        // or 'auto' with no ontouchstart), the touch is matched to its pointer.
+        (this.usesTouchEvents ? undefined : this.pointerFingerAt(touch));
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
@@ -2948,7 +2961,7 @@ export class GestureHost {
     if (
       last != null &&
       time - last.time < UIKIT_PRESS.momentumMemory.value &&
-      scroller.contains(last.target)
+      containsAlongFlatTree(scroller, last.target)
     ) {
       this.lastScroll = {scroller, time};
     }
@@ -2965,7 +2978,7 @@ export class GestureHost {
       }
       if (
         touch.target instanceof Node &&
-        scroller.contains(touch.target) &&
+        containsAlongFlatTree(scroller, touch.target) &&
         // Only a pan this finger drove takes the touch: the browser starts
         // one only once the finger has travelled its slop. A scroll under a
         // finger that has not (scrollIntoView, a transcript pinned to its
