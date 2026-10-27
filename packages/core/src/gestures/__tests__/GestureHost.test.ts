@@ -1494,6 +1494,23 @@ describe('GestureHost', () => {
       expect(isFingerScroll(host, list)).toBe(false);
     });
 
+    it('forgets a finger scroll in progress when the watch stops listening, so a later program scroll is not the finger’s', () => {
+      const pointer = pointerQuery(true);
+      detachers.push(pointer.restore);
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      detachers.push(watchFingerScrolls(host, list));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(isFingerScroll(host, list)).toBe(true);
+      // The pointer turns fine mid-scroll: the watch stops listening, and its
+      // scrollend never comes.
+      pointer.set(false);
+      pointer.set(true);
+      list.dispatchEvent(new Event('scroll'));
+      expect(isFingerScroll(host, list)).toBe(false);
+    });
+
     it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
       detachers.push(watchFingerScrolls(host, list));
