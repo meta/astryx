@@ -2,15 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
-    "paths": {
-      "@astryxdesign/core/motion/*": ["../core/dist/motion/*"],
-      "@astryxdesign/core/gestures": ["../core/dist/gestures/index"],
-      "@astryxdesign/core/gestures/*": ["../core/dist/gestures/*"],
-      "@astryxdesign/core/utils/touchPresentation": [
-        "../core/dist/utils/touchPresentation"
-      ]
-    }
+    "rootDir": "./src"
   },
   "include": ["src"]
 }

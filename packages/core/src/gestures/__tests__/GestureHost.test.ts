@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
+import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
@@ -1088,6 +1089,30 @@ describe('GestureHost', () => {
     expect(consumer.events.at(-1)).toMatch(/^cancelled/);
   });
 
+  it('lets a scroll take an unclaimed touch from 10 px of travel, straight or diagonal, and not before (spec:AST-094 FR20)', () => {
+    const takenAfter = (dx: number, dy: number) => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      const consumer = new RecordingConsumer();
+      const detach = host.attachConsumer(row, consumer);
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      const moved = {...finger, x: 10 + dx, y: 10 + dy};
+      touch('touchmove', row, [moved], [moved], 16);
+      list.dispatchEvent(new Event('scroll'));
+      const taken = consumer.events.some(event =>
+        event.startsWith('cancelled'),
+      );
+      touch('touchend', row, [moved], [], 32);
+      detach();
+      return taken;
+    };
+    expect(takenAfter(0, 9)).toBe(false);
+    expect(takenAfter(0, 10)).toBe(true);
+    // 9.9 px and 11.3 px from where it landed.
+    expect(takenAfter(7, 7)).toBe(false);
+    expect(takenAfter(8, 8)).toBe(true);
+  });
+
   it("leaves a still finger's press and click alone when the page scrolls under it", () => {
     const {list, button} = mount(
       '<div id="list"><button id="button">Go</button></div>',
@@ -1472,6 +1497,23 @@ describe('GestureHost', () => {
       list.dispatchEvent(new Event('scroll'));
       expect(isFingerScroll(host, list)).toBe(true);
       list.dispatchEvent(new Event('scrollend'));
+      expect(isFingerScroll(host, list)).toBe(false);
+    });
+
+    it('forgets a finger scroll in progress when the watch stops listening, so a later program scroll is not the finger’s', () => {
+      const pointer = pointerQuery(true);
+      detachers.push(pointer.restore);
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      detachers.push(watchFingerScrolls(host, list));
+      const finger = {id: 1, x: 10, y: 10};
+      touch('touchstart', row, [finger], [finger], 0);
+      list.dispatchEvent(new Event('scroll'));
+      expect(isFingerScroll(host, list)).toBe(true);
+      // The pointer turns fine mid-scroll: the watch stops listening, and its
+      // scrollend never comes.
+      pointer.set(false);
+      pointer.set(true);
+      list.dispatchEvent(new Event('scroll'));
       expect(isFingerScroll(host, list)).toBe(false);
     });
 
@@ -3091,5 +3133,268 @@ describe('only where the primary pointer is coarse (spec:AST-094 FR19, FR24)', (
     expect(String(warn.mock.calls[0][0])).toContain(
       'where the primary pointer is fine',
     );
+  });
+});
+
+describe('an action group under a fine pointer (family:action-groups FR5; spec:AST-094 FR19, FR24)', () => {
+  const listenerTypes = (spy: ReturnType<typeof vi.spyOn>) =>
+    (spy.mock.calls as unknown[][])
+      .map(call => call[0] as string)
+      .filter(t => /^(touch|pointer|click|blur|scroll|contextmenu)/.test(t));
+
+  it('keeps one passive pointerdown listener on the group while idle, and none for a recognizer that is not a group', () => {
+    const {group, other} = mount(
+      '<div id="group"><button id="one"></button></div><div id="other"></div>',
+    );
+    const added = vi.spyOn(document, 'addEventListener');
+    const viewAdded = vi.spyOn(window, 'addEventListener');
+    const groupAdded = vi.spyOn(group, 'addEventListener');
+    const otherAdded = vi.spyOn(other, 'addEventListener');
+    added.mockClear();
+    viewAdded.mockClear();
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    detachers.push(
+      fine.attach(group, new TapGestureRecognizer(), {actionGroup: true}),
+      fine.attach(other, new TapGestureRecognizer()),
+    );
+    expect(listenerTypes(added)).toEqual([]);
+    expect(listenerTypes(viewAdded)).toEqual([]);
+    expect(groupAdded.mock.calls).toEqual([
+      ['pointerdown', expect.any(Function), {passive: true}],
+    ]);
+    expect(otherAdded).not.toHaveBeenCalled();
+  });
+
+  it('adds page listeners only during a press, removes them at the release, and serves the press to the group', () => {
+    const {group, one} = mount(
+      '<div id="group"><button id="one"></button></div>',
+    );
+    // The press's listeners come through the shared input stream, on the
+    // window's capture phase.
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const tap = new TapGestureRecognizer();
+    const states: string[] = [];
+    tap.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(group, tap, {actionGroup: true}));
+    added.mockClear();
+    removed.mockClear();
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    expect(listenerTypes(added)).toEqual(
+      expect.arrayContaining(['pointermove', 'pointerup', 'pointercancel']),
+    );
+    expect(listenerTypes(removed)).toEqual([]);
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 80});
+    expect(states).toContain('ended');
+    for (const type of ['pointermove', 'pointerup', 'pointercancel']) {
+      expect(listenerTypes(removed)).toContain(type);
+    }
+  });
+
+  it("hears a group press's click once, whether the host is installed or not, and drops its own click subscription after the lift's task", () => {
+    // A document of its own: no other host hears its clicks.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    frameDocument.body.innerHTML =
+      '<div id="group"><button id="one"></button></div><div id="row"></div>';
+    const group = frameDocument.getElementById('group') as HTMLElement;
+    const one = frameDocument.getElementById('one') as HTMLElement;
+    const row = frameDocument.getElementById('row') as HTMLElement;
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const now = vi.spyOn(browserClock, 'now');
+    try {
+      // onClick reads the clock once per call: count its calls per click.
+      const clickCalls = () => {
+        now.mockClear();
+        one.dispatchEvent(
+          new frameWindow.MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            detail: 1,
+          }),
+        );
+        return now.mock.calls.length;
+      };
+      const send = (type: 'pointerdown' | 'pointerup', time: number) => {
+        const event = new frameWindow.PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          clientX: 10,
+          clientY: 10,
+          button: 0,
+          buttons: type === 'pointerdown' ? 1 : 0,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        one.dispatchEvent(event);
+      };
+      const fine = new GestureHost(frameDocument, {
+        clock,
+        isPrimaryPointerCoarse: () => false,
+      });
+      const detachGroup = fine.attach(group, new TapGestureRecognizer(), {
+        actionGroup: true,
+      });
+      // Not installed: the press brings its own click subscription, which
+      // goes after the lift's task.
+      send('pointerdown', 0);
+      send('pointerup', 80);
+      expect(clickCalls()).toBe(1);
+      vi.runOnlyPendingTimers();
+      expect(clickCalls()).toBe(0);
+      // A per-event recognizer installs the host while a group press is
+      // held: the host's own click subscription takes over, and a click is
+      // heard once, before and after the press's task ends.
+      send('pointerdown', 1000);
+      const detachRow = fine.attach(row, new PanGestureRecognizer(), {
+        perEventPointer: true,
+      });
+      send('pointerup', 1080);
+      expect(clickCalls()).toBe(1);
+      vi.runOnlyPendingTimers();
+      expect(clickCalls()).toBe(1);
+      detachRow();
+      detachGroup();
+    } finally {
+      now.mockRestore();
+      vi.useRealTimers();
+      frame.remove();
+    }
+  });
+
+  it('serves only the group: a recognizer that is not a group, on the press path, takes no part', () => {
+    const {outer, group, one} = mount(
+      '<div id="outer"><div id="group"><button id="one"></button></div></div>',
+    );
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const groupTap = new TapGestureRecognizer();
+    const outerTap = new TapGestureRecognizer();
+    const outerStates: string[] = [];
+    outerTap.addListener(r => outerStates.push(r.state));
+    detachers.push(
+      fine.attach(group, groupTap, {actionGroup: true}),
+      fine.attach(outer, outerTap),
+    );
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 80});
+    expect(outerStates).toEqual([]);
+  });
+
+  it('removes the group listener on detach, and a coarse pointer keeps the usual page listeners instead', () => {
+    const {group} = mount('<div id="group"></div>');
+    const groupRemoved = vi.spyOn(group, 'removeEventListener');
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const detach = fine.attach(group, new TapGestureRecognizer(), {
+      actionGroup: true,
+    });
+    detach();
+    expect(groupRemoved).toHaveBeenCalledWith(
+      'pointerdown',
+      expect.any(Function),
+    );
+    const groupAdded = vi.spyOn(group, 'addEventListener');
+    const added = vi.spyOn(window, 'addEventListener');
+    added.mockClear();
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    detachers.push(
+      coarse.attach(group, new TapGestureRecognizer(), {actionGroup: true}),
+    );
+    expect(listenerTypes(added)).toContain('pointerdown');
+    expect(
+      groupAdded.mock.calls.filter(call => call[0] === 'pointerdown'),
+    ).toEqual([]);
+  });
+});
+
+describe("inputMode 'pointer-events'", () => {
+  /** A clock whose timers the test fires. */
+  class TimerClock {
+    time = 0;
+    private readonly timers = new Map<number, () => void>();
+    private next = 1;
+    now(): number {
+      return this.time;
+    }
+    setTimeout(callback: () => void): number {
+      const id = this.next++;
+      this.timers.set(id, callback);
+      return id;
+    }
+    clearTimeout(id: number): void {
+      this.timers.delete(id);
+    }
+    /** Runs every timer, and the ones they set, at `time`. */
+    fireAll(time: number): void {
+      this.time = time;
+      while (this.timers.size > 0) {
+        const due = [...this.timers.values()];
+        this.timers.clear();
+        for (const callback of due) {
+          callback();
+        }
+      }
+    }
+  }
+
+  it("tracks a finger once, from its pointer events, so a still finger's long press begins", () => {
+    const {box} = mount('<div id="box"></div>');
+    const timers = new TimerClock();
+    const pointerHost = new GestureHost(document, {
+      clock: timers,
+      inputMode: 'pointer-events',
+      isPrimaryPointerCoarse: () => true,
+    });
+    const press = new LongPressGestureRecognizer();
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    detachers.push(pointerHost.attach(box, press));
+    // A browser with Touch Events sends both for one finger.
+    pointer('pointerdown', box, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    const finger = {id: 7, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    expect(press.numberOfTouches).toBe(1);
+    timers.fireAll(800);
+    expect(states).toContain('began');
+    pointer('pointerup', box, {pointerType: 'touch', x: 10, y: 10, time: 820});
+    touch('touchend', box, [finger], [], 820);
+    expect(states).toContain('ended');
   });
 });
