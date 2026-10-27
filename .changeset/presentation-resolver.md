@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] An internal `usePresentation` / `readPresentation` resolves a component's `presentation` prop into the surface to render and whether its touch input modes apply, keeping an omitted value distinct from an explicit `'popover'` so a caller's choice always wins over a touch default. No component reads it yet; behavior is unchanged.
+[chore] An internal `usePresentation` / `readPresentation` resolves a component's `presentation` prop into the surface to render and whether its touch input modes apply, keeping an omitted value distinct from an explicit `'popover'` so a caller's choice always wins over a touch default. ContextMenu reads it; its touch behavior has its own entry.
 
 @vjeux
