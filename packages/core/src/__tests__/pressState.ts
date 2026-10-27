@@ -183,8 +183,11 @@ export function readsPressStrength(el: Element, arm = FADING_ARM): boolean {
 /**
  * Does the element's `::after` paint the press the controller writes as its
  * image while `arm` matches (`var(--_press-paint-image)`), with the layer's
- * own colour yielding to it (`transparent`) on the same arm? A card's overlay
- * layer paints this way; `arm` defaults to the release's.
+ * own colour yielding to it on the same arm? A card's overlay layer paints
+ * this way; `arm` defaults to the release's. While the press is on the colour
+ * is `transparent`; over the release it is the layer's hover-or-nothing
+ * colour (`var(--_press-overlay)`, `:active` no longer matching), so a
+ * hovering pointer's hover returns beneath the fading image.
  */
 export function afterPaintsPress(el: Element, arm = FADING_ARM): boolean {
   const rules = rulesWithSelector(el, arm).filter(rule =>
@@ -195,7 +198,12 @@ export function afterPaintsPress(el: Element, arm = FADING_ARM): boolean {
       /background-image:[^;}]*(--_press-paint-image|--color-overlay-pressed)/.test(
         rule,
       ),
-    ) && rules.some(rule => /background-color:\s*transparent/.test(rule))
+    ) &&
+    rules.some(rule =>
+      arm === FADING_ARM
+        ? /background-color:\s*var\(--_press-overlay\)/.test(rule)
+        : /background-color:\s*transparent/.test(rule),
+    )
   );
 }
 

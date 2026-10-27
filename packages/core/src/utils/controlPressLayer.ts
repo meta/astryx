@@ -128,7 +128,16 @@ export const controlPressLayerStyles = stylex.create({
         default: null,
         ...pointerImageArms,
         [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
-        [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},
+        // Over the release a hovering pointer's hover paints beneath the
+        // fading image, so the release lands on it (interactionOverlay).
+        [PRESSED_FADING]: {
+          default: pressedOverlayImage,
+          [COARSE]: 'none',
+          [HOVER_HOVER]: {
+            default: pressedOverlayImage,
+            ':hover': `${pressedOverlayImage}, ${hoverImage}`,
+          },
+        },
       },
     },
     ...strengthReleaseOutsideCoarse,

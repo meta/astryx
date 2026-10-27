@@ -1377,14 +1377,23 @@ describe('the release fades: the arms the controller writes to', () => {
           `${variant} ${arm}`,
         ).toBe(true);
       }
-      // ...and lands on nothing, not on the hover strength: under a finger
-      // there is no hover.
+      // ...and the press lands on nothing, not on the hover strength: under
+      // a finger there is no hover. Only a hovering pointer's own hover arm
+      // paints beneath the fading image, so a mouse release lands on it.
+      const fading = rulesWithSelector(element, '[data-astryx-press="fading"]');
       expect(
-        rulesWithSelector(element, '[data-astryx-press="fading"]').some(rule =>
-          rule.includes('--color-overlay-hover'),
+        fading
+          .filter(rule => rule.includes('--color-overlay-hover'))
+          .every(rule => rule.includes(':hover')),
+        variant,
+      ).toBe(true);
+      expect(
+        fading.some(
+          rule =>
+            rule.includes(':hover') && rule.includes('--color-overlay-hover'),
         ),
         variant,
-      ).toBe(false);
+      ).toBe(variant !== 'pressedBackgroundColor');
     }
   });
 

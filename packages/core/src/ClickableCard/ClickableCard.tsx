@@ -114,12 +114,12 @@ const styles = stylex.create({
       pointerEvents: 'none',
       // A press the controller paints shows on its first frame and fades on
       // its strength's own animation, so the colour it replaces drops out at
-      // once rather than crossfading: no transition while it paints. The
-      // mouse states keep the fast fade.
+      // once rather than crossfading: no transition while the press is on.
+      // The mouse states, and the hover returning beneath a fading press,
+      // keep the fast fade.
       transitionProperty: {
         default: 'background-color',
         [PRESSED_ON]: 'none',
-        [PRESSED_FADING]: 'none',
       },
       transitionDuration: durationVars['--duration-fast'],
       transitionTimingFunction: easeVars['--ease-standard'],
@@ -129,7 +129,9 @@ const styles = stylex.create({
       backgroundColor: {
         default: 'var(--_press-overlay)',
         [PRESSED_ON]: 'transparent',
-        [PRESSED_FADING]: 'transparent',
+        // Over the release only the press yields: a hovering pointer's hover
+        // fades back in beneath the fading image, so the release lands on it.
+        [PRESSED_FADING]: 'var(--_press-overlay)',
       },
       // The press at its strength, which the card's `pressedAlpha` arms own:
       // 1 on the first frame of a believed press, then 1 → 0 over the

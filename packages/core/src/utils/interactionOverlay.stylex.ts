@@ -55,6 +55,10 @@
  *    deselect crossfade; the controller removes the attribute when the same
  *    clock runs out, and by then the paint is gone). It fades to nothing, not
  *    to the hover strength: under a finger there is no hover to land on.
+ *    Under a hovering mouse or pen the hover arm paints again beneath the
+ *    fading image (only the press yields while `fading`), so the release
+ *    lands on the hover the control still has, with no dip toward its rest
+ *    and no bare frame when the attribute goes.
  *
  * WHY AN ANIMATION AND NOT A TRANSITION. Two reasons, both about composers.
  * StyleX is last-wins per property, and composers own their `transition-*`
@@ -325,9 +329,17 @@ export const interactionOverlayStyles = stylex.create({
         // While the controller paints, the colour arms yield to the image. A
         // device with a touchscreen beside a mouse matches `:active` and the
         // emulated `:hover` under a finger too, and the press would otherwise
-        // paint twice.
+        // paint twice. Over the release only the press yields: a hovering
+        // pointer's hover paints beneath the fading image, so the release
+        // lands on it.
         [PRESSED_ON]: 'transparent',
-        [PRESSED_FADING]: 'transparent',
+        [PRESSED_FADING]: {
+          default: 'transparent',
+          [HOVER_HOVER]: {
+            default: 'transparent',
+            ':hover': colorVars['--color-overlay-hover'],
+          },
+        },
       },
     },
     backgroundImage: {
@@ -349,7 +361,15 @@ export const interactionOverlayStyles = stylex.create({
         default: null,
         ...pointerImageArms,
         [PRESSED_ON]: pressedOverlayImage,
-        [PRESSED_FADING]: pressedOverlayImage,
+        // Over the release a hovering pointer's hover paints beneath the
+        // fading image; see the colour variant above.
+        [PRESSED_FADING]: {
+          default: pressedOverlayImage,
+          [HOVER_HOVER]: {
+            default: pressedOverlayImage,
+            ':hover': `${pressedOverlayImage}, ${hoverImage}`,
+          },
+        },
       },
     },
   },
@@ -371,7 +391,13 @@ export const interactionOverlayStyles = stylex.create({
           ':active': `${pressedImage}, ${neutralImage}`,
         },
         [PRESSED_ON]: `${pressedOverlayImage}, ${neutralImage}`,
-        [PRESSED_FADING]: `${pressedOverlayImage}, ${neutralImage}`,
+        [PRESSED_FADING]: {
+          default: `${pressedOverlayImage}, ${neutralImage}`,
+          [HOVER_HOVER]: {
+            default: `${pressedOverlayImage}, ${neutralImage}`,
+            ':hover': `${pressedOverlayImage}, ${hoverImage}, ${neutralImage}`,
+          },
+        },
       },
     },
   },
