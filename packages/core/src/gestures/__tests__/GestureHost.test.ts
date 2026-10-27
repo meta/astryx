@@ -3709,6 +3709,50 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     }
   });
 
+  it('holds selection off document-wide while a mouse pan claims, as WebKit extends a drag selection past the pan: a selection begun elsewhere goes, until the press is over', async () => {
+    const {box, outside} = mount(
+      '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
+    );
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const [type, x] of [
+      ['pointerdown', 10],
+      ['pointermove', 30],
+      ['pointermove', 50],
+    ] as const) {
+      time += 16;
+      pointer(type, box, {pointerType: 'mouse', x, y: 10, buttons: 1, time});
+    }
+    expect(['began', 'changed']).toContain(pan.state);
+    const elsewhere = new Event('selectstart', {
+      bubbles: true,
+      cancelable: true,
+    });
+    outside.dispatchEvent(elsewhere);
+    expect(elsewhere.defaultPrevented).toBe(true);
+    // WebKit extends the drag's selection over the page without a selectstart.
+    const range = document.createRange();
+    range.selectNodeContents(outside);
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    expect(selection.rangeCount).toBe(0);
+    pointer('pointerup', box, {
+      pointerType: 'mouse',
+      x: 50,
+      y: 10,
+      time: time + 16,
+    });
+    // The press's own mouseup and click come in the same task: the hold
+    // lasts past them.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const later = new Event('selectstart', {bubbles: true, cancelable: true});
+    outside.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
+  });
+
   it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
     const {box} = mount('<div id="box">Some selected text</div>');
     const fine = fineHost();
@@ -3779,6 +3823,63 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
       time: 1080,
     });
     expect(consumer.events.length).toBeGreaterThan(0);
+  });
+
+  it("ends a fine-pointer finger's press on an action group at its lift, and the group's next press begins and ends as well (FR43, FR19)", () => {
+    vi.useFakeTimers();
+    try {
+      const {group, a} = mount(
+        '<div id="group"><button id="a">A</button><button id="b">B</button></div>',
+      );
+      const laptop = new GestureHost(document, {
+        isPrimaryPointerCoarse: () => false,
+      });
+      // The action-group adapter's recognizer: a long press with no minimum
+      // duration and no movement limit, attached as an action group.
+      const press = new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        allowableMovement: Number.POSITIVE_INFINITY,
+      });
+      const states: string[] = [];
+      press.addTransitionListener((_recognizer, _from, to) => states.push(to));
+      detachers.push(laptop.attach(group, press, {actionGroup: true}));
+      // Chromium on a touchscreen laptop: pointerdown, then touchstart; at
+      // the lift, pointerup, then touchend.
+      const fingerPress = (
+        pointerId: number,
+        touchId: number,
+        time: number,
+      ) => {
+        const finger = {id: touchId, x: 10, y: 10};
+        pointer('pointerdown', a, {
+          id: pointerId,
+          pointerType: 'touch',
+          x: 10,
+          y: 10,
+          buttons: 1,
+          time,
+        });
+        touch('touchstart', a, [finger], [finger], time);
+        vi.advanceTimersByTime(20);
+        pointer('pointerup', a, {
+          id: pointerId,
+          pointerType: 'touch',
+          x: 10,
+          y: 10,
+          time: time + 50,
+        });
+        touch('touchend', a, [finger], [], time + 50);
+        vi.advanceTimersByTime(20);
+      };
+      fingerPress(31, 0, 0);
+      const first = states.splice(0);
+      fingerPress(32, 1, 1000);
+      expect(first).toEqual(expect.arrayContaining(['began', 'ended']));
+      expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
+      expect(press.state).toBe('possible');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {

@@ -786,7 +786,24 @@
 
 /* The Table hover tint, at whatever duration and curve is being argued over.
    Rows 1-9 of the violation table are this, and the honest finding is that
-   150ms and 175ms are near-indistinguishable at 1x. */
+   150ms and 175ms are near-indistinguishable at 1x, which is why the preview
+   also shows the tint with no transition at all. */
+.tintTable {
+  width: 100%;
+  /* Three panes share a narrow window: the columns shrink to the pane. */
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tintTable td {
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+/* Also the "real rule" rows on the Bugs page, which are divs: the padding
+   and radius are theirs (a table row ignores both). */
 .tintRow {
   padding: var(--space-2, 6px) var(--space-3, 10px);
   border-radius: var(--radius-sm, 6px);
@@ -794,8 +811,29 @@
     var(--tint-ease, ease);
 }
 
+/* The hover overlay token Astryx ships (the rig used to read two names no
+   theme defines, so the tint never showed). */
 .tintRow:hover {
   background-color: var(--color-overlay-hover);
+}
+
+/* The state token, as Table would read it. */
+.tintRowToken {
+  transition: background-color var(--lab-duration-state) var(--ease-state);
+}
+
+/* Reduce Motion: the tint is a change of state, so with a fine pointer it
+   lands at once (design:reduced-motion DR3), and an instant change is also
+   within DR2's "200 ms or less" on touch. */
+@media (prefers-reduced-motion: reduce) {
+  .tintRowToken {
+    transition: none;
+  }
+}
+
+/* Deleting the transition, the option the preview makes visible. */
+.tintRowNone {
+  transition: none;
 }
 
 /* NavItem's hover tint (NavTintRig). Before: as shipped, it snaps on where
