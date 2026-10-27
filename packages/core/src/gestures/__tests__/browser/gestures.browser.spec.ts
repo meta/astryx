@@ -1166,14 +1166,20 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
         <div id="row" style="height: 80px; background: #cfc">row</div>
         <div style="height: 1200px">more rows</div>
       </div>`;
-    const states: string[] = [];
-    (window as unknown as {__watch: string[]}).__watch = states;
+    const list = document.getElementById('list') as HTMLElement;
+    const states: Array<{to: string; scrollTop: number}> = [];
+    (
+      window as unknown as {__watch: Array<{to: string; scrollTop: number}>}
+    ).__watch = states;
     const watcher = new PanGestureRecognizer({
       name: 'watch',
       direction: 'vertical',
       claimsTouches: false,
     });
-    watcher.addTransitionListener((_current, _from, to) => states.push(to));
+    // Each transition with how far the list had scrolled then.
+    watcher.addTransitionListener((_current, _from, to) =>
+      states.push({to, scrollTop: list.scrollTop}),
+    );
     host.attach(document.getElementById('list') as HTMLElement, watcher, {
       manageStyle: false,
     });
@@ -1183,12 +1189,21 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
   await driver.play(drag(at, {x: at.x, y: at.y - 120}, 30));
   await page.waitForTimeout(100);
   const states = await page.evaluate(
-    () => (window as unknown as {__watch: string[]}).__watch,
+    () =>
+      (
+        window as unknown as {
+          __watch: Array<{to: string; scrollTop: number}>;
+        }
+      ).__watch,
   );
   // The browser scrolled the list: the watcher took nothing from it.
   expect(await scrollTop(page, 'list')).toBeGreaterThan(20);
   expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
-  // And it followed the scroll from its start to the lift.
-  expect(states).toContain('began');
-  expect(states.at(-1)).toBe('ended');
+  // And it followed the scroll from its start to the lift: it still
+  // reported moves once the browser had taken the touch and was scrolling.
+  expect(states.map(entry => entry.to)).toContain('began');
+  expect(
+    states.some(entry => entry.to === 'changed' && entry.scrollTop > 0),
+  ).toBe(true);
+  expect(states.at(-1)?.to).toBe('ended');
 });
