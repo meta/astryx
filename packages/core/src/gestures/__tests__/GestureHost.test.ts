@@ -3594,6 +3594,75 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     );
   });
 
+  it("keeps a claiming recognizer's blocking touchmove listener on its element under a fine pointer, outside FR24's one-listener budget, so a touchscreen laptop's finger claims as on a phone (FR19)", () => {
+    const {box, tapper} = mount('<div id="box"></div><div id="tapper"></div>');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    const tapperAdded = vi.spyOn(tapper, 'addEventListener');
+    for (const spy of [boxAdded, tapperAdded]) {
+      spy.mockClear();
+    }
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+      fine.attach(tapper, new TapGestureRecognizer()),
+    );
+    expect(
+      (boxAdded.mock.calls as unknown[][]).filter(
+        call => call[0] === 'touchmove',
+      ),
+    ).toEqual([['touchmove', expect.any(Function), {passive: false}]]);
+    // A tap claims only at its lift: still only its one listener.
+    expect(gestureListeners(tapperAdded)).toEqual(['pointerdown']);
+  });
+
+  it('claims a finger for a one-way pan under a fine pointer through its blocking touchmove, as the pan leaves the browser every direction (FR24, FR19)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const boxAdded = vi.spyOn(box, 'addEventListener');
+    boxAdded.mockClear();
+    const fine = fineHost();
+    // A one-way pan (a toast's swipe) leaves all four directions native, so
+    // no touch-action stops the browser's pan: only cancelling moves does,
+    // through a listener the element carries before the finger lands (the
+    // browser decides at touchstart whether a move can be cancelled).
+    const swipe = new PanGestureRecognizer({name: 'swipe', direction: 'right'});
+    detachers.push(fine.attach(box, swipe));
+    expect(box.getAttribute('data-astryx-touch-action')).toBeNull();
+    expect(
+      (boxAdded.mock.calls as unknown[][]).filter(
+        call => call[0] === 'touchmove',
+      ),
+    ).toEqual([['touchmove', expect.any(Function), {passive: false}]]);
+    const finger = {id: 3, x: 5, y: 5};
+    pointer('pointerdown', box, {
+      id: 9,
+      pointerType: 'touch',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    let last: Event | null = null;
+    for (const [x, time] of [
+      [20, 16],
+      [40, 32],
+      [60, 48],
+    ] as const) {
+      pointer('pointermove', box, {
+        id: 9,
+        pointerType: 'touch',
+        x,
+        y: 5,
+        buttons: 1,
+        time,
+      });
+      const moved = {id: 3, x, y: 5};
+      last = touch('touchmove', box, [moved], [moved], time);
+    }
+    expect(['began', 'changed']).toContain(swipe.state);
+    expect(last?.defaultPrevented).toBe(true);
+  });
+
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     detachers.push(() => warn.mockRestore());
