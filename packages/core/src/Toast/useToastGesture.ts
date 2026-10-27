@@ -11,8 +11,8 @@
  * @position Internal Toast gesture unit; attached to the Toast card root
  *
  * Toast's own swipe, wherever the banner swipe does not apply (a fine primary
- * pointer, or `presentation="toast"`): a pen or a finger moves the card 1:1
- * toward its edge and fades it a little. A release toward the edge dismisses
+ * pointer, or `presentation="toast"`): a finger, a pen or a mouse moves the
+ * card 1:1 toward its edge and fades it a little. A release toward the edge dismisses
  * when it travelled past max(40% of the card's height, 48 px), or when it was
  * a flick: moving toward the edge faster than 1.2 px/ms when it lifted, at
  * any travel, by the pan's release velocity (the shared VelocityTracker, read
@@ -21,9 +21,11 @@
  * could only be dragged away, never flicked.
  *
  * The swipe is a PanGestureRecognizer on the shared gesture host
- * (`spec:AST-094` FR43, FR24): it begins at the pan's 10 pt toward the edge
- * (FR17), a second finger never ends a swipe that began (FR10), and a drag
- * sideways or away from the edge stays the page's.
+ * (`spec:AST-094` FR43, FR24): it takes every pointer, and once it claims a
+ * mouse or a pen drag the host clears and holds off text selection (FR41); it
+ * begins at the pan's 10 pt toward the edge (FR17), a second finger never ends
+ * a swipe that began (FR10), and a drag sideways or away from the edge stays
+ * the page's.
  */
 
 import {useEffect, useRef} from 'react';
@@ -104,7 +106,6 @@ export function useToastGesture(
         // banner swipe carries it where that presentation applies.
         name: 'Toast.swipe',
         direction: panDirection(options.direction),
-        allowedPointerTypes: ['touch', 'pen'],
         axisRatio: VERTICAL_INTENT_RATIO,
         maximumNumberOfTouches: 1,
         shouldReceiveTouch: (_recognizer, touch) => {

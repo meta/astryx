@@ -879,7 +879,7 @@ test('a touch while the card springs back passes through to the page', async ({
 test.describe('with a fine pointer', () => {
   test.use({hasTouch: false, isMobile: false});
 
-  test('touch work costs nothing: no layer, a mouse drag leaves the card alone, and the close button keeps Toast’s fade', async ({
+  test('touch work costs nothing: no layer, and the close button keeps Toast’s fade', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-toast--mobile-swipe-to-dismiss');
@@ -894,12 +894,6 @@ test.describe('with a fine pointer', () => {
     if (box == null) {
       throw new Error('no toast');
     }
-    const x = box.x + 40;
-    const y = box.y + box.height / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await page.mouse.move(x, y - 60, {steps: 10});
-    await page.mouse.up();
     expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
     expect(await cardOffset(card)).toBe(0);
     expect(await card.evaluate(el => el.style.willChange)).toBe('');
@@ -907,6 +901,39 @@ test.describe('with a fine pointer', () => {
     const fading = await waitForAnimation(card);
     expect(fading.length).toBeGreaterThan(0);
     expect(await cardOffset(card)).toBe(0);
+    await expect(page.locator('.astryx-toast')).toHaveCount(0);
+  });
+
+  test('a mouse drag across the toast’s text swipes it away and leaves no text selected (spec:AST-094 FR43, FR41)', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-toast--mobile-swipe-to-dismiss');
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    await page.getByRole('button', {name: 'Show toast'}).click();
+    const card = page.locator('.astryx-toast').first();
+    await expect(card).toBeVisible();
+    await waitForRest(card);
+    const text = await card.getByText('Swipe or close me').boundingBox();
+    if (text == null) {
+      throw new Error('no toast text');
+    }
+    // From inside the text, up toward the top edge and a little across it: a
+    // drag that selects the text when nothing takes it.
+    const x = text.x + text.width / 2;
+    const y = text.y + text.height / 2;
+    const selected = async () =>
+      page.evaluate(() => window.getSelection()?.toString() ?? '');
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 12, y - 40, {steps: 8});
+    // The swipe has the drag: the card follows, and no text is selected.
+    expect((await ownSwipe(card)).y).toBeLessThan(-20);
+    expect(await selected()).toBe('');
+    await page.mouse.move(x + 24, y - 80, {steps: 8});
+    expect(await selected()).toBe('');
+    await page.mouse.up();
     await expect(page.locator('.astryx-toast')).toHaveCount(0);
   });
 

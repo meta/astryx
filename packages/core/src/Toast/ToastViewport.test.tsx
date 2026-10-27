@@ -1089,6 +1089,49 @@ describe('Toast swipe dismissal', () => {
     expect(getComputedStyle(visualToast).transform).not.toContain('translateX');
   });
 
+  it('dismisses on a mouse drag toward the edge past the threshold, as on a pen (spec:AST-094 FR43)', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast();
+      const mouse = (
+        type: 'pointerDown' | 'pointerMove' | 'pointerUp',
+        clientY: number,
+      ) =>
+        fireEvent[type](visualToast, {
+          pointerId: 1,
+          pointerType: 'mouse',
+          button: 0,
+          buttons: type === 'pointerUp' ? 0 : 1,
+          clientX: 0,
+          clientY,
+        });
+
+      act(() => {
+        mouse('pointerDown', 0);
+      });
+      for (const y of [20, 40, 60]) {
+        clock.advance(100);
+        act(() => {
+          mouse('pointerMove', y);
+        });
+      }
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe(
+        '60px',
+      );
+      clock.advance(100);
+      act(() => {
+        mouse('pointerUp', 60);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('manual');
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-exit-y')).toBe(
+        '120%',
+      );
+    } finally {
+      clock.restore();
+    }
+  });
+
   it('dismisses a fast flick below the distance threshold', () => {
     // 60 px in 20 ms, in two moves, by the events' own timestamps (the event
     // clock is Date.now in jsdom; the shared release filter reads a release
@@ -2082,7 +2125,7 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
-  it('keeps horizontal pan intent and mouse drag from dismissing', () => {
+  it('keeps a horizontal drag from dismissing, for a pen and a mouse', () => {
     const {visualToast, onHide} = renderSwipeToast();
 
     act(() => {
@@ -3583,7 +3626,7 @@ describe('Toast swipe dismissal under a finger', () => {
     }
   });
 
-  it('under a finger, a sideways pen drag and a mouse drag never dismiss', async () => {
+  it('under a finger, a sideways pen drag or mouse drag never dismisses', async () => {
     // A coarse primary pointer in this test's own context: the mouse here is a
     // second input under the touch presentation, not a fine-pointer case.
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
@@ -3871,6 +3914,63 @@ describe('Toast swipe dismissal under a finger', () => {
     expect(onHide).not.toHaveBeenCalled();
     await afterRetract();
     expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('takes a mouse drag too with presentation="notification" (spec:AST-094 FR43)', async () => {
+    vi.stubGlobal('matchMedia', (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    // A fine primary pointer in this test's own context.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const {visualToast, onHide} = await renderSwipeToast(
+      SWIPE_TOAST,
+      'bottomEnd',
+      'Swipe toast',
+      80,
+      'notification',
+    );
+    const mouse = (
+      type: 'pointerDown' | 'pointerMove' | 'pointerUp',
+      time: number,
+      clientY: number,
+    ) => {
+      const event = createEvent[type](visualToast, {
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: type === 'pointerUp' ? 0 : 1,
+        clientX: 0,
+        clientY,
+      });
+      Object.defineProperty(event, 'timeStamp', {value: time});
+      strokeClock = Math.max(strokeClock, time);
+      fireEvent(visualToast, event);
+    };
+    // A slow mouse drag 30 px toward the edge: the banner's follow.
+    const start = strokeStart();
+    act(() => {
+      mouse('pointerDown', start, 0);
+      mouse('pointerMove', start + 300, 10);
+      mouse('pointerMove', start + 600, 20);
+      mouse('pointerMove', start + 900, 30);
+    });
+    expect(cardY(visualToast)).toBeCloseTo(0.55 * (30 - 14), 5);
+    // Released short of dismissing: it springs back to rest.
+    act(() => {
+      mouse('pointerUp', start + 910, 30);
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 800));
+    });
+    expect(onHide).not.toHaveBeenCalled();
+    expect(cardY(visualToast)).toBeCloseTo(0, 1);
   });
 
   it('dismisses a standalone Toast at once under a finger with presentation="toast"', () => {

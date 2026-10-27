@@ -23,8 +23,9 @@
  * (values and sources in motion/uikit/toast.ts). With a fine pointer Toast
  * keeps its own swipe (useToastGesture):
  *
- * - it is a one-way pan toward the Toast's edge, for touch and pen (a mouse
- *   keeps text selection), on the shared gesture system (../gestures). It
+ * - it is a one-way pan toward the Toast's edge, for every pointer (a
+ *   finger, a pen and a mouse, spec:AST-094 FR43; a mouse or pen drag it
+ *   claims selects no text), on the shared gesture system (../gestures). It
  *   begins, and takes the touch from the browser, at UIKit's pan hysteresis
  *   toward the edge when the drag is `toast.axisRatio` times more vertical
  *   than horizontal; nothing claims the touch earlier (a pan starts at
@@ -174,7 +175,8 @@ export function useToastBannerSwipe(
         // The published name app code relates to (gesture delegates).
         name: 'Toast.swipe',
         direction: panDirection(options.direction),
-        allowedPointerTypes: ['touch', 'pen'],
+        // Every pointer (spec:AST-094 FR43): once the pan claims a mouse or a
+        // pen drag, the host clears and holds off text selection (FR41).
         axisRatio: toast.axisRatio,
         maximumNumberOfTouches: 1,
         shouldReceiveTouch: (_recognizer, touch) => {
