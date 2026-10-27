@@ -2320,18 +2320,42 @@ export class GestureHost {
     }
   }
 
+  /**
+   * A group press's own events, finger, pen or mouse alike, through the
+   * pointer path: under a fine pointer the host reads no Touch Events, so
+   * the touch pairing the installed host does for a finger never applies.
+   */
   private readonly onGroupPointer = (event: PointerEvent): void => {
     if (event.pointerId !== this.groupPressPointer) {
       return;
     }
+    const id = this.pointerIds.get(event.pointerId);
     if (event.type === 'pointermove') {
-      this.onPointerMove(event);
+      if (id != null) {
+        this.arena.moved([
+          {
+            id,
+            x: event.clientX,
+            y: event.clientY,
+            time: eventTime(event),
+            history: coalescedHistory(event),
+          },
+        ]);
+      }
       return;
     }
-    if (event.type === 'pointerup') {
-      this.onPointerUp(event);
-    } else {
-      this.onPointerCancel(event);
+    this.pointerIds.delete(event.pointerId);
+    if (id != null) {
+      if (event.type === 'pointerup') {
+        const dispositions = this.arena.ended([
+          {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
+        ]);
+        if (needsSuppression(dispositions)) {
+          this.armSwallower();
+        }
+      } else {
+        this.arena.cancelled([id], eventTime(event));
+      }
     }
     this.endGroupPress();
   };
