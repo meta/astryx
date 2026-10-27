@@ -681,9 +681,23 @@ describe('discoverExternalPackages', () => {
 });
 
 describe('listComponents', () => {
-  it('returns sorted component directory names, skipping hooks/theme/utils', () => {
+  it('returns sorted component directory names, skipping infrastructure dirs', () => {
     const srcDir = path.join(tmpDir, 'src');
-    for (const dir of ['Button', 'Avatar', 'hooks', 'theme', 'utils', 'Zebra']) {
+    // Infrastructure directories (`hooks`, `theme`, `utils`, `i18n`, `motion`,
+    // `gestures`, `__tests__`) must never be offered to `swizzle`: a copy of
+    // them cannot compile in a consumer project.
+    for (const dir of [
+      'Button',
+      'Avatar',
+      '__tests__',
+      'gestures',
+      'hooks',
+      'i18n',
+      'motion',
+      'theme',
+      'utils',
+      'Zebra',
+    ]) {
       fs.mkdirSync(path.join(srcDir, dir), {recursive: true});
     }
 
