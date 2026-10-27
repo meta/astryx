@@ -53,8 +53,17 @@ export interface ContextRequestOptions {
     commitMs?: number;
     /** When the hold requests, ms after touch-down; never before `commitMs`. @default commitMs */
     requestMs?: number;
+    /**
+     * A lift after the commit and before `requestMs` requests at the lift, as
+     * UIKit opens a context menu then. @default false
+     */
+    requestOnLift?: boolean;
   };
-  /** A hold's progress: committed (claimed), then ended after its request, or cancelled before it. */
+  /**
+   * A hold's progress: committed (claimed), then ended after its request,
+   * or cancelled before it: at a lift with no request, or at once when the
+   * finger drifts past a long press's movement before the request.
+   */
   onHold?: (phase: 'committed' | 'ended' | 'cancelled') => void;
 }
 
@@ -85,15 +94,11 @@ export function attachContextRequest(
   const requestMs = Math.max(commitMs, options.hold?.requestMs ?? commitMs);
   let lastKeyRequestAt = Number.NEGATIVE_INFINITY;
   let held: {touchId: number; pointerType: PointerKind} | null = null;
+  const requestOnLift = options.hold?.requestOnLift === true;
   let hasRequested = false;
-  let requestTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const clearRequestTimer = () => {
-    if (requestTimer != null) {
-      clearTimeout(requestTimer);
-      requestTimer = null;
-    }
-  };
+  // Drifted past the long press's movement before the request: no hold.
+  let hasDrifted = false;
+  let start: {x: number; y: number} | null = null;
 
   const recognizer = new LongPressGestureRecognizer({
     name: 'contextRequest',
@@ -109,13 +114,13 @@ export function attachContextRequest(
         return false;
       }
       held = {touchId: touch.id, pointerType: touch.pointerType};
+      start = {x: touch.startX, y: touch.startY};
       return true;
     },
   });
 
   const requestHold = () => {
-    requestTimer = null;
-    if (hasRequested || !isEnabled()) {
+    if (hasRequested || hasDrifted || !isEnabled()) {
       return;
     }
     hasRequested = true;
@@ -133,19 +138,47 @@ export function attachContextRequest(
     const {state} = recognizer;
     if (state === 'began') {
       hasRequested = false;
+      hasDrifted = false;
       options.onHold?.('committed');
       if (requestMs === commitMs) {
         requestHold();
       } else {
-        requestTimer = setTimeout(requestHold, requestMs - commitMs);
+        // A deadline on the host's clock, like every gesture timer: a lift
+        // stamped past it finds the request made first. The long press's
+        // own timer is spent once it has begun.
+        host.arena.setTimer(
+          recognizer,
+          host.arena.now() + requestMs - commitMs,
+          requestHold,
+        );
+      }
+    } else if (state === 'changed') {
+      const point = recognizer.location();
+      if (
+        !hasRequested &&
+        !hasDrifted &&
+        start != null &&
+        Math.hypot(point.x - start.x, point.y - start.y) >
+          LONG_PRESS_ALLOWABLE_MOVEMENT_PX
+      ) {
+        hasDrifted = true;
+        host.arena.clearTimer(recognizer);
+        options.onHold?.('cancelled');
       }
     } else if (state === 'ended' || state === 'cancelled') {
-      clearRequestTimer();
-      options.onHold?.(
-        state === 'ended' && hasRequested ? 'ended' : 'cancelled',
-      );
+      host.arena.clearTimer(recognizer);
+      if (state === 'ended' && requestOnLift) {
+        requestHold();
+      }
+      if (!hasDrifted) {
+        options.onHold?.(
+          state === 'ended' && hasRequested ? 'ended' : 'cancelled',
+        );
+      }
       hasRequested = false;
+      hasDrifted = false;
       held = null;
+      start = null;
     }
   });
 
@@ -202,7 +235,7 @@ export function attachContextRequest(
   element.addEventListener('contextmenu', onContextMenu);
   element.addEventListener('keydown', onKeyDown);
   return () => {
-    clearRequestTimer();
+    host.arena.clearTimer(recognizer);
     element.removeEventListener('contextmenu', onContextMenu);
     element.removeEventListener('keydown', onKeyDown);
     detachRecognizer();
