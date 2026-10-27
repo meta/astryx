@@ -95,6 +95,8 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {controlPressConsts} from './controlPressLayer.stylex';
 import {subscribeInput} from './inputStream';
+import {resolveMotion} from '../motion/resolveMotion';
+import {press as pressTiming} from '../motion/uikit/timing';
 import {isPrimaryClick} from './primaryClick';
 import {TOUCH_QUERY} from './touchPresentation';
 
@@ -138,6 +140,12 @@ export interface PressProfile {
   readonly highlightDelay: 'inScrollers' | 'always';
   /** How long the release's exit runs, in ms: the attribute leaves after it. */
   readonly releaseMs: number;
+  /**
+   * The `timing.press` motion role behind `releaseMs`: the controller
+   * resolves it under the pressed element (`resolveMotion`), so the release
+   * lasts as long as that element's motion says. Without it, `releaseMs`.
+   */
+  readonly releaseRole?: 'buttonReleaseMs' | 'highlightOutMs';
 }
 
 /**
@@ -168,9 +176,14 @@ export const PRESS_PROFILES = {
   control: {
     highlightDelay: 'inScrollers',
     releaseMs: controlPressConsts.controlReleaseMs,
+    releaseRole: 'buttonReleaseMs',
   },
   /** A table or collection cell: waits only inside a scroll view (FR11). */
-  cell: {highlightDelay: 'inScrollers', releaseMs: PRESS_FADE_MS},
+  cell: {
+    highlightDelay: 'inScrollers',
+    releaseMs: PRESS_FADE_MS,
+    releaseRole: 'highlightOutMs',
+  },
 } as const satisfies Readonly<Record<string, PressProfile>>;
 
 export type PressProfileName = keyof typeof PRESS_PROFILES;
@@ -390,6 +403,10 @@ function timerMs(
   kind: NonNullable<PressStep['timer']>,
   live: {element: Element; releaseMs: number},
 ): number {
+  if (kind === 'flash') {
+    // The quick tap's flash, on its motion role under the pressed element.
+    return resolveMotion(live.element, pressTiming, 'flashMs');
+  }
   if (kind !== 'fade') {
     return TIMER_MS[kind];
   }
@@ -688,10 +705,24 @@ function takeOver(other: Slot, element: HTMLElement): void {
  * with any other pointer (a finger on a touch screen beside a mouse), as the
  * stylesheet's release arms are (the desktop rule, `spec:AST-017` FR59/DEC-25).
  */
-function releaseOf(profile: PressProfile): Pick<PressProfile, 'releaseMs'> {
+function releaseOf(
+  profile: PressProfile,
+  element: Element,
+): Pick<PressProfile, 'releaseMs'> {
   // The same coarse gate the stylesheet's release arms use.
-  const {releaseMs} = stylesheetDroppedActive() ? profile : PRESS_PROFILES.cell;
-  return {releaseMs};
+  return {
+    releaseMs: releaseMsOf(
+      stylesheetDroppedActive() ? profile : PRESS_PROFILES.cell,
+      element,
+    ),
+  };
+}
+
+/** A profile's release clock: its motion role under the element (#8268). */
+function releaseMsOf(profile: PressProfile, element: Element): number {
+  return profile.releaseRole == null
+    ? profile.releaseMs
+    : resolveMotion(element, pressTiming, profile.releaseRole);
 }
 
 /**
@@ -752,8 +783,8 @@ function pressButton(
     pointerId,
     releaseMs:
       pointerId == null
-        ? PRESS_PROFILES.cell.releaseMs
-        : releaseOf(profileOf(element)).releaseMs,
+        ? releaseMsOf(PRESS_PROFILES.cell, element)
+        : releaseOf(profileOf(element), element).releaseMs,
     timer: null,
   };
   if (pointerId == null) {
@@ -846,7 +877,7 @@ function onPointerDown(event: PointerEvent): void {
     element,
     gesture: idlePressGesture(),
     pointerId: event.pointerId,
-    ...releaseOf(profile),
+    ...releaseOf(profile, element),
     timer: null,
   };
   apply(
