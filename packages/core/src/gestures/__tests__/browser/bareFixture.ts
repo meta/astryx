@@ -14,6 +14,7 @@
 import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
+import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../../ScreenEdgePanGestureRecognizer';
 import {lockSelection} from '../../../utils/selectionLock';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
@@ -21,10 +22,12 @@ import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 declare global {
   interface Window {
     __pageTouch: number;
+    __wheelLog: string[];
     __api: {
       host: ReturnType<typeof getGestureHost>;
       LongPressGestureRecognizer: typeof LongPressGestureRecognizer;
       PanGestureRecognizer: typeof PanGestureRecognizer;
+      PinchGestureRecognizer: typeof PinchGestureRecognizer;
       ScreenEdgePanGestureRecognizer: typeof ScreenEdgePanGestureRecognizer;
       TapGestureRecognizer: typeof TapGestureRecognizer;
       lockSelection: typeof lockSelection;
@@ -35,6 +38,7 @@ declare global {
 // The touch listeners on the window and the document, as the engine sees
 // them: what makes the page pay for touches.
 window.__pageTouch = 0;
+window.__wheelLog = [];
 const live = new Set<string>();
 const listenerIds = new WeakMap<object, number>();
 let nextListenerId = 1;
@@ -91,6 +95,7 @@ window.__api = {
   host: getGestureHost(document),
   LongPressGestureRecognizer,
   PanGestureRecognizer,
+  PinchGestureRecognizer,
   ScreenEdgePanGestureRecognizer,
   TapGestureRecognizer,
   lockSelection,

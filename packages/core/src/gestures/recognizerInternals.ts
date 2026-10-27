@@ -28,7 +28,7 @@ import type {GestureEventContext, GestureState, GestureTouch} from './types';
  * never imports a recognizer class: a page ships only the recognizers it
  * constructs.
  */
-export type RecognizerFamily = 'tap' | 'longPress' | 'pan' | 'hover';
+export type RecognizerFamily = 'tap' | 'longPress' | 'pan' | 'pinch' | 'hover';
 
 /** The members of a recognizer only the gesture system calls. */
 export interface RecognizerInternals {

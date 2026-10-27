@@ -429,6 +429,28 @@ anywhere (often on a plain row no recognizer is on) fails a pan limited to
 one finger, so the two fingers zoom the page (WCAG 1.4.4) instead of the pan
 claiming them midway.
 
+## Wheel and trackpad
+
+A recognizer takes scroll input only where it allows that scroll type
+(`allowedScrollTypes`, UIKit's `allowedScrollTypesMask`): `continuous`
+for a trackpad's two-finger scroll, `discrete` for a mouse wheel's notches
+(`spec:AST-094` FR43). A pan allows none by default, as in UIKit, so its
+element gets no wheel listener and the page scrolls over it; a component that
+wants a trackpad's scroll opts in. The web reports no wheel phases or device:
+a line- or page-mode delta, or a whole 100 or 120 px notch on one axis, reads
+as a mouse wheel, anything else as a trackpad.
+
+A wheel gesture drives a pan as a contact moving with the content, along the
+pan's own axis, and only once every scroller between the pointer and the
+pan's element is at its edge that way, decided at the gesture's first wheel:
+a wheel the pan does not take is never prevented. A ctrl-wheel (a trackpad
+pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
+`exp(-deltaY / 100)`; a pinch takes it by default. A wheel gesture ends
+100 ms after its last wheel (provisional, an owner question), at that wheel's
+time, so its release keeps its velocity; macOS's momentum wheels arrive as
+more wheel, and the gesture follows them. A finger, mouse or pen that comes
+down ends it, and a wheel claim keeps the page's text selection.
+
 ## Time
 
 Every input carries its own timestamp (`event.timeStamp`), and timers are

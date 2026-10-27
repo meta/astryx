@@ -24,6 +24,7 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
+import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
 import {expect, test, type Page} from '@playwright/test';
 
 interface Entry {
@@ -1168,6 +1169,69 @@ test('a long press begins at touch-down + 500 ms on the event clock, even when t
 
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
+
+  test('a pan that allows scroll input follows a real wheel along its axis and keeps the page still, a wheel across it scrolls the page, and a pinch follows a ctrl-wheel (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer, PinchGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="strip" style="height: 120px; width: 300px">strip</div><div id="photo" style="height: 120px; width: 300px">photo</div><div style="height: 3000px; width: 3000px"></div>';
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedScrollTypes: ['continuous', 'discrete'],
+      });
+      pan.addTransitionListener((_recognizer, _from, to) =>
+        window.__wheelLog.push(`pan:${to}:${Math.round(pan.translation().x)}`),
+      );
+      host.attach(document.getElementById('strip') as HTMLElement, pan);
+      const pinch = new PinchGestureRecognizer();
+      pinch.addTransitionListener((_recognizer, _from, to) =>
+        window.__wheelLog.push(`pinch:${to}:${pinch.scale.toFixed(2)}`),
+      );
+      host.attach(document.getElementById('photo') as HTMLElement, pinch);
+    });
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const strip = await center(page, 'strip');
+    for (let step = 0; step < 6; step += 1) {
+      await driver.wheel({...strip, dx: 8});
+    }
+    await page.waitForTimeout(250);
+    const pan = await page.evaluate(() =>
+      window.__wheelLog.filter(entry => entry.startsWith('pan:')),
+    );
+    expect(pan[0]).toMatch(/^pan:began:/);
+    expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
+    // The content moves the way the fingers do: a scroll right drags it left.
+    const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
+    expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+    // Across the pan's axis the wheel is the page's.
+    await driver.wheel({...strip, dy: 60});
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(250);
+    const photo = await center(page, 'photo');
+    for (let step = 0; step < 5; step += 1) {
+      await driver.wheel({...photo, dy: -10, ctrl: true});
+    }
+    await page.waitForTimeout(250);
+    const pinch = await page.evaluate(() =>
+      window.__wheelLog.filter(entry => entry.startsWith('pinch:')),
+    );
+    expect(pinch[0]).toMatch(/^pinch:began:/);
+    expect(pinch.some(entry => entry.startsWith('pinch:ended:'))).toBe(true);
+    expect(
+      Math.max(...pinch.map(entry => Number(entry.split(':')[2]))),
+    ).toBeGreaterThan(1);
+  });
 
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
