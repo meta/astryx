@@ -301,6 +301,49 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toEqual([]);
   });
 
+  it('makes no touch listener cancelling for a scroll-only claimer: with it beside a watcher, the touchend stays passive and the contextmenu off (spec:AST-094 FR20, FR24)', () => {
+    const {watched, pull} = mount(
+      '<div id="watched"></div><div id="pull"></div>',
+    );
+    const added = vi.spyOn(window, 'addEventListener');
+    detachers.push(() => added.mockRestore());
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    // A watcher installs the host's touch listeners, all passive (FR20).
+    detachers.push(
+      coarse.attach(
+        watched,
+        new PanGestureRecognizer({claimsTouches: false, direction: 'vertical'}),
+      ),
+    );
+    added.mockClear();
+    // A pull that takes only the wheel claims no touch.
+    detachers.push(
+      coarse.attach(
+        pull,
+        new PanGestureRecognizer({
+          direction: 'vertical',
+          allowedPointerTypes: [],
+          allowedScrollTypes: ['continuous'],
+        }),
+      ),
+    );
+    const calls = added.mock.calls as unknown as [
+      string,
+      unknown,
+      AddEventListenerOptions | undefined,
+    ][];
+    expect(
+      calls.filter(
+        ([type, , options]) =>
+          type === 'touchend' && options?.passive === false,
+      ),
+    ).toEqual([]);
+    expect(calls.filter(([type]) => type === 'contextmenu')).toEqual([]);
+  });
+
   it('listens for the wheel only where a recognizer a wheel can drive allows it: a tap that allows scroll input adds no wheel listener', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
