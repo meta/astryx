@@ -1833,16 +1833,37 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a node detached mid-dip and attached again in a later task shows the move landed and visible', async () => {
     const {animator, element} = reduced();
-    // The call owns its opacity: its dip writes the low opacity inline.
+    // The call owns its opacity: its dip writes opacity inline, the value on
+    // screen as the fade starts (its end is written when the fade retires),
+    // while the model is already partway down.
     animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
     await advance(25);
-    expect(Number(element.style.opacity)).toBeLessThan(1);
+    expect(element.style.opacity).not.toBe('');
+    expect(animator.get('opacity')).toBeLessThan(1);
     animator.attach(null);
     await advance(100);
     animator.attach(element);
     expect(animator.get('x')).toBe(240);
     expect(animator.get('opacity')).toBe(1);
     expect(element.style.opacity).not.toBe('0');
+    expect(Number(element.style.opacity || '1')).toBe(1);
+  });
+
+  it('a node detached mid-dip from a dimmed opacity shows the move landed and visible when attached again', async () => {
+    // With the presented start, a curve writes its starting value inline: a
+    // dip from a dimmed opacity leaves that low value on the node while the
+    // move still waits to land.
+    const {animator, element} = reduced();
+    animator.set({opacity: 0.3});
+    animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
+    await advance(25);
+    expect(Number(element.style.opacity)).toBeLessThan(1);
+    expect(animator.get('x')).toBe(0);
+    animator.attach(null);
+    await advance(100);
+    animator.attach(element);
+    expect(animator.get('x')).toBe(240);
+    expect(animator.get('opacity')).toBe(1);
     expect(Number(element.style.opacity || '1')).toBe(1);
   });
 
