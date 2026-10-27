@@ -398,6 +398,11 @@ function scrollTypeOf(wheel: WheelEvent): ScrollType {
     : 'continuous';
 }
 
+/** Whether a recognizer is a scroll-edge pan (`spec:AST-094` FR19). */
+function isScrollEdgePan(recognizer: GestureRecognizer): boolean {
+  return (recognizer as {scrollEdge?: boolean}).scrollEdge === true;
+}
+
 /** Whether a pan's `direction` takes a contact moving by (cx, cy). */
 function panTakesMove(
   recognizer: GestureRecognizer,
@@ -1785,6 +1790,11 @@ export class GestureHost {
     const type = scrollTypeOf(wheel);
     const view = this.doc.defaultView;
     const isHorizontal = Math.abs(dx) > Math.abs(dy);
+    // Every scroller under the pointer, the page included, as a finger's
+    // probe reads them, without touch-action, which a wheel ignores.
+    const scroll = createNativeScrollProbe(wheel.target, {
+      readsTouchAction: false,
+    });
     const takers: GestureRecognizer[] = [];
     for (
       let node: Node | null =
@@ -1806,7 +1816,16 @@ export class GestureHost {
         if (
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
-            this.scrollerTakes(wheel.target, node, dx, dy, isHorizontal, view))
+            this.scrollerTakes(
+              wheel.target,
+              node,
+              dx,
+              dy,
+              isHorizontal,
+              view,
+            ) ||
+            // A scroll-edge pan only past every scroller's edge (FR19).
+            (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
           continue;
         }
@@ -1819,6 +1838,7 @@ export class GestureHost {
     const base = {
       pointerType: 'mouse' as const,
       target: wheel.target,
+      scroll,
       scrollType: type,
       recognizers: takers,
       consumer: null,

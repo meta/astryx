@@ -445,7 +445,11 @@ as a mouse wheel, anything else as a trackpad.
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
 pan's element is at its edge that way, decided at the gesture's first wheel:
-a wheel the pan does not take is never prevented. A ctrl-wheel (a trackpad
+a wheel the pan does not take is never prevented. A scroll-edge pan (a pull to
+refresh) takes one only if no scroller under the pointer could scroll for it,
+its own scroll owner and the page included, as its finger's rule reads them
+(`spec:AST-094` FR19); `touch-action` narrows only a finger's pan, so a wheel
+reads every scroller past it. A ctrl-wheel (a trackpad
 pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
 `exp(-deltaY / 100)`; a pinch takes it by default. A wheel gesture ends
 100 ms after its last wheel (provisional, an owner question), at that wheel's
