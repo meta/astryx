@@ -1169,6 +1169,45 @@ test('a long press begins at touch-down + 500 ms on the event clock, even when t
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
 
+  test("a mouse drag a pan claimed selects no page text, though it carries past the pan's element over text (spec:AST-094 FR43, FR41)", async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<h1 id="heading">A story heading with words</h1><p>A description with several words in it.</p><button>One</button><button>Two</button><div id="card" style="margin-top: 24px; width: 320px; height: 120px; background: #ccd">Card text a drag would select</div><p>Text below the card, with words.</p>';
+      host.attach(
+        document.getElementById('card') as HTMLElement,
+        new PanGestureRecognizer(),
+      );
+    });
+    const card = await page.locator('#card').boundingBox();
+    if (card == null) {
+      throw new Error('no box for #card');
+    }
+    const x = card.x + 40;
+    const y = card.y + card.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    // Past the pan's start, then up over the text above the card.
+    await page.mouse.move(x + 30, y - 10, {steps: 4});
+    await page.mouse.move(x + 60, card.y - 80, {steps: 12});
+    const during = await page.evaluate(() =>
+      String(window.getSelection() ?? '').trim(),
+    );
+    await page.mouse.up();
+    const after = await page.evaluate(() =>
+      String(window.getSelection() ?? '').trim(),
+    );
+    expect([during, after]).toEqual(['', '']);
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
