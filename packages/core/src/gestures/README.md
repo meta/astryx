@@ -231,8 +231,9 @@ presses nothing.
   a pen and a finger alike (`spec:AST-094` FR43, FR19). Where the primary
   pointer is coarse (`TOUCH_QUERY`, `../utils/coarsePointer.ts`), the host
   listens while something enabled could take a touch. Where it is fine, each
-  element that uses a gesture keeps one passive `pointerdown` listener and
-  the page has none: a press on the element (a mouse's primary button, a
+  element that uses a gesture keeps one passive `pointerdown` listener (and
+  a recognizer that claims a moving finger its blocking `touchmove`, which
+  FR24 counts outside that budget, FR19) and the page has none: a press on the element (a mouse's primary button, a
   pen, or a finger, whose `pointerdown` comes before its `touchstart`)
   adds the host's document and window listeners, and they go once that
   press's contacts end (FR24). A component that uses no gesture, and a
@@ -243,7 +244,10 @@ presses nothing.
   never mixes a pen with a finger (a recognizer takes one kind of pointer
   at a time) (FR43). A press tracker takes a mouse press as a press, with
   the fine-pointer profile: it paints at once, inside a scroller too, and
-  the scroll brake is a finger's only (FR11, DEC-21). The host follows the
+  the scroll brake is a finger's only (FR11, DEC-21). A mouse or a pen drag
+  that a recognizer claims takes no text selection from then on: the
+  selection the drag started goes, and the claiming elements refuse one
+  until the lift (FR41); a click keeps its selection. The host follows the
   query (a tablet docking or undocking a mouse): turning fine cancels every
   touch in flight. `perEventPointer`, an option of `attach`,
   `attachConsumer`, `useGestureRecognizer` and `usePressTracker` from
