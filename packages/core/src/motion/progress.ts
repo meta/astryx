@@ -9,7 +9,7 @@
  *   `presentedProgressVelocity` (the progress velocity that continues what
  *   an animator shows)
  * @position Shared by the motion building blocks that move several channels
- *   along one path (the rect morph, rectMorph.ts) and by companion motion (a
+ *   along one path and by companion motion (a
  *   scrim's dim following a sheet): one velocity unit, one curve mapping and
  *   one way to continue an interrupted motion
  *
@@ -18,7 +18,7 @@
  * progress per second; each channel's own velocity stays in the channel's
  * units per second.
  *
- * An interrupted motion continues from what is on screen (laws M2, M3): the
+ * An interrupted motion continues from what is on screen: the
  * block reads the presented values and velocities from the animator at one
  * `now` (`get`, `getVelocity`), restarts a path from those values, and starts
  * its progress with the presented velocity projected on the path's tangent

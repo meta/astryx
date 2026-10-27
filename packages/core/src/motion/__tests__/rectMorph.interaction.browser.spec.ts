@@ -179,6 +179,171 @@ for (const kind of ['line', 'edge'] as const) {
   }
 }
 
+// FR6 is verified in a browser too: an interrupted motion continues from the
+// box on screen. Two readings: reads on either side of the switch in one
+// task, and the composited frames across it.
+
+// One task, two reads either side of the switch: nothing is presented in
+// between, so the second read is the new motion's first value. The morph
+// reads the document timeline here, the clock the compositor presents on,
+// so both reads see one instant whatever the frame timing; on its default
+// clock the new motion's start would sit up to the time since the last frame
+// ahead of the first read.
+async function readAcrossSwitch(page: Page, restart: boolean) {
+  return page.evaluate(
+    async ({box, square, spring, restart}) => {
+      const element = document.getElementById('surface') as HTMLElement;
+      const morph = Motion.createRectMorph(element, {
+        now: () => Number(document.timeline.currentTime),
+      });
+      const path = Motion.lerpPath(square, box);
+      const read = () => {
+        const r = element.getBoundingClientRect();
+        return {x: r.x, y: r.y, width: r.width, height: r.height};
+      };
+      await morph.present(path, spring).started;
+      // Partway up the present, with the box well away from both ends.
+      await new Promise(resolve => setTimeout(resolve, 160));
+      const before = read();
+      if (restart) {
+        // What a morph that did not continue would do: start the path over.
+        morph.reset();
+        morph.present(path, spring);
+      } else {
+        // On the element itself: no copy, so the switch alone moves the box.
+        morph.dismiss(path, spring, {target: element});
+      }
+      const after = read();
+      return {
+        before,
+        after,
+        step: Math.max(
+          Math.abs(after.x - before.x),
+          Math.abs(after.y - before.y),
+          Math.abs(after.width - before.width),
+          Math.abs(after.height - before.height),
+        ),
+      };
+    },
+    {box: BOX, square: SQUARE, spring: SLOW, restart},
+  );
+}
+
+// The composited frames across a switch, on the morph's default clock. The
+// box rises 240 px along a path with no fade, so the marker is tracked in
+// every frame; the dismissal (or the restart) takes over 600 ms in, near the
+// middle of the travel. The screencast starts once the present has started:
+// before that the box sits at rest, and its first step onto the path is not
+// the switch.
+type Switching = {
+  morph: ReturnType<typeof Motion.createRectMorph>;
+  path: ReturnType<typeof Motion.lerpPath>;
+  from: {x: number; y: number; width: number; height: number};
+};
+async function trackAcrossSwitch(page: Page, restart: boolean) {
+  const surface = page.locator('#surface');
+  await markElement(surface, {inset: MARKER_INSET});
+  await page.evaluate(
+    async ({box, spring}) => {
+      const element = document.getElementById('surface') as HTMLElement;
+      const morph = Motion.createRectMorph(element);
+      const from = {
+        x: box.x,
+        y: box.y + 240,
+        width: box.width * 0.8,
+        height: box.height * 0.8,
+      };
+      const path = Motion.lerpPath(from, box);
+      await morph.present(path, spring).started;
+      (window as unknown as {switching: Switching}).switching = {
+        morph,
+        path,
+        from,
+      };
+    },
+    {box: BOX, spring: SLOW},
+  );
+  const cast = await startScreencast(page);
+  const geometry = await page.evaluate(
+    async ({box, spring, restart}) => {
+      const element = document.getElementById('surface') as HTMLElement;
+      const {morph, path, from} = (window as unknown as {switching: Switching})
+        .switching;
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const at = element.getBoundingClientRect().y;
+      if (restart) {
+        morph.reset();
+        morph.present(path, spring);
+      } else {
+        morph.dismiss(path, spring, {target: element});
+      }
+      await new Promise(resolve => setTimeout(resolve, 600));
+      // The smallest move a discontinuity would make from here: back to the
+      // path's start (a restart), or to the box at rest (a frame presented
+      // without the morph's transform).
+      return {jump: Math.min(Math.abs(at - from.y), Math.abs(at - box.y))};
+    },
+    {box: BOX, spring: SLOW, restart},
+  );
+  await page.waitForTimeout(100);
+  const tracked = (await trackMarker(page, await cast.stop())).filter(
+    frame => frame.box != null,
+  );
+  let rising = 0;
+  let falling = 0;
+  let worstStep = 0;
+  for (let i = 1; i < tracked.length; i++) {
+    const dy = tracked[i].box!.y - tracked[i - 1].box!.y;
+    if (dy < -0.5) {rising++;}
+    if (dy > 0.5) {falling++;}
+    worstStep = Math.max(worstStep, Math.abs(dy));
+  }
+  return {tracked: tracked.length, rising, falling, worstStep, ...geometry};
+}
+
+const SUBPIXEL = 0.5;
+
+test('a dismissal mid-present starts from the box: reads either side of the switch, in one task', async ({
+  page,
+}) => {
+  await open(page);
+  const reading = await readAcrossSwitch(page, false);
+  test
+    .info()
+    .annotations.push({type: 'switch', description: JSON.stringify(reading)});
+  expect(reading.step).toBeLessThanOrEqual(SUBPIXEL);
+});
+
+test('on screen, the box keeps moving through the switch without a jump', async ({
+  page,
+}) => {
+  await open(page);
+  const reading = await trackAcrossSwitch(page, false);
+  test
+    .info()
+    .annotations.push({type: 'track', description: JSON.stringify(reading)});
+  // Frames on both sides of the switch: the box was tracked rising under the
+  // present and falling under the dismissal.
+  expect(reading.rising).toBeGreaterThanOrEqual(5);
+  expect(reading.falling).toBeGreaterThanOrEqual(5);
+  // A frame's own travel is a few px; a discontinuity moves the box by at
+  // least `jump`. Half of it separates the two.
+  expect(reading.worstStep).toBeLessThan(reading.jump / 2);
+});
+
+test('a restart fails both readings, so they have teeth', async ({page}) => {
+  await open(page);
+  const read = await readAcrossSwitch(page, true);
+  await open(page);
+  const track = await trackAcrossSwitch(page, true);
+  test.info().annotations.push({
+    type: 'restart',
+    description: JSON.stringify({read, track}),
+  });
+  expect(read.step).toBeGreaterThan(SUBPIXEL);
+  expect(track.worstStep).toBeGreaterThanOrEqual(track.jump / 2);
+});
+
 test('a present keeps growing every frame through a 1 s main-thread block', async ({
   page,
 }) => {

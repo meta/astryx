@@ -27,6 +27,8 @@ import {
   type MorphRect,
 } from './rectMorph';
 import {timing} from './uikit/timing';
+import {registerSpringsTable, springs} from './uikit/springs';
+import {resolveMotion} from './resolveMotion';
 
 interface Recorded {
   element: Element;
@@ -41,10 +43,27 @@ interface Recorded {
 
 let clock = 1000;
 let recorded: Recorded[] = [];
+// The animator's frames: a call reads the browser's start for its curves in
+// the frame after it, never in the task that makes them, so a test plays that
+// frame before it reads where the element is.
+let frameQueue: (() => void)[] = [];
+const requestFrame = (callback: () => void) => {
+  frameQueue.push(callback);
+};
+async function playFrame() {
+  const frames = frameQueue;
+  frameQueue = [];
+  for (const callback of frames) {
+    callback();
+  }
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 beforeEach(() => {
   clock = 1000;
   recorded = [];
+  frameQueue = [];
   vi.useFakeTimers();
   HTMLElement.prototype.animate = function (keyframes, options) {
     const animation: Recorded = {
@@ -513,7 +532,7 @@ describe('createRectMorph', () => {
     const element = document.createElement('div');
     document.body.appendChild(element);
     stubMedia(options.reducedMotion ?? false, options.coarse ?? true);
-    const morph = createRectMorph(element, {now: () => clock});
+    const morph = createRectMorph(element, {now: () => clock, requestFrame});
     return {element, morph};
   };
   const copyOf = (element: HTMLElement) => {
@@ -530,14 +549,55 @@ describe('createRectMorph', () => {
         animation.keyframes.some(frame => property in frame),
     );
   const settle = async (ms: number) => {
+    await playFrame();
     clock += ms;
     await vi.advanceTimersByTimeAsync(ms);
   };
 
-  it('presents the element from its source to rest on the spring', () => {
+  it('plays the table value, since a motion role is internal (DEC-11)', () => {
+    // A registered table's leaf is a motion role, but a role resolves to its
+    // table value: touch motion stays internal and no `--motion-*` variable
+    // retunes it. Writing one on the scope therefore changes nothing.
+    const {element, morph} = setup();
+    const scope = document.createElement('div');
+    scope.setAttribute('data-astryx-theme', 'brisk');
+    document.body.appendChild(scope);
+    scope.appendChild(element);
+    registerSpringsTable();
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (node: Element) =>
+        ({
+          getPropertyValue: (name: string) =>
+            node === scope && name === '--motion-springs-menu-open'
+              ? '0.9s 0.25'
+              : '',
+        }) as CSSStyleDeclaration,
+    );
+    expect(resolveMotion(element, springs.menuOpen)).toBe(springs.menuOpen);
+
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, springs.menuOpen);
+    const [presenting] = live(element, 'scale');
+    const withVariable = Number(presenting.options.duration);
+    vi.restoreAllMocks();
+
+    const plain = setup();
+    plain.morph.present(
+      lerpPath(SQUARE, BOX, {opacity: [0, 1]}),
+      springs.menuOpen,
+    );
+    const [plainPresenting] = live(plain.element, 'scale');
+    expect(withVariable).toBeCloseTo(
+      Number(plainPresenting.options.duration),
+      6,
+    );
+  });
+
+  it('presents the element from its source to rest on the spring', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
     morph.present(path, BOUNCY);
+    await playFrame();
     expect(element.style.getPropertyValue('transform-origin')).toBe('0px 0px');
     expect(live(element, 'scale').length).toBe(1);
     expect(live(element, 'translate').length).toBe(1);
@@ -591,6 +651,7 @@ describe('createRectMorph', () => {
       expect(element.style.getPropertyValue(property), property).toBe('');
     }
     // It runs from rest back to the square, fading out.
+    await playFrame();
     const progress = progressCurve(BOUNCY);
     const back = lerpPath(BOX, SQUARE, {opacity: [1, 0]});
     const start = clock;
@@ -628,10 +689,42 @@ describe('createRectMorph', () => {
     expectRect(morph.presentedRect()!, SQUARE, 0.01);
   });
 
+  it('a second dismissal on the copy in flight keeps the copy and continues from its rect', async () => {
+    // A dismissal continues the dismissal in flight, so a caller that hands
+    // the same copy again (a retargeted shrink) keeps it: its release runs
+    // once, when the dismissal that is still running ends.
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, SPRING);
+    await settle(progressCurve(SPRING).duration * 1000 + 50);
+    const released: HTMLElement[] = [];
+    const release = (target: HTMLElement) => {
+      released.push(target);
+      target.remove();
+    };
+    const copy = copyOf(element);
+    morph.dismiss(path, BOUNCY, {target: copy, release});
+    clock += 60;
+    await vi.advanceTimersByTimeAsync(60);
+    const onScreen = morph.presentedRect()!;
+
+    const again = morph.dismiss(path, SPRING, {target: copy, release});
+    expect(copy.isConnected).toBe(true);
+    expect(released).toEqual([]);
+    expect(live(copy, 'scale').length).toBe(1);
+    expectRect(morph.presentedRect()!, onScreen, 0.01);
+
+    await settle(progressCurve(SPRING).duration * 1000 + 50);
+    expect(await again.finished).toBe(true);
+    expect(released).toEqual([copy]);
+    expect(copy.isConnected).toBe(false);
+  });
+
   it('a dismissal during the present starts from the rect on screen, with its velocity', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
     morph.present(path, SPRING);
+    await playFrame();
     const progress = progressCurve(SPRING);
     clock += 60;
     await vi.advanceTimersByTimeAsync(60);
@@ -645,6 +738,7 @@ describe('createRectMorph', () => {
     // path is the rest of the line back to the square, so the growth's
     // velocity carries on along it.
     expectRect(morph.presentedRect()!, onScreen, 0.01);
+    await playFrame();
     const before = morph.presentedRect()!;
     clock += 0.01;
     const after = morph.presentedRect()!;
@@ -675,6 +769,7 @@ describe('createRectMorph', () => {
     await settle(1000);
     const copy = copyOf(element);
     morph.dismiss(path, SPRING, {target: copy});
+    await playFrame();
     clock += 80;
     await vi.advanceTimersByTimeAsync(80);
     const onScreen = morph.presentedRect()!;
@@ -685,6 +780,7 @@ describe('createRectMorph', () => {
     morph.present(path, SPRING);
     expect(copy.isConnected).toBe(false);
     expectRect(morph.presentedRect()!, onScreen, 0.01);
+    await playFrame();
     // It keeps shrinking for a moment (the dismissal's velocity), then grows.
     clock += 1;
     const next = morph.presentedRect()!;
@@ -695,10 +791,11 @@ describe('createRectMorph', () => {
     expectRect(morph.presentedRect()!, surface, 1e-6);
   });
 
-  it('takes a release velocity as given (progress per second)', () => {
+  it('takes a release velocity as given (progress per second)', async () => {
     const {morph} = setup();
     const path = lerpPath(SQUARE, BOX);
     morph.present(path, SPRING, {velocity: 6});
+    await playFrame();
     const before = morph.presentedRect()!;
     clock += 0.01;
     const after = morph.presentedRect()!;
@@ -780,6 +877,18 @@ describe('createRectMorph', () => {
         clock = start + t;
         expectRect(morph.presentedRect()!, BOX, 0.01);
       }
+    });
+
+    it('lands a path with no opacity at rest, instead of starting on its source rect', () => {
+      // With no opacity of its own the path gives the cross-fade nothing to
+      // read, so the morph says which way it goes: a present lands at rest
+      // (design:reduced-motion), it does not dip to the source and grow.
+      const {element, morph} = setup({reducedMotion: true, coarse: true});
+      const path = lerpPath(SQUARE, BOX);
+      morph.present(path, SPRING);
+      expectRect(morph.presentedRect()!, BOX, 0.01);
+      expect(live(element, 'scale').length).toBe(0);
+      expect(live(element, 'translate').length).toBe(0);
     });
 
     it('on any other pointer, it completes at once', () => {
