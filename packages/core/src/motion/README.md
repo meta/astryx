@@ -88,13 +88,16 @@ animator.stop(['y']); // freezes at the value on screen
 animator.decay(coast(animator, {x: velocityX}, {bounds: {x: {min: -maxScroll, max: 0}}}));
 
 // Any closed-form curve, here a press that keeps deepening: the target
-// scale falls at 0.16/s and the platter follows it on a spring.
-const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
-  from: 1,
-  target: 1,
-  slope: -0.16,
-});
-animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+// scale falls at 0.16/s and the platter follows it on a spring. Press
+// feedback has no fade of its own, so it is skipped under Reduce Motion.
+if (animator.reducedMotion() === 'off') {
+  const ramp = solveSpringTowardRamp(toSpring(resolveMotion(sheet, springs.quickChange)), {
+    from: 1,
+    target: 1,
+    slope: -0.16,
+  });
+  animator.play({scale: {duration: 0.266, at: ramp.value, velocity: ramp.velocity}});
+}
 
 await handle.finished; // true if it ran to the end, false if interrupted
 ```
@@ -153,7 +156,11 @@ await handle.finished; // true if it ran to the end, false if interrupted
   composes in one `translate` track.
 - `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
-  holds its end value until the next animation replaces it.
+  holds its end value until the next animation replaces it, while the
+  pseudo-element exists. A dialog's `::backdrop` is made again each time the
+  dialog opens, so a presentation `set`s its starting value right after
+  `showModal()`, in the same task (a `set` before it lands on the backdrop
+  the open replaces).
 - `useAnimator()` returns a stable `{ref, animator}`; attach `ref` to the
   element.
 

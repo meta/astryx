@@ -122,7 +122,9 @@ interface TraceEvent {
  * CSS `@keyframes` animation (and, for an unwatched `waitForAnimation`, a
  * cancelled CSS transition) the wait reads its timing, which flushes that
  * animation's style, so wait on such an animation with `waitForRest`, or
- * after the trace.
+ * after the trace. Taking a watch, or calling `waitForRest` while an
+ * animation already runs on the element, reads its animations once, which
+ * restyles it: do either before the window a proof counts.
  */
 export async function traceRendering(
   page: Page,
@@ -261,12 +263,76 @@ export async function traceRendering(
 }
 
 /**
+ * The browser's open pages. The compositor record is browser-wide: its
+ * `Display::FrameDisplayed` events carry no page identity.
+ */
+function openPages(page: Page): Page[] {
+  const browser = page.context().browser();
+  return browser == null
+    ? page.context().pages()
+    : browser.contexts().flatMap(context => context.pages());
+}
+
+/**
+ * Watches for a page that opens while the record runs, in any context (it
+ * may close again before the record stops). Returns whether one opened.
+ */
+async function watchForOtherPages(
+  page: Page,
+): Promise<{stop(): Promise<boolean>}> {
+  let opened = false;
+  const onPage = (other: Page) => {
+    if (other !== page) {
+      opened = true;
+    }
+  };
+  // The page's own context, through Playwright (a persistent context has no
+  // browser to ask).
+  page.context().on('page', onPage);
+  // Every context, through the browser's target discovery: a page in a
+  // context created during the record is a new target too.
+  let targets: CDPSession | null = null;
+  const browser = page.context().browser();
+  if (browser != null) {
+    try {
+      targets = await browser.newBrowserCDPSession();
+      const {targetInfos} = await targets.send('Target.getTargets');
+      const known = new Set(targetInfos.map(info => info.targetId));
+      targets.on('Target.targetCreated', ({targetInfo}) => {
+        if (targetInfo.type === 'page' && !known.has(targetInfo.targetId)) {
+          opened = true;
+        }
+      });
+      await targets.send('Target.setDiscoverTargets', {discover: true});
+    } catch {
+      targets = null;
+    }
+  }
+  return {
+    async stop() {
+      page.context().off('page', onPage);
+      await targets?.detach().catch(() => {});
+      return opened;
+    },
+  };
+}
+
+function assertOnlyPage(page: Page, when: string): void {
+  if (openPages(page).some(other => other !== page && !other.isClosed())) {
+    throw new Error(
+      `startCompositorTrace: another page is open ${when}; the compositor record is browser-wide (its frames carry no page identity), so another page's frames would be credited to this one`,
+    );
+  }
+}
+
+/**
  * Records when the compositor presents each frame, for `busyWindowProof`'s
  * `presented`: a Chromium trace of `Display::FrameDisplayed`, on the page
  * clock. Start it with the screencast, before the block, and stop it after.
  * Engines without a CDP trace (WebKit) resolve `stop()` to [], and the
  * verdict then judges the screencast alone. It runs its own trace, so not
- * inside `traceRendering`.
+ * inside `traceRendering`. The record is browser-wide, so it throws when
+ * another page is open as it starts or stops, or opened while it ran.
  */
 export async function startCompositorTrace(
   page: Page,
@@ -277,6 +343,13 @@ export async function startCompositorTrace(
   } catch {
     return {stop: async () => []};
   }
+  try {
+    assertOnlyPage(page, 'as the trace starts');
+  } catch (error) {
+    await cdp.detach().catch(() => {});
+    throw error;
+  }
+  const others = await watchForOtherPages(page);
   const events: TraceEvent[] = [];
   cdp.on('Tracing.dataCollected', ({value}) => {
     events.push(...(value as unknown as TraceEvent[]));
@@ -304,6 +377,12 @@ export async function startCompositorTrace(
       await cdp.send('Tracing.end');
       await complete;
       await cdp.detach().catch(() => {});
+      if (await others.stop()) {
+        throw new Error(
+          "startCompositorTrace: another page opened during the record; the compositor record is browser-wide (its frames carry no page identity), so that page's frames would be credited to this one",
+        );
+      }
+      assertOnlyPage(page, 'as the trace stops');
       const mark = events.find(e => e.name === tag);
       if (mark == null) {
         throw new Error('startCompositorTrace: the clock mark was not traced');
@@ -318,13 +397,16 @@ export async function startCompositorTrace(
 }
 
 const LONG_TASK_SCRIPT = `(() => {
-  if (window.__harnessLongTasks || typeof PerformanceObserver === 'undefined') return;
+  if (window.__harnessLongTasks) return;
   const tasks = [];
-  window.__harnessLongTasks = tasks;
+  const log = {tasks, supported: false};
+  window.__harnessLongTasks = log;
+  if (typeof PerformanceObserver === 'undefined' || !(PerformanceObserver.supportedEntryTypes || []).includes('longtask')) return;
   try {
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) tasks.push({start: performance.timeOrigin + entry.startTime, durationMs: entry.duration, name: entry.name});
     }).observe({type: 'longtask', buffered: true});
+    log.supported = true;
   } catch {}
 })()`;
 
@@ -347,16 +429,35 @@ export interface LongTask {
   readonly name: string;
 }
 
-/** Long tasks recorded since navigation, optionally only those overlapping a window. */
+/**
+ * Long tasks recorded since navigation, optionally only those overlapping a
+ * window. Fails closed: it throws when the log never ran on this document
+ * (installed after the page navigated) or the engine has no Long Tasks API
+ * (WebKit), so an empty answer is evidence of no long task, never of no log.
+ */
 export async function readLongTasks(
   page: Page,
   range?: {from: number; to: number},
 ): Promise<LongTask[]> {
-  const tasks = await page.evaluate(
+  const log = await page.evaluate(
     () =>
-      (window as unknown as {__harnessLongTasks?: LongTask[]})
-        .__harnessLongTasks ?? [],
+      (
+        window as unknown as {
+          __harnessLongTasks?: {tasks: LongTask[]; supported: boolean};
+        }
+      ).__harnessLongTasks ?? null,
   );
+  if (log == null) {
+    throw new Error(
+      'readLongTasks: the long-task log is not running on this document; call installLongTaskLog(page) before navigating',
+    );
+  }
+  if (!log.supported) {
+    throw new Error(
+      'readLongTasks: this engine has no Long Tasks API, so the log records nothing',
+    );
+  }
+  const tasks = log.tasks;
   return range == null
     ? tasks
     : tasks.filter(
