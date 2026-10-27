@@ -86,8 +86,27 @@ const HOLD_MS = reorder.claim.delayMs + 80;
 const ROW = '#storybook-root li:not([data-astryx-leaving])';
 /** The dragged row's preview, which follows the finger. */
 const PREVIEW = '[data-astryx-reorder-preview]';
-/** The insertion line at the drop position. */
+/**
+ * The list while its insertion line shows: the line is the list's own
+ * ::after, so no element joins the list (component-style-authoring INV7).
+ */
 const LINE = '[data-astryx-reorder-line]';
+
+/** The insertion line's top in the viewport; null while it is hidden. */
+const lineTop = async (page: Page): Promise<number | null> =>
+  page.evaluate(selector => {
+    const list = document.querySelector<HTMLElement>(selector);
+    if (list == null) {
+      return null;
+    }
+    const line = getComputedStyle(list, '::after');
+    if (line.display === 'none') {
+      return null;
+    }
+    // Placed by a translate from the list's padding box.
+    const y = parseFloat(line.translate.split(' ')[1] ?? '0');
+    return list.getBoundingClientRect().top + list.clientTop + y;
+  }, `#storybook-root ${LINE}`);
 
 const row = (page: Page, label: string) =>
   page.locator(ROW).filter({hasText: label}).first();
@@ -386,12 +405,7 @@ test('the rows stay still while the finger drags, and the insertion line marks t
       for (const label of ROWS) {
         moved.push(tops[label] - before[label]);
       }
-      const line = await page.evaluate(selector => {
-        const element = document.querySelector<HTMLElement>(selector);
-        return element == null || element.hidden
-          ? null
-          : element.getBoundingClientRect().top;
-      }, LINE);
+      const line = await lineTop(page);
       if (line != null) {
         lines.push(line);
       }
