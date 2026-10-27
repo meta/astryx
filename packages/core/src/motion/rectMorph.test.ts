@@ -665,6 +665,53 @@ describe('createRectMorph', () => {
     expect(copy.isConnected).toBe(false);
   });
 
+  it('lets the element go of its compositing layer as a dismissal on a copy starts, so no style write reaches it during the dismissal', async () => {
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, SPRING);
+    // Dismissed about 100 ms after the present's curve ended, while the
+    // animator still keeps the element promoted (its promotion linger).
+    await settle(progressCurve(SPRING).duration * 1000 + 100);
+    const copy = copyOf(element);
+    morph.dismiss(path, BOUNCY, {target: copy});
+    // The dismissal's own task.
+    await Promise.resolve();
+    await Promise.resolve();
+    const writes: string[] = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        writes.push(record.oldValue ?? '');
+      }
+    });
+    observer.observe(element, {
+      attributes: true,
+      attributeFilter: ['style'],
+      attributeOldValue: true,
+    });
+    // The dismissal's whole run, and any linger past it.
+    for (let ms = 0; ms < 1200; ms += 50) {
+      await settle(50);
+    }
+    writes.push(...observer.takeRecords().map(record => record.oldValue ?? ''));
+    observer.disconnect();
+    expect(writes).toEqual([]);
+    expect(element.style.getPropertyValue('will-change')).toBe('');
+  });
+
+  it('presents the element again after a dismissal on a copy', async () => {
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, SPRING);
+    await settle(progressCurve(SPRING).duration * 1000 + 100);
+    morph.dismiss(path, BOUNCY, {target: copyOf(element)});
+    await settle(progressCurve(BOUNCY).duration * 1000 + 50);
+    const presenting = morph.present(path, SPRING);
+    expect(live(element, 'scale').length).toBe(1);
+    await settle(progressCurve(SPRING).duration * 1000 + 50);
+    expect(await presenting.finished).toBe(true);
+    expect(element.style.getPropertyValue('scale')).toBe('');
+  });
+
   it('hands its target to the caller\u2019s release, and dismisses the element itself when it is the target', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX);
