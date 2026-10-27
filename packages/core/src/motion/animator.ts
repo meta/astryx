@@ -2420,6 +2420,9 @@ export function createAnimator(
               }
               retireTimers.clear();
               demote();
+              // demote() asks for a fresh will-change read of the node it
+              // demotes; a detached node gets none.
+              cancelSheetWillChangeRead();
             });
             lastDetached = null;
             const time = now();
