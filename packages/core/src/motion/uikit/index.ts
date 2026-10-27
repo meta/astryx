@@ -41,7 +41,7 @@ export {
 } from './gestures';
 export {list} from './list';
 export {navigation, registerNavigationTable} from './navigation';
-export {registerReorderTable, reorder} from './reorder';
+export {reorder} from './reorder';
 export {registerScrollTable, scroll} from './scroll';
 export {
   ACTION_SHEET_DISMISS_SPRING,
