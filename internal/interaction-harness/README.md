@@ -244,20 +244,20 @@ in all, and lists each retake under `recaptures` in the trace.
 
 ## Engine limits (measured with Playwright 1.61)
 
-|                                                        | Chromium 149 | WebKit 26.5 (Linux build)                                                                             |
-| ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------- |
-| Trusted touch + pointer events, multi-touch            | yes          | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                   |
-| Page sees the scripted timestamps                      | yes, exactly | no: real dispatch time; real-time pacing keeps velocities within ~1 ms                                |
-| Sub-pixel touch positions                              | yes          | no: integer CSS px                                                                                    |
-| Native scroll, fling, pinch-zoom from injected touches | yes          | no                                                                                                    |
-| Lifting one finger while others stay down              | yes          | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP` |
-| Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                          |
-| Curve sampling, storyboards, input log                 | yes          | yes                                                                                                   |
-| Screencast frame evidence (busy main thread)           | yes          | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                    |
-| Rendering trace, long tasks                            | yes          | no (Playwright exposes neither)                                                                       |
-| Compositor presentation record                         | yes          | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                           |
-| Wheel steps, exact CSS px deltas (`webInput.ts`)       | yes          | desktop context only (`isMobile: false`): skip with `WHEEL_SKIP`                                      |
-| Pen strokes, pressure, scripted timestamps             | yes          | no: skip with `PEN_SKIP`                                                                              |
+|                                                        | Chromium 149 | WebKit 26.5 (Linux build)                                                                                                                          |
+| ------------------------------------------------------ | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trusted touch + pointer events, multi-touch            | yes          | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                |
+| Page sees the scripted timestamps                      | yes, exactly | no: real dispatch time; real-time pacing keeps velocities within ~1 ms                                                                             |
+| Sub-pixel touch positions                              | yes          | no: integer CSS px                                                                                                                                 |
+| Native scroll, fling, pinch-zoom from injected touches | yes          | no                                                                                                                                                 |
+| Lifting one finger while others stay down              | yes          | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
+| Click synthesised from a touch                         | yes          | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                       |
+| Curve sampling, storyboards, input log                 | yes          | yes                                                                                                                                                |
+| Screencast frame evidence (busy main thread)           | yes          | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                 |
+| Rendering trace, long tasks                            | yes          | no (Playwright exposes neither)                                                                                                                    |
+| Compositor presentation record                         | yes          | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                        |
+| Wheel steps, exact CSS px deltas (`webInput.ts`)       | yes          | desktop context only (`isMobile: false`): skip with `WHEEL_SKIP`; the step also moves the mouse there (a `pointermove`) and holds Control as a key |
+| Pen strokes, pressure, scripted timestamps             | yes          | no: skip with `PEN_SKIP`                                                                                                                           |
 
 What WebKit cannot show here — native scroll hand-off, flings, a finger
 lifting while another stays down, finger tracking under a busy main thread, and
