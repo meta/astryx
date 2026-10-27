@@ -963,6 +963,15 @@ async function readElement<A, R>(
   }
 }
 
+/** The rejection for a wait whose element is not in the document. */
+function notInDocument(name: string, cause?: unknown): Error {
+  return new Error(
+    `${name}: the element is not in the document. An exit that removes ` +
+      'its element is read through its container (watch the parent).',
+    cause === undefined ? undefined : {cause},
+  );
+}
+
 /**
  * Runs a locator read within the wait's own deadline. A locator waits for
  * its element with no timeout of its own, so one the page removed (an exit
@@ -984,11 +993,7 @@ async function withinTimeout<T>(
       if ((await locator.count()) > 0) {
         return null;
       }
-      throw new Error(
-        `${name}: the element is not in the document. An exit that removes ` +
-          'its element is read through its container (watch the parent).',
-        {cause: error},
-      );
+      throw notInDocument(name, error);
     }
     throw error;
   }
@@ -1250,6 +1255,12 @@ export async function waitForAnimation(
       return found;
     }
     if (Date.now() > deadline) {
+      // A traced read goes through handles, which find no element rather
+      // than wait for one: a missing element is reported as missing, as the
+      // untraced read reports it.
+      if (traced && (await locator.count()) === 0) {
+        throw notInDocument('waitForAnimation');
+      }
       throw new Error(
         'waitForAnimation: no animation started on the element, none running ' +
           'and none recorded since the last wait. If the action is the ' +
