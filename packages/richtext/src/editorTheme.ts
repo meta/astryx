@@ -282,8 +282,18 @@ const editorTheme = stylex.create({
   link: {
     color: colorVars['--color-text-accent'],
     textDecoration: 'underline',
+    // Every cursor is conditional, with no unconditional default: a default
+    // `cursor: pointer` class is shared with any other code that sets it, and
+    // a copy of it in a later cascade layer would outrank the conditions.
     cursor: {
-      default: 'pointer',
+      default: null,
+      ':not(:is([data-richtext-follow-links] *))': 'pointer',
+      // Where links follow on Cmd/Ctrl-click (RichTextEditorToolbar's link
+      // card marks the editable root), a plain click places the caret, so a
+      // link reads as text until the modifier is held over it.
+      ':is([data-richtext-follow-links] *)': 'text',
+      ':is([data-richtext-follow-links] [data-richtext-link-follow])':
+        'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },

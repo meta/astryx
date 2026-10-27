@@ -3,14 +3,17 @@
 /**
  * @file linkUtils.ts
  * @input Uses only the DOM URL constructor (guarded via try/catch for SSR/edge).
- * @output Exports `sanitizeUrl`, `validateUrl`, and the URL/email matcher regexes
- *   used by the AutoLink wiring.
+ * @output Exports `sanitizeUrl`, `validateUrl`, `isOpenableUrl`, and the
+ *   URL/email matcher regexes used by the AutoLink wiring.
  * @position @astryxdesign/richtext helper shared by RichTextEditorToolbar (link
- *   button) and the AutoLink matchers in RichTextEditor. Kept dependency-free so
- *   both can import it without pulling in extra `@lexical/*` surface.
+ *   button), its LinkCard (which opens links), and the AutoLink matchers in
+ *   RichTextEditor. Kept dependency-free so all of them can import it without
+ *   pulling in extra `@lexical/*` surface. `isOpenableUrl` is internal: the
+ *   package entry does not export it.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/RichTextEditorToolbar.tsx (link button)
+ * - /packages/richtext/src/LinkCard.tsx (opening links)
  * - /packages/richtext/src/RichTextEditor.tsx (AutoLink matchers)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (link docs)
@@ -89,4 +92,16 @@ export function validateUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether a stored link may be opened from the editor (its card, or
+ * Cmd/Ctrl-click): its address names one of the schemes {@link sanitizeUrl}
+ * allows. An address with no scheme of its own, such as a relative path or an
+ * in-page `#anchor`, is not opened, because {@link sanitizeUrl} would read it
+ * as a host rather than as the address it is.
+ */
+export function isOpenableUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return HAS_SCHEME.test(trimmed) && validateUrl(trimmed);
 }
