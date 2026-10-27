@@ -8,7 +8,8 @@
  * @output Real-engine proof that a menu rendered inside a shadow root acts on
  *   the row under a released pointer (module:DropdownMenu/useMenuPress FR1),
  *   and that a ContextMenu there tells a press on its own rows from a press
- *   outside it, a mouse's at once and a finger's on its lift.
+ *   outside it, a mouse's at once and a finger's on its lift, from the task
+ *   that opened it on.
  * @position Run with `pnpm test:a11y-contract`. Only a real engine resolves a
  *   point inside a shadow root to the shadow host at the document level.
  */
@@ -98,6 +99,82 @@ test('a ContextMenu inside a shadow root picks a clicked item, and a press on it
   await page.mouse.click(hostPadding.x, hostPadding.y);
   await expect(menu).toBeHidden();
   await expect(page.getByTestId('picked-item')).toHaveText('Copy');
+});
+
+test('a ContextMenu inside a shadow root commits its open before the next input: a press on its host right after the right click closes it', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${CONTEXT_STORY}&viewMode=story`,
+  );
+  const {trigger, hostPadding} = await points(page);
+  // The right click, then a press on the host's own padding as the very next
+  // input: a browser runs an input event before the page's posted tasks, so
+  // the press comes once the right click's microtasks have run and before
+  // anything the page queued. The menu shows from a listener inside the
+  // shadow root, where `window.event` is unset.
+  const shows = await page.evaluate(
+    async ({at, outside}) => {
+      let count = 0;
+      const show = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = function (
+        this: HTMLElement,
+        ...args: Parameters<typeof show>
+      ) {
+        if (this.querySelector('[role="menu"]') != null) {
+          count += 1;
+        }
+        show.apply(this, args);
+      };
+      const host = document.querySelector<HTMLElement>(
+        '[data-testid="shadow-host"]',
+      );
+      const target = host?.shadowRoot?.elementFromPoint(at.x, at.y);
+      if (host == null || target == null) {
+        throw new Error('no shadow host or trigger');
+      }
+      const press = (
+        element: Element,
+        point: {x: number; y: number},
+        button: number,
+      ) => {
+        const init = {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: point.x,
+          clientY: point.y,
+          button,
+          buttons: button === 2 ? 2 : 1,
+        };
+        element.dispatchEvent(
+          new PointerEvent('pointerdown', {...init, pointerType: 'mouse'}),
+        );
+        element.dispatchEvent(new MouseEvent('mousedown', init));
+      };
+      press(target, at, 2);
+      target.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: at.x,
+          clientY: at.y,
+          button: 2,
+          detail: 1,
+        }),
+      );
+      // The right click's microtasks run, as they do after any event.
+      await Promise.resolve();
+      await Promise.resolve();
+      press(host, outside, 0);
+      HTMLElement.prototype.showPopover = show;
+      return count;
+    },
+    {at: trigger, outside: hostPadding},
+  );
+  expect(shows).toBe(1);
+  await expect(page.getByRole('menu')).toBeHidden();
 });
 
 test('a ContextMenu inside a shadow root stays open as its opening long press lifts, and a tap on its host closes it', async ({
