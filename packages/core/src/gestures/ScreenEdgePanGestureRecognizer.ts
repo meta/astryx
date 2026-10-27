@@ -19,11 +19,13 @@
  * Attach it to the edge zone: a thin element along the edge, no wider than
  * `edgeRegion` across it. There a pan from one edge takes the axis across
  * the edge from the browser, which has nothing to scroll in so thin a band,
- * so the pan still decides at its 15 px hysteresis; on any wider view it
- * leaves the browser every touch behavior, so the author's scrolling there
- * is untouched (spec:AST-094 FR18), and decides at 10 px, before the browser
- * commits to a scroll (FR19). A pan from several edges claims each axis only
- * in the zone of the edges it watches on that axis.
+ * so a touch in the band decides at UIKit's 15 px screen-edge hysteresis. On
+ * any wider view, whose `touch-action` cannot claim per touch, it leaves the
+ * browser every touch behavior, so the author's scrolling there is untouched,
+ * and a touch in the band decides at FR19's 10 px like every other claim
+ * (spec:AST-094 FR18, DEC-22). A touch outside every band fails at once. A pan
+ * from several edges claims each axis only in the zone of the edges it watches
+ * on that axis.
  */
 
 import {UIKIT_PAN, UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
@@ -117,9 +119,10 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
         return;
       }
       this.activeEdge = edge;
-      // Off its edge's zone the pan leaves the browser that axis, so it
-      // decides within the 10 px the browser waits before it commits to a
-      // scroll (spec:AST-094 FR19); where it takes the axis, at UIKit's 15.
+      // On an element within the band, which takes the axis across the edge,
+      // a touch decides at UIKit's 15 px; on one that reaches beyond it,
+      // which leaves the browser that axis, at FR19's 10 px, before the
+      // browser commits to a scroll (spec:AST-094 FR18, DEC-22).
       const offZone = !this.isEdgeZone(
         edge === 'left' || edge === 'right' ? 'x' : 'y',
       );
