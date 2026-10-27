@@ -155,20 +155,34 @@ describe('ScreenEdgePanGestureRecognizer', () => {
   });
 });
 
-describe('off the edge zone', () => {
-  it('decides at 10 px, before the browser commits to a scroll (spec:AST-094 FR19)', () => {
+describe('where an in-band touch decides (spec:AST-094 FR18, DEC-22)', () => {
+  it('on an element that reaches beyond the band, at 10 px, before the browser commits to a scroll', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    // A stack container: as wide as the screen, the touch 4 px from its edge.
     h.environment.view = {width: 390, height: 844};
     h.finger(1)
-      .down(10, 300, 0, {recognizers: [edge]})
+      .down(4, 300, 0, {recognizers: [edge]})
       .drag(9, 0, 30, 9);
     expect(edge.state).toBe('possible');
     h.finger(1).drag(1, 0, 10, 1);
     expect(h.log[0]).toMatch(/^edge:began@/);
   });
 
-  it('from several edges, also decides at 10 px off their zones', () => {
+  it('on an element within the band, at 15 px', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    h.environment.view = {width: edge.edgeRegion, height: 844};
+    const hysteresis = UIKIT_SCREEN_EDGE_PAN.hysteresis.value;
+    h.finger(1)
+      .down(4, 300, 0, {recognizers: [edge]})
+      .drag(hysteresis - 1, 0, 30, 14);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(1, 0, 10, 1);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+
+  it('from several edges, at 10 px on an element beyond their bands', () => {
     const h = createHarness();
     const edge = new ScreenEdgePanGestureRecognizer({
       name: 'edge',
@@ -176,8 +190,10 @@ describe('off the edge zone', () => {
     });
     h.environment.view = {width: 390, height: 844};
     h.finger(1)
-      .down(10, 300, 0, {recognizers: [edge]})
-      .drag(10, 0, 30, 10);
+      .down(4, 300, 0, {recognizers: [edge]})
+      .drag(9, 0, 30, 9);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(1, 0, 10, 1);
     expect(h.log[0]).toMatch(/^edge:began@/);
   });
 });
