@@ -23,10 +23,11 @@ import {
 } from '../__tests__/pressState';
 import {
   declaresIndicatorPressOwner,
-  layerPressRulesOutsideCoarse,
-  ownerPressRulesOutsideCoarse,
+  layerPressRulesBehindPointer,
+  ownerPressRulesBehindPointer,
   readIndicatorPressLayer,
   readsAncestorPress,
+  readsIndicatorPress,
 } from '../__tests__/indicatorPressLayer';
 import {controlPressConsts} from '../utils/controlPressLayer.stylex';
 import {CheckboxInput} from './CheckboxInput';
@@ -884,7 +885,7 @@ describe('label theme target', () => {
 });
 
 describe('pressed state', () => {
-  it('paints the pressed overlay over the indicator while the row is pressed', () => {
+  it('paints its press through the press model for every pointer: no `:active` arm over the indicator (FR43)', () => {
     const {container} = render(
       <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
     );
@@ -894,8 +895,11 @@ describe('pressed state', () => {
       throw new Error('the checkbox has no indicator wrapper to press');
     }
     // The owner paints over the resolved indicator, so the treatment survives a
-    // theme replacement that does not forward style props.
-    expect(hasPressedArm(wrapper)).toBe(true);
+    // theme replacement that does not forward style props. A mouse and a pen
+    // press through the same controller as a finger (spec:AST-094 FR11's
+    // fine-pointer profile, FR43), so no `:active` arm paints beside it.
+    expect(hasPressedArm(wrapper)).toBe(false);
+    expect(readsIndicatorPress(wrapper)).toBe(true);
   });
 
   it('does not expose a pressed arm on a disabled checkbox', () => {
@@ -936,7 +940,7 @@ describe('pressed state', () => {
     expect(readsPressStrength(wrapper, '[data-astryx-press="on"]')).toBe(false);
   });
 
-  it('paints the touch press on its own layer over the box and releases it on a control’s clock', () => {
+  it('paints the press on its own layer over the box and releases it on a control’s clock', () => {
     const {container} = render(
       <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
     );
@@ -973,10 +977,11 @@ describe('pressed state', () => {
     expect(readsAncestorPress(wrapper)).toBe(false);
   });
 
-  it('keeps its touch press, release included, behind the coarse pointer', () => {
-    // Touch work leaves a fine pointer's behavior as it is (spec:AST-017
-    // FR59): every rule the layer adds for a press the controller writes,
-    // its release's clock, curve and fill too, is in the coarse media key.
+  it('keeps no press rule behind a pointer query: one press model for every pointer (FR43)', () => {
+    // A mouse, a pen and a finger press through the same controller
+    // (spec:AST-094 FR11's fine-pointer profile, FR43): no rule the layer
+    // adds for a press the controller writes, nor its release's clock, curve
+    // and fill, sits behind a pointer query.
     const {container} = render(
       <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
     );
@@ -986,7 +991,7 @@ describe('pressed state', () => {
     if (wrapper == null || control == null) {
       throw new Error('the checkbox has no indicator wrapper or control');
     }
-    expect(layerPressRulesOutsideCoarse(wrapper)).toEqual([]);
-    expect(ownerPressRulesOutsideCoarse(control)).toEqual([]);
+    expect(layerPressRulesBehindPointer(wrapper)).toEqual([]);
+    expect(ownerPressRulesBehindPointer(control)).toEqual([]);
   });
 });

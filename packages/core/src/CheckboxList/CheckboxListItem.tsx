@@ -5,9 +5,8 @@
 /**
  * @file CheckboxListItem.tsx
  * @input Uses React, CheckboxInput, ListItem, CheckboxListContext,
- *   CheckboxRowPressContext, the shared touch-pointer store and
- *   indicatorPressOwnerStyles (under a coarse primary pointer the row owns
- *   its checkbox's press)
+ *   CheckboxRowPressContext and indicatorPressOwnerStyles (a row that
+ *   delegates its clicks owns its checkbox's press, for every pointer)
  * @output Exports CheckboxListItem component, CheckboxListItemProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
@@ -30,7 +29,6 @@ import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
 import {indicatorPressOwnerStyles} from '../Indicator/indicatorPress.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useIsTouchPointer} from '../utils/touchPointerStore';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
@@ -270,19 +268,14 @@ export function CheckboxListItem({
   const checkboxRef = useRef<HTMLInputElement | null>(null);
   const hasRowInteraction = isInteractive || onClickProp != null;
 
-  // Under a coarse primary pointer, a row that delegates its surface clicks
-  // is the option's one press surface: Item marks it pressable and declares
-  // its press paint, and its own checkbox carries no press marker
-  // (CheckboxRowPressContext), so a finger on the label, the description or
-  // the box itself presses the row, and the box paints the row's press, the
-  // way a radio row's circle does. A fine primary pointer keeps main's
-  // behavior (spec:AST-017 FR59): the box stays its own press owner, so a pen
-  // on a fine-pointer page presses the box, never the row. Every row reads
-  // one shared answer, so a long list adds no touch observer per row
-  // (spec:AST-094 FR24); server and hydrating renders read the fine-pointer
-  // answer (spec:AST-094 FR13).
-  const isTouch = useIsTouchPointer();
-  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+  // A row that delegates its surface clicks is the option's one press
+  // surface, for every pointer (`spec:AST-094` FR11's fine-pointer profile,
+  // FR43): Item marks it pressable and declares its press paint, and its own
+  // checkbox carries no press marker (CheckboxRowPressContext), so a finger,
+  // a mouse or a pen on the label, the description or the box itself presses
+  // the row, and the box paints the row's press, the way a radio row's
+  // circle does. Nothing is read per pointer, so a row adds no observer.
+  const rowOwnsPress = hasRowInteraction && !effectiveDisabled;
   // The row's own press arms (the press's image and release it declares)
   // key on the attribute the touch press controller writes on this row, so
   // the row names itself pressable here too: every file with a press arm

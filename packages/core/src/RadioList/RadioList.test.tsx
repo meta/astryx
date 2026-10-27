@@ -23,7 +23,7 @@ import {
 import {
   declaresIndicatorPressOwner,
   layerPressRulesOutsideCoarse,
-  ownerPressRulesOutsideCoarse,
+  ownerPressRulesBehindPointer,
   readIndicatorPressLayer,
   readsAncestorPress,
 } from '../__tests__/indicatorPressLayer';
@@ -974,10 +974,11 @@ describe('pressed state', () => {
       fillsBoth: true,
     });
     expect(readsPressStrength(wrapper)).toBe(false);
-    // A fine pointer keeps its behavior (spec:AST-017 FR59): the layer's
-    // press, release included, is in the coarse media key.
+    // The circle's layer reads the press, release included, in the coarse
+    // media key, while the row declares it for every pointer (the shared
+    // owner styles, spec:AST-094 FR43).
     expect(layerPressRulesOutsideCoarse(wrapper)).toEqual([]);
-    expect(ownerPressRulesOutsideCoarse(row)).toEqual([]);
+    expect(ownerPressRulesBehindPointer(row)).toEqual([]);
     // The circle answers its own row only, never an outer element's press
     // (architecture:component-style-authoring INV4).
     expect(readsAncestorPress(wrapper)).toBe(false);

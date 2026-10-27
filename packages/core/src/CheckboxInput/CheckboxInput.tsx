@@ -64,7 +64,6 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {CheckboxRowPressContext} from './CheckboxRowPressContext';
 
-const COARSE = '@media (pointer: coarse)';
 /** A control's release (UIButton's), when the checkbox owns the press. */
 const CONTROL_RELEASE = `${controlPressConsts.controlReleaseMs}ms`;
 /** A cell's release (the row's deselect), when a row owns the press. */
@@ -89,14 +88,13 @@ const styles = stylex.create({
   },
   // The owner paints this layer over the resolved indicator, so a theme
   // replacement cannot accidentally drop the component's pressed contract.
-  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
-  // mouse keeps `:active` (read off `indicatorScope`, as the hover tint is);
-  // under a coarse pointer that arm is dropped and the touch press controller
-  // writes `data-astryx-press` on the element that owns the press: the
+  // One press model for every pointer (`spec:AST-094` FR11's fine-pointer
+  // profile, FR43): the press controller writes `data-astryx-press` for a
+  // finger, a mouse and a pen alike, on the element that owns the press: the
   // checkbox's own control or, for the row's own checkbox, a row that owns it
   // (CheckboxRowPressContext).
   //
-  // The touch press is this layer's own: the pressed token at full strength
+  // The press is this layer's own: the pressed token at full strength
   // while the press is on, and a release of the layer's opacity, 1 → 0, on
   // the press's clock (a control's, UIButton's highlight release, when the
   // checkbox owns the press; a cell's, the row's deselect, when a row does).
@@ -106,11 +104,8 @@ const styles = stylex.create({
   // (indicatorPressOwnerStyles) and the layer reads its nearest owner's, so a
   // checkbox inside another owner's content (a radio row, a list row) answers
   // only its own press (`architecture:component-style-authoring` INV4).
-  // Every rule for a press the controller writes, the release's clock, curve
-  // and fill included, is in the coarse media key: touch work leaves a fine
-  // pointer's behavior as it is (spec:AST-017 FR59). Under Reduce Motion the
-  // release is the policy's fade (reducedMotionFadeConsts;
-  // `design:reduced-motion` DR2), like the row's.
+  // Under Reduce Motion the release is the policy's fade
+  // (reducedMotionFadeConsts; `design:reduced-motion` DR2), like the row's.
   indicatorPressOverlay: {
     '::after': {
       content: '""',
@@ -118,42 +113,22 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-inner'],
       pointerEvents: 'none',
-      backgroundColor: {
-        default: 'transparent',
-        [stylex.when.ancestor(':active', indicatorScope)]: {
-          default: colorVars['--color-overlay-pressed'],
-          [COARSE]: 'transparent',
-        },
-      },
-      // An image layer over the colour: an image change is discrete, so no
-      // transition can delay the onset. The owner declares the image and the
-      // release (indicatorPressOwnerStyles); the layer reads them, under a
-      // coarse pointer only.
-      backgroundImage: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_indicator-press-image, none)',
-      },
-      animationName: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_indicator-press-release, none)',
-      },
+      // An image layer: an image change is discrete, so no transition can
+      // delay the onset. The owner declares the image and the release
+      // (indicatorPressOwnerStyles); the layer reads them.
+      backgroundImage: 'var(--_indicator-press-image, none)',
+      animationName: 'var(--_indicator-press-release, none)',
       animationDuration: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: CONTROL_RELEASE,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.duration,
-        },
+        default: CONTROL_RELEASE,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.duration,
       },
       animationTimingFunction: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: controlPressConsts.controlReleaseEase,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.easing,
-        },
+        default: controlPressConsts.controlReleaseEase,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.easing,
       },
-      animationFillMode: {default: null, '@media (pointer: coarse)': 'both'},
+      animationFillMode: 'both',
     },
   },
   // The row's own checkbox, under a row that owns the press
@@ -163,20 +138,14 @@ const styles = stylex.create({
   indicatorRowPressOverlay: {
     '::after': {
       animationDuration: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: CELL_RELEASE,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.duration,
-        },
+        default: CELL_RELEASE,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.duration,
       },
       animationTimingFunction: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: cellPressConsts.cellReleaseEase,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.easing,
-        },
+        default: cellPressConsts.cellReleaseEase,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.easing,
       },
     },
   },

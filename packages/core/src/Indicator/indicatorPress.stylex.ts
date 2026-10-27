@@ -3,7 +3,7 @@
 /**
  * @file indicatorPress.stylex.ts
  * @input StyleX and the pressed overlay token
- * @output indicatorPressOwnerStyles: what an element that owns a touch press
+ * @output indicatorPressOwnerStyles: what an element that owns a press
  *   (a CheckboxInput's control, a CheckboxList or RadioList row) declares for
  *   the layer over its selection mark
  * @position Shared by CheckboxInput, CheckboxListItem and RadioListItem; the
@@ -13,7 +13,9 @@
  * element that owns it, and only that one. Each owner declares the press's
  * image and release on itself: none at rest, and the pressed token at full
  * strength (with, while the press fades, the release) only inside its own
- * press arms under a coarse pointer. A layer reads its nearest owner's
+ * press arms, for every pointer: the press controller marks a mouse's and a
+ * pen's press as it does a finger's (`spec:AST-094` FR11's fine-pointer
+ * profile, FR43). A layer reads its nearest owner's
  * values, so a mark inside another owner's content (a list in a row's
  * content, a checkbox in a radio row) answers its own owner, never the outer
  * one (`architecture:component-style-authoring` INV4).
@@ -41,21 +43,12 @@ export const indicatorPressOwnerStyles = stylex.create({
   owner: {
     '--_indicator-press-image': {
       default: 'none',
-      ':is([data-astryx-press="on"])': {
-        default: 'none',
-        '@media (pointer: coarse)': pressedImage,
-      },
-      ':is([data-astryx-press="fading"])': {
-        default: 'none',
-        '@media (pointer: coarse)': pressedImage,
-      },
+      ':is([data-astryx-press="on"])': pressedImage,
+      ':is([data-astryx-press="fading"])': pressedImage,
     },
     '--_indicator-press-release': {
       default: 'none',
-      ':is([data-astryx-press="fading"])': {
-        default: 'none',
-        '@media (pointer: coarse)': indicatorPressRelease,
-      },
+      ':is([data-astryx-press="fading"])': indicatorPressRelease,
     },
   },
 });

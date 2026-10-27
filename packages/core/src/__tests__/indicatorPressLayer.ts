@@ -4,19 +4,21 @@
  * @file indicatorPressLayer.ts
  * @input The rules the StyleX dev runtime injected into the document
  * @output readIndicatorPressLayer, declaresIndicatorPressOwner,
- *   readsIndicatorPress, readsAncestorPress, layerPressRulesOutsideCoarse and
- *   ownerPressRulesOutsideCoarse: what the layer over a checkbox box or a
+ *   readsIndicatorPress, readsAncestorPress, layerPressRulesOutsideCoarse,
+ *   ownerPressRulesOutsideCoarse, layerPressRulesBehindPointer and
+ *   ownerPressRulesBehindPointer: what the layer over a checkbox box or a
  *   radio circle (its wrapper's `::after`) and the element that owns its
- *   touch press (indicatorPressOwnerStyles) declare
+ *   press (indicatorPressOwnerStyles) declare
  * @position Shared test helper for CheckboxInput, CheckboxList and RadioList
  *   tests
  *
  * The owner of a press declares the press's image and release on itself:
  * none at rest, and the pressed token at full strength (with, while the
  * press fades, the release keyframes) inside its own `data-astryx-press`
- * arms under a coarse pointer. The layer reads those values under a coarse
- * pointer and runs the release on the press's clock. jsdom runs no cascade
- * and no animation, so a test reads the injected rules.
+ * arms, for every pointer (`spec:AST-094` FR11's fine-pointer profile,
+ * FR43). The layer reads those values and runs the release on the press's
+ * clock; a layer still behind the coarse-pointer key reads them there. jsdom
+ * runs no cascade and no animation, so a test reads the injected rules.
  *
  * SYNC: When modified, update this header.
  */
@@ -71,6 +73,10 @@ function valueOf(rule: Rule, property: string): string {
 const isCoarse = (rule: Rule) =>
   rule.conditions.some(condition => condition.includes('pointer: coarse'));
 
+/** Behind any pointer query, coarse or fine. */
+const isPointerGated = (rule: Rule) =>
+  rule.conditions.some(condition => /pointer:\s*(coarse|fine)/.test(condition));
+
 /** An arm on the element's own press attribute, not on an ancestor's. */
 const isOwnArm = (rule: Rule, state: 'on' | 'fading') =>
   rule.selector.includes(`:is([data-astryx-press="${state}"])`) &&
@@ -91,15 +97,13 @@ export interface IndicatorPressLayer {
   readonly fillsBoth: boolean;
 }
 
-/** What the layer over a mark does for a touch press `owner` holds. */
+/** What the layer over a mark does for a press `owner` holds. */
 export function readIndicatorPressLayer(
   layer: Element,
   owner: Element,
 ): IndicatorPressLayer {
   const ownerRules = rulesOf(owner);
-  const layerRules = rulesOf(layer).filter(
-    rule => isLayer(rule) && isCoarse(rule),
-  );
+  const layerRules = rulesOf(layer).filter(isLayer);
   const readsImage = layerRules.some(rule =>
     valueOf(rule, 'background-image').includes(`var(${IMAGE}`),
   );
@@ -112,10 +116,7 @@ export function readIndicatorPressLayer(
     accept: (value: string) => boolean,
   ) =>
     ownerRules.some(
-      rule =>
-        isOwnArm(rule, state) &&
-        isCoarse(rule) &&
-        accept(valueOf(rule, property)),
+      rule => isOwnArm(rule, state) && accept(valueOf(rule, property)),
     );
   return {
     paintsOn: readsImage && sets(IMAGE, 'on', v => v.includes(PRESSED_TOKEN)),
@@ -136,7 +137,7 @@ export function readIndicatorPressLayer(
 /**
  * Does the element own a press for the layer over its mark: the press's
  * image and release declared on itself, none at rest, and anything else only
- * inside its own press arms under a coarse pointer?
+ * inside its own press arms?
  */
 export function declaresIndicatorPressOwner(el: Element): boolean {
   const rules = rulesOf(el);
@@ -152,10 +153,7 @@ export function declaresIndicatorPressOwner(el: Element): boolean {
       rest.length > 0 &&
       rest.every(rule => valueOf(rule, property) === 'none') &&
       set.length > 0 &&
-      set.every(
-        rule =>
-          isCoarse(rule) && (isOwnArm(rule, 'on') || isOwnArm(rule, 'fading')),
-      )
+      set.every(rule => isOwnArm(rule, 'on') || isOwnArm(rule, 'fading'))
     );
   });
 }
@@ -221,6 +219,46 @@ export function ownerPressRulesOutsideCoarse(el: Element): string[] {
     .filter(
       rule =>
         !isCoarse(rule) &&
+        [IMAGE, RELEASE].some(property => {
+          const value = valueOf(rule, property);
+          return value !== '' && value !== 'none';
+        }),
+    )
+    .map(describe);
+}
+
+/**
+ * The layer's press rules (reading the owner's press, or the release's name,
+ * clock, curve and fill) that sit behind a pointer query. One press model
+ * serves every pointer (`spec:AST-094` FR11's fine-pointer profile, FR43),
+ * so for a control on it this is empty.
+ */
+export function layerPressRulesBehindPointer(el: Element): string[] {
+  return rulesOf(el)
+    .filter(
+      rule =>
+        isLayer(rule) &&
+        isPointerGated(rule) &&
+        (valueOf(rule, 'background-image').includes(
+          'var(--_indicator-press-',
+        ) ||
+          rule.selector.includes('data-astryx-press') ||
+          [
+            'animation-name',
+            'animation-duration',
+            'animation-timing-function',
+            'animation-fill-mode',
+          ].some(property => valueOf(rule, property) !== '')),
+    )
+    .map(describe);
+}
+
+/** The owner's press values (anything but none) behind a pointer query. */
+export function ownerPressRulesBehindPointer(el: Element): string[] {
+  return rulesOf(el)
+    .filter(
+      rule =>
+        isPointerGated(rule) &&
         [IMAGE, RELEASE].some(property => {
           const value = valueOf(rule, property);
           return value !== '' && value !== 'none';
