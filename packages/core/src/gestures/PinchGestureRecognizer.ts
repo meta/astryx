@@ -27,7 +27,12 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
-import type {GestureEventContext, GestureTouch, Point} from './types';
+import type {
+  GestureEventContext,
+  GestureTouch,
+  Point,
+  ScrollType,
+} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
 export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<PinchGestureRecognizer> {
@@ -45,6 +50,16 @@ export class PinchGestureRecognizer extends GestureRecognizer {
   constructor(options: PinchGestureRecognizerOptions = {}) {
     super(options);
     this.hysteresis = options.hysteresis ?? UIKIT_PINCH.hysteresis.value;
+  }
+
+  /** @internal The host's brand: a ctrl-wheel drives a pinch (recognizerInternals). */
+  protected get family(): 'pinch' {
+    return 'pinch';
+  }
+
+  /** A pinch takes a trackpad's pinch and ctrl and a mouse wheel (FR43). */
+  protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
+    return ['continuous', 'discrete'];
   }
 
   /** Current span over the span the fingers started at. */
