@@ -1320,6 +1320,12 @@ test('a touch landing 41 px from the edge is outside the band: the edge pan neve
   ).toBeLessThan(600);
 });
 
+/** A watcher's transition, with how far the list had scrolled then. */
+interface WatchTransition {
+  to: string;
+  scrollTop: number;
+}
+
 test('a watcher follows a touch the browser scrolls with to the lift, and cancels none of its moves (spec:AST-094 FR20)', async ({
   page,
   browserName,
@@ -1337,10 +1343,8 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
         <div style="height: 1200px">more rows</div>
       </div>`;
     const list = document.getElementById('list') as HTMLElement;
-    const states: Array<{to: string; scrollTop: number}> = [];
-    (
-      window as unknown as {__watch: Array<{to: string; scrollTop: number}>}
-    ).__watch = states;
+    const states: WatchTransition[] = [];
+    (window as unknown as {__watch: WatchTransition[]}).__watch = states;
     const watcher = new PanGestureRecognizer({
       name: 'watch',
       direction: 'vertical',
@@ -1362,7 +1366,7 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
     () =>
       (
         window as unknown as {
-          __watch: Array<{to: string; scrollTop: number}>;
+          __watch: WatchTransition[];
         }
       ).__watch,
   );
