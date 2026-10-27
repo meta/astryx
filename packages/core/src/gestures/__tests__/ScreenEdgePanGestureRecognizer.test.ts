@@ -132,6 +132,40 @@ describe('ScreenEdgePanGestureRecognizer', () => {
   });
 });
 
+describe('an in-band touch on a wider element (spec:AST-094 FR18, DEC-13)', () => {
+  it('decides at 15 px whatever the element\u2019s width, and tracks the travel past it', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+    // A stack container: as wide as the screen, the touch 4 px from its edge.
+    h.environment.view = {width: 390, height: 844};
+    const hysteresis = UIKIT_SCREEN_EDGE_PAN.hysteresis.value;
+    h.finger(1)
+      .down(4, 300, 0, {recognizers: [edge]})
+      .drag(hysteresis - 1, 0, 30, 14);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(1, 0, 10, 1);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+    h.finger(1).drag(25, 0, 50, 5);
+    expect(edge.translation().x).toBeCloseTo(40 - hysteresis, 5);
+  });
+
+  it('from several edges too', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left', 'right'],
+    });
+    h.environment.view = {width: 390, height: 844};
+    const hysteresis = UIKIT_SCREEN_EDGE_PAN.hysteresis.value;
+    h.finger(1)
+      .down(4, 300, 0, {recognizers: [edge]})
+      .drag(hysteresis - 1, 0, 30, 14);
+    expect(edge.state).toBe('possible');
+    h.finger(1).drag(1, 0, 10, 1);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+});
+
 describe('off the edge zone', () => {
   it('decides at 10 px, before the browser commits to a scroll (spec:AST-094 FR19)', () => {
     const h = createHarness();
