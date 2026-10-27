@@ -36,7 +36,7 @@
  * suppresses it, through the gesture host (gestures/selectionLock.ts).
  *
  * Its one touch-only listener, `touchcancel`, is on only while the primary
- * pointer is coarse (gestures/coarsePointer.ts, `spec:AST-094` FR24).
+ * pointer is coarse (coarsePointer.ts, `spec:AST-094` FR24).
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
  * utils/interactionOverlay.stylex.ts and pressFeedback.test.ts.
@@ -55,7 +55,7 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   pressGestureStep,
 } from './pressGesture';
-import {isCoarsePointer, watchCoarsePointer} from '../gestures/coarsePointer';
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
