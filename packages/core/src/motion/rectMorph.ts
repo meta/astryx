@@ -451,12 +451,14 @@ export function createRectMorph(
   };
 
   // Leaves the element as laid out: identity, and none of the morph's inline
-  // properties (an opacity only when a path animated it).
+  // properties (an opacity only when a path animated it). At rest it needs no
+  // compositing layer, so the values go in without promoting it.
   const restoreElement = () => {
     animator.set(
       ownsOpacity
         ? {x: 0, y: 0, scaleX: 1, scaleY: 1, opacity: 1}
         : {x: 0, y: 0, scaleX: 1, scaleY: 1},
+      {promote: false},
     );
     clearInline();
     if (ownsOpacity) {
@@ -554,6 +556,8 @@ export function createRectMorph(
     endExit();
     box = start.box;
     ownsOpacity ||= start.opacityAt != null;
+    // A dismissal on a copy let the element go (dismiss, below).
+    animator.attach(element);
     element.style.setProperty('transform-origin', '0px 0px');
     animator.set(startValues(start, opacity));
     const handle = animator.play(
@@ -597,11 +601,18 @@ export function createRectMorph(
     presenting = null;
     const onElement = target === element;
     if (onElement) {
+      // A dismissal on a copy may have let the element go (below).
+      animator.attach(element);
       box = back.box;
       ownsOpacity ||= back.opacityAt != null;
     } else {
-      // The element is hidden as it closes: leave it as laid out.
+      // The element is hidden as it closes: leave it as laid out, and let go
+      // of the layer its presentation promoted, in this task. Kept, the
+      // promotion would end its linger after the element's last motion: a
+      // style write on an element that no longer paints, landing inside the
+      // dismissal's frames. The next present attaches the element again.
       restoreElement();
+      animator.attach(null);
     }
     const closing = onElement
       ? animator
