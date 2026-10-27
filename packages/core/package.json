@@ -818,6 +818,11 @@
       "source": "./src/Markdown/remark.ts",
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
+    },
+    "./internal/touch": {
+      "source": "./src/internal/touch.ts",
+      "types": "./dist/internal/touch.d.ts",
+      "default": "./dist/internal/touch.js"
     }
   },
   "files": [
