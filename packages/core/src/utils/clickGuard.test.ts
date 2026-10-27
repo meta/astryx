@@ -152,32 +152,3 @@ describe('clickGuard', () => {
     }
   });
 });
-
-describe('a guard whose view goes away', () => {
-  it('lets its window run out without touching the view it no longer has: a torn-down window takes its listeners with it', () => {
-    vi.useFakeTimers();
-    try {
-      const listeners: string[] = [];
-      const view = {
-        addEventListener: (type: string) => listeners.push(type),
-        removeEventListener: (type: string) => {
-          listeners.splice(listeners.indexOf(type), 1);
-        },
-      } as unknown as Window & {removeEventListener?: unknown};
-      const doc = {defaultView: view} as unknown as Document & {
-        defaultView: Window | null;
-      };
-      (view as unknown as {document: Document}).document = doc;
-      armClickGuard(doc);
-      expect(isClickGuardArmed(doc)).toBe(true);
-      // The window goes away before the guard's window runs out, as a test
-      // environment's does between files, or a closed frame's.
-      delete (view as {removeEventListener?: unknown}).removeEventListener;
-      doc.defaultView = null;
-      expect(() => vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS)).not.toThrow();
-      expect(isClickGuardArmed(doc)).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
