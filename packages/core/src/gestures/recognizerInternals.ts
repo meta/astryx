@@ -30,6 +30,7 @@ export interface RecognizerInternals {
   requiresFailureOf(other: GestureRecognizer): boolean;
   allowsSimultaneous(other: GestureRecognizer): boolean;
   shouldBegin(): boolean;
+  keepsTouch(touchId: number): boolean;
   wantsTouch(touch: GestureTouch): boolean;
   deliverBegan(
     touches: ReadonlyArray<GestureTouch>,
