@@ -28,6 +28,13 @@
 
 import {UIKIT_PAN, UIKIT_SCREEN_EDGE_PAN} from '../motion/uikit/gestures';
 import {ALL_NATIVE_TOUCH, type NativeTouchBehavior} from './GestureRecognizer';
+
+/**
+ * How far past `edgeRegion` a view still counts as the edge zone, px: layout
+ * snaps sizes to 1/64 px, so a strip authored at the region measures a hair
+ * wider; half a pixel takes that and nothing a pixel wider.
+ */
+const EDGE_ZONE_TOLERANCE = 0.5;
 import {
   PanGestureRecognizer,
   type PanGestureRecognizerOptions,
@@ -130,7 +137,9 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
 
   /**
    * Whether the view is the edge zone: no wider than `edgeRegion` along the
-   * axis across its edge. A view that cannot be measured is not.
+   * axis across its edge, within layout's rounding (a strip authored at the
+   * 40.2 px region lays out at 40.203 px, on 1/64 px). A view that cannot be
+   * measured is not.
    */
   private isEdgeZone(across: 'x' | 'y'): boolean {
     const size = this.environment.viewSize?.(this.view);
@@ -138,7 +147,7 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
       return false;
     }
     const extent = across === 'x' ? size.width : size.height;
-    return extent > 0 && extent <= this.edgeRegion;
+    return extent > 0 && extent <= this.edgeRegion + EDGE_ZONE_TOLERANCE;
   }
 
   protected override reset(): void {
