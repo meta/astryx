@@ -1315,3 +1315,46 @@ test('a touch landing 41 px from the edge is outside the band: the edge pan neve
     ),
   ).toBeLessThan(600);
 });
+
+test('a watcher follows a touch the browser scrolls with to the lift, and cancels none of its moves (spec:AST-094 FR20)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    'needs native scrolling from injected touches (Mobile Safari on the simulator)',
+  );
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {host, PanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="list" style="height: 300px; overflow-y: auto">
+        <div id="row" style="height: 80px; background: #cfc">row</div>
+        <div style="height: 1200px">more rows</div>
+      </div>`;
+    const states: string[] = [];
+    (window as unknown as {__watch: string[]}).__watch = states;
+    const watcher = new PanGestureRecognizer({
+      name: 'watch',
+      direction: 'vertical',
+      claimsTouches: false,
+    });
+    watcher.addTransitionListener((_current, _from, to) => states.push(to));
+    host.attach(document.getElementById('list') as HTMLElement, watcher, {
+      manageStyle: false,
+    });
+  });
+  await logTouchMoves(page);
+  const at = await center(page, 'row');
+  await driver.play(drag(at, {x: at.x, y: at.y - 120}, 30));
+  await page.waitForTimeout(100);
+  const states = await page.evaluate(
+    () => (window as unknown as {__watch: string[]}).__watch,
+  );
+  // The browser scrolled the list: the watcher took nothing from it.
+  expect(await scrollTop(page, 'list')).toBeGreaterThan(20);
+  expect((await readTouchMoves(page)).some(Boolean)).toBe(false);
+  // And it followed the scroll from its start to the lift.
+  expect(states).toContain('began');
+  expect(states.at(-1)).toBe('ended');
+});
