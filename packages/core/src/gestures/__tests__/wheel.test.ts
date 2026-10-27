@@ -328,6 +328,27 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states.filter(state => state === 'began')).toHaveLength(2);
   });
 
+  it('leaves a wheel every taker declined to the page from its first step, as with no gesture system: a pan whose shouldReceiveTouch refuses it prevents nothing (spec:AST-094 FR43, FR19)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      // A Toast declines a wheel a scroller under it can still take.
+      shouldReceiveTouch: () => false,
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    const prevented = [0, 16, 32, 48, 64, 80].map(
+      time => wheel(box, {dx: 16, time}).defaultPrevented,
+    );
+    expect(prevented).toEqual([false, false, false, false, false, false]);
+    expect(states).toEqual([]);
+    clock.runDue(300);
+    // A notch, too.
+    expect(wheel(box, {dx: 1, mode: 1, time: 400}).defaultPrevented).toBe(
+      false,
+    );
+  });
+
   it('takes no wheel for a pan whose caller allows no scroll type: its element gets no wheel listener, and the page scrolls', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
