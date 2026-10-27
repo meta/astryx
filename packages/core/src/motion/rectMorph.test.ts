@@ -982,6 +982,21 @@ describe('createRectMorph', () => {
       expect(live(element, 'translate').length).toBe(0);
     });
 
+    it('keeps the animator’s dip for an element that only moves, when the caller says so', () => {
+      // A sub-menu's parent card stays visible and only moves: treated as an
+      // entrance it would cut out and fade in, so its caller asks for a move,
+      // and the animator dips it: out, the travel lands, back in.
+      const {element, morph} = setup({reducedMotion: true, coarse: true});
+      const path = lerpPath(SQUARE, BOX);
+      morph.present(path, SPRING, {crossfadeAs: 'move'});
+      const [dip] = live(element, 'opacity');
+      expect(dip).toBeDefined();
+      expect(Number(dip.keyframes[0].opacity)).toBeCloseTo(1, 6);
+      expect(
+        Math.min(...dip.keyframes.map(frame => Number(frame.opacity))),
+      ).toBeLessThan(0.5);
+    });
+
     it('on any other pointer, it completes at once', () => {
       const {element, morph} = setup({reducedMotion: true, coarse: false});
       morph.present(lerpPath(SQUARE, BOX, {opacity: [0, 1]}), SPRING);
