@@ -34,6 +34,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 // A swizzled copy of core's TabList carrying the proposed travelling indicator.
 import {
@@ -43,6 +44,7 @@ import {
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {Token} from '@astryxdesign/core/Token';
+import {themeProps} from '@astryxdesign/core/utils';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {useMotionLab} from './MotionLabStore';
@@ -932,6 +934,61 @@ export function OriginRig({kind}: {kind: 'zero' | 'centre' | 'anchored'}) {
           : kind === 'centre'
             ? 'Right scale value, wrong origin: the surface grows out of its own middle rather than out of the control that opened it.'
             : 'Anchored to the trigger corner, which is what the published page already asks for.'}
+      </Hint>
+    </VStack>
+  );
+}
+
+// --- progress fill -----------------------------------------------------------
+
+/** The values a fast upload might report, one per tick. */
+const FILL_STEPS = [12, 58, 34, 86] as const;
+
+/**
+ * The determinate fill on a data change. Before is the real ProgressBar,
+ * which transitions `width` (a layout property, every frame of every tick).
+ * After is a sandbox copy of its track and fill that moves the same fill with
+ * `transform: scaleX()` on the same token and curve, so only the technique
+ * differs. It carries ProgressBar's theming targets (root, track and fill),
+ * so the theme paints it as it paints the real bar.
+ */
+export function ProgressFillRig({mode}: {mode: Mode}) {
+  const [step, setStep] = useState(0);
+  useLoop(() => setStep(current => (current + 1) % FILL_STEPS.length), 1600);
+  const value = FILL_STEPS[step];
+
+  return (
+    <VStack gap={2} {...stylex.props(sx.full)}>
+      {mode === 'before' ? (
+        <ProgressBar label="Uploading" value={value} hasValueLabel />
+      ) : (
+        <div {...themeProps('progress-bar', {variant: 'accent'})}>
+          <VStack gap={1}>
+            <HStack gap={2} hAlign="between">
+              <Text>Uploading</Text>
+              <Text color="secondary">{value}%</Text>
+            </HStack>
+            <div
+              {...themeProps('progress-bar-track')}
+              className={`astryx-progress-bar-track ${styles.fillTrack}`}
+              role="progressbar"
+              aria-label="Uploading"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={value}>
+              <div
+                {...themeProps('progress-bar-fill', {variant: 'accent'})}
+                className={`astryx-progress-bar-fill ${styles.fillScale}`}
+                style={{transform: `scaleX(${value / 100})`}}
+              />
+            </div>
+          </VStack>
+        </div>
+      )}
+      <Hint>
+        {mode === 'before'
+          ? 'Width is a layout property: every frame of every tick re-lays out the bar. A fast upload ticks often enough to behave like a layout loop.'
+          : 'The same fill on transform: scaleX, so it runs on the compositor. The cost shows at the ends: the rounded caps squash at small values, which is why this needs an exception or a different structure before it ships.'}
       </Hint>
     </VStack>
   );

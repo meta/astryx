@@ -74,7 +74,7 @@ export function MotionControlRail() {
 
   return (
     <HStack gap={3} vAlign="center" wrap="wrap" {...stylex.props(sx.rail)}>
-      <HStack gap={1.5} vAlign="center">
+      <HStack gap={1.5} vAlign="center" wrap="wrap">
         <Text type="supporting" color="secondary">
           Speed
         </Text>
