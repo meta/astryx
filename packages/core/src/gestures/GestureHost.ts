@@ -1645,7 +1645,9 @@ export class GestureHost {
 
   private readonly onTouchStart = (event: TouchEvent): void => {
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     if (this.fingerTargets.length > 1) {
@@ -1751,7 +1753,9 @@ export class GestureHost {
 
   private readonly onTouchMove = (event: TouchEvent): void => {
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     this.dropFingersNotDown(event);
@@ -1901,7 +1905,9 @@ export class GestureHost {
   private readonly onTouchEnd = (event: TouchEvent): void => {
     this.releaseArmedPress();
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     this.dropFingersNotDown(event);
@@ -1979,7 +1985,9 @@ export class GestureHost {
   private readonly onTouchCancel = (event: TouchEvent): void => {
     this.releaseArmedPress();
     this.noteFingersDown(event);
-    if (!this.takeEvent(event)) {
+    // Where the host reads a finger from its pointer events (no ontouchstart,
+    // as after touch emulation turns on), its Touch Events would track it twice.
+    if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
     }
     const listed = touchesOf(event.changedTouches);
