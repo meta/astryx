@@ -354,6 +354,21 @@ export const CONTEXT_MENU_DISMISS_SPRING = {
 } as const;
 
 /**
+ * Context menu: the menu's entrance beside the lifted preview and the preview
+ * shadow's rise and fade (the preview's growth and the backdrop's fade take
+ * the lift spring above).
+ * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+ *   iPhone 17 Pro, per-frame morph and platter layers, Oct 23 2026: the menu
+ *   content's opacity, blur and scale, the morph container's centre and the
+ *   preview shadow's opacity each fit (0.30, 0.80), rms ≤ 0.001; the issued
+ *   UIViewSpringAnimationBehaviorSettings are (0.8, 0.3)
+ */
+export const CONTEXT_MENU_MORPH_SPRING = {
+  response: 0.3,
+  dampingRatio: 0.8,
+} as const;
+
+/**
  * What UIKit plays for a menu with Reduce Motion on: critically damped,
  * slower, no overshoot. A reference reading of UIKit only, never played:
  * under reduced motion no core transition springs (`design:reduced-motion`
@@ -472,6 +487,7 @@ export const springs = {
   subMenuBack: SUB_MENU_BACK_SPRING,
   contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
+  contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
   menuReducedMotion: MENU_REDUCED_MOTION_SPRING,
   switchThumbMove: SWITCH_THUMB_MOVE_SPRING,
   switchThumbStretch: SWITCH_THUMB_STRETCH_SPRING,
@@ -497,6 +513,9 @@ const SPRING_ROLES = {
   menuClose: MENU_CLOSE_SPRING,
   subMenuOpen: SUB_MENU_OPEN_SPRING,
   subMenuBack: SUB_MENU_BACK_SPRING,
+  contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
+  contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
+  contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
 };
 
 /**
