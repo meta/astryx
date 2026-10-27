@@ -21,6 +21,7 @@ import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
 import type {SelectionLock} from '../GestureRecognizer';
+import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {lockSelection} from '../selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
@@ -206,6 +207,26 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
+  it("measures a screen-edge pan's view, so an edge-zone strip takes the axis at UIKit's 15 px, not 10 (spec:AST-094 FR18)", () => {
+    const {strip} = mount('<div id="strip"></div>');
+    strip.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 0, y: 0, width: 40, height: 800});
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    detachers.push(host.attach(strip, pan));
+    const down = {id: 1, x: 5, y: 300};
+    touch('touchstart', strip, [down], [down], 0);
+    const at14 = {...down, x: 19};
+    touch('touchmove', strip, [at14], [at14], 16);
+    expect(pan.state).toBe('possible');
+    const at15 = {...down, x: 20};
+    touch('touchmove', strip, [at15], [at15], 32);
+    expect(pan.state).toBe('began');
+    touch('touchend', strip, [at15], [], 48);
+  });
+
   it('tells a recognizer tracking a finger about a second finger on plain page content, and leaves that finger to the page (spec:AST-094 FR28)', () => {
     const {box} = mount('<div id="box"></div><p id="page">text</p>');
     const page = document.getElementById('page')!;
@@ -3021,5 +3042,50 @@ describe("inputMode 'pointer-events'", () => {
     pointer('pointerup', box, {pointerType: 'touch', x: 10, y: 10, time: 820});
     touch('touchend', box, [finger], [], 820);
     expect(states).toContain('ended');
+  });
+
+  it("cancels a claimed finger's touchmove, matching its touches to its pointer", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pointerHost = new GestureHost(document, {
+      clock,
+      inputMode: 'pointer-events',
+      isPrimaryPointerCoarse: () => true,
+    });
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(pointerHost.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    const finger = {id: 7, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    // Before the pan claims, the browser keeps the move.
+    const early = {...finger, x: 14};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 14,
+      y: 10,
+      buttons: 1,
+      time: 8,
+    });
+    expect(touch('touchmove', box, [early], [early], 8).defaultPrevented).toBe(
+      false,
+    );
+    // Past its hysteresis the pan owns the finger: its touchmoves are cancelled.
+    const claimed = {...finger, x: 40};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 40,
+      y: 10,
+      buttons: 1,
+      time: 32,
+    });
+    expect(pan.state).toBe('began');
+    expect(
+      touch('touchmove', box, [claimed], [claimed], 32).defaultPrevented,
+    ).toBe(true);
   });
 });
