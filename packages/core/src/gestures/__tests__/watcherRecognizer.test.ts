@@ -158,6 +158,54 @@ describe('a recognizer that never claims (a watcher)', () => {
     expect(passivity(onButton, 'touchend')).toEqual([false]);
   });
 
+  it('alone, leaves the host only passive document and window listeners; a claiming recognizer brings the cancelable touchend, contextmenu and click (spec:AST-094 FR20)', () => {
+    document.body.innerHTML = '<div id="page"></div><div id="strip"></div>';
+    const page = document.getElementById('page') as HTMLElement;
+    const strip = document.getElementById('strip') as HTMLElement;
+    const host = new GestureHost(document, {clock: new ManualClock()});
+    const active = () => {
+      const listed: string[] = [];
+      for (const [target, spy] of [
+        ['document', onDocument],
+        ['window', onWindow],
+      ] as const) {
+        for (const [type, , options] of spy.mock.calls) {
+          if (typeof options === 'object' && options.passive === false) {
+            listed.push(`${target} ${type}`);
+          }
+        }
+      }
+      return listed;
+    };
+    const onDocument = vi.spyOn(document, 'addEventListener');
+    const onWindow = vi.spyOn(window, 'addEventListener');
+    detach.push(
+      host.attach(
+        page,
+        new PanGestureRecognizer({
+          name: 'watcher',
+          direction: 'vertical',
+          claimsTouches: false,
+        }),
+        {manageStyle: false},
+      ),
+    );
+    expect(active()).toEqual([]);
+    detach.push(
+      host.attach(
+        strip,
+        new PanGestureRecognizer({name: 'claimer', direction: 'horizontal'}),
+      ),
+    );
+    // At this layer every host listener comes through the shared input
+    // stream (utils/inputStream.ts), on the window's capture phase.
+    expect(active().sort()).toEqual([
+      'window click',
+      'window contextmenu',
+      'window touchend',
+    ]);
+  });
+
   it('leaves the browser every touch behavior: its direction writes no touch-action', () => {
     document.body.innerHTML = '<div id="list"></div><div id="row"></div>';
     const list = document.getElementById('list') as HTMLElement;
