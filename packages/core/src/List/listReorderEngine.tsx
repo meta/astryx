@@ -71,6 +71,7 @@ import {
 } from '../hooks/useAnnounce';
 import {useTranslator, type TranslatorFn} from '../i18n/useTranslator';
 import type {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
+import {VelocityTracker} from '../gestures/VelocityTracker';
 import {reorder} from '../motion/uikit/reorder';
 import {
   animatorFor,
@@ -426,6 +427,11 @@ interface PendingDrop {
   readonly dragged: number;
   /** Where the preview was at the drop: the dragged row glides from there. */
   readonly droppedTop: number;
+  /**
+   * The release's y velocity, px/s: the dragged row's glide starts at it
+   * (spec:AST-094 FR6, FR38).
+   */
+  readonly velocity: number;
   readonly restore: RowRestore;
 }
 
@@ -511,6 +517,11 @@ export interface ReorderGestureEvent {
   readonly state: 'began' | 'changed' | 'ended' | 'cancelled';
   /** The finger's (or pointer's) y in the viewport. */
   readonly y: number;
+  /**
+   * At a release, the finger's (or pointer's) y velocity in px/s, which the
+   * dropped row's glide starts at (spec:AST-094 FR6, FR38).
+   */
+  readonly velocity?: number;
 }
 
 /** A long press's state as a reorder gesture's; null while it waits. */
@@ -833,6 +844,9 @@ export class ListReorderController implements ListReorderSession {
       this.draggedHandle = null;
       const {pointerId, clientX: x, clientY: y} = event;
       let isDragging = false;
+      // The pointer's velocity, for the glide a release hands it to.
+      const velocity = new VelocityTracker();
+      velocity.add(x, y, event.timeStamp);
       const end = () => {
         list.removeEventListener('pointermove', onMove);
         list.removeEventListener('pointerup', onUp);
@@ -849,6 +863,7 @@ export class ListReorderController implements ListReorderSession {
         if (move.pointerId !== pointerId) {
           return;
         }
+        velocity.add(move.clientX, move.clientY, move.timeStamp);
         if (!isDragging) {
           if (
             Math.hypot(move.clientX - x, move.clientY - y) < MOUSE_DRAG_SLOP
@@ -867,7 +882,12 @@ export class ListReorderController implements ListReorderSession {
         }
         end();
         if (isDragging) {
-          this.gesture(null, {state: 'ended', y: up.clientY});
+          velocity.add(up.clientX, up.clientY, up.timeStamp);
+          this.gesture(null, {
+            state: 'ended',
+            y: up.clientY,
+            velocity: velocity.velocity(up.timeStamp).y,
+          });
         }
       };
       const onCancel = (cancel: PointerEvent) => {
@@ -905,6 +925,8 @@ export class ListReorderController implements ListReorderSession {
       return () => {};
     }
     let held: HTMLElement | null = null;
+    // The finger's velocity, for the glide a release hands it to.
+    const velocity = new VelocityTracker();
     return attachTouchHold(
       list,
       target => {
@@ -918,11 +940,21 @@ export class ListReorderController implements ListReorderSession {
         const state = gestureStateOf(recognizer);
         if (state === 'began') {
           this.draggedHandle = held;
+          velocity.reset();
+        }
+        // One sample per event, at the event's time.
+        const touch = recognizer.trackedTouches[0];
+        if (touch != null && state != null && state !== 'cancelled') {
+          velocity.add(touch.x, touch.y, touch.time);
         }
         if (state != null) {
           this.gesture(state === 'began' ? this.rowOf(held) : null, {
             state,
             y: recognizer.location().y,
+            velocity:
+              state === 'ended' && touch != null
+                ? velocity.velocity(touch.time).y
+                : undefined,
           });
         }
       },
@@ -943,7 +975,7 @@ export class ListReorderController implements ListReorderSession {
         this.track(event.y);
         break;
       case 'ended':
-        this.drop();
+        this.drop(event.velocity ?? 0);
         break;
       case 'cancelled':
         this.cancel();
@@ -1196,8 +1228,11 @@ export class ListReorderController implements ListReorderSession {
     session.step = 0;
   }
 
-  /** The drop: the row springs into its position and the move is reported. */
-  private drop(): void {
+  /**
+   * The drop: the move is reported, and on its commit the row glides into
+   * its place, starting at the release's y `velocity` in px/s.
+   */
+  private drop(velocity: number): void {
     const session = this.session;
     if (session == null) {
       return;
@@ -1237,6 +1272,7 @@ export class ListReorderController implements ListReorderSession {
       tops: session.tops,
       dragged,
       droppedTop,
+      velocity,
       restore: session.restore,
     };
     options.onReorder({key, to: position});
@@ -1469,10 +1505,21 @@ export class ListReorderController implements ListReorderSession {
       if (Math.abs(shift) < MIN_MOVE_PX) {
         continue;
       }
-      if (this.animates) {
-        // Every row's place after the drop is its new layout place, so each
-        // running spring (the drop's settle, a row's slide) goes on to 0 from
-        // the shifted value.
+      if (this.animates && index === pending.dragged) {
+        // The dragged row glides from where its preview was dropped into its
+        // new layout place, starting at the release's velocity
+        // (spec:AST-094 FR6, FR38).
+        touchMotion.glide(
+          element,
+          shift,
+          touchMotion.glideBase(list),
+          at,
+          pending.velocity,
+        );
+      } else if (this.animates) {
+        // Every other row's place after the drop is its new layout place, so
+        // its running spring (a row's glide) goes on to 0 from the shifted
+        // value, or the glide starts from rest.
         touchMotion.follow(element, shift, touchMotion.glideBase(list), at);
       } else {
         animatorFor(element).set({y: 0});

@@ -10,7 +10,8 @@
  *   hold, which picks up a row from its handle under a finger, and
  *   `touchMotion`, UIKit's motion for the rows a reorder moves under a finger
  *   (the slides' spring under the list's theme, the slides, the drop's
- *   settle, the way home, and the continuation across the commit). It
+ *   glide at the release's velocity, the way home, and the continuation
+ *   across the commit). It
  *   registers the reorder table's motion role before its first motion
  *   (`registerReorderTable`)
  * @position Imported by List/listReorderEngine.tsx alone: what the reorder
@@ -127,14 +128,24 @@ export const touchMotion = {
   ): void {
     void animateRow(element, {y}, spring, {at});
   },
-  /** The dropped row springs from rest to `y`, whatever the release velocity. */
-  settle(
+  /**
+   * The dropped row glides from where its preview was, `shift` from its new
+   * place, to that place on `spring`, starting at the release's y `velocity`
+   * in px/s (spec:AST-094 FR6, FR38); its offset goes once it arrives.
+   */
+  glide(
     element: HTMLElement,
-    y: number,
+    shift: number,
     spring: SpringDescription,
     at: number,
+    velocity: number,
   ): void {
-    void animateRow(element, {y}, spring, {at, velocity: {y: 0}});
+    animatorFor(element).rebase({y: shift}, {at});
+    releaseOnArrival(
+      element,
+      animateRow(element, {y: 0}, spring, {at, velocity: {y: velocity}})
+        .finished,
+    );
   },
   /**
    * A row goes back to its place on `spring` (the dragged row from rest),
