@@ -30,7 +30,11 @@ import {reorder} from '../motion/uikit/reorder';
 export interface ReorderRow {
   readonly top: number;
   readonly height: number;
-  /** A row that cannot move and that other rows cannot cross. */
+  /**
+   * A row with no handle, so no drag starts from it: a run of them at either
+   * end of the list bounds a drag, and one in the middle is passed over
+   * (spec:AST-103 FR1).
+   */
   readonly isFixed: boolean;
 }
 
