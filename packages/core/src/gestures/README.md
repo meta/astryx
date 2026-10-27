@@ -244,7 +244,9 @@ presses nothing.
   never mixes a pen with a finger (a recognizer takes one kind of pointer
   at a time) (FR43). A press tracker takes a mouse press as a press, with
   the fine-pointer profile: it paints at once, inside a scroller too, and
-  the scroll brake is a finger's only (FR11, DEC-21). A mouse or a pen drag
+  the scroll brake is a finger's only (FR11, DEC-21). A right click, a pen's
+  barrel button and a ctrl-click on macOS (its context click) start no press
+  (`isPrimaryClick`, `../utils/primaryClick.ts`). A mouse or a pen drag
   that a recognizer claims takes no text selection from then on: the
   selection the drag started goes, and the claiming elements refuse one
   until the lift (FR41); a click keeps its selection. The host follows the

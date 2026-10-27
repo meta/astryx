@@ -160,6 +160,7 @@ import {
   withoutClickGuard,
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
+import {isPrimaryClick} from '../utils/primaryClick';
 import {lockDragSelection, locksSelectionFor} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
@@ -1128,7 +1129,7 @@ export class GestureHost {
     if (
       this.isInstalled ||
       !isPointerKind(press.pointerType) ||
-      (press.pointerType === 'mouse' && press.button !== 0)
+      (press.pointerType === 'mouse' && !isPrimaryClick(press))
     ) {
       return;
     }
@@ -2192,7 +2193,9 @@ export class GestureHost {
       });
       return;
     }
-    if (event.pointerType === 'mouse' && event.button !== 0) {
+    // A right click, or a ctrl-click on macOS (its context click), starts no
+    // press (FR43).
+    if (event.pointerType === 'mouse' && !isPrimaryClick(event)) {
       return;
     }
     const target = this.presentedTarget(
