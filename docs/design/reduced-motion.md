@@ -87,8 +87,9 @@ Content that moves with the person's own pointer or finger during a drag
 follows it as direct manipulation and is not a DR1 transition, and neither is
 the momentum that continues a throw (DR2). A transition a
 component starts when a touch drag is released, such as a swiped row sliding
-out or returning (`spec:AST-057` FR5), cross-fades as DR2 says, because a
-finger started it. Any other transition, such as one sheet handing off to
+out or returning after a finger's swipe (`spec:AST-057` FR5), cross-fades as
+DR2 says, because a finger started it; one a trackpad started follows DR2 on
+a coarse primary pointer and DR3 otherwise. Any other transition, such as one sheet handing off to
 another (`component:BottomSheetSwitcher` FR3), follows DR2 on a coarse primary
 pointer and DR3 otherwise.
 
@@ -113,7 +114,7 @@ No normative assets are included.
 
 ## Component contract links
 
-- `spec:AST-057` FR5 implements DR2 for a swiped row's slide out,
+- `spec:AST-057` FR5 implements DR2 and DR3 for a swiped row's slide out,
   spring back, and hold-out.
 - `component:BottomSheetSwitcher` FR3 and ORD1 implement DR2 and DR3 for a
   handoff between sheets.
