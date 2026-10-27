@@ -25,9 +25,12 @@
 
 import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
-import {attachContextRequest} from '../gestures/contextRequest';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {dataAttr} from '../naming';
+import {
+  attachContextMenuRequests,
+  type ContextMenuForwarded,
+} from './contextMenuRequests';
 import {
   ContextMenuView,
   type ContextMenuAttachedHandle,
@@ -221,7 +224,6 @@ export function createInternalContextMenu(
   let seq = 0;
   let isOpen = false;
   let isDestroyed = false;
-  let detachRequest: () => void = () => {};
 
   // A child of the body, not of the element: an event inside the menu never
   // passes through the element on its way to the document.
@@ -255,7 +257,7 @@ export function createInternalContextMenu(
     root.render(internals.wrap != null ? internals.wrap(menu) : menu);
   };
 
-  const forward = (request: Forwarded['request']) => {
+  const forward = (request: ContextMenuForwarded) => {
     if (isDestroyed) {
       return;
     }
@@ -264,22 +266,19 @@ export function createInternalContextMenu(
     render();
   };
 
-  const attach = () => {
-    detachRequest();
-    detachRequest = attachContextRequest(element, {
-      onRequest: request => forward({kind: request.kind, point: request.point}),
-      isEnabled: () => !isDestroyed && options.isDisabled !== true,
-    });
-  };
-  attach();
+  const requests = attachContextMenuRequests(
+    element,
+    {isDisabled: options.isDisabled},
+    forward,
+  );
   render();
 
   return {
     open(at) {
-      forward({kind: 'open', point: at ?? null});
+      requests.open(at);
     },
     close() {
-      forward('close');
+      requests.close();
     },
     destroy() {
       if (isDestroyed) {
@@ -287,8 +286,7 @@ export function createInternalContextMenu(
       }
       const hadFocus = host.contains(doc.activeElement);
       isDestroyed = true;
-      detachRequest();
-      detachRequest = () => {};
+      requests.destroy();
       root.unmount();
       host.remove();
       if (isOpen) {
@@ -300,17 +298,9 @@ export function createInternalContextMenu(
       }
     },
     update(nextOptions, nextInternals = internals) {
-      const wasDisabled = options.isDisabled === true;
       options = nextOptions as CreateContextMenuOptions;
       internals = nextInternals;
-      if (wasDisabled !== (options.isDisabled === true) && !isDestroyed) {
-        if (options.isDisabled === true) {
-          forward('close');
-        }
-        // A disabled request registers nothing (spec:AST-094 FR24), so
-        // enabling attaches it again.
-        attach();
-      }
+      requests.update({isDisabled: options.isDisabled});
       render();
     },
   };
