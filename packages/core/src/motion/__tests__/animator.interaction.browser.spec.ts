@@ -407,12 +407,7 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
 
 test('a spring started right before a block plays in full after it', async ({
   page,
-  browserName,
 }) => {
-  test.skip(
-    browserName === 'webkit',
-    'WebKit starts a pending animation at its last frame time before the block (animator header, known limits)',
-  );
   await open(page);
   const box = page.locator('#box');
   await markElement(box, {inset: MARKER_INSET});

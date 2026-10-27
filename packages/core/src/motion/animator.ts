@@ -76,9 +76,12 @@
  * animation (two animations on one property leave the compositor in both
  * engines), so the retarget keeps the velocity on screen.
  *
- * WebKit starts an animation created just before a block at its last frame
- * time before the block, so there the motion still skips into its curve;
- * Chromium starts it after the block.
+ * WebKit dates an animation created just before a block at its last frame
+ * time before the block, where the first frame after it would show the
+ * motion skipped into its curve; the call's first read of that start (its
+ * `ready`, once the task has ended, or the first frame after it) moves the
+ * start to that read, so WebKit delays the motion as Chromium's commit does
+ * (startAfterBlock).
  *
  * Promotion: Mobile Safari runs an animation whose start time is set from
  * script on its compositor at its first commit only if the element (or the
@@ -494,6 +497,11 @@ interface StartGroup {
   readonly animations: Animation[];
   readonly channels: Set<Channel>;
   resolved: boolean;
+  /**
+   * The first frame after the call has run: a start read later is the
+   * browser's, whatever it says (startAfterBlock).
+   */
+  framed?: boolean;
   /** A later call in the same task that took over its curves. */
   adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
@@ -623,6 +631,14 @@ const SAMPLE_GRID_MS = 1000 / 30;
 
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
+
+/**
+ * How far before the call's first read a browser's start for a call from
+ * rest can lie and still be that read's own frame: two frames at 60 Hz. A
+ * start dated by the call and further back came from a frame before a
+ * main-thread block in the call's task (WebKit; startAfterBlock).
+ */
+const LATE_START_MS = 34;
 /** Above this many keyframes the tolerance is relaxed. */
 const MAX_KEYFRAMES = 1200;
 /**
@@ -1857,7 +1873,10 @@ export function createAnimator(
     // or when its compositor starts them (Chromium). Read it in that first
     // frame, ahead of anything that might pause or seek the animations, and
     // when `ready` settles.
-    requestFrame?.(() => syncGroup(group));
+    requestFrame?.(() => {
+      syncGroup(group);
+      group.framed = true;
+    });
     ready.then(
       () => syncGroup(group),
       () => settleCancelled(group),
@@ -1914,7 +1933,10 @@ export function createAnimator(
     }
     for (const animation of group.animations) {
       if (animation.startTime != null) {
-        resolveGroup(group, Number(animation.startTime));
+        resolveGroup(
+          group,
+          startAfterBlock(group, Number(animation.startTime)),
+        );
         return;
       }
     }
@@ -1982,6 +2004,43 @@ export function createAnimator(
         resting[property] = segment.target;
       }
     }
+  };
+
+  /**
+   * The start of a call from rest, on the frame that commits it. Chromium,
+   * like Core Animation, starts a pending animation when it commits it, so a
+   * main-thread block later in the call's task delays the motion; WebKit
+   * dates it at its last frame time before that task, so the first frame
+   * after the block would show it skipped into its curve. A start the browser
+   * put by the call and more than LATE_START_MS before the call's first read
+   * (its `ready`, once the task has ended, or the first frame after it) moves
+   * to that read, with every animation of the call.
+   */
+  const startAfterBlock = (group: StartGroup, start: number): number => {
+    const timeline =
+      typeof document === 'undefined'
+        ? null
+        : (document.timeline?.currentTime as number | null | undefined);
+    // A start well after the call is the browser's commit of it.
+    if (
+      timeline == null ||
+      group.framed === true ||
+      start > group.provisional + LATE_START_MS
+    ) {
+      return start;
+    }
+    // Read once the call's task has ended (its `ready`) or in the first
+    // frame after it, both after any block in that task.
+    const at = Math.max(now(), timeline);
+    if (at - start <= LATE_START_MS) {
+      return start;
+    }
+    for (const animation of group.animations) {
+      if (animation.playState !== 'idle') {
+        animation.startTime = at;
+      }
+    }
+    return at;
   };
 
   /** Moves a call from rest onto the time the browser started it. */
