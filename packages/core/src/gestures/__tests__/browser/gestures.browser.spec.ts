@@ -1169,7 +1169,7 @@ test('a long press begins at touch-down + 500 ms on the event clock, even when t
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
 
-  test('the host registers no touch listener while idle and warns for nothing, though the page attaches recognizers; a mouse drag pans (spec:AST-094 FR43, FR24)', async ({
+  test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
     const warnings: string[] = [];
@@ -1186,7 +1186,9 @@ test.describe('where the primary pointer is fine', () => {
     const seen = await page.evaluate(() => ({
       isCoarse: matchMedia('(pointer: coarse)').matches,
       page: window.__pageTouchListenersAtLoad,
-      elements: window.__listeners.map(entry => entry.id),
+      elements: window.__listeners.map(
+        entry => `${entry.id}:${entry.type}:${String(entry.passive)}`,
+      ),
       // What the host would write: none of it, in any engine's spelling.
       styles: ['hpan', 'presser', 'slider', 'card'].map(id => {
         const style = document.getElementById(id)?.style;
@@ -1197,7 +1199,23 @@ test.describe('where the primary pointer is fine', () => {
     }));
     expect(seen.isCoarse).toBe(false);
     expect(seen.page).toEqual([]);
-    expect(seen.elements).toEqual([]);
+    // Only the elements whose recognizer claims a moving finger (or keeps
+    // its press) carry a touch listener: the blocking touchmove, which FR24
+    // counts outside the one-listener budget, so a touchscreen laptop's
+    // finger claims as on a phone (FR19).
+    expect(seen.elements).toEqual(
+      [
+        'hpan',
+        'presser',
+        'pinchable',
+        'sheetBody',
+        'card',
+        'slider',
+        'switchRow',
+        'onePan',
+        'kept',
+      ].map(id => `${id}:touchmove:false`),
+    );
     expect(seen.styles).toEqual(['||', '||', '||', '||']);
     // Gestures attach for every pointer: nothing to warn about.
     expect(
