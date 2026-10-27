@@ -48,9 +48,9 @@ export interface UseGestureRecognizerOptions {
   /** Let the host set touch-action (and long-press callout) styles. @default true */
   manageStyle?: boolean;
   /**
-   * The recognizer reads each event's pointer itself (`spec:AST-057`'s row
-   * swipe), so it attaches even where the primary pointer is fine; see the
-   * host's AttachOptions. @default false
+   * Accepted and ignored: every attachment reads each event's pointer
+   * (`spec:AST-094` FR43). Kept so callers written before FR43 compile.
+   * @deprecated
    */
   perEventPointer?: boolean;
   /**

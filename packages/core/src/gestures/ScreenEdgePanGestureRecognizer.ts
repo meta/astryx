@@ -71,6 +71,9 @@ export class ScreenEdgePanGestureRecognizer extends PanGestureRecognizer {
     super({
       maximumNumberOfTouches: 1,
       hysteresis: UIKIT_SCREEN_EDGE_PAN.hysteresis.value,
+      // A finger's: under a mouse, a trackpad or a pen the screen-edge pan
+      // stays off (`spec:AST-094` FR43), unless the caller allows one.
+      allowedPointerTypes: ['touch'],
       ...options,
     });
     this.edges = options.edges ?? ['leading'];

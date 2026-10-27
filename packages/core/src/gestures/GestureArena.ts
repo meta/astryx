@@ -220,7 +220,6 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
-          ...(input.isFeedbackOnly === true ? {isFeedbackOnly: true} : {}),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
