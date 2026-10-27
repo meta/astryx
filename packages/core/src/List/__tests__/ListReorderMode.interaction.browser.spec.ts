@@ -94,6 +94,109 @@ test.describe('with a mouse', () => {
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
 
+  /**
+   * The open anchored hint: its surface (the theme roles it wears), its
+   * anchoring (the layer's placement rules), and where it sits against the
+   * element it is anchored to (the element whose `anchor-name` its
+   * `position-anchor` names): the gap below it, and which of its edges the
+   * hint lines up with (`start`, or `end` where the start would leave the
+   * viewport).
+   */
+  const openHint = async (page: Page) =>
+    page.evaluate(() => {
+      const hint = Array.from(
+        document.querySelectorAll<HTMLElement>('[popover]'),
+      ).find(element => element.matches(':popover-open'));
+      if (hint == null) {
+        return null;
+      }
+      const name = getComputedStyle(hint)
+        .getPropertyValue('position-anchor')
+        .trim();
+      const anchor = Array.from(
+        document.querySelectorAll<HTMLElement>('*'),
+      ).find(element =>
+        element.style
+          .getPropertyValue('anchor-name')
+          .split(',')
+          .map(part => part.trim())
+          .includes(name),
+      );
+      if (anchor == null) {
+        return null;
+      }
+      const box = hint.getBoundingClientRect();
+      const anchorBox = anchor.getBoundingClientRect();
+      const style = getComputedStyle(hint);
+      return {
+        below: box.top - anchorBox.bottom,
+        edge:
+          Math.abs(box.left - anchorBox.left) < 0.5
+            ? 'start'
+            : Math.abs(box.right - anchorBox.right) < 0.5
+              ? 'end'
+              : 'none',
+        inView: box.left >= 0 && box.right <= window.innerWidth,
+        anchoring: {
+          positionArea: style.getPropertyValue('position-area'),
+          positionTryFallbacks: style.getPropertyValue(
+            'position-try-fallbacks',
+          ),
+          marginBlockStart: style.marginBlockStart,
+        },
+        surface: {
+          backgroundColor: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          boxShadow: style.boxShadow,
+          color: style.color,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          padding: style.padding,
+          position: style.position,
+        },
+      };
+    });
+
+  test("reorder mode's hint sits where Core's keyboard hint does and wears the same surface", async ({
+    page,
+  }) => {
+    // Core's keyboard hint: a tab list reached with the keyboard.
+    await openStory(page, storybook(), 'core-tablist--default');
+    await expectFinePointer(page);
+    await page.keyboard.press('Tab');
+    await expect.poll(async () => openHint(page)).not.toBeNull();
+    await page.waitForTimeout(300);
+    const keyboard = await openHint(page);
+    // Reorder mode's hint, below the handle whose row is in the mode. The
+    // list is narrowed so its handles, at the rows' end, are as far from the
+    // viewport's edge as the tab list is: each hint has the room to line up
+    // with its anchor's start, and the layer flips neither.
+    await openStory(page, storybook(), STORY);
+    await page.evaluate(() => {
+      const root = document.getElementById('storybook-root');
+      if (root != null) {
+        root.style.width = '420px';
+      }
+    });
+    await handle(page, 'Inbox').focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('button', {name: 'Done'})).toBeVisible();
+    await page.waitForTimeout(300);
+    const reorderHint = await openHint(page);
+    // The same layer, anchoring and theme roles (spec:AST-103, FR4 hint): the
+    // same surface, the same placement rules, the same gap below the anchor,
+    // and the same edge to line up with.
+    expect(reorderHint?.surface).toEqual(keyboard?.surface);
+    expect(reorderHint?.anchoring).toEqual(keyboard?.anchoring);
+    expect(
+      Math.abs((reorderHint?.below ?? Number.NaN) - (keyboard?.below ?? 0)),
+    ).toBeLessThan(0.5);
+    expect(keyboard?.edge).toBe('start');
+    expect(reorderHint?.edge).toBe('start');
+    expect(reorderHint?.inView).toBe(true);
+    await page.keyboard.press('Escape');
+  });
+
   test("a mouse click on a handle turns on reorder mode and shows its hint's moves and Done, and announces no drop", async ({
     page,
   }) => {
