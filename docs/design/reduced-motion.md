@@ -54,11 +54,12 @@ trackpad, or keyboard the change is immediate.
 
 ## State representation
 
-| State                             | Required representation                                                                         | Allowed variation          |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------- |
-| reduced motion, coarse pointer    | Opacity-only cross-fade of 200 ms or less (DR2); an in-place value change applies at once (DR2) | A shorter cross-fade       |
-| reduced motion, any other pointer | Immediate change (DR3), except a touch drag's release (DR2)                                     | None                       |
-| no reduced-motion preference      | Outside this record                                                                             | Component and theme motion |
+| State                                             | Required representation                                                                         | Allowed variation          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------- |
+| reduced motion, coarse pointer                    | Opacity-only cross-fade of 200 ms or less (DR2); an in-place value change applies at once (DR2) | A shorter cross-fade       |
+| reduced motion, any other pointer                 | Immediate change (DR3), except a touch drag's release (DR2)                                     | None                       |
+| no reduced-motion preference, theme on `'system'` | Outside this record                                                                             | Component and theme motion |
+| a theme on `'always'` (DR2a)                      | As reduced motion, whatever the person's setting                                                | DR1–DR3                    |
 
 ## Responsive and input behavior
 
@@ -75,6 +76,10 @@ trackpad, or keyboard the change is immediate.
   under Reduce Motion. An in-place value change, such as a progress fill's length or
   another continuous value, does not cross-fade: under reduced motion it
   applies at once on any pointer, with no added element (DEC-3).
+- **DR2a — A theme may reduce motion for everyone.** A theme's
+  `reducedMotion: 'always'` applies DR1–DR3 for every person, whatever their
+  setting; `'system'` follows each person's setting (`spec:AST-108`). No theme
+  option loosens DR1–DR4.
 - **DR3 — Fine-pointer presentations change at once.** Under reduced motion,
   every other DR1 transition, when the primary pointer is not coarse, MUST complete
   immediately, with no animated property.

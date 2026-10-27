@@ -65,8 +65,8 @@ a measured, sourced difference exists.
   deceleration rate, rubber-band coefficient, gesture threshold and haptic
   moment a touch presentation uses MUST default to the measured native value
   for that use (FR2), and every component that plays the same motion or
-  gesture MUST use the same value; once the roles are public, a theme MAY
-  override a motion role (FR4).
+  gesture MUST use the same value; a theme reaches the roles only
+  through its motion knobs (FR4, DEC-15).
   No component uses a value of its own where a measured value exists. The same
   values apply on every touch platform; a platform gets a value of its own only
   where a measured, sourced difference exists (FR2).
@@ -107,18 +107,24 @@ a measured, sourced difference exists.
   touch presentation plays MUST be a motion role named for its use
   (`architecture:theme-tokens` INV3). The roles this record names are listed below with their defaults and
   sources; further roles a component's own record measures join through the
-  generated motion role table (DEC-5). The role's value is its
-  measured value (FR1, FR2). The roles are internal until the public
-  motion-token set is decided, so a theme cannot override them yet (DEC-11). A component MUST read touch motion through these roles
-  and MUST NOT play a literal. Once a role is public, a theme value MUST reach the motion at its
+  generated motion role table (DEC-5). With tempo 1 and character
+  standard, every role plays its measured value exactly (FR1, FR2); a theme's
+  tempo scales durations and its character offsets bounce through fixed
+  per-role weights (`spec:AST-108` FR3), and roles on the fixed list ignore
+  both: the on-screen keyboard (`spec:AST-099` FR8); gesture thresholds, the
+  content-touch delay, and momentum (`spec:AST-002` FR3); finger tracking, the
+  rubber band, the press model's onset delay, cancel distance, and tap flash
+  (`spec:AST-108` FR4), and busy loops; and the 200 ms Reduce Motion cap.
+  The per-role tables stay internal (DEC-15). A component MUST read touch motion through these roles
+  and MUST NOT play a literal. A theme's knob values MUST reach the motion at its
   start, without changing how the motion runs (FR5, FR6). Motion that
   must stay in step with the on-screen keyboard is not a theme role: it rides
   the keyboard's own motion (`spec:AST-099` FR8,
   `architecture:react-component-runtime` INV11). Gesture thresholds, the timings that decide who gets a touch (the
   content-touch delay, the scroll brake, momentum memory) and haptics are not
-  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). When the public set is decided, its roles join the motion configuration of
-  `architecture:theme-authoring-contract` and `architecture:theme-tokens`,
-  whose rules are unchanged until then. It departs from the draft `design:motion` DR3
+  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). The three knobs join the motion configuration of
+  `architecture:theme-authoring-contract` and `architecture:theme-tokens`
+  (`spec:AST-108`). It departs from the draft `design:motion` DR3
   wherever the native motion settles with an overshoot or stretches with a
   rubber band.
 
@@ -546,8 +552,8 @@ outside a menu closes it.
 ## Current-state impact
 
 - `architecture:theme-tokens` and `architecture:theme-authoring-contract`:
-  unchanged until the public motion-token set is decided; then its roles join
-  the motion configuration (FR4, DEC-11).
+  the three motion knobs join the motion configuration (FR4, DEC-15,
+  `spec:AST-108`).
 - `architecture:interaction-modality`: the touch-presentation conditions
   (FR13) sit beside the shared modality state; its invariants are unchanged.
 - `architecture:react-component-runtime`: FR24 states the caller-visible
@@ -613,7 +619,7 @@ outside a menu closes it.
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1, FR2        | Value check over every measured value and its uses                                                                             | every value; a guess and its measurement task; a platform-specific value; two components playing the same motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | an unsourced value, an unknown source kind, a guess without a listed measurement, an unsourced platform split, or two values for one use fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR3             | Unit tests of the spring, decay, rubber band and projection math against an independent integration and values read from UIKit | under-, critically and overdamped springs; release velocities; both rates; overscroll depths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | changing a formula or a constant breaks the agreement with UIKit's values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| FR4             | Role unit tests over every touch motion                                                                                        | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a literal played in place of a role, a value that differs from the table, or a theme that changes a role before the public set is decided fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR4             | Role unit tests over every touch motion                                                                                        | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a literal played in place of a role, a value that differs from the table at `tempo` 1 and `'standard'`, or a theme that changes a role other than through its motion knobs fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame  | Chromium phone emulation; WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                     | catch at peak velocity; retarget with a new spring                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -650,8 +656,8 @@ remembered: a number enters the table only with a citable source, and Android
 touch devices get the same values until a measured, sourced difference is
 recorded.
 
-The table supplies the defaults and a theme may retune any motion role (FR4):
-a product can soften a spring without forking a component, and the measured
+The table supplies the defaults and a theme tunes them through its motion
+knobs (FR4, DEC-15): a product can soften motion without forking a component, and the measured
 values stay the ones it starts from. Platform-matched look and feel is not part
 of this decision.
 
@@ -673,8 +679,8 @@ release runs as a compositor animation of the measured curve (FR5, FR9).
 **Decider:** `cixzhang`, `2026-10-24`
 
 A product tunes motion as it tunes color and type, so every touch spring,
-duration and curve is a theme motion role whose default is the measured value
-(FR4). Thresholds decide who gets a touch, not how anything looks, so they stay
+duration and curve is a motion role whose default is the measured value and
+which a theme reaches through its motion knobs (FR4, DEC-15). Thresholds decide who gets a touch, not how anything looks, so they stay
 internal (`spec:AST-002` FR3).
 
 ### DEC-4 — A finger opens a menu on press
@@ -786,6 +792,18 @@ rows likewise highlight on touch-down is a guess until a short UIMenu on the
 iOS 26.2 simulator measures it.
 
 Rejected: the 150 ms delay on every menu row.
+
+### DEC-15 — The public motion set is three theme knobs; per-role tables stay internal
+
+**Reference:** `spec:AST-094/DEC-15`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A theme reaches touch motion only through `spec:AST-108`'s three knobs, tempo,
+character, and reduced motion, which transform the measured roles; the
+per-role tables and weights stay internal. This supersedes DEC-11's "all
+internal" for exactly these three knobs, and DEC-1's and DEC-3's per-role
+retuning, which a theme does through the knobs; DEC-11's rejected alternative, public
+per-component roles, stays rejected.
 
 ### DEC-21 — Gestures work on the web, not only under a finger
 
