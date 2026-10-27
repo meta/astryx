@@ -76,11 +76,11 @@ const styles = stylex.create({
   // The press layer, painted on the circle itself: the host's layer is a
   // rounded square that would tint past the circle, and the host leaves it
   // off for an indicator marked `data-astryx-indicator-press="self"`
-  // (indicatorPressScope). The same two press models as the host's, read
-  // from what the host hands down: a mouse `:active` fill
-  // (`--_indicator-press-fill`) and, only under a coarse pointer, the press
-  // image whose strength the row's `pressedAlpha` drives
-  // (`--_press-paint-image`).
+  // (indicatorPressScope). It reads the press image whose strength the
+  // row's `pressedAlpha` drives (`--_press-paint-image`), for every
+  // pointer: a mouse and a pen press through the same press controller as a
+  // finger (`spec:AST-094` FR11's fine-pointer profile, FR43), so the image
+  // is the circle's only press.
   ownPress: {
     position: 'relative',
     '::after': {
@@ -89,16 +89,7 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
-      backgroundColor: 'var(--_indicator-press-fill, transparent)',
-      // The touch press image, under a coarse pointer only, as CheckboxInput's
-      // own layer gates it: a held pen on a fine-pointer page draws the mouse
-      // `:active` fill above, and the image as well would paint its press
-      // twice. The key stays literal (StyleX ranks an imported at-rule key
-      // differently).
-      backgroundImage: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_press-paint-image, none)',
-      },
+      backgroundImage: 'var(--_press-paint-image, none)',
     },
   },
   checkmark: {

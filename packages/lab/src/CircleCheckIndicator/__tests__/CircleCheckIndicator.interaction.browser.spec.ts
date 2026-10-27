@@ -357,7 +357,7 @@ test.describe('CircleCheckIndicator press', () => {
     expect(held.circleLayerRadius).toBe(held.circleRadius);
   });
 
-  test('a mouse press tints the circle, not a square around it', async ({
+  test('a mouse press paints the circle through the press model at once, not a square and not `:active` (FR43)', async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -375,10 +375,24 @@ test.describe('CircleCheckIndicator press', () => {
       const at = await circleCentreOf(page, 'Mountains');
       await page.mouse.move(at.x, at.y);
       await page.mouse.down();
+      // FR11's fine-pointer profile: the shared press controller marks the
+      // press at `pointerdown`, with no delay.
+      const pressState = await page
+        .getByRole('checkbox', {name: 'Mountains'})
+        .evaluate(
+          input =>
+            input
+              .closest('[data-astryx-pressable]')
+              ?.getAttribute('data-astryx-press') ?? null,
+        );
       const held = await readPress(page, 'Mountains');
       await page.mouse.up();
+      expect(pressState).toBe('on');
       expect(held.hostContent).toBe('none');
-      expect(held.circleColour).not.toBe('rgba(0, 0, 0, 0)');
+      expect(held.circleContent).not.toBe('none');
+      expect(held.circleImage).not.toBe('none');
+      // One press model: no `:active` fill beside the image.
+      expect(held.circleColour).toBe('rgba(0, 0, 0, 0)');
       expect(held.circleLayerRadius).toBe(held.circleRadius);
     } finally {
       await context.close();

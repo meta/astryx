@@ -116,19 +116,27 @@ describe('CircleCheckIndicator ships the table', () => {
     return el;
   }
 
-  it('paints the touch press image only under a coarse pointer, so a held pen draws its press once', () => {
-    // A pen on a fine-pointer page draws the mouse `:active` fill; the press
-    // image as well would paint the press twice. CheckboxInput's own layer
-    // gates its image the same way.
+  it('paints its press image for every pointer and no `:active` fill (FR43: one press model)', () => {
+    // A mouse and a pen press through the same press controller as a finger
+    // (spec:AST-094 FR11's fine-pointer profile), so the image the row's
+    // press strength drives is the circle's only press, for every pointer.
+    const declarations = declarationsOf(circle('md'));
     const images = [
-      ...(declarationsOf(circle('md')).get('background-image') ??
+      ...(declarations.get('background-image') ??
         new Map<string | null, string>()),
     ];
     expect(images.length).toBeGreaterThan(0);
     for (const [media, value] of images) {
-      expect(media).toContain('(pointer: coarse)');
+      expect(media).toBeNull();
       expect(value).toContain('--_press-paint-image');
     }
+    const colours = [
+      ...(declarations.get('background-color') ??
+        new Map<string | null, string>()),
+    ].map(([, value]) => value);
+    expect(
+      colours.some(value => value.includes('--_indicator-press-fill')),
+    ).toBe(false);
   });
 
   it('changes in one frame under a finger, keeps the theme’s fade with a mouse and none with a mouse under Reduce Motion', () => {
