@@ -1039,7 +1039,11 @@ export class GestureHost {
     // the element wait for the main thread.
     const needsWheel = registration.recognizers.some(
       recognizer =>
-        recognizer.isEnabled && recognizer.allowedScrollTypes.size > 0,
+        recognizer.isEnabled &&
+        recognizer.allowedScrollTypes.size > 0 &&
+        // A wheel drives a pan or a pinch only.
+        (internals(recognizer).family === 'pan' ||
+          internals(recognizer).family === 'pinch'),
     );
     if (needsWheel && !registration.hasWheelListener) {
       element.addEventListener('wheel', this.onWheel, {passive: false});
