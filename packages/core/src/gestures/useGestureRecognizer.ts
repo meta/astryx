@@ -20,7 +20,7 @@
  * SYNC: When modified, update useGestureRecognizer.test.tsx and README.md.
  */
 
-import {useEffect, useRef, useState, type RefObject} from 'react';
+import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
@@ -133,7 +133,13 @@ export function usePressTracker(
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
-  const [tracker] = useState(
+  const {trackingExpansion, highlightDelay, cancelTravel, quickTapFlash} =
+    options;
+  // The tracker reads these four when it is built: a change rebuilds it (the
+  // attachment below moves to the new one and disposes the old), and the new
+  // values apply from the next touch. The callbacks, the brake included, are
+  // read through the ref on every touch.
+  const tracker = useMemo(
     () =>
       new PressTracker({
         getBounds: () => ref.current?.getBoundingClientRect() ?? null,
@@ -150,10 +156,10 @@ export function usePressTracker(
             optionsRef.current.onHighlightChange?.(isHighlighted);
           }
         },
-        trackingExpansion: options.trackingExpansion,
-        highlightDelay: options.highlightDelay,
-        cancelTravel: options.cancelTravel,
-        quickTapFlash: options.quickTapFlash,
+        trackingExpansion,
+        highlightDelay,
+        cancelTravel,
+        quickTapFlash,
         vetoesAncestorRecognizer: recognizer =>
           optionsRef.current.vetoesAncestorRecognizer?.(recognizer) ??
           defaultVeto(recognizer),
@@ -169,6 +175,7 @@ export function usePressTracker(
           );
         },
       }),
+    [ref, trackingExpansion, highlightDelay, cancelTravel, quickTapFlash],
   );
 
   // Syncs the document's gesture host with the element behind `ref`: the

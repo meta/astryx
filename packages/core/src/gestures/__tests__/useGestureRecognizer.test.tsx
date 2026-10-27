@@ -311,6 +311,49 @@ describe('usePressTracker', () => {
     remove.mockRestore();
   });
 
+  it('rebuilds its tracker when trackingExpansion, highlightDelay, cancelTravel or quickTapFlash change', () => {
+    const trackers: unknown[] = [];
+    function Tracked(props: {
+      trackingExpansion?: number;
+      highlightDelay?: 'inScrollers' | 'always' | 'never';
+      cancelTravel?: number;
+      quickTapFlash?: number;
+      label?: string;
+    }) {
+      const ref = useRef<HTMLButtonElement>(null);
+      trackers.push(usePressTracker(ref, props));
+      return (
+        <button ref={ref} type="button">
+          {props.label ?? 'Go'}
+        </button>
+      );
+    }
+    const {rerender} = render(<Tracked cancelTravel={70} />);
+    rerender(<Tracked cancelTravel={70} label="Same options" />);
+    expect(trackers[1]).toBe(trackers[0]);
+    rerender(<Tracked cancelTravel={20} />);
+    expect(trackers[2]).not.toBe(trackers[1]);
+    rerender(<Tracked cancelTravel={20} trackingExpansion={30} />);
+    expect(trackers[3]).not.toBe(trackers[2]);
+    rerender(
+      <Tracked
+        cancelTravel={20}
+        trackingExpansion={30}
+        highlightDelay="never"
+      />,
+    );
+    expect(trackers[4]).not.toBe(trackers[3]);
+    rerender(
+      <Tracked
+        cancelTravel={20}
+        trackingExpansion={30}
+        highlightDelay="never"
+        quickTapFlash={0}
+      />,
+    );
+    expect(trackers[5]).not.toBe(trackers[4]);
+  });
+
   it('reports UIControl events for a tap', () => {
     const events: ControlEvent[] = [];
     const {getByTestId} = render(
