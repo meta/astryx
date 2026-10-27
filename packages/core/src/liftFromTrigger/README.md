@@ -1,10 +1,11 @@
 # LiftFromTrigger
 
 The one lift-from-trigger presentation, internal to core and opt-in. A
-surface that chooses it (ContextMenu's touch invocation today) lifts its
-trigger out of the page above a tinted backdrop, grows a surface (a menu) out
-of the press beside it, shrinks that surface back into the press when it
-closes, and returns the trigger to its place. Nothing else gets it by
+surface that chooses it (ContextMenu's touch invocation) lifts its trigger
+out of the page above a tinted backdrop, grows a surface (a menu) out of the
+press beside it, shrinks that surface back into the press when it closes, and
+returns the trigger to its place. A viewer's zoom from a thumbnail lifts a
+copy of the thumbnail's picture instead (below). Nothing else gets it by
 default, and any surface that lifts uses this module, never a copy of it.
 Nothing here is exported from the package entry point; components import it
 by path.
@@ -30,6 +31,22 @@ a box inside the trigger would move with it); and the placeholder. The input hol
 while it closes: never more than five (`spec:AST-017` FR60, DEC-29). The
 exit copy the surface shrinks on is the layer runtime's transient copy. At
 rest there is nothing.
+
+## The zoom's copy
+
+A zoom from a thumbnail into a viewer (UIKit's `.zoom`) needs the
+thumbnail's picture between the viewer's backdrop and its photo, which a
+trigger in the top layer cannot be: it would cover the whole viewer, or sit
+under its backdrop. So `liftCopy(source, {host, src})` lifts a copy, the one
+transient clone `architecture:layer-runtime` INV15 allows: one image of the
+source's picture (aspect fill, its corners) in the viewer's host at the
+source's box, inert and hidden from assistive technology, while the source
+hides where it stands and keeps its layout (no placeholder). The viewer moves
+the copy on the rect morph with its own paths and springs; a close during the
+opening turns the same copy around from the rect on screen, with its
+velocity. `drop()` at the landing, or on unmount, takes the copy away and
+shows the source as it was, once the last copy of it drops. While a copy is
+up the page has one element more.
 
 ## Motion
 

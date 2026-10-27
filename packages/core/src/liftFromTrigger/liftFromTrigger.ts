@@ -11,12 +11,13 @@
  *   viewport gutter and declared inset
  * @output Exports createLiftFromTrigger: lift a source out of the page above a tinted
  *   backdrop, grow a surface out of the press beside it, shrink the surface
- *   back into the press, and return the source to its place
+ *   back into the press, and return the source to its place; and liftCopy:
+ *   a copy of a source's picture in a viewer's host, for a zoom
  * @position The one lift-from-trigger presentation, internal to core and
  *   opt-in: only a surface that chooses it uses it (ContextMenu's touch
- *   invocation today). Layer stays generic: the top layer, dismissal, the
- *   input hold and the shared exit copy are its; this module only
- *   uses them
+ *   invocation; a viewer's zoom from a thumbnail). Layer stays generic: the
+ *   top layer, dismissal, the input hold and the shared exit copy are its;
+ *   this module only uses them
  *
  * UIKit's context menu lifts the long-pressed view out of the page: it grows
  * on from the size the press gave it to its lifted size, a shadow rising
@@ -46,6 +47,16 @@
  * (`architecture:component-style-authoring` INV7, `spec:AST-017` FR60), and
  * its close plays on the layer runtime's one exit copy
  * (`placeLayerExitCopy`).
+ *
+ * A zoom from a thumbnail into a viewer lifts a copy instead
+ * (`architecture:layer-runtime` INV15's clone): the copy has to show between
+ * the viewer's backdrop and its photo, which a source in the top layer cannot
+ * (it would cover the whole viewer, or sit under its backdrop). liftCopy puts
+ * one copy of the source's picture in the viewer's host at the source's box,
+ * inert and hidden from assistive technology, and hides the source where it
+ * stands (it keeps its layout, so no placeholder); the viewer moves the copy
+ * on the rect morph, which turns an interrupted motion around from the rect
+ * on screen, and a drop shows the source again and takes the copy away.
  *
  * Every motion is `translate`, `scale` or `opacity` on the compositor
  * (spec:AST-094 FR5): the source and the surface on the rect morph, which
@@ -198,6 +209,38 @@ export interface LiftFromTrigger {
   dispose(): void;
   /** Whether a source is lifted. */
   isLifted(): boolean;
+}
+
+/** Where a copy goes, and how it is marked. */
+export interface LiftCopyOptions {
+  /**
+   * The element the copy goes in (a viewer's container): positioned, so the
+   * copy is laid out against its box; its stacking decides what the copy
+   * shows over and under.
+   */
+  readonly host: HTMLElement;
+  /** The picture for a source that shows none. */
+  readonly src?: string;
+  /** Marks the copy. @default 'data-astryx-lift-copy' */
+  readonly attribute?: string;
+}
+
+/** A copy of a source's picture, lifted into a host while the source hides. */
+export interface LiftedCopy {
+  /**
+   * The copy: an image in the host, laid out at the source's box (aspect
+   * fill, its corners), inert and hidden from assistive technology. Move it
+   * on the rect morph (`createRectMorph(copy.element)`).
+   */
+  readonly element: HTMLImageElement;
+  /** The source's box, client px, where the copy is laid out. */
+  readonly box: MorphRect;
+  /**
+   * Takes the copy away and shows the source again, as it was, once the last
+   * copy of it drops: at the landing, or on unmount (nothing is left either
+   * way). A second call does nothing.
+   */
+  drop(): void;
 }
 
 type SavedStyle = [property: string, value: string, priority: string][];
@@ -1299,5 +1342,131 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       }
     },
     isLifted: () => state?.isSourceLifted === true,
+  };
+}
+
+/**
+ * Sources a copy hides: how many copies hold each, and the visibility it had
+ * inline before the first, which it gets back when the last drops.
+ */
+const hiddenSources = new WeakMap<
+  HTMLElement,
+  {holders: number; visibility: [value: string, priority: string]}
+>();
+
+/** Hides `source` where it stands until the returned call lets go. */
+function hideSource(source: HTMLElement): () => void {
+  const held = hiddenSources.get(source);
+  if (held == null) {
+    hiddenSources.set(source, {
+      holders: 1,
+      visibility: [
+        source.style.getPropertyValue('visibility'),
+        source.style.getPropertyPriority('visibility'),
+      ],
+    });
+    source.style.setProperty('visibility', 'hidden', 'important');
+  } else {
+    held.holders += 1;
+  }
+  let isReleased = false;
+  return () => {
+    const entry = hiddenSources.get(source);
+    if (isReleased || entry == null) {
+      return;
+    }
+    isReleased = true;
+    entry.holders -= 1;
+    if (entry.holders > 0) {
+      return;
+    }
+    hiddenSources.delete(source);
+    const [value, priority] = entry.visibility;
+    if (value === '') {
+      source.style.removeProperty('visibility');
+    } else {
+      source.style.setProperty('visibility', value, priority);
+    }
+  };
+}
+
+/** The picture a source shows: an image's own, or the first one inside it. */
+function pictureOf(source: HTMLElement): string {
+  const image =
+    source instanceof HTMLImageElement
+      ? source
+      : source.querySelector<HTMLImageElement>('img');
+  return image?.currentSrc || image?.src || '';
+}
+
+/**
+ * Lifts a copy of `source`'s picture into `host` for a zoom
+ * (`architecture:layer-runtime` INV15's clone): one image laid out at the
+ * source's box (aspect fill, its corners), inert and hidden from assistive
+ * technology, while the source hides where it stands. The caller moves the
+ * copy on the rect morph and drops it at the landing. Null, with nothing
+ * changed, for a source that is not in the page or has no box.
+ */
+export function liftCopy(
+  source: HTMLElement,
+  {host, src, attribute = 'data-astryx-lift-copy'}: LiftCopyOptions,
+): LiftedCopy | null {
+  if (!source.isConnected || !host.isConnected) {
+    return null;
+  }
+  // Reads before writes: the page lays out once for the copy.
+  const shown = source.getBoundingClientRect();
+  if (shown.width <= 0 || shown.height <= 0) {
+    return null;
+  }
+  const box: MorphRect = {
+    x: shown.left,
+    y: shown.top,
+    width: shown.width,
+    height: shown.height,
+  };
+  // The host's padding box is the copy's containing block.
+  const origin = host.getBoundingClientRect();
+  const left = box.x - origin.left - host.clientLeft + host.scrollLeft;
+  const top = box.y - origin.top - host.clientTop + host.scrollTop;
+  const radius = shapeRadius(source);
+  const picture = pictureOf(source) || src || '';
+  const copy = source.ownerDocument.createElement('img');
+  copy.src = picture;
+  copy.alt = '';
+  copy.setAttribute('aria-hidden', 'true');
+  copy.setAttribute('inert', '');
+  copy.setAttribute(attribute, '');
+  Object.assign(copy.style, {
+    position: 'absolute',
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${box.width}px`,
+    height: `${box.height}px`,
+    // Exactly the box, whatever the host's styles say about images.
+    margin: '0',
+    padding: '0',
+    border: '0',
+    maxWidth: 'none',
+    maxHeight: 'none',
+    boxSizing: 'border-box',
+    objectFit: 'cover',
+    borderRadius: radius,
+    pointerEvents: 'none',
+  });
+  host.append(copy);
+  const release = hideSource(source);
+  let isDropped = false;
+  return {
+    element: copy,
+    box,
+    drop: () => {
+      if (isDropped) {
+        return;
+      }
+      isDropped = true;
+      copy.remove();
+      release();
+    },
   };
 }
