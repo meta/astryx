@@ -379,6 +379,25 @@ describe('List reorderable', () => {
     }
   });
 
+  it('adds only the handle to a row without end content: no end-slot wrapper (spec:AST-103 FR5)', () => {
+    const rows = (reorderable?: Reorderable) => (
+      <List reorderable={reorderable}>
+        <ListItem itemKey="inbox" label="Inbox" />
+        <ListItem itemKey="sent" label="Sent" align="first-line" />
+      </List>
+    );
+    const {rerender} = render(rows());
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    const before = [inbox, sent].map(row => row.querySelectorAll('*').length);
+    rerender(rows(createReorderable({onReorder: () => {}})));
+    expect(inbox.querySelectorAll('*').length).toBe(before[0] + 1);
+    expect(sent.querySelectorAll('*').length).toBe(before[1] + 1);
+    // The handle is the row's own child, after the label.
+    expect(handleOf('Inbox').parentElement).toBe(inbox);
+    expect(handleOf('Sent').parentElement).toBe(sent);
+  });
+
   it('adds one element to a row, the handle, whose lines are a pseudo-element', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
@@ -553,17 +572,21 @@ describe('List reorderable', () => {
     handle.focus();
     await user.keyboard(' ');
     // No line before a move.
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
     await user.keyboard('{ArrowDown}');
     layOut(list);
     await user.keyboard('{ArrowDown}');
     expect(labels()).toEqual(['Sent', 'Drafts', 'Inbox']);
-    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
-    expect(line).not.toBeNull();
-    expect(line).not.toHaveAttribute('hidden');
-    expect(line).toHaveAttribute('aria-hidden', 'true');
+    // The line is the list's own pseudo-element, placed by its custom
+    // properties: no element joins the list (component-style-authoring INV7).
+    expect(list).toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toMatch(
+      /px$/,
+    );
+    expect(list.children).toHaveLength(3);
     await user.keyboard('{Escape}');
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toBe('');
   });
 
   it('moves nothing with the arrows outside reorder mode', async () => {
@@ -782,6 +805,10 @@ describe('List reorderable', () => {
     // The key has Table's idKey shape: a string or a number, nothing else.
     // @ts-expect-error: a bigint is no item key.
     void (<ListItem itemKey={7n} label="Seven" />);
+    // Nor is it a reorderable object's key: no item could report one
+    // (spec:AST-103 FR1).
+    // @ts-expect-error: a bigint is no reorder key.
+    void createReorderable<bigint>({onReorder: () => {}});
   });
 
   it('keeps reorder mode when the object is made anew, and calls the latest onReorder', async () => {
@@ -1205,6 +1232,7 @@ describe('List reorderable', () => {
     const list = screen.getByRole('list');
     layOut(list);
     const [a, b, c] = Array.from(list.querySelectorAll('li'));
+    const restCount = a.querySelectorAll('*').length;
     mouseDrag(handleOf('A'), 322, 322 + 70);
     // The rows the drag passes stay where they are.
     for (const row of [a, b, c]) {
@@ -1223,11 +1251,21 @@ describe('List reorderable', () => {
     expect(preview!.style.opacity).toBe(a.style.opacity);
     expect(preview!.style.boxShadow).toBe('none');
     expect(preview!.style.translate).toBe('0px 70px');
-    // The line sits after C, where A would land (position 2 of 0-2).
-    const line = list.querySelector<HTMLElement>('[data-astryx-reorder-line]');
-    expect(line).not.toBeNull();
-    expect(line).not.toHaveAttribute('hidden');
-    expect(line!.style.translate).toBe('0px 131px');
+    // The preview, the one transient copy, sits right before its source: its
+    // counter reads the source's number in a numbered list, the source counts
+    // nothing while it is picked up, and the last row keeps :last-child.
+    expect(preview!.nextElementSibling).toBe(a);
+    expect(a.style.counterIncrement).toBe('none');
+    // The line sits after C, where A would land (position 2 of 0-2): the
+    // list's own pseudo-element, so the list holds the rows and the preview
+    // only (component-style-authoring INV7), and the picked-up row holds what
+    // it held at rest (spec:AST-103 FR5).
+    expect(list).toHaveAttribute('data-astryx-reorder-line');
+    expect(list.style.getPropertyValue('--astryx-reorder-line-y')).toBe(
+      '131px',
+    );
+    expect(list.children).toHaveLength(4);
+    expect(a.querySelectorAll('*')).toHaveLength(restCount);
     // The drop rearranges the rows and takes the preview and line away.
     act(() => {
       fireEvent.pointerUp(handleOf('A'), {...MOUSE, clientY: 322 + 70});
@@ -1235,8 +1273,11 @@ describe('List reorderable', () => {
     expect(onReorder).toHaveBeenCalledWith({key: 'A', to: 2});
     expect(labels()).toEqual(['B', 'C', 'A']);
     expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
+    expect(list.children).toHaveLength(3);
+    expect(a.querySelectorAll('*')).toHaveLength(restCount);
     expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+    expect(a.style.counterIncrement).toBe('');
   });
 
   it('announces Done when a drag ends reorder mode, keeping its moves', async () => {
@@ -1270,8 +1311,9 @@ describe('List reorderable', () => {
       fireEvent.pointerCancel(handleOf('A'), {...MOUSE, clientY: 322 + 70});
     });
     expect(list.querySelector('[data-astryx-reorder-preview]')).toBeNull();
-    expect(list.querySelector('[data-astryx-reorder-line]')).toBeNull();
+    expect(list).not.toHaveAttribute('data-astryx-reorder-line');
     expect(a).not.toHaveAttribute('data-astryx-reorder-source');
+    expect(a.style.counterIncrement).toBe('');
     expect(onReorder).not.toHaveBeenCalled();
     expect(labels()).toEqual(['A', 'B', 'C']);
   });
@@ -1351,24 +1393,31 @@ describe('List reorderable', () => {
     glide.mockRestore();
   });
 
-  it("keeps the slides' spring an internal constant: touch motion has no theme surface", () => {
-    const drag = (coarse: boolean) => {
-      stubPrimaryPointer(coarse);
-      const {unmount} = render(<ReorderableRows initial={['A', 'B', 'C']} />);
-      const list = screen.getByRole('list');
-      layOut(list);
-      const handle = handleOf('A');
-      mouseDrag(handle, 322, 322);
-      fireEvent.pointerCancel(handle, {...MOUSE, clientY: 322});
-      unmount();
-    };
-    // A mouse's rows take their places at once; under a finger they slide
-    // on the measured spring, which stays internal: no motion role either
-    // way (spec:AST-094 FR4 as ruled: touch motion stays internal).
-    drag(false);
-    expect(motionRole('reorder.slide.spring')).toBeUndefined();
-    drag(true);
-    expect(motionRole('reorder.slide.spring')).toBeUndefined();
+  it('sends a still-gliding row home on the shared settle role, keeping its velocity (spec:AST-094 FR4, FR6)', async () => {
+    stubPrimaryPointer(true);
+    const home = vi.spyOn(touchMotion, 'home');
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['A', 'B', 'C']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    // A key move commits, and its rows glide on springs.settle.
+    handleOf('A').focus();
+    await user.keyboard(' {ArrowDown}{Escape}');
+    await waitFor(() => expect(labels()).toEqual(['B', 'A', 'C']));
+    layOut(list);
+    // Picked up again while it still glides, then cancelled: it goes home on
+    // the same role, from where it is shown, at the speed it has.
+    const handle = handleOf('A');
+    mouseDrag(handle, 344, 344 + 30);
+    fireEvent.pointerCancel(handle, {...MOUSE, clientY: 344 + 30});
+    const draggedRow = handle.closest('li');
+    const calls = home.mock.calls.filter(([element]) => element === draggedRow);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [, spring, , fromRest] of calls) {
+      expect(spring).toEqual({duration: 0.5, bounce: 0});
+      expect(fromRest).toBe(false);
+    }
+    home.mockRestore();
   });
 
   it('puts its listeners on the list: none on a row or a handle', () => {

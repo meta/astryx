@@ -45,7 +45,7 @@ import {
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars, typeScaleVars} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {ownRingContainerStyles} from './ownRing.stylex';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
@@ -169,6 +169,23 @@ const styles = stylex.create({
         'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
     },
   },
+  // The row's own child (a row without end content, spec:AST-103 FR5): it
+  // ends the row, as the end slot would, and aligns as the row's `align`
+  // would align that slot.
+  inRow: {
+    marginInlineStart: 'auto',
+  },
+  // `start`: at the top of the row's content.
+  inRowStart: {
+    alignSelf: 'flex-start',
+  },
+  // `first-line`: centred on the label's first line, a line of body text at
+  // the top of the row's content (the line Item's first-line slots centre
+  // on). Its layout height stays the lines' height (the end margin).
+  inRowFirstLine: {
+    alignSelf: 'flex-start',
+    marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${HANDLE_SIZE}px) / 2)`,
+  },
 });
 
 /**
@@ -176,6 +193,44 @@ const styles = stylex.create({
  * on focus within stays off for the handle, which rings itself.
  */
 export const reorderRowStyle = ownRingContainerStyles.focusWithin;
+
+/** The insertion line's thickness, px (the engine centres it on a gap). */
+export const INSERTION_LINE_THICKNESS = 2;
+
+const listStyles = stylex.create({
+  // The insertion line (design:ordered-collection-reordering): the list's own
+  // pseudo-element, decoration with no semantic role, so no element joins the
+  // list (architecture:component-style-authoring INV7). The engine shows it
+  // with `data-astryx-reorder-line` on the list and places it with the list's
+  // custom properties: its top (`--astryx-reorder-line-y`, a compositor
+  // translate) and its inline start and size (the dragged row's).
+  list: {
+    '::after': {
+      content: '""',
+      display: {
+        default: 'none',
+        '[data-astryx-reorder-line]': 'block',
+      },
+      position: 'absolute',
+      top: 0,
+      insetInlineStart: 'var(--astryx-reorder-line-start, 0px)',
+      inlineSize: 'var(--astryx-reorder-line-size, 0px)',
+      blockSize: INSERTION_LINE_THICKNESS,
+      borderRadius: INSERTION_LINE_THICKNESS / 2,
+      backgroundColor: {
+        default: colorVars['--color-accent'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      forcedColorAdjust: 'none',
+      translate: '0 var(--astryx-reorder-line-y, 0px)',
+      pointerEvents: 'none',
+      zIndex: 2,
+    },
+  },
+});
+
+/** The style of a reorderable list (List applies it): its insertion line. */
+export const reorderListStyle = listStyles.list;
 
 /**
  * The text a label shows: its strings and numbers, through its elements'
@@ -230,6 +285,7 @@ export function ListReorderHandle({
   isDisabled = false,
   rowLabel,
   rowLabelledBy,
+  rowAlign,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useTranslator();
@@ -392,7 +448,12 @@ export function ListReorderHandle({
           event.stopPropagation();
         }
       }}
-      {...focusOutlineProps.focusVisible(styles.handle)}
+      {...focusOutlineProps.focusVisible(
+        styles.handle,
+        rowAlign != null && styles.inRow,
+        rowAlign === 'start' && styles.inRowStart,
+        rowAlign === 'first-line' && styles.inRowFirstLine,
+      )}
     />
   );
 }

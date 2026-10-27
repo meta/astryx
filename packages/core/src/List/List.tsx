@@ -368,6 +368,7 @@ export function List({
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)
               : styles.withCounter),
+          reorderSession?.listStyle,
           xstyle,
         ),
         className,

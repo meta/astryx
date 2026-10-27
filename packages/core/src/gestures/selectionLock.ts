@@ -31,7 +31,7 @@
  * iOS query matches utils/touchPresentation.ts.
  */
 
-import {isCoarsePointer} from './coarsePointer';
+import {isCoarsePointer} from '../utils/coarsePointer';
 import {parentAcrossShadow} from './nativeScroll';
 
 /** What a held finger must not start on a control or a cell. */

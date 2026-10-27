@@ -20,8 +20,10 @@
  * reorderable/createReorderable.ts.
  */
 
+import type {ItemAlign} from '../Item/Item';
 import type {ComponentType, Key, ReactNode, RefObject} from 'react';
 import type {StyleXStyles} from '@stylexjs/stylex';
+import type {reorderListStyle} from './ListReorderHandle';
 
 /**
  * The key a reorderable object carries its machinery under. No description:
@@ -64,6 +66,12 @@ export interface ListReorderHandleProps {
    * (spec:AST-085).
    */
   readonly isDisabled?: boolean;
+  /**
+   * The row's alignment (ListItem `align`) when the handle is the row's own
+   * child, after its label: a row without end content, which has no end slot
+   * to align it (spec:AST-103 FR5). Absent inside the end slot.
+   */
+  readonly rowAlign?: ItemAlign;
 }
 
 /**
@@ -97,6 +105,8 @@ export interface ListReorderSession {
   readonly RowName: ComponentType<ListReorderRowNameProps>;
   /** A row with a handle: its focus ring stays off for the handle's own. */
   readonly rowStyle: StyleXStyles;
+  /** The list itself: its insertion line, a pseudo-element. */
+  readonly listStyle: typeof reorderListStyle;
 }
 
 /** The machinery a reorderable object carries. */

@@ -8,12 +8,9 @@
  *   (motion/uikit/reorder.ts) and the row motion (utils/rowMotion.ts)
  * @output The List reorder's touch layer: `attachTouchHold`, the list's one
  *   hold, which picks up a row from its handle under a finger, and
- *   `touchMotion`, UIKit's motion for the rows a reorder moves under a finger
- *   (the slides' spring under the list's theme, the slides, the drop's
- *   glide at the release's velocity, the way home, and the continuation
- *   across the commit). It
- *   registers the reorder table's motion role before its first motion
- *   (`registerReorderTable`)
+ *   `touchMotion`, the motion of the rows a reorder moves under a finger: the
+ *   shared settle role under the list's theme, the drop's glide at the
+ *   release's velocity, the way home, and the continuation across the commit
  * @position Imported by List/listReorderEngine.tsx alone: what the reorder
  *   runs only under a finger sits behind this one import
  *
@@ -42,7 +39,7 @@ import {
   type DurationBounce,
   type SpringDescription,
 } from '../motion/spring';
-import {registerReorderTable, reorder} from '../motion/uikit/reorder';
+import {reorder} from '../motion/uikit/reorder';
 import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {
   animateRow,
@@ -97,18 +94,6 @@ function releaseOnArrival(element: HTMLElement, arrived: Promise<boolean>) {
 /** UIKit's motion for the rows of a reorder under a finger. */
 export const touchMotion = {
   /**
-   * The slides' spring, read once when a motion starts: the measured
-   * constant (`reorder.slide.spring`), through the motion table, which
-   * makes no reorder value a role (touch motion stays internal). Registers
-   * the reorder table first (once).
-   */
-  slideBase(list: HTMLElement): DurationBounce {
-    registerReorderTable();
-    return durationBounceOf(
-      toSpring(resolveMotion(list, reorder.slide.spring)),
-    );
-  },
-  /**
    * The rows' glide to their new places once a move commits (a drop, a
    * reorder mode move): coordinated layout movement, so it plays the one
    * shared settle role, `springs.settle` (spec:AST-105 FR4, the role
@@ -119,15 +104,7 @@ export const touchMotion = {
     registerSpringsTable();
     return durationBounceOf(toSpring(resolveMotion(list, springs.settle)));
   },
-  /** A row the dragged row passes slides to `y` on `spring`. */
-  slide(
-    element: HTMLElement,
-    y: number,
-    spring: SpringDescription,
-    at: number,
-  ): void {
-    void animateRow(element, {y}, spring, {at});
-  },
+
   /**
    * The dropped row glides from where its preview was, `shift` from its new
    * place, to that place on `spring`, starting at the release's y `velocity`
