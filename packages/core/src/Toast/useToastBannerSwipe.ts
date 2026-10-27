@@ -165,14 +165,19 @@ export function useToastBannerSwipe(
   /** The dismissing release the next retract follows, if any. */
   const releaseRef = useRef<DismissingRelease | null>(null);
   const optionsRef = useRef(options);
+  // Synchronizes the pan recognizer's callbacks (`shouldReceiveTouch` and
+  // the transition listener below) and the retract with the latest options,
+  // which they read when input or a dismissal arrives; it acquires nothing
+  // (architecture:react-component-runtime INV3).
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
   });
   const [animator] = useState(() => createAnimator(null));
+  // Attaches the swipe's compositor animator to the card in the notification
+  // presentation, not for `enabled` (a swiped card keeps its translation
+  // through the exit), and gives the card its own layer, since it moves by
+  // `translate` every frame; the cleanup detaches both (INV3).
   useIsomorphicLayoutEffect(() => {
-    // Attached while under a finger, not for `enabled`: a swiped card keeps
-    // its translation through the exit. The card moves by `translate` every
-    // frame, so it gets its own layer.
     const root = isNotification ? rootRef.current : null;
     animator.attach(root);
     root?.style.setProperty('will-change', 'translate');
@@ -241,10 +246,14 @@ export function useToastBannerSwipe(
     },
   );
 
+  // Synchronizes the pan recognizer's direction with the toast's edge; it
+  // acquires nothing and is idempotent (INV3).
   useIsomorphicLayoutEffect(() => {
     pan.setDirection(panDirection(options.direction));
   }, [pan, options.direction]);
 
+  // Subscribes to the pan recognizer's state transitions, which move the card
+  // with the contact and release it; the cleanup removes the listener (INV3).
   useEffect(
     () =>
       pan.addTransitionListener((recognizer, _from, to) => {
