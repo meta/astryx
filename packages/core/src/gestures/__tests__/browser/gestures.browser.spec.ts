@@ -1216,6 +1216,61 @@ test.describe('where the primary pointer is fine', () => {
     expect([during, after]).toEqual(['', '']);
   });
 
+  test('a scroll-edge pan takes a trackpad scroll only at the top of the page that scrolls it, pulling the content down; mid-page the page scrolls (spec:AST-094 FR43, FR19)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="margin: 0"></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="content" style="height: 3000px; width: 300px">content</div>';
+      const pull = new PanGestureRecognizer({
+        direction: 'vertical',
+        scrollEdge: true,
+        allowedPointerTypes: [],
+        allowedScrollTypes: ['continuous'],
+      });
+      pull.addTransitionListener((_recognizer, _from, to) =>
+        window.__wheelLog.push(`pull:${to}`),
+      );
+      host.attach(document.getElementById('content') as HTMLElement, pull);
+    });
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const at = {x: 100, y: 200};
+    // Mid-page, a scroll up is the page's.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.waitForTimeout(100);
+    for (let step = 0; step < 4; step += 1) {
+      await driver.wheel({...at, dy: -16});
+    }
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => window.scrollY)).toBeLessThan(400);
+    expect(await page.evaluate(() => window.__wheelLog)).toEqual([]);
+    // At the top, scrolling down is the page's too.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+    await driver.wheel({...at, dy: 16});
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.__wheelLog)).toEqual([]);
+    // At the top, pulling the content down: the pan's, and the page holds.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
+    for (let step = 0; step < 4; step += 1) {
+      await driver.wheel({...at, dy: -16});
+    }
+    await page.waitForTimeout(250);
+    const pull = await page.evaluate(() => window.__wheelLog);
+    expect(pull[0]).toBe('pull:began');
+    expect(pull).toContain('pull:ended');
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  });
+
   test('a wheel gesture stays with the pan that took it when the pan moves its element from under a still cursor, as a browser latches a scroller (spec:AST-094 FR43)', async ({
     page,
   }) => {
