@@ -126,6 +126,10 @@ Out of coverage, each taking its final place at once:
   since only content after the change in the DOM moves;
 - text reflowing inside a paragraph beside a float;
 - elements the app moves itself with its own transforms;
+- a closing element whose space no end margin frees (a grid item whose
+  track or gap changes when it hides, or a flex-row item that sets its row's
+  height): it hides at once, without its exit, and the content after it
+  takes its final place at once;
 - an anchored popover tied to a moving element, which layer anchoring keeps
   in place (`architecture:layer-runtime`).
 
