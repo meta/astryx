@@ -94,7 +94,7 @@ export const rowPressLayerStyles = stylex.create({
    * selection hold keeps the row: at rest a row's own `::before` and its
    * stacking are as they were; during a press the layer is the row's
    * `::before`, so a caller's decoration there is replaced for that time
-   * (decorate with `::after` or a child). A selection hold (selectionHold.ts)
+   * (decorate with a child). A selection hold (selectionHold.ts)
    * writes `held` on the row it keeps selected through a navigation push: the
    * layer shows at full strength, and the hold's own Web Animations move it
    * from there.

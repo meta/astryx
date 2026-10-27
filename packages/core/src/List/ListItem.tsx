@@ -467,7 +467,7 @@ export function ListItem({
   );
   // Under a finger, an interactive row's hit target grows toward the touch
   // target where its neighbors leave room, with no visual or layout change
-  // (component:List FR10): useTouchHitArea keeps the row's insets live, and
+  // (`spec:AST-094` FR42; `component:List` FR10, #8571): useTouchHitArea keeps the row's insets live, and
   // its invisible layer (touchHitAreaStyles.layer) reads them.
   const isTouchTarget =
     (onClick != null || href != null || interactiveRef != null) && !isDisabled;

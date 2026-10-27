@@ -16,7 +16,7 @@
  *   List/__tests__/ListTouchHitArea.interaction.browser.spec.ts
  */
 
-import {useRef} from 'react';
+import {act, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
@@ -49,21 +49,65 @@ vi.mock('./hitArea', async importOriginal => {
   };
 });
 
+import {ThemeContext, type ThemeContextValue} from '../theme/useTheme';
 import {useTouchHitArea} from './touchHitArea';
 import {touchHitAreaStyles} from './touchHitArea.stylex';
 
-function Host({enabled}: {enabled: boolean}) {
+function Host({
+  enabled,
+  target,
+  fontSize,
+}: {
+  enabled: boolean;
+  target?: string;
+  fontSize?: string;
+}) {
   const ref = useRef<HTMLSpanElement | null>(null);
   useTouchHitArea(ref, enabled);
   return (
     <div>
       <span
         data-testid="host"
-        ref={ref}
+        ref={node => {
+          // The page's touch target, set before the hook's effect reads it.
+          if (node != null && target != null) {
+            node.style.setProperty('--size-touch-target', target);
+          }
+          if (node != null && fontSize != null) {
+            node.style.setProperty('font-size', fontSize);
+          }
+          ref.current = node;
+        }}
         {...stylex.props(touchHitAreaStyles.layer)}
       />
     </div>
   );
+}
+
+/** A matchMedia whose primary pointer can change, firing its listeners. */
+function stubPointer(coarse: boolean): (coarse: boolean) => void {
+  let isCoarse = coarse;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    get matches() {
+      return query === '(pointer: coarse)' && isCoarse;
+    },
+    media: query,
+    addEventListener: (_type: string, listener: () => void) =>
+      listeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) =>
+      listeners.delete(listener),
+  }));
+  return next => {
+    isCoarse = next;
+    for (const listener of [...listeners]) {
+      listener();
+    }
+  };
+}
+
+function themed(value: ThemeContextValue, children: ReactNode): ReactNode {
+  return <ThemeContext value={value}>{children}</ThemeContext>;
 }
 
 /** The element's injected `::after` rules, split by the touch gate. */
@@ -135,6 +179,48 @@ describe('useTouchHitArea', () => {
     expect(watches[1].minSize).toBe(44);
     host.unmount();
     expect(watches[1].stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a page raise the touch target under a finger, never lower it below 44 px (spec:AST-094 FR42)', () => {
+    stubCoarse();
+    const raised = render(<Host enabled target="60px" />);
+    expect(watches[0].minSize).toBe(60);
+    raised.unmount();
+    render(<Host enabled target="30px" />);
+    expect(watches[1].minSize).toBe(44);
+  });
+
+  it('reads the page’s touch target in rem through the root’s font size and in em through the element’s', () => {
+    stubCoarse();
+    document.documentElement.style.setProperty('font-size', '16px');
+    try {
+      const rem = render(<Host enabled target="3.75rem" />);
+      expect(watches[0].minSize).toBe(60);
+      rem.unmount();
+      render(<Host enabled target="3em" fontSize="20px" />);
+      expect(watches[1].minSize).toBe(60);
+    } finally {
+      document.documentElement.style.removeProperty('font-size');
+    }
+  });
+
+  it('reads the touch target again when the primary pointer turns coarse', () => {
+    const setCoarse = stubPointer(false);
+    render(<Host enabled target="60px" />);
+    expect(watches.at(-1)?.minSize).toBe(44);
+    act(() => setCoarse(true));
+    expect(watches.at(-1)?.minSize).toBe(60);
+    expect(watches.at(-2)?.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the touch target again when the theme changes', () => {
+    stubCoarse();
+    const first = {mode: 'light'} as unknown as ThemeContextValue;
+    const second = {mode: 'dark'} as unknown as ThemeContextValue;
+    const {rerender} = render(themed(first, <Host enabled target="48px" />));
+    expect(watches.at(-1)?.minSize).toBe(48);
+    rerender(themed(second, <Host enabled target="60px" />));
+    expect(watches.at(-1)?.minSize).toBe(60);
   });
 
   it('writes the insets it hears on the element', () => {
