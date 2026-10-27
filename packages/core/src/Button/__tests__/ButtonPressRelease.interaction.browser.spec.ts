@@ -9,8 +9,9 @@
  * @output Animation proofs for a control's press release on the
  *   compositor: it follows UIButton's curve on the button's layer and on a
  *   card's `::after` (sampled frame by frame, both engines), keeps fading on
- *   every frame while the main thread is blocked, and does no Layout or
- *   Paint; under reduced motion it is one opacity cross-fade of 200 ms or
+ *   every frame while the main thread is blocked, keeps its layer until the
+ *   strength reaches 0 when a busy first frame starts it late (both
+ *   engines), and does no Layout or Paint; under reduced motion it is one opacity cross-fade of 200 ms or
  *   less on a coarse pointer (design:reduced-motion DR2) and immediate with
  *   any other pointer (DR3); a storyboard of the release, its trace
  *   asserted
@@ -600,6 +601,62 @@ test('the release of a button keeps fading on every frame while the main thread 
   const last = strengths.at(-1);
   expect(last).toBeDefined();
   expect(strengths[0].strength).toBeGreaterThan((last?.strength ?? 1) + 0.2);
+});
+
+test('after a busy first frame, the release keeps a button’s layer until its strength reaches 0', async ({
+  page,
+}) => {
+  const opened = await openSurface(page, BUTTONS, secondaryButton);
+  // When the press controller writes the release, 150 ms of script hold the
+  // main thread before the first frame, so the release animation starts
+  // late. Each frame after that records whether the release is still
+  // written and the layer's strength, until the release is gone.
+  await opened.surface.evaluate(el => {
+    type Frame = [press: string | null, strength: number];
+    (window as unknown as {__release: Promise<Frame[]>}).__release =
+      new Promise(resolve => {
+        const frames: Frame[] = [];
+        const observer = new MutationObserver(() => {
+          if (el.getAttribute('data-astryx-press') !== 'fading') {
+            return;
+          }
+          observer.disconnect();
+          const until = performance.now() + 150;
+          while (performance.now() < until) {
+            // Busy: the main thread is held.
+          }
+          const sample = () => {
+            const press = el.getAttribute('data-astryx-press');
+            frames.push([
+              press,
+              Number(getComputedStyle(el, '::before').opacity),
+            ]);
+            if (press !== 'fading') {
+              resolve(frames);
+              return;
+            }
+            requestAnimationFrame(sample);
+          };
+          requestAnimationFrame(sample);
+        });
+        observer.observe(el, {attributeFilter: ['data-astryx-press']});
+      });
+  });
+  await opened.driver.play(tap(opened.center, {holdMs: HOLD_MS}));
+  const frames = await page.evaluate(
+    async () =>
+      (
+        window as unknown as {
+          __release: Promise<[string | null, number][]>;
+        }
+      ).__release,
+  );
+  const fading = frames.filter(([press]) => press === 'fading');
+  // The release ran on frames after the block, and its last frame still
+  // written shows the layer at rest: the release went when its animation
+  // ended, not partway through it on a clock started before the block.
+  expect(fading.length, JSON.stringify(frames)).toBeGreaterThan(2);
+  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThan(0.05);
 });
 
 test('the release of a button does no Layout or Paint per frame', async ({

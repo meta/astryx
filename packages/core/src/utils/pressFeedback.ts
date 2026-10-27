@@ -25,7 +25,9 @@
  * and highlights at once outside one (`spec:AST-094` FR11), like a control.
  * Both are cancelled by travel past
  * the slop or by the scroll that takes the touch, and both fade at the lift
- * on their profile's clock.
+ * on their profile's clock. The release ends when the stylesheet's release
+ * animation does (endAfterRelease), so a busy first frame, which starts that
+ * animation late, never cuts it short.
  *
  * LISTENERS ONLY WHILE A PRESS IS LIVE. At rest the document carries two
  * passive listeners, `pointerdown` and `keydown`, which only arm. A touch, or
@@ -323,7 +325,8 @@ interface LiveGesture {
   pointerId: number | null;
   /** The surface's profile's release clock, in ms. */
   releaseMs: number;
-  timer: ReturnType<typeof setTimeout> | null;
+  /** Cancels the clock the current phase owes, or the release it waits for. */
+  timer: (() => void) | null;
 }
 
 /**
@@ -442,8 +445,83 @@ export interface PaintPressOptions {
 /** What a press may replace: a `held` row is its owner's until released. */
 const PRESS_REPLACES: ReadonlyArray<PressPaint> = ['none', 'on', 'fading'];
 const PAINTS: ReadonlySet<string> = new Set(['on', 'held', 'fading']);
-/** A `fading` paint's own release clock, per element (paintPress). */
-const fadeTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
+/** Cancels a `fading` paint's own release, per element (paintPress). */
+const fadeTimers = new WeakMap<Element, () => void>();
+
+/** The document timeline's time now, in ms; `null` where the engine has none. */
+function timelineNow(): number | null {
+  const time =
+    typeof document === 'undefined' ? null : document.timeline?.currentTime;
+  return typeof time === 'number' ? time : null;
+}
+
+/**
+ * The release animations a `fading` write at `writtenAt` started on
+ * `element`: its own CSS animations (on it, or its `::before` or `::after`,
+ * never a descendant's), finite, and started at or after the write or still
+ * waiting for their first frame. Empty where the engine has no Web
+ * Animations.
+ */
+function releaseAnimationsOf(
+  element: Element,
+  writtenAt: number | null,
+): Animation[] {
+  if (typeof element.getAnimations !== 'function') {
+    return [];
+  }
+  return element.getAnimations({subtree: true}).filter(animation => {
+    // A CSS animation's effect is a KeyframeEffect: its target is the
+    // element it runs on, or the element whose pseudo-element it runs on.
+    const effect = animation.effect as KeyframeEffect | null;
+    if (!('animationName' in animation) || effect?.target !== element) {
+      return false;
+    }
+    if (!Number.isFinite(Number(effect.getComputedTiming().endTime))) {
+      return false;
+    }
+    const start = animation.startTime;
+    return start == null || (writtenAt != null && Number(start) >= writtenAt);
+  });
+}
+
+/**
+ * Call `end` when the release a `fading` write just started on `element` is
+ * over: when the stylesheet's release animation ends, not when a clock runs
+ * out. A busy main thread delays the animation's first frame, and with it
+ * its end, so a clock started at the write would remove `fading` mid-fade
+ * and cut the release short. The clock only looks: `clockMs` after the
+ * write, a release animation still running, or still waiting for its first
+ * frame, is waited for until it finishes or is cancelled (the surface was
+ * unmounted or restyled); with none (reduced motion's instant release, a
+ * surface without a press layer, an engine without Web Animations) the
+ * release ends there. Returns a cancel.
+ */
+function endAfterRelease(
+  element: Element,
+  clockMs: number,
+  end: () => void,
+): () => void {
+  const writtenAt = timelineNow();
+  let waiting = true;
+  const timer = setTimeout(() => {
+    const running = releaseAnimationsOf(element, writtenAt);
+    if (running.length === 0) {
+      end();
+      return;
+    }
+    void Promise.allSettled(
+      running.map(async animation => animation.finished),
+    ).then(() => {
+      if (waiting) {
+        end();
+      }
+    });
+  }, clockMs);
+  return () => {
+    waiting = false;
+    clearTimeout(timer);
+  };
+}
 
 /** The press state painted on `element` now; `null` for a value no painter wrote. */
 export function readPressPaint(element: Element): PressPaint | null {
@@ -471,7 +549,7 @@ function writePress(
   }
   const pending = fadeTimers.get(element);
   if (pending != null) {
-    clearTimeout(pending);
+    pending();
     fadeTimers.delete(element);
   }
   if (next === 'none') {
@@ -485,8 +563,9 @@ function writePress(
 /**
  * Paint `next` on `element` if its current press state is in `onlyFrom`
  * (by default none, on or fading: a hold survives a press, and its owner
- * releases it with `onlyFrom: ['held']`). A `fading` paint ends on its own
- * clock. Returns whether it painted. For a painter other than the touch
+ * releases it with `onlyFrom: ['held']`). A `fading` paint ends when its
+ * release animation does, or on its own clock where none runs
+ * (endAfterRelease). Returns whether it painted. For a painter other than the touch
  * press controller: a group that tracks its selection, a row that keeps its
  * selection through a navigation.
  */
@@ -501,12 +580,12 @@ export function paintPress(
   if (next === 'fading') {
     fadeTimers.set(
       element,
-      setTimeout(() => {
+      endAfterRelease(element, options.releaseMs ?? PRESS_FADE_MS, () => {
         fadeTimers.delete(element);
         if (element.getAttribute(PRESSED_ATTRIBUTE) === 'fading') {
           element.removeAttribute(PRESSED_ATTRIBUTE);
         }
-      }, options.releaseMs ?? PRESS_FADE_MS),
+      }),
     );
   }
   return true;
@@ -526,7 +605,7 @@ function paintElement(element: HTMLElement, paint: GesturePaint): void {
 
 function clearTimer(slot: Slot): void {
   if (slot.live?.timer != null) {
-    clearTimeout(slot.live.timer);
+    slot.live.timer();
     slot.live.timer = null;
   }
 }
@@ -569,23 +648,28 @@ function apply(slot: Slot, step: PressStep): void {
   }
   if (step.timer != null) {
     const kind = step.timer;
-    // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
-    // while a scroll runs, so a frame-based delay would fire late, after the
-    // scroll, and paint a control nobody is pressing any more.
-    live.timer = setTimeout(
-      () => {
-        if (slot.live != null) {
-          slot.live.timer = null;
-        }
-        apply(
-          slot,
-          pressGestureStep(slot.live?.gesture ?? idlePressGesture(), {
-            kind: TIMER_EVENT[kind],
-          }),
-        );
-      },
-      timerMs(kind, live),
-    );
+    const fire = () => {
+      if (slot.live != null) {
+        slot.live.timer = null;
+      }
+      apply(
+        slot,
+        pressGestureStep(slot.live?.gesture ?? idlePressGesture(), {
+          kind: TIMER_EVENT[kind],
+        }),
+      );
+    };
+    if (kind === 'fade') {
+      // The release is over when its animation is, however late a busy
+      // main thread let that animation start.
+      live.timer = endAfterRelease(live.element, timerMs(kind, live), fire);
+    } else {
+      // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
+      // while a scroll runs, so a frame-based delay would fire late, after the
+      // scroll, and paint a control nobody is pressing any more.
+      const timer = setTimeout(fire, timerMs(kind, live));
+      live.timer = () => clearTimeout(timer);
+    }
   }
 }
 
