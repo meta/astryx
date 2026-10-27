@@ -74,6 +74,7 @@ import React, {
   Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Heading} from '../Heading';
@@ -1080,7 +1081,16 @@ export function ContextMenuView({
         hold: touchModes ? TOUCH_HOLD : undefined,
         onHold: phase => onHoldRef.current(phase),
       },
-      forwarded => onForwardedRef.current(forwarded),
+      forwarded => {
+        // The open commits in the request's own task, before the next input,
+        // as React commits a request it dispatches itself. A request comes
+        // from a listener on the trigger, and inside a shadow root
+        // `window.event` is unset there, so React cannot tell it is a
+        // discrete input: it would commit the open in a later task, and a
+        // press outside in between would find no listener.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the open must commit before the next input, inside a shadow root too
+        flushSync(() => onForwardedRef.current(forwarded));
+      },
     );
     return () => requests.destroy();
   }, [attachment, isDisabled, touchModes, triggerAs]);
