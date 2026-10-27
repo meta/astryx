@@ -278,6 +278,16 @@ function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
 }
 
 /**
+ * Whether a recognizer takes a contact that comes with Touch Events and a
+ * long press's contextmenu: a finger's or a pen's. A scroll-only recognizer
+ * (`allowedPointerTypes: []`) and a mouse-only one take neither.
+ */
+function takesTouchContacts(recognizer: GestureRecognizer): boolean {
+  const types = recognizer.allowedPointerTypes;
+  return types == null || types.has('touch') || types.has('pen');
+}
+
+/**
  * A hover recognizer, told apart by its family rather than its class, so a
  * page without one never ships HoverGestureRecognizer.
  */
@@ -1418,8 +1428,10 @@ export class GestureHost {
 
   /**
    * Whether an enabled participant could claim a touch or cancel a lift: a
-   * consumer, or a recognizer that claims touches. With only watchers
-   * attached, the host's listeners are all passive (`spec:AST-094` FR20).
+   * consumer, or a recognizer that claims touches and takes a finger or a
+   * pen. With only watchers, or only scroll-only recognizers
+   * (`allowedPointerTypes: []`), the host's listeners are all passive
+   * (`spec:AST-094` FR20, FR24).
    */
   private hasClaimer(): boolean {
     for (const registration of this.registry.values()) {
@@ -1427,7 +1439,10 @@ export class GestureHost {
       if (
         (consumer != null && consumer.isEnabled?.() !== false) ||
         registration.recognizers.some(
-          recognizer => recognizer.isEnabled && recognizer.claimsTouches,
+          recognizer =>
+            recognizer.isEnabled &&
+            recognizer.claimsTouches &&
+            takesTouchContacts(recognizer),
         )
       ) {
         return true;
