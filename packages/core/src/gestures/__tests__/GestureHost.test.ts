@@ -1289,6 +1289,82 @@ describe('GestureHost', () => {
     expect(consumer.events.at(-1)).toMatch(/^ended/);
   });
 
+  it("cancels the stylus touchend of a pen a recognizer claimed, as a finger's, so no compatibility mouse event or click follows (iPad's order; spec:AST-094 FR21, FR43)", () => {
+    const {box} = mount('<div id="box"></div>');
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    const states: string[] = [];
+    tap.addListener(r => states.push(r.state));
+    detachers.push(host.attach(box, tap));
+    const stylus = (type: string, time: number, isLift: boolean) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      const pen = {
+        identifier: 77,
+        clientX: 10,
+        clientY: 10,
+        target: box,
+        touchType: 'stylus',
+      };
+      Object.defineProperty(event, 'changedTouches', {value: [pen]});
+      Object.defineProperty(event, 'touches', {value: isLift ? [] : [pen]});
+      Object.defineProperty(event, 'timeStamp', {value: time});
+      box.dispatchEvent(event);
+      return event;
+    };
+    // iPad Safari: the pen's pointer events, then its stylus touches.
+    pointer('pointerdown', box, {
+      id: 9,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    stylus('touchstart', 0, false);
+    pointer('pointerup', box, {
+      id: 9,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      time: 60,
+    });
+    const end = stylus('touchend', 60, true);
+    expect(states).toEqual(['ended']);
+    expect(end.defaultPrevented).toBe(true);
+  });
+
+  it('leaves the stylus touchend of a pen no recognizer claimed to the browser', () => {
+    const {box, other} = mount('<div id="box"></div><div id="other"></div>');
+    detachers.push(host.attach(box, new TapGestureRecognizer({name: 'tap'})));
+    pointer('pointerdown', other, {
+      id: 9,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', other, {
+      id: 9,
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      time: 60,
+    });
+    const end = new Event('touchend', {bubbles: true, cancelable: true});
+    const pen = {
+      identifier: 77,
+      clientX: 10,
+      clientY: 10,
+      target: other,
+      touchType: 'stylus',
+    };
+    Object.defineProperty(end, 'changedTouches', {value: [pen]});
+    Object.defineProperty(end, 'touches', {value: []});
+    Object.defineProperty(end, 'timeStamp', {value: 60});
+    other.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(false);
+  });
+
   it("cancels a finger's moves only when a claimed pen's own stylus touch moves, never a finger nobody owns", () => {
     const {pad, list} = mount('<div id="pad"></div><div id="list"></div>');
     const drawing = new PanGestureRecognizer({name: 'draw'});
