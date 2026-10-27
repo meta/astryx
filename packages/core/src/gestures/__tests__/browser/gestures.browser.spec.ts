@@ -1076,8 +1076,8 @@ for (const travel of [
 
 /**
  * A screen-edge pan on a strip along the left edge as wide as its band
- * (40.15 px: an engine snaps 40.2 px up to 40.203, wider than the band),
- * over a horizontal scroller that fills the page; every
+ * (40.2 px, which lays out at 40.203), over a horizontal scroller that
+ * fills the page; every
  * transition of the pan goes to `window.__edge`.
  */
 async function openEdgePan(page: Page, engine: string): Promise<Driver> {
@@ -1088,7 +1088,7 @@ async function openEdgePan(page: Page, engine: string): Promise<Driver> {
       <div id="hscroll" style="height: 300px; overflow-x: auto; overscroll-behavior: contain">
         <div style="width: 3000px; height: 300px; background: linear-gradient(90deg, #eef, #cce)">wide</div>
       </div>
-      <div id="edge" style="position: fixed; left: 0; top: 0; width: 40.15px; height: 300px"></div>`;
+      <div id="edge" style="position: fixed; left: 0; top: 0; width: 40.2px; height: 300px"></div>`;
     const edges: string[] = [];
     (window as unknown as {__edge: string[]}).__edge = edges;
     const pan = new ScreenEdgePanGestureRecognizer({
