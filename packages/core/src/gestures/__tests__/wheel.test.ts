@@ -16,6 +16,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
+import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {ManualClock} from './harness';
 
@@ -310,15 +311,49 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     ).toEqual([]);
   });
 
-  it("takes no wheel for a pan that allows no scroll type, UIKit's default: its element gets no wheel listener, and the page scrolls", () => {
+  it("takes wheel and trackpad scrolling on a pan by default, a mouse wheel's notches included (spec:AST-094 FR43)", () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
     const pan = new PanGestureRecognizer({direction: 'horizontal'});
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
+    expect(
+      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toEqual([['wheel', expect.any(Function), {passive: false}]]);
+    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(true);
+    expect(states[0]).toBe('began');
+    clock.runDue(200);
+    // A mouse wheel's notch, in lines (Firefox's).
+    expect(wheel(box, {dx: 1, mode: 1, time: 300}).defaultPrevented).toBe(true);
+    expect(states.filter(state => state === 'began')).toHaveLength(2);
+  });
+
+  it('takes no wheel for a pan whose caller allows no scroll type: its element gets no wheel listener, and the page scrolls', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(box, 'addEventListener');
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: [],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
     expect(added.mock.calls.map(call => call[0])).not.toContain('wheel');
     expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
     expect(states).toEqual([]);
+  });
+
+  it('takes no wheel on a screen-edge pan, which FR43 keeps off under a mouse and a trackpad: a widened allowedScrollTypes is refused (spec:AST-094 FR43)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(box, 'addEventListener');
+    const edge = new ScreenEdgePanGestureRecognizer({
+      edges: ['left'],
+      // @ts-expect-error the screen-edge pan takes no allowedScrollTypes
+      allowedScrollTypes: ['continuous', 'discrete'],
+    });
+    expect(edge.allowedScrollTypes.size).toBe(0);
+    detachers.push(host.attach(box, edge));
+    expect(added.mock.calls.map(call => call[0])).not.toContain('wheel');
+    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
   });
 
   it('takes a trackpad scroll along its axis on a pan that allows continuous scrolling: it begins past 10 px, follows the content, and ends 100 ms after the last wheel', () => {
