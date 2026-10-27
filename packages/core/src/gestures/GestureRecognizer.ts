@@ -88,7 +88,8 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
    * (`discrete`) drive it as a contact moving with the content, along its
    * own axis and after the scrollers under the pointer (`spec:AST-094`
    * FR43). A pinch takes a ctrl-wheel, as a trackpad pinches.
-   * @default none; a pinch takes both
+   * @default none; a pan and a pinch take both (FR43), the screen-edge pan
+   *   none, whatever a caller passes
    */
   allowedScrollTypes?: ReadonlyArray<ScrollType>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */

@@ -463,7 +463,8 @@ describe('GestureHost', () => {
         .filter(t => /^(touch|pointer)/.test(t));
     // A fine primary pointer: nothing on the page while idle, and on the
     // element the one listener its press needs, plus the claiming pan's
-    // blocking touchmove, which FR24 counts outside that budget (FR19).
+    // blocking touchmove, which FR24 counts outside that budget (FR19), and
+    // the wheel listener a pan takes wheel and trackpad scrolling by (FR43).
     const fine = new GestureHost(document, {
       clock,
       isPrimaryPointerCoarse: () => false,
@@ -474,6 +475,7 @@ describe('GestureHost', () => {
     expect(boxAdded.mock.calls.map(call => call[0]).sort()).toEqual([
       'pointerdown',
       'touchmove',
+      'wheel',
     ]);
     detachFine();
     boxAdded.mockClear();
