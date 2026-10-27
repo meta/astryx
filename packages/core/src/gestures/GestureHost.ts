@@ -136,7 +136,6 @@ import {
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
@@ -162,7 +161,11 @@ import {
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
-import {lockDragSelection, locksSelectionFor} from '../utils/selectionLock';
+import {
+  type DragSelectionReleaseOptions,
+  lockDragSelection,
+  locksSelectionFor,
+} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 import {
@@ -381,7 +384,10 @@ export class GestureHost {
   private readonly pendingCallerReads = new Set<HTMLElement>();
   private isCallerReadScheduled = false;
   /** The selection lock each contact holds, by host contact id. */
-  private readonly lockedBy = new Map<number, () => void>();
+  private readonly lockedBy = new Map<
+    number,
+    (options?: DragSelectionReleaseOptions) => void
+  >();
   private readonly presentedHitTesting: 'auto' | 'always' | 'never';
   /**
    * Contacts sent to what is drawn instead of what the engine hit, by host
@@ -1542,9 +1548,12 @@ export class GestureHost {
     }
   }
 
-  /** Undo `lockSelection` for a contact that ended; idempotent. */
-  private unlockSelection(id: number): void {
-    this.lockedBy.get(id)?.();
+  /**
+   * Undo `lockSelection` for a contact that ended, at once for a cancel;
+   * idempotent.
+   */
+  private unlockSelection(id: number, isCancel = false): void {
+    this.lockedBy.get(id)?.({isCancel});
     this.lockedBy.delete(id);
   }
 
@@ -2387,7 +2396,7 @@ export class GestureHost {
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
       this.pointerIds.delete(event.pointerId);
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
       this.retargeted.delete(id);
       this.arena.cancelled([id], eventTime(event));
     }
@@ -2641,7 +2650,7 @@ export class GestureHost {
   private cancelEverything(time: number): void {
     const ids = [...this.pointerIds.values()];
     for (const id of ids) {
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
     }
     for (const identifier of [...this.touchIds.keys()]) {
       // The browser may keep the touch alive: its lift must not click.
