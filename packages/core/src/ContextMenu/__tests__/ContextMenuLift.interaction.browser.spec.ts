@@ -80,8 +80,8 @@ async function openLiftStory(
   // One touch model: the engine's own finger (a coarse pointer) lifts.
   await openStory(page, storybook(), 'core-contextmenu--touch-long-press');
   const trigger = page.getByTestId('touch-context-menu');
-  // The touch layer, the lift included, loads on demand; it marks the
-  // trigger pressable once it runs.
+  // The touch layer, the lift included, marks the trigger pressable once it
+  // runs (from the first render under the touch model).
   await expect(trigger).toHaveAttribute('data-astryx-pressable', '', {
     timeout: 10_000,
   });
