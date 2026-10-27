@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
-      description: 'Spacing density for items. Under a finger, rows are at least 52px tall, 62px with a description, as iOS table rows are; a compact list and a list with markers keep their rows.',
+      description: "Spacing density for items. Under a finger, an interactive row's hit target reaches the touch target (44px unless the theme sets one) where its neighbors leave room, with no change to how rows look or lay out.",
       default: "'balanced'",
     },
     {

@@ -372,6 +372,11 @@ export function useListUpdateMotion(
   /** The commit whose motions hold the list's clip; a newer one takes it. */
   const clipRef = useRef(0);
 
+  // External system (`architecture:react-component-runtime` INV3): the rows'
+  // shared motion animators (utils/rowMotion.ts), the list's clip, and the
+  // removed rows' copies this effect adds to the list. Each commit reads the
+  // rows' layout and moves them from where they were; the unmount cleanup
+  // below stops them and removes the copies.
   useIsomorphicLayoutEffect(() => {
     const element = listRef.current;
     // Motion off (no `hasAnimatedChanges`, or a mouse): read
@@ -556,7 +561,9 @@ export function useListUpdateMotion(
   // rewraps rows, a stylesheet or theme changing row heights, a row resizing
   // itself) would leave the places above stale, and the next update would
   // start its rows from where they no longer were: read them again whenever
-  // the list's box changes size.
+  // the list's box changes size. External system
+  // (`architecture:react-component-runtime` INV3): a resize observation of the
+  // list's box, released by the cleanup.
   useIsomorphicLayoutEffect(() => {
     const element = listRef.current;
     if (element == null || !animates) {

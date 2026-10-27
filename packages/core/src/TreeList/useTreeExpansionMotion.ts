@@ -137,6 +137,11 @@ export function useTreeExpansionMotion(
    */
   const movedRef = useRef<Map<HTMLElement, number>>(new Map());
 
+  // External system (`architecture:react-component-runtime` INV3): the shared
+  // motion animators (utils/rowMotion.ts) of the group's rows and of the rows
+  // after it in the tree. A toggle starts them, a toggle mid-motion retargets
+  // them, and the commit that removes the children stops them at rest; the
+  // unmount cleanup below releases any still moving.
   useIsomorphicLayoutEffect(() => {
     const before = previousRef.current;
     previousRef.current = {isExpanded, shown};

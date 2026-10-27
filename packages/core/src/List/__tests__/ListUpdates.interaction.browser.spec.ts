@@ -298,7 +298,8 @@ test('a reorder: each row slides from its old place to its new one', async ({
   // surface behind it, so their labels never show through each other.
   const paint = async (element: Locator) =>
     element.evaluate(node => {
-      const layer = getComputedStyle(node, '::after');
+      // The surface: an inset shadow across the row's padding box.
+      const shadow = getComputedStyle(node).boxShadow;
       const probe = document.createElement('div');
       probe.style.backgroundColor = 'var(--color-background-surface)';
       node.parentElement?.append(probe);
@@ -307,9 +308,9 @@ test('a reorder: each row slides from its old place to its new one', async ({
       return {
         zIndex: getComputedStyle(node).zIndex,
         layer:
-          layer.content === 'none' || layer.content === ''
+          shadow === 'none' || !shadow.includes('inset')
             ? null
-            : layer.backgroundColor,
+            : (/^rgba?\([^)]*\)/.exec(shadow)?.[0] ?? shadow),
         surface,
       };
     });
