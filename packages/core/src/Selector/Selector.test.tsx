@@ -4979,3 +4979,50 @@ describe('Selector and option actions (not adopted)', () => {
     }
   });
 });
+
+describe('Selector caller aria-labelledby', () => {
+  const FRUITS = ['Apple', 'Banana', 'Cherry'];
+
+  it('names the trigger by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="lunch-heading">Lunch</span>
+        <Selector
+          label="Fruit"
+          options={FRUITS}
+          onChange={() => {}}
+          aria-labelledby="lunch-heading"
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Fruit Lunch'});
+    expect(trigger.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'lunch-heading',
+    );
+  });
+
+  it('names a grouped trigger by the group, its label, and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="lunch-heading">Lunch</span>
+        <InputGroup label="Order">
+          <Selector
+            label="Fruit"
+            options={FRUITS}
+            onChange={() => {}}
+            aria-labelledby="lunch-heading"
+          />
+        </InputGroup>
+      </>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'Order Fruit Lunch'}),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves a standalone trigger named by its label element without a caller aria-labelledby', () => {
+    render(<Selector label="Fruit" options={FRUITS} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(trigger).not.toHaveAttribute('aria-labelledby');
+  });
+});
