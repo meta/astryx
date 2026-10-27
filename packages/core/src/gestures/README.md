@@ -223,9 +223,11 @@ presses nothing.
   | Recognizers on the element                        | `touch-action`      |
   | ------------------------------------------------- | ------------------- |
   | tap, long press                                   | `manipulation`      |
-  | horizontal pan or swipe, horizontal edge pan      | `pan-y pinch-zoom`  |
+  | horizontal pan or swipe                           | `pan-y pinch-zoom`  |
+  | horizontal edge pan on a strip within its band    | `pan-y pinch-zoom`  |
   | vertical pan or swipe                             | `pan-x pinch-zoom`  |
   | one-way pan, pan with `scrollEdge`                | left as is (`auto`) |
+  | edge pan on a view wider than its band            | left as is (`auto`) |
   | free pan                                          | `pinch-zoom`        |
   | pinch or rotation                                 | `pan-x pan-y`       |
   | pinch or rotation together with a free pan        | `none`              |
