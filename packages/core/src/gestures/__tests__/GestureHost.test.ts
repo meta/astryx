@@ -24,6 +24,7 @@ import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
 import type {SelectionLock} from '../GestureRecognizer';
 import {VelocityTracker} from '../VelocityTracker';
+import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {lockSelection} from '../../utils/selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
@@ -212,6 +213,26 @@ class LockingConsumer extends RecordingConsumer {
 }
 
 describe('GestureHost', () => {
+  it("measures a screen-edge pan's view, so an edge-zone strip takes the axis at UIKit's 15 px, not 10 (spec:AST-094 FR18)", () => {
+    const {strip} = mount('<div id="strip"></div>');
+    strip.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 0, y: 0, width: 40, height: 800});
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    detachers.push(host.attach(strip, pan));
+    const down = {id: 1, x: 5, y: 300};
+    touch('touchstart', strip, [down], [down], 0);
+    const at14 = {...down, x: 19};
+    touch('touchmove', strip, [at14], [at14], 16);
+    expect(pan.state).toBe('possible');
+    const at15 = {...down, x: 20};
+    touch('touchmove', strip, [at15], [at15], 32);
+    expect(pan.state).toBe('began');
+    touch('touchend', strip, [at15], [], 48);
+  });
+
   it('tells a recognizer tracking a finger about a second finger on plain page content, and leaves that finger to the page (spec:AST-094 FR28)', () => {
     const {box} = mount('<div id="box"></div><p id="page">text</p>');
     const page = document.getElementById('page')!;
@@ -917,22 +938,79 @@ describe('GestureHost', () => {
     touch('touchend', card, [{...finger, y: 88}], [], 64);
   });
 
-  it('leaves a scroll-edge pan to claim at its begin', () => {
-    const {sheet} = mount('<div id="sheet"></div>');
-    const pan = new PanGestureRecognizer({
-      name: 'sheet',
-      direction: 'down',
-      scrollEdge: true,
+  describe("a scroll-edge pan's first moves (spec:AST-094 FR19, DEC-18)", () => {
+    /** A sheet whose own list sits under the finger, scrolled to `scrollTop`. */
+    function sheetOverList(scrollTop: number, options = {scrollEdge: true}) {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        ...options,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (y: number, time: number, cancelable = true) =>
+        touch(
+          'touchmove',
+          row,
+          [{...finger, y}],
+          [{...finger, y}],
+          time,
+          cancelable,
+        );
+      const lift = (y: number, time: number) =>
+        touch('touchend', row, [{...finger, y}], [], time);
+      return {list, pan, at, lift};
+    }
+
+    it('cancels the moves from the first one while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(102, 16).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      expect(at(107, 32).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      expect(at(112, 48).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('began');
+      lift(112, 64);
     });
-    detachers.push(host.attach(sheet, pan));
-    const finger = {id: 1, x: 50, y: 100};
-    touch('touchstart', sheet, [finger], [finger], 0);
-    const at = (y: number, time: number) =>
-      touch('touchmove', sheet, [{...finger, y}], [{...finger, y}], time);
-    expect(at(107, 16).defaultPrevented).toBe(false);
-    expect(at(112, 32).defaultPrevented).toBe(true);
-    expect(pan.state).toBe('began');
-    touch('touchend', sheet, [{...finger, y: 112}], [], 48);
+
+    it('leaves the moves to the browser while a scroller under the finger can still scroll that way', () => {
+      const {pan, at, lift} = sheetOverList(50);
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      expect(at(112, 48).defaultPrevented).toBe(false);
+      expect(pan.state).toBe('failed');
+      lift(112, 64);
+    });
+
+    it('leaves a first move toward the content to the browser', () => {
+      const {at, lift} = sheetOverList(0);
+      expect(at(98, 16).defaultPrevented).toBe(false);
+      lift(98, 32);
+    });
+
+    it('cancels nothing before a pan without scrollEdge begins', () => {
+      const {pan, at, lift} = sheetOverList(0, {scrollEdge: false});
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      expect(at(112, 48).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('began');
+      lift(112, 64);
+    });
+
+    it('cancels nothing once the browser has taken the touch for a scroll', () => {
+      const {list, at, lift} = sheetOverList(50);
+      // The browser scrolls the list: its moves can no longer be cancelled.
+      at(102, 16, false);
+      // The list reaches its edge under the same finger: still the browser's.
+      scrollable(list, {scrollTop: 0});
+      expect(at(107, 32).defaultPrevented).toBe(false);
+      lift(107, 48);
+    });
   });
 
   it('names the pointer a finger, a pen or a mouse is driven by', () => {
@@ -3306,6 +3384,45 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     expect(outerStates).toEqual([]);
   });
 
+  it('serves a finger on the group too, and still answers a mouse afterwards', () => {
+    const {group, one} = mount(
+      '<div id="group"><button id="one"></button></div>',
+    );
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    const tap = new TapGestureRecognizer();
+    const states: string[] = [];
+    tap.addListener(r => states.push(r.state));
+    detachers.push(fine.attach(group, tap, {actionGroup: true}));
+    pointer('pointerdown', one, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointermove', one, {
+      pointerType: 'touch',
+      x: 11,
+      y: 10,
+      buttons: 1,
+      time: 16,
+    });
+    pointer('pointerup', one, {pointerType: 'touch', x: 11, y: 10, time: 60});
+    expect(states).toEqual(['ended']);
+    pointer('pointerdown', one, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 400,
+    });
+    pointer('pointerup', one, {pointerType: 'mouse', x: 10, y: 10, time: 460});
+    expect(states).toEqual(['ended', 'ended']);
+  });
+
   it('removes the group listener on detach, and a coarse pointer keeps the usual page listeners instead', () => {
     const {group} = mount('<div id="group"></div>');
     const groupRemoved = vi.spyOn(group, 'removeEventListener');
@@ -3396,5 +3513,50 @@ describe("inputMode 'pointer-events'", () => {
     pointer('pointerup', box, {pointerType: 'touch', x: 10, y: 10, time: 820});
     touch('touchend', box, [finger], [], 820);
     expect(states).toContain('ended');
+  });
+
+  it("cancels a claimed finger's touchmove, matching its touches to its pointer", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pointerHost = new GestureHost(document, {
+      clock,
+      inputMode: 'pointer-events',
+      isPrimaryPointerCoarse: () => true,
+    });
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(pointerHost.attach(box, pan));
+    pointer('pointerdown', box, {
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    const finger = {id: 7, x: 10, y: 10};
+    touch('touchstart', box, [finger], [finger], 0);
+    // Before the pan claims, the browser keeps the move.
+    const early = {...finger, x: 14};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 14,
+      y: 10,
+      buttons: 1,
+      time: 8,
+    });
+    expect(touch('touchmove', box, [early], [early], 8).defaultPrevented).toBe(
+      false,
+    );
+    // Past its hysteresis the pan owns the finger: its touchmoves are cancelled.
+    const claimed = {...finger, x: 40};
+    pointer('pointermove', box, {
+      pointerType: 'touch',
+      x: 40,
+      y: 10,
+      buttons: 1,
+      time: 32,
+    });
+    expect(pan.state).toBe('began');
+    expect(
+      touch('touchmove', box, [claimed], [claimed], 32).defaultPrevented,
+    ).toBe(true);
   });
 });

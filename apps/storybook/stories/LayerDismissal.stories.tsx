@@ -30,7 +30,7 @@ import {
   Tooltip,
   VStack,
 } from '@astryxdesign/core';
-import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {InfoTip} from '@astryxdesign/lab/InfoTip';
 import type {Meta, StoryObj} from '@storybook/react-vite';
 
@@ -527,31 +527,32 @@ export const MobileNavAlone: Story = {render: () => <MobileNavAloneExample />};
  * next Escape closes the sheet.
  */
 function SheetWithHoverTipExample() {
-  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
       <Button
         label="Open sheet"
         variant="secondary"
-        onClick={() => setActiveSheet('details')}
+        onClick={() => setIsOpen(true)}
       />
-      <BottomSheetSwitcher
-        activeSheet={activeSheet}
-        onActiveSheetChange={setActiveSheet}
-        hasScrim={false}>
-        <BottomSheet sheetId="details" label="Details" height="hug" padding={0}>
-          <VStack gap={3} xstyle={sheetStyles.body}>
-            <Text type="body">
-              Hover the button to show the tip, then press Escape. The first
-              press closes only the tip; the next press closes the sheet.
-            </Text>
-            <Tooltip content="A hover tip, showing">
-              <Button label="Hover me" variant="secondary" />
-            </Tooltip>
-          </VStack>
-        </BottomSheet>
-      </BottomSheetSwitcher>
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hasScrim={false}
+        label="Details"
+        height="hug"
+        padding={0}>
+        <VStack gap={3} xstyle={sheetStyles.body}>
+          <Text type="body">
+            Hover the button to show the tip, then press Escape. The first press
+            closes only the tip; the next press closes the sheet.
+          </Text>
+          <Tooltip content="A hover tip, showing">
+            <Button label="Hover me" variant="secondary" />
+          </Tooltip>
+        </VStack>
+      </BottomSheet>
     </>
   );
 }
