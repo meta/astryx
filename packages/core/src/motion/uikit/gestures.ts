@@ -289,6 +289,21 @@ export const UIKIT_VELOCITY = {
 } as const satisfies Record<string, GestureConstant>;
 
 /**
+ * The stray-click window, kept for importers written before the click guard
+ * owned it: `CLICK_GUARD_WINDOW_MS` (utils/clickGuard.ts) bounds the stray
+ * click, and `UIKIT_GESTURES` leaves this out.
+ * @deprecated Read `CLICK_GUARD_WINDOW_MS`.
+ */
+export const UIKIT_CLICK = {
+  /**
+   * Longest a guard waits for the browser's click after a touch it swallowed.
+   * @source GUESS — A safety bound, not a UIKit number; the click guard's own.
+   * @measure M-G17
+   */
+  strayClickWindow: {value: 400, unit: 'ms'},
+} as const satisfies Record<string, GestureConstant>;
+
+/**
  * Every group in one object, for a reader that needs several. A reader of
  * one group imports it by name instead (`UIKIT_PAN`): object properties do
  * not tree-shake, so this object bundles every group
