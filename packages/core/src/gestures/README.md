@@ -248,8 +248,10 @@ presses nothing.
   barrel button and a ctrl-click on macOS (its context click) start no press
   (`isPrimaryClick`, `../utils/primaryClick.ts`). A mouse or a pen drag
   that a recognizer claims takes no text selection from then on: the
-  selection the drag started goes, and the claiming elements refuse one
-  until the lift (FR41); a click keeps its selection. The host follows the
+  selection the drag started goes, the claiming elements refuse one, and
+  the document refuses one too until the press's mouseup and click have
+  passed, since WebKit extends a drag's selection past them (FR41); a click
+  keeps its selection. The host follows the
   query (a tablet docking or undocking a mouse): turning fine cancels every
   touch in flight. `perEventPointer`, an option of `attach`,
   `attachConsumer`, `useGestureRecognizer` and `usePressTracker` from
