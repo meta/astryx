@@ -27,7 +27,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import {rulesDeclaredFor} from '../__tests__/pressState';
+import {layerOnlyWhilePressed, rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
 import {Item} from './Item';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
@@ -540,6 +540,16 @@ describe('Item', () => {
       expect(item).toHaveClass('astryx-item');
       expect(item).toHaveAttribute('data-align', align);
     }
+  });
+
+  it('keeps its touch press layer to a press: on, fading or held', () => {
+    render(<Item label="Row" onClick={() => {}} data-testid="row" />);
+    // Under a coarse pointer the row's `::before` layer and its isolation
+    // apply only on a press arm, a selection hold's `held` included; at rest
+    // a caller's own `::before` keeps its styles.
+    expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
+      true,
+    );
   });
 
   it('aligns the row on first baselines only under first-line', () => {

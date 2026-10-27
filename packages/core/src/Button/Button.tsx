@@ -64,6 +64,7 @@ import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {controlPressLayerStyles} from '../utils/controlPressLayer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useTranslator} from '../i18n';
 import type {ButtonVariantMap} from './index';
@@ -130,6 +131,16 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
+    },
+    // The press scale's transition stays on the compositor only while the
+    // button keeps its own layer: a layer the browser makes for the
+    // transition and drops at its end repaints the button. Under the touch
+    // press model the button keeps one from the touch to the end of its
+    // release, so the release does no Paint per frame.
+    willChange: {
+      default: null,
+      '[data-astryx-press="on"]': 'transform',
+      '[data-astryx-press="fading"]': 'transform',
     },
   },
   inactive: {
@@ -729,6 +740,9 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    // The press the controller writes, on a layer under the label whose
+    // release runs on the compositor (UIButton's highlight release).
+    controlPressLayerStyles.control,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
     useAriaDisabled && styles.ariaDisabled,
