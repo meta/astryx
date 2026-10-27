@@ -1338,10 +1338,6 @@ export class GestureHost {
     }
     const view = this.doc.defaultView;
     this.isInstalled = true;
-    // The host's own click subscription takes over from a group press's,
-    // so a click is heard once (a host installing mid-press).
-    this.groupClickUnsubscribe?.();
-    this.groupClickUnsubscribe = null;
     this.usesTouchEvents =
       this.inputMode === 'auto' && view != null && 'ontouchstart' in view;
     if (view == null) {
@@ -2211,8 +2207,6 @@ export class GestureHost {
   private groupPressPointer: number | null = null;
   /** The input stream subscriptions one group press holds until it lifts. */
   private groupPressUnsubscribers: (() => void)[] = [];
-  /** The group press's own click subscription, when the host has none. */
-  private groupClickUnsubscribe: (() => void) | null = null;
 
   /**
    * A press on an action group under a fine pointer (`family:action-groups`
@@ -2244,7 +2238,7 @@ export class GestureHost {
     if (recognizers.length === 0 && consumer == null) {
       return;
     }
-    this.disarmSwallower();
+    disarmClickGuard(this.doc);
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
     this.groupPressPointer = event.pointerId;
@@ -2268,9 +2262,8 @@ export class GestureHost {
    * The input one group press needs while it is held, through the shared
    * input stream (utils/inputStream.ts) like every host listener: its
    * pointer's moves and lift, and the window's own blur. The click a lift
-   * owes is the press's too (claimed presses swallow it); an installed host
-   * already hears it, so the press subscribes to it only when the host is
-   * not installed, and never twice.
+   * owes is the click guard's (utils/clickGuard.ts), which hears every click
+   * through its own one listener per window.
    */
   private listenForGroupPress(isListening: boolean): void {
     for (const unsubscribe of this.groupPressUnsubscribers.splice(0)) {
@@ -2292,11 +2285,6 @@ export class GestureHost {
         }
       }),
     );
-    if (!this.isInstalled && this.groupClickUnsubscribe == null) {
-      this.groupClickUnsubscribe = subscribeInput(view, 'click', this.onClick, {
-        cancels: true,
-      });
-    }
   }
 
   private readonly onGroupPointer = (event: PointerEvent): void => {
@@ -2325,23 +2313,10 @@ export class GestureHost {
     this.endGroupPress();
   };
 
-  /**
-   * The press lifted: its subscriptions go now; its click subscription stays
-   * for the click the lift dispatches in the same task, then goes too.
-   */
+  /** The press lifted: its subscriptions go now. */
   private endGroupPress(): void {
     this.groupPressPointer = null;
     this.listenForGroupPress(false);
-    const view = this.doc.defaultView;
-    const removeClick = () => {
-      this.groupClickUnsubscribe?.();
-      this.groupClickUnsubscribe = null;
-    };
-    if (view != null && typeof view.setTimeout === 'function') {
-      view.setTimeout(removeClick, 0);
-    } else {
-      removeClick();
-    }
   }
 
   private readonly onPointerMove = (event: PointerEvent): void => {
