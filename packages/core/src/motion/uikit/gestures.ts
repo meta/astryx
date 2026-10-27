@@ -245,8 +245,8 @@ export const UIKIT_PRESS = {
   /**
    * How long after a finger was down a scroll can still be that finger's
    * momentum (the brake only counts scrolls a finger drove).
-   * @source GUESS — The press model bound (utils/pressFeedback.ts): iOS
-   *   momentum runs for a second or two after the lift.
+   * @source GUESS — The gesture host's brake bound (gestures/GestureHost.ts):
+   *   iOS momentum runs for a second or two after the lift.
    * @measure M-G19
    */
   momentumMemory: {value: 3000, unit: 'ms'},
