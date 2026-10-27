@@ -29,6 +29,29 @@ describe('ScreenEdgePanGestureRecognizer', () => {
     expect(middle.log).toEqual(['miss:failed@0']);
   });
 
+  it("stays off under a mouse and a pen: a drag from the edge band is a finger's only (spec:AST-094 FR43)", () => {
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const h = createHarness();
+      const edge = new ScreenEdgePanGestureRecognizer({name: 'edge'});
+      h.finger(1)
+        .down(10, 300, 0, {recognizers: [edge], pointerType})
+        .drag(40, 4, 50);
+      expect(h.log.some(line => line.startsWith('edge:began'))).toBe(false);
+    }
+  });
+
+  it('a caller can still allow it another pointer', () => {
+    const h = createHarness();
+    const edge = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      allowedPointerTypes: ['touch', 'pen'],
+    });
+    h.finger(1)
+      .down(10, 300, 0, {recognizers: [edge], pointerType: 'pen'})
+      .drag(40, 4, 50);
+    expect(h.log[0]).toMatch(/^edge:began@/);
+  });
+
   it('resolves the leading edge under RTL and requires inward movement', () => {
     const h = createHarness();
     h.environment.rtl = true;
