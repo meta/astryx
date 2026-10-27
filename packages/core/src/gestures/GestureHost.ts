@@ -354,6 +354,8 @@ interface WheelGesture {
   /** The latest wheel's time. */
   last: number;
   timer: unknown;
+  /** The recognizers that took it; none where the page keeps it. */
+  readonly takers: ReadonlyArray<GestureRecognizer>;
 }
 
 /**
@@ -579,6 +581,8 @@ export class GestureHost {
   private nextId = 1;
   /** The wheel gesture in progress (FR43). */
   private wheel: WheelGesture | null = null;
+  /** Whether the document routes every wheel to the live wheel gesture. */
+  private isWheelLatched = false;
   /** Wheels already taken: each element on the path with a listener hears one. */
   private readonly wheelsSeen = new WeakSet<Event>();
   private readonly clock: GestureClock;
@@ -686,6 +690,14 @@ export class GestureHost {
       // UIKit when a view leaves the window.
       if (recognizer.state !== 'possible' || recognizer.isInvolved()) {
         recognizer.cancel();
+      }
+      const wheel = this.wheel;
+      if (
+        wheel != null &&
+        wheel.takers.includes(recognizer) &&
+        !this.wheelHasTaker(wheel)
+      ) {
+        this.endWheel();
       }
       this.refresh(element, registration);
       this.cleanup(element, registration);
@@ -1677,7 +1689,11 @@ export class GestureHost {
    * pinches) as two contacts whose span follows exp(-deltaY / 100). A wheel
    * the page keeps is never prevented; one a recognizer takes always is. It
    * ends `WHEEL_END_MS` after its last wheel, at that wheel's time, so its
-   * release keeps its velocity.
+   * release keeps its velocity. A gesture a recognizer took is latched to it,
+   * as a browser latches a scroller: while it lasts, the document hands this
+   * every wheel first, wherever it lands, so a pan whose element moves from
+   * under a still pointer keeps it (FR24: a page listener only during a
+   * gesture).
    */
   private readonly onWheel = (event: Event): void => {
     const wheel = event as WheelEvent;
@@ -1695,10 +1711,33 @@ export class GestureHost {
       this.endWheel();
       gesture = null;
     }
+    if (
+      gesture != null &&
+      gesture.ids.length > 0 &&
+      !this.wheelHasTaker(gesture)
+    ) {
+      // Every recognizer that took it has left (detached, disabled or
+      // cancelled): the rest of the gesture is the page's.
+      this.endWheel();
+      gesture = {
+        kind,
+        ids: [],
+        x: wheel.clientX,
+        y: wheel.clientY,
+        span: WHEEL_PINCH_SPAN,
+        last: time,
+        timer: null,
+        takers: [],
+      };
+      this.wheel = gesture;
+    }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
     if (gesture == null) {
       gesture = this.beginWheel(wheel, kind, dx, dy, time);
       this.wheel = gesture;
+      if (gesture.ids.length > 0) {
+        this.latchWheel();
+      }
     }
     gesture.last = time;
     if (gesture.timer != null) {
@@ -1737,6 +1776,7 @@ export class GestureHost {
       span: WHEEL_PINCH_SPAN,
       last: time,
       timer: null,
+      takers: [],
     };
     // A contact already down keeps its gesture; the wheel stays the page's.
     if (this.arena.touches.length > 0 || (dx === 0 && dy === 0)) {
@@ -1788,11 +1828,12 @@ export class GestureHost {
       this.arena.began([
         {...base, id, x: wheel.clientX, y: wheel.clientY, time},
       ]);
-      return {...kept, ids: [id]};
+      return {...kept, ids: [id], takers};
     }
     const gesture: WheelGesture = {
       ...kept,
       ids: [this.nextId++, this.nextId++],
+      takers,
     };
     this.arena.began(
       this.pinchContacts(gesture, time).map(input => ({...base, ...input})),
@@ -1838,9 +1879,39 @@ export class GestureHost {
     ];
   }
 
+  /** Whether a recognizer that took this wheel gesture still takes part in it. */
+  private wheelHasTaker(gesture: WheelGesture): boolean {
+    // A cancelled or failed recognizer keeps that state until its contacts
+    // end, which a wheel gesture's do only here.
+    return gesture.takers.some(recognizer => {
+      const {state} = recognizer;
+      return (
+        recognizer.isEnabled &&
+        (state === 'began' ||
+          state === 'changed' ||
+          (state === 'possible' && recognizer.isInvolved()))
+      );
+    });
+  }
+
+  /** Route every wheel on the page to the live wheel gesture, from its claim. */
+  private latchWheel(): void {
+    if (!this.isWheelLatched) {
+      this.doc.addEventListener('wheel', this.onWheel, {
+        capture: true,
+        passive: false,
+      });
+      this.isWheelLatched = true;
+    }
+  }
+
   /** End the wheel gesture in progress, at its last wheel's time. */
   private endWheel(): void {
     const gesture = this.wheel;
+    if (this.isWheelLatched) {
+      this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
+      this.isWheelLatched = false;
+    }
     if (gesture == null) {
       return;
     }

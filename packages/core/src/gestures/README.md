@@ -451,7 +451,10 @@ pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
 100 ms after its last wheel (provisional, an owner question), at that wheel's
 time, so its release keeps its velocity; macOS's momentum wheels arrive as
 more wheel, and the gesture follows them. A finger, mouse or pen that comes
-down ends it, and a wheel claim keeps the page's text selection.
+down ends it, and a wheel claim keeps the page's text selection. A gesture a
+recognizer took is latched to it, as a browser latches a scroller: while it
+lasts, a document `wheel` listener routes every step to it wherever it lands,
+so a pan whose element moves from under a still pointer keeps the gesture.
 
 ## Time
 
