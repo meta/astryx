@@ -13,10 +13,13 @@
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
  *
  * Detects a single-finger long-press: fires `onLongPress` with the press
- * start point after `delayMs`. Cancels if the finger travels farther than
- * `moveCancelPx` from where it landed (treated as a scroll/drag), lifts, or
- * the touch is cancelled. The pending timer is also cleared on unmount. The
- * defaults are the long-press recognizer's (motion/uikit/longPress.ts).
+ * start point after `delayMs`. Cancels if the finger moves past
+ * `moveCancelPx` on either axis (treated as a scroll/drag), lifts, or the
+ * touch is cancelled. The pending timer is also cleared on unmount. The
+ * default duration and tolerance are the long-press recognizer's
+ * (motion/uikit/longPress.ts); the recognizer measures its tolerance as a
+ * distance, as UIKit does, and this hook on each axis, as ContextMenu's
+ * measured hold and the menu trigger's released behavior do.
  *
  * Two ways in, one detector. Spread the touch handlers onto an element, or —
  * when the caller already runs its own pointer-event machine, as
@@ -48,10 +51,7 @@ export interface UseLongPressOptions {
   disabled?: boolean;
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
-  /**
-   * Travel farther than this distance (px) from where the press began
-   * cancels it, as UIKit's `allowableMovement`. Defaults to 10.
-   */
+  /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
   moveCancelPx?: number;
 }
 
@@ -137,10 +137,12 @@ export function useLongPress(
       if (from == null) {
         return false;
       }
-      // A distance, as UIKit measures `allowableMovement`: a (7, 7) drift
-      // keeps a 10 px press, a (7.2, 7.2) one ends it.
+      // This press's own tolerance when its caller chose one, on either axis.
       const limit = pressToleranceRef.current?.moveCancelPx ?? moveCancelPx;
-      if (Math.hypot(point.x - from.x, point.y - from.y) > limit) {
+      if (
+        Math.abs(point.x - from.x) > limit ||
+        Math.abs(point.y - from.y) > limit
+      ) {
         // Treat as a scroll/drag, not a long-press.
         clear();
         return false;
