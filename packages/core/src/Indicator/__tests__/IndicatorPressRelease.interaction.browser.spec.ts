@@ -15,8 +15,9 @@
  *   stays bare while its circle paints; a storyboard of the release, its trace
  *   asserted; with a mouse (spec:AST-094 FR11's fine-pointer profile, FR43) a
  *   checkbox and a CheckboxList row press through the same model at once and
- *   release on their host's clock, a right click and a read-only row paint
- *   nothing, and a radio row keeps its `:active` paint for now
+ *   release on their host's clock, a pen presses a checkbox the same way
+ *   (Chromium), a right click and a read-only row paint nothing, and a radio
+ *   row keeps its `:active` paint for now
  * @position Interaction evidence for the indicator press layers in
  *   CheckboxInput.tsx and RadioListItem.tsx; the row layers they release
  *   beside are proven in ListRowPress.interaction.browser.spec.ts and
@@ -44,6 +45,8 @@ import {
   touchDriver,
   traceRendering,
   waitForAnimation,
+  webInputDriver,
+  PEN_SKIP,
   withStorybook,
   writeEvidence,
   type CastFrame,
@@ -735,6 +738,53 @@ test.describe('with a mouse', () => {
       expect(await seen()).toEqual([]);
     });
   }
+
+  test('a pen press on a checkbox paints through the same press model (FR43)', async ({
+    page,
+  }) => {
+    const input = await webInputDriver(page);
+    test.skip(!input.pens, PEN_SKIP);
+    await openStory(page, storybook(), 'core-checkboxinput--default');
+    await stopClicks(page);
+    const owner = page
+      .locator('#storybook-root [data-astryx-pressable]')
+      .first();
+    const layer = markWrapper(page, '.astryx-checkbox-indicator');
+    const box = await layer.boundingBox();
+    if (box == null) {
+      throw new Error('core-checkboxinput--default: nothing to press');
+    }
+    // Each press state the controller writes, with the layer's image read in
+    // the same task: the pen's press must paint, not only be marked.
+    const layerHandle = await layer.elementHandle();
+    await owner.evaluate((el, target) => {
+      const seen: {state: string; image: string}[] = [];
+      (window as unknown as {__penSeen: typeof seen}).__penSeen = seen;
+      new MutationObserver(() => {
+        seen.push({
+          state: el.getAttribute('data-astryx-press') ?? '',
+          image: getComputedStyle(target as Element, '::after').backgroundImage,
+        });
+      }).observe(el, {
+        attributes: true,
+        attributeFilter: ['data-astryx-press'],
+      });
+    }, layerHandle);
+    const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    // A held pen: down, a still move 300 ms later, and the lift there.
+    await input.pen([
+      {...at, t: 0},
+      {...at, t: 300},
+    ]);
+    const seen = await page.evaluate(
+      () =>
+        (window as unknown as {__penSeen: {state: string; image: string}[]})
+          .__penSeen,
+    );
+    const on = seen.find(entry => entry.state === 'on');
+    expect(on?.image ?? '', JSON.stringify(seen)).toContain('gradient');
+    expect(seen.map(entry => entry.state)).toContain('fading');
+  });
 
   test('a mouse press on a read-only CheckboxList row paints no press (FR43)', async ({
     page,
