@@ -12,6 +12,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
+import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createHarness, ManualClock, RecordingConsumer} from './harness';
 import {coarsePrimaryPointer} from './pointerQuery';
 
@@ -114,6 +115,96 @@ describe('a recognizer that never claims (a watcher)', () => {
         (options as AddEventListenerOptions | undefined)?.passive === false,
     );
     expect(blocking).toHaveLength(0);
+  });
+
+  it('gets only passive target listeners for its touch, touchend included, while a tap on the same kind of touch gets a cancelable touchend (spec:AST-094 FR20)', () => {
+    document.body.innerHTML = '<div id="page"></div><div id="button"></div>';
+    const page = document.getElementById('page') as HTMLElement;
+    const button = document.getElementById('button') as HTMLElement;
+    const host = new GestureHost(document, {clock: new ManualClock()});
+    const onPage = vi.spyOn(page, 'addEventListener');
+    const onButton = vi.spyOn(button, 'addEventListener');
+    detach.push(
+      host.attach(
+        page,
+        new PanGestureRecognizer({
+          name: 'watcher',
+          direction: 'vertical',
+          claimsTouches: false,
+        }),
+        {manageStyle: false},
+      ),
+      host.attach(button, new TapGestureRecognizer({name: 'tap'})),
+    );
+    const touchDown = (target: HTMLElement, identifier: number) => {
+      const event = new Event('touchstart', {bubbles: true, cancelable: true});
+      const entry = {identifier, clientX: 10, clientY: 10, target};
+      Object.defineProperty(event, 'changedTouches', {value: [entry]});
+      Object.defineProperty(event, 'touches', {value: [entry]});
+      target.dispatchEvent(event);
+    };
+    const passivity = (spy: typeof onPage, type: string) =>
+      spy.mock.calls
+        .filter(([listened]) => listened === type)
+        .map(
+          ([, , options]) =>
+            (options as AddEventListenerOptions | undefined)?.passive,
+        );
+    touchDown(page, 1);
+    expect(passivity(onPage, 'touchmove')).toEqual([true]);
+    expect(passivity(onPage, 'touchend')).toEqual([true]);
+    expect(passivity(onPage, 'touchcancel')).toEqual([true]);
+    touchDown(button, 2);
+    expect(passivity(onButton, 'touchend')).toEqual([false]);
+  });
+
+  it('alone, leaves the host only passive document and window listeners; a claiming recognizer brings the cancelable touchend, contextmenu and click (spec:AST-094 FR20)', () => {
+    document.body.innerHTML = '<div id="page"></div><div id="strip"></div>';
+    const page = document.getElementById('page') as HTMLElement;
+    const strip = document.getElementById('strip') as HTMLElement;
+    const host = new GestureHost(document, {clock: new ManualClock()});
+    const active = () => {
+      const listed: string[] = [];
+      for (const [target, spy] of [
+        ['document', onDocument],
+        ['window', onWindow],
+      ] as const) {
+        for (const [type, , options] of spy.mock.calls) {
+          if (
+            typeof options === 'object' &&
+            (options).passive === false
+          ) {
+            listed.push(`${target} ${type}`);
+          }
+        }
+      }
+      return listed;
+    };
+    const onDocument = vi.spyOn(document, 'addEventListener');
+    const onWindow = vi.spyOn(window, 'addEventListener');
+    detach.push(
+      host.attach(
+        page,
+        new PanGestureRecognizer({
+          name: 'watcher',
+          direction: 'vertical',
+          claimsTouches: false,
+        }),
+        {manageStyle: false},
+      ),
+    );
+    expect(active()).toEqual([]);
+    detach.push(
+      host.attach(
+        strip,
+        new PanGestureRecognizer({name: 'claimer', direction: 'horizontal'}),
+      ),
+    );
+    expect(active().sort()).toEqual([
+      'document contextmenu',
+      'document touchend',
+      'window click',
+    ]);
   });
 
   it('leaves the browser every touch behavior: its direction writes no touch-action', () => {

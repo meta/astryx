@@ -23,7 +23,7 @@
  * SYNC: When modified, update the gestures README ("Holding the page still").
  */
 
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
 /**

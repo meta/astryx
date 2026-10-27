@@ -244,8 +244,11 @@ describe('useGestureRecognizer', () => {
     }
   });
 
-  it('reports nothing from the isEnabled Effect for a recognizer that required the disabled one to fail (react-component-runtime INV2)', () => {
-    const onSingle = vi.fn();
+  it('reports a recognizer that required the disabled one to fail after the isEnabled Effect, not inside it, in its recognized state (react-component-runtime INV2)', async () => {
+    const states: string[] = [];
+    const onSingle = vi.fn((recognizer: TapGestureRecognizer) => {
+      states.push(recognizer.state);
+    });
     function Taps({isDoubleEnabled}: {isDoubleEnabled: boolean}) {
       const ref = useRef<HTMLDivElement>(null);
       const double = useGestureRecognizer(
@@ -270,10 +273,121 @@ describe('useGestureRecognizer', () => {
     touch('touchend', surface, {id: 1, x: 5, y: 5}, 40, true);
     // The single tap waits for the double tap to fail.
     expect(onSingle).not.toHaveBeenCalled();
-    // Turning the double tap off fails it in the Effect, and the single tap
-    // recognizes in that same arena pass: its caller hears nothing from it.
+    // Turning the double tap off fails it in the Effect; the single tap
+    // waiting on it recognizes in a pass just after, so its caller hears it
+    // outside the Effect, reading the recognized state.
     rerender(<Taps isDoubleEnabled={false} />);
     expect(onSingle).not.toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(states).toEqual(['ended']);
+  });
+
+  it('reports a recognizer that required one a replaced node cancelled after that layout Effect, not inside it (react-component-runtime INV2)', async () => {
+    const states: string[] = [];
+    function Nested({innerKey}: {innerKey: string}) {
+      const outerRef = useRef<HTMLDivElement>(null);
+      const innerRef = useRef<HTMLDivElement>(null);
+      const double = useGestureRecognizer(
+        innerRef,
+        () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+      );
+      const single = useGestureRecognizer(
+        outerRef,
+        () => new TapGestureRecognizer(),
+        recognizer => {
+          states.push(recognizer.state);
+        },
+      );
+      useEffect(() => {
+        single.requireToFail(double);
+      }, [single, double]);
+      return (
+        <div ref={outerRef}>
+          <div key={innerKey} data-testid="inner" ref={innerRef} />
+        </div>
+      );
+    }
+    const {getByTestId, rerender} = render(<Nested innerKey="first" />);
+    const inner = getByTestId('inner');
+    touch('touchstart', inner, {id: 2, x: 5, y: 5}, 0);
+    touch('touchend', inner, {id: 2, x: 5, y: 5}, 40, true);
+    expect(states).toEqual([]);
+    // The double tap's node is replaced: detaching it cancels its wait in a
+    // layout Effect, and the outer single tap recognizes just after.
+    rerender(<Nested innerKey="second" />);
+    expect(states).toEqual([]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(states).toEqual(['ended']);
+  });
+
+  it('attaches an action group, which the host serves under a fine pointer: a mouse press on one of its actions reaches the recognizer (family:action-groups FR5)', () => {
+    // A document whose host was never told the pointer is coarse (jsdom's
+    // frames have no matchMedia): a fine primary pointer.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    const states: string[] = [];
+    function Group({actionGroup}: {actionGroup: boolean}) {
+      const ref = useRef<HTMLDivElement>(null);
+      useGestureRecognizer(
+        ref,
+        () => new TapGestureRecognizer(),
+        recognizer => {
+          states.push(recognizer.state);
+        },
+        {actionGroup},
+      );
+      return (
+        <div data-testid="group" ref={ref}>
+          <button data-testid="action" type="button">
+            OK
+          </button>
+        </div>
+      );
+    }
+    const press = (target: Element, pointerId: number, time: number) => {
+      for (const [type, buttons] of [
+        ['pointerdown', 1],
+        ['pointerup', 0],
+      ] as const) {
+        const event = new frameWindow.PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId,
+          pointerType: 'mouse',
+          clientX: 5,
+          clientY: 5,
+          button: 0,
+          buttons,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        target.dispatchEvent(event);
+      }
+    };
+    try {
+      const {getByTestId, rerender, unmount} = render(
+        <Group actionGroup={false} />,
+        {container: frameDocument.body, baseElement: frameDocument.body},
+      );
+      const action = getByTestId('action');
+      // Not a group: under a fine pointer the host serves nothing.
+      press(action, 1, 0);
+      expect(states).toEqual([]);
+      act(() => {
+        rerender(<Group actionGroup />);
+      });
+      press(action, 2, 1000);
+      expect(states).toEqual(['ended']);
+      unmount();
+    } finally {
+      frame.remove();
+    }
   });
 
   it('attaches nothing while disabled: no touch-action, no gesture (FR24)', async () => {
@@ -603,6 +717,84 @@ describe('usePressTracker', () => {
     touch('touchend', button, {id: 8, x: 1, y: 1}, 50, true);
     expect(events).toEqual([]);
   });
+
+  function PressInTaps({
+    isDoubleEnabled,
+    hasSingle,
+    onEvent,
+  }: {
+    isDoubleEnabled: boolean;
+    hasSingle: boolean;
+    onEvent: (event: ControlEvent | 'highlight' | 'unhighlight') => void;
+  }) {
+    const outerRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLButtonElement>(null);
+    const double = useGestureRecognizer(
+      outerRef,
+      () => new TapGestureRecognizer({numberOfTapsRequired: 2}),
+      undefined,
+      {isEnabled: isDoubleEnabled},
+    );
+    const single = useGestureRecognizer(
+      outerRef,
+      () => new TapGestureRecognizer(),
+      undefined,
+      {isEnabled: hasSingle},
+    );
+    useEffect(() => {
+      single.requireToFail(double);
+    }, [single, double]);
+    usePressTracker(innerRef, {
+      onControlEvent: onEvent,
+      onHighlightChange: isHighlighted =>
+        onEvent(isHighlighted ? 'highlight' : 'unhighlight'),
+    });
+    return (
+      <div ref={outerRef}>
+        <button data-testid="press" ref={innerRef} type="button" />
+      </div>
+    );
+  }
+
+  it.each([
+    ['alone', false],
+    ['with a single tap waiting on it', true],
+  ])(
+    'ends a press that waits on an ancestor double tap after, not inside, the isEnabled Effect that turns it off (%s; react-component-runtime INV2)',
+    async (_event, hasSingle) => {
+      const events: (ControlEvent | 'highlight' | 'unhighlight')[] = [];
+      const {getByTestId, rerender} = render(
+        <PressInTaps
+          isDoubleEnabled
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      const button = getByTestId('press');
+      touch('touchstart', button, {id: 21, x: 1, y: 1}, 0);
+      touch('touchend', button, {id: 21, x: 1, y: 1}, 40, true);
+      const before = [...events];
+      // Turning the double tap off fails it in the Effect: whatever that
+      // arena pass resolves for the press reaches no caller callback.
+      rerender(
+        <PressInTaps
+          isDoubleEnabled={false}
+          hasSingle={hasSingle}
+          onEvent={event => events.push(event)}
+        />,
+      );
+      expect(events).toEqual(before);
+      // Just after it, the press ends and un-highlights: nothing is left
+      // highlighted.
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(events.slice(before.length)).toEqual([
+        'touchUpInside',
+        'unhighlight',
+      ]);
+    },
+  );
 
   it('tracks the element behind the ref when it is replaced (INV6)', () => {
     const events: ControlEvent[] = [];
