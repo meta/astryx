@@ -12,6 +12,7 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React, {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {TimeInput} from './TimeInput';
@@ -65,6 +66,42 @@ describe('TimeInput', () => {
     // A real, non-composing ArrowUp still steps the time by one minute.
     fireEvent.keyDown(input, {key: 'ArrowUp'});
     expect(onChange).toHaveBeenCalledWith('14:31');
+  });
+
+  it('arrow step after typing shows the stepped time and survives blur', () => {
+    const onChange = vi.fn();
+    function Host() {
+      const [value, setValue] = useState<ISOTimeString | undefined>(
+        '14:30' as ISOTimeString,
+      );
+      return (
+        <TimeInput
+          label="Time"
+          value={value}
+          onChange={next => {
+            onChange(next);
+            setValue(next);
+          }}
+        />
+      );
+    }
+    render(<Host />);
+    const input = screen.getByLabelText('Time');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2:35 PM'}});
+    expect(onChange).toHaveBeenLastCalledWith('14:35');
+
+    // The step commits a new value; the typed draft must not keep showing
+    // the pre-step text over it.
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith('14:36');
+    expect(input.value).toBe('2:36 PM');
+
+    // Leaving the field must not re-commit the stale draft and undo the step.
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith('14:36');
+    expect(input.value).toBe('2:36 PM');
   });
 
   it('does not step into a fractional minute when increment is fractional', () => {

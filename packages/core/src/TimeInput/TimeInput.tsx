@@ -711,6 +711,10 @@ function TimeField({
 
         // Check if within range
         if (isTimeInRange(newTime, min, max)) {
+          // The step is the committed value now: drop any typed draft so the
+          // box shows the stepped time and blur cannot re-commit stale text
+          // over it.
+          setPendingInput(null);
           fireChange(newTime);
           // Stepping programmatically rewrites a plain textbox's value, and
           // screen readers do not announce programmatic textbox changes — the
