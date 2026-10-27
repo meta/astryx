@@ -7,26 +7,30 @@
  *   harness, and the reorder values of the UIKit constants table
  *   (motion/uikit/reorder.ts)
  * @output Interaction and animation proofs of a List with `reorderable`
- *   (spec:AST-103), against
- *   UIKit's measured edit-mode reorder, on a touch screen that is not iOS
- *   (the motion is the same on every touch screen): a finger held still on a
- *   handle picks the row up and the drop moves it; a flick on a handle
- *   scrolls instead; the row follows the finger one to one and stops at the
- *   list's end; the rows it passes slide on the table spring; the drop
- *   springs from rest on the distance-scaled spring, even from a finger that
- *   lifts moving, and a cancelled drag goes home from rest, commits nothing
- *   (each told apart from a settle that took the release velocity); the page autoscrolls by
- *   whole points every 20 ms near the edge; a second finger does not break the drag; a
- *   pinch that starts on a handle zooms; the drop and the slides keep moving
- *   while the main thread is blocked; a drag does no Layout or Paint per move;
- *   a mouse drags at once with no motion; under Reduce Motion the rows it
- *   passes, the drop and a key move cross-fade in place within 200 ms; in RTL
- *   the handle is on the left and the drag keeps x; a focused handle shows one
- *   whole ring, clear of its lines, on a 44 pt target that makes its row no
- *   taller; a held finger locks text selection on the handle until the lift,
- *   and a mouse sees a plain button's styles; a pinned first row bounds a
- *   drag; storyboards of a drag and a drop. Reorder mode's own proofs (keys,
- *   a mouse click, taps alone, start(key) and the hint) are in
+ *   (spec:AST-103) in the drag's stationary-rows look
+ *   (design:ordered-collection-reordering), on a touch screen that is not
+ *   iOS: a finger held still on a handle picks the row up, which dims in
+ *   place while an aria-hidden preview with the same emphasis and no
+ *   elevation follows, and the drop moves it; a flick on a handle scrolls instead; the preview follows the finger
+ *   one to one and stops at the list's end while the row stays put; the rows
+ *   stay still during the drag while the insertion line marks each gap the
+ *   finger reaches; the drop glides the row from where its preview was, and
+ *   the rows it passed from their old places, on the shared settle spring
+ *   from rest,
+ *   even from a finger that lifts moving (told apart from a glide that took
+ *   the release velocity); a cancelled drag restores everything at once and
+ *   commits nothing; the page autoscrolls by whole points every 20 ms near
+ *   the edge; a second finger does not break the drag; a pinch that starts
+ *   on a handle zooms; the drop's glides keep moving while the main thread
+ *   is blocked; a drag does no Layout or Paint per move; a mouse drags at
+ *   once with no motion; under Reduce Motion the rows stay still during the
+ *   drag and the drop and a key move cross-fade in place within 200 ms; in
+ *   RTL the handle is on the left and the drag keeps x; a focused handle
+ *   shows one whole ring, clear of its lines, on a 44 pt target that makes
+ *   its row no taller; a held finger locks text selection on the handle
+ *   until the lift, and a mouse sees a plain button's styles; a pinned first
+ *   row bounds a drag; storyboards of a drag and a drop. Reorder mode's own
+ *   proofs (keys, a mouse click, taps alone, start(key) and the hint) are in
  *   ListReorderMode.interaction.browser.spec.ts
  * @position Interaction evidence for List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts and List/ListReorderHandle.tsx
@@ -63,7 +67,8 @@ import {
 } from '@astryxdesign/interaction-harness';
 import {solveSpring, toSpring} from '../../motion/spring';
 import {reorder} from '../../motion/uikit/reorder';
-import {autoscrollStep, settleSpring} from '../reorderModel';
+import {springs} from '../../motion/uikit/springs';
+import {autoscrollStep} from '../reorderModel';
 
 const storybook = withStorybook(test);
 
@@ -72,17 +77,37 @@ const LONG_STORY = 'core-list--reorder-long-list';
 const PINNED_STORY = 'core-list--reorder-with-pinned-rows';
 const ROWS = ['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash'];
 const HOLD_MS = reorder.claim.delayMs + 80;
+/**
+ * The list's rows, without the drag's preview and insertion line: inert,
+ * aria-hidden ghosts of the list (`data-astryx-leaving`).
+ */
+const ROW = '#storybook-root li:not([data-astryx-leaving])';
+/** The dragged row's preview, which follows the finger. */
+const PREVIEW = '[data-astryx-reorder-preview]';
+/** The insertion line at the drop position. */
+const LINE = '[data-astryx-reorder-line]';
 
 const row = (page: Page, label: string) =>
-  page.locator('#storybook-root li').filter({hasText: label}).first();
+  page.locator(ROW).filter({hasText: label}).first();
 
 const handle = (page: Page, label: string) =>
   page.getByRole('button', {name: `Reorder ${label}`, exact: true});
 
 const labels = async (page: Page) =>
   page
-    .locator('#storybook-root li')
+    .locator(ROW)
     .evaluateAll(rows => rows.map(element => element.textContent ?? ''));
+
+/** Each row's top on screen, by label. */
+const rowTops = async (page: Page): Promise<Record<string, number>> =>
+  page.locator(ROW).evaluateAll(rows => {
+    const tops: Record<string, number> = {};
+    for (const element of rows) {
+      tops[element.textContent?.trim() ?? ''] =
+        element.getBoundingClientRect().top;
+    }
+    return tops;
+  });
 
 const translateY = async (element: Locator) =>
   element.evaluate(el => {
@@ -152,18 +177,27 @@ const tableProgress = (duration: number) => {
   };
 };
 
-test('a finger held still on a handle picks the row up, and the drop moves it', async ({
+test('a finger held still on a handle picks the row up: it dims in place, a preview with the same emphasis follows, and the drop moves it', async ({
   page,
 }) => {
   await open(page);
   const {pitch} = await pitchOf(page);
   const inbox = row(page, 'Inbox');
-  const background = async () =>
-    inbox.evaluate(el => getComputedStyle(el).backgroundColor);
-  const resting = await background();
+  const opacity = async () =>
+    Number(await inbox.evaluate(el => getComputedStyle(el).opacity));
   const from = await centerOf(handle(page, 'Inbox'));
   const driver = await touchDriver(page);
-  let dragging = '';
+  const held: {
+    value?: {
+      opacity: number;
+      preview: {
+        background: string;
+        hidden: string | null;
+        opacity: number;
+        shadow: string;
+      } | null;
+    };
+  } = {};
   await driver.play(
     drag(
       from,
@@ -176,19 +210,39 @@ test('a finger held still on a handle picks the row up, and the drop moves it', 
     ),
     {
       onEvent: async (step: TouchEventStep) => {
-        if (step.type === 'touchMove' && dragging === '') {
-          if (step.t > HOLD_MS + 100) {
-            dragging = await background();
-          }
+        if (
+          step.type === 'touchMove' &&
+          held.value == null &&
+          step.t > HOLD_MS + 100
+        ) {
+          held.value = {
+            opacity: await opacity(),
+            preview: await page.evaluate(selector => {
+              const preview = document.querySelector<HTMLElement>(selector);
+              return preview == null
+                ? null
+                : {
+                    background: getComputedStyle(preview).backgroundColor,
+                    hidden: preview.getAttribute('aria-hidden'),
+                    opacity: Number(getComputedStyle(preview).opacity),
+                    shadow: getComputedStyle(preview).boxShadow,
+                  };
+            }, PREVIEW),
+          };
         }
       },
     },
   );
-  // Opaque while it moves, as a table cell is, so the rows it passes stay
-  // under it; its own background again once it rests.
-  expect(resting).toBe('rgba(0, 0, 0, 0)');
-  expect(dragging).not.toBe('rgba(0, 0, 0, 0)');
-  expect(dragging).not.toBe('');
+  // While it moves, the row stays in its place and its preview follows the
+  // finger, hidden from assistive technology. The two share one reduced
+  // emphasis, and the preview, with the row's background, is not raised
+  // (design:ordered-collection-reordering DR2).
+  expect(held.value?.opacity).toBeLessThan(1);
+  expect(held.value?.preview?.opacity).toBe(held.value?.opacity);
+  expect(held.value?.preview?.shadow).toBe('none');
+  expect(held.value?.preview?.background).toBeDefined();
+  expect(held.value?.preview?.background).not.toBe('rgba(0, 0, 0, 0)');
+  expect(held.value?.preview?.hidden).toBe('true');
   await expect
     .poll(async () => labels(page))
     .toEqual(['Sent', 'Drafts', 'Inbox', 'Archive', 'Spam', 'Trash']);
@@ -196,8 +250,10 @@ test('a finger held still on a handle picks the row up, and the drop moves it', 
   for (const label of ROWS) {
     expect(await translateY(row(page, label))).toBe(0);
   }
+  // The drop takes the preview and the line away and restores the row.
+  await expect(page.locator(`${PREVIEW}, ${LINE}`)).toHaveCount(0);
   await expect(page.locator('[data-astryx-reordering]')).toHaveCount(0);
-  await expect.poll(background).toBe(resting);
+  await expect.poll(opacity).toBe(1);
 });
 
 test('a flick that starts on a handle scrolls the page and moves no row', async ({
@@ -216,7 +272,7 @@ test('a flick that starts on a handle scrolls the page and moves no row', async 
   await expect(page.locator('[data-astryx-reordering]')).toHaveCount(0);
 });
 
-test('after the hold the row follows the finger one to one, and stops with its top at the list top', async ({
+test('after the hold the preview follows the finger one to one and stops with its top at the list top, while the row stays in place', async ({
   page,
 }) => {
   await open(page);
@@ -229,7 +285,8 @@ test('after the hold the row follows the finger one to one, and stops with its t
   const height = await archive.evaluate(el => (el as HTMLElement).offsetHeight);
   const driver = await touchDriver(page);
   const errors: number[] = [];
-  let lastTop = 0;
+  const stayed: number[] = [];
+  const last: {top?: number} = {};
   // Down 80 px, then far up past the top of the list, without lifting.
   const script = drag(
     from,
@@ -257,8 +314,16 @@ test('after the hold the row follows the finger one to one, and stops with its t
       if (step.type !== 'touchMove' || step.t < HOLD_MS + 20) {
         return;
       }
-      const top = await topOf(archive);
-      lastTop = top;
+      const top = await page.evaluate(
+        selector =>
+          document.querySelector(selector)?.getBoundingClientRect().top ?? null,
+        PREVIEW,
+      );
+      if (top == null) {
+        return;
+      }
+      stayed.push((await topOf(archive)) - start);
+      last.top = top;
       const finger = step.fingers[0].y;
       if (finger > from.y - 40) {
         errors.push(top - start - (finger - from.y));
@@ -267,74 +332,101 @@ test('after the hold the row follows the finger one to one, and stops with its t
   });
   await writeEvidence(
     'reorder/tracking',
-    {'tracking.json': JSON.stringify({errors, lastTop, listTop}, null, 1)},
+    {
+      'tracking.json': JSON.stringify(
+        {errors, stayed, lastTop: last.top, listTop},
+        null,
+        1,
+      ),
+    },
     test.info(),
   );
   expect(errors.length).toBeGreaterThan(5);
   for (const error of errors) {
     expect(Math.abs(error)).toBeLessThan(1);
   }
+  // The row itself never left its place (DR2, DR3).
+  for (const moved of stayed) {
+    expect(Math.abs(moved)).toBeLessThan(0.5);
+  }
   // Clamped at the list's own end (the page's top edge is further up): the
-  // row stops with its top on the list's top, never hanging over what is
+  // preview stops with its top on the list's top, never hanging over what is
   // above the list. At the visible edge itself its centre would stop there.
-  expect(lastTop).toBeCloseTo(Math.max(listTop, -height / 2), 0);
+  expect(last.top).toBeCloseTo(Math.max(listTop, -height / 2), 0);
 });
 
-test('the rows it passes slide out of the way on the table spring', async ({
+test('the rows stay still while the finger drags, and the insertion line marks the gap where the row would land', async ({
   page,
 }, testInfo) => {
   await open(page);
-  const {pitch} = await pitchOf(page);
-  const sent = row(page, 'Sent');
+  const {height, pitch} = await pitchOf(page);
+  const before = await rowTops(page);
   const from = await centerOf(handle(page, 'Inbox'));
   const driver = await touchDriver(page);
+  // Down past Sent and Drafts, and held there.
   const script = drag(
     from,
-    {x: from.x, y: from.y + 0.6 * pitch},
+    {x: from.x, y: from.y + 2.1 * pitch},
     {
       holdMs: HOLD_MS,
-      durationMs: 160,
-      restMs: 1200,
+      durationMs: 600,
+      restMs: 200,
     },
   );
-  const samples: {t: number; value: number}[] = [];
-  const spring = tableProgress(reorder.slide.spring.duration);
-  const lastMove = script.length - 2;
-  let index = -1;
+  const moved: number[] = [];
+  const lines: number[] = [];
   await driver.play(script, {
     onEvent: async (step: TouchEventStep) => {
-      index += 1;
-      if (step.type !== 'touchMove' || index !== lastMove) {
+      if (step.type !== 'touchMove' || step.t < HOLD_MS + 20) {
         return;
       }
-      await holdAnimations(page, sent);
-      for (const t of timeline(spring.settleMs)) {
-        await seekAnimations(page, t);
-        samples.push({t, value: await translateY(sent)});
+      const tops = await rowTops(page);
+      for (const label of ROWS) {
+        moved.push(tops[label] - before[label]);
       }
-      await releaseAnimations(page, {finish: true});
+      const line = await page.evaluate(selector => {
+        const element = document.querySelector<HTMLElement>(selector);
+        return element == null || element.hidden
+          ? null
+          : element.getBoundingClientRect().top;
+      }, LINE);
+      if (line != null) {
+        lines.push(line);
+      }
     },
   });
-  const expected = (t: number) => -pitch * spring.at(t);
-  const comparison = compareCurve(samples, expected, 0.5);
+  // The gaps after Sent and after Drafts, where Inbox would land.
+  const gaps = [before.Sent + height, before.Drafts + height];
   await writeEvidence(
-    'curves/list-reorder-slide',
+    'reorder/stationary-rows',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {spring: reorder.slide.spring, pitch, samples, comparison},
+        {before, gaps, lines, moved},
         null,
-        2,
+        1,
       ),
     },
     testInfo,
   );
-  expect(samples.length).toBeGreaterThan(5);
-  expect(comparison.maxError, JSON.stringify(comparison.worst)).toBeLessThan(
-    0.5,
-  );
+  // Nothing made room: every row stayed where it was until the drop (DR3).
+  expect(moved.length).toBeGreaterThan(5 * ROWS.length);
+  for (const value of moved) {
+    expect(Math.abs(value)).toBeLessThan(0.5);
+  }
+  // The line sat in the gap after Sent, then in the gap after Drafts, as the
+  // finger crossed them: only ever in a gap, and last after Drafts.
+  expect(lines.length).toBeGreaterThan(0);
+  for (const top of lines) {
+    expect(
+      gaps.some(gap => Math.abs(top - gap) < 4),
+      `${top}`,
+    ).toBe(true);
+  }
+  expect(lines.some(top => Math.abs(top - gaps[0]) < 4)).toBe(true);
+  expect(Math.abs(lines[lines.length - 1] - gaps[1])).toBeLessThan(4);
   await expect
     .poll(async () => labels(page))
-    .toEqual(['Sent', 'Inbox', 'Drafts', 'Archive', 'Spam', 'Trash']);
+    .toEqual(['Sent', 'Drafts', 'Inbox', 'Archive', 'Spam', 'Trash']);
 });
 
 /**
@@ -376,23 +468,26 @@ function handoffCurve(
   return ms => curve.value(ms / 1000);
 }
 
-test('the drop springs the row from rest into its slot, its duration scaled by the distance left, even from a moving finger', async ({
+test('the drop glides the row from where its preview was into its new place on the shared settle spring, from rest, even from a moving finger, and the rows it passed to theirs', async ({
   page,
 }, testInfo) => {
   await open(page);
-  const {pitch, height} = await pitchOf(page);
+  const {pitch} = await pitchOf(page);
   const inbox = row(page, 'Inbox');
+  const sent = row(page, 'Sent');
   const start = await topOf(inbox);
+  const sentStart = await topOf(sent);
   const from = await centerOf(handle(page, 'Inbox'));
   const travel = 0.62 * pitch;
   const driver = await touchDriver(page);
   const samples: {t: number; value: number}[] = [];
-  // The row is released `pitch - travel` above its slot (slot 1).
-  const distance = pitch - travel;
-  const spring = settleSpring(distance, height);
-  const progress = tableProgress(spring.duration);
-  // The finger lifts while it moves, so a settle that took its velocity
-  // would leave from the release moving, not from rest.
+  const passed: {t: number; value: number}[] = [];
+  // A committed move's glide is coordinated layout movement: it plays the
+  // shared settle role, springs.settle (spec:AST-105 FR4).
+  const duration = springs.settle.duration;
+  const progress = tableProgress(duration);
+  // The finger lifts while it moves, so a glide that took its velocity would
+  // leave from the release moving, not from rest.
   const script = drag(
     from,
     {x: from.x, y: from.y + travel},
@@ -404,42 +499,47 @@ test('the drop springs the row from rest into its slot, its duration scaled by t
       if (step.type !== 'touchEnd') {
         return;
       }
-      await holdAnimations(page, inbox);
+      await holdAnimations(page, page.locator('#storybook-root ul'));
       for (const t of timeline(progress.settleMs)) {
         await seekAnimations(page, t);
         samples.push({t, value: (await topOf(inbox)) - start});
+        passed.push({t, value: (await topOf(sent)) - sentStart});
       }
       await releaseAnimations(page, {finish: true});
     },
   });
-  const curve = (t: number) => travel + distance * progress.at(t);
+  // Inbox lands in slot 1, one pitch down; it leaves from where its preview
+  // was, `travel` down, and glides the rest on the settle spring.
+  const curve = (t: number) => travel + (pitch - travel) * progress.at(t);
   // The commit that applies the drop lands a few ms into it and continues the
-  // same curve from there (its value and velocity kept): the held animation
-  // starts that much into the drop. The lag is fitted to every sample (a
-  // spring from rest is flat at its start, so its first sample cannot place
-  // it).
+  // same curve from there: the held animation starts that much into the
+  // glide. The lag is fitted to every sample (a spring from rest is flat at
+  // its start, so its first sample cannot place it).
   const {lag} = fitLag(samples, curve);
   const comparison = compareCurve(samples, t => curve(t + lag), 0.5);
-  // A settle that took the release velocity misses the samples at any lag.
+  // A glide that took the release velocity misses the samples at any lag.
   const handoff = fitLag(
     samples,
-    handoffCurve(spring.duration, travel, pitch, velocity),
+    handoffCurve(duration, travel, pitch, velocity),
   );
+  // Sent, which Inbox passed, glides from its old place to its new one, one
+  // pitch up, on the same spring.
+  const sentFit = fitLag(passed, t => -pitch * progress.at(t));
   await writeEvidence(
     'curves/list-reorder-drop',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
-          spring,
+          duration,
           pitch,
-          height,
           travel,
-          distance,
           velocity,
           lag,
           samples,
           comparison,
           handoff,
+          passed,
+          sentFit,
         },
         null,
         2,
@@ -448,83 +548,101 @@ test('the drop springs the row from rest into its slot, its duration scaled by t
     testInfo,
   );
   expect(velocity).toBeGreaterThan(150);
-  expect(spring.duration).toBeLessThan(reorder.settle.maxDuration);
   expect(samples[0].value).toBeCloseTo(travel, 0);
   expect(lag).toBeLessThan(30);
   expect(comparison.maxError, JSON.stringify(comparison.worst)).toBeLessThan(
     0.5,
   );
   expect(handoff.maxError).toBeGreaterThan(2);
+  expect(sentFit.maxError).toBeLessThan(0.5);
   await expect
     .poll(async () => labels(page))
     .toEqual(['Sent', 'Inbox', 'Drafts', 'Archive', 'Spam', 'Trash']);
 });
 
-test('a cancelled drag sends the row home from rest and commits no move', async ({
+test('a cancelled drag restores everything at once and commits no move', async ({
   page,
   browserName,
-}, testInfo) => {
+}) => {
   // WebKit's driver dispatches no touch cancel.
   test.skip(browserName === 'webkit', 'Chromium dispatches the touch cancel');
   await open(page);
-  const {pitch, height} = await pitchOf(page);
-  const inbox = row(page, 'Inbox');
-  const start = await topOf(inbox);
+  const {pitch} = await pitchOf(page);
+  const before = await rowTops(page);
   const from = await centerOf(handle(page, 'Inbox'));
-  const travel = 1.6 * pitch;
   const driver = await touchDriver(page);
-  const samples: {t: number; value: number}[] = [];
+  const state = async () =>
+    page.evaluate(
+      ({rowSelector, preview, line}) => ({
+        overlays: document.querySelector(`${preview}, ${line}`) != null,
+        opacities: Array.from(
+          document.querySelectorAll<HTMLElement>(rowSelector),
+        ).map(element => Number(getComputedStyle(element).opacity)),
+        travelling: Array.from(
+          document.querySelectorAll<HTMLElement>(rowSelector),
+        ).some(element =>
+          element
+            .getAnimations()
+            .some(
+              animation =>
+                animation.playState === 'running' &&
+                animation.effect instanceof KeyframeEffect &&
+                animation.effect
+                  .getKeyframes()
+                  .some(frame => frame.translate != null),
+            ),
+        ),
+      }),
+      {rowSelector: ROW, preview: PREVIEW, line: LINE},
+    );
+  const seen: {
+    during?: Awaited<ReturnType<typeof state>>;
+    after?: Awaited<ReturnType<typeof state>>;
+    tops?: Record<string, number>;
+  } = {};
   // The browser takes the touch while the finger still moves.
-  const script = drag(
-    from,
-    {x: from.x, y: from.y + travel},
-    {holdMs: HOLD_MS, durationMs: 200, cancel: true},
-  );
-  const velocity = releaseVelocity(script).y;
-  const spring = settleSpring(travel, height);
-  const progress = tableProgress(spring.duration);
-  await driver.play(script, {
-    onEvent: async (step: TouchEventStep) => {
-      if (step.type !== 'touchCancel') {
-        return;
-      }
-      await holdAnimations(page, inbox);
-      for (const t of timeline(progress.settleMs)) {
-        await seekAnimations(page, t);
-        samples.push({t, value: (await topOf(inbox)) - start});
-      }
-      await releaseAnimations(page, {finish: true});
-    },
-  });
-  // Home from where the finger left it, from rest, on the drop's spring. No
-  // commit comes between the cancel and the return, so neither curve is
-  // shifted, and one that took the release velocity misses the samples.
-  const curve = (t: number) => travel * (1 - progress.at(t));
-  const fit = compareCurve(samples, curve, 0.5);
-  const handoff = compareCurve(
-    samples,
-    handoffCurve(spring.duration, travel, 0, velocity),
-    0.5,
-  );
-  await writeEvidence(
-    'curves/list-reorder-cancel',
+  await driver.play(
+    drag(
+      from,
+      {x: from.x, y: from.y + 1.6 * pitch},
+      {holdMs: HOLD_MS, durationMs: 200, cancel: true},
+    ),
     {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {spring, pitch, height, travel, velocity, samples, fit, handoff},
-        null,
-        2,
-      ),
+      onEvent: async (step: TouchEventStep) => {
+        if (
+          step.type === 'touchMove' &&
+          seen.during == null &&
+          step.t > HOLD_MS + 100
+        ) {
+          seen.during = await state();
+        }
+        if (step.type === 'touchCancel') {
+          // The next frame: everything is back already (DR5).
+          await page.evaluate(
+            async () =>
+              new Promise<void>(resolve =>
+                requestAnimationFrame(() => resolve()),
+              ),
+          );
+          seen.after = await state();
+          seen.tops = await rowTops(page);
+        }
+      },
     },
-    testInfo,
   );
-  expect(samples[0].value).toBeCloseTo(travel, 0);
-  expect(fit.maxError, JSON.stringify(fit.worst)).toBeLessThan(0.5);
-  expect(handoff.maxError).toBeGreaterThan(2);
-  await waitForRest(page);
-  expect(await labels(page)).toEqual(ROWS);
-  for (const label of ROWS) {
-    expect(await translateY(row(page, label))).toBe(0);
+  // The drag was live: its preview and line were up.
+  expect(seen.during?.overlays).toBe(true);
+  expect(seen.after?.overlays).toBe(false);
+  expect(seen.after?.travelling).toBe(false);
+  for (const opacity of seen.after?.opacities ?? [0]) {
+    expect(opacity).toBe(1);
   }
+  for (const label of ROWS) {
+    expect(Math.abs((seen.tops?.[label] ?? Number.NaN) - before[label])).toBe(
+      0,
+    );
+  }
+  expect(await labels(page)).toEqual(ROWS);
   await expect(page.locator('[data-astryx-reordering]')).toHaveCount(0);
 });
 
@@ -793,16 +911,15 @@ async function busyProof(
   });
 }
 
-test('the rows it passes keep sliding while the main thread is blocked', async ({
+test('the rows the drop moves keep gliding while the main thread is blocked', async ({
   page,
 }, testInfo) => {
   await open(page);
-  // In one move Inbox jumps past Sent, Drafts and Archive, and the finger
-  // stays down below them: Sent slides up a row, clear of the dragged row,
-  // while script cannot run.
+  // In one move Inbox passes Sent, Drafts and Archive, and the finger lifts
+  // below them: on the drop Sent glides up a row while script cannot run.
   const proof = await busyProof(page, row(page, 'Sent'), 3.2, {
     blockMs: 200,
-    releaseFirst: false,
+    releaseFirst: true,
     durationMs: 16,
   });
   await writeEvidence(
@@ -814,11 +931,12 @@ test('the rows it passes keep sliding while the main thread is blocked', async (
   expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
 });
 
-test('the drop keeps settling while the main thread is blocked', async ({
+test('the dropped row keeps gliding while the main thread is blocked', async ({
   page,
 }, testInfo) => {
   await open(page);
-  // Released half a row from its slot: the drop takes its full duration.
+  // Released a row and a half down: Inbox glides from where its preview was
+  // into its new place.
   const proof = await busyProof(page, row(page, 'Inbox'), 1.49, {
     blockMs: 150,
     releaseFirst: true,
@@ -839,8 +957,10 @@ test('a drag does no Layout or Paint per move', async ({page, browserName}) => {
   const from = await centerOf(handle(page, 'Inbox'));
   const driver = await touchDriver(page);
   let played: Awaited<ReturnType<typeof driver.play>> = [];
+  const line: {shownAt?: number} = {};
   const trace = await traceRendering(page, async () => {
-    // Past two rows: two slot changes start the neighbours' slides.
+    // Past two rows: the insertion line shows at the first gap and moves to
+    // the second.
     played = await driver.play(
       drag(
         from,
@@ -851,19 +971,36 @@ test('a drag does no Layout or Paint per move', async ({page, browserName}) => {
           restMs: 100,
         },
       ),
+      {
+        onEvent: async (step: TouchEventStep) => {
+          if (line.shownAt != null || step.type !== 'touchMove') {
+            return;
+          }
+          const shown = await page.evaluate(selector => {
+            const element = document.querySelector<HTMLElement>(selector);
+            return element != null && !element.hidden;
+          }, LINE);
+          if (shown) {
+            line.shownAt = Date.now();
+          }
+        },
+      },
     );
     await page.waitForTimeout(400);
   });
-  // From the first move after the claim to the last move: the drag itself.
+  // Once the insertion line is up, to the last move: each move only moves
+  // the preview (and the line, at the second gap), in the compositor.
   const moves = played.filter(
-    step => step.type === 'touchMove' && step.t > HOLD_MS + 20,
+    step =>
+      step.type === 'touchMove' && step.dispatchedAt > (line.shownAt ?? 0),
   );
   const during = countBetween(
     trace,
     moves[0].dispatchedAt,
     moves[moves.length - 1].dispatchedAt,
   );
-  expect(moves.length).toBeGreaterThan(20);
+  expect(line.shownAt).toBeDefined();
+  expect(moves.length).toBeGreaterThan(15);
   expect(during.Layout ?? 0, JSON.stringify(during)).toBe(0);
   expect(during.Paint ?? 0, JSON.stringify(during)).toBe(0);
 });
@@ -1045,7 +1182,9 @@ async function sampleRow(page: Page, label: string, ms: number) {
   await page.evaluate(
     ({label, ms}) => {
       const row = Array.from(
-        document.querySelectorAll<HTMLElement>('#storybook-root li'),
+        document.querySelectorAll<HTMLElement>(
+          '#storybook-root li:not([data-astryx-leaving])',
+        ),
       ).find(li => li.textContent?.trim().startsWith(label));
       const samples: {t: number; opacity: number; top: number}[] = [];
       (window as unknown as {__rowSamples: typeof samples}).__rowSamples =
@@ -1102,7 +1241,7 @@ async function rowAnimations(locator: Locator) {
 // The cross-fade is the animator's Reduced Motion default; the rows take it
 // as every row motion does (no row keeps travel under Reduced Motion).
 test.describe('with Reduce Motion', () => {
-  test('the rows it passes and the drop cross-fade in place: no travel, at most 200 ms', async ({
+  test('the rows stay still while the finger drags, and the drop cross-fades the rows it moves into their new places: no travel, at most 200 ms', async ({
     page,
   }) => {
     // Reduce Motion on, before the story opens.
@@ -1114,8 +1253,7 @@ test.describe('with Reduce Motion', () => {
       ),
     ).toBe(true);
     const {pitch} = await pitchOf(page);
-    const sent = row(page, 'Sent');
-    const inbox = row(page, 'Inbox');
+    const before = await rowTops(page);
     const from = await centerOf(handle(page, 'Inbox'));
     const driver = await touchDriver(page);
     const script = drag(
@@ -1125,38 +1263,47 @@ test.describe('with Reduce Motion', () => {
     );
     const lastMove = script.length - 2;
     let index = -1;
-    let passed: Awaited<ReturnType<typeof rowAnimations>> = [];
+    const during: {
+      tops?: Record<string, number>;
+      animations?: Awaited<ReturnType<typeof rowAnimations>>;
+    } = {};
     await driver.play(script, {
       onEvent: async (step: TouchEventStep) => {
         index += 1;
         if (step.type === 'touchMove' && index === lastMove) {
-          passed = await rowAnimations(sent);
+          during.tops = await rowTops(page);
+          during.animations = [
+            ...(await rowAnimations(row(page, 'Inbox'))),
+            ...(await rowAnimations(row(page, 'Sent'))),
+          ];
         }
         if (step.type === 'touchEnd') {
           await sampleRow(page, 'Inbox', ROW_FADE_MS + 100);
         }
       },
     });
-    // Sent made room for Inbox: by a cross-fade, not a slide.
-    expect(passed.length).toBeGreaterThan(0);
-    for (const animation of passed) {
-      expect(animation.translate).toBe(false);
-      expect(animation.opacity).toBe(true);
+    // While the finger drags, nothing makes room and nothing moves (DR3).
+    expect(during.animations).toEqual([]);
+    for (const label of ROWS) {
+      expect(during.tops?.[label]).toBe(before[label]);
     }
-    // The drop too: Inbox fades into its slot instead of springing to it,
-    // and every row is at rest, fully shown, within the fade (two frames of
-    // slack for the measurement).
-    for (const animation of await rowAnimations(inbox)) {
-      expect(animation.translate).toBe(false);
+    // The drop moves no row either (DR8): the rows it moves, Inbox and Sent,
+    // only fade, and every row is at rest, fully shown, within the fade (two
+    // frames of slack for the measurement).
+    for (const label of ['Inbox', 'Sent']) {
+      for (const animation of await rowAnimations(row(page, label))) {
+        expect(animation.translate).toBe(false);
+      }
     }
     expect(await msUntilRowsRest(page)).toBeLessThanOrEqual(ROW_FADE_MS + 34);
-    // The drop is a cross-fade too (DR2), not a jump: Inbox fades out where
-    // the finger left it, takes its slot while transparent, and fades in.
+    // Inbox fades out where its preview left it, takes its new place while
+    // transparent, and fades in there.
     const dropped = await rowSamples(page);
     const lowest = Math.min(...dropped.map(sample => sample.opacity));
     expect(lowest).toBeLessThanOrEqual(0.1);
     const released = dropped[0].top;
     const landed = dropped[dropped.length - 1].top;
+    expect(landed).toBe(before.Sent);
     for (const sample of dropped) {
       if (sample.opacity > 0.1) {
         expect(
@@ -1177,6 +1324,7 @@ test.describe('with Reduce Motion', () => {
         ),
       ).toBe(1);
     }
+    await expect(page.locator(`${PREVIEW}, ${LINE}`)).toHaveCount(0);
   });
 
   test('a key move cross-fades its rows too', async ({page}) => {
