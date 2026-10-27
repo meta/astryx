@@ -138,6 +138,10 @@ export class GestureArena {
   /** The latest time processed: input never moves the clock backwards. */
   private latestTime = Number.NEGATIVE_INFINITY;
   private depth = 0;
+  /** Open `deferResolution` calls: what their stops unblock waits. */
+  private deferDepth = 0;
+  /** A deferred stop left a resolution for the next pass. */
+  private owesResolution = false;
 
   constructor(options: GestureArenaOptions = {}) {
     this.options = options;
@@ -478,6 +482,38 @@ export class GestureArena {
     }
   }
 
+  /**
+   * Runs `body`, code outside input that stops recognizers (an Effect that
+   * turns one off or detaches it), without resolving what those stops
+   * unblock: the recognitions waiting on them, the touches they held from
+   * a view, the resets. A pass a microtask later resolves all of it, at the
+   * last event's time, so the listeners and consumers it reaches hear it
+   * outside the caller's frame and read the recognized state
+   * (react-component-runtime INV2).
+   */
+  deferResolution(body: () => void): void {
+    this.deferDepth += 1;
+    try {
+      body();
+    } finally {
+      this.deferDepth -= 1;
+    }
+    if (this.deferDepth === 0 && this.owesResolution) {
+      queueMicrotask(() => {
+        if (this.owesResolution && this.deferDepth === 0) {
+          this.run(this.lastEventTime(), () => {});
+        }
+      });
+    }
+  }
+
+  /** The last event's time, or now before any event. */
+  private lastEventTime(): number {
+    return Number.isFinite(this.latestTime)
+      ? this.latestTime
+      : this.clock.now();
+  }
+
   /** Cancel an active recognizer, or fail a possible one. */
   stop(recognizer: GestureRecognizer): void {
     // A cancel from code between events happens at the last event's time:
@@ -661,6 +697,10 @@ export class GestureArena {
    * settle in one pass.
    */
   private reviewPending(): void {
+    if (this.deferDepth > 0) {
+      this.owesResolution = true;
+      return;
+    }
     let changed = true;
     while (changed) {
       changed = false;
@@ -904,13 +944,26 @@ export class GestureArena {
   private run(time: number, body: () => void): void {
     this.depth += 1;
     try {
+      if (this.depth === 1 && this.deferDepth === 0 && this.owesResolution) {
+        // A deferred stop resolves before anything newer: input that comes
+        // ahead of its microtask (a nested dispatch) sees settled state.
+        this.owesResolution = false;
+        this.currentTime = this.clampTime(this.lastEventTime());
+        this.settle();
+      }
       this.flushTimers(time);
       this.currentTime = this.clampTime(time);
       body();
       // Re-entrant calls settle with the outermost one: settling mid-delivery
-      // would reset recognizers that have not heard the event yet.
+      // would reset recognizers that have not heard the event yet. Inside
+      // `deferResolution`, the next pass settles.
       if (this.depth === 1) {
-        this.settle();
+        if (this.deferDepth > 0) {
+          this.owesResolution = true;
+        } else {
+          this.owesResolution = false;
+          this.settle();
+        }
       }
     } finally {
       this.depth -= 1;
