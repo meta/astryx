@@ -26,6 +26,7 @@ import {
   ChipRig,
   DisclosureRig,
   ListReorderRig,
+  NavTintRig,
   RailRig,
   SkeletonSwapRig,
   StatCountRig,
@@ -290,6 +291,26 @@ export default function PreviewsPage() {
                 tone: 'after',
                 label: 'Proposed — counts',
                 content: <StatCountRig mode="after" />,
+              },
+            ]}
+          />
+        </DemoCard>
+
+        <DemoCard
+          title="NavItem hover tint"
+          question="Hover a row in each pane. Today the tint snaps on; the proposal fades it on the state token, and narrows the hover gate to a fine pointer that hovers."
+          badges={<Badge variant="error" label="ADD" />}>
+          <ComparePanes
+            panes={[
+              {
+                tone: 'before',
+                label: 'Today — snaps on hover',
+                content: <NavTintRig mode="before" />,
+              },
+              {
+                tone: 'after',
+                label: 'State token, fine pointers only',
+                content: <NavTintRig mode="after" />,
               },
             ]}
           />

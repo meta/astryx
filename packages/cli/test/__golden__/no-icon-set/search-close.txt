@@ -1,9 +1,14 @@
-Results for "close" (20 of 44)
+Results for "close" (20 of 45)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
+name:        BottomSheet
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/BottomSheet
+command:     pnpm exec astryx component BottomSheet
 name:        BottomSheetSwitcher
 domain:      component
 package:     @astryxdesign/core
@@ -101,8 +106,3 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs styling/styling-advanced compound-components
 parent:      pnpm exec astryx docs styling/styling-advanced --index
-name:        ComplexSelector
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ComplexSelector
-command:     pnpm exec astryx component ComplexSelector

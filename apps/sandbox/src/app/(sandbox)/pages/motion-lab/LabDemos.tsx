@@ -623,12 +623,21 @@ export function RailRig({mode}: {mode: Mode}) {
 
 // --- skeleton -> content -----------------------------------------------------
 
+// The skeleton stays up long enough to read as a loading state: a 420 ms
+// flash in a 3 s loop looked like static content with a blink, so the swap
+// itself was easy to miss.
+const SKELETON_MS = 1400;
+const SKELETON_LOOP_MS = 3600;
+
 export function SkeletonSwapRig({mode}: {mode: Mode}) {
   const [loaded, setLoaded] = useState(false);
+  const arrivalRef = useRef<number | undefined>(undefined);
   useLoop(() => {
+    window.clearTimeout(arrivalRef.current);
     setLoaded(false);
-    window.setTimeout(() => setLoaded(true), 420);
-  }, 3000);
+    arrivalRef.current = window.setTimeout(() => setLoaded(true), SKELETON_MS);
+  }, SKELETON_LOOP_MS);
+  useEffect(() => () => window.clearTimeout(arrivalRef.current), []);
 
   return (
     <VStack gap={2} {...stylex.props(sx.full)}>
@@ -969,6 +978,73 @@ export function TintRig({mode}: {mode: Mode}) {
           ? 'Hardcoded 150ms with the CSS default curve.'
           : 'The state token, at 175ms with --ease-state.'}
       </Hint>
+    </VStack>
+  );
+}
+
+// --- nav item hover tint ----------------------------------------------------
+
+const NAV_ITEMS = ['Overview', 'Projects', 'Settings'];
+const FINE_HOVER = '(hover: hover) and (pointer: fine)';
+
+/** Whether this device hovers with a fine pointer, as the gate reads it. */
+function useFineHover(): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia(FINE_HOVER);
+    setMatches(query.matches);
+    const update = () => setMatches(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return matches;
+}
+
+/**
+ * NavItem's hover tint. Before: today's item, which tints at once wherever
+ * the device hovers, as shipped nav items paint it. After: the tint
+ * fades on Astryx's state token (`--duration-fast`, whatever the theme sets,
+ * on the shipped `--ease-standard` curve), and only where the device hovers
+ * with a fine pointer, so a tap leaves no tint behind.
+ */
+export function NavTintRig({mode}: {mode: Mode}) {
+  const {speed, reducedMotion} = useMotionLab();
+  const isFineHover = useFineHover();
+  const after =
+    mode === 'after'
+      ? {
+          // The system token, stretched by the rail's slow motion; the
+          // Delete policy removes the fade, Degrade keeps it (colour is not
+          // movement).
+          ['--tint-duration' as string]:
+            reducedMotion === 'delete'
+              ? '0ms'
+              : `calc(var(--duration-fast) * ${speed})`,
+          ['--tint-ease' as string]: 'var(--ease-standard-today)',
+        }
+      : {['--tint-duration' as string]: '0ms'};
+  return (
+    <VStack gap={1} {...stylex.props(sx.full)}>
+      {NAV_ITEMS.map(item => (
+        <div
+          key={item}
+          className={mode === 'after' ? styles.navTintFine : styles.navTint}
+          style={after}>
+          <Text type="supporting">{item}</Text>
+        </div>
+      ))}
+      <Hint>
+        {mode === 'before'
+          ? 'Today: the tint snaps on at once wherever the device hovers.'
+          : "The theme's state token (--duration-fast on --ease-standard), only on a fine pointer that hovers."}
+      </Hint>
+      {mode === 'after' && isFineHover != null && (
+        <Hint>
+          {isFineHover
+            ? 'This device hovers with a fine pointer: the tint is on.'
+            : 'This device has no fine hover: a tap leaves no tint.'}
+        </Hint>
+      )}
     </VStack>
   );
 }

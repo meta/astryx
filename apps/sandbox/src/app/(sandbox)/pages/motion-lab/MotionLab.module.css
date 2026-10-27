@@ -234,7 +234,9 @@
 .scrimAfter[data-open='true'] {
   opacity: 1;
   visibility: visible;
-  transition: opacity var(--lab-duration-overlay) linear, visibility 0s;
+  transition:
+    opacity var(--lab-duration-overlay) linear,
+    visibility 0s;
 }
 
 .scrimBefore[data-open='true'] {
@@ -321,7 +323,9 @@
 .drawer[data-open='true'] {
   transform: translateX(0);
   visibility: visible;
-  transition: transform var(--drawer-slide, 410ms) var(--ease-drawer), visibility 0s;
+  transition:
+    transform var(--drawer-slide, 410ms) var(--ease-drawer),
+    visibility 0s;
 }
 
 /* The unmount timer firing while the slide is still running. */
@@ -351,7 +355,11 @@
 }
 
 .trackTimer {
-  background: color-mix(in srgb, var(--color-text-error, #d3543f) 45%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-text-error, #d3543f) 45%,
+    transparent
+  );
 }
 
 /* --------------------------------------------------- sliding indicator --- */
@@ -669,7 +677,8 @@
   height: 11px;
   border-radius: 50%;
   background: var(--color-background-success, #3f9a6b);
-  animation: pulseRing var(--loop-duration, 2s) var(--loop-ease, ease-in-out) infinite;
+  animation: pulseRing var(--loop-duration, 2s) var(--loop-ease, ease-in-out)
+    infinite;
 }
 
 @keyframes pulseRing {
@@ -693,7 +702,8 @@
     var(--color-background-base) 80%
   );
   background-size: 220% 100%;
-  animation: shimmer var(--loop-duration, 1.5s) var(--loop-ease, ease-in-out) infinite;
+  animation: shimmer var(--loop-duration, 1.5s) var(--loop-ease, ease-in-out)
+    infinite;
 }
 
 @keyframes shimmer {
@@ -761,11 +771,35 @@
 .tintRow {
   padding: var(--space-2, 6px) var(--space-3, 10px);
   border-radius: var(--radius-sm, 6px);
-  transition: background-color var(--tint-duration, 150ms) var(--tint-ease, ease);
+  transition: background-color var(--tint-duration, 150ms)
+    var(--tint-ease, ease);
 }
 
 .tintRow:hover {
   background: var(--color-background-hover, var(--color-background-elevated));
+}
+
+/* NavItem's hover tint (NavTintRig). Before: as shipped, it snaps on where
+   the device hovers. After: it fades on the duration and curve the rig passes
+   in, and only where the device hovers with a fine pointer. */
+.navTint,
+.navTintFine {
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border-radius: var(--radius-sm, 6px);
+  transition: background-color var(--tint-duration, 0ms) var(--tint-ease, ease);
+}
+
+/* Today, as shipped nav items paint it: on any device that hovers. */
+@media (hover: hover) {
+  .navTint:hover {
+    background: var(--color-overlay-hover, var(--color-background-elevated));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navTintFine:hover {
+    background: var(--color-overlay-hover, var(--color-background-elevated));
+  }
 }
 
 /* A `transitionProperty` with no duration: the rule reads like motion in
@@ -865,7 +899,9 @@
 }
 
 .lightboxFade[data-open='true'] {
-  transition: opacity var(--lab-duration-enter) var(--ease-entry), visibility 0s;
+  transition:
+    opacity var(--lab-duration-enter) var(--ease-entry),
+    visibility 0s;
 }
 
 .lightboxNone {
