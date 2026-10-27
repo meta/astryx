@@ -30,7 +30,7 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
-import {useMediaQuery} from '../hooks';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
