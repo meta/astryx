@@ -38,6 +38,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {ContextMenu} from '../../ContextMenu';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {MOUSE_DRAG_SLOP} from '../listReorderEngine';
@@ -1255,6 +1256,54 @@ describe('List reorderable', () => {
     ).toEqual([]);
     unmount();
     added.mockRestore();
+  });
+
+  it('a hold on the handle opens no row menu, and a hold elsewhere on the row opens it (spec:AST-103)', () => {
+    vi.useFakeTimers();
+    const show = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    try {
+      render(
+        <ContextMenu label="Row actions" items={[{label: 'Move Inbox'}]}>
+          <List reorderable={createReorderable({onReorder: () => {}})}>
+            <ListItem itemKey="inbox" label="Inbox" />
+            <ListItem itemKey="sent" label="Sent" />
+          </List>
+        </ContextMenu>,
+      );
+      const handle = handleOf('Inbox');
+      show.mockClear();
+      // Held past the menu's long press: the handle's hold is the row's, not
+      // the menu's.
+      fireEvent.touchStart(handle, {touches: [{clientX: 300, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(800);
+      });
+      fireEvent.touchEnd(handle, {touches: []});
+      expect(show).not.toHaveBeenCalled();
+      // A finger's long press on the handle sends the menu no context
+      // request either.
+      const request = new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(request, 'pointerType', {value: 'touch'});
+      act(() => {
+        handle.dispatchEvent(request);
+      });
+      expect(request.defaultPrevented).toBe(true);
+      expect(show).not.toHaveBeenCalled();
+      // A hold on the row's label opens the row's menu.
+      const label = screen.getByText('Inbox');
+      fireEvent.touchStart(label, {touches: [{clientX: 40, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.touchEnd(label, {touches: []});
+      expect(show).toHaveBeenCalled();
+    } finally {
+      show.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('does not activate an interactive row from its handle', async () => {
