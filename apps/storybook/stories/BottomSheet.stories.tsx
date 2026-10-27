@@ -844,3 +844,72 @@ export const NestedPopover: Story = {
     );
   },
 };
+
+/**
+ * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
+ * native host, which lands on the panel; the field is not focused.
+ */
+export const NoScrimAutofocus: Story = {
+  name: 'No scrim with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Filter places"
+          hasScrim={false}
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Search"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
+ * what focus lands on when the sheet opens.
+ */
+export const ModalAutofocus: Story = {
+  name: 'Modal with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Edit note"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Note"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
