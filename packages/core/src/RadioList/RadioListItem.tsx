@@ -25,7 +25,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
-import {colorVars, radiusVars} from '../theme/tokens.stylex';
+import {radiusVars} from '../theme/tokens.stylex';
 import {mergeProps, isRenderable, rtlStyles} from '../utils';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {indicatorPressOwnerStyles} from '../Indicator/indicatorPress.stylex';
@@ -40,10 +40,6 @@ import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 /** The row is a cell: the circle releases on the row's deselect clock. */
 const CELL_RELEASE = `${cellPressConsts.cellReleaseMs}ms`;
 
-// The mouse press's paint, declared on the row and inherited by the layer
-// over the circle. Internal: not a theme hook.
-const ROW_PRESS = '--_radio-row-press';
-
 const styles = stylex.create({
   radioWrapper: {
     position: 'relative',
@@ -54,18 +50,16 @@ const styles = stylex.create({
     isolation: 'isolate',
   },
   // The row remains the large press target, but nested links and buttons keep
-  // their independent action and do not make the radio appear pressed: the
-  // row declares the mouse press's paint (`rowStyles.press`) and this layer
-  // reads it. This owner-drawn layer also survives a theme replacing the
-  // indicator component.
-  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
-  // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
-  // touch press controller writes `data-astryx-press` on the row, which this layer
-  // reads off the same scope marker as the hover tint. The controller paints
-  // the innermost pressable, so a nested link or button takes the press
-  // itself and the row never carries the attribute for it.
+  // their independent action and do not make the radio appear pressed. This
+  // owner-drawn layer also survives a theme replacing the indicator component.
+  // One press model for every pointer (`spec:AST-094` FR11's fine-pointer
+  // profile, FR43): the press controller writes `data-astryx-press` on the
+  // row for a finger, a mouse and a pen alike, and a link or a button inside
+  // the row takes its own press, so the row never carries the attribute for
+  // it (the controller's boundary, which replaces the row's `:active`
+  // exclusion).
   //
-  // The touch press is this layer's own: the pressed token at full strength
+  // The press is this layer's own: the pressed token at full strength
   // while the press is on, and a release of the layer's opacity, 1 → 0, on
   // the row's clock (a cell's deselect). Opacity runs on the compositor, so
   // the release keeps moving while script runs.
@@ -76,36 +70,22 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
-      backgroundColor: `var(${ROW_PRESS}, transparent)`,
-      // An image layer over the colour: an image change is discrete, so no
-      // transition can delay the onset. The owner declares the image and the
-      // release (indicatorPressOwnerStyles); the layer reads them, under a
-      // coarse pointer only.
-      backgroundImage: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_indicator-press-image, none)',
-      },
-      animationName: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_indicator-press-release, none)',
-      },
+      // An image layer: an image change is discrete, so no transition can
+      // delay the onset. The owner declares the image and the release
+      // (indicatorPressOwnerStyles); the layer reads them.
+      backgroundImage: 'var(--_indicator-press-image, none)',
+      animationName: 'var(--_indicator-press-release, none)',
       animationDuration: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: CELL_RELEASE,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.duration,
-        },
+        default: CELL_RELEASE,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.duration,
       },
       animationTimingFunction: {
-        default: null,
-        '@media (pointer: coarse)': {
-          default: cellPressConsts.cellReleaseEase,
-          '@media (prefers-reduced-motion: reduce)':
-            reducedMotionFadeConsts.easing,
-        },
+        default: cellPressConsts.cellReleaseEase,
+        '@media (prefers-reduced-motion: reduce)':
+          reducedMotionFadeConsts.easing,
       },
-      animationFillMode: {default: null, '@media (pointer: coarse)': 'both'},
+      animationFillMode: 'both',
     },
   },
   input: {
@@ -170,22 +150,6 @@ const rowStyles = stylex.create({
     backgroundImage: 'none',
     '::before': {
       content: 'none',
-    },
-  },
-  // The mouse press (a finger's lives on `data-astryx-press`): the row is
-  // pressed, but not through a nested link or button, which keep their own
-  // action. The `:has()` is on the row itself and reaches no descendant
-  // selector, so a change inside the row re-checks the row alone; the circle's
-  // layer reads the paint through inheritance rather than a relation that
-  // would restyle everything under the row.
-  press: {
-    [ROW_PRESS]: {
-      default: null,
-      ':active:not(:has(a:active,button:active,[role="button"]:active,[role="link"]:active))':
-        {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
     },
   },
 });
@@ -426,7 +390,6 @@ export function RadioListItem({
           // styles so it wins within the base layer; a `radio-list-item` theme
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
-          !isDisabled && rowStyles.press,
           xstyle,
         ] as StyleXStyles
       }

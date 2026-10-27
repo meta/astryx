@@ -16,8 +16,8 @@
  *   asserted; with a mouse (spec:AST-094 FR11's fine-pointer profile, FR43) a
  *   checkbox and a CheckboxList row press through the same model at once and
  *   release on their host's clock, a pen presses a checkbox the same way
- *   (Chromium), a right click and a read-only row paint nothing, and a radio
- *   row keeps its `:active` paint for now
+ *   (Chromium), and a right click and a read-only row paint nothing; a radio
+ *   row presses the same way
  * @position Interaction evidence for the indicator press layers in
  *   CheckboxInput.tsx and RadioListItem.tsx; the row layers they release
  *   beside are proven in ListRowPress.interaction.browser.spec.ts and
@@ -640,34 +640,13 @@ test.describe('with a mouse', () => {
     deviceScaleFactor: 1,
   });
 
-  /** The mark's colour under the probe, as presented (mean of R, G, B). */
-  const markPixel = async (page: Page, at: {x: number; y: number}) => {
-    const shot = await page.screenshot({
-      clip: {x: at.x, y: at.y, width: 1, height: 1},
-      animations: 'disabled',
-      caret: 'hide',
-    });
-    return page.evaluate(async data => {
-      const bitmap = await createImageBitmap(
-        await (await fetch(`data:image/png;base64,${data}`)).blob(),
-      );
-      const canvas = new OffscreenCanvas(1, 1);
-      const context = canvas.getContext('2d');
-      context?.drawImage(bitmap, 0, 0);
-      const px = context?.getImageData(0, 0, 1, 1).data ?? [0, 0, 0];
-      return Math.round((px[0] + px[1] + px[2]) / 3);
-    }, shot.toString('base64'));
-  };
-
   /** The element that owns a surface's press: the checkbox's control, or the row. */
   const ownerOf = (page: Page, surface: Surface) =>
     surface.story === 'core-checkboxinput--default'
       ? page.locator('#storybook-root [data-astryx-pressable]').first()
       : optionRow(page, 'SMS');
 
-  for (const surface of SURFACES.filter(
-    each => each.story !== 'core-radiolist--default',
-  )) {
+  for (const surface of SURFACES) {
     test(`a mouse press on ${surface.name} paints at once through the press model and releases on its host’s clock (FR43)`, async ({
       page,
     }) => {
@@ -831,66 +810,4 @@ test.describe('with a mouse', () => {
     ).toEqual([]);
     expect(layerImages.filter(image => image.includes('gradient'))).toEqual([]);
   });
-
-  for (const surface of SURFACES.filter(
-    each => each.story === 'core-radiolist--default',
-  )) {
-    test(`hover and :active on ${surface.name} paint as before, until the press controller treats a nested control as a press boundary`, async ({
-      page,
-    }) => {
-      await openStory(page, storybook(), surface.story);
-      // A fine-pointer case proves nothing under a coarse primary pointer.
-      expect(
-        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
-      ).toBe(false);
-      await page.evaluate(() =>
-        window.addEventListener(
-          'click',
-          event => {
-            event.preventDefault();
-            event.stopPropagation();
-          },
-          true,
-        ),
-      );
-      const layer = surface.layer(page);
-      const box = await layer.boundingBox();
-      const target = await surface.target(page).boundingBox();
-      if (box == null || target == null) {
-        throw new Error(`${surface.story}: nothing to press`);
-      }
-      const probe = {
-        x: Math.round(box.x + 4),
-        y: Math.round(box.y + box.height / 2),
-      };
-      const center = {
-        x: target.x + target.width / 2,
-        y: target.y + target.height / 2,
-      };
-      await page.mouse.move(1, 1);
-      const rest = await markPixel(page, probe);
-      await page.mouse.move(center.x, center.y);
-      await page.waitForTimeout(300);
-      const hover = await markPixel(page, probe);
-      await page.mouse.down();
-      await page.waitForTimeout(300);
-      const active = await markPixel(page, probe);
-      const pressAttr = await page.evaluate(
-        () => document.querySelector('[data-astryx-press]') != null,
-      );
-      await page.mouse.up();
-      // The touch press never runs for a mouse.
-      expect(pressAttr).toBe(false);
-      // As on the stack without this commit (same pixels on both builds): a
-      // checkbox and a radio circle darken on hover and more on `:active`; a
-      // CheckboxList row's box stays blank while the row takes the mouse.
-      if (surface.story === 'core-checkboxlist--default') {
-        expect(hover).toBe(rest);
-        expect(active).toBe(rest);
-      } else {
-        expect(hover).toBeLessThan(rest);
-        expect(active).toBeLessThan(hover);
-      }
-    });
-  }
 });
