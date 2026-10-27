@@ -1689,7 +1689,9 @@ export class GestureHost {
   /**
    * Cancel a `touchmove` while a recognizer owns one of its fingers. A touch
    * no recognizer owns keeps its moves (`spec:AST-094` FR19): nothing is
-   * cancelled before a recognizer begins, or for a touch it does not track.
+   * cancelled before a recognizer begins, or for a touch it does not track,
+   * unless a recognizer holds that finger already (a scroll-edge pan pulling
+   * away from an edge every scroller under it is at; FR19, DEC-18).
    */
   private cancelIfClaimed(event: TouchEvent): void {
     if (!event.cancelable || event.defaultPrevented) {
@@ -1704,7 +1706,12 @@ export class GestureHost {
         id != null &&
         (this.arena.isClaimed(id) ||
           (this.isCoarse &&
-            this.arena.consumerOf(id)?.keepsTouch?.(id) === true))
+            this.arena.consumerOf(id)?.keepsTouch?.(id) === true) ||
+          // A recognizer that holds the finger before it begins: a
+          // scroll-edge pan pulling away from an edge (FR19, DEC-18).
+          this.arena
+            .participantsOf(id)
+            .some(recognizer => internals(recognizer).keepsTouch(id)))
       ) {
         event.preventDefault();
         return;

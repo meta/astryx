@@ -364,6 +364,32 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.offset = {x: -swallowed.x, y: -swallowed.y};
   }
 
+  /**
+   * A scroll-edge pan holds its finger from the first move while every
+   * scroller under it is at its edge and the finger pulls away from that
+   * edge, the pan's own way (`spec:AST-094` FR19, DEC-18):
+   * the browser would only rubber-band there. It still begins at its
+   * hysteresis; a move the content can still scroll stays the browser's.
+   */
+  protected override keepsTouch(touchId: number): boolean {
+    const touch = this.touches.get(touchId);
+    if (
+      !this.scrollEdge ||
+      this.state !== 'possible' ||
+      touch == null ||
+      touch.pointerType !== 'touch' ||
+      touch.takenByBrowser
+    ) {
+      return false;
+    }
+    const moved = this.raw;
+    return (
+      (moved.x !== 0 || moved.y !== 0) &&
+      this.classify(moved) === 'begin' &&
+      !this.nativeCanScroll(moved.x, moved.y)
+    );
+  }
+
   private nativeCanScroll(dx: number, dy: number): boolean {
     for (const touch of this.touches.values()) {
       if (touch.scroll?.canScroll(dx, dy) === true) {
