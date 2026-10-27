@@ -352,6 +352,30 @@ describe('placeLayerExitCopy', () => {
     ).toBe(list.getAttribute('style'));
   });
 
+  it.each(['iframe', 'object', 'embed', 'video', 'audio', 'canvas'])(
+    'copies a %s as an empty box of its size, so nothing loads or plays again',
+    tag => {
+      popoverApi(true);
+      const element = layer();
+      const live = document.createElement(tag);
+      live.className = 'media';
+      live.style.setProperty('margin', '4px');
+      Object.defineProperty(live, 'offsetWidth', {value: 320});
+      Object.defineProperty(live, 'offsetHeight', {value: 180});
+      element.querySelector('.list')!.appendChild(live);
+      const copy = place(element);
+      expect(copy.querySelector(tag)).toBeNull();
+      const box = copy.querySelector<HTMLElement>('.list > .media')!;
+      expect(box.tagName).toBe('SPAN');
+      expect(box.childNodes).toHaveLength(0);
+      expect(box.style.getPropertyValue('width')).toBe('320px');
+      expect(box.style.getPropertyValue('height')).toBe('180px');
+      expect(box.style.getPropertyValue('margin')).toBe('4px');
+      // The live one is untouched.
+      expect(element.querySelector(tag)).toBe(live);
+    },
+  );
+
   it('keeps scrolled content where it was scrolled to', () => {
     popoverApi(true);
     const element = layer();
