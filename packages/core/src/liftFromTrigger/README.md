@@ -62,9 +62,9 @@ document listeners end with it, and an unmount ends everything at once
 
 ## Files
 
-| File                                                    | What it is                                                                                                     |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, grow and close a surface beside it, drop, end.                        |
-| `useLiftFromTrigger.ts`                                 | A component's one lift, ended when it unmounts.                                                                |
-| `liftFromTriggerGeometry.ts`                            | How far the trigger grows, where it lands inside the layer runtime's gutter, which side the surface takes.     |
-| `__tests__/liftFromTrigger.interaction.browser.spec.ts` | Browser proofs (Chromium and WebKit): the top layer, the placeholder, the properties that move, counts, leaks. |
+| File                                                    | What it is                                                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, grow and close a surface beside it, drop, end. `liftCopy`: the zoom's copy.            |
+| `useLiftFromTrigger.ts`                                 | A component's one lift, ended when it unmounts.                                                                                 |
+| `liftFromTriggerGeometry.ts`                            | How far the trigger grows, where it lands inside the layer runtime's gutter, which side the surface takes.                      |
+| `__tests__/liftFromTrigger.interaction.browser.spec.ts` | Browser proofs (Chromium and WebKit): the top layer, the placeholder, the properties that move, counts, leaks, the zoom's copy. |
