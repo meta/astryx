@@ -13,7 +13,8 @@ owners: [cixzhang]
 affects_architecture: [architecture:react-component-runtime]
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: [useAnimatedLayout, TreeList, Collapsible]
+affects_consumer_docs:
+  [useAnimatedLayout, TreeList, Collapsible, useTableRowExpansion]
 ---
 
 # Animated layout system spec
@@ -56,11 +57,12 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
 - **FR1 — One hook, one handle, one prop.** `useAnimatedLayout({containerRef})`
   returns an opaque `animatedLayout` handle with no public methods or fields.
   An app passes it to a component whose size changes through that
-  component's `animatedLayout` prop, and the component reports each change.
+  component's `animatedLayout` prop, or a hook's `animatedLayout` option where
+  the component is a hook, and the component reports each change.
   `containerRef` names the area; ScrollableArea does not register itself, and
   an app passes the ref it already gives ScrollableArea, which reaches the
   native scroll viewport. Each adopting component's record documents its
-  `animatedLayout` prop.
+  `animatedLayout` prop or option.
 - **FR2 — Without a handle, nothing changes.** A component without a handle
   keeps its behavior: the changed element shows its change as its own record
   says, and content after it takes its place at once.
@@ -125,6 +127,7 @@ What moves inside an area, each case with its test:
 | Portals and top-layer content                                                               | Never moved                                                                                                             | A popover open from a following row                                  |
 | Elements already moving                                                                     | Keep their running motion and add the new move to it                                                                    | Two changes 100 ms apart                                             |
 | Nested areas                                                                                | Motion stops at the area of the handle the changed component holds; an inner area moves as one unit within an outer one | An area inside an area, changed in the inner one                     |
+| Table rows after an opening or closing detail row                                           | The rows glide; a closing detail row hides at once, and its space is held while the rows after it glide up              | A detail row opening and closing in a table with a pinned column     |
 
 Out of coverage, each taking its final place at once:
 
@@ -138,14 +141,15 @@ Out of coverage, each taking its final place at once:
 - a closing element whose space no end margin frees (a grid item whose
   track or gap changes when it hides, or a flex-row item that sets its row's
   height): it hides at once, without its exit, and the content after it
-  takes its final place at once;
+  takes its final place at once, other than a table detail row (Coverage);
 - an anchored popover tied to a moving element, which layer anchoring keeps
   in place (`architecture:layer-runtime`).
 
 ## Current-state impact
 
-- No Core component takes `animatedLayout` yet; TreeList and Collapsible are
-  the first adopters, and their docs gain the `animatedLayout` prop.
+- No Core component takes `animatedLayout` yet; TreeList, Collapsible, and
+  Table's row expansion (`component:Table` FR15) are the first adopters, and
+  their docs gain the `animatedLayout` handle.
 - Core gains the `useAnimatedLayout` export and its documentation (FR7).
 - `architecture:react-component-runtime` INV12 produces the glide.
 - `architecture:react-component-runtime` INV12 also gains the in-place swap
