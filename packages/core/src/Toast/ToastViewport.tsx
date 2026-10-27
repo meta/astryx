@@ -27,6 +27,7 @@ import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, durationVars, easeVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -160,6 +161,16 @@ const styles = stylex.create({
   toastWrapperExiting: {
     gridTemplateRows: '0fr',
     paddingBlockEnd: 0,
+  },
+  // Under reduced motion on a touch screen Toast's own exit is a fade in
+  // place (Toast.tsx, design:reduced-motion DR2): the row waits for it, then
+  // closes at once, so the fade is never cut short by the unmount.
+  toastWrapperExitingAfterFade: {
+    transitionDelay: {
+      default: '0s',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+    },
   },
   toastWrapperInner: {
     width: '100%',
@@ -304,6 +315,7 @@ function ToastRow({
         isReversed ? styles.toastWrapperFromTop : styles.toastWrapperFromBottom,
         isReversed ? styles.toastWrapperGapReversed : styles.toastWrapperGap,
         isCollapsing && styles.toastWrapperExiting,
+        isCollapsing && !isNotification && styles.toastWrapperExitingAfterFade,
       )}
       onTransitionEnd={(e: React.TransitionEvent) => {
         // `grid-template-rows` is not private to this wrapper — any descendant

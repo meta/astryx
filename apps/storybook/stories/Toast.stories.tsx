@@ -537,6 +537,40 @@ export const MobileSwipeToDismiss: StoryObj = {
   },
 };
 
+export const MobileToastPresentation: StoryObj = {
+  name: 'Mobile situations / Toast presentation',
+  render: () => (
+    <MobileCanvas
+      title="Toast presentation"
+      description={
+        'presentation="toast" keeps Toast\'s own swipe and fade on every device, a touch screen included. Under Reduce Motion on a touch screen the card fades out where it is, and its row closes after the fade.'
+      }>
+      <ToastViewport
+        position="topEnd"
+        isTopLayer={false}
+        maxVisible={2}
+        presentation="toast">
+        <MockCard>
+          <Text type="supporting" color="secondary">
+            Swipe the toast toward its edge, or close it: it fades as Toast
+            always has, on a touch screen too.
+          </Text>
+          <ToastReplayControls
+            items={[
+              {
+                key: 'mobile-toast-presentation',
+                body: 'Close me',
+                isAutoHide: false,
+              },
+            ]}
+          />
+        </MockCard>
+      </ToastViewport>
+    </MobileCanvas>
+  ),
+  parameters: mobileStoryParameters,
+};
+
 export const MobileTimedToast: StoryObj = {
   name: 'Mobile situations / Timed toast',
   render: () => (

@@ -40,11 +40,14 @@
  *   the finger was moving toward the edge at `toast.flickVelocity`
  *   (`isDismissRelease`): it calls `dismiss`. Otherwise the card springs
  *   back to rest on the compositor, handed its release velocity, on
- *   `springs.settle` (the `spec:AST-094` FR4 role the banner's measured
- *   settle matches);
+ *   `springs.settle` (the `spec:AST-094` FR4 row the banner's measured
+ *   settle matches, imported alone); a release moving back toward rest
+ *   always springs back (FR37);
  * - `retract` is how the card leaves, whatever dismissed it (a release, the
  *   close button, the timeout): from where it is, it slides past its edge on
  *   the compositor over `toast.exitMs` on `toast.exitCurve` (constants),
+ *   starting at the card's release velocity after a dismissing release
+ *   (FR38),
  *   without fading, as the banner retracts. It starts in the call (an input
  *   event or the timer), so no render can delay it, calls `onRetract` (the
  *   row stops clipping the card) and resolves when the card is gone; `rest`
@@ -71,7 +74,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {createAnimator, type MotionHandle} from '../motion/animator';
-import {registerSpringsTable, springs} from '../motion/uikit/springs';
+import {SETTLE_SPRING} from '../motion/uikit/springs';
 import {toast} from '../motion/uikit/toast';
 import {
   followOffset,
@@ -137,6 +140,8 @@ export function useToastBannerSwipe(
   const retractingRef = useRef<Promise<void> | null>(null);
   /** The next retract follows a release (a touch release, for Reduced Motion). */
   const releasedRef = useRef(false);
+  /** The card's speed toward its edge at a dismissing release (px/s). */
+  const releaseVelocityRef = useRef(0);
   const optionsRef = useRef(options);
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
@@ -147,10 +152,6 @@ export function useToastBannerSwipe(
     // its translation through the exit. The card moves by `translate` every
     // frame, so it gets its own layer.
     const root = isNotification ? rootRef.current : null;
-    if (root != null) {
-      // The shared springs' roles, before the first motion plays one.
-      registerSpringsTable();
-    }
     animator.attach(root);
     root?.style.setProperty('will-change', 'translate');
     return () => {
@@ -230,7 +231,10 @@ export function useToastBannerSwipe(
           to === 'ended' &&
           isDismissRelease(session.offset, fingerVelocity)
         ) {
+          // The retract starts in this call and continues the card's speed
+          // (the follow ratio of the finger's, spec:AST-094 FR38).
           releasedRef.current = true;
+          releaseVelocityRef.current = fingerVelocity * toast.followRatio;
           dismiss();
           releasedRef.current = false;
           return;
@@ -245,7 +249,7 @@ export function useToastBannerSwipe(
           // cross-fade (a touch release): the card lands at rest and fades in.
           const handle = animator.animate(
             {y: 0},
-            {spring: springs.settle, velocity: {y: velocity * direction}},
+            {spring: SETTLE_SPRING, velocity: {y: velocity * direction}},
             {crossfadeAs: 'entrance', touchRelease: true},
           );
           settlingRef.current = handle;
@@ -289,7 +293,16 @@ export function useToastBannerSwipe(
     const touchRelease = releasedRef.current;
     const handle = animator.play(
       {
-        y: retractCurve(from, to, toast.exitMs, toast.exitCurve),
+        y: retractCurve(
+          from,
+          to,
+          toast.exitMs,
+          toast.exitCurve,
+          // After a dismissing release: the card's speed toward its edge.
+          touchRelease
+            ? releaseVelocityRef.current * optionsRef.current.direction
+            : undefined,
+        ),
       },
       {crossfadeAs: 'exit', touchRelease},
     );

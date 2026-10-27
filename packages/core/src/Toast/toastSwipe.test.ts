@@ -12,7 +12,11 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {resolveMotion} from '../motion/resolveMotion';
 import {listMotionRoles, motionRoleOf} from '../motion/roles';
 import {dampingRatioOf, responseOf, toSpring} from '../motion/spring';
-import {registerSpringsTable, springs} from '../motion/uikit/springs';
+import {
+  SETTLE_SPRING,
+  registerSpringsTable,
+  springs,
+} from '../motion/uikit/springs';
 import {toast} from '../motion/uikit/toast';
 import {
   RETRACT_CLEARANCE,
@@ -79,6 +83,17 @@ describe('isDismissRelease', () => {
     },
   );
 
+  it('cancels a release moving back toward rest, however far out the card is (spec:AST-094 FR37)', () => {
+    // 60 px out, then lifted while moving back at 50 px/s with the finger
+    // 50 px out: the card is 19.8 px out, past the dismiss offset.
+    expect(followOffset(50)).toBeCloseTo(19.8, 10);
+    expect(isDismissRelease(followOffset(50), -50)).toBe(false);
+    expect(isDismissRelease(toast.dismissOffset + 40, -1)).toBe(false);
+    // A finger still at the lift reads no speed (spec:AST-100 FR2): the
+    // distance decides.
+    expect(isDismissRelease(followOffset(50), 0)).toBe(true);
+  });
+
   it('dismisses at the dismiss offset or the flick velocity, whichever comes first', () => {
     expect(isDismissRelease(toast.dismissOffset, 0)).toBe(true);
     expect(isDismissRelease(toast.dismissOffset - 0.01, 0)).toBe(false);
@@ -95,7 +110,9 @@ describe('motion values', () => {
 
   it('springs back on springs.settle, which the measured banner settle matches, and owns no role', () => {
     // Seven recorded banner settles: critically damped, a 0.5 s response.
-    const settle = toSpring(springs.settle);
+    // Toast imports that one row (INV6).
+    expect(SETTLE_SPRING).toBe(springs.settle);
+    const settle = toSpring(SETTLE_SPRING);
     expect(responseOf(settle)).toBeCloseTo(0.5, 6);
     expect(dampingRatioOf(settle)).toBeCloseTo(1, 6);
     expect(motionRoleOf(springs.settle)?.id).toBe('springs.settle');
@@ -172,6 +189,39 @@ describe('the retract', () => {
       for (const [t, bottom] of frames) {
         expect(Math.abs(curve.at(t / 1000) - bottom) / rest).toBeLessThan(0.07);
       }
+    }
+  });
+
+  it('starts at the release velocity after a dismissing release (spec:AST-094 FR38)', () => {
+    // An upward retract from 25 px to 105 px out, for releases at 0 to
+    // 600 px/s toward the edge (negative: up).
+    for (const speed of [0, 150, 600]) {
+      const curve = retractCurve(-25, -105, 160, toast.exitCurve, -speed);
+      expect(curve.duration).toBeCloseTo(0.16, 5);
+      expect(Math.abs(curve.velocity(0) + speed)).toBeLessThanOrEqual(
+        Math.max(2, speed * 0.02),
+      );
+      expect(curve.at(0)).toBe(-25);
+      expect(curve.at(curve.duration)).toBe(-105);
+      let previous = curve.at(0);
+      for (let t = 0.005; t <= curve.duration; t += 0.005) {
+        expect(curve.at(t)).toBeLessThanOrEqual(previous);
+        expect(curve.at(t)).toBeGreaterThanOrEqual(-105);
+        previous = curve.at(t);
+      }
+    }
+  });
+
+  it('carries a flick faster than its curve out sooner, still at the release velocity', () => {
+    const curve = retractCurve(-25, -105, 160, toast.exitCurve, -3000);
+    expect(curve.duration).toBeLessThan(0.16);
+    expect(Math.abs(curve.velocity(0) + 3000)).toBeLessThanOrEqual(60);
+    expect(curve.at(curve.duration)).toBe(-105);
+    let previous = curve.at(0);
+    for (let t = 0.002; t <= curve.duration; t += 0.002) {
+      expect(curve.at(t)).toBeLessThanOrEqual(previous);
+      expect(curve.at(t)).toBeGreaterThanOrEqual(-105);
+      previous = curve.at(t);
     }
   });
 
