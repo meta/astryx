@@ -45,7 +45,7 @@ a measured, sourced difference exists.
 - Pointer (desktop) presentations. Their timing and easing stay with the
   theme's duration and easing tokens (`architecture:theme-tokens`).
 - Platform-matched look and feel: glass versus material surfaces, glyphs and
-  chrome. This record governs behavior only.
+  chrome. This record governs behavior, and touch sizing only as FR42 states.
 - WebKit embedded in a native app and the native Swift package. This record
   governs the web components themselves.
 - Scroll physics. Scrolling stays native on every platform: on iOS an overflow
@@ -323,7 +323,8 @@ drives it and the primary pointer is coarse (FR19); where the primary pointer
 is fine, a finger in a menu keeps today's behavior (`spec:AST-017` FR59,
 DEC-25), and menus make no per-gesture pointer read; FR29 applies to DropdownMenu's trigger under the same
 condition; FR34 applies to menus;
-FR31 and FR35 apply to anchored menus and to Popover under a finger; FR32 and
+FR31 applies to anchored menus and to Popover under a finger, and FR35 to
+the entrances it lists; FR32 and
 FR33 apply to menus only. A mouse keeps today's behavior.
 
 - **FR26 — The lift decides.** A menu row MUST act when the finger lifts over
@@ -395,11 +396,18 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   opened it (`component:DropdownMenu` FR11 and FR20). The change between
   levels plays on the motion roles `springs.subMenuOpen` and
   `springs.subMenuBack` (FR4); under reduced motion FR8 applies.
-- **FR35 — A presentation takes no input while it grows.** Under a finger, a
-  tap or a drag that lands while a Popover or an anchored menu is still
-  growing out of its trigger MUST NOT close it, scroll the page, move focus,
-  or reach anything beneath it; the presentation finishes and stays open. A
-  pinch still zooms the page (FR10). A mouse keeps today's behavior.
+- **FR35 — A presentation takes no input while it enters.** Under a finger, a
+  tap or a drag that lands while a touch presentation is still entering, a
+  Popover or an anchored menu growing out of its trigger, an alert
+  (`component:AlertDialog`), a sheet, a dialog, a Drawer, MobileNav, or
+  Lightbox, MUST NOT close it, scroll the page, move focus, or reach anything
+  beneath it; the presentation finishes entering and stays open. Around a non-modal sheet
+  only a tap or a drag on the sheet is held; the page stays live
+  (`component:BottomSheet` FR11, `component:BottomSheetSwitcher` FR5). Only pointer
+  input is held: keys and assistive technology stay live, and the content stays
+  in the accessibility tree. A pinch still zooms the page (FR10). During an entrance this
+  rule applies instead of FR6's catch: the entrance finishes first. A mouse
+  keeps today's behavior (DEC-16).
 
 ### Release decisions
 
@@ -475,6 +483,21 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   This replaces `component:Selector` DEC-1's width-and-pointer query with the
   FR13 rule for `adaptive`.
 
+- **FR42 — The default look grows no box for touch.** The default Astryx
+  look makes no box size increase for phones or touch: row heights, control
+  sizes and target sizes stay as they are; a box may shrink to fit a compact
+  screen, such as an alert's phone width. Type sizing is outside this rule, including a box
+  that grows only with its text, such as a Button whose label follows the
+  16 px reading base:
+  the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
+  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  hit-area expansion never overlaps a neighboring interactive element's own
+  target: where neighbors are closer than 44 px, the expansion is clamped to
+  half the gap, or skipped, so each element stays reachable; an expansion a
+  component or module record sets on purpose, such as `component:Thumbnail` AR4's, is
+  unaffected. Mobile size increases belong to theme adaptations (DEC-20).
+
 ### Platform support
 
 - Supported engines: Astryx's supported browsers (`spec:AST-013`) with touch
@@ -524,8 +547,22 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   and FR9 under a finger) are stated here (FR26–FR30); FR6's last sentence
   gives way to the cell press profile (FR11); its mouse rules (FR8 and the
   mouse halves of FR1–FR3) and its non-gesture rules stay in the module.
+- Every component under a coarse pointer: no box grows for touch, and a
+  touch target reaches 44 px only through an invisible hit area clamped by
+  its neighbors, unless a component or module record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
   under a finger they follow FR26–FR35 as each applies.
+- `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
+  `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
+  and `component:Lightbox`: under a finger, a tap or a drag during the
+  entrance is held (FR35), an exception during the entrance to
+  `component:BottomSheet` FR7, `component:BottomSheetSwitcher` FR6,
+  `component:Popover` DEC-8 (a Popover presented as a sheet),
+  `component:MobileNav` FR4 and `family:overlay-dismissal` AV4, which otherwise
+  let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
+  `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
+  Non-modal state) do not hold the page: the page behind them stays live, and
+  only the sheet itself holds a tap or a drag while it enters.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
@@ -559,9 +596,10 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 | FR26–FR28, FR30 | Menu press tests on synthetic touch streams and a real-Chromium touch test                                                     | a slide from one row to another; a lift outside; a cancel; a second finger; edge autoscroll                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | an act on the press-start row, two acts for one gesture, a lift outside that closes, or a lit row after a cancel fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR29            | Trigger tests with explicit timestamps                                                                                         | a press in a fixed bar; a press in scrolling content held 149 and 150 ms; a quick tap in scrolling content; a scroll taking the touch before 150 ms; a drift of 12 and 14 pt; moves before and after the handoff; `presentation="popover"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a fixed-bar press that waits, a held finger's scroll-view open before 150 ms or after a scroll, a quick tap that does not open at its lift, an open past the drift allowance, a lift that acts before the handoff, or a `popover` trigger that opens on press fails                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR31–FR33       | Browser tests and storyboards under a finger                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a surface that does not grow from and shrink into its trigger, a pan outside that leaves a menu open, a Popover whose dismissal changed, a pinch blocked other than by the author's `touch-action`, a tap outside that reaches the page, or a changed mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| FR34, FR35      | Browser tests and storyboards under a finger                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a pinch blocked other than by the author's `touch-action`, or a changed mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR34, FR35      | Browser tests and storyboards under a finger                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse; a tap and a drag during an alert's, a sheet's, and a dialog's entrance; a key and a screen reader during an entrance; a pinch during an alert's and a sheet's entrance; a tap and a scroll on the page beside an entering non-modal sheet, which pass                                                                                                                                                                                                                                                                                                                                                    | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a pinch blocked other than by the author's `touch-action`, or a changed mouse path, a held key or assistive-technology activation, a hidden content tree, or a tap or drag during an entrance that closes the presentation, scrolls a held page, moves focus or reaches anything beneath, fails                                                                                                                                                                                                                                      |
 | FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                     | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity, or an action with no keyboard or mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, or a change to native selection elsewhere or to mouse, keyboard, or assistive-technology selection fails                                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR42            | Default-theme geometry tests under a coarse and a fine pointer, and hit-testing between adjacent targets                       | every component at phone width with a finger and with a mouse; a dense toolbar; a chip and its remove button; a Switch beside a label link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a default-theme box that grows under touch or at phone width other than with its text, or, where no component or module record sets the hit area, a touch target under 44 px where neighbors allow it or a hit area that overlaps a neighbor's target, fails                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari and Android Chrome devices          | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Decision log
@@ -714,6 +752,31 @@ rows likewise highlight on touch-down is a guess until a short UIMenu on the
 iOS 26.2 simulator measures it.
 
 Rejected: the 150 ms delay on every menu row.
+
+### DEC-20 — The default look grows nothing for touch
+
+**Reference:** `spec:AST-094/DEC-20`
+**Decider:** `cixzhang`, `2026-10-26`
+
+Sizes do not grow on phones or under touch in the default look, so a product
+looks the same everywhere unless its theme chooses otherwise; shrinking to fit
+a compact screen is fine. Touch reach comes from invisible hit areas, clamped
+so two close neighbors both stay reachable. Themes own mobile size increases
+through their adaptations.
+
+Rejected: touch-only row heights and control sizes in the default look.
+
+### DEC-16 — Every touch presentation holds pointer input while it enters
+
+**Reference:** `spec:AST-094/DEC-16`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A tap or a drag that lands while an alert, a sheet, or a dialog is still
+entering is almost never aimed at it, so it is absorbed, as it already is for
+a popover or a menu growing out of its trigger. Only pointer input is held, so
+keyboard and assistive-technology users are never blocked.
+
+Rejected: holding input only for presentations that grow from a trigger.
 
 ### DEC-19 — A phone menu stays beside its trigger
 
