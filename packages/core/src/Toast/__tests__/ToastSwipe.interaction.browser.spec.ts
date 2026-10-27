@@ -1306,3 +1306,56 @@ test(
     expect(exitOpacity.every(opacity => opacity === 1)).toBe(true);
   },
 );
+
+test('presentation="toast" under a finger: Toast’s own swipe is the shared pan, so a drag away from the edge leaves the card and one toward it moves it and dismisses it (spec:AST-094 FR43)', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-toast--mobile-toast-presentation');
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Show toast'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const card = page.locator('.astryx-toast').first();
+  await expect(card).toBeVisible();
+  await waitForRest(card);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const from = {
+    x: Math.round(box.x + 40),
+    y: Math.round(box.y + box.height / 2),
+  };
+
+  // Away from the top edge: the card stays where it is.
+  await driver.play(
+    drag(from, {x: from.x, y: from.y + 60}, {durationMs: 300, hz: 60}),
+  );
+  expect(await ownSwipe(card)).toEqual({y: 0, scale: 1, opacity: 1});
+  await expect(page.locator('.astryx-toast')).toHaveCount(1);
+
+  // Toward it: the card follows the finger 1:1, and the release dismisses it.
+  let followed = 0;
+  await driver.play(
+    drag(from, {x: from.x, y: from.y - 80}, {durationMs: 300, hz: 60}),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          followed = Math.min(followed, (await ownSwipe(card)).y);
+        }
+      },
+    },
+  );
+  expect(followed).toBeLessThan(-40);
+  await expect(page.locator('.astryx-toast')).toHaveCount(0);
+});

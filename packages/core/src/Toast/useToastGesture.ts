@@ -6,62 +6,44 @@
  * @file useToastGesture.ts
  * @input Uses a resolved Toast edge direction, timer pause/resume hooks,
  *   dismissal callback, enabled state, and interactive-descendant policy
- * @output Returns the Toast card root ref and touch/pen gesture bindings
+ * @output Returns the Toast card root ref; the swipe is a pan on the shared
+ *   gesture host
  * @position Internal Toast gesture unit; attached to the Toast card root
  *
- * A release toward the edge dismisses when it travelled past
- * max(40% of the card's height, 48 px), or when it was a flick: the finger
- * moving toward the edge faster than 1.2 px/ms when it lifted, at any travel,
- * by the shared release-velocity estimate every gesture reads
- * (gestures/VelocityTracker, fed the input events' own timestamps and read
- * at the lift's, so a finger that rested before lifting reads no speed).
+ * Toast's own swipe, wherever the banner swipe does not apply (a fine primary
+ * pointer, or `presentation="toast"`): a pen or a finger moves the card 1:1
+ * toward its edge and fades it a little. A release toward the edge dismisses
+ * when it travelled past max(40% of the card's height, 48 px), or when it was
+ * a flick: moving toward the edge faster than 1.2 px/ms when it lifted, at
+ * any travel, by the pan's release velocity (the shared VelocityTracker, read
+ * at the lift, so a contact that rested before lifting reads no speed).
  * Without that, a one-line toast (40% of which is below the 48 px floor)
  * could only be dragged away, never flicked.
+ *
+ * The swipe is a PanGestureRecognizer on the shared gesture host
+ * (`spec:AST-094` FR43, FR24): it begins at the pan's 10 pt toward the edge
+ * (FR17), a second finger never ends a swipe that began (FR10), and a drag
+ * sideways or away from the edge stays the page's.
  */
 
-import {useCallback, useEffect, useRef} from 'react';
-import type {PointerEvent as ReactPointerEvent, RefObject} from 'react';
-import {VelocityTracker} from '../gestures/VelocityTracker';
+import {useEffect, useRef} from 'react';
+import type {RefObject} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 
-const DRAG_PROMOTION_SLOP = 8;
 const SWIPE_DISMISS_RATIO = 0.4;
 /** The dismiss distance of a card too short for its height ratio to reach it. */
 const SWIPE_DISMISS_MIN_DISTANCE = 48;
-/** Average speed, px/ms, at which a release dismisses whatever its travel. */
+/** Speed toward the edge, px/ms, at which a release dismisses whatever its travel. */
 const FLICK_VELOCITY = 1.2;
+/** How much more vertical than horizontal a drag must be to swipe the card. */
 const VERTICAL_INTENT_RATIO = 1.2;
 const SWIPE_EXIT_DISTANCE = '120%';
 const SWIPE_ACTIVE_FADE_MAX = 0.4;
 const SWIPE_ACTIVE_SCALE_MAX = 0.02;
 
 export type ToastGestureDirection = 1 | -1;
-
-interface GesturePoint {
-  source: 'touch' | 'pen';
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  /**
-   * The input event's `timeStamp`. Browsers deliver moves on the next frame,
-   * so the time a handler runs can trail the finger by a frame or two; the
-   * event's own time is when the finger was there.
-   */
-  time: number;
-}
-
-interface GestureState {
-  source: GesturePoint['source'];
-  pointerId: number;
-  startX: number;
-  startY: number;
-  /** The shared release-velocity estimate, fed every point of the gesture. */
-  tracker: VelocityTracker;
-  direction: ToastGestureDirection;
-  intent: 'pending' | 'vertical' | 'opposite';
-  pausedTimer: boolean;
-  surfaceSize: number;
-  dismissThreshold: number;
-}
 
 interface UseToastGestureOptions {
   direction: ToastGestureDirection;
@@ -77,17 +59,15 @@ interface UseToastGestureOptions {
   ) => boolean;
 }
 
-interface ToastGestureBindings {
-  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onLostPointerCapture: (event: ReactPointerEvent<HTMLDivElement>) => void;
-}
-
 interface UseToastGestureResult {
   rootRef: RefObject<HTMLDivElement | null>;
-  bindings: ToastGestureBindings;
+}
+
+/** One contact on the card, from touch-down to its release. */
+interface SwipeSession {
+  pausedTimer: boolean;
+  surfaceSize: number;
+  dismissThreshold: number;
 }
 
 function swipeProgressValue(travel: number, surfaceSize: number): number {
@@ -102,343 +82,135 @@ function clearTransientStyles(root: HTMLElement): void {
   root.style.removeProperty('--_toast-swipe-scale');
 }
 
-export function useToastGesture({
-  direction,
-  enabled,
-  canPauseTimer,
-  isTimerPaused,
-  pauseTimer,
-  resumeTimer,
-  dismiss,
-  shouldIgnoreTarget,
-}: UseToastGestureOptions): UseToastGestureResult {
+function panDirection(direction: ToastGestureDirection): 'down' | 'up' {
+  return direction === 1 ? 'down' : 'up';
+}
+
+export function useToastGesture(
+  options: UseToastGestureOptions,
+): UseToastGestureResult {
   const rootRef = useRef<HTMLDivElement>(null);
-  const gestureRef = useRef<GestureState | null>(null);
+  const optionsRef = useRef(options);
+  useIsomorphicLayoutEffect(() => {
+    optionsRef.current = options;
+  });
+  const sessionRef = useRef<SwipeSession | null>(null);
 
-  const resetGesture = useCallback(
-    (shouldResume: boolean) => {
-      const root = rootRef.current;
-      const state = gestureRef.current;
-      gestureRef.current = null;
-      if (root) {
-        clearTransientStyles(root);
-      }
-      if (shouldResume && state?.pausedTimer) {
-        resumeTimer();
-      }
-    },
-    [resumeTimer],
-  );
-
-  const beginGesture = useCallback(
-    (point: GesturePoint, target: EventTarget | null): boolean => {
-      const root = rootRef.current;
-      if (
-        !root ||
-        !enabled ||
-        gestureRef.current != null ||
-        shouldIgnoreTarget(target, root)
-      ) {
-        return false;
-      }
-      const pausedTimer = canPauseTimer && !isTimerPaused();
-      if (pausedTimer) {
-        pauseTimer();
-      }
-      const surfaceSize = Math.max(root.getBoundingClientRect().height, 1);
-      const tracker = new VelocityTracker();
-      tracker.add(point.clientX, point.clientY, point.time);
-      gestureRef.current = {
-        source: point.source,
-        pointerId: point.pointerId,
-        startX: point.clientX,
-        startY: point.clientY,
-        tracker,
-        direction,
-        intent: 'pending',
-        pausedTimer,
-        surfaceSize,
-        dismissThreshold: Math.max(
-          surfaceSize * SWIPE_DISMISS_RATIO,
-          SWIPE_DISMISS_MIN_DISTANCE,
-        ),
-      };
-      return true;
-    },
-    [
-      canPauseTimer,
-      direction,
-      enabled,
-      isTimerPaused,
-      pauseTimer,
-      shouldIgnoreTarget,
-    ],
-  );
-
-  const moveGesture = useCallback(
-    (
-      point: GesturePoint,
-      preventDefault: () => void,
-      releaseCapture?: () => void,
-    ) => {
-      const state = gestureRef.current;
-      const root = rootRef.current;
-      if (
-        !state ||
-        !root ||
-        point.source !== state.source ||
-        point.pointerId !== state.pointerId
-      ) {
-        return;
-      }
-      state.tracker.add(point.clientX, point.clientY, point.time);
-      const deltaX = point.clientX - state.startX;
-      const deltaY = point.clientY - state.startY;
-      const absX = Math.abs(deltaX);
-      const absY = Math.abs(deltaY);
-      if (state.intent === 'pending') {
-        if (absX > DRAG_PROMOTION_SLOP && absX > absY) {
-          releaseCapture?.();
-          resetGesture(true);
-          return;
-        }
-        if (
-          absY <= DRAG_PROMOTION_SLOP ||
-          absY <= absX * VERTICAL_INTENT_RATIO
-        ) {
-          return;
-        }
-        state.intent = deltaY * state.direction > 0 ? 'vertical' : 'opposite';
-        if (state.intent === 'opposite') {
-          releaseCapture?.();
-          resetGesture(true);
-          return;
-        }
-        root.style.setProperty('transition-duration', '0s');
-      }
-      preventDefault();
-      const travel = Math.max(0, deltaY * state.direction);
-      const progress = swipeProgressValue(travel, state.surfaceSize);
-      root.style.setProperty(
-        '--_toast-swipe-y',
-        `${travel * state.direction}px`,
-      );
-      root.style.setProperty(
-        '--_toast-swipe-opacity',
-        (1 - progress * SWIPE_ACTIVE_FADE_MAX).toFixed(3),
-      );
-      root.style.setProperty(
-        '--_toast-swipe-scale',
-        (1 - progress * SWIPE_ACTIVE_SCALE_MAX).toFixed(3),
-      );
-    },
-    [resetGesture],
-  );
-
-  const endGesture = useCallback(
-    (point: GesturePoint) => {
-      const state = gestureRef.current;
-      const root = rootRef.current;
-      if (
-        !state ||
-        !root ||
-        point.source !== state.source ||
-        point.pointerId !== state.pointerId
-      ) {
-        return;
-      }
-      const travel = Math.max(
-        0,
-        (point.clientY - state.startY) * state.direction,
-      );
-      // Toward the edge, px/ms, read at the lift's own time: a finger that
-      // rested longer than the stillness interval before lifting reads no
-      // speed (AST-100 FR2). A flick needs no minimum travel of its own: the
-      // swipe already had to pass the slop toward the edge to begin.
-      const velocity =
-        (state.tracker.velocity(point.time).y * state.direction) / 1000;
-      const isDismissed =
-        state.intent === 'vertical' &&
-        (travel >= state.dismissThreshold || velocity > FLICK_VELOCITY);
-
-      gestureRef.current = null;
-      root.style.removeProperty('transition-duration');
-      if (isDismissed) {
-        // The exit animation owns the final translation. Clear the live-drag
-        // transform/fade/scale first so a standalone Toast does not remain
-        // partially translated or faded after its dismiss callback fires.
-        clearTransientStyles(root);
-        root.style.setProperty(
-          '--_toast-swipe-exit-y',
-          state.direction === 1
-            ? SWIPE_EXIT_DISTANCE
-            : `calc(-1 * ${SWIPE_EXIT_DISTANCE})`,
-        );
-        dismiss();
-        return;
-      }
-      clearTransientStyles(root);
-      if (state.pausedTimer) {
-        resumeTimer();
-      }
-    },
-    [dismiss, resumeTimer],
-  );
-
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (
-        event.pointerType === 'pen' &&
-        (event.button == null || event.button === 0) &&
-        beginGesture(
-          {
-            source: 'pen',
-            pointerId: event.pointerId,
-            clientX: event.clientX,
-            clientY: event.clientY,
-            time: event.timeStamp,
-          },
-          event.target,
-        )
-      ) {
-        rootRef.current?.setPointerCapture?.(event.pointerId);
-      }
-    },
-    [beginGesture],
-  );
-
-  const handlePointerMove = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.pointerType !== 'pen') {
-        return;
-      }
-      moveGesture(
-        {
-          source: 'pen',
-          pointerId: event.pointerId,
-          clientX: event.clientX,
-          clientY: event.clientY,
-          time: event.timeStamp,
-        },
-        () => event.preventDefault(),
-        () => rootRef.current?.releasePointerCapture?.(event.pointerId),
-      );
-    },
-    [moveGesture],
-  );
-
-  const handlePointerUp = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (event.pointerType !== 'pen') {
-        return;
-      }
-      rootRef.current?.releasePointerCapture?.(event.pointerId);
-      endGesture({
-        source: 'pen',
-        pointerId: event.pointerId,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        time: event.timeStamp,
-      });
-    },
-    [endGesture],
-  );
-
-  const handlePointerCancel = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (
-        event.pointerType === 'pen' &&
-        gestureRef.current?.source === 'pen' &&
-        gestureRef.current?.pointerId === event.pointerId
-      ) {
-        resetGesture(true);
-      }
-    },
-    [resetGesture],
-  );
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !enabled) {
-      return;
-    }
-    const point = (touch: Touch, event: TouchEvent): GesturePoint => ({
-      source: 'touch',
-      pointerId: touch.identifier,
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      time: event.timeStamp,
-    });
-    const changedTouch = (event: TouchEvent) => {
-      const state = gestureRef.current;
-      const pointerId = state?.source === 'touch' ? state.pointerId : null;
-      return pointerId == null
-        ? undefined
-        : [...event.changedTouches].find(
-            touch => touch.identifier === pointerId,
-          );
-    };
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches?.length !== 1) {
-        // A second contact means the browser may be handling pinch zoom or
-        // two-finger scrolling. Abandon any accepted one-finger swipe before
-        // touchmove can suppress that native gesture.
-        resetGesture(true);
-        return;
-      }
-      const touch = event.changedTouches[0];
-      if (touch != null) {
-        beginGesture(point(touch, event), event.target);
-      }
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      if (event.touches?.length !== 1) {
-        resetGesture(true);
-        return;
-      }
-      const touch = changedTouch(event);
-      if (touch) {
-        moveGesture(point(touch, event), () => {
-          if (event.cancelable) {
-            event.preventDefault();
-          }
-        });
-      }
-    };
-    const handleTouchEnd = (event: TouchEvent) => {
-      if (event.touches.length > 0) {
-        resetGesture(true);
-        return;
-      }
-      const touch = changedTouch(event);
-      if (touch) {
-        endGesture(point(touch, event));
-      } else if (event.touches.length === 0) {
-        resetGesture(true);
-      }
-    };
-    const handleTouchCancel = () => resetGesture(true);
-
-    root.addEventListener('touchstart', handleTouchStart, {passive: true});
-    root.addEventListener('touchmove', handleTouchMove, {passive: false});
-    root.addEventListener('touchend', handleTouchEnd, {passive: true});
-    root.addEventListener('touchcancel', handleTouchCancel, {passive: true});
-    return () => {
-      root.removeEventListener('touchstart', handleTouchStart);
-      root.removeEventListener('touchmove', handleTouchMove);
-      root.removeEventListener('touchend', handleTouchEnd);
-      root.removeEventListener('touchcancel', handleTouchCancel);
-    };
-  }, [beginGesture, enabled, endGesture, moveGesture, resetGesture]);
-
-  return {
+  const pan = useGestureRecognizer(
     rootRef,
-    bindings: {
-      onPointerDown: handlePointerDown,
-      onPointerMove: handlePointerMove,
-      onPointerUp: handlePointerUp,
-      onPointerCancel: handlePointerCancel,
-      onLostPointerCapture: handlePointerCancel,
-    },
-  };
+    () =>
+      new PanGestureRecognizer({
+        // The published name app code relates to (gesture delegates); the
+        // banner swipe carries it where that presentation applies.
+        name: 'Toast.swipe',
+        direction: panDirection(options.direction),
+        allowedPointerTypes: ['touch', 'pen'],
+        axisRatio: VERTICAL_INTENT_RATIO,
+        maximumNumberOfTouches: 1,
+        shouldReceiveTouch: (_recognizer, touch) => {
+          const root = rootRef.current;
+          const current = optionsRef.current;
+          if (
+            root == null ||
+            current.shouldIgnoreTarget(touch.target as EventTarget, root)
+          ) {
+            return false;
+          }
+          if (sessionRef.current == null) {
+            // Touch-down: hold the auto-hide timer while the contact is on
+            // the card.
+            const pausedTimer =
+              current.canPauseTimer && !current.isTimerPaused();
+            if (pausedTimer) {
+              current.pauseTimer();
+            }
+            const surfaceSize = Math.max(
+              root.getBoundingClientRect().height,
+              1,
+            );
+            sessionRef.current = {
+              pausedTimer,
+              surfaceSize,
+              dismissThreshold: Math.max(
+                surfaceSize * SWIPE_DISMISS_RATIO,
+                SWIPE_DISMISS_MIN_DISTANCE,
+              ),
+            };
+          }
+          return true;
+        },
+      }),
+    undefined,
+    // The host writes the card's touch-action for the enabled pan (a touch
+    // screen's finger, FR18); one setting per element, shared with the
+    // banner swipe's.
+    {isEnabled: options.enabled, manageStyle: true},
+  );
+
+  useIsomorphicLayoutEffect(() => {
+    pan.setDirection(panDirection(options.direction));
+  }, [pan, options.direction]);
+
+  useEffect(
+    () =>
+      pan.addTransitionListener((recognizer, _from, to) => {
+        const session = sessionRef.current;
+        const root = rootRef.current;
+        if (session == null || root == null) {
+          return;
+        }
+        const {direction, dismiss, resumeTimer} = optionsRef.current;
+        // Travel toward the edge since touch-down, the pan's 10 pt included.
+        const travel = Math.max(0, recognizer.totalTranslation().y * direction);
+        if (to === 'began' || to === 'changed') {
+          if (to === 'began') {
+            root.style.setProperty('transition-duration', '0s');
+          }
+          const progress = swipeProgressValue(travel, session.surfaceSize);
+          root.style.setProperty('--_toast-swipe-y', `${travel * direction}px`);
+          root.style.setProperty(
+            '--_toast-swipe-opacity',
+            (1 - progress * SWIPE_ACTIVE_FADE_MAX).toFixed(3),
+          );
+          root.style.setProperty(
+            '--_toast-swipe-scale',
+            (1 - progress * SWIPE_ACTIVE_SCALE_MAX).toFixed(3),
+          );
+          return;
+        }
+        if (to !== 'ended' && to !== 'cancelled' && to !== 'failed') {
+          return;
+        }
+        sessionRef.current = null;
+        // Toward the edge, px/ms, read at the lift: a contact that rested
+        // longer than the stillness interval before lifting reads no speed
+        // (AST-100 FR2). A flick needs no minimum travel of its own: the
+        // swipe already had to pass the pan's 10 pt toward the edge.
+        const velocity = (recognizer.velocity().y * direction) / 1000;
+        clearTransientStyles(root);
+        if (
+          to === 'ended' &&
+          (travel >= session.dismissThreshold || velocity > FLICK_VELOCITY)
+        ) {
+          // The exit animation owns the final translation; the live-drag
+          // transform, fade and scale are cleared first so a standalone
+          // Toast does not stay partly translated or faded after its
+          // dismiss callback fires.
+          root.style.setProperty(
+            '--_toast-swipe-exit-y',
+            direction === 1
+              ? SWIPE_EXIT_DISTANCE
+              : `calc(-1 * ${SWIPE_EXIT_DISTANCE})`,
+          );
+          dismiss();
+          return;
+        }
+        if (session.pausedTimer) {
+          resumeTimer();
+        }
+      }),
+    [pan],
+  );
+
+  return {rootRef};
 }

@@ -65,7 +65,10 @@
  *   resumes it.
  *
  * With a fine pointer the recognizer takes no touches and the animator is
- * detached, so the card is useToastGesture's alone.
+ * detached, so the card is useToastGesture's alone: its own pan on the same
+ * card. The host writes the card's touch-action for whichever of the two is
+ * enabled (a disabled recognizer leaves the browser everything, FR24), so
+ * both let it manage the card's style.
  *
  * SYNC: When modified, update toastSwipe.ts, Toast.doc.mjs and the finger swipe
  *   tests in ToastViewport.test.tsx and
@@ -201,7 +204,8 @@ export function useToastBannerSwipe(
     undefined,
     {
       isEnabled: isNotification && options.enabled,
-      manageStyle: isNotification,
+      // One setting per element, shared with useToastGesture's pan.
+      manageStyle: true,
       perEventPointer: options.isForced,
     },
   );

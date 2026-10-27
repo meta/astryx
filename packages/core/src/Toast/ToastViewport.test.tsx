@@ -942,6 +942,80 @@ describe('Toast native motion contract', () => {
 
 // Everywhere but iOS (Android, other touch screens, a pen on a laptop),
 // Toast keeps its own swipe.
+/**
+ * A touch event as a browser sends it where the primary pointer is fine (a
+ * touch screen on a laptop): each changed touch's pointer event first, at the
+ * touch event's own time, then the touch event. Toast's own swipe is a pan on
+ * the shared gesture host, which takes a finger from its pointerdown there.
+ */
+function fineTouch(target: HTMLElement, event: Event): Event {
+  const type = (
+    {
+      touchstart: 'pointerDown',
+      touchmove: 'pointerMove',
+      touchend: 'pointerUp',
+      touchcancel: 'pointerCancel',
+    } as const
+  )[event.type as 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel'];
+  const {touches = [], changedTouches = []} = event as unknown as {
+    touches?: ReadonlyArray<{identifier: number}>;
+    changedTouches?: ReadonlyArray<{
+      identifier: number;
+      clientX: number;
+      clientY: number;
+    }>;
+  };
+  for (const touch of Array.from(changedTouches)) {
+    const pointer = createEvent[type](target, {
+      pointerId: 100 + touch.identifier,
+      pointerType: 'touch',
+      isPrimary:
+        touches.length === 0 || touches[0]?.identifier === touch.identifier,
+      button: 0,
+      buttons: type === 'pointerUp' || type === 'pointerCancel' ? 0 : 1,
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+    });
+    Object.defineProperty(pointer, 'timeStamp', {value: event.timeStamp});
+    fireEvent(target, pointer);
+  }
+  fineClockLatest = Math.max(fineClockLatest, event.timeStamp);
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** A browser's touchcancel for one finger, after its pointercancel. */
+function fineTouchCancel(
+  target: HTMLElement,
+  identifier: number,
+  clientY = 0,
+): Event {
+  const event = new Event('touchcancel', {bubbles: true, cancelable: true});
+  const touch = {identifier, clientX: 10, clientY};
+  Object.defineProperty(event, 'touches', {value: []});
+  Object.defineProperty(event, 'changedTouches', {value: [touch]});
+  return fineTouch(target, event);
+}
+
+/** The latest time an own-swipe test stamped an event with. */
+let fineClockLatest = 0;
+
+/**
+ * A time well after every event the document's gesture host has seen: its
+ * clock only moves forward, and jsdom stamps events with Date.now, which
+ * these tests move by hand.
+ */
+function fineClockStart(): number {
+  return (
+    Math.max(
+      fineClockLatest,
+      Date.now(),
+      performance.now(),
+      getGestureHost(document).arena.now(),
+    ) + 1000
+  );
+}
+
 describe('Toast swipe dismissal', () => {
   function renderSwipeToast(
     options: ToastOptions = SWIPE_TOAST,
@@ -1002,8 +1076,6 @@ describe('Toast swipe dismissal', () => {
       });
     });
 
-    expect(visualToast.setPointerCapture).toHaveBeenCalledWith(7);
-    expect(visualToast.releasePointerCapture).toHaveBeenCalledWith(7);
     expect(onHide).toHaveBeenCalledWith('manual');
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(visualToast.style.getPropertyValue('--_toast-swipe-exit-y')).toBe(
@@ -1021,7 +1093,7 @@ describe('Toast swipe dismissal', () => {
     // 60 px in 20 ms, in two moves, by the events' own timestamps (the event
     // clock is Date.now in jsdom; the shared release filter reads a release
     // from two moved samples).
-    let time = 1_000;
+    let time = fineClockStart();
     const now = vi.spyOn(Date, 'now').mockImplementation(() => time);
     try {
       const {visualToast, onHide} = renderSwipeToast(
@@ -1066,20 +1138,23 @@ describe('Toast swipe dismissal', () => {
         '120%',
       );
     } finally {
+      fineClockLatest = Math.max(fineClockLatest, time);
       now.mockRestore();
     }
   });
 
   // A one-line toast is 56 px tall: 40% of it is below the 48 px distance
   // floor, so a short swipe on it can only be dismissed as a flick.
-  function mockClock(start = 1_000) {
+  function mockClock(start = fineClockStart()) {
     let time = start;
     const spy = vi.spyOn(Date, 'now').mockImplementation(() => time);
     return {
       advance(ms: number) {
         time += ms;
+        fineClockLatest = Math.max(fineClockLatest, time);
       },
       restore() {
+        fineClockLatest = Math.max(fineClockLatest, time);
         spy.mockRestore();
       },
     };
@@ -1155,7 +1230,7 @@ describe('Toast swipe dismissal', () => {
           value: type === 'touchend' ? [] : [touch],
         });
         Object.defineProperty(event, 'changedTouches', {value: [touch]});
-        visualToast.dispatchEvent(event);
+        fineTouch(visualToast, event);
         return event;
       };
 
@@ -1207,7 +1282,7 @@ describe('Toast swipe dismissal', () => {
       };
 
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+        fineTouch(visualToast, touchEvent('touchstart', 100));
       });
       clock.advance(15);
       const firstMove = touchEvent('touchmove', 80);
@@ -1216,9 +1291,9 @@ describe('Toast swipe dismissal', () => {
       const lift = touchEvent('touchend', 60);
       clock.advance(30);
       act(() => {
-        visualToast.dispatchEvent(firstMove);
-        visualToast.dispatchEvent(secondMove);
-        visualToast.dispatchEvent(lift);
+        fineTouch(visualToast, firstMove);
+        fineTouch(visualToast, secondMove);
+        fineTouch(visualToast, lift);
       });
 
       expect(onHide).toHaveBeenCalledWith('manual');
@@ -1252,7 +1327,7 @@ describe('Toast swipe dismissal', () => {
         return event;
       };
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+        fineTouch(visualToast, touchEvent('touchstart', 100));
       });
       for (const [advance, y] of [
         [300, 90],
@@ -1265,11 +1340,11 @@ describe('Toast swipe dismissal', () => {
       ] as const) {
         clock.advance(advance);
         act(() => {
-          visualToast.dispatchEvent(touchEvent('touchmove', y));
+          fineTouch(visualToast, touchEvent('touchmove', y));
         });
       }
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchend', 53));
+        fineTouch(visualToast, touchEvent('touchend', 53));
       });
 
       expect(onHide).toHaveBeenCalledWith('manual');
@@ -1303,7 +1378,7 @@ describe('Toast swipe dismissal', () => {
         return event;
       };
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+        fineTouch(visualToast, touchEvent('touchstart', 100));
       });
       for (const [advance, y] of [
         [300, 90],
@@ -1316,13 +1391,13 @@ describe('Toast swipe dismissal', () => {
       ] as const) {
         clock.advance(advance);
         act(() => {
-          visualToast.dispatchEvent(touchEvent('touchmove', y));
+          fineTouch(visualToast, touchEvent('touchmove', y));
         });
       }
       // The finger rests, with no event, before it lifts.
       clock.advance(41);
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchend', 53));
+        fineTouch(visualToast, touchEvent('touchend', 53));
       });
 
       expect(onHide).not.toHaveBeenCalled();
@@ -1346,7 +1421,7 @@ describe('Toast swipe dismissal', () => {
         clientY: number,
       ) => {
         const event = new Event(type, {bubbles: true, cancelable: true});
-        const touch = {identifier: 35, clientX: 10, clientY};
+        const touch = {identifier: 36, clientX: 10, clientY};
         Object.defineProperty(event, 'touches', {
           value: type === 'touchend' ? [] : [touch],
         });
@@ -1354,7 +1429,7 @@ describe('Toast swipe dismissal', () => {
         return event;
       };
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+        fineTouch(visualToast, touchEvent('touchstart', 100));
       });
       for (const [advance, y] of [
         [300, 90],
@@ -1367,13 +1442,13 @@ describe('Toast swipe dismissal', () => {
       ] as const) {
         clock.advance(advance);
         act(() => {
-          visualToast.dispatchEvent(touchEvent('touchmove', y));
+          fineTouch(visualToast, touchEvent('touchmove', y));
         });
       }
       // The finger rests, with no event, before it lifts.
       clock.advance(39);
       act(() => {
-        visualToast.dispatchEvent(touchEvent('touchend', 53));
+        fineTouch(visualToast, touchEvent('touchend', 53));
       });
 
       expect(onHide).toHaveBeenCalledWith('manual');
@@ -1536,6 +1611,12 @@ describe('Toast swipe dismissal', () => {
         clientY: 0,
       });
       fireEvent.pointerMove(visualToast, {
+        pointerId: 7,
+        pointerType: 'pen',
+        clientX: 80,
+        clientY: 20,
+      });
+      fireEvent.pointerUp(visualToast, {
         pointerId: 7,
         pointerType: 'pen',
         clientX: 80,
@@ -1752,6 +1833,9 @@ describe('Toast swipe dismissal', () => {
   });
 
   it('allows native page scrolling until touch intent matches the dismiss edge', () => {
+    // A touch screen on a laptop: a finger's moves away from the edge or
+    // sideways stay the page's; the swipe cancels them only once it claims
+    // the finger, toward the edge (spec:AST-094 FR17, FR19).
     const {visualToast, onHide} = renderSwipeToast(
       SWIPE_TOAST,
       'topEnd',
@@ -1760,14 +1844,15 @@ describe('Toast swipe dismissal', () => {
     const touchEvent = (
       type: 'touchstart' | 'touchmove' | 'touchend',
       clientY: number,
+      clientX = 10,
     ) => {
       const event = new Event(type, {bubbles: true, cancelable: true});
-      const touch = {identifier: 31, clientX: 10, clientY};
+      const touch = {identifier: 31, clientX, clientY};
       Object.defineProperty(event, 'touches', {
         value: type === 'touchend' ? [] : [touch],
       });
       Object.defineProperty(event, 'changedTouches', {value: [touch]});
-      visualToast.dispatchEvent(event);
+      fineTouch(visualToast, event);
       return event;
     };
 
@@ -1779,20 +1864,21 @@ describe('Toast swipe dismissal', () => {
       move = touchEvent('touchmove', 140);
     });
     expect(move!.defaultPrevented).toBe(false);
+    act(() => {
+      touchEvent('touchend', 140);
+    });
     expect(onHide).not.toHaveBeenCalled();
 
     act(() => {
       touchEvent('touchstart', 100);
     });
-    Object.defineProperty(
-      (move = new Event('touchmove', {bubbles: true, cancelable: true})),
-      'changedTouches',
-      {value: [{identifier: 31, clientX: 80, clientY: 104}]},
-    );
     act(() => {
-      visualToast.dispatchEvent(move);
+      move = touchEvent('touchmove', 104, 80);
     });
-    expect(move.defaultPrevented).toBe(false);
+    expect(move!.defaultPrevented).toBe(false);
+    act(() => {
+      touchEvent('touchend', 104, 80);
+    });
 
     act(() => {
       touchEvent('touchstart', 100);
@@ -1814,7 +1900,7 @@ describe('Toast swipe dismissal', () => {
       const point = {identifier: 44, clientX: 10, clientY};
       Object.defineProperty(event, 'touches', {value: [point]});
       Object.defineProperty(event, 'changedTouches', {value: [point]});
-      visualToast.dispatchEvent(event);
+      fineTouch(visualToast, event);
       return event;
     };
 
@@ -1829,9 +1915,7 @@ describe('Toast swipe dismissal', () => {
     expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('40px');
 
     act(() => {
-      visualToast.dispatchEvent(
-        new Event('touchcancel', {bubbles: true, cancelable: true}),
-      );
+      fineTouchCancel(visualToast, 44, 40);
     });
 
     expect(onHide).not.toHaveBeenCalled();
@@ -1841,46 +1925,46 @@ describe('Toast swipe dismissal', () => {
     );
   });
 
-  it('abandons a one-finger swipe when a second touch starts', () => {
+  it('leaves the card to the page when a second finger lands before the swipe begins (spec:AST-094 FR10)', () => {
     const {visualToast, onHide} = renderSwipeToast();
     const dispatchTouch = (
-      type: 'touchstart' | 'touchmove',
+      type: 'touchstart' | 'touchmove' | 'touchend',
       touches: {identifier: number; clientX: number; clientY: number}[],
       changedTouches = touches,
     ) => {
       const event = new Event(type, {bubbles: true, cancelable: true});
       Object.defineProperty(event, 'touches', {value: touches});
       Object.defineProperty(event, 'changedTouches', {value: changedTouches});
-      visualToast.dispatchEvent(event);
-      return event;
+      return fineTouch(visualToast, event);
     };
     const first = {identifier: 51, clientX: 10, clientY: 0};
     const second = {identifier: 52, clientX: 30, clientY: 40};
 
     act(() => {
       dispatchTouch('touchstart', [first]);
-      dispatchTouch('touchmove', [{...first, clientY: 40}]);
+      dispatchTouch('touchmove', [{...first, clientY: 4}]);
+      // Two fingers before the swipe began: the page's pinch.
+      dispatchTouch('touchstart', [{...first, clientY: 4}, second], [second]);
+      dispatchTouch(
+        'touchmove',
+        [{...first, clientY: 60}, second],
+        [{...first, clientY: 60}],
+      );
     });
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('40px');
-
-    act(() => {
-      dispatchTouch('touchstart', [first, second], [second]);
-    });
-    const multitouchMove = dispatchTouch('touchmove', [first, second]);
-
-    expect(multitouchMove.defaultPrevented).toBe(false);
     expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
-      '',
-    );
+    act(() => {
+      dispatchTouch('touchend', [second], [{...first, clientY: 60}]);
+      dispatchTouch('touchend', [], [second]);
+    });
     expect(onHide).not.toHaveBeenCalled();
   });
 
-  it('does not dismiss when another touch remains outside the Toast', () => {
+  it('dismisses when the swiping finger lifts though another stays down outside the Toast (spec:AST-094 FR10)', () => {
     const {visualToast, onHide} = renderSwipeToast();
     const first = {identifier: 61, clientX: 10, clientY: 0};
     const second = {identifier: 62, clientX: 200, clientY: 200};
     const dispatchTouch = (
+      target: HTMLElement,
       type: 'touchstart' | 'touchmove' | 'touchend',
       touches: (typeof first)[],
       changedTouches: (typeof first)[],
@@ -1888,32 +1972,26 @@ describe('Toast swipe dismissal', () => {
       const event = new Event(type, {bubbles: true, cancelable: true});
       Object.defineProperty(event, 'touches', {value: touches});
       Object.defineProperty(event, 'changedTouches', {value: changedTouches});
-      visualToast.dispatchEvent(event);
-      return event;
+      return fineTouch(target, event);
     };
+    const moved = {...first, clientY: 60};
 
     act(() => {
-      dispatchTouch('touchstart', [first], [first]);
-      dispatchTouch(
-        'touchmove',
-        [{...first, clientY: 60}],
-        [{...first, clientY: 60}],
-      );
+      dispatchTouch(visualToast, 'touchstart', [first], [first]);
+      dispatchTouch(visualToast, 'touchmove', [moved], [moved]);
     });
     expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('60px');
 
-    // The second contact began outside the Toast, so its touchstart did not
-    // reach the Toast listener. Ending the tracked finger must still cancel
-    // while that other contact remains active.
+    // The second finger lands on the page, off the Toast: it changes nothing
+    // about a swipe that began.
     act(() => {
-      dispatchTouch('touchend', [second], [{...first, clientY: 60}]);
+      dispatchTouch(document.body, 'touchstart', [moved, second], [second]);
+      dispatchTouch(visualToast, 'touchend', [second], [moved]);
     });
-
-    expect(onHide).not.toHaveBeenCalled();
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
-      '',
-    );
+    expect(onHide).toHaveBeenCalledWith('manual');
+    act(() => {
+      dispatchTouch(document.body, 'touchend', [], [second]);
+    });
   });
 
   it('does not let a pen event with the same numeric ID control a touch gesture', () => {
@@ -1927,7 +2005,7 @@ describe('Toast swipe dismissal', () => {
     Object.defineProperty(touchStart, 'changedTouches', {value: [touch]});
 
     act(() => {
-      visualToast.dispatchEvent(touchStart);
+      fineTouch(visualToast, touchStart);
       fireEvent.pointerMove(visualToast, {
         pointerId: 7,
         pointerType: 'pen',
@@ -1946,21 +2024,20 @@ describe('Toast swipe dismissal', () => {
     expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
 
     act(() => {
-      visualToast.dispatchEvent(
-        new Event('touchcancel', {bubbles: true, cancelable: true}),
-      );
+      fineTouchCancel(visualToast, 7);
     });
   });
 
-  it('removes native touch listeners when a Toast unmounts', () => {
+  it('leaves the gesture host when a Toast unmounts', () => {
     const {visualToast, unmount} = renderSwipeToast();
     const removeListener = vi.spyOn(visualToast, 'removeEventListener');
 
     unmount();
 
-    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
-      expect(removeListener).toHaveBeenCalledWith(type, expect.any(Function));
-    }
+    // The host's one passive pointerdown listener on the card goes with it.
+    expect(removeListener.mock.calls.map(([type]) => type)).toContain(
+      'pointerdown',
+    );
   });
 
   it('resets safely on pointercancel and resumes the auto-hide timer', () => {
@@ -2163,7 +2240,7 @@ describe('Toast swipe dismissal with a fine pointer', () => {
       const touch = {identifier: 41, clientX: 10, clientY};
       Object.defineProperty(event, 'touches', {value: [touch]});
       Object.defineProperty(event, 'changedTouches', {value: [touch]});
-      visualToast.dispatchEvent(event);
+      fineTouch(visualToast, event);
     };
 
     act(() => {
@@ -2181,7 +2258,7 @@ describe('Toast swipe dismissal with a fine pointer', () => {
     );
     expect(visualToast.style.translate).toBe('');
     act(() => {
-      visualToast.dispatchEvent(new Event('touchcancel', {bubbles: true}));
+      fineTouchCancel(visualToast, 41, 60);
     });
     expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
   });
@@ -2209,6 +2286,164 @@ describe('Toast swipe dismissal with a fine pointer', () => {
     expect(onHide).toHaveBeenCalledWith('manual');
     expect(visualToast.style.translate).toBe('');
     expect(getComputedStyle(visualToast).opacity).toBe('0');
+  });
+
+  /**
+   * One finger event under a fine primary pointer, as a browser sends it:
+   * the pointer event, then the touch event, at an explicit time.
+   */
+  function fingerEvent(
+    target: HTMLElement,
+    phase: 'down' | 'move' | 'up',
+    identifier: number,
+    time: number,
+    clientY: number,
+    touches: ReadonlyArray<{identifier: number; clientY: number}>,
+  ) {
+    const pointer = createEvent[
+      phase === 'down'
+        ? 'pointerDown'
+        : phase === 'move'
+          ? 'pointerMove'
+          : 'pointerUp'
+    ](target, {
+      pointerId: 100 + identifier,
+      pointerType: 'touch',
+      isPrimary: touches[0]?.identifier === identifier,
+      button: 0,
+      buttons: phase === 'up' ? 0 : 1,
+      clientX: 10,
+      clientY,
+    });
+    Object.defineProperty(pointer, 'timeStamp', {value: time});
+    fireEvent(target, pointer);
+    const touch = new Event(
+      phase === 'down'
+        ? 'touchstart'
+        : phase === 'move'
+          ? 'touchmove'
+          : 'touchend',
+      {bubbles: true, cancelable: true},
+    );
+    const contact = (id: number, y: number) => ({
+      identifier: id,
+      clientX: 10,
+      clientY: y,
+      target,
+    });
+    Object.defineProperty(touch, 'touches', {
+      value: touches.map(t => contact(t.identifier, t.clientY)),
+    });
+    Object.defineProperty(touch, 'changedTouches', {
+      value: [contact(identifier, clientY)],
+    });
+    Object.defineProperty(touch, 'timeStamp', {value: time});
+    target.dispatchEvent(touch);
+  }
+
+  function renderFineSwipeToast() {
+    const onHide = vi.fn();
+    render(
+      <ToastViewport isTopLayer={false} position="bottomEnd">
+        <ShowToastButton options={{...SWIPE_TOAST, onHide}} />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    const visualToast = screen
+      .getByText('Swipe toast')
+      .closest('[data-type]') as HTMLElement;
+    vi.spyOn(visualToast, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 80,
+      top: 0,
+      right: 400,
+      bottom: 80,
+      left: 0,
+      toJSON: () => ({}),
+    });
+    return {visualToast, onHide};
+  }
+
+  it('listens through the shared gesture host, with no touch listener of its own (spec:AST-094 FR43, FR24)', () => {
+    // A fine primary pointer in this test's own context.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const added: string[] = [];
+    const addEventListener = HTMLElement.prototype.addEventListener;
+    const spy = vi
+      .spyOn(HTMLElement.prototype, 'addEventListener')
+      .mockImplementation(function (
+        this: HTMLElement,
+        type: string,
+        listener: EventListenerOrEventListenerObject,
+        options?: boolean | AddEventListenerOptions,
+      ) {
+        if (this.hasAttribute('data-type')) {
+          added.push(type);
+        }
+        addEventListener.call(this, type, listener, options);
+      });
+    try {
+      renderFineSwipeToast();
+    } finally {
+      spy.mockRestore();
+    }
+    // The card's swipe is a pan on the shared host: a press reaches it through
+    // the host's passive pointerdown listener, and the host's page listeners
+    // carry a finger's start and end, so the card has none of its own.
+    expect(
+      added.filter(type =>
+        ['touchstart', 'touchend', 'touchcancel'].includes(type),
+      ),
+    ).toEqual([]);
+    expect(added).toContain('pointerdown');
+  });
+
+  it('keeps a swipe that began when a second finger lands, and dismisses at the lift (spec:AST-094 FR10)', () => {
+    // A fine primary pointer in this test's own context.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const {visualToast, onHide} = renderFineSwipeToast();
+    const start =
+      Math.max(performance.now(), getGestureHost(document).arena.now()) + 100;
+    const first = 61;
+    const second = 62;
+    act(() => {
+      fingerEvent(visualToast, 'down', first, start, 0, [
+        {identifier: first, clientY: 0},
+      ]);
+      fingerEvent(visualToast, 'move', first, start + 16, 20, [
+        {identifier: first, clientY: 20},
+      ]);
+      fingerEvent(visualToast, 'move', first, start + 32, 40, [
+        {identifier: first, clientY: 40},
+      ]);
+    });
+    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('40px');
+    act(() => {
+      fingerEvent(visualToast, 'down', second, start + 48, 70, [
+        {identifier: first, clientY: 40},
+        {identifier: second, clientY: 70},
+      ]);
+      fingerEvent(visualToast, 'move', first, start + 64, 60, [
+        {identifier: first, clientY: 60},
+        {identifier: second, clientY: 70},
+      ]);
+    });
+    // The second finger changes nothing: the card stays under the first.
+    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('60px');
+    act(() => {
+      fingerEvent(visualToast, 'up', first, start + 80, 60, [
+        {identifier: second, clientY: 70},
+      ]);
+    });
+    // 60 px is past max(40% of 80 px, 48 px).
+    expect(onHide).toHaveBeenCalledWith('manual');
+    act(() => {
+      fingerEvent(visualToast, 'up', second, start + 96, 70, []);
+    });
   });
 });
 

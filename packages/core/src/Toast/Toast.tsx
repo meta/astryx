@@ -14,7 +14,8 @@
  *   and every dismissal (a swipe, the close button, the timeout, an app's
  *   dismiss) first retracts the card past its edge, as the banner leaves;
  *   otherwise (`adaptive` with a fine pointer, or `presentation="toast"`)
- *   the swipe is useToastGesture's and the exit Toast's fade
+ *   the swipe is useToastGesture's (a pan on the shared gesture host) and
+ *   the exit Toast's fade
  * @position Core implementation; rendered by ToastViewport and documented by Toast.doc.mjs
  *
  * SYNC: When Toast layout, timer pause, media theme, or dismissal behavior changes,
@@ -324,7 +325,7 @@ export function ToastSurface({
   const {isTouch} = useTouchPresentation();
   const isNotification =
     presentation === 'notification' || (presentation === 'adaptive' && isTouch);
-  const {rootRef, bindings: gestureBindings} = useToastGesture({
+  const {rootRef} = useToastGesture({
     direction: gestureDirection,
     enabled: !isExiting && !isNotification,
     canPauseTimer: isAutoHide,
@@ -423,7 +424,6 @@ export function ToastSurface({
       onMouseLeave={resumeTimer}
       onFocusCapture={pauseTimer}
       onBlurCapture={resumeTimer}
-      {...gestureBindings}
       {...mergeProps(
         themeProps('toast', {type}),
         stylex.props(
