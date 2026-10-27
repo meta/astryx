@@ -157,20 +157,29 @@ const styles = stylex.create({
         // on the tab instead, and paints as an image below.
         '@media (pointer: coarse)': 'transparent',
       },
+      // While the press is on, the hover and pressed colours yield to the
+      // image (same shape as the arm above, so it outranks it). Over the
+      // release they paint again: a hovering pointer's hover sits beneath the
+      // fading image, so the release lands on it.
+      [stylex.when.ancestor('[data-astryx-press="on"]', tabScope)]: {
+        default: 'transparent',
+        '@media (hover: hover)': 'transparent',
+        '@media (pointer: coarse)': 'transparent',
+      },
     },
     // The touch press, as an image layer over the colour: an image change is
     // discrete, so the layer's colour transition cannot fade the onset in,
     // and the strength the tab's `pressedAlpha` arms own (1 while on, 1 → 0
-    // over the release) is what moves. Coarse pointers only, like the colour
-    // arms above; see interactionOverlay.stylex.ts.
+    // over the release) is what moves. Every pointer: a mouse paints at once;
+    // see interactionOverlay.stylex.ts.
     backgroundImage: {
       default: null,
       [stylex.when.ancestor('[data-astryx-press="on"]', tabScope)]: {
-        default: null,
+        default: pressedOverlayImage,
         '@media (pointer: coarse)': pressedOverlayImage,
       },
       [stylex.when.ancestor('[data-astryx-press="fading"]', tabScope)]: {
-        default: null,
+        default: pressedOverlayImage,
         '@media (pointer: coarse)': pressedOverlayImage,
       },
     },
