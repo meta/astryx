@@ -9,7 +9,9 @@
  *
  * Begins once `numberOfTouchesRequired` fingers have stayed down for
  * `minimumPressDuration` without any of them travelling further than
- * `allowableMovement` (after `numberOfTapsRequired` quick taps, when set).
+ * `allowableMovement` (after `numberOfTapsRequired` quick taps, when set),
+ * measured as a distance, as UIKit's is, or on each axis with `isPerAxis`
+ * (a context menu's tolerance).
  * After it begins, movement is unlimited and reports `changed`; lifting a
  * finger ends it. Lifting or travelling before the duration fails it. With a
  * duration of zero it begins on the touch itself, in the same event, as
@@ -22,7 +24,7 @@
 
 import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
 import {lockSelection} from '../utils/selectionLock';
-import {travel} from './geometry';
+import {axisTravel, travel} from './geometry';
 import {
   GestureRecognizer,
   isActive,
@@ -35,6 +37,8 @@ import type {GestureEventContext, GestureTouch} from './types';
 export interface LongPressGestureRecognizerOptions extends GestureRecognizerOptions<LongPressGestureRecognizer> {
   minimumPressDuration?: number;
   allowableMovement?: number;
+  /** Measure `allowableMovement` on each axis, not as a distance. @default false */
+  isPerAxis?: boolean;
   /** Quick taps before the press. @default 0 */
   numberOfTapsRequired?: number;
   /** @default 1 */
@@ -49,6 +53,7 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
 
   minimumPressDuration: number;
   allowableMovement: number;
+  isPerAxis: boolean;
   numberOfTapsRequired: number;
   numberOfTouchesRequired: number;
 
@@ -80,6 +85,7 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
       UIKIT_LONG_PRESS.minimumPressDuration.value;
     this.allowableMovement =
       options.allowableMovement ?? UIKIT_LONG_PRESS.allowableMovement.value;
+    this.isPerAxis = options.isPerAxis ?? false;
     this.numberOfTapsRequired = options.numberOfTapsRequired ?? 0;
     this.numberOfTouchesRequired = options.numberOfTouchesRequired ?? 1;
   }
@@ -143,7 +149,13 @@ export class LongPressGestureRecognizer extends GestureRecognizer {
 
   protected override touchesMoved(touches: ReadonlyArray<GestureTouch>): void {
     if (this.state === 'possible') {
-      if (touches.some(touch => travel(touch) > this.allowableMovement)) {
+      if (
+        touches.some(
+          touch =>
+            (this.isPerAxis ? axisTravel(touch) : travel(touch)) >
+            this.allowableMovement,
+        )
+      ) {
         this.setState('failed');
       }
       return;
