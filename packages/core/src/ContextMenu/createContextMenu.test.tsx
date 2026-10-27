@@ -88,6 +88,12 @@ const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
 /** Whether the menu's popover is showing (the popover mocks above). */
 const isOpen = () =>
   menu()?.closest('[popover]')?.hasAttribute('popover-open') === true;
+/** Whether the menu inside `root` is showing (the popover mocks above). */
+const isOpenIn = (root: ParentNode) =>
+  root
+    .querySelector('[role="menu"]')
+    ?.closest('[popover]')
+    ?.hasAttribute('popover-open') === true;
 const rows = () =>
   Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
 
@@ -187,6 +193,19 @@ describe('createContextMenu', () => {
     const host = document.querySelector(`[${dataAttr('context-menu-host')}]`);
     expect(host?.parentElement).toBe(popover);
     popover.remove();
+  });
+
+  it("lives inside the element's shadow root, so the menu stays in the element's tree", () => {
+    attach({items: [{label: 'Archive'}]});
+    const shadowHost = document.createElement('div');
+    document.body.append(shadowHost);
+    const shadow = shadowHost.attachShadow({mode: 'open'});
+    shadow.append(element);
+    rightClick(element);
+    expect(isOpenIn(shadow)).toBe(true);
+    const host = shadow.querySelector(`[${dataAttr('context-menu-host')}]`);
+    expect(host?.parentNode).toBe(shadow);
+    shadowHost.remove();
   });
 
   it('choosing a row runs it and closes the menu', async () => {
