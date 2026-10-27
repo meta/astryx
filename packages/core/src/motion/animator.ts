@@ -153,7 +153,11 @@
  *
  * A pseudo-element (`options.pseudoElement`, a dialog's `::backdrop`) has no
  * inline style: its end value is held by a static filling animation (after a
- * curve ends, and after `set`) until the next animation replaces it.
+ * curve ends, and after `set`) until the next animation replaces it, and for
+ * as long as the pseudo-element exists. The browser makes a `::backdrop`
+ * again each time its dialog opens, without the hold, so a presentation
+ * calls `set` with its starting value right after `showModal()`, in the same
+ * task: a `set` before it lands on the backdrop the open replaces.
  *
  * SSR-safe: nothing touches `window` or `document` at module scope, and an
  * animator created without an element only keeps state until one is attached.
@@ -877,6 +881,22 @@ export function createAnimator(
   const restWaits = new Set<RestWait>();
   /** A detach that settles as an unmount at the end of the task, unless an attach follows. */
   let unmountQueued = false;
+  /**
+   * The node the latest attach(null) detached, while its unmount is pending:
+   * a waiting Reduce Motion move lands there, so that node is left visible
+   * where it was going.
+   */
+  let lastDetached: HTMLElement | null = null;
+  /** Runs `write` with the pending unmount's node as the target. */
+  const onLastDetached = (write: () => void) => {
+    const current = target;
+    target = target ?? lastDetached;
+    try {
+      write();
+    } finally {
+      target = current;
+    }
+  };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
@@ -2667,6 +2687,7 @@ export function createAnimator(
         // completion timer outlives the element, as in dispose()
         // (architecture:react-component-runtime INV5). A replacement keeps
         // them all: the motion goes on on the new node.
+        lastDetached = target;
         if (!unmountQueued) {
           unmountQueued = true;
           queueMicrotask(() => {
@@ -2674,10 +2695,30 @@ export function createAnimator(
               return;
             }
             unmountQueued = false;
-            // A Reduce Motion move still waiting lands in the model where it
-            // was going, as in dispose(), so a later attach shows the element
-            // there and visible; its calls settle as interrupted.
-            landPending(false);
+            // A Reduce Motion move still waiting lands where it was going, as
+            // in dispose(), on the node just detached too: a dip's fade out
+            // left its low opacity inline there, so a later attach of that
+            // node (a Suspense or Activity reveal) shows it landed and
+            // visible. Its calls settle as interrupted.
+            onLastDetached(() => {
+              landPending(false);
+              // The landing's commit rebuilt every channel it touched on the
+              // detached node, any axis still moving included: leave that
+              // node with no animation, timer or promotion.
+              for (const animation of running.values()) {
+                animation.cancel();
+              }
+              running.clear();
+              for (const timer of retireTimers.values()) {
+                clearTimeout(timer);
+              }
+              retireTimers.clear();
+              demote();
+              // demote() asks for a fresh will-change read of the node it
+              // demotes; a detached node gets none.
+              cancelSheetWillChangeRead();
+            });
+            lastDetached = null;
             const time = now();
             for (const property of PROPERTIES) {
               interrupt(property, time);
@@ -2690,6 +2731,7 @@ export function createAnimator(
       } else {
         // A node in place of the one just detached: no unmount.
         unmountQueued = false;
+        lastDetached = null;
       }
       // After the landing's commit, which can promote the element again.
       demote();
@@ -2931,10 +2973,14 @@ export function createAnimator(
       const time = playOptions.at ?? now();
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
-      for (const [key, curve] of Object.entries(curves) as [
-        MotionProperty | 'scale',
-        MotionCurve | undefined,
-      ][]) {
+      // `scale` first, so an explicit `scaleX` or `scaleY` beside it wins.
+      const entries = (
+        Object.entries(curves) as [
+          MotionProperty | 'scale',
+          MotionCurve | undefined,
+        ][]
+      ).sort(([a], [b]) => Number(b === 'scale') - Number(a === 'scale'));
+      for (const [key, curve] of entries) {
         if (curve == null) {
           continue;
         }
@@ -3298,8 +3344,14 @@ export function createAnimator(
     dispose() {
       flushDeferred();
       // A Reduce Motion move still waiting to land is written at its end
-      // state, so the element is left visible where it was going; its call
-      // and the calls it carries settle as interrupted.
+      // state, so the element is left visible where it was going (the node
+      // just detached, when an unmount is pending); its call and the calls
+      // it carries settle as interrupted.
+      if (target == null && unmountQueued) {
+        target = lastDetached;
+      }
+      lastDetached = null;
+      unmountQueued = false;
       landPending(false);
       // Nothing moves any more: every atRest() wait settles.
       for (const wait of [...restWaits]) {
