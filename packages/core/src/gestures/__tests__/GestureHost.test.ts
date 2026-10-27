@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
+import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
@@ -3167,12 +3168,14 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     expect(otherAdded).not.toHaveBeenCalled();
   });
 
-  it('adds document listeners only during a press, removes them at the release, and serves the press to the group', () => {
+  it('adds page listeners only during a press, removes them at the release, and serves the press to the group', () => {
     const {group, one} = mount(
       '<div id="group"><button id="one"></button></div>',
     );
-    const added = vi.spyOn(document, 'addEventListener');
-    const removed = vi.spyOn(document, 'removeEventListener');
+    // The press's listeners come through the shared input stream, on the
+    // window's capture phase.
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
     const fine = new GestureHost(document, {
       clock,
       isPrimaryPointerCoarse: () => false,
@@ -3198,6 +3201,81 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     expect(states).toContain('ended');
     for (const type of ['pointermove', 'pointerup', 'pointercancel']) {
       expect(listenerTypes(removed)).toContain(type);
+    }
+  });
+
+  it("hears a group press's click once, whether the host is installed or not, and drops its own click subscription after the lift's task", () => {
+    // A document of its own: no other host hears its clicks.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    frameDocument.body.innerHTML =
+      '<div id="group"><button id="one"></button></div><div id="row"></div>';
+    const group = frameDocument.getElementById('group') as HTMLElement;
+    const one = frameDocument.getElementById('one') as HTMLElement;
+    const row = frameDocument.getElementById('row') as HTMLElement;
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const now = vi.spyOn(browserClock, 'now');
+    try {
+      // onClick reads the clock once per call: count its calls per click.
+      const clickCalls = () => {
+        now.mockClear();
+        one.dispatchEvent(
+          new frameWindow.MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            detail: 1,
+          }),
+        );
+        return now.mock.calls.length;
+      };
+      const send = (type: 'pointerdown' | 'pointerup', time: number) => {
+        const event = new frameWindow.PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          clientX: 10,
+          clientY: 10,
+          button: 0,
+          buttons: type === 'pointerdown' ? 1 : 0,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        one.dispatchEvent(event);
+      };
+      const fine = new GestureHost(frameDocument, {
+        clock,
+        isPrimaryPointerCoarse: () => false,
+      });
+      const detachGroup = fine.attach(group, new TapGestureRecognizer(), {
+        actionGroup: true,
+      });
+      // Not installed: the press brings its own click subscription, which
+      // goes after the lift's task.
+      send('pointerdown', 0);
+      send('pointerup', 80);
+      expect(clickCalls()).toBe(1);
+      vi.runOnlyPendingTimers();
+      expect(clickCalls()).toBe(0);
+      // A per-event recognizer installs the host while a group press is
+      // held: the host's own click subscription takes over, and a click is
+      // heard once, before and after the press's task ends.
+      send('pointerdown', 1000);
+      const detachRow = fine.attach(row, new PanGestureRecognizer(), {
+        perEventPointer: true,
+      });
+      send('pointerup', 1080);
+      expect(clickCalls()).toBe(1);
+      vi.runOnlyPendingTimers();
+      expect(clickCalls()).toBe(1);
+      detachRow();
+      detachGroup();
+    } finally {
+      now.mockRestore();
+      vi.useRealTimers();
+      frame.remove();
     }
   });
 
@@ -3228,7 +3306,7 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
     expect(outerStates).toEqual([]);
   });
 
-  it('removes the group listener on detach, and a coarse pointer keeps the usual document listeners instead', () => {
+  it('removes the group listener on detach, and a coarse pointer keeps the usual page listeners instead', () => {
     const {group} = mount('<div id="group"></div>');
     const groupRemoved = vi.spyOn(group, 'removeEventListener');
     const fine = new GestureHost(document, {
@@ -3244,7 +3322,7 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
       expect.any(Function),
     );
     const groupAdded = vi.spyOn(group, 'addEventListener');
-    const added = vi.spyOn(document, 'addEventListener');
+    const added = vi.spyOn(window, 'addEventListener');
     added.mockClear();
     const coarse = new GestureHost(document, {
       clock,

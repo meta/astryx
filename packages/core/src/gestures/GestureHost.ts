@@ -55,9 +55,9 @@
  * - Where the primary pointer is fine the host listens for nothing
  *   (`spec:AST-094` FR19, FR24) except an action group
  *   (`AttachOptions.actionGroup`, `family:action-groups` FR5): one passive
- *   `pointerdown` listener on the group, and document listeners only while
- *   its press is held, removed at the release. Only the group's own
- *   recognizers and consumer take that press.
+ *   `pointerdown` listener on the group, and page listeners (the shared
+ *   input stream's) only while its press is held, removed at the release.
+ *   Only the group's own recognizers and consumer take that press.
  *
  * FINGERS
  *
@@ -238,8 +238,8 @@ export interface AttachOptions {
    * The element is an action group, sibling actions a held pointer slides
    * across (`family:action-groups` FR5). Where the primary pointer is fine,
    * the host still serves it, and nothing else: one passive `pointerdown`
-   * listener on the element, and document listeners only while a press is
-   * held (`spec:AST-094` FR19, FR24). @default false
+   * listener on the element, and page listeners only while a press is held
+   * (`spec:AST-094` FR19, FR24). @default false
    */
   actionGroup?: boolean;
 }
@@ -1331,6 +1331,10 @@ export class GestureHost {
     }
     const view = this.doc.defaultView;
     this.isInstalled = true;
+    // The host's own click subscription takes over from a group press's,
+    // so a click is heard once (a host installing mid-press).
+    this.groupClickUnsubscribe?.();
+    this.groupClickUnsubscribe = null;
     this.usesTouchEvents =
       this.inputMode === 'auto' && view != null && 'ontouchstart' in view;
     if (view == null) {
@@ -2199,11 +2203,15 @@ export class GestureHost {
 
   /** The pointer of the group press being served under a fine pointer. */
   private groupPressPointer: number | null = null;
+  /** The input stream subscriptions one group press holds until it lifts. */
+  private groupPressUnsubscribers: (() => void)[] = [];
+  /** The group press's own click subscription, when the host has none. */
+  private groupClickUnsubscribe: (() => void) | null = null;
 
   /**
    * A press on an action group under a fine pointer (`family:action-groups`
    * FR5): the group's recognizers and consumer take it, nothing else on the
-   * path does (`spec:AST-094` FR19), and the document listens only until it
+   * path does (`spec:AST-094` FR19), and the page listens only until it
    * lifts (FR24). Where the primary pointer is coarse the host's own
    * listeners serve the group, as every other recognizer.
    */
@@ -2250,38 +2258,38 @@ export class GestureHost {
     ]);
   }
 
-  /** The document listeners one group press needs while it is held. */
+  /**
+   * The input one group press needs while it is held, through the shared
+   * input stream (utils/inputStream.ts) like every host listener: its
+   * pointer's moves and lift, and the window's own blur. The click a lift
+   * owes is the press's too (claimed presses swallow it); an installed host
+   * already hears it, so the press subscribes to it only when the host is
+   * not installed, and never twice.
+   */
   private listenForGroupPress(isListening: boolean): void {
-    const doc = this.doc;
-    const view = doc.defaultView;
-    if (isListening) {
-      doc.addEventListener('pointermove', this.onGroupPointer, PASSIVE_CAPTURE);
-      doc.addEventListener('pointerup', this.onGroupPointer, PASSIVE_CAPTURE);
-      doc.addEventListener(
-        'pointercancel',
-        this.onGroupPointer,
-        PASSIVE_CAPTURE,
-      );
-      view?.addEventListener('blur', this.onGroupBlur);
-      // The click a lift owes is the press's too: claimed presses swallow it.
-      view?.addEventListener('click', this.onClick, ACTIVE_CAPTURE);
-    } else {
-      doc.removeEventListener(
-        'pointermove',
-        this.onGroupPointer,
-        PASSIVE_CAPTURE,
-      );
-      doc.removeEventListener(
-        'pointerup',
-        this.onGroupPointer,
-        PASSIVE_CAPTURE,
-      );
-      doc.removeEventListener(
-        'pointercancel',
-        this.onGroupPointer,
-        PASSIVE_CAPTURE,
-      );
-      view?.removeEventListener('blur', this.onGroupBlur);
+    for (const unsubscribe of this.groupPressUnsubscribers.splice(0)) {
+      unsubscribe();
+    }
+    const view = this.doc.defaultView;
+    if (!isListening || view == null) {
+      return;
+    }
+    this.groupPressUnsubscribers.push(
+      subscribeInput(view, 'pointermove', this.onGroupPointer),
+      subscribeInput(view, 'pointerup', this.onGroupPointer),
+      subscribeInput(view, 'pointercancel', this.onGroupPointer),
+      // The window's own blur; an element's blur reaches the window's
+      // capture phase too and means nothing here.
+      subscribeInput(view, 'blur', event => {
+        if (!(event.target instanceof view.Node)) {
+          this.onGroupBlur();
+        }
+      }),
+    );
+    if (!this.isInstalled && this.groupClickUnsubscribe == null) {
+      this.groupClickUnsubscribe = subscribeInput(view, 'click', this.onClick, {
+        cancels: true,
+      });
     }
   }
 
@@ -2312,7 +2320,7 @@ export class GestureHost {
   };
 
   /**
-   * The press lifted: its document listeners go now; the click listener stays
+   * The press lifted: its subscriptions go now; its click subscription stays
    * for the click the lift dispatches in the same task, then goes too.
    */
   private endGroupPress(): void {
@@ -2320,9 +2328,8 @@ export class GestureHost {
     this.listenForGroupPress(false);
     const view = this.doc.defaultView;
     const removeClick = () => {
-      if (!this.isInstalled) {
-        view?.removeEventListener('click', this.onClick, ACTIVE_CAPTURE);
-      }
+      this.groupClickUnsubscribe?.();
+      this.groupClickUnsubscribe = null;
     };
     if (view != null && typeof view.setTimeout === 'function') {
       view.setTimeout(removeClick, 0);
