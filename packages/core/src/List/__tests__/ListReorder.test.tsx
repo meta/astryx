@@ -1306,6 +1306,36 @@ describe('List reorderable', () => {
     }
   });
 
+  it("keeps the handle's touch from a row menu without hiding it from the gesture host or capture listeners", () => {
+    // The handle stops its touchstart in React's bubble phase. The gesture
+    // host and its recognizers listen in the capture phase (on the document
+    // and on armed elements), so they still see every touch that starts on
+    // the handle, as does any capture-phase listener.
+    stubPrimaryPointer(true);
+    render(
+      <ContextMenu label="Row actions" items={[{label: 'Move Inbox'}]}>
+        <List reorderable={createReorderable({onReorder: () => {}})}>
+          <ListItem itemKey="inbox" label="Inbox" />
+          <ListItem itemKey="sent" label="Sent" />
+        </List>
+      </ContextMenu>,
+    );
+    const handle = handleOf('Inbox');
+    const captured = vi.fn();
+    document.addEventListener('touchstart', captured, {capture: true});
+    const host = getGestureHost(document);
+    try {
+      const touch = {identifier: 0, clientX: 300, clientY: 20, target: handle};
+      fireEvent.touchStart(handle, {touches: [touch], changedTouches: [touch]});
+      expect(captured).toHaveBeenCalledTimes(1);
+      expect(host.fingersDown()).toBe(1);
+      fireEvent.touchEnd(handle, {touches: [], changedTouches: [touch]});
+      expect(host.fingersDown()).toBe(0);
+    } finally {
+      document.removeEventListener('touchstart', captured, {capture: true});
+    }
+  });
+
   it('does not activate an interactive row from its handle', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
