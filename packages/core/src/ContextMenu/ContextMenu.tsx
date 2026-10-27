@@ -4,9 +4,10 @@
 /**
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, the presentation resolver (usePresentation), useLongPress,
- *   and the touch layer (ContextMenuTouchLayer: the press recognizer, the
- *   press feedback and the lift presentation)
+ *   useListFocus, the presentation resolver (usePresentation), the headless
+ *   context menu's request core (contextMenuRequests.ts: the trigger's
+ *   context request), and the touch layer (ContextMenuTouchLayer: the press
+ *   feedback and the lift presentation)
  * @output Exports ContextMenu with cursor-popover, touch-lift and touch-sheet
  *   presentations
  * @position Core implementation; consumed by index.ts
@@ -19,19 +20,25 @@
  * under the cursor.
  * Reuses DropdownMenu item rendering and keyboard navigation.
  *
+ * ContextMenu is built on the headless context menu (spec:AST-107 FR8, FR7):
+ * its trigger's context request (a held finger or pen, a right click,
+ * Shift+F10 or the context-menu key, once per gesture) opens it, through the
+ * request core createContextMenu uses too.
+ *
  * Under a finger (a coarse primary pointer: one touch model on every touch
  * device, iOS and Android alike) the trigger behaves like UIKit's
- * UIContextMenuInteraction: a finger held still commits the menu at UIKit's
- * moment (`contextMenu.press.commitMs`), with the press feedback, the page
- * stays put while that menu is up, and the press sends no click. When the
+ * UIContextMenuInteraction: the request's hold runs on UIKit's timeline
+ * (`contextMenu.press`: the commit, then the menu at its moment or at a lift
+ * after the commit, a drift tolerance on each axis), with the press feedback,
+ * the page stays put while that menu is up, and the press sends no click. When the
  * menu shows, a block trigger lifts itself as UIKit's preview does
  * (ContextMenuLift.tsx, on the lift module) and the menu sits beside it
  * (`contextMenu.lift`); an inline trigger keeps the menu at the finger. The
  * touch layer, the lift included, is part of ContextMenu, so it runs from the
  * first render under the touch model (a phone pays no extra request for it).
- * A fine primary pointer keeps the right-click menu and today's long press for
- * a finger (500 ms, `useLongPress`), as `presentation="popover"` does; the
- * touch recognizer stays off there.
+ * A fine primary pointer keeps the right-click menu and the request's own long
+ * press for a finger (500 ms), as `presentation="popover"` does; UIKit's
+ * timeline applies only under the touch model.
  *
  * Supports two content modes with a single keyboard/focus path:
  * - **Data-driven**: pass `items` array (converted to components internally)
@@ -47,7 +54,7 @@
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
  * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
- * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
+ * - /packages/core/src/ContextMenu/contextMenuRequests.ts (the request core)
  * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
  * - /packages/core/src/ContextMenu/ContextMenuLift.tsx (lift presentation)
  * - /packages/core/src/ContextMenu/index.ts
@@ -93,7 +100,8 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
-import {useLongPress} from '../hooks/useLongPress';
+import type {ContextRequestOptions} from '../gestures/contextRequest';
+import {contextMenu} from '../motion/uikit/contextMenu';
 import {pressableProps} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -106,6 +114,10 @@ import {
   type ContextMenuTouchHandle,
   type LiftedMenuPlacement,
 } from './ContextMenuTouchLayer';
+import {
+  attachContextMenuRequests,
+  type ContextMenuForwarded,
+} from './contextMenuRequests';
 import type {ContextMenuLiftResult} from './ContextMenuLift';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {
@@ -130,6 +142,19 @@ import type {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+
+/**
+ * UIContextMenuInteraction's hold (contextMenu.press, measured on iOS 26.2):
+ * the commit at 400 ms, the menu at 735 ms or at a lift after the commit, and
+ * a drift tolerance on each axis.
+ */
+const TOUCH_HOLD = {
+  commitMs: contextMenu.press.commitMs,
+  requestMs: contextMenu.press.menuDisplayMs,
+  requestOnLift: true,
+  allowableMovement: contextMenu.press.allowableMovement,
+  isPerAxis: true,
+};
 
 const LazyMenuBottomSheet = lazy(async () =>
   import('../DropdownMenu/MenuBottomSheet').then(module => ({
@@ -884,37 +909,6 @@ export function ContextMenuView({
     [layer, listRef],
   );
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      if (isDisabled) {
-        return;
-      }
-      e.preventDefault();
-      const rect = getAnchorBaseRect();
-      // A keyboard-initiated contextmenu (Shift+F10 / the Menu key) fires a
-      // `contextmenu` event whose coordinates are (0, 0) in several browsers.
-      // Detect that and anchor the menu to the trigger's bottom-left instead,
-      // so the menu is reachable without a pointer (menus-8).
-      const isKeyboardInvoked =
-        e.clientX === 0 && e.clientY === 0 && e.detail === 0;
-      // Convert the viewport cursor point into the trigger's local space so
-      // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
-      // A finger's long press reaches here as a pointer `contextmenu` where
-      // the browser sends one (Chromium); its compatibility mousedown then
-      // belongs to the opening press. A mouse or the keyboard opens without
-      // one, so every later mousedown is a press outside.
-      openingGestureRef.current =
-        (e.nativeEvent as Partial<PointerEvent>).pointerType === 'touch'
-          ? currentGesture()
-          : null;
-      openAtLocalPoint(localX, localY, e.currentTarget as HTMLElement);
-    },
-    [isDisabled, openAtLocalPoint, getAnchorBaseRect],
-  );
-
   // The lift presentation (ContextMenuLift.tsx, run by the touch layer): when
   // the menu shows under a finger, the trigger's preview lifts above a tinted
   // backdrop and the menu sits beside it.
@@ -1025,80 +1019,71 @@ export function ContextMenuView({
   // pinning the page moves neither.)
   useScrollLock(isOpen && isTouchOpen && !usesBottomSheet);
 
-  // Today's long press for a finger outside the touch model: under a fine
-  // primary pointer, or with `presentation="popover"` (the way back,
-  // public-component-api INV16). iOS Safari never synthesizes a `contextmenu`
-  // event on a long press, so the menu opens at the touch point once the
-  // finger has been held for 500 ms (useLongPress: the timer, the move cancel
-  // and the cleanup). Under the touch model the recognizer above owns the
-  // finger instead.
-  const {
-    onTouchStart: handleLongPressTouchStart,
-    onTouchMove: handleLongPressTouchMove,
-    onTouchEnd: handleLongPressTouchEnd,
-    onTouchCancel: handleLongPressTouchCancel,
-  } = useLongPress({
-    disabled: isDisabled || touchModes,
-    onLongPress: useCallback(
-      (point: {x: number; y: number}) => {
-        const rect = getAnchorBaseRect();
-        // The finger is still down: the compatibility mousedown iOS sends
-        // mid-hold, or Chromium as it lifts, belongs to this press.
-        openingGestureRef.current = currentGesture();
-        openAtLocalPoint(
-          rect ? point.x - rect.left : point.x,
-          rect ? point.y - rect.top : point.y,
-          triggerRef.current,
-        );
+  // ContextMenu is built on the headless context menu's request core
+  // (contextMenuRequests.ts, spec:AST-107 FR8): its trigger's context request
+  // (a held finger or pen, a right click, Shift+F10 or the context-menu key,
+  // once per gesture) reaches the menu here. Under the touch model the hold
+  // runs on UIContextMenuInteraction's timeline; otherwise a finger's hold
+  // opens the menu at 500 ms, as before (public-component-api INV16).
+  const onForwardedRef = useRef<(forwarded: ContextMenuForwarded) => void>(
+    () => {},
+  );
+  onForwardedRef.current = forwarded => {
+    if (forwarded === 'close') {
+      closeMenu();
+      return;
+    }
+    const {kind, point} = forwarded;
+    if (kind === 'hold' && touchModes && point != null) {
+      // The press feedback stops where it is, and the menu opens under the
+      // finger: UIKit's presentation (the lift) where it applies.
+      touchHandleRef.current?.hold();
+      openFromFinger(point);
+      return;
+    }
+    // A finger's compatibility mousedown, sent mid-hold or at the lift,
+    // belongs to the press that opened the menu (spec:AST-094 FR33).
+    openingGestureRef.current = kind === 'hold' ? currentGesture() : null;
+    const rect = getAnchorBaseRect();
+    if (point == null || rect == null) {
+      // A key's request, or open() without a point: the trigger's
+      // bottom-left corner, so the menu is reachable without a pointer
+      // (menus-8).
+      openAtLocalPoint(0, rect?.height ?? 0, triggerRef.current);
+      return;
+    }
+    openAtLocalPoint(
+      point.x - rect.left,
+      point.y - rect.top,
+      triggerRef.current,
+    );
+  };
+  // At the commit the click haptic plays, where a vibration motor is the only
+  // haptic (iOS Safari can play none: no tap lands at the commit).
+  const onHoldRef = useRef<NonNullable<ContextRequestOptions['onHold']>>(
+    () => {},
+  );
+  onHoldRef.current = phase => {
+    if (phase === 'committed' && touchModes) {
+      touchHandleRef.current?.commit();
+    }
+  };
+  useEffect(() => {
+    const trigger = triggerRef.current;
+    if (trigger == null || attachment != null) {
+      return;
+    }
+    const requests = attachContextMenuRequests(
+      trigger,
+      {
+        isDisabled,
+        hold: touchModes ? TOUCH_HOLD : undefined,
+        onHold: phase => onHoldRef.current(phase),
       },
-      [openAtLocalPoint, getAnchorBaseRect],
-    ),
-  });
-  const handleTriggerTouchStart = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchStart(event);
-      onTouchStartProp?.(event);
-    },
-    [handleLongPressTouchStart, onTouchStartProp],
-  );
-  const handleTriggerTouchMove = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchMove(event);
-      onTouchMoveProp?.(event);
-    },
-    [handleLongPressTouchMove, onTouchMoveProp],
-  );
-  const handleTriggerTouchEnd = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchEnd();
-      onTouchEndProp?.(event);
-    },
-    [handleLongPressTouchEnd, onTouchEndProp],
-  );
-  const handleTriggerTouchCancel = useCallback(
-    (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchCancel();
-      onTouchCancelProp?.(event);
-    },
-    [handleLongPressTouchCancel, onTouchCancelProp],
-  );
-
-  // ContextMenu owns invocation. Consumer handlers are notified too, but
-  // preventing their default does not cancel component-owned behavior that
-  // the public API does not promise as cancelable.
-  const handleTriggerContextMenu = useCallback(
-    (event: React.MouseEvent<HTMLElement>) => {
-      if (touchHandleRef.current?.isTracking() === true) {
-        // The browser's own long-press menu (Android Chrome) for a finger the
-        // recognizer is timing: the recognizer decides, not this event.
-        event.preventDefault();
-      } else {
-        handleContextMenu(event);
-      }
-      onContextMenuProp?.(event);
-    },
-    [handleContextMenu, onContextMenuProp],
-  );
+      forwarded => onForwardedRef.current(forwarded),
+    );
+    return () => requests.destroy();
+  }, [attachment, isDisabled, touchModes, triggerAs]);
 
   const popoverXstyle = menuWidth
     ? styles.popoverCustomWidth(menuWidth)
@@ -1302,11 +1287,13 @@ export function ContextMenuView({
         // one press machine (utils/pressFeedback.ts); the touch layer installs
         // the machine and its press feedback follows the pressed state.
         {...(touchModes ? pressableProps : null)}
-        onContextMenu={handleTriggerContextMenu}
-        onTouchStart={handleTriggerTouchStart}
-        onTouchMove={handleTriggerTouchMove}
-        onTouchEnd={handleTriggerTouchEnd}
-        onTouchCancel={handleTriggerTouchCancel}
+        // Consumer handlers are notified; the context request, not these,
+        // opens the menu.
+        onContextMenu={onContextMenuProp}
+        onTouchStart={onTouchStartProp}
+        onTouchMove={onTouchMoveProp}
+        onTouchEnd={onTouchEndProp}
+        onTouchCancel={onTouchCancelProp}
         data-testid={testId}
         {...stylex.props(
           styles.trigger,
@@ -1325,7 +1312,6 @@ export function ContextMenuView({
           isShown={triggerAs !== 'span'}
           triggerKey={triggerAs}
           onHandleChange={setTouchHandle}
-          onOpen={openFromFinger}
           onBackdropTap={closeMenu}
         />
       ) : null}

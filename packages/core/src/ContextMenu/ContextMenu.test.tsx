@@ -576,16 +576,68 @@ function dispatchTouch(
   return event;
 }
 
+/** The fingers `finger()` holds down: the first of them is the primary. */
+const fingersDown = new Set<number>();
+afterEach(() => {
+  // A finger a case left down lifts, so the gesture host starts the next case
+  // with none.
+  for (const id of [...fingersDown]) {
+    const contact = {id, x: 0, y: 0};
+    dispatchFingerPointer('pointerup', document.body, contact);
+    dispatchTouch('touchend', document.body, [contact], []);
+  }
+  fingersDown.clear();
+});
+
+/** A finger's pointer event, sent before its touch event as a browser does. */
+function dispatchFingerPointer(
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  target: EventTarget,
+  contact: Contact,
+): void {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: contact.id,
+    pointerType: 'touch',
+    isPrimary:
+      type === 'pointerdown'
+        ? fingersDown.size === 0
+        : [...fingersDown][0] === contact.id,
+    clientX: contact.x,
+    clientY: contact.y,
+    button: type === 'pointermove' ? -1 : 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+  target.dispatchEvent(event);
+}
+
+/**
+ * A finger as a browser reports it: each step's pointer event, then its touch
+ * event. The context request reads whichever the gesture host takes the
+ * finger from.
+ */
 function finger(target: EventTarget, id = 1, x = 20, y = 20) {
   const contact = {id, x, y};
   return {
-    down: () => dispatchTouch('touchstart', target, [contact], [contact]),
+    down: () => {
+      dispatchFingerPointer('pointerdown', target, contact);
+      fingersDown.add(contact.id);
+      return dispatchTouch('touchstart', target, [contact], [contact]);
+    },
     moveTo: (nx: number, ny: number) => {
       contact.x = nx;
       contact.y = ny;
+      dispatchFingerPointer('pointermove', target, contact);
       return dispatchTouch('touchmove', target, [contact], [contact]);
     },
-    up: () => dispatchTouch('touchend', target, [contact], []),
+    up: () => {
+      dispatchFingerPointer('pointerup', target, contact);
+      fingersDown.delete(contact.id);
+      return dispatchTouch('touchend', target, [contact], []);
+    },
   };
 }
 
@@ -1606,8 +1658,8 @@ describe('ContextMenu compound mode', () => {
           width: 60,
           height: 20,
         }) as DOMRect;
-      // Keyboard-initiated contextmenu: coords (0,0), detail 0 -> local (0, height).
-      fireEvent.contextMenu(trigger, {clientX: 0, clientY: 0, detail: 0});
+      // A key's request (Shift+F10, read from its keydown): local (0, height).
+      fireEvent.keyDown(trigger, {key: 'F10', shiftKey: true});
       const anchor = getCursorAnchor(trigger);
       expect(anchor.style.left).toBe('0px');
       // The 1px anchor steps back into the trigger's last pixel row, so its
@@ -2068,29 +2120,38 @@ describe('ContextMenu inline trigger (triggerAs)', () => {
   });
 });
 
+const fingerOn = finger;
+
 describe('ContextMenu outside dismissal', () => {
   const finger = (pointerId: number) => ({pointerType: 'touch', pointerId});
 
-  // Holds a finger on the trigger until the long-press opens the menu. Only
-  // the long-press delay is faked.
+  // The long press's timer and the clock the gesture host reads are faked
+  // for the whole case, moving on from the last case's clock, so a finger's
+  // event times only move forward.
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'],
+    });
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // Holds a finger on the trigger, as a browser reports it (its pointer and
+  // touch events), until the long-press opens the menu.
   function longPress(trigger: HTMLElement, pointerId: number) {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
-    try {
-      fireEvent.pointerDown(trigger, finger(pointerId));
-      fireEvent.touchStart(trigger, {touches: [{clientX: 20, clientY: 20}]});
-      act(() => {
-        vi.advanceTimersByTime(500);
-      });
-    } finally {
-      vi.useRealTimers();
-    }
+    fingerOn(trigger, pointerId).down();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
   }
 
   // What a browser sends after a touch: the lift, then compatibility mouse
   // events aimed at the element the finger held.
   function lift(target: HTMLElement, pointerId: number) {
-    fireEvent.pointerUp(target, finger(pointerId));
-    fireEvent.touchEnd(target);
+    fingerOn(target, pointerId).up();
     fireEvent.mouseDown(target);
     fireEvent.mouseUp(target);
     fireEvent.click(target);
@@ -2131,10 +2192,10 @@ describe('ContextMenu outside dismissal', () => {
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('a finger long press that opens the menu through a pointer contextmenu (Chromium) does not close it as it lifts', () => {
+  it('a finger long press whose pointer contextmenu (Chromium) the context request refuses does not close the menu as it lifts', () => {
     const onOpenChange = vi.fn<(isOpen: boolean) => void>();
     const {trigger, outside} = renderMenu(onOpenChange);
-    fireEvent.pointerDown(trigger, finger(8));
+    longPress(trigger, 8);
     const contextmenu = createEvent.contextMenu(trigger, {
       clientX: 20,
       clientY: 15,

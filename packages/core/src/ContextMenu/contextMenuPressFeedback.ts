@@ -12,8 +12,8 @@
  *   ContextMenu's menu, and end when the lift takes over; the growth
  *   itself follows the press machine)
  * @position The press feedback of ContextMenu's touch invocation
- *   (pressFeedback.ts believes the press, contextMenuPress.ts opens the menu;
- *   this shows it)
+ *   (pressFeedback.ts believes the press, the trigger's context request
+ *   opens the menu; this shows it)
  *
  * On iOS 26.2 a finger resting on a view with a context menu makes a copy of
  * the view grow from its center: UIKit asks for a size that ramps linearly
