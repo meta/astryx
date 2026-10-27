@@ -13,7 +13,7 @@
  * gate itself drives pointerQuery() and fires its change.
  */
 
-import {COARSE_POINTER_QUERY} from '../coarsePointer';
+import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
 
 /** The primary pointer as a test sets it. */
 export interface PointerQuery {
