@@ -1042,6 +1042,39 @@ describe('start: when a call\u2019s animations start', () => {
     expect(animator.get('x', 1066 + 5000)).toBeCloseTo(200, 3);
   });
 
+  it('presented: a later presented call that takes part of a waiting call\u2019s channel starts the rest of it, from its own start', async () => {
+    const {animator} = setup();
+    const first = animator.animate(
+      {x: 100, y: 100},
+      {spring: springs.settle},
+      {start: 'presented'},
+    );
+    clock = 1016;
+    await commitFrame(1016);
+    animator.animate({x: 200}, {spring: springs.settle}, {start: 'presented'});
+    // The first call's second frame: its channel now holds the second call's
+    // curve, so nothing starts yet.
+    clock = 1033;
+    await commitFrame(1033);
+    expect(live('translate')).toHaveLength(0);
+    // The second call's second frame creates the channel, with the first
+    // call's y in it; the browser starts it at the next commit.
+    clock = 1050;
+    await commitFrame(1050);
+    expect(live('translate')).toHaveLength(1);
+    clock = 1066;
+    await commitFrame(1066);
+    await expect(first.started).resolves.toBe(1066);
+    // y was at rest on screen until then: its curve starts there, and the
+    // model reads what the screen shows.
+    const y = solveSpring(toSpring(springs.settle), {from: 0, to: 100});
+    expect(animator.get('y', 1166)).toBeCloseTo(y.value(0.1), 6);
+    expect(sampleAt(live('translate')[0], 'translate', 1166)[1]).toBeCloseTo(
+      y.value(0.1),
+      0,
+    );
+  });
+
   it('presented: another change before then creates the animations first', async () => {
     const {animator} = setup();
     animator.animate({x: 100}, {spring: springs.settle}, {start: 'presented'});
