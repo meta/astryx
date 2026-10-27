@@ -96,12 +96,12 @@ describe('TimeInput', () => {
     // the pre-step text over it.
     fireEvent.keyDown(input, {key: 'ArrowUp'});
     expect(onChange).toHaveBeenLastCalledWith('14:36');
-    expect(input.value).toBe('2:36 PM');
+    expect(input).toHaveValue('2:36 PM');
 
     // Leaving the field must not re-commit the stale draft and undo the step.
     fireEvent.blur(input);
     expect(onChange).toHaveBeenLastCalledWith('14:36');
-    expect(input.value).toBe('2:36 PM');
+    expect(input).toHaveValue('2:36 PM');
   });
 
   it('does not step into a fractional minute when increment is fractional', () => {
