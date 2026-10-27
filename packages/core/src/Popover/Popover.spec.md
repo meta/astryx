@@ -215,6 +215,8 @@ table owns their semantic effect.
 | Neutral-role popup                                | The neutral wrapper is not selected as a dialog focus target; automatic entry prefers genuine content focus, or callers may disable autofocus for trigger-retained patterns.                | Child menu, listbox, or other semantics own their focus model.                                           |
 | Automatic focus disabled                          | Opening does not move focus.                                                                                                                                                                | May be persistent configuration or a one-opening show preference.                                        |
 | Controlled open                                   | External open state invokes the no-activation opening path: first genuine content control, then dialog-container fallback.                                                                  | The caller remains the visibility source of truth.                                                       |
+| Tab or Shift+Tab inside the open popup            | Focus moves to the next or previous tabbable descendant and wraps at either end, so it stays inside the popup, modal or not.                                                                | A role-neutral menu closes on Tab and a listbox keeps focus in its input, as their own records state.    |
+| Tab or Shift+Tab from outside the open popup      | The popup does not capture it: focus moves to the next or previous control in the page's own order, as if the popup were not there.                                                         | The browser's order, which places an anchored popup after its trigger, may still lead into it.           |
 | Tab from a focused container                      | Focus enters the first tabbable descendant.                                                                                                                                                 | If none exists, focus remains inside.                                                                    |
 | Shift+Tab from a focused container                | Focus enters the last tabbable descendant.                                                                                                                                                  | If none exists, focus remains inside.                                                                    |
 | Escape                                            | The topmost eligible Popover closes according to shared dismissal policy.                                                                                                                   | Explicit-dismiss surfaces may disable both light and Escape dismissal.                                   |
@@ -257,9 +259,12 @@ table owns their semantic effect.
 - **AR2 — Dialog naming.** Dialog mode requires a caller-provided accessible
   label and places dialog/modal semantics on the painted surface. Missing naming
   warns in development but does not synthesize a label.
-- **AR3 — Focus containment and indication.** Automatic entry and
-  Tab/Shift+Tab behavior follow the matrix above; a trapped surface with no
-  tabbable descendant does not let focus escape. Eligible focus destinations use
+- **AR3 — Focus containment and indication.** Every Popover is a focus
+  region, modal or not (DEC-9). Automatic entry and Tab/Shift+Tab behavior
+  follow the matrix above: containment holds focus that is inside the popup,
+  and a Tab that starts outside it is never redirected into it. `isModal`
+  changes only the modal semantics. A trapped surface with no tabbable
+  descendant does not let focus escape. Eligible focus destinations use
   the shared modality-aware focus indication rather than changing semantic focus
   placement to suppress pointer outlines.
 - **AR4 — Focus return.** Dismissal returns focus to the trigger when focus had
@@ -346,6 +351,7 @@ consumers that need distinct theme reachability provide and document an owned
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | Public boundary, FR1         | `Popover.test.tsx` compile-time public-surface assertions plus package/barrel inspection                                                                  | Unchanged public signatures and same-gesture rejection across Popover-family openings                              | A public type changes or a same-gesture request reaches visibility state.                                                                           | `audit:Popover/api`           |
 | FR2, AR2–AR4                 | `Popover.test.tsx` focus/role suites and `useFocusTrap.test.tsx` container-entry suites                                                                   | Pointer, keyboard/AT-style, read-only, neutral role, no autofocus, controlled, Tab/Shift+Tab, Escape, focus return | Changing semantic destination by modality, selecting fallback close initially, losing shared indication, or allowing focus escape fails assertions. | `audit:Popover/accessibility` |
+| AR3, DEC-9                   | `useFocusTrap.test.tsx` and `Popover.test.tsx` focus-region suites                                                                                        | Modal and non-modal; Tab and Shift+Tab inside the popup and from a control outside it                              | A Tab outside that the popup pulls into itself, or a Tab inside that leaves it, fails assertions.                                                   | `audit:Popover/accessibility` |
 | ORD2, FR4                    | `Popover.test.tsx` sizing/overflow suites; `Popover.stories.tsx` match-trigger and overflow scenarios; geometry under `Core/Layer` viewport-inset stories | Explicit width clamped to the viewport, trigger matching, fitting and overflowing content                          | Reversing width precedence, capping to the span beside the trigger, or always enabling scroll fails emitted-style or overflow assertions.           | `audit:Popover/layout`        |
 | FR8                          | `Popover.test.tsx` surface-padding suite                                                                                                                  | Default rung, `0`, an explicit rung, a direct hook composition with and without a rung                             | A default other than step 3, a rung landing on a box inside the surface, or the hook painting a rung it was not given fails the suite.              | `audit:Popover/theming`       |
 | FR9                          | `spec:AST-094` verification for FR31 and FR35                                                                                                             | Under a finger: open, close, a touch during growth; a mouse                                                        | A Popover that does not grow from and shrink into its trigger, a changed dismissal, or a changed mouse path fails.                                  | `audit:Popover/behavior`      |
@@ -445,6 +451,24 @@ trigger's expanded state and controlled element follow whichever surface is
 open. The sheet loads on demand, so pages whose popovers stay anchored do not
 load it.
 
+### DEC-9 — A Popover is a focus region, modal or not
+
+**Reference:** `component:Popover/DEC-9`
+
+**Decider:** `cixzhang`, `2026-10-26`
+
+A Popover is a focus region like a dialog's. While focus is inside it,
+Tab and Shift+Tab cycle through its controls, and a dismissal closes it and
+returns focus to the trigger (AR4). It leaves the rest of the
+page's focus order alone: a Tab pressed outside it moves to the next control in
+the page and is never pulled into the popup, and a non-modal Popover leaves the
+page interactive. This holds for modal and non-modal popovers alike. A
+role-neutral popup keeps its child role's own Tab model, so a menu still closes
+on Tab and a listbox's focus stays in its input.
+
+Rejected: no Tab containment for non-modal popovers, which would let focus
+fall out of an open popup into the page behind it.
+
 ## Verification gaps
 
 These implementation and evidence items remain required follow-up, but they do
@@ -463,7 +487,8 @@ not block acceptance of the semantic contract above.
 ## Open questions
 
 None. DEC-1 settles the visibility model, DEC-2 settles canonical target
-ownership, and DEC-3 settles semantic focus versus modality-aware indication.
+ownership, DEC-3 settles semantic focus versus modality-aware indication, and
+DEC-9 settles focus containment for modal and non-modal popovers.
 The remaining items are verification work, not human API questions.
 
 ## Content boundary
