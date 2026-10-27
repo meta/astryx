@@ -314,6 +314,37 @@ describe('animate: keyframes on the compositor', () => {
     ).toEqual([300, 0]);
   });
 
+  it('on a 3x screen, bakes the spring within a quarter of a device pixel', async () => {
+    vi.stubGlobal('devicePixelRatio', 3);
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(1000);
+    const curve = solveSpring(toSpring(springs.settle), {from: 0, to: 300});
+    const duration = Number(animation.options.duration) - END_HOLD_MS;
+    let worst = 0;
+    for (let t = 0; t <= duration; t += 0.5) {
+      const [x] = sampleAt(animation, 'translate', 1000 + t);
+      worst = Math.max(worst, Math.abs(x - curve.value(t / 1000)));
+    }
+    // In device pixels, as the curve's chords are checked at their quarters.
+    expect(worst * 3).toBeLessThan(0.26);
+  });
+
+  it('on a 1x screen, bakes no more keyframes than a quarter of a CSS pixel needs', () => {
+    const count = (ratio: number) => {
+      vi.stubGlobal('devicePixelRatio', ratio);
+      recorded = [];
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      return live('translate')[0].keyframes.length;
+    };
+    const desktop = count(1);
+    expect(desktop).toBeLessThan(count(3));
+    // A ratio below 1 (a zoomed-out page) bakes as 1, never coarser.
+    expect(count(0.5)).toBe(desktop);
+  });
+
   it('keeps the keyframe count modest (adaptive sampling)', () => {
     const {animator} = setup();
     animator.animate({x: 300}, {spring: springs.settle});
@@ -1802,16 +1833,37 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a node detached mid-dip and attached again in a later task shows the move landed and visible', async () => {
     const {animator, element} = reduced();
-    // The call owns its opacity: its dip writes the low opacity inline.
+    // The call owns its opacity: its dip writes opacity inline, the value on
+    // screen as the fade starts (its end is written when the fade retires),
+    // while the model is already partway down.
     animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
     await advance(25);
-    expect(Number(element.style.opacity)).toBeLessThan(1);
+    expect(element.style.opacity).not.toBe('');
+    expect(animator.get('opacity')).toBeLessThan(1);
     animator.attach(null);
     await advance(100);
     animator.attach(element);
     expect(animator.get('x')).toBe(240);
     expect(animator.get('opacity')).toBe(1);
     expect(element.style.opacity).not.toBe('0');
+    expect(Number(element.style.opacity || '1')).toBe(1);
+  });
+
+  it('a node detached mid-dip from a dimmed opacity shows the move landed and visible when attached again', async () => {
+    // With the presented start, a curve writes its starting value inline: a
+    // dip from a dimmed opacity leaves that low value on the node while the
+    // move still waits to land.
+    const {animator, element} = reduced();
+    animator.set({opacity: 0.3});
+    animator.animate({x: 240, opacity: 1}, {spring: springs.navigationPush});
+    await advance(25);
+    expect(Number(element.style.opacity)).toBeLessThan(1);
+    expect(animator.get('x')).toBe(0);
+    animator.attach(null);
+    await advance(100);
+    animator.attach(element);
+    expect(animator.get('x')).toBe(240);
+    expect(animator.get('opacity')).toBe(1);
     expect(Number(element.style.opacity || '1')).toBe(1);
   });
 

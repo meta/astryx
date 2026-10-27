@@ -207,12 +207,15 @@ test('a frame painted before the compositor has the curve shows the element wher
   // then a retarget mid-flight.
   const result = await page.evaluate(
     async ({travel}) => {
-      const fresh = () => {
+      const fresh = (now?: () => number) => {
         const element = document.createElement('div');
         element.style.cssText =
           'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
         document.body.append(element);
-        return {element, animator: Motion.createAnimator(element)};
+        return {
+          element,
+          animator: Motion.createAnimator(element, now ? {now} : {}),
+        };
       };
       const x = (element: HTMLElement) =>
         Number.parseFloat(getComputedStyle(element).translate.split(' ')[0]) ||
@@ -224,14 +227,20 @@ test('a frame painted before the compositor has the curve shows the element wher
       }
       const presentX = x(present.element);
 
-      const retarget = fresh();
+      // One instant for the read and the retarget: 150 ms into the settle the
+      // curve moves about a pixel a millisecond, so two clock reads would
+      // differ by however long a busy page took between them.
+      let frozen: number | null = null;
+      const retarget = fresh(() => frozen ?? performance.now());
       await retarget.animator.animate(
         {x: travel},
         {spring: Motion.springs.settle},
       ).started;
       await new Promise(resolve => setTimeout(resolve, 150));
+      frozen = performance.now();
       const onScreen = retarget.animator.get('x');
       retarget.animator.animate({x: 0}, {spring: Motion.springs.settle});
+      frozen = null;
       for (const animation of retarget.element.getAnimations()) {
         animation.cancel();
       }
@@ -245,7 +254,8 @@ test('a frame painted before the compositor has the curve shows the element wher
   });
   expect(result.presentX).toBeCloseTo(0, 1);
   expect(result.onScreen).toBeGreaterThan(20);
-  expect(Math.abs(result.retargetX - result.onScreen)).toBeLessThan(1);
+  // The inline value is written to a thousandth of a pixel.
+  expect(result.retargetX).toBeCloseTo(result.onScreen, 2);
 });
 
 test('under Reduce Motion, a dip a busy main thread lands late still ends within its 200 ms cross-fade', async ({
