@@ -47,6 +47,7 @@ import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {controlPressLayerStyles} from '../utils/controlPressLayer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useTranslator} from '../i18n';
 
@@ -488,6 +489,10 @@ export function Thumbnail({
             // The touch press's strength and release, on the element the
             // controller writes to; the `::after` above paints off it.
             isInteractive && interactionOverlayStyles.pressedAlpha,
+            // Under a coarse primary pointer, the press's release runs on the
+            // `::after`'s opacity, on the compositor; any other pointer keeps
+            // the strength's release.
+            isInteractive && controlPressLayerStyles.controlOver,
           ),
           isHoverReveal ? getContainerProps() : {},
         )}>

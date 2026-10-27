@@ -23,6 +23,21 @@ describe('HoverGestureRecognizer', () => {
     expect(hover.claimsTouches).toBe(false);
   });
 
+  it('hovers again after being disabled or cancelled mid-hover', () => {
+    const hover = new HoverGestureRecognizer({name: 'hover'});
+    hover.hoverEntered({x: 1, y: 1}, 'mouse');
+    expect(hover.state).toBe('began');
+    hover.setEnabled(false);
+    expect(hover.state).toBe('cancelled');
+    hover.setEnabled(true);
+    hover.hoverEntered({x: 2, y: 2}, 'mouse');
+    expect(hover.state).toBe('began');
+    hover.cancel();
+    hover.hoverEntered({x: 3, y: 3}, 'mouse');
+    expect(hover.state).toBe('began');
+    hover.hoverExited();
+  });
+
   it('starts over at the next enter after a hover was cancelled mid-way', () => {
     const hover = new HoverGestureRecognizer();
     const states: string[] = [];

@@ -236,17 +236,49 @@ describe('component dispatcher — name resolution', () => {
     SLOW,
   );
 
-  it(
-    'is case-SENSITIVE: a lowercased name is unknown',
-    async () => {
+  // `button`, `switch`, `slider` and `list` are also the names of motion
+  // tables (motion/uikit/<name>.ts) in core's UIKit work; `list` and `badge`
+  // match a component (List, Badge) by case alone.
+  it.each(['button', 'switch', 'slider', 'list', 'badge'])(
+    'is case-SENSITIVE: the lowercased name %s is unknown',
+    async name => {
       let err;
       try {
-        await component('button', {cwd});
+        await component(name, {cwd});
       } catch (e) {
         err = e;
       }
       expect(err).toBeDefined();
       expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+    },
+    SLOW,
+  );
+
+  it(
+    'suggests the component a lowercased name matches by case',
+    async () => {
+      let err;
+      try {
+        await component('badge', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.suggestions?.[0]?.name).toBe('Badge');
+    },
+    SLOW,
+  );
+
+  it(
+    'reads no source for a lowercased name, even where a module has its spelling',
+    async () => {
+      let err;
+      try {
+        await component('button', {cwd, source: true});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_NO_SOURCE');
     },
     SLOW,
   );

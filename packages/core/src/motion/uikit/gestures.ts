@@ -41,6 +41,11 @@
  */
 
 import {DELAYS_CONTENT_TOUCHES_MS} from './scroll';
+import {press} from './timing';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from './longPress';
 
 export type GestureConstantUnit =
   'px' | 'ms' | 'px/s' | 'rad' | 'ratio' | 'count';
@@ -96,7 +101,7 @@ export const UIKIT_LONG_PRESS = {
    * @source measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed
    *   with HID touches, Oct 23 2026: _minimumPressDuration 0.5
    */
-  minimumPressDuration: {value: 500, unit: 'ms'},
+  minimumPressDuration: {value: LONG_PRESS_DURATION_MS, unit: 'ms'},
   /**
    * UILongPressGestureRecognizer.allowableMovement default, a distance.
    * @source apple-docs
@@ -104,7 +109,7 @@ export const UIKIT_LONG_PRESS = {
    * @source measured: UIKit lab, iOS 26.2 simulator, ivar reads confirmed
    *   with HID touches, Oct 23 2026: a (7, 7) drift begins, (7.2, 7.2) fails
    */
-  allowableMovement: {value: 10, unit: 'px'},
+  allowableMovement: {value: LONG_PRESS_ALLOWABLE_MOVEMENT_PX, unit: 'px'},
 } as const satisfies Record<string, GestureConstant>;
 
 export const UIKIT_PAN = {
@@ -240,8 +245,8 @@ export const UIKIT_PRESS = {
   /**
    * How long after a finger was down a scroll can still be that finger's
    * momentum (the brake only counts scrolls a finger drove).
-   * @source GUESS — The press model bound (utils/pressFeedback.ts): iOS
-   *   momentum runs for a second or two after the lift.
+   * @source GUESS — The gesture host's brake bound (gestures/GestureHost.ts):
+   *   iOS momentum runs for a second or two after the lift.
    * @measure M-G19
    */
   momentumMemory: {value: 3000, unit: 'ms'},
@@ -283,15 +288,19 @@ export const UIKIT_VELOCITY = {
   stillness: {value: 40, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
+/**
+ * The stray-click window, kept for importers written before the click guard
+ * owned it: `CLICK_GUARD_WINDOW_MS` (utils/clickGuard.ts) bounds the stray
+ * click, and `UIKIT_GESTURES` leaves this out.
+ * @deprecated Read `CLICK_GUARD_WINDOW_MS`.
+ */
 export const UIKIT_CLICK = {
   /**
-   * Longest the system waits for the browser's click after a touch it
-   * swallows. iOS and Chromium deliver it right after `touchend`; this only
-   * bounds a click that never comes.
-   * @source GUESS — A safety bound, not a UIKit number.
+   * Longest a guard waits for the browser's click after a touch it swallowed.
+   * @source GUESS — A safety bound, not a UIKit number; the click guard's own.
    * @measure M-G17
    */
-  strayClickWindow: {value: 1000, unit: 'ms'},
+  strayClickWindow: {value: 400, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
 /**
@@ -311,7 +320,6 @@ export const UIKIT_GESTURES = {
   control: UIKIT_CONTROL,
   press: UIKIT_PRESS,
   velocity: UIKIT_VELOCITY,
-  click: UIKIT_CLICK,
 } as const;
 
 /**

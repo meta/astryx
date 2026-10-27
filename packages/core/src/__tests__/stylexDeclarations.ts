@@ -16,7 +16,8 @@
  * comparisons meaningless.
  *
  * Later rules win, matching the cascade for the equal-specificity atomic
- * classes StyleX emits.
+ * classes StyleX emits. Rules that style a pseudo-element of the element are
+ * not its declarations and are skipped.
  *
  * SYNC: When modified, update this header.
  */
@@ -39,6 +40,11 @@ export function declaredValue(el: Element, property: string): string | null {
       }
       const owner = /^\.([\w-]+)/.exec(rule.selectorText)?.[1];
       if (owner == null || !classes.has(owner)) {
+        continue;
+      }
+      // A pseudo-element's declaration (a press layer's `::before`) is that
+      // box's value, not the element's.
+      if (rule.selectorText.includes('::')) {
         continue;
       }
       const declared = rule.style.getPropertyValue(property);
