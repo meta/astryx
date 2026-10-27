@@ -2376,45 +2376,64 @@ test.describe('animation state', () => {
 
     // A 300 ms delay plays last when going backward: the curve starts at once.
     let watch = await watchAnimations(box);
-    let readyAt = await box.evaluate(async (el, keyframes) => {
+    let begunAt = await box.evaluate(async (el, keyframes) => {
       const animation = el.animate(keyframes, {duration: 400, delay: 300});
       animation.reverse();
       await animation.ready;
-      return performance.timeOrigin + performance.now();
+      // When it began, by its own clock read at one instant: a run going
+      // backward starts at its end, so its current time has come down from
+      // there by as much as the timeline has moved since (through the rate).
+      // performance.now() read after `ready` drifts later under load.
+      const end = Number(animation.effect?.getComputedTiming().endTime ?? 0);
+      return (
+        performance.timeOrigin +
+        Number(document.timeline.currentTime) -
+        (end - Number(animation.currentTime)) / Math.abs(animation.playbackRate)
+      );
     }, frames);
     const [delayed] = await watch.started();
-    expect(Math.abs(delayed.from - readyAt)).toBeLessThan(50);
+    expect(Math.abs(delayed.from - begunAt)).toBeLessThan(50);
     expect(delayed.to - delayed.from).toBeCloseTo(400, 0);
     await box.evaluate(el => el.getAnimations().forEach(a => a.finish()));
 
     // A short one that ended before the look keeps its curve inside its life.
     watch = await watchAnimations(box);
-    readyAt = await box.evaluate(async (el, keyframes) => {
+    begunAt = await box.evaluate(async (el, keyframes) => {
       const animation = el.animate(keyframes, {duration: 60});
       animation.reverse();
       await animation.ready;
-      return performance.timeOrigin + performance.now();
+      const end = Number(animation.effect?.getComputedTiming().endTime ?? 0);
+      return (
+        performance.timeOrigin +
+        Number(document.timeline.currentTime) -
+        (end - Number(animation.currentTime)) / Math.abs(animation.playbackRate)
+      );
     }, frames);
     await page.waitForTimeout(200);
     const [ended] = await watch.started();
     expect(ended.finishedAt).not.toBeNull();
-    expect(Math.abs(ended.from - readyAt)).toBeLessThan(50);
+    expect(Math.abs(ended.from - begunAt)).toBeLessThan(50);
     expect(ended.to).toBeLessThanOrEqual((ended.finishedAt ?? 0) + 1);
 
     // One the page cancels when it ends keeps its start.
     watch = await watchAnimations(box);
-    readyAt = await box.evaluate(async (el, keyframes) => {
+    begunAt = await box.evaluate(async (el, keyframes) => {
       const animation = el.animate(keyframes, {duration: 60});
       animation.addEventListener('finish', () => animation.cancel(), {
         once: true,
       });
       animation.reverse();
       await animation.ready;
-      return performance.timeOrigin + performance.now();
+      const end = Number(animation.effect?.getComputedTiming().endTime ?? 0);
+      return (
+        performance.timeOrigin +
+        Number(document.timeline.currentTime) -
+        (end - Number(animation.currentTime)) / Math.abs(animation.playbackRate)
+      );
     }, frames);
     await page.waitForTimeout(200);
     const [cancelled] = await watch.started();
-    expect(Math.abs(cancelled.from - readyAt)).toBeLessThan(50);
+    expect(Math.abs(cancelled.from - begunAt)).toBeLessThan(50);
     expect(cancelled.to - cancelled.from).toBeCloseTo(60, 0);
 
     // Read right after finish(), before the finish event is delivered: the
