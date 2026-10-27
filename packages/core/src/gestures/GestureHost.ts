@@ -143,7 +143,7 @@ import type {
   TouchSample,
 } from './types';
 import {internals} from './recognizerInternals';
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {locksSelectionFor} from './selectionLock';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {
