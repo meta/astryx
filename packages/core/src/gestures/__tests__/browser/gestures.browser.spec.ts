@@ -1209,5 +1209,10 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
   expect(
     states.some(entry => entry.to === 'changed' && entry.scrollTop > 0),
   ).toBe(true);
-  expect(states.at(-1)?.to).toBe('ended');
+  // It ended there, then the arena reset it to possible, as UIKit resets a
+  // recognizer after it ends.
+  expect(states.slice(-2).map(entry => entry.to)).toEqual([
+    'ended',
+    'possible',
+  ]);
 });
