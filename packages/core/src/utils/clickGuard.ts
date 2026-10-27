@@ -31,7 +31,7 @@
  * gestures/GestureHost.ts.
  */
 
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../gestures/hapticSwitch';
+import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
 import {subscribeInput} from './inputStream';
 
 /**
