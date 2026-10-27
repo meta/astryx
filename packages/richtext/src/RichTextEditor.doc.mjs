@@ -266,6 +266,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          "Selection toolbar: render RichTextEditorSelectionToolbar in the plugins slot (plugins={<RichTextEditorSelectionToolbar />}) for formatting beside selected text. While the editor is editable, a non-collapsed selection shows it: bold, italic, underline, strikethrough, inline code, and Link, with the same commands, glyphs, and link popover as RichTextEditorToolbar, then endContent after a divider for actions on the selection. Pick and order the formats with formats, drop Link with hasLink={false}, and give hasNewTabLinks the toolbar's value. It never takes focus when it appears: Alt+F10 (Option+F10 on a Mac) moves focus into it, arrow keys move along it, and Escape returns focus to the editor with the selection kept. It overlays the document beside the editable text without reflowing it. Under a coarse pointer it docks to the bottom of the visual viewport, above an on-screen keyboard, because the platform's own selection menu sits beside the selection; presentation='floating' or presentation='docked' keeps one surface on every device. A selection of table cells gets the formats without Link. Read-only and disabled editors show none. It takes base props and passes them to the Astryx Toolbar it renders, as RichTextEditorToolbar does (name it with label).",
+      },
+      {
+        guidance: true,
+        description:
           'Auto-linking: render RichTextEditorAutoLinkPlugin in the plugins slot to turn typed/pasted URLs and emails into links automatically. Created links open in a new tab by default (target=_blank, rel=noopener noreferrer, baked into the node). Pass matchers to recognize additional patterns (build them with createLinkMatcherWithRegExp).',
       },
       {
