@@ -108,8 +108,13 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 // Style injection for unbuilt themes
 // =============================================================================
 
-/** Track which themes have already been injected */
-const injectedThemes = new Set<string>();
+/**
+ * Track which themes have already been injected, with how many mounted
+ * `Theme` instances currently rely on each. The CSS is document-wide and
+ * shared, so it is removed only when the last instance using it unmounts —
+ * never when one of several (a nested or sibling `Theme`) goes away.
+ */
+const injectedThemes = new Map<string, {count: number; release: () => void}>();
 const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
 /**
@@ -130,8 +135,15 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     // Second and later `Theme`s using this theme do no work at all —
     // generation included. Its CSS is document-wide and identical for each.
     const themeKey = `astryx-theme-${theme.name}`;
-    if (injectedThemes.has(themeKey)) {
-      return;
+    const existing = injectedThemes.get(themeKey);
+    if (existing) {
+      existing.count += 1;
+      return () => {
+        existing.count -= 1;
+        if (existing.count === 0) {
+          existing.release();
+        }
+      };
     }
 
     // One-time perf hint per theme
@@ -147,8 +159,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     );
 
     const {prose, component} = generateThemeCSS(theme);
-    injectedThemes.add(themeKey);
     const cleanups: (() => void)[] = [() => injectedThemes.delete(themeKey)];
+    const entry = {
+      count: 1,
+      release: () => {
+        for (const cleanup of cleanups) {
+          cleanup();
+        }
+      },
+    };
+    injectedThemes.set(themeKey, entry);
 
     // Prose defaults go into @layer reset — lowest priority, scoped to
     // the theme region. Any class-based style (StyleX, .xds-*) wins.
@@ -185,8 +205,9 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     }
 
     return () => {
-      for (const cleanup of cleanups) {
-        cleanup();
+      entry.count -= 1;
+      if (entry.count === 0) {
+        entry.release();
       }
     };
   }, [theme, id]);

@@ -334,4 +334,36 @@ describe('Theme', () => {
     expect(injected).toContain('@layer reset, astryx-base, astryx-theme;');
     expect(injected).not.toContain(':root {');
   });
+
+  it('keeps the shared CSS until the last Theme using it unmounts', () => {
+    function App({showInner}: {showInner: boolean}) {
+      return (
+        <Theme theme={testTheme}>
+          <span>outer</span>
+          {showInner && (
+            <Theme theme={testTheme}>
+              <span>inner</span>
+            </Theme>
+          )}
+        </Theme>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App showInner={true} />);
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    // The inner Theme injected first (effects commit children before
+    // parents); its unmount must not strip the CSS the outer one still needs.
+    rerender(<App showInner={false} />);
+    expect(document.head.querySelector(selector)).not.toBeNull();
+
+    // Re-adding an instance reuses the shared CSS without regenerating it.
+    rerender(<App showInner={true} />);
+    expect(generateThemeCSSSpy).toHaveBeenCalledTimes(1);
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
+
+    // The last instance leaving removes it.
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
 });
