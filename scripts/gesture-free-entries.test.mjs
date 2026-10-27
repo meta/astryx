@@ -2,12 +2,15 @@
 
 /**
  * @file gesture-free-entries.test.mjs
- * @input Core's root, hooks and utils entries, bundled with the PR size
- *   report's esbuild options (.github/scripts/lib/component-size.js)
+ * @input Core's utils entry, bundled with the PR size report's esbuild
+ *   options (.github/scripts/lib/component-size.js)
  * @output Pins architecture:react-component-runtime INV13's bundle claim for
- *   Core's public entries: none of them carries a byte of `gestures/` until a
- *   component imports it
- * @position Node test over source, so it needs no build
+ *   the utils entry: it carries no byte of `gestures/` (the haptic switch's
+ *   attribute lives in utils/hapticSwitch.ts for that)
+ * @position Node test over source, so it needs no build. The root and hooks
+ *   entries carry gesture code exactly as far as the components and hooks
+ *   that use a gesture import it: scripts/touch-support-bundle.test.mjs pins
+ *   that per import, against its list of gesture users
  */
 
 import fs from 'node:fs';
@@ -61,12 +64,8 @@ function gestureBytesIn(entry) {
   );
 }
 
-describe("Core's public entries carry no gesture code", () => {
-  it.each([
-    ['the root entry', 'index.ts'],
-    ['the hooks entry', 'hooks/index.ts'],
-    ['the utils entry', 'utils/index.ts'],
-  ])('%s', (_name, entry) => {
-    expect(gestureBytesIn(path.join(CORE_SRC, entry))).toEqual([]);
+describe("Core's utils entry carries no gesture code", () => {
+  it('bundles no byte of gestures/', () => {
+    expect(gestureBytesIn(path.join(CORE_SRC, 'utils/index.ts'))).toEqual([]);
   });
 });
