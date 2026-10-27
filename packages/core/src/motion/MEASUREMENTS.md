@@ -255,8 +255,8 @@ match the probe.
 ## Context menu (UIContextMenuInteraction)
 
 Values the context menu reads from its own table, which lands with the
-context menu; its springs are `springs.contextMenuLift` and
-`springs.contextMenuDismiss`.
+context menu; its springs are the motion roles `springs.contextMenuLift`,
+`springs.contextMenuDismiss` and `springs.contextMenuMorph`.
 
 Captured (iOS 26.2 simulator, Oct 23 2026; the values land with the context
 menu's table): M-CM4.

@@ -51,19 +51,20 @@ import {registerSpringsTable, springs} from '../motion/uikit/springs';
 const LIFT = contextMenu.lift;
 
 /**
- * The lift's springs, as measured: the preview grows and the tint fades in
- * on `springs.contextMenuLift`, the menu enters and the shadow rises and
- * fades on `morphSpring`, the preview returns on `morphSpring` while the tint
- * clears on `springs.contextMenuDismiss`.
+ * The lift's springs, as measured, each an internal motion role
+ * (`spec:AST-094` FR4): the preview grows and the tint fades in on
+ * `springs.contextMenuLift`, the menu enters and the shadow rises and fades on
+ * `springs.contextMenuMorph`, the preview returns on `springs.contextMenuMorph`
+ * while the tint clears on `springs.contextMenuDismiss`.
  */
 const MOTION: LiftFromTriggerMotion = {
   lift: springs.contextMenuLift,
-  drop: LIFT.morphSpring,
+  drop: springs.contextMenuMorph,
   clear: springs.contextMenuDismiss,
-  shadowIn: LIFT.morphSpring,
-  shadowOut: LIFT.morphSpring,
-  surfaceIn: LIFT.morphSpring,
-  surfaceOut: LIFT.morphSpring,
+  shadowIn: springs.contextMenuMorph,
+  shadowOut: springs.contextMenuMorph,
+  surfaceIn: springs.contextMenuMorph,
+  surfaceOut: springs.contextMenuMorph,
 };
 
 /** Where a lift landed: the view's box, the preview's, and the viewport. */
@@ -109,9 +110,9 @@ export function useContextMenuLift(
         if (trigger == null) {
           return null;
         }
-        // The springs' tables register before the first motion (idempotent):
-        // `springs.menuClose` resolves through its role (spec:AST-094 FR4);
-        // every other spring is its table's.
+        // The springs' tables register before the first motion (idempotent),
+        // so every spring the lift plays resolves through its role
+        // (spec:AST-094 FR4).
         registerContextMenuTable();
         registerSpringsTable();
         return lift.lift(trigger, {

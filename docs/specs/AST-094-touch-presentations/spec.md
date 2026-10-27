@@ -121,25 +121,28 @@ a measured, sourced difference exists.
   wherever the native motion settles with an overshoot or stretches with a
   rubber band.
 
-  | Role                       | Default                             | Source                                                                                         |
-  | -------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-  | `springs.fingerTracking`   | response 0.15 s, damping ratio 0.86 | Apple: SwiftUI `interactiveSpring()`                                                           |
-  | `springs.emphasis`         | duration 0.5 s, bounce 0.3          | Apple: SwiftUI `.bouncy`                                                                       |
-  | `springs.settle`           | duration 0.5 s, bounce 0            | Apple: SwiftUI `.smooth`                                                                       |
-  | `springs.quickChange`      | duration 0.5 s, bounce 0.15         | Apple: SwiftUI `.snappy`                                                                       |
-  | `springs.viewChange`       | mass 3, stiffness 1000, damping 500 | measured: UIKit `UISpringTimingParameters()`, iOS 26.2 simulator, 2026-10-23                   |
-  | `springs.timedChange`      | duration 0.5 s, bounce 0            | Apple: UIKit `UIView.animate(springDuration:bounce:)`                                          |
-  | `springs.stateChange`      | response 0.55 s, damping ratio 1    | Apple: SwiftUI `Animation.default`                                                             |
-  | `springs.directChange`     | response 0.5 s, damping ratio 0.825 | Apple: SwiftUI `.spring(response:dampingFraction:)`                                            |
-  | `springs.menuOpen`         | damping ratio 0.8, response 0.32 s  | measured: UIMenu opening, iOS 26.2 simulator, 2026-10-23                                       |
-  | `springs.menuClose`        | damping ratio 0.85, response 0.35 s | measured: UIMenu closing, iOS 26.2 simulator, 2026-10-23                                       |
-  | `springs.subMenuOpen`      | damping ratio 0.85, response 0.4 s  | measured: UIKit's own spring for UIMenu's sub-menu opening, iOS 26.2 simulator, 2026-10-24     |
-  | `springs.subMenuBack`      | damping ratio 1, response 0.4 s     | measured: UIKit's own spring for UIMenu's sub-menu header back, iOS 26.2 simulator, 2026-10-24 |
-  | `timing.stateChangeMs`     | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                |
-  | `timing.curves.viewChange` | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                     |
-  | `timing.curves.exit`       | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                      |
-  | `timing.curves.entrance`   | cubic-bezier(0, 0, 0.58, 1)         | measured: UIKit's ease-out, iOS 26.2 simulator, 2026-10-23                                     |
-  | `timing.curves.move`       | cubic-bezier(0.42, 0, 0.58, 1)      | measured: UIKit's ease-in-out, iOS 26.2 simulator, 2026-10-23                                  |
+  | Role                         | Default                             | Source                                                                                                |
+  | ---------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+  | `springs.fingerTracking`     | response 0.15 s, damping ratio 0.86 | Apple: SwiftUI `interactiveSpring()`                                                                  |
+  | `springs.emphasis`           | duration 0.5 s, bounce 0.3          | Apple: SwiftUI `.bouncy`                                                                              |
+  | `springs.settle`             | duration 0.5 s, bounce 0            | Apple: SwiftUI `.smooth`                                                                              |
+  | `springs.quickChange`        | duration 0.5 s, bounce 0.15         | Apple: SwiftUI `.snappy`                                                                              |
+  | `springs.viewChange`         | mass 3, stiffness 1000, damping 500 | measured: UIKit `UISpringTimingParameters()`, iOS 26.2 simulator, 2026-10-23                          |
+  | `springs.timedChange`        | duration 0.5 s, bounce 0            | Apple: UIKit `UIView.animate(springDuration:bounce:)`                                                 |
+  | `springs.stateChange`        | response 0.55 s, damping ratio 1    | Apple: SwiftUI `Animation.default`                                                                    |
+  | `springs.directChange`       | response 0.5 s, damping ratio 0.825 | Apple: SwiftUI `.spring(response:dampingFraction:)`                                                   |
+  | `springs.menuOpen`           | damping ratio 0.8, response 0.32 s  | measured: UIMenu opening, iOS 26.2 simulator, 2026-10-23                                              |
+  | `springs.menuClose`          | damping ratio 0.85, response 0.35 s | measured: UIMenu closing, iOS 26.2 simulator, 2026-10-23                                              |
+  | `springs.subMenuOpen`        | damping ratio 0.85, response 0.4 s  | measured: UIKit's own spring for UIMenu's sub-menu opening, iOS 26.2 simulator, 2026-10-24            |
+  | `springs.subMenuBack`        | damping ratio 1, response 0.4 s     | measured: UIKit's own spring for UIMenu's sub-menu header back, iOS 26.2 simulator, 2026-10-24        |
+  | `springs.contextMenuLift`    | damping ratio 0.8, response 0.32 s  | measured: UIContextMenuInteraction's preview lift, iOS 26.2 simulator, 2026-10-23                     |
+  | `springs.contextMenuDismiss` | damping ratio 0.85, response 0.35 s | measured: UIContextMenuInteraction's dismissal, iOS 26.2 simulator, 2026-10-23                        |
+  | `springs.contextMenuMorph`   | damping ratio 0.8, response 0.3 s   | measured: UIContextMenuInteraction's menu entrance and preview shadow, iOS 26.2 simulator, 2026-10-23 |
+  | `timing.stateChangeMs`       | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                       |
+  | `timing.curves.viewChange`   | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                            |
+  | `timing.curves.exit`         | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                             |
+  | `timing.curves.entrance`     | cubic-bezier(0, 0, 0.58, 1)         | measured: UIKit's ease-out, iOS 26.2 simulator, 2026-10-23                                            |
+  | `timing.curves.move`         | cubic-bezier(0.42, 0, 0.58, 1)      | measured: UIKit's ease-in-out, iOS 26.2 simulator, 2026-10-23                                         |
 
 ### Motion
 
