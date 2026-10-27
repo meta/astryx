@@ -398,6 +398,7 @@ test.describe('with a finger', () => {
 
   test("each of the hint's buttons keeps its size, and its touch target grows toward 44 px without covering its neighbour", async ({
     page,
+    browser,
     browserName,
   }) => {
     // No control grows for a finger: where the primary pointer is coarse a
@@ -443,8 +444,25 @@ test.describe('with a finger', () => {
           const glyph = (
             element.firstElementChild ?? element
           ).getBoundingClientRect();
+          // What the button adds around what it shows: its glyph's box, or
+          // its text's.
+          // A text's height is its line's, which the button's height holds.
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const glyphBox = element.firstElementChild?.getBoundingClientRect();
+          const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+          const content = glyphBox ?? {
+            width: range.getBoundingClientRect().width,
+            height: Number.isFinite(lineHeight)
+              ? lineHeight
+              : range.getBoundingClientRect().height,
+          };
           return {
             name,
+            chrome: {
+              x: box.width - content.width,
+              y: box.height - content.height,
+            },
             box: {
               left: box.left,
               right: box.right,
@@ -462,17 +480,80 @@ test.describe('with a finger', () => {
         }),
       names,
     );
-    for (const {name, box, hit} of targets) {
-      // Its own size: no wider for a finger.
-      expect(box.right - box.left, `${name} keeps its size`).toBeLessThan(44);
-      // The hit layer only grows, and never past 44 px.
+    // The same hint where the primary pointer is fine: each button adds the
+    // same space around what it shows, since no control grows for a finger
+    // (spec:AST-094 FR42); only the invisible hit layer reaches further. The
+    // theme's type scale may set larger text where the primary pointer is
+    // coarse, so the comparison leaves the text's own size out.
+    const fineContext = await browser.newContext({
+      viewport: page.viewportSize() ?? {width: 390, height: 844},
+      hasTouch: false,
+      isMobile: false,
+    });
+    const fine = await fineContext.newPage();
+    await openStory(fine, storybook(), STORY);
+    expect(
+      await fine.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    await handle(fine, 'Sent').focus();
+    await fine.keyboard.press('Enter');
+    await expect(handle(fine, 'Sent')).toHaveAttribute('aria-pressed', 'true');
+    const fineSizes = await fine.evaluate(
+      list =>
+        list.map(name => {
+          const element = Array.from(document.querySelectorAll('button')).find(
+            button =>
+              button.getAttribute('aria-label') === name ||
+              button.textContent?.trim() === name,
+          );
+          if (element == null) {
+            throw new Error(`no ${name}`);
+          }
+          const box = element.getBoundingClientRect();
+          // A text's height is its line's, which the button's height holds.
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const glyphBox = element.firstElementChild?.getBoundingClientRect();
+          const lineHeight = parseFloat(getComputedStyle(element).lineHeight);
+          const content = glyphBox ?? {
+            width: range.getBoundingClientRect().width,
+            height: Number.isFinite(lineHeight)
+              ? lineHeight
+              : range.getBoundingClientRect().height,
+          };
+          return {
+            x: box.width - content.width,
+            y: box.height - content.height,
+          };
+        }),
+      names,
+    );
+    await fineContext.close();
+    for (const [index, {name, box, hit, chrome}] of targets.entries()) {
+      // Its own size around what it shows: the same as under a fine pointer.
+      expect(
+        Math.abs(chrome.x - fineSizes[index].x),
+        `${name} adds no width for a finger`,
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(chrome.y - fineSizes[index].y),
+        `${name} adds no height for a finger`,
+      ).toBeLessThanOrEqual(0.5);
+      // The hit layer only grows, and never past 44 px unless the button
+      // itself is larger.
+      const width = box.right - box.left;
+      const height = box.bottom - box.top;
       expect(
         hit.right - hit.left,
         `${name} target width`,
-      ).toBeGreaterThanOrEqual(box.right - box.left);
-      expect(hit.bottom - hit.top).toBeGreaterThanOrEqual(box.bottom - box.top);
-      expect(hit.right - hit.left).toBeLessThanOrEqual(44.5);
-      expect(hit.bottom - hit.top).toBeLessThanOrEqual(44.5);
+      ).toBeGreaterThanOrEqual(width);
+      expect(hit.bottom - hit.top).toBeGreaterThanOrEqual(height);
+      expect(hit.right - hit.left).toBeLessThanOrEqual(
+        Math.max(44, width) + 0.5,
+      );
+      expect(hit.bottom - hit.top).toBeLessThanOrEqual(
+        Math.max(44, height) + 0.5,
+      );
     }
     // Neighbouring targets meet at most halfway: none covers the next.
     for (let index = 0; index + 1 < targets.length; index += 1) {
