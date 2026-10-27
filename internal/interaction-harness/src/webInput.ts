@@ -25,10 +25,15 @@
  *   released at the last, with `pointerType: 'pen'`, a pressure and an
  *   optional tilt, each event stamped with its scripted time: the page
  *   receives trusted pen pointer events (and the compatibility mouse events)
- *   with those timestamps.
+ *   with those timestamps. The stroke starts once the page has presented two
+ *   frames: the press goes out with no page round trip, so right after a
+ *   navigation it could carry the previous document's page scale (about:blank
+ *   scales a press at 100 px to 41 px in the phone project).
  *
  * WebKit (Playwright's Linux build): `page.mouse.wheel` in a desktop context
- * (`isMobile: false`, `hasTouch: false`), waiting the same way. WebKit's mobile emulation has no
+ * (`isMobile: false`, `hasTouch: false`), waiting the same way. The step
+ * moves the mouse to (x, y) first (a `pointermove`) and holds Control as a key,
+ * which Chromium's step does neither. WebKit's mobile emulation has no
  * wheel input, and Playwright has no pen for WebKit: both throw, naming the
  * reason, so a proof skips on the driver's flags instead.
  *
@@ -149,6 +154,23 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
       if (points.length === 0) {
         return;
       }
+      // Two presented frames first: the press reaches the compositor with no
+      // page round trip, and right after a navigation it could still carry
+      // the previous document's page scale. The harness's own frames, not a
+      // frozen timer gate's (story.ts).
+      await page.evaluate(
+        () =>
+          new Promise<void>(resolve => {
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+              }
+            ).__harnessTimerGate;
+            const frame =
+              gate?.frame ?? window.requestAnimationFrame.bind(window);
+            frame(() => frame(() => resolve()));
+          }),
+      );
       const startWall = Date.now();
       const startStamp = Date.now() / 1000;
       const events = [

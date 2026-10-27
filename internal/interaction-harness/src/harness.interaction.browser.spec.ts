@@ -1289,6 +1289,23 @@ test.describe('wheel and pen input', () => {
     ).toBeCloseTo(100, 0);
   });
 
+  test('a stroke sent right after a navigation presses where it is scripted', async ({
+    page,
+  }) => {
+    // The driver exists before the page navigates, and the stroke goes out
+    // the moment the page has loaded: the press must not take the previous
+    // document's page scale (about:blank's, in the phone project).
+    const driver = await webInputDriver(page);
+    test.skip(!driver.pens, PEN_SKIP);
+    await fixture(page);
+    await driver.pen([
+      {x: 100, y: 100, t: 0, pressure: 0.5},
+      {x: 100, y: 120, t: 30, pressure: 0.5},
+    ]);
+    const down = (await readInputLog(page)).find(r => r.type === 'pointerdown');
+    expect(down).toMatchObject({pointerType: 'pen', x: 100, y: 100});
+  });
+
   test('says which inputs it has: WebKit in a phone context has no wheel and no pen', async ({
     page,
     browserName,
