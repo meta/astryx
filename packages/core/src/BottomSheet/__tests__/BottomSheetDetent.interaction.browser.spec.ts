@@ -126,6 +126,7 @@ function slowDragTo(from: {x: number; y: number}, dy: number) {
 
 test('a slow drag follows the finger and settles on the nearest detent', async ({
   page,
+  browserName,
 }) => {
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
   // Two thirds of the way to the half detent: nearer to it than to tall.
@@ -159,10 +160,14 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
   expect(restingTop).toBeCloseTo(tallTop + dy, 0);
   await waitForRest(sheet);
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
-  // No long task from the gesture or the settle (the story's own load is excluded).
-  expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
-    [],
-  );
+  // No long task from the gesture or the settle (the story's own load is
+  // excluded). Only Chromium has the Long Tasks API, so only Chromium can
+  // check this; the drag and the settle above hold in both engines.
+  if (browserName === 'chromium') {
+    expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
+      [],
+    );
+  }
 });
 
 test('a downward flick dismisses the sheet', async ({page}) => {
