@@ -62,6 +62,7 @@ const {Selector} = await import('../Selector');
 const {MultiSelector} = await import('../MultiSelector');
 const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
+const {Tokenizer} = await import('../Tokenizer/Tokenizer');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
@@ -159,6 +160,26 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     );
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
+  },
+  'Tokenizer/TokenizerBottomSheet.tsx': async () => {
+    // The sheet's own content is a caller's `emptySearchText` element; the
+    // default EmptyState announces itself.
+    render(
+      <Tokenizer
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        emptySearchText={<em>Nothing called that</em>}
+        experimental={{presentation: 'bottom-sheet'}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Tags'}));
+    fireEvent.change(await screen.findByLabelText('Search Tags'), {
+      target: {value: 'zzz'},
+    });
+    await expectDelegated('Nothing called that');
   },
 };
 

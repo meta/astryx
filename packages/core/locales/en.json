@@ -1599,6 +1599,58 @@
     "defaultMessage": "Removed {label}",
     "description": "Polite screen-reader announcement after a token is removed from a Tokenizer, by its × button or by Backspace. Live-region text, never shown on screen; `{label}` is the token's visible text."
   },
+  "@astryx.tokenizer.search": {
+    "defaultMessage": "Search {label}",
+    "description": "Accessible name of the search field at the top of a Tokenizer's bottom sheet (the touch presentation). `{label}` is the field's own label, e.g. `Search Tags`. Not shown on screen."
+  },
+  "@astryx.tokenizer.searchPlaceholder": {
+    "defaultMessage": "Search…",
+    "description": "Placeholder inside the search field at the top of a Tokenizer's bottom sheet, shown while the query is empty. Single word plus ellipsis."
+  },
+  "@astryx.tokenizer.noResultsDescription": {
+    "defaultMessage": "Try a different search.",
+    "description": "Supporting sentence under the no-results empty-state title inside a Tokenizer's bottom sheet, suggesting the person change the query."
+  },
+  "@astryx.tokenizer.create": {
+    "defaultMessage": "Create \"{value}\"",
+    "description": "Label of the create row inside a Tokenizer's bottom sheet when `hasCreate` is set and the typed text matches no existing item. `{value}` is the typed text, e.g. `Create \"Marketing\"`."
+  },
+  "@astryx.tokenizer.add": {
+    "defaultMessage": "Add",
+    "description": "Visible label of the button at the end of the create row inside a Tokenizer's bottom sheet; pressing it adds the typed text as a new token. Imperative verb; short."
+  },
+  "@astryx.tokenizer.addValue": {
+    "defaultMessage": "Add {value}",
+    "description": "Screen-reader-only name of the create row's Add button inside a Tokenizer's bottom sheet. `{value}` is the typed text, e.g. `Add Marketing`."
+  },
+  "@astryx.tokenizer.done": {
+    "defaultMessage": "Done",
+    "description": "Label of the primary footer button inside a Tokenizer's bottom sheet; pressing it closes the sheet. Selections are already applied, so this is not a confirm."
+  },
+  "@astryx.tokenizer.clearAllTitle": {
+    "defaultMessage": "Clear all selected items?",
+    "description": "Title of the confirmation dialog shown when the person presses Clear all inside a Tokenizer's bottom sheet. A question."
+  },
+  "@astryx.tokenizer.clearAllDescription": {
+    "defaultMessage": "This removes all selected items from {label}.",
+    "description": "Body of the Clear all confirmation dialog inside a Tokenizer's bottom sheet. `{label}` is the field's own label, e.g. `This removes all selected items from Tags.`"
+  },
+  "@astryx.tokenizer.nothingToClear": {
+    "defaultMessage": "Nothing selected",
+    "description": "Tooltip on the disabled Clear all action in a Tokenizer's bottom sheet while no item is selected; keeps the action focusable and says why it does nothing."
+  },
+  "@astryx.tokenizer.allRemoved": {
+    "defaultMessage": "All items removed",
+    "description": "Polite screen-reader announcement after a confirmed Clear all in a Tokenizer's bottom sheet has removed every selected item. Live-region text, never shown on screen."
+  },
+  "@astryx.tokenizer.selectedCount": {
+    "defaultMessage": "{count, number} selected",
+    "description": "Screen-reader-only lead-in of the description on a Tokenizer's bottom-sheet trigger (the touch presentation), followed by the selected token labels. `{count}` is how many tokens are selected, e.g. `2 selected`. Not shown on screen."
+  },
+  "@astryx.tokenizer.clearSelection": {
+    "defaultMessage": "Clear selection",
+    "description": "Label of the destructive action button in the Clear all confirmation dialog inside a Tokenizer's bottom sheet. Imperative verb phrase; confirms removing every token."
+  },
   "@astryx.lightbox.imagePosition": {
     "defaultMessage": "Image {index, number} of {total, number}",
     "description": "Polite screen-reader announcement when a Lightbox moves to a media item that has no alt text. Live-region text, never shown on screen; `{index}` is 1-based, example: `Image 3 of 12`."
