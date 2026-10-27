@@ -798,3 +798,143 @@ export const CaretPlacement: Story = {
     }
   },
 };
+// A long, searchable dataset for the sheet presentation: enough entries to
+// see the 50-row batches of progressive rendering.
+const sheetTags: SearchableItem[] = Array.from({length: 1000}, (_, index) => {
+  const number = index + 1;
+  return {
+    id: `tag-${number}`,
+    label:
+      number === 1
+        ? 'Design'
+        : number === 2
+          ? 'Eng'
+          : `Tag ${String(number).padStart(2, '0')}`,
+  };
+});
+
+const sheetTagSource: SearchSource = {
+  search: (query: string) =>
+    sheetTags.filter(tag =>
+      tag.label.toLowerCase().includes(query.toLowerCase()),
+    ),
+  bootstrap: () => sheetTags,
+};
+
+/**
+ * The experimental touch surface, forced on every device so it is reviewable
+ * on a laptop: `experimental.presentation="bottom-sheet"`. The trigger shows
+ * the selected tokens; tapping it opens one tall sheet with the search row on
+ * top, checkbox rows that keep their place while the sheet is open, a Create
+ * row for typed text, and a confirmed Clear all beside Done.
+ */
+export const ExperimentalBottomSheet: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+    ]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={sheetTagSource}
+        value={value}
+        onChange={items => setValue(items)}
+        hasCreate
+        maxMenuItems={1000}
+        debounceMs={0}
+        experimental={{presentation: 'bottom-sheet'}}
+      />
+    );
+  },
+  args: {
+    label: 'Tags',
+    placeholder: 'Add tags',
+  },
+  name: 'Experimental: bottom sheet',
+};
+
+/**
+ * `experimental.presentation="adaptive"`: the sheet on a compact
+ * coarse-pointer screen (narrow the viewport and emulate touch), otherwise the
+ * inline combobox — the same resolution Selector uses.
+ */
+export const ExperimentalAdaptive: Story = {
+  render: args => {
+    // Enough tokens to wrap the inline field's row on a phone, so the box
+    // the trigger keeps at the swap is the wrapped one (FR16, FR17).
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+      sheetTags[2],
+      sheetTags[3],
+      sheetTags[4],
+    ]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={sheetTagSource}
+        value={value}
+        onChange={items => setValue(items)}
+        maxMenuItems={1000}
+        debounceMs={0}
+        experimental={{presentation: 'adaptive'}}
+      />
+    );
+  },
+  args: {
+    label: 'Tags',
+    placeholder: 'Add tags',
+  },
+  name: 'Experimental: adaptive',
+};
+
+/**
+ * Disabled and at-limit states of the sheet presentation: the disabled
+ * trigger stays focusable and does not open; at `maxEntries` the sheet's
+ * unchecked rows are inert while checked rows still toggle.
+ */
+export const ExperimentalBottomSheetStates: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+    ]);
+    return (
+      <div style={{display: 'grid', gap: 16}}>
+        <Tokenizer
+          {...args}
+          label="Disabled"
+          searchSource={sheetTagSource}
+          value={[sheetTags[0], sheetTags[1]]}
+          onChange={() => {}}
+          isDisabled
+          experimental={{presentation: 'bottom-sheet'}}
+        />
+        <Tokenizer
+          {...args}
+          label="Disabled and empty"
+          searchSource={sheetTagSource}
+          value={[]}
+          onChange={() => {}}
+          isDisabled
+          experimental={{presentation: 'bottom-sheet'}}
+        />
+        <Tokenizer
+          {...args}
+          label="At the limit"
+          searchSource={sheetTagSource}
+          value={value}
+          onChange={items => setValue(items)}
+          maxEntries={2}
+          debounceMs={0}
+          experimental={{presentation: 'bottom-sheet'}}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add tags',
+  },
+  name: 'Experimental: bottom sheet states',
+};
