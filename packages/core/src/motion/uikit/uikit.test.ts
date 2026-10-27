@@ -20,7 +20,9 @@ import {
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
 } from '../../utils/pressGesture';
+import * as uikit from '.';
 import {scroll, springs, timing} from '.';
+import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
 import {UIKIT_GESTURES} from './gestures';
 
 // Modules in this folder that hold no table of their own: longPress.ts holds
@@ -284,6 +286,14 @@ describe('UIKit constants table: values', () => {
     expect(
       Object.values(UIKIT_GESTURES).some(group => 'strayClickWindow' in group),
     ).toBe(false);
+  });
+
+  it("keeps UIKIT_CLICK in the barrel for importers written before the click guard, with the guard's window", () => {
+    // internal/motion.ts (#8562) and lanes import it from the barrel.
+    expect(uikit.UIKIT_CLICK.strayClickWindow.value).toBe(
+      CLICK_GUARD_WINDOW_MS,
+    );
+    expect(Object.values(UIKIT_GESTURES)).not.toContain(uikit.UIKIT_CLICK);
   });
 
   it('names each platform preset for its use, not its source', () => {
