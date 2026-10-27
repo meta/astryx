@@ -104,7 +104,9 @@ export class PinchGestureRecognizer extends GestureRecognizer {
       return;
     }
     const span = this.span();
-    if (this.state === 'possible') {
+    // Once recognized, a pinch waiting on a recognizer it requires to fail
+    // keeps its re-based start: its moves only follow the fingers.
+    if (this.state === 'possible' && this.pending == null) {
       if (Math.abs(span - this.initialSpan) >= this.hysteresis) {
         // UIKit measures from the start moved by the hysteresis, and its
         // first velocity spans from the touch-down (scale 1) to here.
