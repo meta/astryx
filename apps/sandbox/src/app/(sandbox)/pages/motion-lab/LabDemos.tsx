@@ -26,8 +26,10 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {AppShell} from '@astryxdesign/core/AppShell';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -39,6 +41,7 @@ import {
   TabList as ProposedTabList,
 } from './proposed/TabList';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
+import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {Token} from '@astryxdesign/core/Token';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
@@ -90,32 +93,42 @@ const sx = stylex.create({
     color: 'var(--color-text-secondary)',
   },
   outlineItemOn: {color: 'var(--color-text-primary)'},
-  railItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '9px',
-    padding: '6px 8px',
-    borderRadius: 'var(--radius-sm, 6px)',
-  },
-  railIcon: {
-    width: '15px',
-    height: '15px',
-    borderRadius: '4px',
-    backgroundColor: 'var(--color-border)',
-    flexShrink: 0,
-  },
-  frame: {
+  shellFrame: {
     borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: 'var(--color-border)',
     borderRadius: 'var(--radius-md, 9px)',
     overflow: 'hidden',
-    height: '190px',
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr',
-    backgroundColor: 'var(--color-background-base)',
+    height: '240px',
   },
-  framePad: {padding: '14px'},
+  // The shell fills its demo frame rather than the window.
+  shellFill: {height: '100%'},
+  // The fix's rail: its width animates on the lab's collapse-and-expand
+  // duration (--lab-duration-reveal, which carries the speed control and
+  // Delete) and decelerating curve, and snaps under Degrade (--lab-translate)
+  // and the OS setting.
+  railWidth: {
+    transitionProperty: 'width',
+    transitionDuration: {
+      default: 'calc(var(--lab-duration-reveal) * var(--lab-translate, 1))',
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: 'var(--ease-entry)',
+  },
+  // A page narrower than the content area, as an app's page is beside a rail
+  // (a demo pane is narrow, so the width is scaled down with it).
+  pageCentered: {
+    maxWidth: '160px',
+    marginInline: 'auto',
+    padding: '14px',
+  },
+  // Anchored to the rail edge, so it moves with the rail and never re-centers.
+  pageAnchored: {
+    maxWidth: '160px',
+    marginInlineStart: 0,
+    marginInlineEnd: 'auto',
+    padding: '14px',
+  },
   checkBox: {
     width: '20px',
     height: '20px',
@@ -569,53 +582,71 @@ export function DisclosureRig({
 
 const RAIL_ITEMS = ['Home', 'Projects', 'Components', 'Tokens', 'Settings'];
 
+function RailIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden {...props}>
+      <rect x="2" y="2" width="12" height="12" rx="3" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * The real AppShell and SideNav, collapsing on a loop through SideNav's own
+ * controlled `collapsible` config. Today the rail snaps between its widths.
+ * The fix animates the rail's width (the lab's reveal duration and entry
+ * curve, decelerating), so the content,
+ * AppShell's flex sibling, follows the rail edge in the same frame with no
+ * script per frame, and the page is anchored to the rail edge rather than
+ * centered in its own widening space, so it never re-centers. Reduce Motion
+ * (the OS setting, or the lab's) snaps.
+ */
 export function RailRig({mode}: {mode: Mode}) {
   const [collapsed, setCollapsed] = useState(false);
   useLoop(() => setCollapsed(v => !v), 2800);
+  const isFix = mode === 'after';
 
-  // Hand-built, unlike the TabList and CheckboxInput demos on this page.
-  //
-  // A real fork of core's SideNav needs `SideNavCollapseContext` on the public
-  // surface — SideNav is a provider, and core exports only the reader hook
-  // `useSideNavCollapse`. Importing the context by relative path compiles and
-  // is silently wrong: the app resolves `@astryxdesign/core/*` to dist, so a
-  // relative import of src yields a SECOND React context object, and core's
-  // SideNavItem/Heading/Section read the other one, see the default
-  // `{isCollapsed: false}`, and render labels inside a narrow rail with no
-  // error anywhere.
-  //
-  // So this pane approximates the rail rather than being it, and the demo is
-  // weaker for it. The one-line fix is `export {SideNavCollapseContext}` from
-  // packages/core/src/SideNav/index.ts, beside the hook — exactly how
-  // SideNavRenderContext is already exported three lines below. Deferred: it is
-  // a public API surface change and wants its own review.
   return (
     <VStack gap={2} {...stylex.props(sx.full)}>
-      <div {...stylex.props(sx.frame)}>
-        <div
-          data-collapsed={collapsed}
-          className={`${styles.rail} ${mode === 'after' ? styles.railAnimated : ''}`}>
-          <VStack gap={0.5} {...stylex.props(sx.framePad)}>
-            {RAIL_ITEMS.map(item => (
-              <span key={item} {...stylex.props(sx.railItem)}>
-                <span {...stylex.props(sx.railIcon)} />
-                <span className={styles.railLabel}>
-                  <Text type="supporting">{item}</Text>
-                </span>
-              </span>
-            ))}
-          </VStack>
-        </div>
-        <div {...stylex.props(sx.framePad)}>
-          <Text type="supporting" color="secondary">
-            Content
-          </Text>
-        </div>
+      {/* A demo, not part of the page: inert keeps its shell's main landmark,
+          skip link and items out of the page's accessibility tree and tab
+          order. */}
+      <div inert {...stylex.props(sx.shellFrame)}>
+        <AppShell
+          height="fill"
+          xstyle={sx.shellFill}
+          sideNav={
+            <SideNav
+              collapsible={{
+                isCollapsed: collapsed,
+                onCollapsedChange: setCollapsed,
+              }}
+              xstyle={isFix ? sx.railWidth : undefined}>
+              <SideNavSection title="Pages" isHeaderHidden>
+                {RAIL_ITEMS.map((item, index) => (
+                  <SideNavItem
+                    key={item}
+                    label={item}
+                    icon={RailIcon}
+                    isSelected={index === 1}
+                  />
+                ))}
+              </SideNavSection>
+            </SideNav>
+          }>
+          <div {...stylex.props(isFix ? sx.pageAnchored : sx.pageCentered)}>
+            <VStack gap={1}>
+              <Text weight="semibold">Projects</Text>
+              <Text type="supporting" color="secondary">
+                The page beside the rail.
+              </Text>
+            </VStack>
+          </div>
+        </AppShell>
       </div>
       <Hint>
-        {mode === 'before'
-          ? 'Only the chevron rotates. The rail snaps between widths, so the content beside it jumps. Approximated \u2014 see the note in LabDemos.tsx for why this one is not the real SideNav.'
-          : 'The rail\u2019s own width animates on --ease-move. width is a layout property, so this is a deliberate criterion-6 exception \u2014 the transform alternative leaves neighbouring content un-reflowed until the animation ends, which reads worse on a rail this narrow.'}
+        {isFix
+          ? 'The rail\u2019s width animates on the lab\u2019s collapse-and-expand duration and decelerating curve. The content is AppShell\u2019s flex sibling, so its edge follows the rail in the same frame, and the page is anchored to that edge, so it moves with the rail instead of half as far. Reduce Motion snaps.'
+          : 'Today: the real SideNav snaps between its widths, so the page beside it jumps.'}
       </Hint>
     </VStack>
   );
@@ -623,12 +654,21 @@ export function RailRig({mode}: {mode: Mode}) {
 
 // --- skeleton -> content -----------------------------------------------------
 
+// The skeleton stays up long enough to read as a loading state: a 420 ms
+// flash in a 3 s loop looked like static content with a blink, so the swap
+// itself was easy to miss.
+const SKELETON_MS = 1400;
+const SKELETON_LOOP_MS = 3600;
+
 export function SkeletonSwapRig({mode}: {mode: Mode}) {
   const [loaded, setLoaded] = useState(false);
+  const arrivalRef = useRef<number | undefined>(undefined);
   useLoop(() => {
+    window.clearTimeout(arrivalRef.current);
     setLoaded(false);
-    window.setTimeout(() => setLoaded(true), 420);
-  }, 3000);
+    arrivalRef.current = window.setTimeout(() => setLoaded(true), SKELETON_MS);
+  }, SKELETON_LOOP_MS);
+  useEffect(() => () => window.clearTimeout(arrivalRef.current), []);
 
   return (
     <VStack gap={2} {...stylex.props(sx.full)}>
@@ -969,6 +1009,73 @@ export function TintRig({mode}: {mode: Mode}) {
           ? 'Hardcoded 150ms with the CSS default curve.'
           : 'The state token, at 175ms with --ease-state.'}
       </Hint>
+    </VStack>
+  );
+}
+
+// --- nav item hover tint ----------------------------------------------------
+
+const NAV_ITEMS = ['Overview', 'Projects', 'Settings'];
+const FINE_HOVER = '(hover: hover) and (pointer: fine)';
+
+/** Whether this device hovers with a fine pointer, as the gate reads it. */
+function useFineHover(): boolean | null {
+  const [matches, setMatches] = useState<boolean | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia(FINE_HOVER);
+    setMatches(query.matches);
+    const update = () => setMatches(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return matches;
+}
+
+/**
+ * NavItem's hover tint. Before: today's item, which tints at once wherever
+ * the device hovers, as shipped nav items paint it. After: the tint
+ * fades on Astryx's state token (`--duration-fast`, whatever the theme sets,
+ * on the shipped `--ease-standard` curve), and only where the device hovers
+ * with a fine pointer, so a tap leaves no tint behind.
+ */
+export function NavTintRig({mode}: {mode: Mode}) {
+  const {speed, reducedMotion} = useMotionLab();
+  const isFineHover = useFineHover();
+  const after =
+    mode === 'after'
+      ? {
+          // The system token, stretched by the rail's slow motion; the
+          // Delete policy removes the fade, Degrade keeps it (colour is not
+          // movement).
+          ['--tint-duration' as string]:
+            reducedMotion === 'delete'
+              ? '0ms'
+              : `calc(var(--duration-fast) * ${speed})`,
+          ['--tint-ease' as string]: 'var(--ease-standard-today)',
+        }
+      : {['--tint-duration' as string]: '0ms'};
+  return (
+    <VStack gap={1} {...stylex.props(sx.full)}>
+      {NAV_ITEMS.map(item => (
+        <div
+          key={item}
+          className={mode === 'after' ? styles.navTintFine : styles.navTint}
+          style={after}>
+          <Text type="supporting">{item}</Text>
+        </div>
+      ))}
+      <Hint>
+        {mode === 'before'
+          ? 'Today: the tint snaps on at once wherever the device hovers.'
+          : "The theme's state token (--duration-fast on --ease-standard), only on a fine pointer that hovers."}
+      </Hint>
+      {mode === 'after' && isFineHover != null && (
+        <Hint>
+          {isFineHover
+            ? 'This device hovers with a fine pointer: the tint is on.'
+            : 'This device has no fine hover: a tap leaves no tint.'}
+        </Hint>
+      )}
     </VStack>
   );
 }
