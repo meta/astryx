@@ -102,7 +102,6 @@ import {
   autoscrollStep,
   clampTop,
   dropPosition,
-  settleSpring,
   type ReorderGeometry,
 } from './reorderModel';
 
@@ -1327,7 +1326,7 @@ export class ListReorderController implements ListReorderSession {
     restore: RowRestore,
   ): void {
     const at = motionNow();
-    for (const [index, element] of rows.entries()) {
+    for (const element of rows) {
       const value = shownY(element, at);
       if (Math.abs(value) < MIN_MOVE_PX && !isMoving(element)) {
         continue;
@@ -1337,11 +1336,10 @@ export class ListReorderController implements ListReorderSession {
         releaseMotion(element, 'translate');
         continue;
       }
-      const spring =
-        index === dragged
-          ? settleSpring(value, element.offsetHeight)
-          : touchMotion.glideBase(list);
-      touchMotion.home(element, spring, at, index === dragged);
+      // A row still gliding (a drop's or a key move's glide) goes on home on
+      // the shared settle role from where it is shown, at the speed it has
+      // (spec:AST-094 FR4, FR6).
+      touchMotion.home(element, touchMotion.glideBase(list), at, false);
     }
     list.removeAttribute(REORDERING_ATTRIBUTE);
     this.restWhenDone(rows[dragged], restore);

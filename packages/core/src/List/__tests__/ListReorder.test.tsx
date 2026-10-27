@@ -1165,24 +1165,31 @@ describe('List reorderable', () => {
     glide.mockRestore();
   });
 
-  it("keeps the slides' spring an internal constant: touch motion has no theme surface", () => {
-    const drag = (coarse: boolean) => {
-      stubPrimaryPointer(coarse);
-      const {unmount} = render(<ReorderableRows initial={['A', 'B', 'C']} />);
-      const list = screen.getByRole('list');
-      layOut(list);
-      const handle = handleOf('A');
-      mouseDrag(handle, 322, 322);
-      fireEvent.pointerCancel(handle, {...MOUSE, clientY: 322});
-      unmount();
-    };
-    // A mouse's rows take their places at once; under a finger they slide
-    // on the measured spring, which stays internal: no motion role either
-    // way (spec:AST-094 FR4 as ruled: touch motion stays internal).
-    drag(false);
-    expect(motionRole('reorder.slide.spring')).toBeUndefined();
-    drag(true);
-    expect(motionRole('reorder.slide.spring')).toBeUndefined();
+  it('sends a still-gliding row home on the shared settle role, keeping its velocity (spec:AST-094 FR4, FR6)', async () => {
+    stubPrimaryPointer(true);
+    const home = vi.spyOn(touchMotion, 'home');
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['A', 'B', 'C']} />);
+    const list = screen.getByRole('list');
+    layOut(list);
+    // A key move commits, and its rows glide on springs.settle.
+    handleOf('A').focus();
+    await user.keyboard(' {ArrowDown}{Escape}');
+    await waitFor(() => expect(labels()).toEqual(['B', 'A', 'C']));
+    layOut(list);
+    // Picked up again while it still glides, then cancelled: it goes home on
+    // the same role, from where it is shown, at the speed it has.
+    const handle = handleOf('A');
+    mouseDrag(handle, 344, 344 + 30);
+    fireEvent.pointerCancel(handle, {...MOUSE, clientY: 344 + 30});
+    const draggedRow = handle.closest('li');
+    const calls = home.mock.calls.filter(([element]) => element === draggedRow);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [, spring, , fromRest] of calls) {
+      expect(spring).toEqual({duration: 0.5, bounce: 0});
+      expect(fromRest).toBe(false);
+    }
+    home.mockRestore();
   });
 
   it('puts its listeners on the list: none on a row or a handle', () => {
