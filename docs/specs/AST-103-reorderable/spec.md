@@ -109,7 +109,8 @@ announcements are those of FR3 and FR4, and the tree adds no option.
   collection also bounds the drop range: nothing drops beyond it, and a
   keyboard or assistive-technology move past it is refused and announced (FR4).
   Each item's key comes from the data,
-  never from React's `key`: List reads each `ListItem`'s `itemKey`, a string;
+  never from React's `key`: List reads each `ListItem`'s `itemKey`, a string or a number, the
+  shape Table's `idKey` returns, and `onReorder` reports that key as given;
   a collection whose items already carry an identity, such as TreeList's `id`
   or Table's `idKey`, uses it; and a data collection without one takes
   `idKey` in Table's shape, a field name or a function of the item (DEC-4). A row without a key shows no handle and cannot be
