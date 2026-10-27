@@ -36,6 +36,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
+  type ModalOutletChange,
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
@@ -583,7 +584,7 @@ export function ToastViewport({
     if (!isTopLayer || host == null) {
       return;
     }
-    const place = () => {
+    const place = (change: ModalOutletChange = 'outlet') => {
       const parent = getActiveModalOutlet() ?? rootOutletRef.current;
       if (parent == null) {
         return;
@@ -599,7 +600,9 @@ export function ToastViewport({
       }
       // Leaving the document hid the popover. Showing it again puts it above
       // the modal that just opened, or above everything once the last modal
-      // closed.
+      // closed. A non-modal surface that entered the top layer (`entry`)
+      // moved nothing, so the viewport leaves and re-enters in place to get
+      // above it; focus inside it is kept across the re-entry.
       const el = viewportRef.current;
       if (el == null || typeof el.showPopover !== 'function') {
         return;
@@ -609,6 +612,28 @@ export function ToastViewport({
         isShowing = el.matches(':popover-open');
       } catch {
         /* :popover-open unsupported */
+      }
+      if (isShowing && change === 'entry') {
+        const active = document.activeElement;
+        const hadFocus = active instanceof HTMLElement && el.contains(active);
+        try {
+          el.hidePopover();
+          isShowing = false;
+        } catch {
+          /* not a showing popover */
+        }
+        if (isShowing) {
+          return;
+        }
+        try {
+          el.showPopover();
+        } catch {
+          /* already showing */
+        }
+        if (hadFocus) {
+          active.focus({preventScroll: true});
+        }
+        return;
       }
       if (!isShowing) {
         try {
