@@ -3709,6 +3709,50 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     }
   });
 
+  it('holds selection off document-wide while a mouse pan claims, as WebKit extends a drag selection past the pan: a selection begun elsewhere goes, until the press is over', async () => {
+    const {box, outside} = mount(
+      '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
+    );
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const [type, x] of [
+      ['pointerdown', 10],
+      ['pointermove', 30],
+      ['pointermove', 50],
+    ] as const) {
+      time += 16;
+      pointer(type, box, {pointerType: 'mouse', x, y: 10, buttons: 1, time});
+    }
+    expect(['began', 'changed']).toContain(pan.state);
+    const elsewhere = new Event('selectstart', {
+      bubbles: true,
+      cancelable: true,
+    });
+    outside.dispatchEvent(elsewhere);
+    expect(elsewhere.defaultPrevented).toBe(true);
+    // WebKit extends the drag's selection over the page without a selectstart.
+    const range = document.createRange();
+    range.selectNodeContents(outside);
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+    expect(selection.rangeCount).toBe(0);
+    pointer('pointerup', box, {
+      pointerType: 'mouse',
+      x: 50,
+      y: 10,
+      time: time + 16,
+    });
+    // The press's own mouseup and click come in the same task: the hold
+    // lasts past them.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const later = new Event('selectstart', {bubbles: true, cancelable: true});
+    outside.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
+  });
+
   it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
     const {box} = mount('<div id="box">Some selected text</div>');
     const fine = fineHost();
