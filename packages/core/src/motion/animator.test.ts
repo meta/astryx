@@ -905,6 +905,8 @@ describe('promotion: a compositing layer while it moves', () => {
     // would force a style recalculation in the input handler.
     stylesheet['will-change'] = 'transform, opacity';
     const {animator, element} = setup();
+    // In the document, where the read happens.
+    document.body.append(element);
     await commitFrame(clock);
     await vi.advanceTimersByTimeAsync(0);
     const readsOf = () =>
@@ -917,6 +919,46 @@ describe('promotion: a compositing layer while it moves', () => {
     expect(element.style.willChange).toBe('transform, opacity, translate');
     await advance(PROMOTION_LINGER_MS + 10);
     expect(element.style.willChange).toBe('');
+    element.remove();
+  });
+
+  it('reads no style for a node out of the document: a node removed before its read is never read', async () => {
+    // A shared animator (animatorFor) is never detached: its node can leave
+    // the document with the read still waiting. A node out of the document
+    // has no style to read, and reading one costs a style pass for nothing.
+    stubMedia(false, false);
+    const readsOf = (node: Element) =>
+      vi
+        .mocked(window.getComputedStyle)
+        .mock.calls.filter(([read]) => read === node).length;
+    const removed = document.createElement('div');
+    document.body.append(removed);
+    createAnimator(removed, {now: () => clock, requestFrame});
+    removed.remove();
+    const kept = document.createElement('div');
+    document.body.append(kept);
+    createAnimator(kept, {now: () => clock, requestFrame});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(readsOf(removed)).toBe(0);
+    // A node still in the document is read, once, in that task.
+    expect(readsOf(kept)).toBe(1);
+    kept.remove();
+  });
+
+  it("keeps the stylesheet's will-change when a node read nothing before it moves", () => {
+    // Put back after its read was skipped, a node reads its stylesheet's
+    // reasons when a promotion needs them.
+    stylesheet['will-change'] = 'transform, opacity';
+    stubMedia(false, false);
+    const element = document.createElement('div');
+    const animator = createAnimator(element, {
+      now: () => clock,
+      requestFrame,
+    });
+    document.body.append(element);
+    animator.set({y: 10});
+    expect(element.style.willChange).toBe('transform, opacity, translate');
+    element.remove();
   });
 
   it("keeps the stylesheet's will-change when an element attached in this task moves at once", () => {
