@@ -18,6 +18,7 @@ import {
   discoverComponents,
   familyMember,
   findComponentReadme,
+  findExportedComponentSource,
   findComponentSource,
   resolveImportPath,
   discoverExternalComponentsGrouped,
@@ -226,6 +227,48 @@ describe('familyMember', () => {
     expect(familyMember(stack, 'Stack')).toBeNull();
     expect(familyMember({name: 'Button'}, 'Button')).toBeNull();
     expect(familyMember(stack, 'HStack')).toBeNull();
+  });
+});
+
+describe('a doc is found only for a component or hook name its source exports', () => {
+  it('ignores lowercase modules that share a name, and files that do not export it', () => {
+    const core = mkTmp('as-cd-names-');
+    const write = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(core, 'src', rel)), {recursive: true});
+      fs.writeFileSync(path.join(core, 'src', rel), text);
+    };
+    write('motion/useAnimator.ts', 'export function useAnimator() {}\n');
+    write('motion/useAnimator.doc.mjs', "export const docs = {name: 'useAnimator'};\n");
+    // Motion tables beside a doc: modules, not components.
+    write('motion/uikit/button.ts', 'export const button = {};\n');
+    write('motion/uikit/slider.ts', 'export const slider = {};\n');
+    write('motion/uikit/switch.ts', 'export const switchTable = {};\n');
+    write('Stack/Stack.tsx', 'export function Stack() {}\n');
+    write('Stack/Stack.doc.mjs', "export const docs = {name: 'Stack'};\n");
+    // A sub-component the parent's folder documents.
+    write('Stack/StackItem.tsx', 'export function StackItem() {}\n');
+    // A PascalCase file that exports no binding of its name.
+    write('Stack/StackTypes.ts', 'export type StackProps = {gap: number};\n');
+    for (const name of ['button', 'slider', 'switch']) {
+      expect(findComponentReadme(core, name), name).toBeNull();
+      expect(findExportedComponentSource(core, name), name).toBeNull();
+    }
+    expect(findComponentReadme(core, 'StackTypes')).toBeNull();
+    expect(findComponentReadme(core, 'StackItem')).toBe(
+      path.join(core, 'src', 'Stack', 'Stack.doc.mjs'),
+    );
+    expect(findExportedComponentSource(core, 'StackItem')).toBe(
+      path.join(core, 'src', 'Stack', 'StackItem.tsx'),
+    );
+    expect(findComponentReadme(core, 'useAnimator')).toBe(
+      path.join(core, 'src', 'motion', 'useAnimator.doc.mjs'),
+    );
+  });
+
+  it('finds no doc for a lowercased name in the real core', () => {
+    for (const name of ['button', 'list', 'scroll', 'switch', 'slider']) {
+      expect(findComponentReadme(CORE, name), name).toBeNull();
+    }
   });
 });
 

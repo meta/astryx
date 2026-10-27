@@ -253,7 +253,12 @@ describe('findComponentReadme', () => {
     const srcDir = path.join(tmpDir, 'src');
     const stackDir = path.join(srcDir, 'Stack');
     fs.mkdirSync(stackDir, {recursive: true});
-    fs.writeFileSync(path.join(stackDir, 'XDSStackItem.tsx'), '');
+    // The sub-component's file exports it: only a file that exports the name
+    // counts.
+    fs.writeFileSync(
+      path.join(stackDir, 'XDSStackItem.tsx'),
+      'export function XDSStackItem() {}',
+    );
     fs.writeFileSync(
       path.join(stackDir, 'Stack.doc.mjs'),
       'export const docs = {}',
