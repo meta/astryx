@@ -3825,6 +3825,63 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     expect(consumer.events.length).toBeGreaterThan(0);
   });
 
+  it("ends a fine-pointer finger's press on an action group at its lift, and the group's next press begins and ends as well (FR43, FR19)", () => {
+    vi.useFakeTimers();
+    try {
+      const {group, a} = mount(
+        '<div id="group"><button id="a">A</button><button id="b">B</button></div>',
+      );
+      const laptop = new GestureHost(document, {
+        isPrimaryPointerCoarse: () => false,
+      });
+      // The action-group adapter's recognizer: a long press with no minimum
+      // duration and no movement limit, attached as an action group.
+      const press = new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        allowableMovement: Number.POSITIVE_INFINITY,
+      });
+      const states: string[] = [];
+      press.addTransitionListener((_recognizer, _from, to) => states.push(to));
+      detachers.push(laptop.attach(group, press, {actionGroup: true}));
+      // Chromium on a touchscreen laptop: pointerdown, then touchstart; at
+      // the lift, pointerup, then touchend.
+      const fingerPress = (
+        pointerId: number,
+        touchId: number,
+        time: number,
+      ) => {
+        const finger = {id: touchId, x: 10, y: 10};
+        pointer('pointerdown', a, {
+          id: pointerId,
+          pointerType: 'touch',
+          x: 10,
+          y: 10,
+          buttons: 1,
+          time,
+        });
+        touch('touchstart', a, [finger], [finger], time);
+        vi.advanceTimersByTime(20);
+        pointer('pointerup', a, {
+          id: pointerId,
+          pointerType: 'touch',
+          x: 10,
+          y: 10,
+          time: time + 50,
+        });
+        touch('touchend', a, [finger], [], time + 50);
+        vi.advanceTimersByTime(20);
+      };
+      fingerPress(31, 0, 0);
+      const first = states.splice(0);
+      fingerPress(32, 1, 1000);
+      expect(first).toEqual(expect.arrayContaining(['began', 'ended']));
+      expect(states).toEqual(expect.arrayContaining(['began', 'ended']));
+      expect(press.state).toBe('possible');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('takes perEventPointer as it takes any attach, and warns for nothing', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     detachers.push(() => warn.mockRestore());
