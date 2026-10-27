@@ -396,70 +396,125 @@ test.describe('with a finger', () => {
     await expect(page.getByRole('button', {name: 'Done'})).toBeHidden();
   });
 
-  test("each of the hint's buttons is a 44 px target centered on what it shows, and none covers its neighbour", async ({
+  test("each of the hint's buttons keeps its size, and its touch target grows toward 44 px without covering its neighbour", async ({
     page,
     browserName,
   }) => {
-    // design:bidirectionality DR8: a target stays centered on its visible
-    // control, keeps the required size, and never makes part of another
-    // control clickable as itself.
+    // No control grows for a finger: where the primary pointer is coarse a
+    // target reaches toward 44 px through an invisible hit layer, each side
+    // stopping at half the gap to a neighbouring target, so a tap always goes
+    // to the nearer one (Cindy's size rule; design:bidirectionality DR8).
     await open(page);
     await handle(page, 'Sent').focus();
     await page.keyboard.press('Enter');
     await expect(handle(page, 'Sent')).toHaveAttribute('aria-pressed', 'true');
     const names = ['Move up', 'Move down', 'Done'];
-    const boxes = [];
     for (const name of names) {
-      const button = page.getByRole('button', {name});
-      await expect(button).toBeVisible();
-      const box = await button.boundingBox();
-      if (box == null) {
-        throw new Error(`no box for ${name}`);
-      }
-      // What it shows: the glyph (its first element) or its text.
-      const glyph = await button.evaluate(element => {
-        const rect = (
-          element.firstElementChild ?? element
-        ).getBoundingClientRect();
-        return {left: rect.left, right: rect.right};
-      });
-      boxes.push({name, box, glyph});
+      await expect(page.getByRole('button', {name})).toBeVisible();
     }
-    for (const {name, box, glyph} of boxes) {
-      expect(box.width, `${name} is 44 px wide`).toBeGreaterThanOrEqual(44);
-      // Centered on what it shows (within a pixel).
+    // The hit layer's insets are written a frame after the hint shows.
+    await expect
+      .poll(async () =>
+        page
+          .getByRole('button', {name: 'Move up'})
+          .evaluate(element =>
+            getComputedStyle(element)
+              .getPropertyValue('--astryx-hit-inset-top')
+              .trim(),
+          ),
+      )
+      .not.toBe('');
+    const targets = await page.evaluate(
+      list =>
+        list.map(name => {
+          const element = Array.from(document.querySelectorAll('button')).find(
+            button =>
+              button.getAttribute('aria-label') === name ||
+              button.textContent?.trim() === name,
+          );
+          if (element == null) {
+            throw new Error(`no ${name}`);
+          }
+          const style = getComputedStyle(element);
+          const inset = (side: string) =>
+            parseFloat(style.getPropertyValue(`--astryx-hit-inset-${side}`)) ||
+            0;
+          const box = element.getBoundingClientRect();
+          const glyph = (
+            element.firstElementChild ?? element
+          ).getBoundingClientRect();
+          return {
+            name,
+            box: {
+              left: box.left,
+              right: box.right,
+              top: box.top,
+              bottom: box.bottom,
+            },
+            hit: {
+              left: box.left - inset('left'),
+              right: box.right + inset('right'),
+              top: box.top - inset('top'),
+              bottom: box.bottom + inset('bottom'),
+            },
+            glyph: {left: glyph.left, right: glyph.right},
+          };
+        }),
+      names,
+    );
+    for (const {name, box, hit} of targets) {
+      // Its own size: no wider for a finger.
+      expect(box.right - box.left, `${name} keeps its size`).toBeLessThan(44);
+      // The hit layer only grows, and never past 44 px.
       expect(
-        Math.abs(box.x + box.width / 2 - (glyph.left + glyph.right) / 2),
-        `${name} is centered on its glyph`,
-      ).toBeLessThanOrEqual(1);
+        hit.right - hit.left,
+        `${name} target width`,
+      ).toBeGreaterThanOrEqual(box.right - box.left);
+      expect(hit.bottom - hit.top).toBeGreaterThanOrEqual(box.bottom - box.top);
+      expect(hit.right - hit.left).toBeLessThanOrEqual(44.5);
+      expect(hit.bottom - hit.top).toBeLessThanOrEqual(44.5);
     }
-    // Every point of each glyph hits its own button: no neighbour's target
-    // covers it.
-    for (const {name, box, glyph} of boxes) {
-      const y = box.y + box.height / 2;
-      for (const x of [glyph.left + 1, glyph.right - 1]) {
-        const hit = await page.evaluate(
-          ([px, py]) =>
-            document
-              .elementFromPoint(px, py)
-              ?.closest('button')
-              ?.getAttribute('aria-label') ??
-            document.elementFromPoint(px, py)?.closest('button')?.textContent ??
-            null,
+    // Neighbouring targets meet at most halfway: none covers the next.
+    for (let index = 0; index + 1 < targets.length; index += 1) {
+      expect(
+        targets[index].hit.right,
+        `${targets[index].name} stops short of ${targets[index + 1].name}`,
+      ).toBeLessThanOrEqual(targets[index + 1].hit.left + 0.5);
+    }
+    // Every point of each glyph, and the edge of each target, hits its own
+    // button.
+    for (const {name, box, hit, glyph} of targets) {
+      const y = (box.top + box.bottom) / 2;
+      for (const x of [
+        glyph.left + 1,
+        glyph.right - 1,
+        hit.left + 1,
+        hit.right - 1,
+      ]) {
+        const label = await page.evaluate(
+          ([px, py]) => {
+            const button = document.elementFromPoint(px, py)?.closest('button');
+            return (
+              button?.getAttribute('aria-label') ??
+              button?.textContent?.trim() ??
+              null
+            );
+          },
           [x, y] as const,
         );
-        expect(hit, `${name} at x=${x.toFixed(1)}`).toBe(name);
+        expect(label, `${name} at x=${x.toFixed(1)}`).toBe(name);
       }
     }
-    // The 8 px of the up glyph nearest Move down move the row up (a tap
-    // activates a button everywhere but Linux WebKit's injected touches).
+    // A tap in Move up's target just past its visible edge, nearer it than
+    // Move down, moves the row up (a tap activates a button everywhere but
+    // Linux WebKit's injected touches).
     if (browserName === 'webkit') {
       return;
     }
-    const [up] = boxes;
+    const [up] = targets;
     const driver = await touchDriver(page);
     await driver.play(
-      tap({x: up.glyph.right - 4, y: up.box.y + up.box.height / 2}),
+      tap({x: up.hit.right - 1, y: (up.box.top + up.box.bottom) / 2}),
     );
     await expect
       .poll(async () => labels(page))
