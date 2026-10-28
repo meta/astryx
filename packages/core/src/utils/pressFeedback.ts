@@ -4,9 +4,9 @@
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts) and the document's pointer,
  *   keyboard, scroll and visibility events
- * @output Exports paintPress and readPressPaint (the one writer of the press
- *   attribute for every painter), PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE,
- *   pressableProps and installPressFeedback
+ * @output Exports paintPress and readPressPaint (the press attribute's
+ *   writer for every press they track), PRESSABLE_ATTRIBUTE,
+ *   PRESSED_ATTRIBUTE, pressableProps and installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
  *   per document that writes `data-astryx-press` on the nearest pressable surface.
  *   Installed by usePressFeedback (hooks/usePressFeedback.ts) on first mount;
@@ -202,10 +202,12 @@ export function readPressPaint(element: Element): PressPaint | null {
 }
 
 /**
- * Write `next` on `element` if its state is one of `onlyFrom`: THE ONE
- * WRITER of the press attribute, for the controller and every other painter
- * (paintPress), so a fade's clock and the attribute never drift apart. Any
- * write ends a fade paintPress left running there. Returns whether it wrote.
+ * Write `next` on `element` if its state is one of `onlyFrom`: the press
+ * attribute's writer for the controller and every painter that uses
+ * paintPress, so a fade's clock and the attribute never drift apart (the
+ * action-group tracker, hooks/actionGroupTracker.ts, still writes its groups'
+ * presses itself). Any write ends a fade paintPress left running there.
+ * Returns whether it wrote.
  */
 function writePress(
   element: Element,
@@ -260,7 +262,7 @@ export function paintPress(
 }
 
 /**
- * The controller's paint, through the one writer: a state the controller did
+ * The controller's paint, through writePress: a state the controller did
  * not write is its owner's (a `held` row), so neither a new press nor a
  * release's end overwrites or clears it.
  */
