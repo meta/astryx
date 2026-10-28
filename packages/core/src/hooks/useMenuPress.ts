@@ -68,9 +68,9 @@ import {
   type MenuPressPointerType,
 } from './menuPressGesture';
 import {
-  useLongPress,
+  useLongPressDetector,
+  type LongPressDetectorHandlers,
   type LongPressTolerance,
-  type UseLongPressHandlers,
 } from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
@@ -330,7 +330,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // handle is held in a ref because the pointer handlers below are stable
   // callbacks and the hook is created further down, once `fireLongPress`
   // exists.
-  const longPressApiRef = useRef<UseLongPressHandlers | null>(null);
+  const longPressApiRef = useRef<LongPressDetectorHandlers | null>(null);
   const touchMovePreventerRef = useRef<(() => void) | null>(null);
   // The edge autoscroll running now: its scroller, its direction, and the
   // re-read of the row under the resting pointer after each step.
@@ -753,7 +753,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // tolerance and the timer are what matter, and they now have one home.
   // The press's tolerance is read as it starts (triggerTolerance), so no
   // menu or row observes the pointer query (spec:AST-094 FR24).
-  longPressApiRef.current = useLongPress({
+  longPressApiRef.current = useLongPressDetector({
     onLongPress: fireLongPress,
     delayMs: options.longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS,
   });

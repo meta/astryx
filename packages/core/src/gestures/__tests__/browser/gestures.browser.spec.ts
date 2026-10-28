@@ -1288,10 +1288,10 @@ test.describe('where the primary pointer is fine', () => {
     }));
     expect(seen.isCoarse).toBe(false);
     expect(seen.page).toEqual([]);
-    // Only the elements whose recognizer claims a moving finger (or keeps
-    // its press) carry a touch listener: the blocking touchmove, which FR24
-    // counts outside the one-listener budget, so a touchscreen laptop's
-    // finger claims as on a phone (FR19).
+    // Only the elements whose recognizer claims a moving finger carry a
+    // touch listener: the blocking touchmove, which FR24 counts outside the
+    // one-listener budget, so a touchscreen laptop's finger claims as on a
+    // phone (FR19). A kept press gets its own only during a press.
     expect(seen.elements).toEqual(
       [
         'hpan',
@@ -1302,7 +1302,6 @@ test.describe('where the primary pointer is fine', () => {
         'slider',
         'switchRow',
         'onePan',
-        'kept',
       ].map(id => `${id}:touchmove:false`),
     );
     expect(seen.styles).toEqual(['||', '||', '||', '||']);
