@@ -56,7 +56,7 @@ A PR changes only spec records when every changed path is one of:
 
 - `docs/specs/<id>/spec.md` or `plan.md`;
 - a family or design spec (excluding indexes, templates, schemas, and assets);
-- a colocated Core/Lab `<Name>.spec.md`.
+- a component or module record under `docs/specs/components/`.
 
 Draft-only spec records can merge after validation without owner approval.
 Approval reads the record against the `## Writing rubric results` the author
