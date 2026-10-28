@@ -21,6 +21,7 @@ import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
 import {LayerContext} from '../Layer/LayerContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {dataAttr} from '../naming';
+import * as hooks from '../hooks';
 import {createContextMenu} from './createContextMenu';
 import {useContextMenu, type UseContextMenuOptions} from './useContextMenu';
 
@@ -265,6 +266,10 @@ describe('useContextMenu', () => {
 });
 
 describe('useContextMenu: its element and its React roots', () => {
+  it('is exported from the hooks entry point, as AST-107 imports it (spec:AST-107 FR6)', () => {
+    expect(hooks.useContextMenu).toBe(useContextMenu);
+  });
+
   it('attaches to the element its ref points at now, when that element changes', () => {
     function Switching({which}: {which: 'a' | 'b'}) {
       const ref = useRef<HTMLLIElement>(null);
