@@ -317,6 +317,28 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("makes one request from a pen held still, and none from the browser menu that pen's hold also fires, during it or at the lift", () => {
+    const {row} = mount('<div id="row">Row</div>');
+    const seen = requests(row);
+    pointer('pointerdown', row, {
+      pointerType: 'pen',
+      x: 20,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    host.arena.advanceTime(600);
+    const during = contextmenu(row, {x: 20, y: 10, pointerType: 'pen'});
+    pointer('pointerup', row, {pointerType: 'pen', x: 20, y: 10, time: 700});
+    // Windows fires a pen's press-and-hold menu at the lift.
+    const atLift = contextmenu(row, {x: 20, y: 10, pointerType: 'pen'});
+    expect(during.defaultPrevented).toBe(true);
+    expect(atLift.defaultPrevented).toBe(true);
+    expect(seen.map(request => [request.kind, request.pointerType])).toEqual([
+      ['hold', 'pen'],
+    ]);
+  });
+
   it('makes no request for a finger that lifts before the hold or travels past its tolerance', () => {
     const {row} = mount('<div id="row">Row</div>');
     const seen = requests(row);
@@ -353,7 +375,7 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     expect(seen.map(request => request.kind)).toEqual(['pointer']);
   });
 
-  it('leaves a control that keeps its press for a hold-repeat its own long press, right click and Shift+F10', () => {
+  it("leaves a control that keeps its press for a hold-repeat only its hold: its right click and Shift+F10 reach the row's context request", () => {
     const {row, stepper} = mount(
       '<div id="row">Row <button id="stepper">+</button></div>',
     );
@@ -367,11 +389,14 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     touch('touchstart', stepper, {id: 1, x: 5, y: 5}, 0);
     host.arena.advanceTime(700);
     touch('touchend', stepper, {id: 1, x: 5, y: 5}, 800, true);
+    // The hold is the stepper's repeat: no request.
+    expect(seen).toEqual([]);
     const right = contextmenu(stepper, {x: 5, y: 5, pointerType: 'mouse'});
-    expect(right.defaultPrevented).toBe(false);
+    expect(right.defaultPrevented).toBe(true);
+    host.arena.advanceTime(2000);
     stepper.focus();
     key(stepper, {key: 'F10', shiftKey: true});
-    expect(seen).toEqual([]);
+    expect(seen.map(request => request.kind)).toEqual(['pointer', 'keyboard']);
   });
 
   it('starts no press for a right click or a ctrl-click on macOS', () => {
