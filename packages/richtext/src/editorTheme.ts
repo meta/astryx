@@ -451,8 +451,14 @@ const editorTheme = stylex.create({
   // puts each line in its own bidi paragraph taking the direction of its
   // own first strong character, which is what a reader of code wants: a
   // Hebrew comment line reads right-to-left while `const x = 1;` keeps its
-  // semicolon at the end, in either document. Core Markdown's `pre` starts
-  // its code at the left edge in a right-to-left document too.
+  // semicolon at the end, in either document.
+  //
+  // This is the one place the two surfaces differ. Core Markdown's `pre`
+  // takes the document's direction for the whole block, so in a
+  // right-to-left document it reorders every line and renders
+  // `const x = 1;` as `;const x = 1`. Code is read in its own order, not
+  // the document's, so RichText does not follow it here; core Markdown
+  // wants the same treatment in a change that can move both surfaces.
   codeDirection: {
     direction: 'inherit',
     unicodeBidi: 'plaintext',

@@ -39,9 +39,10 @@
  * Their containers are not prose and keep `dir="auto"`, which the theme
  * styles as the document's direction: a list, whose markers and indent order
  * the items; a table, whose columns are read in the document's order; and a
- * fenced code block, which is several lines under one element, where
- * `pre[dir="auto"]` gives the browser `unicode-bidi: plaintext` and it reads
- * each line on its own.
+ * fenced code block, which is several lines under one element, where the
+ * theme sets `unicode-bidi: plaintext` so each line reads on its own. That
+ * last one is the single place RichText and core `Markdown` disagree: core
+ * reorders a whole code block to the document's direction.
  *
  * SYNC: When modified, keep RichTextEditor.tsx and RichTextView.tsx in sync.
  */
