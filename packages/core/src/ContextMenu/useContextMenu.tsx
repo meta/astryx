@@ -43,6 +43,7 @@ import {ThemeContext} from '../theme/useTheme';
 import type {ContextMenuOption} from './ContextMenu';
 import {
   bridgeContextMenu,
+  destroyContextMenuFromReact,
   createContextMenu,
   readRowsContext,
   subscribeRowsContext,
@@ -135,8 +136,11 @@ function createMenuContentPortal(doc: Document): MenuContentPortal {
       );
     },
     unmount() {
-      root.unmount();
       host.remove();
+      // Called from an effect's cleanup: React cannot unmount a root while
+      // it commits another, so this one renders nothing instead, an update
+      // React takes in its own time, and is dropped with its node.
+      root.render(null);
     },
   };
 }
@@ -247,7 +251,7 @@ export function useContextMenu(
     controllerRef.current = controller;
     portalRef.current = portal;
     return () => {
-      controller.destroy();
+      destroyContextMenuFromReact(controller);
       portal?.unmount();
       if (controllerRef.current === controller) {
         controllerRef.current = null;
