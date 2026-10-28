@@ -4,8 +4,8 @@
 
 /**
  * @file Kbd.tsx
- * @input Uses React, StyleX, theme tokens, shortcut key names and aliases
- * @output Exports Kbd component and KbdProps with canonical shortcut labels
+ * @input Uses React, StyleX, theme tokens, shortcut key names, aliases, provider-bound translator
+ * @output Exports Kbd component and KbdProps with localized shortcut text
  * @position Core implementation; renders styled keyboard shortcut indicators
  *
  * SYNC: When modified, update:
@@ -19,6 +19,7 @@ import {mergeProps} from '../utils';
 import {isApplePlatform} from '../utils/isApplePlatform';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {useTranslator, type TranslatorFn} from '../i18n';
 import {
   colorVars,
   spacingVars,
@@ -67,7 +68,6 @@ const KEY_DISPLAY = new Map<string, string>([
   ['shift', '\u21E7'], // ⇧
   ['enter', '\u21B5'], // ↵
   ['backspace', '\u232B'], // ⌫
-  ['escape', 'Esc'],
   ['tab', '\u21E5'], // ⇥
   ['up', '\u2191'],
   ['down', '\u2193'],
@@ -86,10 +86,11 @@ const KBD_KEY_ALIASES = new Map<string, string>([
  * `mod` key (⌘ on macOS, Ctrl on other platforms) and falls back to
  * KEY_DISPLAY or uppercased key name.
  */
-function getKeyDisplay(key: string, isMac: boolean): string {
+function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
   if (key === 'mod') {
-    return isMac ? '\u2318' : 'Ctrl';
+    return isMac ? '\u2318' : t('@astryx.kbd.key.controlShort');
   }
+  if (key === 'escape') return t('@astryx.kbd.key.escapeShort');
   return KEY_DISPLAY.get(key) ?? key.toUpperCase();
 }
 
@@ -99,25 +100,26 @@ function getKeyDisplay(key: string, isMac: boolean): string {
  * accessible name for the shortcut is built from these words instead.
  */
 const KEY_LABEL = new Map<string, string>([
-  ['ctrl', 'Control'],
-  ['alt', 'Alt'],
-  ['shift', 'Shift'],
-  ['enter', 'Enter'],
-  ['backspace', 'Backspace'],
-  ['escape', 'Escape'],
-  ['tab', 'Tab'],
-  ['up', 'Up arrow'],
-  ['down', 'Down arrow'],
-  ['left', 'Left arrow'],
-  ['right', 'Right arrow'],
-  ['plus', 'Plus'],
+  ['ctrl', '@astryx.kbd.key.control'],
+  ['alt', '@astryx.kbd.key.alt'],
+  ['shift', '@astryx.kbd.key.shift'],
+  ['enter', '@astryx.kbd.key.enter'],
+  ['backspace', '@astryx.kbd.key.backspace'],
+  ['escape', '@astryx.kbd.key.escape'],
+  ['tab', '@astryx.kbd.key.tab'],
+  ['up', '@astryx.kbd.key.up'],
+  ['down', '@astryx.kbd.key.down'],
+  ['left', '@astryx.kbd.key.left'],
+  ['right', '@astryx.kbd.key.right'],
+  ['plus', '@astryx.kbd.key.plus'],
 ]);
 
-function getKeyLabel(key: string, isMac: boolean): string {
+function getKeyLabel(key: string, isMac: boolean, t: TranslatorFn): string {
   if (key === 'mod') {
-    return isMac ? 'Command' : 'Control';
+    return t(isMac ? '@astryx.kbd.key.command' : '@astryx.kbd.key.control');
   }
-  return KEY_LABEL.get(key) ?? key.toUpperCase();
+  const labelKey = KEY_LABEL.get(key);
+  return labelKey ? t(labelKey) : key.toUpperCase();
 }
 
 function subscribeToPlatformChanges(): () => void {
@@ -164,6 +166,7 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
  * ```
  */
 export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
+  const t = useTranslator();
   const isMac = useSyncExternalStore(
     subscribeToPlatformChanges,
     isApplePlatform,
@@ -186,8 +189,12 @@ export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
   // Screen-reader name: the joined spoken labels (e.g. "Command + K"), since
   // the visual glyphs below are announced meaninglessly by assistive tech.
   const accessibleName = parts
-    .map(({key}) => getKeyLabel(key, isMac))
-    .join(' + ');
+    .map(({key}) => getKeyLabel(key, isMac, t))
+    .reduce(
+      (shortcut, key, index) =>
+        index === 0 ? key : t('@astryx.kbd.shortcut', {shortcut, key}),
+      '',
+    );
 
   return (
     <span
@@ -203,7 +210,7 @@ export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
       )}>
       {parts.map(({key, reactKey}) => (
         <kbd key={reactKey} aria-hidden="true" {...stylex.props(styles.kbd)}>
-          {getKeyDisplay(key, isMac)}
+          {getKeyDisplay(key, isMac, t)}
         </kbd>
       ))}
     </span>

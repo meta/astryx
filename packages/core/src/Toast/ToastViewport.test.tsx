@@ -442,6 +442,143 @@ describe('ToastViewport visible limit', () => {
   });
 });
 
+describe('dismissing a toast that has no mounted row', () => {
+  function ShowAndKeepDismiss({
+    options,
+    label,
+    onShown,
+  }: {
+    options: ToastOptions;
+    label: string;
+    onShown: (dismiss: () => void) => void;
+  }) {
+    const toast = useToast();
+    return (
+      <button type="button" onClick={() => onShown(toast(options))}>
+        {label}
+      </button>
+    );
+  }
+
+  it('reports a hidden toast once when it is dismissed twice before the viewport renders again', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    render(
+      <ToastViewport isTopLayer={false} maxVisible={1}>
+        <ShowAndKeepDismiss
+          options={{body: 'Toast A', isAutoHide: false, onHide: onHideA}}
+          label="Show A"
+          onShown={dismiss => {
+            dismissA = dismiss;
+          }}
+        />
+        <ShowToastButton
+          options={{body: 'Toast B', isAutoHide: false}}
+          triggerLabel="Show B"
+        />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show A'));
+      fireEvent.click(screen.getByText('Show B'));
+    });
+    expect(screen.queryByText('Toast A')).toBeNull();
+
+    // Both calls land in one batch, before the list renders without A.
+    act(() => {
+      dismissA?.();
+      dismissA?.();
+    });
+    expect(onHideA).toHaveBeenCalledTimes(1);
+  });
+
+  it('frees the slot of a toast dismissed while it was hidden past maxVisible', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    render(
+      <ToastViewport isTopLayer={false} maxVisible={2}>
+        <ShowAndKeepDismiss
+          options={{body: 'Toast A', isAutoHide: false, onHide: onHideA}}
+          label="Show A"
+          onShown={dismiss => {
+            dismissA = dismiss;
+          }}
+        />
+        <ShowToastButton
+          options={{body: 'Toast B', isAutoHide: false}}
+          triggerLabel="Show B"
+        />
+        <ShowToastButton
+          options={{body: 'Toast C', isAutoHide: false}}
+          triggerLabel="Show C"
+        />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show A'));
+      fireEvent.click(screen.getByText('Show B'));
+      fireEvent.click(screen.getByText('Show C'));
+    });
+    // Only the newest two are shown: A is hidden past the limit.
+    expect(screen.queryByText('Toast A')).toBeNull();
+
+    act(() => {
+      dismissA?.();
+    });
+    expect(onHideA).toHaveBeenCalledTimes(1);
+    expect(onHideA).toHaveBeenCalledWith('manual');
+
+    // C leaves. A was dismissed, so it must not come back to hold the slot
+    // as an empty row: B is the only toast left.
+    const toastC = getToastWrapperByText('Toast C');
+    act(() => {
+      fireEvent.click(
+        within(toastC).getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    act(() => {
+      completeExit(toastC.dataset.toastId ?? '');
+    });
+    expect(document.querySelectorAll('[data-toast-id]')).toHaveLength(1);
+    expect(screen.getByText('Toast B')).toBeInTheDocument();
+
+    // Once B leaves too, nothing is left: no row, no empty landmark.
+    const toastB = getToastWrapperByText('Toast B');
+    act(() => {
+      fireEvent.click(
+        within(toastB).getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    act(() => {
+      completeExit(toastB.dataset.toastId ?? '');
+    });
+    expect(document.querySelectorAll('[data-toast-id]')).toHaveLength(0);
+    expect(screen.queryByRole('region', {name: 'Notifications'})).toBeNull();
+    expect(onHideA).toHaveBeenCalledTimes(1);
+  });
+
+  it('never shows a toast dismissed before it rendered, and reports it once', () => {
+    const onHide = vi.fn();
+    render(
+      <ToastViewport isTopLayer={false}>
+        <ShowAndKeepDismiss
+          options={{body: 'Toast gone', isAutoHide: false, onHide}}
+          label="Show and dismiss"
+          onShown={dismiss => dismiss()}
+        />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show and dismiss'));
+    });
+
+    expect(document.querySelectorAll('[data-toast-id]')).toHaveLength(0);
+    expect(screen.queryByRole('region', {name: 'Notifications'})).toBeNull();
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+});
+
 describe('ToastViewport keyboard reach + focus', () => {
   it('F6 moves focus into the newest toast', () => {
     renderViewport(

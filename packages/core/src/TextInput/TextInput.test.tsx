@@ -315,6 +315,49 @@ describe('TextInput', () => {
       }
     });
 
+    it('names the input by its label and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="billing-heading">Billing</span>
+          <TextInput
+            label="Email"
+            value=""
+            onChange={() => {}}
+            aria-labelledby="billing-heading"
+          />
+        </>,
+      );
+      const input = screen.getByRole('textbox', {name: 'Email Billing'});
+      expect(input.getAttribute('aria-labelledby')?.split(' ')).toContain(
+        'billing-heading',
+      );
+    });
+
+    it('names a grouped input by the group, its label, and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="billing-heading">Billing</span>
+          <InputGroup label="Contact">
+            <TextInput
+              label="Email"
+              value=""
+              onChange={() => {}}
+              aria-labelledby="billing-heading"
+            />
+          </InputGroup>
+        </>,
+      );
+      expect(
+        screen.getByRole('textbox', {name: 'Contact Email Billing'}),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves a standalone input named by its label element without a caller aria-labelledby', () => {
+      render(<TextInput label="Email" value="" onChange={() => {}} />);
+      const input = screen.getByRole('textbox', {name: 'Email'});
+      expect(input).not.toHaveAttribute('aria-labelledby');
+    });
+
     it('does not render status message when not provided', () => {
       render(
         <TextInput

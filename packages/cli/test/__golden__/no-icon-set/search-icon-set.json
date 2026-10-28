@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon set",
-    "matchCount": 367,
+    "matchCount": 369,
     "results": [
       {
         "domain": "doc",
@@ -16,18 +16,6 @@
         "title": "<text>",
         "command": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons use-astryx-icon",
         "parent": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ToolbarTableFilter",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ToolbarTableFilter --type block",
         "mentions": []
       },
       {
@@ -44,6 +32,44 @@
         "mentions": [
           "This lets you swap the icon set (e.g."
         ]
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons icon-variants",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme icon-sizes",
+        "parent": "astryx docs theme --index",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ToolbarTableFilter",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ToolbarTableFilter --type block",
+        "mentions": []
       },
       {
         "domain": "component",
@@ -219,30 +245,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ChatComposerDrawerShowcase --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerWithProgress",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerWithProgress --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerFooterActions",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerFooterActions --type block",
         "mentions": []
       }
     ]

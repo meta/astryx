@@ -206,6 +206,32 @@ they are separately named.
   surface, component, package, theme family, or visual suite MUST join the
   canonical workflow. A repository guard MUST reject independent visual owners
   while preserving legitimate non-visual artifact use.
+- **FR13 — Broad CI on a pull request runs what the change reaches.** On a
+  `pull_request` event whose trusted classification finds no shared
+  infrastructure, broad CI keeps every owner and required context and narrows
+  what those owners run. The Vitest test owner runs the tests whose module graph
+  reaches a changed file, against the merge commit's base parent, plus every test
+  that reads repository sources through the file system, directly or through a
+  module it imports; a computed `import()`, a child process, or a library that
+  reads sources for it (the TypeScript compiler, a bundler) counts as reading
+  sources; and every test that loads a changed workspace package from its build,
+  by the package's name or a path into its `dist/`. The visual and RTL
+  owners audit one affected set of component folders: the changed components
+  and their reverse dependents, the folders of the components, in any package,
+  whose built bundle, `import()` targets included, reaches a changed module.
+  Visual audits each dependent folder that has a stable story, and runs the
+  whole plan when the dependents exceed its focused budget or none has one; RTL
+  audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
+  a readable build the audits run in full. PR accessibility stays scoped to
+  changed components (FR12). Shared infrastructure runs the full suite: root
+  dependency manifests and lockfile, root configuration, a package's manifest,
+  build or test configuration and test setup, `internal/` (the test harness
+  included), `theme-build` paths (tokens and themes), Storybook configuration,
+  `node-tooling` paths (FR8 keeps their whole Node project), and every other
+  `shared-or-unknown` path except Changesets. Every fail-closed
+  condition of FR3–FR4 also runs the full suite. `main`, release branches,
+  merge-group entries and `release-check` dispatches always run the full suite,
+  and release checks keep FR12's full scope.
 
 ### Platform support
 
@@ -226,7 +252,9 @@ itself.
 Implementation begins by preserving those existing singleton surface sets and
 making their ownership model reusable. Existing package, theme/build, and
 Storybook/visual surfaces remain on broad CI until their dedicated owners are
-admitted. The current broad workflow may dispatch surface-owned jobs; their names
+admitted. Within broad CI, a pull request runs what its change reaches (FR13),
+while `main`, merge-group entries and release checks run everything. The current
+broad workflow may dispatch surface-owned jobs; their names
 describe implementation, but they do not receive a specialized route until the
 classifier and join contract are complete. New surfaces may add lanes only through
 FR10. New coverage joins its current surface owner; visual regression remains in
@@ -244,6 +272,7 @@ the shared Storybook PR owner.
 | FR10     | surface-admission and routing contract tests                                | existing surface; proposed surface with and without the full admission contract                          | a new surface adds lanes without its approved paths, commands, ownership, projections, and routing tests                                                                           |
 | FR11     | surface owner, internal-job, and required-join contract tests               | Build package browser behavior; CLI; theme-family broad fallback; mixed Core+CLI                         | a second owner is routed for one surface, an internal job masquerades as a lane, an owned failure misses its join, or an unrelated owner runs                                      |
 | FR12     | Storybook visual-plan, canonical workflow, and repository-owner guard tests | PR scope; full-plan maintenance; report-only publication; deployment/a11y/RTL/vibe artifacts             | another workflow captures or compares pixels, a renamed or aliased owner escapes the guard, or legitimate non-visual artifacts are rejected                                        |
+| FR13     | classifier, workflow contract, component-analysis and RTL-scope tests       | component change; shared module; Changeset beside code; infrastructure path; incomplete list; no build   | an infrastructure path is scoped, a file-system guard test is skipped, a reverse dependent leaves visual/RTL or enters PR accessibility, or a full-suite event is narrowed         |
 
 ## Decision log
 
@@ -340,6 +369,20 @@ The release path retains the complete suite and cannot substitute a scoped resul
 Rejected: a separate workflow, per-push full audits, and treating a maintenance
 capture, skipped check, a checked SHA no longer in current `main` history, or
 retroactive status as release evidence.
+
+### DEC-6 — Pull requests run what the change reaches; full runs stay where landing is decided
+
+**Reference:** `spec:AST-030/DEC-6`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A pull request's Vitest legs and browser audits follow what its change reaches:
+the module graph for tests and built-bundle reach for components. Tests that
+read sources through the file system run whole, because no import reaches what
+they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
+release checks run everything, so no landing or release gate narrows.
+
+Rejected: a full run triggered by approval, a label or a draft-to-ready change,
+which tests the pull request's head rather than the merged result.
 
 ## Open questions
 
