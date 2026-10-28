@@ -4,17 +4,21 @@
  * @file ContextMenuOnFactory.test.tsx
  * @input vitest (jsdom), ContextMenu with createContextMenu watched
  * @output Checks that ContextMenu is built on the public headless context
- *   menu (spec:AST-107 FR8, FR7): it attaches createContextMenu to its own
- *   trigger with a `render` for its rows, and those rows still read the
- *   caller's own contexts
+ *   menu (spec:AST-107 FR8, FR7; component:ContextMenu FR10): it attaches
+ *   createContextMenu to its own trigger, with its items or a `render` for
+ *   its rows, which still read the caller's own contexts; unmounting while
+ *   open removes everything; and its source attaches no request of its own
  * @position Testing for ContextMenu.tsx over createContextMenu.tsx
  */
 
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {act, render, screen} from '@testing-library/react';
 import {createContext, use} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ContextMenu} from './ContextMenu';
 import {DropdownMenuItem as ContextMenuItem} from '../DropdownMenu/DropdownMenuItem';
+import {dataAttr} from '../naming';
 import {createContextMenu} from './createContextMenu';
 
 // The real factory, watched: ContextMenu must go through it.
@@ -117,5 +121,38 @@ describe('ContextMenu on createContextMenu (spec:AST-107 FR8, FR7)', () => {
     expect(
       screen.getByRole('menuitem', {name: 'from the app', hidden: true}),
     ).not.toBeNull();
+  });
+
+  it('unmounting while open removes the menu, its container and the trigger\u2019s request (component:ContextMenu FR10)', () => {
+    const view = render(
+      <ContextMenu items={[{label: 'Rename'}]} data-testid="trigger">
+        <div>Area</div>
+      </ContextMenu>,
+    );
+    const trigger = screen.getByTestId('trigger');
+    rightClick(trigger);
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    view.unmount();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(
+      document.querySelector(`[${dataAttr('context-menu-host')}]`),
+    ).toBeNull();
+    // The trigger's request is gone: the browser keeps its own menu.
+    const request = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+    trigger.dispatchEvent(request);
+    expect(request.defaultPrevented).toBe(false);
+  });
+
+  it('attaches no request and keeps no open state of its own: its source makes no request call (component:ContextMenu FR10)', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'packages/core/src/ContextMenu/ContextMenu.tsx'),
+      'utf8',
+    );
+    expect(source).not.toMatch(
+      /attachContextRequest\(|attachContextMenuRequests\(/,
+    );
   });
 });
