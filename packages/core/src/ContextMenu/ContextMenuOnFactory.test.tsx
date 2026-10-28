@@ -155,4 +155,51 @@ describe('ContextMenu on createContextMenu (spec:AST-107 FR8, FR7)', () => {
       /attachContextRequest\(|attachContextMenuRequests\(/,
     );
   });
+
+  it('unmounting leaves React no root to unmount during its own commit, so it logs no error', () => {
+    const errors = vi.spyOn(console, 'error');
+    try {
+      const view = render(
+        <ContextMenu items={[{label: 'Rename'}]} data-testid="trigger">
+          <div>Area</div>
+        </ContextMenu>,
+      );
+      rightClick(screen.getByTestId('trigger'));
+      expect(document.querySelector('[role="menu"]')).not.toBeNull();
+      view.unmount();
+      const messages = errors.mock.calls.map(call => String(call[0]));
+      expect(
+        messages.filter(message =>
+          message.includes('synchronously unmount a root'),
+        ),
+      ).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('unmounting the whole React root around an open ContextMenu throws nothing afterwards', async () => {
+    const thrown: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      thrown.push(event.error ?? event.message);
+    };
+    window.addEventListener('error', onError);
+    try {
+      const view = render(
+        <ContextMenu items={[{label: 'Rename'}]} data-testid="trigger">
+          <div>Area</div>
+        </ContextMenu>,
+      );
+      rightClick(screen.getByTestId('trigger'));
+      expect(document.querySelector('[role="menu"]')).not.toBeNull();
+      // The test's root goes with everything in its container.
+      view.unmount();
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(thrown).toEqual([]);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
+  });
 });
