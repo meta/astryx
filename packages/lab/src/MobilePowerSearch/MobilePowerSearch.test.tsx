@@ -2632,6 +2632,89 @@ describe('MobilePowerSearch Core parity', () => {
       ).toHaveLength(9);
     });
 
+    it('does not announce "No results found" when Add filter is left after a query that listed suggestions', async () => {
+      setup({config: contentSearchConfig, filters: [openFilter]});
+      openSheet();
+      tapRow('Add filter');
+      const input = within(sheet()).getByRole('searchbox', {name: 'Search'});
+      fireEvent.change(input, {target: {value: 'status'}});
+      expect(
+        within(sheet()).getAllByRole('button', {name: /Status/}).length,
+      ).toBeGreaterThan(0);
+      // Back to Filters: the Add filter sheet's body stays mounted, its
+      // results list emptied by the step change — no empty-result message is
+      // spoken, not on the page and not in the Filters dialog.
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+      expect(
+        within(sheet()).getByRole('heading', {name: 'Filters'}),
+      ).toBeTruthy();
+      await new Promise(resolve => setTimeout(resolve, 40));
+      expect(pageRegionText()).toBe('');
+      expect(
+        sheet().querySelector(
+          ':scope > [data-astryx-modal-live-region="polite"]',
+        )?.textContent ?? '',
+      ).not.toContain('No results found');
+      // Escape out of the flow after another query: nothing on the page.
+      tapRow('Add filter');
+      fireEvent.change(
+        within(sheet()).getByRole('searchbox', {name: 'Search'}),
+        {target: {value: 'status'}},
+      );
+      fireEvent.keyDown(sheet(), {key: 'Escape'});
+      settleSheets();
+      await new Promise(resolve => setTimeout(resolve, 40));
+      expect(pageRegionText()).toBe('');
+    });
+
+    it('announces the unavailable state only while its step is open, and again when the same stale filter reopens', async () => {
+      const stale: PowerSearchConfig = {
+        ...config,
+        fields: config.fields.map(f =>
+          f.key === 'status'
+            ? {...f, operators: f.operators.filter(o => o.key !== 'is')}
+            : f,
+        ),
+      };
+      const {rerender} = setup({filters: [openFilter, authorFilter]});
+      openEditFlow('Status is Open');
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+      expect(
+        within(sheet()).getByRole('heading', {name: 'Filters'}),
+      ).toBeTruthy();
+      // The value step is closed but its body stays mounted with the draft; a
+      // config update that drops the edited operator must not be spoken — not
+      // now, and not held for the next dialog that opens.
+      rerender(
+        <MobilePowerSearch
+          config={stale}
+          filters={[openFilter, authorFilter]}
+          onChange={vi.fn()}
+        />,
+      );
+      await new Promise(resolve => setTimeout(resolve, 40));
+      expect(pageRegionText()).toBe('');
+      // Opening another filter's step: words held for the closed step would
+      // surface in the value step's dialog here.
+      tapRow('Author is Ada');
+      await new Promise(resolve => setTimeout(resolve, 40));
+      for (const region of document.querySelectorAll('[aria-live]')) {
+        expect(region.textContent ?? '').not.toContain(
+          'This filter is no longer available',
+        );
+      }
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+      // Reopening the stale filter — its row now reads the field's label and
+      // the raw operator key — speaks it, in its own dialog, as a new
+      // occasion even though the filter is the same.
+      tapRow('Status is');
+      await waitFor(() =>
+        expect(sheetRegion().textContent).toBe(
+          'This filter is no longer available',
+        ),
+      );
+    });
+
     it('shows no "no match" message for a config with no field', () => {
       setup({config: {name: 'Empty', fields: []}});
       openSheet();

@@ -30,7 +30,7 @@ export const docs = {
       {guidance: false, description: 'Do not ship stable product on this Lab API; it has no theming or spec contract yet.'},
     ],
     anatomy: [
-      {name: 'Trigger field', required: true, description: 'Button showing tokens as a summary.'},
+      {name: 'Trigger field', required: true, description: 'Button showing tokens as a summary, in the inline Tokenizer field\'s own box: same border, radius, surface, block size and token inset as the desktop field.'},
       {name: 'Management sheet', required: true, description: 'One searchable list with trailing checkboxes for existing items, a trailing Add action for custom text, and equal-width Clear all and Done footer actions when unfiltered. Clear all requires confirmation and stays focusable with its reason when nothing is selected; the footer is hidden while searching. Nothing of the sheet is in the page while it is closed.'},
     ],
   },

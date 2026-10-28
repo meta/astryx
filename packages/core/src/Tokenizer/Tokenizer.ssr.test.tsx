@@ -115,7 +115,9 @@ async function hydrateFreshTokenizer(
   }
 
   stubCoarsePointer(isCoarsePointer);
-  vi.spyOn(console, 'error').mockImplementation(() => {});
+  // Watched, not muted: React reports some mismatches (an attribute whose
+  // server value differs from the client's, for one) only on the console.
+  const logged = vi.spyOn(console, 'error');
   const recoverableErrors: unknown[] = [];
   let root!: ReturnType<typeof hydrateRoot>;
   await act(async () => {
@@ -143,7 +145,9 @@ async function hydrateFreshTokenizer(
     root.unmount();
   });
   container.remove();
-  return result;
+  const consoleErrors = [...logged.mock.calls];
+  logged.mockRestore();
+  return {...result, consoleErrors};
 }
 
 describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', () => {
@@ -155,6 +159,7 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
     // Hydration matches that markup, then the first client render after it
     // resolves `bottom-sheet` and renders the trigger in the field's place.
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.trigger).not.toBeNull();
     expect(result.combobox).toBeNull();
     // Nothing was focused before interaction, and the swap moves no focus.
@@ -171,6 +176,7 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
     });
     expect(result.html).toContain('autofocus=""');
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.trigger).not.toBeNull();
     expect(result.combobox).toBeNull();
     // The same element and visit: the trigger holds the focus the input had.
@@ -182,6 +188,7 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
   it('keeps the inline combobox after hydration on a fine-pointer client', async () => {
     const result = await serverRenderThenHydrate(false);
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.combobox).not.toBeNull();
     expect(result.trigger).toBeNull();
     expect(result.activeElement).toBe(document.body);

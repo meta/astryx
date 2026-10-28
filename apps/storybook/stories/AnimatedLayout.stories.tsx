@@ -267,3 +267,47 @@ export const BeforeAndAfter: Story = {
     </div>
   ),
 };
+
+/**
+ * Content before the change moves too when the layout centers it: in a
+ * vertically centered column, opening the Collapsible moves the card above it
+ * up as much as the card below it moves down.
+ */
+function CenteredDemo() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  return (
+    <div style={{maxWidth: 520}}>
+      <ScrollableArea ref={containerRef} height={420} label="Centered column">
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            minHeight: 400,
+            padding: 12,
+            boxSizing: 'border-box',
+          }}>
+          <div style={plain}>Before the change (moves up)</div>
+          <div style={card}>
+            <Collapsible
+              trigger="Shipping details"
+              defaultIsOpen={false}
+              animatedLayout={animatedLayout}>
+              <p style={{margin: '4px 0'}}>Ships in 2 business days.</p>
+              <p style={{margin: '4px 0'}}>Free returns for 30 days.</p>
+              <p style={{margin: '4px 0'}}>Tracking arrives by email.</p>
+            </Collapsible>
+          </div>
+          <div style={plain}>After the change (moves down)</div>
+        </div>
+      </ScrollableArea>
+    </div>
+  );
+}
+
+/** A centered column: the content before the change glides too. */
+export const CenteredColumn: Story = {
+  name: 'Centered column',
+  render: () => <CenteredDemo />,
+};

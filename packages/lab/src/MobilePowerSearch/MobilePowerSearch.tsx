@@ -503,15 +503,27 @@ function SheetEmptyMessage({
   id,
   message,
   occasion,
+  isShown,
 }: {
   id?: string;
   message: string;
   occasion: string;
+  /**
+   * Whether the message's step is the open one. A closed sheet keeps its body
+   * mounted, so the message can exist — and its occasion change — while no
+   * one is in the sheet: nothing is spoken then, and the occasion is
+   * forgotten so the same one is spoken again when the step reopens on it.
+   */
+  isShown: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const announce = useAnnounce();
   const spokenOccasionRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!isShown) {
+      spokenOccasionRef.current = null;
+      return;
+    }
     if (spokenOccasionRef.current === occasion) {
       return;
     }
@@ -520,7 +532,7 @@ function SheetEmptyMessage({
     if (text) {
       announce(text);
     }
-  }, [announce, occasion]);
+  }, [announce, isShown, occasion]);
   return (
     <div ref={ref} id={id} {...stylex.props(styles.empty)}>
       <Text type="supporting" color="secondary">
@@ -1994,6 +2006,7 @@ export function MobilePowerSearch({
                   id={contentResultsId}
                   message="No results found"
                   occasion={contentQuery}
+                  isShown={step === 'fields'}
                 />
               ) : (
                 // An empty query with no bootstrap suggestion: the results
@@ -2008,6 +2021,7 @@ export function MobilePowerSearch({
                 <SheetEmptyMessage
                   message="No filters match your search"
                   occasion={fieldQuery}
+                  isShown={step === 'fields'}
                 />
               )
             ) : (
@@ -2144,6 +2158,7 @@ export function MobilePowerSearch({
                     <SheetEmptyMessage
                       message="This filter is no longer available"
                       occasion={`${draft.field}-${draft.operator ?? ''}`}
+                      isShown={step === 'value'}
                     />
                   )
                 )}

@@ -17,7 +17,12 @@ import {
 import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {
+  colorVars,
+  sizeVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
+import {inputWrapperStyles} from '@astryxdesign/core/Field';
 import {MobileTokenizer, type MobileTokenizerChange} from './MobileTokenizer';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 
@@ -479,7 +484,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     const forced = stylex.create({
       trigger: {
         borderColor: {
-          default: colorVars['--color-border'],
+          default: colorVars['--color-border-emphasized'],
           '@media (forced-colors: active)': 'GrayText',
         },
         color: {default: null, '@media (forced-colors: active)': 'GrayText'},
@@ -679,6 +684,45 @@ describe('MobileTokenizer Core-sheet parity', () => {
     }
   });
 
+  it("draws the closed trigger as the inline Tokenizer field's box: the shared input wrapper (1px emphasized border, element radius, surface), the md block size, the 3px token-row inset and gap — no 44px touch height (FR16)", () => {
+    const atoms = (className: string | undefined) =>
+      (className ?? '')
+        .split(' ')
+        .filter(name => name !== '' && !name.includes('__'));
+    const inset = `calc(${spacingVars['--spacing-1']} - 1px)`;
+    const own = stylex.create({
+      box: {
+        minHeight: sizeVars['--size-element-md'],
+        paddingBlock: inset,
+        paddingInline: inset,
+        gap: spacingVars['--spacing-1'],
+        rowGap: inset,
+        flexWrap: 'wrap',
+      },
+      touch: {minHeight: 44},
+    });
+    render(
+      <MobileTokenizer
+        label="Tags"
+        searchSource={source}
+        value={[ITEMS[0], ITEMS[1]]}
+        onChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Tags'});
+    // The very classes Core's inline field and sheet trigger compose: the
+    // shared box with the field's own wrap, inset and size on top (later
+    // wins per property, as in the component).
+    for (const name of atoms(
+      stylex.props(inputWrapperStyles.base, own.box).className,
+    )) {
+      expect(trigger).toHaveClass(name);
+    }
+    for (const name of atoms(stylex.props(own.touch).className)) {
+      expect(trigger).not.toHaveClass(name);
+    }
+  });
+
   it('paints the trigger on the input surface, so a status band behind it does not show through the tokens', () => {
     const atoms = (style: stylex.StyleXStyles) =>
       stylex
@@ -762,6 +806,51 @@ describe('MobileTokenizer Core-sheet parity', () => {
     // Leaving the field reports the blur once.
     act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
     expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the sheet's focus hand-back as the entry when the trigger never had focus (a tap that opens without focusing, as Safari does), so the caller never gets a blur without its focus", async () => {
+    presentModally();
+    const events: string[] = [];
+    render(
+      <>
+        <button type="button">Elsewhere</button>
+        <MobileTokenizer
+          label="Tags"
+          onFocus={() => events.push('focus')}
+          onBlur={() => events.push('blur')}
+          searchSource={source}
+          value={[ITEMS[0]]}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Tags'});
+    // A click with no focus first: the sheet opens, nothing reported yet.
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog');
+    await screen.findByRole('checkbox', {name: 'Design'});
+    expect(trigger).not.toHaveFocus();
+    expect(events).toEqual([]);
+    // Done: BottomSheet hands focus to the trigger. The trigger never had
+    // focus, so this is the entry.
+    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    act(() => trigger.focus());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(events).toEqual(['focus']);
+    // Leaving the field reports the blur, after its focus.
+    act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+    expect(events).toEqual(['focus', 'blur']);
+    // A second round from a focused trigger: entry on focus, quiet on the
+    // hand-back, blur on leaving — one pair again.
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    act(() => trigger.focus());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+    expect(events).toEqual(['focus', 'blur', 'focus', 'blur']);
   });
 
   it('forwards the base props — id, data-*, aria-*, handlers — to the trigger button, not the field root', () => {

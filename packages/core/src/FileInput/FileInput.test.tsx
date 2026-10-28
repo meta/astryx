@@ -728,6 +728,30 @@ describe('FileInput', () => {
       expect(handleChange).toHaveBeenCalledWith(null);
     });
 
+    it('returns focus to the trigger, not the aria-hidden native input, after a keyboard clear', () => {
+      const file = createFile('test.txt', 100);
+      render(<FileInput label="Upload" value={file} onChange={() => {}} />);
+      fireEvent.click(screen.getByRole('button', {name: 'Clear Upload'}), {
+        detail: 0,
+      });
+      expect(screen.getByRole('button', {name: /^Upload/})).toHaveFocus();
+    });
+
+    it('returns focus to the trigger, not the aria-hidden native input, after a pointer clear', async () => {
+      const raf = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation(cb => {
+          cb(0);
+          return 0;
+        });
+      const user = userEvent.setup();
+      const file = createFile('test.txt', 100);
+      render(<FileInput label="Upload" value={file} onChange={() => {}} />);
+      await user.click(screen.getByRole('button', {name: 'Clear Upload'}));
+      expect(screen.getByRole('button', {name: /^Upload/})).toHaveFocus();
+      raf.mockRestore();
+    });
+
     it('calls onChange and changeAction with null when clear is clicked', async () => {
       const user = userEvent.setup();
       const order: string[] = [];

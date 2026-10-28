@@ -174,13 +174,31 @@ those contracts.
   through the shared rectangle morph (`architecture:layer-runtime` INV15;
   `spec:AST-094` FR5) once Core has that morph; until then, the module plays
   its own compositor translate. It never animates height. Its walk visits only
-  the following element siblings at each ancestor level up to the area, through
-  `parentElement` and `nextElementSibling`, descending only into an element
-  with `display: contents`, so its cost grows with depth plus following
-  siblings. Changes in one area in the same frame are measured together. A
+  the changed element's ancestors up to the area and the element siblings on
+  either side at each of their levels, through `parentElement`,
+  `nextElementSibling` and `previousElementSibling`, descending only into an
+  element with `display: contents`, and each level's walk stops at the first
+  sibling outside the band the changes in a frame can bring into view (the
+  area's visible part plus one viewport, or the changed elements' summed size
+  if larger, above and below), so its cost grows with depth plus the
+  siblings near the visible part, never with the length of a list. Where the
+  scroll container opts out of scroll anchoring, a change above the band
+  walks forward to the band; that cost grows with the distance. In a
+  container whose children run across the block direction (multi-column, a
+  wrapping column flex box, or a column-flow grid), the walk runs through
+  that level, a cost that grows with its children. Changes in
+  one area in the same frame are measured together. A
   component reports a change through an internal, non-exported function that
   takes the `useAnimatedLayout` handle, so the handle stays member-free, and
-  each moving element is one the page already renders
+  each moving element is one the page already renders, except a swap's one
+  transient copy of the old content (`spec:AST-105` FR8). Two Core components hold their own handle
+  for their own change: AppShell's content area and the SideNav rail, during a
+  side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
+  FR6), each making its copy through the swap. The module may also play
+  caller-supplied frames on elements the page already renders, on the one
+  shared motion, with no copy, releasing them when the motion ends; AppShell's
+  content surface uses this to cover an expand's gap when its old wrap is not
+  copied. Neither is public
   (`architecture:component-style-authoring` INV7). The module follows INV3
   and INV5.
 - **INV13 — One shared set of internal touch modules.** Core's touch
@@ -386,6 +404,6 @@ component suite is not blanket conformance with every invariant.
 | INV9             | Provider/external-store identity and render-count tests                                                                                                                               | Unchanged semantic payload changes identity, or snapshot identity creates a render loop                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV10            | Shared test over every adopter of the announcement module                                                                                                                             | An adopter holding its own Effect, observer, timer, or listener for its own-content announcement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV11            | Source boundary check plus hook tests across StrictMode replay and unmount                                                                                                            | A second keyboard listener or measurement in Core; a consumer reading a CSS custom property on the root or a shared ancestor for the height; an export of the hook; a component outside Core measuring by a rule other than AST-099 FR2, or riding the keyboard; a listener left after unmount; a Core rider driven by JavaScript per frame or by its own transition; or more than one layout read per keyboard change                                                                                                                                                                                                                                                                                        |
-| INV12            | Source boundary check plus real-browser tests on a throttled phone profile over a 10-level by 50-sibling tree and two changes in one frame                                            | A per-frame height or layout, a walk past the area or into a subtree other than `display: contents`, an element moved twice for one frame, an added element, or an exported reporting function fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| INV12            | Source boundary check plus real-browser tests on a throttled phone profile over a 10-level by 50-sibling tree and two changes in one frame                                            | A per-frame height or layout, a walk past the area or into a subtree other than `display: contents`, an element moved twice for one frame, an added element other than a swap's one transient copy, that copy left after the swap ends, or an exported reporting function fails                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV13            | Source boundary check plus bundle analysis of a page with several touch components, and real-browser tests on a throttled phone profile, under a fine pointer, and on a hybrid device | A second copy of a touch module on one page, a component bundling its own copy of a module's primitive, an `import()` of a module in a component, a public export or doc entry for the modules, an install call or installed check in the public API, a gesture listener in a component that uses no gesture, or an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, an import of `@astryxdesign/core/internal/*` outside Core and Lab, a class outside the recognizer family, an `instanceof` check on a recognizer, an internal factory with a public factory's name, or a direct module import for a job the public layer covers fails |
 | INV15            | Unit tests of the animator's value mode and real-browser proofs of its adopters                                                                                                       | A value off its motion role, a count past the component's swap size, a count or cross-fade under reduced motion with a coarse or a fine pointer, an intermediate value announced, or a public export fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

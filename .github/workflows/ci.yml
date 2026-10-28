@@ -826,8 +826,12 @@ jobs:
           echo "Change scope could not be classified; refusing to skip required work."
           exit 1
 
+      # The PR head (or the queued merge), not a PR merge commit, so the
+      # helper measures the PR's own diff (see interaction-scope).
       - uses: actions/checkout@v7
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       # The helper comes from the base, since an older head lacks it. Exit 1
       # means out of scope; 0 in scope; 2 unknown, so the Swift work runs.
@@ -1861,8 +1865,13 @@ jobs:
           echo "Change scope could not be classified; refusing to skip required work."
           exit 1
 
+      # The PR head, not the merge commit: the helper diffs HEAD against its
+      # merge base with the PR's base, and a merge commit would count main's
+      # own changes since that base as the PR's.
       - uses: actions/checkout@v7
         if: github.event_name == 'pull_request' && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       # The helper comes from the base, since an older head lacks it. Exit 1
       # means out of scope; 0 in scope; 2 unknown, so the proofs run.
@@ -2452,11 +2461,22 @@ jobs:
       - name: Install Playwright
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
+      # The D7 native-size regression test lives on the PR head. A head cut
+      # before it has no native-size enforcement for the test to check (its
+      # audit still checks D7's centering and hit-testing), so the step says
+      # so and passes; a head that has the file always runs it, and a failure
+      # fails. ci-rtl-d7.test.mjs keeps the path pointing at a real file.
       - name: Verify D7 native target regression
         if: matrix.package == 'core' && matrix.part == 1
         env:
           ASTRYX_RTL_BROWSER: '1'
-        run: pnpm exec vitest run --project node .github/scripts/rtl-audit-coarse-hit.browser.test.mjs --maxWorkers=1
+        run: |
+          D7_TEST=.github/scripts/rtl-audit-coarse-hit.browser.test.mjs
+          if [ ! -f "$D7_TEST" ]; then
+            echo '::notice title=D7 regression skipped::skipped: head predates D7 native-size enforcement; its D7 results cover centering and hit-testing only'
+            exit 0
+          fi
+          pnpm exec vitest run --project node "$D7_TEST" --maxWorkers=1
 
       # A registry/classifier mutation runs the full audit from the PR checkout,
       # while eligibility itself came from trusted base policy. Scope resolution

@@ -38,6 +38,7 @@ import {
   useEffect,
   useId,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -50,7 +51,7 @@ import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
-import {Field} from '@astryxdesign/core/Field';
+import {Field, inputWrapperStyles} from '@astryxdesign/core/Field';
 import {useAnnounce, useMergedRefs} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -120,25 +121,37 @@ const CREATABLE_ID_PREFIX = '__xds_create__';
 const LIST_RENDER_BATCH_SIZE = 50;
 const LIST_LOAD_MORE_THRESHOLD_PX = 200;
 
+// The inline Tokenizer's token-row inset: a token's corners (radius-1) sit
+// concentric with the field's (radius-2) when inset = radius-2 − radius-1 −
+// border = 3px. The same number is the row gap, so wrapped rows read evenly.
+const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
+
 const styles = stylex.create({
+  // The closed trigger is the inline Tokenizer field's own control box, as a
+  // button — the same `inputWrapperStyles.base` box Core's sheet trigger
+  // composes (`component:Tokenizer` FR16: same width, border, radius,
+  // surface and `size` block size, minus only the inline input's own row),
+  // so before the sheet opens the field looks the same as the desktop field.
+  // The 44px thumb targets belong to the sheet's rows, not to the closed
+  // field. These rules are the inline field's own on top of the shared box:
+  // tokens wrap, the row inset and gap keep token and field corners
+  // concentric, the block size is the `md` step, and the cursor says "press"
+  // since there is no input to type into.
   trigger: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-1'],
     width: '100%',
-    minHeight: 44,
-    paddingBlock: spacingVars['--spacing-1'],
-    paddingInline: spacingVars['--spacing-2'],
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: colorVars['--color-border'],
-    borderRadius: radiusVars['--radius-element'],
-    // The input surface, as Core's sheet trigger has from the shared input
-    // wrapper: Field's attached status band sits behind the control, and a
-    // transparent trigger would show it through the tokens.
-    backgroundColor: colorVars['--color-background-surface'],
+    flexWrap: 'wrap',
+    gap: spacingVars['--spacing-1'],
+    // Row gap matches the block inset so wrapped rows look evenly spaced.
+    rowGap: TOKEN_ROW_INSET,
+    minHeight: sizeVars['--size-element-md'],
+    height: 'auto',
+    paddingBlock: TOKEN_ROW_INSET,
+    paddingInline: TOKEN_ROW_INSET,
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    color: 'inherit',
     textAlign: 'start',
+    appearance: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -149,7 +162,7 @@ const styles = stylex.create({
   // base values, since StyleX merges per property.
   triggerDisabled: {
     borderColor: {
-      default: colorVars['--color-border'],
+      default: colorVars['--color-border-emphasized'],
       '@media (forced-colors: active)': 'GrayText',
     },
     color: {
@@ -159,6 +172,8 @@ const styles = stylex.create({
   },
   triggerPlaceholder: {
     color: colorVars['--color-text-secondary'],
+    // The input's text inset, so the placeholder sits where typed text would.
+    paddingInline: spacingVars['--spacing-1'],
   },
   triggerPlaceholderDisabled: {
     color: {
@@ -327,6 +342,12 @@ export function MobileTokenizer<T extends SearchableItem>({
   const tokenElementId = (itemId: string) =>
     `${countId}-${encodeURIComponent(itemId)}`;
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // Whether the caller has been told focus entered the field and not yet
+  // that it left: the sheet's focus hand-back is reported as the entry when
+  // the trigger never had focus (a tap or click that opened the sheet without
+  // focusing the trigger, as Safari does), so a caller never sees a blur
+  // without its focus.
+  const hasReportedFocusRef = useRef(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // The sheet stays mounted after it closes until BottomSheet has run its
   // exit and handed focus back to the trigger; at rest nothing of the sheet
@@ -497,12 +518,20 @@ export function MobileTokenizer<T extends SearchableItem>({
           // that focus is the signal that the retained sheet can leave. The
           // field's own sheet is part of the field, so focus coming back from
           // it is not focus entering from outside: the caller's onFocus stays
-          // quiet for it.
+          // quiet for it — unless the trigger never had focus (a tap that
+          // opened the sheet without focusing it, as Safari does), in which
+          // case the hand-back is the entry, and the caller hears it before
+          // any blur.
           const isReturningFromSheet = !isSheetOpen && isSheetPresented;
           if (isReturningFromSheet) {
             setIsSheetPresented(false);
+          }
+          const isInsideTheField =
+            isReturningFromSheet && hasReportedFocusRef.current;
+          if (isInsideTheField) {
             return;
           }
+          hasReportedFocusRef.current = true;
           (
             callerOnFocus as unknown as
               React.FocusEventHandler<HTMLButtonElement> | undefined
@@ -514,13 +543,19 @@ export function MobileTokenizer<T extends SearchableItem>({
           if (isSheetOpen) {
             return;
           }
+          hasReportedFocusRef.current = false;
           (
             callerOnBlur as unknown as
               React.FocusEventHandler<HTMLButtonElement> | undefined
           )?.(event);
         }}
         {...mergeProps(
-          stylex.props(styles.trigger, isDisabled && styles.triggerDisabled),
+          stylex.props(
+            inputWrapperStyles.base,
+            styles.trigger,
+            isDisabled && inputWrapperStyles.disabled,
+            isDisabled && styles.triggerDisabled,
+          ),
           className,
           style,
         )}>
@@ -724,12 +759,26 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
   // The source is read through a ref at request time, so a caller that
   // rebuilds the source object in render causes no new request on an
   // unrelated render (a row toggle); the sheet asks the source only on open,
-  // on a query change, and on clearing (FR20).
+  // on a query change, and on clearing (FR20). The ref is updated in a layout
+  // effect, before any request this commit makes. (React's own
+  // useLayoutEffect: this content renders only inside an open sheet, after a
+  // press, so it never runs on the server.)
   const searchSourceRef = useRef(searchSource);
-  useEffect(() => {
+  useLayoutEffect(() => {
     searchSourceRef.current = searchSource;
   }, [searchSource]);
-  useEffect(() => {
+  // Synchronizes the row list with the caller's `searchSource`, an external
+  // system this component does not own: it asks the source for the bootstrap
+  // set or the query's results and copies the answer into state. The
+  // bootstrap set is requested at once — on open and when the query clears —
+  // and a typed query waits `debounceMs`. A layout effect, as Core's sheet
+  // runs it, so a source that answers synchronously settles before the
+  // browser paints the open commit and the Loading row never reaches the
+  // screen. Cleanup clears the debounce timer so a superseded query never
+  // fetches, and the sequence guard drops a response that lands after a
+  // newer request, so the list never shows stale results
+  // (`architecture:react-component-runtime` INV3).
+  useLayoutEffect(() => {
     if (!isOpen) {
       return;
     }

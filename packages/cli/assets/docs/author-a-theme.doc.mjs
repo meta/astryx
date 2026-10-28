@@ -55,6 +55,7 @@ export const docs = {
           ['tokens', 'Base tokens are copied first, then child tokens override on top.'],
           ['components', 'Deep-merged: child component rules override matching keys from the base.'],
           ['icons', 'Shallow-merged: child icons override matching names from the base.'],
+          ['iconVariants', 'Replaced, never merged: a child that sets iconVariants replaces the base list; a child that omits it inherits the list.'],
           ['indicators', 'Shallow-merged: child indicators override matching names from the base.'],
           ['onDark, onLight', "Deep-merged per surface: the base's resolved surface first, then the child's overrides."],
           ['motion', "Field by field: the child's `fast`, `medium` and `ratio` regenerate the fast and medium duration tokens; `slow` and `easing` left unset keep the base theme's tokens, so an inherited slow band stays at the base's ratio."],
@@ -135,6 +136,8 @@ export const docs = {
         {type: 'prose', text: 'In the example above, the generated theme imports `./icons.mjs` from `dist`. If the second command is skipped, `theme build` can still succeed, but loading or bundling the generated module fails because `dist/icons.mjs` is missing. `--icons-specifier` changes the emitted import; it does not create or verify the target file. Match the specifier to a module that resolves from the generated JS file.'},
         {type: 'prose', text: 'Without `--icons-specifier`, the detected source import specifier is emitted unchanged. In the default flow without `--out`, a bundler can resolve an extensionless `./icons` to the neighboring `icons.tsx` source, but Node ESM does not perform that lookup and reports `ERR_MODULE_NOT_FOUND`. Moving the output with `--out` also changes where relative imports resolve from.'},
         {type: 'prose', text: 'Keep `react` and the icon library external so the registry does not bundle its own copies of those dependencies.'},
+        {type: 'prose', text: "A registry entry can be a function of `{size, variant}`. The built theme keeps the function, so `Icon` asks it for the size and variant it renders, as the runtime theme does, including for entries inherited from a built or package theme. The built theme's `icons` field and the registry its module re-exports are React nodes, with each function read at size `md`. A function written in the theme file itself cannot be carried, so the build fails; move it into the registry module."},
+        {type: 'prose', text: "A theme that lists `iconVariants` also writes an `IconVariantMap` augmentation into `<theme>.variants.d.ts`, so `Icon`'s `variant` accepts those names wherever the theme's types load. Its declaration carries the list too, so a theme that extends the built theme types `variant` in its icon entries by that list."},
       ],
     },
     {

@@ -1,13 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   Table,
   useTableRowExpansion,
+  useTableStickyColumns,
   pixel,
   proportional,
 } from '@astryxdesign/core/Table';
+import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 import type {TableColumn} from '@astryxdesign/core/Table';
 import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral';
@@ -202,6 +204,129 @@ export const NotAllRowsExpandable: Story = {
         hasHover
         plugins={{expansion}}
       />
+    );
+  },
+};
+
+const manyOrders: Order[] = Array.from({length: 2000}, (_, index) => ({
+  ...orders[index % orders.length],
+  id: `ord-${String(index + 1).padStart(4, '0')}`,
+}));
+const sevenOrders = manyOrders.slice(0, 7);
+
+/**
+ * With an `animatedLayout` handle, opening or closing a row's panel glides the
+ * rows after it instead of jumping them, the panel plays in on the same
+ * motion, and each row's divider moves with its row. The Customer column is
+ * pinned and the table scrolls horizontally, so the pinned cells' own
+ * dividers move too. Under Reduce Motion, and with column lines (the
+ * `dividers` control at "columns" or "grid"), the rows change at once. The
+ * `themed` control sets a blue theme border and an app's red border on the
+ * tbody's third row; `rowBorder` sets an app's 3 px green border on the
+ * fourth order's row itself (`tr`), which glides with the row too; `edgeBorder`
+ * sets one on the tbody's bottom (`tbody`) or as the top of the fifth order's
+ * cells (`top`), each of which wins the collapse and glides with its row;
+ * `wideBorder` sets a theme's 2 px green divider on every row.
+ */
+export const GlidingRows: StoryObj<{
+  themed?: boolean;
+  rowBorder?: boolean;
+  wideBorder?: boolean;
+  edgeBorder?: 'none' | 'tbody' | 'top';
+  dividers?: 'rows' | 'columns' | 'grid';
+}> = {
+  args: {
+    themed: false,
+    rowBorder: false,
+    wideBorder: false,
+    edgeBorder: 'none',
+    dividers: 'rows',
+  },
+  render: ({themed, rowBorder, wideBorder, edgeBorder, dividers}) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const animatedLayout = useAnimatedLayout({containerRef});
+    const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+      () => new Set(),
+    );
+    const expansion = useTableRowExpansion<Order>({
+      expandedKeys,
+      onToggle: key => setExpandedKeys(prev => toggleKey(prev, key)),
+      getRowKey: item => item.id,
+      renderExpanded: item => <OrderItems order={item} />,
+      animatedLayout,
+    });
+    const sticky = useTableStickyColumns<Order>({startKeys: ['customer']});
+    const wideColumns = useMemo(
+      () => columns.map(column => ({...column, width: pixel(220)})),
+      [],
+    );
+    const style: React.CSSProperties & Record<string, string | number> = {
+      maxWidth: 640,
+      ...(themed === true ? {'--color-border': 'rgb(37, 99, 235)'} : {}),
+      ...(wideBorder === true
+        ? {'--color-border': 'rgb(22, 163, 74)', '--border-width': '2px'}
+        : {}),
+    };
+    return (
+      <div ref={containerRef} data-testid="gliding-rows" style={style}>
+        {themed && (
+          <style>{`[data-testid="gliding-rows"] tbody tr:nth-child(3) td { border-bottom-color: rgb(220, 38, 38); }`}</style>
+        )}
+        {rowBorder && (
+          <style>{`[data-testid="gliding-rows"] tr[data-expansion-key="${sevenOrders[3].id}"] { border-bottom: 3px solid rgb(22, 163, 74); }`}</style>
+        )}
+        {edgeBorder === 'tbody' && (
+          <style>{`[data-testid="gliding-rows"] tbody { border-bottom: 3px solid rgb(22, 163, 74); }`}</style>
+        )}
+        {edgeBorder === 'top' && (
+          <style>{`[data-testid="gliding-rows"] tr[data-expansion-key="${sevenOrders[4].id}"] td { border-top: 3px solid rgb(22, 163, 74); }`}</style>
+        )}
+        <Table
+          data={sevenOrders}
+          columns={wideColumns}
+          dividers={dividers}
+          idKey="id"
+          hasHover
+          plugins={{expansion, sticky}}
+        />
+        <p>Content after the table glides too.</p>
+      </div>
+    );
+  },
+};
+
+/**
+ * A long table (2,000 rows, not virtualized) with an `animatedLayout`
+ * handle: a glide moves only the rows near the visible part, so opening a
+ * panel costs the same as in a short table.
+ */
+export const GlidingRowsLongTable: StoryObj<{glide?: boolean}> = {
+  args: {glide: true},
+  render: ({glide}) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const animatedLayout = useAnimatedLayout({containerRef});
+    const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
+      () => new Set(),
+    );
+    const expansion = useTableRowExpansion<Order>({
+      expandedKeys,
+      onToggle: key => setExpandedKeys(prev => toggleKey(prev, key)),
+      getRowKey: item => item.id,
+      renderExpanded: item => <OrderItems order={item} />,
+      animatedLayout: glide === false ? undefined : animatedLayout,
+    });
+    return (
+      <div
+        ref={containerRef}
+        data-testid="gliding-rows-long"
+        style={{maxWidth: 720, height: 520, overflow: 'auto'}}>
+        <Table
+          data={manyOrders}
+          columns={columns}
+          idKey="id"
+          plugins={{expansion}}
+        />
+      </div>
     );
   },
 };

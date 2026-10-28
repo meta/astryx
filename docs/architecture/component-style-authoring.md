@@ -137,7 +137,9 @@ not evidence of conformance or violation.
   only second copy is one transient copy during an exit, a presentation
   switch, a lift from the trigger (`architecture:layer-runtime` INV15), or a
   handoff between sheets, such as the cross-fade
-  `design:reduced-motion` DR2 requires, or one moving preview while a
+  `design:reduced-motion` DR2 requires; AppShell's old content wrap during a
+  side nav collapse or expand (`component:AppShell` FR17); the SideNav rail's
+  old state during a collapse or expand (`component:SideNav` FR6); or one moving preview while a
   reorderable item is dragged (`design:ordered-collection-reordering`); it is
   made by one Core mechanism for its kind, rather than by each component, and is removed within 1
   second of the transition ending. Until that shared mechanism exists, a

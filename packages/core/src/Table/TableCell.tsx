@@ -38,6 +38,7 @@ import {
   mergeXStyle,
 } from './useTableCellStyles';
 import {mergeProps} from '../utils';
+import {glidingDividerStyles} from './glidingDivider';
 import {themeProps} from '../utils/themeProps';
 
 /** Props for TableCell — thin `<td>` wrapper */
@@ -234,6 +235,8 @@ export function TableCell({
           dividerColumnStyles.cell,
         ),
         ...(hasContextMenu ? [contextMenuCellStyles.cell] : []),
+        // While a glide moves the row, its divider moves with it.
+        glidingDividerStyles.cell,
       ]
     : [];
 
