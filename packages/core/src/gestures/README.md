@@ -174,7 +174,9 @@ assistive-technology activation keep working.
   the release takes the list's deselect clock.
 
 `paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})`, in
-`utils/pressFeedback.ts`, is the one writer of `data-astryx-press`. It owns the release timer and writes
+`utils/pressFeedback.ts`, writes `data-astryx-press` for every press it tracks;
+the action-group tracker (`hooks/actionGroupTracker.ts`) writes its groups'
+presses itself. `paintPress` owns the release timer and writes
 only over values the caller may replace (by default none, `on` and
 `fading`), so a `held` row survives presses until its owner releases it
 with `onlyFrom: ['held']`.
