@@ -4,7 +4,7 @@
 
 /**
  * @file FileInput.tsx
- * @input Uses React, useId, Field, Icon, Spinner, VisuallyHidden
+ * @input Uses React, useId, Field, Icon, Spinner, VisuallyHidden, provider-bound translator
  * @output Exports FileInput component, public types, and its root/icon theme targets
  * @position Core implementation; consumed by index.ts, tested by FileInput.test.tsx
  *
@@ -68,14 +68,16 @@ import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-function formatFileSize(bytes: number): string {
+function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
-    return `${bytes} B`;
+    return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
   }
   if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
+    return t('@astryx.fileInput.fileSize.kilobytes', {size: bytes / 1024});
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return t('@astryx.fileInput.fileSize.megabytes', {
+    size: bytes / (1024 * 1024),
+  });
 }
 
 function validateFiles(
@@ -116,7 +118,7 @@ function validateFiles(
         errors.push(
           t('@astryx.fileInput.errorMaxSize', {
             fileName: file.name,
-            maxSize: formatFileSize(maxSize),
+            maxSize: formatFileSize(maxSize, t),
           }),
         );
         return false;

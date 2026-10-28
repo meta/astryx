@@ -6,13 +6,22 @@
  *   `adaptive`: the server renders the inline combobox, the client hydrates
  *   it without a recoverable error, a coarse-pointer client swaps to the
  *   trigger in the first post-hydration render, and focus is undisturbed
- * @position Core Tokenizer tests
+ * @position Core Tokenizer tests. Each case hydrates a fresh module graph and
+ *   finishes the on-demand sheet load its hydration starts, so none of its
+ *   work lands in the next case
  */
 import {act} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
+// The Tokenizer entry each case imports and its on-demand sheet, loaded
+// while this file is collected, which is untimed: a first load transforms
+// their whole module graph, which takes seconds, and many times that on a
+// busy machine. Each fresh module graph below runs these modules again
+// without that cost.
+import '../internal/tokenizer-presentation';
+import './TokenizerBottomSheet';
 
 const ITEMS: SearchableItem[] = [
   {id: 'design', label: 'Design'},
@@ -24,7 +33,15 @@ const source: SearchSource<SearchableItem> = {
   bootstrap: () => ITEMS,
 };
 
-afterEach(() => {
+/** A case's hydration, while it runs. */
+let hydrating: Promise<unknown> | null = null;
+
+afterEach(async () => {
+  // A case that ended before its hydration did (a timeout) leaves it running:
+  // it finishes here, before the next case starts.
+  if (hydrating != null) {
+    await hydrating;
+  }
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
@@ -46,13 +63,30 @@ function stubCoarsePointer(matches: boolean) {
   );
 }
 
+interface HydrationOptions {
+  hasAutoFocus?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}
+
 async function serverRenderThenHydrate(
   isCoarsePointer: boolean,
-  options: {
-    hasAutoFocus?: boolean;
-    onFocus?: () => void;
-    onBlur?: () => void;
-  } = {},
+  options: HydrationOptions = {},
+) {
+  const run = hydrateFreshTokenizer(isCoarsePointer, options);
+  hydrating = run;
+  try {
+    return await run;
+  } finally {
+    if (hydrating === run) {
+      hydrating = null;
+    }
+  }
+}
+
+async function hydrateFreshTokenizer(
+  isCoarsePointer: boolean,
+  options: HydrationOptions,
 ) {
   vi.resetModules();
   const {TokenizerWithPresentation} =
@@ -96,6 +130,15 @@ async function serverRenderThenHydrate(
     trigger: container.querySelector('button[aria-haspopup="dialog"]'),
     activeElement: document.activeElement,
   };
+  // Right after hydration a coarse-pointer client presents the sheet: its
+  // host renders and the preload starts loading the sheet on demand. Finish
+  // that load before the case ends, or it resolves during the next case's
+  // hydration.
+  if (isCoarsePointer) {
+    await act(async () => {
+      await import('./TokenizerBottomSheet');
+    });
+  }
   await act(async () => {
     root.unmount();
   });
