@@ -389,7 +389,7 @@ function finish(slot: Slot): void {
     return;
   }
   clearTimer(slot);
-  live.element.removeAttribute(PRESSED_ATTRIBUTE);
+  writePress(live.element, 'none');
   slot.live = null;
   if (slot === button) {
     holdKey(false);
