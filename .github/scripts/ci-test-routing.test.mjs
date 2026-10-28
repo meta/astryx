@@ -63,6 +63,8 @@ const WORKFLOWS = {
     lanes: ['test-ui', 'test-node'],
     // A PR that only touches docs skips the suite but must still report.
     scopeConditional: true,
+    // A pull request the import graph can scope runs only related tests.
+    graphScoped: true,
     // Each Vitest lane splits its project across matrix legs.
     sharded: true,
   },
@@ -71,6 +73,8 @@ const WORKFLOWS = {
     // other and so ride one lane of their own.
     lanes: ['test-ui', 'test-node', 'typecheck'],
     scopeConditional: false,
+    // The push to main runs every test.
+    graphScoped: false,
     sharded: true,
   },
 };
@@ -103,7 +107,7 @@ function runLines(job) {
 
 describe.each(Object.entries(WORKFLOWS))(
   '%s test routing',
-  (file, {lanes, scopeConditional, sharded}) => {
+  (file, {lanes, scopeConditional, graphScoped, sharded}) => {
     const workflow = load(file);
 
     it('gives the Node suite more than one Vitest worker', () => {
@@ -161,7 +165,56 @@ describe.each(Object.entries(WORKFLOWS))(
       // runs FR23 in a later step on the same runner, after its share exited.
       expect(suites).toHaveLength(2);
       const [share, isolated] = suites;
-      expect(share.run.trim()).toBe(`pnpm test:ui ${SHARD_ARG}`);
+      // Its share is the full UI project, or for a scoped pull request the
+      // tests related to its diff (check-scope's full_suite).
+      if (graphScoped) {
+        expect(share.run.trim()).toBe(
+          [
+            'if [ "$SCOPED" = true ]; then',
+            `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            '  # Tests no module graph relates to the change run too: guards',
+            '  # that read sources, and tests that load a changed package from',
+            '  # its build (by name or its dist/).',
+            '  # The list goes through a file so a failing lister fails the step.',
+            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
+            'else',
+            `  pnpm test:ui ${SHARD_ARG}`,
+            'fi',
+          ].join('\n'),
+        );
+        expect(share.env.SCOPED).toBe(
+          "${{ github.event_name == 'pull_request' && needs.check-scope.outputs.full_suite == 'false' }}",
+        );
+        // The Node lane runs the same scoped share, guards included.
+        const node = workflow.jobs['test-node'].steps.find(
+          step => step.name === 'Run this shard of the Node tests',
+        );
+        expect(node.run.trim()).toBe(
+          [
+            'if [ "$SCOPED" = true ]; then',
+            `  pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            '  # Tests no module graph relates to the change run too: guards',
+            '  # that read sources, and tests that load a changed package from',
+            '  # its build (by name or its dist/).',
+            '  # The list goes through a file so a failing lister fails the step.',
+            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
+            'else',
+            `  pnpm test:node ${SHARD_ARG}`,
+            'fi',
+          ].join('\n'),
+        );
+        expect(node.env.SCOPED).toBe(share.env.SCOPED);
+      } else {
+        expect(share.run.trim()).toBe(`pnpm test:ui ${SHARD_ARG}`);
+      }
       expect(isolated.run.trim()).toBe('pnpm test:ui:isolated');
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
@@ -288,7 +341,7 @@ describe.each(Object.entries(WORKFLOWS))(
 );
 
 describe('ci.yml pr-a11y browser specs', () => {
-  const steps = load('ci.yml').jobs['pr-a11y'].steps;
+  const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
   const run = steps.find(
     step => step.name === 'Run browser accessibility specs',
   );
@@ -366,7 +419,8 @@ describe('ci.yml RTL package sharding', () => {
     for (const name of [
       'build-storybook',
       'pr-a11y-shard',
-      'pr-a11y',
+      'pr-a11y-guards',
+      'pr-a11y-specs',
       'a11y-contracts-shard',
       'pr-rtl-shard',
     ]) {
@@ -386,7 +440,11 @@ describe('ci.yml RTL package sharding', () => {
     expect(runLines(workflow.jobs['build-storybook'])).toContain(
       'astryx-build-sha.txt',
     );
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain('git rev-parse HEAD');
+    for (const name of ['pr-a11y-guards', 'pr-a11y-specs']) {
+      expect(runLines(workflow.jobs[name]), name).toContain(
+        'git rev-parse HEAD',
+      );
+    }
     expect(runLines(shard)).toContain('git rev-parse HEAD');
 
     const evidence = read(
@@ -403,10 +461,10 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('keeps PR accessibility scoped while RTL retains its canonical resolver', () => {
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain(
+    expect(runLines(workflow.jobs['pr-a11y-guards'])).toContain(
       '.github/scripts/a11y-pr-scope.mjs',
     );
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain(
+    expect(runLines(workflow.jobs['pr-a11y-guards'])).toContain(
       'SCOPE_ARGS=(--components "$COMPONENTS")',
     );
     expect(runLines(shard)).toContain('.github/scripts/rtl-shard-scope.mjs');
@@ -717,5 +775,61 @@ describe('ci.yml interaction proofs', () => {
     }
     // Unknown scope (exit 2) runs the proofs; only "out of scope" skips them.
     expect(scope).toContain('if [ "$scope" = 1 ]; then');
+  });
+});
+
+describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
+  const workflow = load('ci.yml');
+  const stepNamed = name => {
+    for (const job of Object.values(workflow.jobs)) {
+      const step = (job.steps ?? []).find(candidate => candidate.name === name);
+      if (step != null) return step;
+    }
+    throw new Error(`no step named ${name}`);
+  };
+
+  it('asks component analysis for full audits unless check-scope reports a scoped suite', () => {
+    const analyze = stepNamed('Analyze components');
+    expect(analyze.env.FULL_SUITE).toBe(
+      '${{ needs.check-scope.outputs.full_suite }}',
+    );
+    expect(analyze.run).toContain(
+      'if [ "$FULL_SUITE" != false ]; then FORCE_FULL=(--force-full); fi',
+    );
+    expect(analyze.run).toContain('"${FORCE_FULL[@]}"');
+  });
+
+  it('hands the visual gate the folder-level reverse dependents RTL audits, and the whole plan when analysis or the gate asks for it', () => {
+    const visual = stepNamed('Run the visual gate for the touched components');
+    expect(visual.run).toContain(
+      `DEPENDENTS=$(jq -r '[(.dependentComponentFolders // [])[] | select(startswith("core/")) | ltrimstr("core/")] | unique | join(",")' analysis.json)`,
+    );
+    expect(visual.run).toContain(
+      'if [ -n "$DEPENDENTS" ]; then DEPENDENT_ARGS=(--dependents "$DEPENDENTS"); fi',
+    );
+    expect(visual.run).toContain(
+      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)',
+    );
+    expect(visual.run).toContain(
+      "FORCE_FULL_AUDITS=$(jq -r '.forceFullComponentAudits == true' analysis.json)",
+    );
+    expect(visual.run).toContain('[ "$FORCE_FULL_AUDITS" = \'true\' ]');
+    // The gate's broaden exit runs the whole plan instead of skipping.
+    expect(visual.run).toMatch(
+      /if \[ "\$code" = 3 \]; then[\s\S]*?COMMAND=release\s+SCOPE_ARGS=\(\)\s+run_gate/,
+    );
+  });
+
+  it('scopes the visual classification only on a pull request check-scope scoped', () => {
+    const check = stepNamed('Check for component changes');
+    expect(check.env.SCOPED).toBe(
+      "${{ github.event_name == 'pull_request' && needs.check-scope.outputs.full_suite == 'false' }}",
+    );
+    expect(check.run).toContain(
+      'if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi',
+    );
+    expect(check.run).toContain(
+      'visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}"',
+    );
   });
 });

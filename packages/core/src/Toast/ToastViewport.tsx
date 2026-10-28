@@ -349,6 +349,9 @@ export function ToastViewport({
   // Toast ids whose exit has begun — guards onHide from double-firing (see
   // removeToast). Mirrors exitingIds state, readable synchronously.
   const exitingIdsRef = useRef<Set<string>>(new Set());
+  // Toasts dispatched since the last commit, by id: a dismiss() called
+  // before the toast first renders still finds it (and its onHide).
+  const pendingEntriesRef = useRef<Map<string, ToastEntry>>(new Map());
   // The element that was focused before the user jumped into the viewport
   // (via F6). Used to restore focus once all toasts are dismissed so focus
   // never falls to <body>.
@@ -424,6 +427,16 @@ export function ToastViewport({
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
       }
+      const pending = pendingEntriesRef.current;
+      if (uniqueID) {
+        // An overwrite replaces a toast that has not rendered yet too.
+        for (const [pendingId, pendingEntry] of pending) {
+          if (pendingEntry.options.uniqueID === uniqueID) {
+            pending.delete(pendingId);
+          }
+        }
+      }
+      pending.set(entry.id, entry);
       // An overwrite swaps a new entry, with a new id, into the replaced
       // toast's place, so the old row leaves the DOM without ever being
       // dismissed. Its settled id is dropped by the prune below, which covers
@@ -450,11 +463,15 @@ export function ToastViewport({
     if (exitingIdsRef.current.has(id)) {
       return;
     }
-    exitingIdsRef.current.add(id);
-    const entry = toastsRef.current.find(t => t.id === id);
-    if (entry) {
-      entry.options.onHide?.(reason);
+    const entry =
+      toastsRef.current.find(t => t.id === id) ??
+      pendingEntriesRef.current.get(id);
+    if (entry == null) {
+      // Already gone: nothing to hide or report.
+      return;
     }
+    exitingIdsRef.current.add(id);
+    entry.options.onHide?.(reason);
     // If focus currently lives inside the toast being dismissed, remember
     // that its removal must hand focus off to a neighbor (or the element
     // focused before the user entered the viewport) rather than <body>.
@@ -481,6 +498,20 @@ export function ToastViewport({
         pendingFocusRef.current = 'restore';
       }
     }
+    if (dismissedNode == null) {
+      // No row is mounted for it: it is hidden past `maxVisible`, or it has
+      // not rendered yet. Nothing animates out, so it leaves the list now.
+      // Waiting for its row to finish exiting would keep it forever: when it
+      // surfaced, its row would mount already collapsed, with no transition
+      // left to end, and hold a visible slot as an empty row.
+      // It leaves the committed list now too, so a second dismissal before
+      // the next render finds nothing to report.
+      exitingIdsRef.current.delete(id);
+      pendingEntriesRef.current.delete(id);
+      toastsRef.current = toastsRef.current.filter(t => t.id !== id);
+      setToasts(prev => prev.filter(t => t.id !== id));
+      return;
+    }
     setExitingIds(prev => {
       if (prev.has(id)) {
         return prev;
@@ -491,6 +522,7 @@ export function ToastViewport({
 
   const handleExited = useCallback((id: string) => {
     exitingIdsRef.current.delete(id);
+    pendingEntriesRef.current.delete(id);
     setExitingIds(withoutId(id));
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);

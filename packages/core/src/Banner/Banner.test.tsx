@@ -5,9 +5,9 @@
  * @input Uses vitest, @testing-library/react, Banner component
  * @output Unit tests for Banner component behavior, including default and
  *   explicit live-region roles, augmented-status color fallback, scoped status
- *   control context that does not recolor tooltips, the 'banner-frame' theme
- *   target on the outer elevation/radius painter, and the 'banner-icon' theme
- *   target on the status icon glyph (#4166)
+ *   foregrounds that do not recolor consumer content or tooltips, the
+ *   'banner-frame' theme target on the outer elevation/radius painter, and the
+ *   'banner-icon' theme target on the status icon glyph (#4166)
  * @position Testing; validates Banner.tsx implementation
  *
  * SYNC: When modified, update this header
@@ -229,22 +229,41 @@ describe('Banner', () => {
     expect(screen.queryByRole('button', {name: /^Dismiss/})).toBeNull();
   });
 
-  it('leaves consumer endContent outside the built-in status control context', () => {
+  it('leaves consumer endContent outside the built-in status foreground', () => {
     render(
-      <Banner
-        status="success"
-        title="With Action"
-        endContent={
-          <button type="button" data-testid="end-btn">
-            Action
-          </button>
-        }
-      />,
+      <>
+        <style>{'dialog { color: inherit; }'}</style>
+        <Banner
+          status="warning"
+          title="Warning action"
+          endContent={
+            <dialog open data-testid="warning-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+        <Banner
+          status="error"
+          title="Error action"
+          endContent={
+            <dialog open data-testid="error-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+      </>,
     );
-    const action = screen.getByTestId('end-btn');
-    expect(action).toBeInTheDocument();
-    expect(action.className).not.toContain(
-      'Banner__statusControlStyles.success',
+
+    const warningTitle = screen.getByText('Warning action');
+    const errorTitle = screen.getByText('Error action');
+    const warningDialog = screen.getByTestId('warning-dialog');
+    const errorDialog = screen.getByTestId('error-dialog');
+
+    expect(getComputedStyle(warningTitle).color).not.toBe(
+      getComputedStyle(errorTitle).color,
+    );
+    expect(getComputedStyle(warningDialog).color).toBe(
+      getComputedStyle(errorDialog).color,
     );
   });
 

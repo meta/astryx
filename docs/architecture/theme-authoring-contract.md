@@ -285,6 +285,12 @@ classify local references. Until the implementation lands, INV8's prefix-indepen
 clauses are current authority but not enforcement. Existing explicit enrollment,
 owner, lineage, collision, cycle, and legacy-unenrolled behavior remains shipped.
 
+The motion resolver is accepted but unshipped: an internal, pure
+`resolveThemeMotion(theme)` returns a theme's motion knobs, durations, easings,
+and role tables for the animator and for server code, touching no DOM and with
+no import-time side effects (`spec:AST-108` FR6). Until it lands, FR6's
+resolution is current authority but not enforcement.
+
 ## Verification
 
 | Invariant                | Evidence                                                                                                | Failure signal                                                                                                            |
