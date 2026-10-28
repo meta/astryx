@@ -111,9 +111,7 @@ export interface ListProps extends BaseProps<
   reorderable?: Reorderable;
 
   /**
-   * Whether to show dividers between list items. Under a finger, a touch
-   * press hides the dividers on either side of the pressed row until the
-   * finger lifts, as iOS lists do.
+   * Whether to show dividers between list items.
    * @default false
    */
   hasDividers?: boolean;

@@ -416,23 +416,6 @@ describe('the release', () => {
     vi.advanceTimersByTime(PRESS_FADE_MS);
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
-
-  it('leaves a state it did not write alone: a selection hold outlives the release', () => {
-    press(rows[0], 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(PRESS_ONSET_MS);
-    press(rows[0], 'pointerup', 10, 10);
-    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-    // The activation pushes, and the row is held selected (selectionHold.ts).
-    rows[0].setAttribute(PRESSED_ATTRIBUTE, 'held');
-    vi.advanceTimersByTime(PRESS_FADE_MS);
-    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('held');
-    // A new press on the held row neither repaints nor clears it.
-    press(rows[0], 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(PRESS_ONSET_MS);
-    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('held');
-    press(rows[0], 'pointercancel', 10, 10);
-    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('held');
-  });
 });
 
 describe('two touches in a row', () => {
