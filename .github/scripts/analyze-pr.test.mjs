@@ -103,6 +103,9 @@ function buildFixture() {
     path.join(upstream, 'packages/core/src/Badge/index.ts'),
     "export {Badge} from './Badge';\n",
   );
+  fs.mkdirSync(path.join(upstream, 'docs/specs/components/Badge'), {
+    recursive: true,
+  });
   fs.writeFileSync(
     path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'),
     '---\nschema_version: 3\n---\n',

@@ -151,7 +151,7 @@ function popoverFixture() {
       references: [],
     },
   );
-  writeRecord(root, 'packages/core/src/Dialog/modules/DialogBody.spec.md', {
+  writeRecord(root, 'docs/specs/components/Dialog/modules/DialogBody.spec.md', {
     kind: 'module',
     id: 'module:Dialog/DialogBody',
     parent_component: 'component:Dialog',
