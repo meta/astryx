@@ -107,6 +107,11 @@
       "aliases": []
     },
     {
+      "name": "component-charts-area-chart",
+      "path": "components/charts/area-chart",
+      "aliases": []
+    },
+    {
       "name": "component-charts-chart",
       "path": "components/charts/chart",
       "aliases": []
@@ -134,6 +139,21 @@
     {
       "name": "component-charts-chart-tooltip",
       "path": "components/charts/chart-tooltip",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-line-chart",
+      "path": "components/charts/line-chart",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-metric-tile",
+      "path": "components/charts/metric-tile",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-sparkline",
+      "path": "components/charts/sparkline",
       "aliases": []
     },
     {
