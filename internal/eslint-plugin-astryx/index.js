@@ -21,6 +21,7 @@
  * - disabled-cursor: Flags a cursor that promises an interaction without giving way to not-allowed on a disabled element
  * - no-unstable-merged-refs: Flags render-time mergeRefs callbacks and unstable callback inputs to useMergedRefs
  * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
+ * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
  * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
  * Philosophy: Strict for agents (CI), lenient for humans (local dev)
@@ -52,6 +53,7 @@ import noReactNamespaceHooksRule from './no-react-namespace-hooks.js';
 import noUnstableMergedRefsRule from './no-unstable-merged-refs.js';
 import copyrightHeaderRule from './copyright-header.js';
 import noRawConsoleCliRule from './no-raw-console-cli.js';
+import noCoreInternalImportRule from './no-core-internal-import.js';
 import requireBasePropsRule from './require-base-props.js';
 import requireRefPropRule from './require-ref-prop.js';
 import requireBasePropsPassthroughRule from './require-baseprops-passthrough.js';
@@ -357,6 +359,7 @@ const plugin = {
     'require-baseprops-passthrough': requireBasePropsPassthroughRule,
     'copyright-header': copyrightHeaderRule,
     'no-raw-console-cli': noRawConsoleCliRule,
+    'no-core-internal-import': noCoreInternalImportRule,
     'no-hardcoded-i18n-string': noHardcodedI18nStringRule,
     'i18n-key-format': i18nKeyFormatRule,
     'require-table-section': requireTableSectionRule,

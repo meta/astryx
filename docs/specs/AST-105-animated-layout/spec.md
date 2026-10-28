@@ -13,7 +13,8 @@ owners: [cixzhang]
 affects_architecture: [architecture:react-component-runtime]
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: [useAnimatedLayout, TreeList, Collapsible]
+affects_consumer_docs:
+  [useAnimatedLayout, TreeList, Collapsible, useTableRowExpansion]
 ---
 
 # Animated layout system spec
@@ -32,7 +33,8 @@ affects_consumer_docs: [useAnimatedLayout, TreeList, Collapsible]
 
 When something inside an area changes size, the changed element and the
 content after it animate together on one shared motion role instead of
-jumping. An app opts in once per area; without it, nothing changes.
+jumping. An app opts in once per area; without it, nothing changes, except where a
+component's record animates its own change (FR2).
 
 ## Non-goals
 
@@ -56,20 +58,26 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
 - **FR1 — One hook, one handle, one prop.** `useAnimatedLayout({containerRef})`
   returns an opaque `animatedLayout` handle with no public methods or fields.
   An app passes it to a component whose size changes through that
-  component's `animatedLayout` prop, and the component reports each change.
+  component's `animatedLayout` prop, or a hook's `animatedLayout` option where
+  the component is a hook, and the component reports each change.
   `containerRef` names the area; ScrollableArea does not register itself, and
   an app passes the ref it already gives ScrollableArea, which reaches the
   native scroll viewport. Each adopting component's record documents its
-  `animatedLayout` prop.
+  `animatedLayout` prop or option.
 - **FR2 — Without a handle, nothing changes.** A component without a handle
   keeps its behavior: the changed element shows its change as its own record
-  says, and content after it takes its place at once.
+  says, and content after it takes its place at once. AppShell's content area and
+  the SideNav rail animate their own change during a side nav collapse or
+  expand, as their records state (`component:AppShell` FR17, `component:SideNav`
+  FR6).
 - **FR3 — The content after a change glides within the area.** For any change
   a component holding the handle reports, such as a disclosure opening,
   content loading in, a message appearing, or an item inserted or removed,
-  the content after it inside the area moves from its old place to its new
-  one instead of jumping, at every ancestor level up to the area and never
-  past it. An element moves only when its layout rectangle changed and it is
+  the content it shifts inside the area moves from its old place to its new
+  one instead of jumping: the siblings after it, and the siblings before it
+  that its layout moves (a centered, end-aligned or space-between row, or
+  `order`), and its own ancestors where the layout moves them (a centered
+  column), at every ancestor level up to the area and never past it. An element moves only when its layout rectangle changed and it is
   in the area's visible part. Which elements move is listed under Coverage.
   Shifted content may mix Astryx components and plain app elements, and none
   of it opts in. Several changes in one area, nested or not, compose: each
@@ -97,44 +105,71 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   `containerRef` animate together on one shared motion role. Fixed and stuck
   sticky elements stay put, the glide never scrolls the area, and Reduce
   Motion is respected."
+- **FR8 — Two elements can swap in place.** An area can swap one element for
+  another in the same place, such as a skeleton for its content: the two
+  overlap so the area is never empty, a short show delay keeps a fast load
+  from flashing the first, and a direction carries a forward or back page
+  change. The swap shares FR4's one motion. Under reduced motion it follows
+  `design:reduced-motion` DR1–DR3: an opacity-only cross-fade under a coarse
+  primary pointer, an immediate change otherwise. Layer exits stay with the
+  layer runtime's exit copy (`architecture:layer-runtime` INV14). A swap can
+  also hold the area's old content as one transient copy, inert and hidden from
+  assistive technology, while the new content enters, and removes it when the
+  swap ends (`architecture:component-style-authoring` INV7); AppShell's
+  content area does this during a side nav collapse or expand
+  (`component:AppShell` FR17), and the SideNav rail holds its old state during a collapse or expand
+  (`component:SideNav` FR6).
+  The swap is internal; the hook's public contract is unchanged.
 
 ## Coverage
 
 What moves inside an area, each case with its test:
 
-| Case                                                                                        | Behavior                                                                                                                | Test                                                                 |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Normal-flow block siblings after the changed element, at each ancestor level up to the area | Moves when its rectangle changed                                                                                        | Nested changed element with block siblings at three levels           |
-| An element with `display: contents`                                                         | Has no box; its children are taken in its place                                                                         | A following `display: contents` wrapper with two children            |
-| Absolutely positioned or fixed elements                                                     | Skipped and take their final place; an absolute child of a moving element rides with it                                 | One of each, plus an absolute badge on a moving row                  |
-| Sticky elements                                                                             | In flow while unstuck, so moves when its rectangle changed; a stuck element takes its final place                       | A sticky header above and below its stuck point                      |
-| Floats                                                                                      | Moves when its rectangle changed                                                                                        | A float after the changed element                                    |
-| Flex and grid items after the changed element, including wrap and row direction             | Moves when its rectangle changed                                                                                        | A wrapping flex row and a row-direction neighbor that does not shift |
-| Hidden, `display: none`, or zero-size elements                                              | Skipped                                                                                                                 | One of each after the changed element                                |
-| Changed elements outside the area's visible part                                            | Take their final place without animation                                                                                | A long list with changed rows above and below the fold               |
-| Elements under a scaled or transformed ancestor                                             | Moves by its layout change, corrected for the ancestor's scale                                                          | A moving row inside a scaled panel                                   |
-| Portals and top-layer content                                                               | Never moved                                                                                                             | A popover open from a following row                                  |
-| Elements already moving                                                                     | Keep their running motion and add the new move to it                                                                    | Two changes 100 ms apart                                             |
-| Nested areas                                                                                | Motion stops at the area of the handle the changed component holds; an inner area moves as one unit within an outer one | An area inside an area, changed in the inner one                     |
+| Case                                                                                             | Behavior                                                                                                                                                                                                                                         | Test                                                                                                                 |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Normal-flow block siblings after the changed element, at each ancestor level up to the area      | Moves when its rectangle changed                                                                                                                                                                                                                 | Nested changed element with block siblings at three levels                                                           |
+| An element with `display: contents`                                                              | Has no box; its children are taken in its place                                                                                                                                                                                                  | A following `display: contents` wrapper with two children                                                            |
+| Absolutely positioned or fixed elements                                                          | Skipped and take their final place; an absolute child of a moving element rides with it                                                                                                                                                          | One of each, plus an absolute badge on a moving row                                                                  |
+| Content inside an absolutely positioned, fixed, stuck sticky or top-layer ancestor of the change | Only the content after the change moves; that ancestor, the ancestors inside it and the siblings before the change take their final place                                                                                                        | A header above a card around the change in a bottom-docked panel, and a bottom-stuck sticky footer around the change |
+| Sticky elements                                                                                  | In flow while unstuck, so moves when its rectangle changed; a stuck element takes its final place                                                                                                                                                | A sticky header above and below its stuck point                                                                      |
+| Floats                                                                                           | Moves when its rectangle changed                                                                                                                                                                                                                 | A float after the changed element                                                                                    |
+| Flex and grid items after the changed element, including wrap and row direction                  | Moves when its rectangle changed                                                                                                                                                                                                                 | A wrapping flex row and a row-direction neighbor that does not shift                                                 |
+| Siblings before the changed element, and its ancestors, at each level                            | Moves when its rectangle changed: a centered, end-aligned or space-between row, a centered column, or `order` among the siblings near the visible part moves them                                                                                | A centered row, a space-between row, an end-aligned row, a centered column and an `order`-placed sibling             |
+| Hidden, `display: none`, or zero-size elements                                                   | Skipped                                                                                                                                                                                                                                          | One of each after the changed element                                                                                |
+| Changed elements outside the area's visible part                                                 | Take their final place without animation                                                                                                                                                                                                         | A long list with changed rows above and below the fold                                                               |
+| Elements under a scaled or transformed ancestor                                                  | Moves by its layout change, corrected for the ancestor's scale                                                                                                                                                                                   | A moving row inside a scaled panel                                                                                   |
+| Portals and top-layer content                                                                    | Never moved                                                                                                                                                                                                                                      | A popover open from a following row                                                                                  |
+| Elements already moving                                                                          | Keep their running motion and add the new move to it                                                                                                                                                                                             | Two changes 100 ms apart                                                                                             |
+| Nested areas                                                                                     | Motion stops at the area of the handle the changed component holds; an inner area moves as one unit within an outer one                                                                                                                          | An area inside an area, changed in the inner one                                                                     |
+| Table rows after an opening or closing detail row                                                | The rows glide; a closing detail row hides at once, and its space is held while the rows after it glide up. A table that draws column lines (`component:Table` FR15) does not glide: it and the content after it take their final places at once | A detail row opening and closing in a table with a pinned column, and in a table with column lines                   |
 
 Out of coverage, each taking its final place at once:
 
 - content outside the area, and content in another document or an iframe;
 - inline text and other non-replaced inline content, which cannot take a
   transform;
-- flex or grid items earlier in the DOM that `order` places after the change,
-  since only content after the change in the DOM moves;
 - text reflowing inside a paragraph beside a float;
 - elements the app moves itself with its own transforms;
+- a closing element whose space no end margin frees (a grid item whose
+  track or gap changes when it hides, or a flex-row item that sets its row's
+  height): it hides at once, without its exit, and the content after it
+  takes its final place at once, other than a table detail row (Coverage);
 - an anchored popover tied to a moving element, which layer anchoring keeps
-  in place (`architecture:layer-runtime`).
+  in place (`architecture:layer-runtime`);
+- an item that `order`, or a grid placement (`grid-row`, `grid-column`, a
+  named area or dense packing), brings into view from beyond the area's
+  visible part plus one viewport (or the changes' size, if larger) in
+  document order, which the walk does not reach.
 
 ## Current-state impact
 
-- No Core component takes `animatedLayout` yet; TreeList and Collapsible are
-  the first adopters, and their docs gain the `animatedLayout` prop.
+- No Core component takes `animatedLayout` yet; TreeList, Collapsible, and
+  Table's row expansion (`component:Table` FR15) are the first adopters, and
+  their docs gain the `animatedLayout` handle.
 - Core gains the `useAnimatedLayout` export and its documentation (FR7).
 - `architecture:react-component-runtime` INV12 produces the glide.
+- `architecture:react-component-runtime` INV12 also gains the in-place swap
+  (FR8); no component swaps yet.
 
 ## Verification
 
@@ -144,6 +179,7 @@ Out of coverage, each taking its final place at once:
 | FR3, Coverage | Real-browser tests, one per Coverage row                                                                   | each Coverage row; mixed Astryx and plain content; two changes in one frame; an area scrolled mid-list | an element that behaves other than its row says, an element moved twice for one frame, content past the area that moves, or the area scrolling fails |
 | FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers                                                            | starting on different frames or reading different motion, a component-specific timing, or Reduce Motion applied to one and not the other fails       |
 | FR5           | Fine-pointer before-and-after evidence on each adopting pull request, from the component's Storybook story | a mouse on each adopting component                                                                     | a glide missing under a mouse, or an adopting pull request without that evidence, fails                                                              |
+| FR8           | Unit tests of the swap and real-browser proofs of its adopters                                             | a fast load, a slow load, a forward and a back page change, Reduce Motion                              | an empty area during a swap, a placeholder flashed for a fast load, travel under Reduce Motion, a layer exit played by it, or a public export fails  |
 
 ## Decision log
 
@@ -154,7 +190,9 @@ Out of coverage, each taking its final place at once:
 
 Content that jumps when something above it changes size is disorienting, on
 any pointer. An app passes one handle per area to the components whose size
-changes, so the opt-in is explicit and composes without wrappers; the
+changes, so the opt-in is explicit and composes without wrappers; a component animates
+its own change only where its record says so (FR2;
+`component:SideNav/DEC-2`); the
 content after a change glides on one shared motion role with the changed
 element, inside the area and only where it is visible.
 

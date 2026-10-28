@@ -701,7 +701,7 @@ describe('DateInput — field parity', () => {
     expect(sheet).not.toBeNull();
     await waitFor(() => {
       expect(
-        sheet!.querySelector('[data-astryx-modal-busy-region]'),
+        sheet!.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
     });
     expect(

@@ -45,6 +45,18 @@ import {LayoutContent} from '../Layout/LayoutContent';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
+import {SideNavShellContext, type SideNavShell} from '../SideNav/railMotion';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
+import {
+  holdLayoutSwap,
+  landLayoutGlide,
+  layoutMotionFor,
+  playLayoutFrames,
+  playLayoutSwap,
+  reportLayoutChange,
+  type LayoutChange,
+  type LayoutSwap,
+} from '../motion/animatedLayout';
 import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
@@ -472,6 +484,19 @@ const styles = stylex.create({
  * </AppShell>
  * ```
  */
+
+/**
+ * The column beside the rail that holds `main`: its ancestor whose parent
+ * also holds the rail. The glide moves it; the rail's edge rides it.
+ */
+function columnOf(main: HTMLElement, rail: HTMLElement | null): HTMLElement {
+  let column = main;
+  while (column.parentElement != null && !column.parentElement.contains(rail)) {
+    column = column.parentElement;
+  }
+  return column;
+}
+
 export function AppShell({
   variant = 'elevated',
   banner,
@@ -749,6 +774,147 @@ export function AppShell({
   ) : undefined;
 
   // =========================================================================
+  // While the inline side nav collapses or expands, the content area holds
+  // its own animated layout handle (`component:AppShell` FR17): the column
+  // beside the rail glides from its old place, and the content swaps its old
+  // wrap for its new one in place (`spec:AST-105` FR8), on the rail's clock
+  // (`component:SideNav` FR6).
+  const railRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const contentLayout = useAnimatedLayout({containerRef: shellRef});
+  const pendingContentRef = useRef<{
+    /** The column's glide, reported only for a spring motion. */
+    change: LayoutChange | null;
+    swap: LayoutSwap | null;
+    before: DOMRect;
+    /** The opacities the held and the entering wrap start from. */
+    held: number;
+    entering: number;
+  } | null>(null);
+  // The running swap: when it started and its wraps' starting opacities, so a
+  // change made during it starts its cross-fade from what the content shows.
+  const lastSwapRef = useRef<{
+    startedAt: number;
+    held: number;
+    entering: number;
+  } | null>(null);
+  const sideNavShell = useMemo<SideNavShell>(
+    () => ({
+      animatedLayout: contentLayout,
+      rail: () => railRef.current,
+      column: () =>
+        mainRef.current == null
+          ? null
+          : columnOf(mainRef.current, railRef.current),
+      landContent() {
+        if (mainRef.current != null) {
+          landLayoutGlide(columnOf(mainRef.current, railRef.current));
+        }
+      },
+      beforeRailChange() {
+        const main = mainRef.current;
+        if (main == null) {
+          return;
+        }
+        const motion = layoutMotionFor(main);
+        // Only a spring glides the column; under Reduce Motion the two wraps
+        // cross-fade over a steady surface (`design:reduced-motion` DR2).
+        let change: LayoutChange | null = null;
+        if (motion.kind === 'spring') {
+          change = reportLayoutChange(contentLayout, railRef);
+          change.measureBefore();
+        }
+        // At rest the copy (the wrap shown now) starts opaque and the entering
+        // wrap unseen; mid-swap the wrap in the DOM is the entering one and
+        // the copy's wrap is the one entering next, each at what it shows.
+        let held = 1;
+        let entering = 0;
+        const last = lastSwapRef.current;
+        if (last != null && motion.kind === 'spring') {
+          const elapsed =
+            Number(main.ownerDocument.timeline?.currentTime ?? 0) -
+            last.startedAt;
+          if (elapsed < motion.progress.durationMs) {
+            const p = 1 - motion.progress.remaining(elapsed);
+            held = last.entering + (1 - last.entering) * p;
+            entering = last.held * (1 - p);
+          }
+        }
+        lastSwapRef.current = null;
+        pendingContentRef.current = {
+          change,
+          swap: holdLayoutSwap(contentLayout, main, {isVisiblePart: true}),
+          before: main.getBoundingClientRect(),
+          held,
+          entering,
+        };
+      },
+      afterRailChange() {
+        const pending = pendingContentRef.current;
+        pendingContentRef.current = null;
+        const main = mainRef.current;
+        if (pending == null || main == null) {
+          return () => {};
+        }
+        pending.change?.animate();
+        // The column beside the rail, which the glide moves: the copy sits
+        // beside it, in its parent, and rides its glide.
+        const column = columnOf(main, railRef.current);
+        const after = main.getBoundingClientRect();
+        const isRtl = getComputedStyle(main).direction === 'rtl';
+        const travel = isRtl
+          ? pending.before.right - after.right
+          : pending.before.left - after.left;
+        // An expand slides the narrower column in from its old start, which
+        // opens a gap at its trailing edge: the content surface (the elevated
+        // backdrop, or the main element) reaches over it as it closes,
+        // whether or not the old wrap is held.
+        const cover: {element: Element; frames: (p: number) => Keyframe}[] = [];
+        const surface = backdropRef.current ?? main;
+        const color = getComputedStyle(surface).backgroundColor;
+        const isPainted = !/^rgba\(.*,\s*0\)$|^transparent$/.test(color);
+        const glides = layoutMotionFor(main).kind === 'spring';
+        if ((isRtl ? travel > 0 : travel < 0) && glides && isPainted) {
+          cover.push({
+            element: surface,
+            frames: p => ({
+              boxShadow: `${-travel * (1 - p)}px 0px 0px 0px ${color}`,
+            }),
+          });
+        }
+        if (pending.swap == null || column.parentElement == null) {
+          return playLayoutFrames(contentLayout, cover);
+        }
+        // Under Reduce Motion nothing glides: the old wrap's copy paints the
+        // surface it sat on, so that surface fades out with it where it was
+        // (`design:reduced-motion` DR2) instead of leaving a bare strip.
+        if (!glides && isPainted) {
+          pending.swap.copy.style.backgroundColor = color;
+        }
+        const {held, entering} = pending;
+        lastSwapRef.current = {
+          startedAt: Number(main.ownerDocument.timeline?.currentTime ?? 0),
+          held,
+          entering,
+        };
+        return playLayoutSwap(pending.swap, {
+          host: column.parentElement,
+          copy: p => ({opacity: held * (1 - p)}),
+          rideWith: {element: column, travel: {x: travel, y: 0}},
+          incoming: [
+            ...Array.from(main.children, element => ({
+              element,
+              frames: (p: number) => ({opacity: entering + (1 - entering) * p}),
+            })),
+            ...cover,
+          ],
+        });
+      },
+    }),
+    [contentLayout],
+  );
+
   // Build sideNav content
   //
   // In auto mode, the sideNav panel is not internally scrollable (the page
@@ -758,6 +924,7 @@ export function AppShell({
   // =========================================================================
   const sideNavPanel = showSideNavInline ? (
     <LayoutPanel
+      ref={railRef}
       padding={0}
       hasDivider={navHasDividers}
       isScrollable={isFill}
@@ -767,7 +934,7 @@ export function AppShell({
         isAuto && stickyBgStyle,
         isAuto && styles.panelAutoFill,
       ]}>
-      {sideNav}
+      <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
     </LayoutPanel>
   ) : undefined;
 
@@ -785,6 +952,7 @@ export function AppShell({
 
   const mainInner = (
     <LayoutContent
+      ref={mainRef}
       padding={contentPadding ?? 0}
       role="main"
       id={MAIN_CONTENT_ID}
@@ -807,7 +975,7 @@ export function AppShell({
           : styles.contentWrapper,
       )}>
       {shouldElevateWithCorner && (
-        <div {...stylex.props(styles.elevatedBackdrop)} />
+        <div ref={backdropRef} {...stylex.props(styles.elevatedBackdrop)} />
       )}
       {mainInner}
     </div>

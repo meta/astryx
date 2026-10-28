@@ -16,9 +16,11 @@
  * re-arms it. The returned function is called by an owner announcing the
  * busy operation's outcome: a busy start not yet announced is dropped, so it
  * never follows its own outcome (FR8). While a native modal is open, the body-level channel is not
- * exposed, so a control inside it announces through one persistent polite
- * region in that dialog, inserted empty and filled a frame later (Platform
- * support, FR3).
+ * exposed, so a control inside it announces through that dialog's polite
+ * container, the one `useAnnounce` uses for every message from inside the
+ * modal (FR14), inserted empty and filled a frame later (FR3); the control's
+ * own element locates the modal, so a busy start inside a native modal an app
+ * renders without Astryx is heard inside it too.
  *
  * SYNC: deliberately NOT exported from /packages/core/src/hooks/index.ts —
  * this is a shared implementation detail of Astryx's busy controls.
@@ -26,54 +28,13 @@
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {
+  announceInModal,
+  enclosingModalDialog,
   takeJoinedAnnouncement,
   useAnnounce,
+  withdrawFromModalPending,
   withdrawPendingAnnouncement,
 } from './useAnnounce';
-
-const REGION_ATTR = 'data-astryx-modal-busy-region';
-const VISUALLY_HIDDEN_CSS =
-  'position:absolute;width:1px;height:1px;margin:-1px;padding:0;' +
-  'overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;';
-const CLEAR_DELAY_MS = 2000; // Matches useAnnounce.
-
-// The pending write and clear of each in-dialog region; a new write cancels
-// them so an earlier message can neither land late nor clear a later one.
-const pendingByRegion = new WeakMap<
-  HTMLElement,
-  {frame: number; timer?: ReturnType<typeof setTimeout>}
->();
-
-function announceInModal(dialog: HTMLDialogElement, message: string): void {
-  let region = dialog.querySelector<HTMLElement>(`:scope > [${REGION_ATTR}]`);
-  if (region == null) {
-    region = document.createElement('div');
-    region.setAttribute(REGION_ATTR, '');
-    region.setAttribute('role', 'status');
-    region.setAttribute('aria-live', 'polite');
-    region.setAttribute('aria-atomic', 'true');
-    region.style.cssText = VISUALLY_HIDDEN_CSS;
-    dialog.appendChild(region);
-  }
-  const target = region;
-  const previous = pendingByRegion.get(target);
-  if (previous != null) {
-    cancelAnimationFrame(previous.frame);
-    clearTimeout(previous.timer);
-  }
-  target.textContent = '';
-  const pending: {frame: number; timer?: ReturnType<typeof setTimeout>} = {
-    frame: 0,
-  };
-  pending.frame = requestAnimationFrame(() => {
-    target.textContent = message;
-    pending.timer = setTimeout(() => {
-      target.textContent = '';
-      pendingByRegion.delete(target);
-    }, CLEAR_DELAY_MS);
-  });
-  pendingByRegion.set(target, pending);
-}
 
 export function useBusyAnnouncement(
   isBusy: boolean,
@@ -86,10 +47,16 @@ export function useBusyAnnouncement(
   // This busy start's share of the shared channel's pending text, until it
   // settles.
   const channelMessageRef = useRef<object | null>(null);
+  // Or its write inside a modal's container, until it settles.
+  const modalMessageRef = useRef<{
+    dialog: HTMLDialogElement;
+    message: string;
+  } | null>(null);
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;
       channelMessageRef.current = null;
+      modalMessageRef.current = null;
       return;
     }
     if (hasAnnouncedRef.current) {
@@ -100,9 +67,15 @@ export function useBusyAnnouncement(
     const frame = requestAnimationFrame(() => {
       frameRef.current = null;
       hasAnnouncedRef.current = true;
-      const dialog = elementRef.current?.closest('dialog');
-      if (dialog?.open && dialog.matches(':modal')) {
+      // The nearest open native modal around the control's own element,
+      // Astryx or app-rendered, so a busy start inside a modal an app renders
+      // without Astryx is still heard inside it (`spec:AST-086` FR14); the
+      // shared `useAnnounce` route otherwise, which itself follows the
+      // nearest Astryx modal around this hook's caller.
+      const dialog = enclosingModalDialog(elementRef.current);
+      if (dialog != null) {
         announceInModal(dialog, message);
+        modalMessageRef.current = {dialog, message};
       } else {
         announce(message, 'polite');
         channelMessageRef.current = takeJoinedAnnouncement();
@@ -122,10 +95,16 @@ export function useBusyAnnouncement(
       // Still busy until the settled state commits; do not schedule again.
       hasAnnouncedRef.current = true;
     }
-    // Written to the channel but not yet exposed: withdraw it too.
+    // Written to the channel, or inside the modal, but not yet exposed:
+    // withdraw it too.
     if (channelMessageRef.current != null) {
       withdrawPendingAnnouncement(channelMessageRef.current, 'polite');
       channelMessageRef.current = null;
+    }
+    if (modalMessageRef.current != null) {
+      const {dialog, message} = modalMessageRef.current;
+      withdrawFromModalPending(dialog, message, 'polite');
+      modalMessageRef.current = null;
     }
   }, []);
 }

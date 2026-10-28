@@ -33,6 +33,8 @@ deciding_specs:
     spec:AST-071/DEC-1,
     spec:AST-017/DEC-23,
     spec:AST-012/DEC-6,
+    spec:AST-107/DEC-2,
+    spec:AST-107/DEC-3,
   ]
 ---
 
@@ -136,7 +138,10 @@ guidance owns the process used to propose and test APIs.
   return, utility signature, default, or operation reachable from a supported
   package path is public even when its source comment, filename, or current use
   calls it internal. Privacy requires removing the export or moving the capability
-  behind a non-exported boundary.
+  behind a non-exported boundary. Core's `./internal/*` subpaths are the one
+  exception: reachable, but reserved for Core and Lab, undocumented, versioned
+  in lockstep with Core, limited by lint to those two packages, and outside
+  the compatibility promise (`spec:AST-017` FR21).
 - **INV13 — Public deltas route to their authority owner.** Every public API update
   and every public behavior change follows the result and disposition defined by
   `architecture:knowledge-contracts`. Tests, a Changeset, or a generated manifest
@@ -191,7 +196,11 @@ guidance owns the process used to propose and test APIs.
   API that shares a job with existing API, unless the existing API is being
   deprecated in favor of it. INV3 keeps one prop to one concept and INV16 keeps
   one `presentation` prop for a surface choice; INV21 applies the same rule
-  across props, components, hooks, and factories. A deprecation follows INV9.
+  across props, components, hooks, and factories. A hook that delegates
+  entirely to a public factory, with no behavior of its own, and a component
+  built entirely on a public factory are one API with that factory, not a
+  second one (`spec:AST-107` FR6, FR8). A deprecation follows
+  INV9.
 
 This record applies to stable public packages. Lab components are not stable
 public promises until promotion.
@@ -252,6 +261,8 @@ public promises until promotion.
   theme width names and inclusive-`from`/exclusive-`below` edge meanings.
 - `spec:AST-071/DEC-1` — every styling input works from every styling system,
   so a part's styling inputs come as a set.
+- `spec:AST-107/DEC-2` and `spec:AST-107/DEC-3` — a hook over a public
+  factory, and a component built entirely on one, are one API with it (INV21).
 - `spec:AST-017/DEC-23` — a touch presentation or open-surface touch mode is
   a default the caller can always override, through one `presentation` prop
   that also restores the previous surface and mode.
@@ -271,7 +282,7 @@ copy the component matrix.
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                          | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                  |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                      | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                |
 | INV11                   | Public-API admission review plus owning theming/component tests                      | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                      |
-| INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping         | A reachable supporting type or behavior is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                                                      |
+| INV12, INV13            | Generated declaration/export/behavior inventory plus canonical-owner mapping         | A reachable supporting type or behavior outside `./internal/*` is called internal, or mechanical evidence is treated as permission to accept it                                                                                                                                               |
 | INV14                   | `AppShell.test.tsx`                                                                  | A component hardcodes a divergent point or treats equality as below                                                                                                                                                                                                                           |
 | INV15                   | Public-API review of the generated declaration inventory                             | A part or StyleX-typed styling prop ships without class-name and inline-style counterparts on the same element                                                                                                                                                                                |
 | INV16                   | Public-API review of touch presentations plus coarse- and fine-pointer runtime tests | A stable component that presents a different surface or switches an open surface's input mode under a coarse pointer and has no `presentation` value that keeps its fine-pointer surface and mode; such a touch mode callers cannot reach; a default that overrides an explicit caller choice |

@@ -379,7 +379,10 @@ export function Thumbnail({
   );
   const showPlaceholder = (!isLoading && !hasSrc) || hasError;
   const isInteractive = onClick != null && !isDisabled && !isLoading;
-  const hasRemove = onRemove != null && !isDisabled;
+  // Open and Remove stay mounted while they cannot act, inert and announced
+  // as disabled, so a focused one keeps focus (spec:AST-085 FR1, FR4, FR6).
+  const hasOpen = onClick != null;
+  const hasRemove = onRemove != null;
   const isHoverReveal = hasRemove && showRemoveOn === 'hover';
   const {getContainerProps, getContentRevealProps} = useContainerReveal({
     isEnabled: isHoverReveal,
@@ -449,9 +452,13 @@ export function Thumbnail({
         variant="secondary"
         size="sm"
         isIconOnly
+        aria-disabled={isDisabled ? 'true' : undefined}
+        onKeyDown={isDisabled ? suppressActivationKeys : undefined}
         onClick={e => {
           e.stopPropagation();
-          onRemove(e);
+          if (!isDisabled) {
+            onRemove(e);
+          }
         }}
         xstyle={styles.removeButtonOverrides}
       />
@@ -484,11 +491,13 @@ export function Thumbnail({
           ),
           isHoverReveal ? getContainerProps() : {},
         )}>
-        {isInteractive ? (
+        {hasOpen ? (
           <button
             type="button"
-            onClick={onClick}
+            onClick={isInteractive ? onClick : stopInertPress}
+            onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
+            aria-disabled={isInteractive ? undefined : 'true'}
             {...stylex.props(styles.interactiveButton)}>
             {imageContent}
           </button>
@@ -514,3 +523,24 @@ export function Thumbnail({
 }
 
 Thumbnail.displayName = 'Thumbnail';
+
+/**
+ * Enter and Space on an inert action dispatch no click at all, so no listener
+ * anywhere receives one (spec:AST-085 FR2), as Button does for its own
+ * aria-disabled state.
+ */
+function suppressActivationKeys(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+  }
+}
+
+/**
+ * A click that still reaches an inert Open (a pointer, or assistive
+ * technology dispatching one) calls nothing and stops here, so an ancestor's
+ * click handler does not take it either (spec:AST-085 FR2).
+ */
+function stopInertPress(event: React.MouseEvent<HTMLButtonElement>) {
+  event.preventDefault();
+  event.stopPropagation();
+}

@@ -4,8 +4,7 @@
 
 /**
  * @file useSheetGestures.ts
- * @input Uses React (useCallback, useEffect, useMemo, useRef, useState) and
- *   the core useMediaQuery hook
+ * @input Uses React (useCallback, useEffect, useMemo, useRef, useState)
  * @output Exports useSheetGestures hook and its option/result types
  * @position Internal to BottomSheet; not exported from the core entry point
  *
@@ -85,7 +84,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   type UIEvent as ReactUIEvent,
 } from 'react';
-import {useMediaQuery} from '../hooks';
+
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -300,6 +299,13 @@ export interface UseSheetGesturesOptions {
   /** Whether the owning sheet is open. Drag state resets when it closes. */
   isOpen: boolean;
   /**
+   * The host's controlled answer to the last close request: false once the
+   * host has taken a dismissal (its own state says closed, even while the
+   * sheet still animates out), true while it is open or has refused one.
+   * Settles whether a release's dismissal was honored. Defaults to `isOpen`.
+   */
+  isOpenRequested?: boolean;
+  /**
    * Whether a downward swipe may dismiss the sheet. When false, a gesture
    * past the dismiss threshold settles at the shortest detent instead.
    * @default true
@@ -402,6 +408,16 @@ export interface UseSheetGesturesResult {
   /** Whether the drag in progress has moved the sheet off its base detent. */
   isTraveling: boolean;
   /**
+   * Whether the sheet's current dismissal was started by the release of a
+   * touch drag (a finger's swipe or fling past the dismiss line). True from
+   * the release until the sheet is open again; false for a dismissal from a
+   * control, Escape, the scrim or code, and for a mouse or pen drag. Under
+   * reduced motion a transition a touch drag's release starts cross-fades on
+   * every pointer (`design:reduced-motion` DR2), so the exit's motion needs
+   * to know.
+   */
+  isDismissedByTouchDrag: boolean;
+  /**
    * The sheet's offset right now, in px: the settled detent at rest, the live
    * position during a drag. Written per input sample without a render; read
    * it where the live number is needed without subscribing to it.
@@ -458,6 +474,7 @@ function prefersReducedMotion(): boolean {
  */
 export function useSheetGestures({
   isOpen,
+  isOpenRequested = isOpen,
   canDismiss = true,
   offscreenBlockEndInset = 0,
   onDismiss,
@@ -468,6 +485,35 @@ export function useSheetGestures({
   const [dragOffset, setDragOffset] = useState(0);
   const [settledOffset, setSettledOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  // Scoped to the one close the release requested. The release calls
+  // onDismiss() and sets `pending`; the host answers in the same update, so
+  // the first render afterwards says whether it took the close (its
+  // controlled state now says closed: the exit under way is the drag's) or
+  // refused it (a guarded onOpenChange left it open: the sheet snaps back and
+  // the request is spent). Either way the flag is settled during render, the
+  // prev-prop pattern, and derived back to false once the sheet is open
+  // again — so a later close from a control, Escape or code is never
+  // mistaken for a drag.
+  const [touchDragDismissal, setTouchDragDismissal] = useState<{
+    isTouch: boolean;
+    pending: boolean;
+  } | null>(null);
+  if (touchDragDismissal != null) {
+    if (touchDragDismissal.pending) {
+      setTouchDragDismissal(
+        isOpenRequested
+          ? null
+          : {isTouch: touchDragDismissal.isTouch, pending: false},
+      );
+    } else if (isOpenRequested) {
+      setTouchDragDismissal(null);
+    }
+  }
+  const isDismissedByTouchDrag =
+    touchDragDismissal != null &&
+    !touchDragDismissal.pending &&
+    touchDragDismissal.isTouch &&
+    !isOpenRequested;
   // Whether the drag in flight has moved the sheet off its base detent. One
   // state change per drag, for hosts that react to travel beginning.
   const [isTraveling, setIsTraveling] = useState(false);
@@ -597,6 +643,8 @@ export function useSheetGestures({
     // capture and takes its events from `touchmove`, so every real-pointer
     // handler has to leave it alone.
     syntheticTouch: boolean;
+    /** The pointer's kind: a finger, a pen, or a mouse. */
+    pointerType: string;
     pointerId: number;
     startCoord: number;
     lastCoord: number;
@@ -960,6 +1008,7 @@ export function useSheetGestures({
       renderedOffset: number,
       layoutOffset: number,
       naturalEndGap: number,
+      isTouch: boolean,
     ) => {
       const {offsets, peekOffset} = resolveDetents(height);
       const maxOffset = offsets[offsets.length - 1];
@@ -1018,6 +1067,7 @@ export function useSheetGestures({
             naturalEndGap,
             false,
           );
+          setTouchDragDismissal({isTouch, pending: true});
           onDismissRef.current();
         } else {
           settleAt(maxOffset);
@@ -1060,6 +1110,7 @@ export function useSheetGestures({
       const baseLayoutOffset = settledLayoutOffsetRef.current;
       dragStateRef.current = {
         syntheticTouch,
+        pointerType: syntheticTouch ? 'touch' : event.pointerType,
         pointerId: event.pointerId,
         startCoord: start,
         lastCoord: event.clientY,
@@ -1258,6 +1309,7 @@ export function useSheetGestures({
         state.renderedOffset,
         state.layoutOffset,
         state.naturalEndGap,
+        state.pointerType === 'touch',
       );
     },
     [settleFromDrag],
@@ -1582,11 +1634,6 @@ export function useSheetGestures({
     }
   }, []);
 
-  // Subscribed, not memoized: the preference can change while a sheet is open,
-  // and this branch decides whether the settle runs as a transition at all.
-  // The imperative gesture paths read prefersReducedMotion() directly.
-  const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-
   const reconcileScrollPreservationInset = useCallback(
     (body: HTMLElement) => {
       if (scrollPreservationInsetRef.current <= 0) {
@@ -1678,9 +1725,13 @@ export function useSheetGestures({
         // Gated on the sheet being up: suppression must not outlive the sheet
         // it was suppressing for. The host swaps the panel to its closing
         // state in whatever frame the dismissal lands, and a stale `none`
-        // would apply to that transform too, cutting the exit.
+        // would apply to that transform too, cutting the exit. Reduced motion
+        // is the panel's own stylesheet's to honor (its transform transition
+        // collapses under the preference), not an inline `none` here: the
+        // shorthand would also silence the panel's opacity transition, the
+        // cross-fade `design:reduced-motion` DR2 asks for on a coarse pointer.
         transition:
-          isOpen && (isDragging || isScrollAreaReconciling || reducedMotion)
+          isOpen && (isDragging || isScrollAreaReconciling)
             ? 'none'
             : undefined,
         // One-finger drags are the sheet's; a pinch stays the browser's.
@@ -1688,7 +1739,7 @@ export function useSheetGestures({
         overscrollBehavior: 'contain',
       },
     }),
-    [activeOffset, isDragging, isOpen, isScrollAreaReconciling, reducedMotion],
+    [activeOffset, isDragging, isOpen, isScrollAreaReconciling],
   );
 
   const handleProps = useMemo<SheetHandleProps>(
@@ -1746,6 +1797,7 @@ export function useSheetGestures({
     settledOffset,
     isDragging,
     isTraveling,
+    isDismissedByTouchDrag,
     activeOffsetRef,
     sheetHeight,
     scrollPreservationInset,

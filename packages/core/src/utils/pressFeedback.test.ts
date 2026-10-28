@@ -50,7 +50,13 @@ function press(
   pointerType = 'touch',
 ): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
-  Object.assign(event, {clientX: x, clientY: y, pointerId: 1, pointerType});
+  Object.assign(event, {
+    button: 0,
+    clientX: x,
+    clientY: y,
+    pointerId: 1,
+    pointerType,
+  });
   element.dispatchEvent(event);
 }
 
@@ -107,10 +113,24 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('ignores a mouse entirely', () => {
+  it('leaves a mouse press to `:active` where the primary pointer is fine', () => {
+    // The test environment is a desktop: `(pointer: coarse)` does not match,
+    // so the stylesheet keeps `:active` for the mouse and the controller
+    // stays out of its way.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
     expect(pressedRow()).toBe(-1);
+  });
+
+  it('leaves a Space press to `:active` where the primary pointer is fine', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const button = pressable('button');
+    rows[0].appendChild(button);
+    button.dispatchEvent(
+      new KeyboardEvent('keydown', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
   it('ignores a touch that lands outside every pressable', () => {
@@ -335,6 +355,294 @@ describe('two touches in a row', () => {
     rows[2].dispatchEvent(second);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(rows.some(row => row.hasAttribute(PRESSED_ATTRIBUTE))).toBe(false);
+  });
+});
+
+describe('a phone or tablet paints a mouse or Space press itself', () => {
+  // `(pointer: coarse)` reads the PRIMARY pointer. Where it matches, the
+  // stylesheet drops every `:active` arm, so a trackpad click or a Space press
+  // on a focused button would paint nothing at all unless the controller
+  // paints it: a tablet with a keyboard and trackpad, a phone with a mouse.
+  const coarse = (query: string): MediaQueryList =>
+    ({
+      matches: /\(\s*pointer\s*:\s*coarse\s*\)/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+
+  function key(target: Element, type: 'keydown' | 'keyup', init = {}): void {
+    target.dispatchEvent(
+      new KeyboardEvent(type, {
+        key: ' ',
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      }),
+    );
+  }
+
+  function focusedButton(row: HTMLElement): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.setAttribute(PRESSABLE_ATTRIBUTE, '');
+    row.appendChild(button);
+    button.focus();
+    return button;
+  }
+
+  beforeEach(() => {
+    release();
+    vi.stubGlobal('matchMedia', coarse);
+    // These are a mouse or a key on a touch-first device: coarse primary.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
+    release = installPressFeedback();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('paints a mouse press at once, holds it, and fades it at the release', () => {
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    // No onset delay: a mouse button cannot become a scroll.
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    vi.advanceTimersByTime(1000);
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[1], 'pointerup', 10, 100, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    press(document.body, 'pointermove', 400, 900, 'mouse');
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(document.body, 'pointerup', 400, 900, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
+  it('paints only the primary button', () => {
+    const secondary = new Event('pointerdown', {bubbles: true});
+    Object.assign(secondary, {
+      button: 2,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+    });
+    rows[0].dispatchEvent(secondary);
+    expect(pressedRow()).toBe(-1);
+  });
+
+  it('paints the innermost surface, and nothing on a disabled one', () => {
+    const inner = pressable('button');
+    rows[2].appendChild(inner);
+    press(inner, 'pointerdown', 10, 200, 'mouse');
+    expect(inner.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(inner, 'pointerup', 10, 200, 'mouse');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+
+    const disabled = pressable('button');
+    disabled.setAttribute('aria-disabled', 'true');
+    rows[3].appendChild(disabled);
+    press(disabled, 'pointerdown', 10, 300, 'mouse');
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+
+  it('drops the paint at once when the pointer is cancelled or a drag starts', () => {
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    press(rows[0], 'pointercancel', 10, 10, 'mouse');
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    rows[1].dispatchEvent(new Event('dragstart', {bubbles: true}));
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    // The slot is free again: the next press paints.
+    press(rows[2], 'pointerdown', 10, 200, 'mouse');
+    expect(rows[2].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("a finger's press and a mouse press keep their own slots", () => {
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    const touch = new Event('pointerdown', {bubbles: true});
+    Object.assign(touch, {
+      button: 0,
+      clientX: 10,
+      clientY: 100,
+      pointerId: 7,
+      pointerType: 'touch',
+    });
+    rows[1].dispatchEvent(touch);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[0], 'pointerup', 10, 10, 'mouse');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("a mouse press on a surface a finger's release is still fading keeps its paint", () => {
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(rows[0], 'pointerup', 10, 10);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    // The finger's fade timer would have removed the attribute here.
+    vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('a mouse press never arms the scroll brake', () => {
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    press(rows[0], 'pointerup', 10, 10, 'mouse');
+    scroller.dispatchEvent(new Event('scroll'));
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('paints a Space press on a focused button while the key is down', () => {
+    const button = focusedButton(rows[0]);
+    key(button, 'keydown');
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    vi.advanceTimersByTime(1000);
+    key(button, 'keydown', {repeat: true});
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    key(button, 'keyup');
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('listens for the key’s release and focus loss only while Space holds a press', () => {
+    const attached = new Set<string>();
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const sync = () => {
+      for (const [type] of add.mock.calls.splice(0)) {
+        attached.add(type);
+      }
+      for (const [type] of remove.mock.calls.splice(0)) {
+        attached.delete(type);
+      }
+    };
+    const button = focusedButton(rows[0]);
+    key(button, 'keydown');
+    sync();
+    expect([...attached].sort()).toEqual(['blur', 'keyup']);
+    key(button, 'keyup');
+    sync();
+    expect([...attached]).toEqual([]);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('leaves the row around a focused checkbox or radio at rest, as desktop browsers do', () => {
+    // Only the input matches `:active` for a Space press; the row around it,
+    // the pressable surface, stays at rest in desktop Chromium and WebKit.
+    for (const type of ['checkbox', 'radio']) {
+      const input = document.createElement('input');
+      input.type = type;
+      rows[2].appendChild(input);
+      input.focus();
+      key(input, 'keydown');
+      expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      key(input, 'keyup');
+    }
+  });
+
+  it('paints a Space press only on a focused element that is itself the surface', () => {
+    const plain = document.createElement('button');
+    rows[2].appendChild(plain);
+    plain.focus();
+    key(plain, 'keydown');
+    expect(rows[2].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    key(plain, 'keyup');
+  });
+
+  it('leaves a menu row to the menu: its highlight is the only paint', () => {
+    // useMenuPress FR6 and DEC-6: a press held on one row while the highlight
+    // follows the pointer to another would light two rows.
+    const menu = document.createElement('div');
+    menu.setAttribute('data-astryx-menu-press', '');
+    const first = pressable('button');
+    const second = pressable('button');
+    menu.append(first, second);
+    document.body.appendChild(menu);
+    try {
+      press(first, 'pointerdown', 10, 10, 'mouse');
+      press(second, 'pointermove', 10, 40, 'mouse');
+      expect(first.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      press(second, 'pointerup', 10, 40, 'mouse');
+      first.focus();
+      key(first, 'keydown');
+      expect(first.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      key(first, 'keyup');
+    } finally {
+      menu.remove();
+    }
+  });
+
+  it('paints nothing where Space activates nothing, for Enter, or for a press the page cancelled', () => {
+    const link = document.createElement('a');
+    link.href = '#';
+    link.setAttribute(PRESSABLE_ATTRIBUTE, '');
+    rows[0].appendChild(link);
+    key(link, 'keydown');
+
+    const roleButton = pressable('div');
+    roleButton.setAttribute('role', 'button');
+    roleButton.tabIndex = 0;
+    rows[1].appendChild(roleButton);
+    key(roleButton, 'keydown');
+
+    const button = focusedButton(rows[2]);
+    key(button, 'keydown', {key: 'Enter'});
+    button.addEventListener('keydown', event => event.preventDefault(), {
+      once: true,
+    });
+    key(button, 'keydown');
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+
+  it('ends the press with its fade when focus leaves before the key comes up', () => {
+    const button = focusedButton(rows[0]);
+    key(button, 'keydown');
+    button.dispatchEvent(new FocusEvent('blur'));
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('leaves nothing painted when the page hides or the controller comes down', () => {
+    const button = focusedButton(rows[0]);
+    key(button, 'keydown');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    });
+    expect(button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    release();
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    key(button, 'keydown');
+    press(rows[2], 'pointerdown', 10, 200, 'mouse');
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+    // Re-install for afterEach's release.
+    release = installPressFeedback();
   });
 });
 
