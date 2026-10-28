@@ -12,10 +12,10 @@
  * One gesture makes one request. A hold is an arena participant, a long press
  * held to UIKit's 500 ms with its 10 pt tolerance, so it loses to a claim
  * another recognizer already made on that finger; the browser's own menu
- * that a held finger or a key also fires is refused rather than requested
- * again. A control that keeps its press for a hold-repeat (a stepper) keeps
- * its long press, right click and Shift+F10: none of them requests through
- * it. A mouse held still makes no request: it selects text and drags.
+ * that a held finger, a held pen or a key also fires is refused rather than
+ * requested again. A control that keeps its press for a hold-repeat (a
+ * stepper) owns only its hold: its right click and Shift+F10 still reach the
+ * request. A mouse held still makes no request: it selects text and drags.
  */
 
 import {
@@ -74,8 +74,11 @@ export interface ContextRequestOptions {
   onHold?: (phase: 'committed' | 'ended' | 'cancelled') => void;
 }
 
-/** How long after a key's request the browser's own context menu event is that key's echo, ms. */
-const KEY_ECHO_MS = 500;
+/**
+ * How long after a key's request, or a pen's hold, the browser's own context
+ * menu event is that input's echo, ms.
+ */
+const MENU_ECHO_MS = 500;
 
 const POINTER_KINDS: ReadonlySet<string> = new Set(['touch', 'mouse', 'pen']);
 
@@ -100,6 +103,8 @@ export function attachContextRequest(
   const commitMs = options.hold?.commitMs ?? LONG_PRESS_DURATION_MS;
   const requestMs = Math.max(commitMs, options.hold?.requestMs ?? commitMs);
   let lastKeyRequestAt = Number.NEGATIVE_INFINITY;
+  /** When a pen's hold last ended, for its menu event at the lift. */
+  let lastPenHoldAt = Number.NEGATIVE_INFINITY;
   let held: {touchId: number; pointerType: PointerKind} | null = null;
   const requestOnLift = options.hold?.requestOnLift === true;
   const allowableMovement =
@@ -186,6 +191,9 @@ export function attachContextRequest(
           state === 'ended' && hasRequested ? 'ended' : 'cancelled',
         );
       }
+      if (held?.pointerType === 'pen') {
+        lastPenHoldAt = host.arena.now();
+      }
       hasRequested = false;
       hasDrifted = false;
       held = null;
@@ -195,7 +203,9 @@ export function attachContextRequest(
 
   const onContextMenu = (event: Event): void => {
     const menu = event as MouseEvent;
-    if (!isEnabled() || host.keepsPressBetween(menu.target, element)) {
+    // A hold-repeat control inside owns only its hold: its right click
+    // reaches this request.
+    if (!isEnabled()) {
       return;
     }
     // The browser's own menu stays off either way.
@@ -207,7 +217,12 @@ export function attachContextRequest(
     if (
       pointerType === 'touch' ||
       host.fingersDown() > 0 ||
-      time - lastKeyRequestAt < KEY_ECHO_MS
+      time - lastKeyRequestAt < MENU_ECHO_MS ||
+      // A pen's own menu event, during its hold or at its lift, is the hold's.
+      (pointerType === 'pen' &&
+        ((held?.pointerType === 'pen' &&
+          (recognizer.state === 'began' || recognizer.state === 'changed')) ||
+          time - lastPenHoldAt < MENU_ECHO_MS))
     ) {
       return;
     }
@@ -224,11 +239,9 @@ export function attachContextRequest(
     const key = event as KeyboardEvent;
     const isRequestKey =
       (key.key === 'F10' && key.shiftKey) || key.key === 'ContextMenu';
-    if (
-      !isRequestKey ||
-      !isEnabled() ||
-      host.keepsPressBetween(key.target, element)
-    ) {
+    // A hold-repeat control inside owns only its hold: Shift+F10 on it
+    // reaches this request.
+    if (!isRequestKey || !isEnabled()) {
       return;
     }
     key.preventDefault();

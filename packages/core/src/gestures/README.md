@@ -455,10 +455,10 @@ context-menu key. Each gesture makes one request, reporting its `kind`
 (`hold`, `pointer`, `keyboard`), its pointer, and its point (none from
 the keyboard). The hold is an arena participant, so it loses to a claim
 another recognizer made on that finger first (a reorder handle's hold); the
-browser's own menu that a held finger or a key also fires is refused, never
-requested again; and a mouse held still makes no request. A control that
-keeps its press for a hold-repeat keeps its long press, right click and
-Shift+F10 its own. A right click or a ctrl-click on macOS starts no press.
+browser's own menu that a held finger, a held pen or a key also fires is
+refused, never requested again; and a mouse held still makes no request. A
+control that keeps its press for a hold-repeat owns only its hold: its right
+click and Shift+F10 still reach the request. A right click or a ctrl-click on macOS starts no press.
 The request listens on its own element only, and only while enabled.
 
 A hold can come in two stages (`hold: {commitMs, requestMs}`, reported by
