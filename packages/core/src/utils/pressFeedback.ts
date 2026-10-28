@@ -6,8 +6,7 @@
  *   scroll and visibility events
  * @output Exports paintPress and readPressPaint (the one writer of the press
  *   attribute for every painter), PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE,
- *   pressableProps, the list row's press profile (CELL_PRESS_PROFILE,
- *   cellPressableProps) and
+ *   pressableProps and
  *   installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
  *   per document that writes `data-astryx-press` on the nearest pressable surface.
@@ -73,21 +72,6 @@ export const PRESSED_ATTRIBUTE = 'data-astryx-press';
 export const pressableProps: {readonly [PRESSABLE_ATTRIBUTE]: ''} = {
   [PRESSABLE_ATTRIBUTE]: '',
 };
-
-/**
- * The press profile a list row carries in its {@link PRESSABLE_ATTRIBUTE}
- * marker: rows paint the press on the cell layer (interactionOverlay.stylex.ts
- * `cell`) and release on the cell's clock; a selection hold finds rows by it.
- */
-export const CELL_PRESS_PROFILE = 'cell';
-
-/**
- * Spread on a list row's pressable element after the press feedback hook's
- * props: the marker carries the cell profile.
- */
-export const cellPressableProps: {
-  readonly [PRESSABLE_ATTRIBUTE]: typeof CELL_PRESS_PROFILE;
-} = {[PRESSABLE_ATTRIBUTE]: CELL_PRESS_PROFILE};
 
 /**
  * How long after a touch a scroll can still be that finger's momentum.
