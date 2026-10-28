@@ -690,7 +690,10 @@ export function Pagination({
           <div
             ref={dotsListRef}
             {...stylex.props(styles.dotsContainer)}
-            role="group"
+            // The dots already behave as an APG radio group (one Tab stop,
+            // arrows, Home/End, selection follows focus), so they expose its
+            // roles (spec:AST-020 FR15): a reader announces "Page 3, 3 of 7".
+            role="radiogroup"
             aria-label={pageIndicatorsLabel}
             onKeyDown={handleDotsKeyDown}
             onFocus={handleDotsFocus}>
@@ -700,11 +703,14 @@ export function Pagination({
                 <button
                   key={i + 1}
                   type="button"
+                  role="radio"
                   data-page={i + 1}
-                  aria-label={t('@astryx.pagination.goToPage', {
-                    page: i + 1,
+                  aria-label={t('@astryx.pagination.pageAnnounce', {
+                    current: i + 1,
                   })}
-                  aria-current={isActive ? 'page' : undefined}
+                  // aria-checked carries the current page; aria-current beside
+                  // it would announce the same state twice.
+                  aria-checked={isActive}
                   // The active dot is the single roving tab stop; useListFocus
                   // maintains it as focus and the active page move.
                   tabIndex={isActive ? 0 : -1}
