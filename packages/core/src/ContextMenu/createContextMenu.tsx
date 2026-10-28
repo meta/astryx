@@ -374,6 +374,11 @@ function AttachedMenu({
         .display.startsWith('inline') ?? false,
   );
   const handleOpenChange = onOpenChange;
+  // Synchronizes the menu with requests from outside React: the element's
+  // own listeners (its context request) and the controller's open() and
+  // close() arrive as `forwarded`, and each reaches the menu's handle once
+  // it has rendered; the menu reports `onOpenChange` from its own show and
+  // hide.
   useLayoutEffect(() => {
     if (forwarded == null) {
       return;
