@@ -33,8 +33,6 @@ verified_by:
     packages/core/src/Layer/anchorName.test.ts,
     packages/core/src/Layer/useLayerDismissal.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
-    packages/core/src/Layer/layerExitCopy.test.ts,
-    packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
@@ -64,7 +62,6 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV7",
       "INV11",
       "INV12",
-      "INV13",
       "INV14",
       "INV15"
     ],
@@ -300,25 +297,6 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
-### Exit copy
-
-The browser hides a popover the moment it closes, whether by a pick, Escape, or
-its own light dismiss. A touch presentation whose close stays on screen plays it
-on an exit copy: a static copy of the layer that `placeLayerExitCopy` takes as
-the layer closes. The copy is laid out on the layer's own box and carries the
-transform and opacity the layer is drawn with, so a copy taken while the layer
-is still entering holds where it was drawn. It carries no ids, form names, or
-form owner; it is `inert`, hidden from assistive technology, and out of pointer
-reach; it keeps the layer's scroll positions. It is shown only in the top layer,
-as a manual popover, so a clipping, transformed, or sticky ancestor neither cuts
-nor moves it; a fixed box or a larger `z-index` is no substitute
-(`spec:AST-027` FR8). Where the browser refuses that show during the closing
-popover's own toggle, the copy waits, hidden, and enters the top layer once the
-toggle is over: after the script that closed the layer, or in the next frame
-before it paints. Where there is no top layer (no popover API), or the browser
-still refuses, there is no copy and the close is immediate. The presentation
-that placed the copy animates it and removes it when its close settles.
-
 ### Current dismissal plumbing
 
 `family:overlay-dismissal` owns the shipped Escape/platform-close membership
@@ -502,12 +480,6 @@ layers use Layer rendering without joining Escape/platform dismissal.
   correct, and the runtime polls nothing: an anchor that a scrolled
   container hides is followed again when an intersection observer reports it
   back in view.
-- **INV13 — One exit copy per closing layer.** A layer's close plays on at most
-  one exit copy, made by `placeLayerExitCopy`: drawn where the layer was drawn,
-  inert, hidden from assistive technology, without ids, form names, or form
-  owner, shown only in the top layer, and removed by its owner when the close
-  settles. Placing a second copy for the same layer removes the first; another
-  layer's copy stays.
 - **INV14 — The runtime owns every layer's shared mechanism.** Internally, the layer runtime owns the shared
   mechanism layers use: top-layer mounting, close-request delivery, the
   presentation hold (keeping a layer's chosen presentation from the open until
@@ -561,13 +533,11 @@ Current gaps are observable facts, not current target behavior:
 migration, verification, and completion criteria for these gaps. This record must
 be updated only as that work ships.
 
-INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
-runtime owns the shared exit copy (INV13, `placeLayerExitCopy`), and the one
-lift-from-trigger module exists (INV15, `packages/core/src/liftFromTrigger/`);
-no shared presentation hold or runtime backdrop tint exists, Dialog, Drawer,
-BottomSheet, Lightbox, MobileNav, ToastViewport, and Selector each build their
-own top-layer mounting, exit, or backdrop, and Popover builds its own
-presentation hold for its sheet presentation.
+INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them: no
+shared presentation hold, exit copy, runtime backdrop tint, or lift module
+exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
+and Selector each build their own top-layer mounting, exit, or backdrop, and
+Popover builds its own presentation hold for its sheet presentation.
 BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
@@ -598,12 +568,6 @@ above are the stack's, the mounting under them is this gap's.
   entry/return, and controlled close behavior.
 - A browser fallback change updates public `useLayer` and Popover docs and tests
   for both the native path and actual fallback.
-- An exit-copy change verifies, where each can be observed: the copy's reach,
-  accessibility and form exclusion in jsdom; its top-layer show (from script
-  and by light dismiss), its place mid-entrance, and that a layer keeps one
-  copy, in jsdom and in Chromium and WebKit; and the refused show's wait in
-  jsdom and on Android Chromium, the engine that refuses a show during another
-  popover's toggle.
 
 ## Owning code
 
@@ -625,8 +589,6 @@ above are the stack's, the mounting under them is this gap's.
   transitions of a layer and its content across the re-placement's display
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
-- `Layer/layerExitCopy.ts` owns the exit copy a touch presentation's close plays
-  on.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -676,7 +638,6 @@ this current architecture record.
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                       |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor |
 | INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                          | A layer whose first painted rectangle differs from its settled one                                                                                                                                            |
-| INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                     | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                   |
 | INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                               | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                         |
 | INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                              | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                         |
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                         | A current local channel silently changes ownership or policy                                                                                                                                                  |

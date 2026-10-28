@@ -131,11 +131,10 @@ and its panels stay put, so no element is added to any row.
 - **A render prop for a custom panel.** Deferred, not foreclosed: a
   `render*`-shaped addition can land when a caller needs something the
   vocabulary cannot say (DEC-1).
-- **Gesture tuning.** Axis-lock distance, commit ratio, fling velocity,
-  resistance past the panel: behavior constants in source, not public API and
-  not design tokens (the same ruling the touch press model received for its
-  clocks). The row's slide and spring motion plays on theme motion roles
-  (`spec:AST-094` FR4).
+- **Gesture tuning.** Axis-lock distance, commit ratio, fling velocity, slide
+  and spring durations, resistance past the panel: behavior constants in
+  source, not public API and not design tokens (the same ruling the touch
+  press model received for its clocks).
 - **Vertical swipes**, and a swipe whose only
   meaning is dismissal (Toast already has that in `useToastGesture`).
 - **Public out-of-flow slots on `Item`.** Deliberately not admitted: the
@@ -220,10 +219,9 @@ and its panels stay put, so no element is added to any row.
 | open state               | closed, resting open                                                                                                                                                    | The row's own. A pointer landing anywhere outside a resting row closes it, which is also how a drag on a neighbour closes it; no group state exists.                                                                                                                                                                                                                                                                                                                 | closed   | `spec:AST-057`              | proposed  |
 | the modality split       | internal                                                                                                                                                                | A mouse drag never starts the swipe; a finger's or a pen's pointer event or a horizontal wheel gesture does, read from the input event, not a prop or a media query (`architecture:interaction-modality` INV6).                                                                                                                                                                                                                                                      | —        | `spec:AST-057`              | proposed  |
 
-Not public: axis-lock distance, commit ratio, fling velocity, resistance,
-panel widths, the custom property's name. They are behavior constants. The
-row's slide and spring motion plays on theme motion roles (`spec:AST-094`
-FR4).
+Not public: axis-lock distance, commit ratio, fling velocity, durations,
+resistance, panel widths, the custom property's name. They are behavior
+constants.
 
 ## Requirements
 
