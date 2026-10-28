@@ -15,6 +15,8 @@
  * Fullscreen dialogs add safe-area protection to the default padding fallback
  * while preserving explicit prop/theme padding overrides, and fade in without
  * the centered-dialog translate/scale motion.
+ * Initial focus is applied after showModal; an explicit descendant request
+ * takes priority over a header's default title request.
  *
  * Under reduced motion the entrance never travels or scales
  * (docs/design/reduced-motion.md): on a touch screen the dialog fades in
@@ -541,11 +543,6 @@ export function Dialog({
   // would cost at the dialog level.
   const titleId = useId();
 
-  const dialogContextValue = useMemo(
-    () => ({isInline, titleId}),
-    [isInline, titleId],
-  );
-
   // Consumer-provided labels always win over the DialogHeader default.
   const hasConsumerName =
     props['aria-label'] != null || props['aria-labelledby'] != null;
@@ -573,6 +570,19 @@ export function Dialog({
       }
     },
     [titleId, hasConsumerName],
+  );
+
+  // A composed header whose title renders after the dialog mounted asks the
+  // dialog to look for the title again.
+  const syncDefaultName = useCallback(() => {
+    if (dialogRef.current != null) {
+      attachDialog(dialogRef.current);
+    }
+  }, [attachDialog]);
+
+  const dialogContextValue = useMemo(
+    () => ({isInline, titleId, syncDefaultName}),
+    [isInline, titleId, syncDefaultName],
   );
 
   // Input in a second document (a same-origin iframe, a Document
@@ -642,11 +652,27 @@ export function Dialog({
         dialog.showModal();
         // React's autoFocus calls .focus() during commit, before showModal()
         // makes the dialog visible, so the focus silently fails.
-        // Focus the first element with data-autofocus inside the dialog.
-        const autofocusTarget =
-          dialog.querySelector<HTMLElement>('[data-autofocus]');
-        if (autofocusTarget) {
-          focusForLastInput(autofocusTarget);
+        // Explicit descendant intent takes priority over a header's default
+        // title. Keep the marker private to the focus-owning components.
+        const autofocusTargets = [
+          ...dialog.querySelectorAll<HTMLElement>(
+            '[data-autofocus]:not([data-autofocus="dialog-title"])',
+          ),
+          ...dialog.querySelectorAll<HTMLElement>(
+            '[data-autofocus="dialog-title"]',
+          ),
+        ];
+        for (const target of autofocusTargets) {
+          if (target.closest('[hidden], [inert], [aria-hidden="true"]')) {
+            continue;
+          }
+          // Disabled and CSS-hidden targets cannot receive focus in the
+          // browser. If a request cannot land, try the next eligible request
+          // and finally the title; otherwise preserve native initial focus.
+          focusForLastInput(target);
+          if (document.activeElement === target) {
+            break;
+          }
         }
       }
       // Under a coarse primary pointer, a tap or a drag during the entrance
