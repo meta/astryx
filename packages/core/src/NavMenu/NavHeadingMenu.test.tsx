@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi} from 'vitest';
-import type {KeyboardEvent} from 'react';
+import {Activity, type KeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link';
 import {NavHeadingMenu} from './NavHeadingMenu';
 import {NavHeadingMenuItem} from './NavHeadingMenuItem';
 import {NavHeadingCloseContext} from './NavMenuContext';
@@ -126,6 +127,203 @@ describe('NavHeadingMenuItem', () => {
       'aria-disabled',
       'true',
     );
+  });
+
+  it('exposes no destination on a disabled link item', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const item = screen.getByRole('menuitem');
+    // No href means no navigation path at all: not a pointer click, a
+    // middle-click, an assistive-technology activation, or Enter.
+    expect(item).not.toHaveAttribute('href');
+    // The row keeps its shape and still reports the disabled state.
+    expect(item.tagName).toBe('A');
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('does not reach a custom link component when a link item is disabled', () => {
+    function CustomLink({
+      children,
+      ref,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      return (
+        <a ref={ref} data-custom-link {...props}>
+          {children}
+        </a>
+      );
+    }
+    render(
+      <LinkProvider component={CustomLink}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+        </NavHeadingMenu>
+      </LinkProvider>,
+    );
+    const item = screen.getByRole('menuitem');
+    expect(item).not.toHaveAttribute('data-custom-link');
+    expect(item).not.toHaveAttribute('href');
+  });
+
+  it('keeps an enabled link item on the custom link component', () => {
+    function CustomLink({
+      children,
+      ref,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      return (
+        <a ref={ref} data-custom-link {...props}>
+          {children}
+        </a>
+      );
+    }
+    render(
+      <LinkProvider component={CustomLink}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" />
+        </NavHeadingMenu>
+      </LinkProvider>,
+    );
+    const item = screen.getByRole('menuitem');
+    expect(item).toHaveAttribute('data-custom-link');
+    expect(item).toHaveAttribute('href', '/docs');
+  });
+
+  it('keeps a disabled link item focusable but out of the Tab order', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const item = screen.getByRole('menuitem');
+    // No href and no tabindex would make the anchor unfocusable.
+    expect(item).toHaveAttribute('tabindex', '-1');
+    item.focus();
+    expect(item).toHaveFocus();
+  });
+
+  it('keeps focus on a link item that becomes disabled while focused', () => {
+    const {rerender} = render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const disabled = screen.getByRole('menuitem');
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+  });
+
+  it('does not steal focus when an unfocused link item toggles disabled', () => {
+    const {rerender} = render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menuitem')).not.toHaveFocus();
+  });
+
+  it('does not pull focus back when an Activity boundary reveals a row', () => {
+    const tree = (mode: 'visible' | 'hidden') => (
+      <>
+        <button type="button">Elsewhere</button>
+        <Activity mode={mode}>
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Docs" href="/docs" />
+          </NavHeadingMenu>
+        </Activity>
+      </>
+    );
+    const {rerender} = render(tree('visible'));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide the row while it holds focus, then move focus elsewhere.
+    rerender(tree('hidden'));
+    const other = screen.getByRole('button', {name: 'Elsewhere'});
+    other.focus();
+    expect(other).toHaveFocus();
+
+    // Revealing the same node must leave focus where the person put it.
+    rerender(tree('visible'));
+    expect(other).toHaveFocus();
+  });
+
+  it('leaves focus on the page when an Activity boundary reveals a row', () => {
+    const tree = (mode: 'visible' | 'hidden') => (
+      <Activity mode={mode}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" />
+        </NavHeadingMenu>
+      </Activity>
+    );
+    const {rerender} = render(tree('visible'));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide while focused, then drop focus to the page.
+    rerender(tree('hidden'));
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    // The same node re-attaches on reveal; it was not replaced, so it must not
+    // pull focus back from the page.
+    rerender(tree('visible'));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('does not take focus on reveal when isDisabled flipped while hidden', () => {
+    const tree = (mode: 'visible' | 'hidden', isDisabled: boolean) => (
+      <>
+        <button type="button">Elsewhere</button>
+        <Activity mode={mode}>
+          <NavHeadingMenu>
+            <NavHeadingMenuItem
+              label="Billing"
+              href="/billing"
+              isDisabled={isDisabled}
+            />
+          </NavHeadingMenu>
+        </Activity>
+      </>
+    );
+    const {rerender} = render(tree('visible', false));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide while focused, swap the row's element type while hidden, then move
+    // focus to another control.
+    rerender(tree('hidden', false));
+    rerender(tree('hidden', true));
+    const other = screen.getByRole('button', {name: 'Elsewhere'});
+    other.focus();
+    expect(other).toHaveFocus();
+
+    // The swapped-in node attaches only now and must not take focus.
+    rerender(tree('visible', true));
+    expect(screen.getByRole('menuitem')).not.toHaveAttribute('href');
+    expect(other).toHaveFocus();
   });
 
   it('renders description text', () => {

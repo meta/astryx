@@ -1549,6 +1549,32 @@ describe('defineTheme extends', () => {
     expect(child.tokens['--radius-container']).toBe('16px');
   });
 
+  it('inherits motion field by field: a field the child leaves unset keeps the base value (spec:AST-108 FR5)', () => {
+    const base = defineTheme({
+      name: 'base',
+      motion: {
+        fast: 100,
+        medium: 200,
+        slow: 400,
+        ratio: 0.75,
+        easing: 'cubic-bezier(0.2, 0, 0, 1)',
+      },
+    });
+    const child = defineTheme({
+      name: 'child',
+      extends: base,
+      motion: {fast: 120, medium: 240, ratio: 0.8},
+    });
+    // The fields the child sets regenerate their tokens.
+    expect(child.tokens['--duration-fast']).toBe('120ms');
+    expect(child.tokens['--duration-medium-min']).toBe('190ms');
+    // `slow` and `easing`, left unset, keep the base's tokens: the slow band
+    // stays at the base's ratio (400 × 0.75), not the child's.
+    expect(child.tokens['--duration-slow']).toBe('400ms');
+    expect(child.tokens['--duration-slow-min']).toBe('300ms');
+    expect(child.tokens['--ease-standard']).toBe('cubic-bezier(0.2, 0, 0, 1)');
+  });
+
   it('overrides base tokens with explicit tokens', () => {
     const base = defineTheme({
       name: 'base',

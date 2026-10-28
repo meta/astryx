@@ -145,6 +145,12 @@ const contextMenuCellStyles = stylex.create({
 
 const dividerRowStyles = stylex.create({
   cell: {
+    // The width this cell's divider draws, for a pinned cell's own divider
+    // to match (plugins/stickyColumns). Private plumbing, not a theme API.
+    '--_table-row-divider-width': {
+      default: borderVars['--border-width'],
+      [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
+    },
     borderBottomWidth: {
       default: borderVars['--border-width'],
       // Skip border on cells in the last body row to avoid a

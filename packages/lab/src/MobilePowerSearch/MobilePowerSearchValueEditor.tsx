@@ -4,7 +4,7 @@
 
 /**
  * @file MobilePowerSearchValueEditor.tsx
- * @input OperatorValue, staged FilterValue, onChange, label, timezoneID;
+ * @input OperatorValue, staged FilterValue, onChange, label;
  *   public @astryxdesign/core inputs (DateInput, DateRangeInput,
  *   DateTimeInput, Icon, List, NumberInput, TextInput, TimeInput, Typeahead,
  *   VisuallyHidden) and the Lab MobileTokenizer
@@ -33,7 +33,6 @@ import {
   DateRangeInput,
   type DateRange,
 } from '@astryxdesign/core/DateRangeInput';
-import {DateTimeInput} from '@astryxdesign/core/DateTimeInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
@@ -52,10 +51,8 @@ import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {MobileTokenizer} from '../MobileTokenizer';
 import {
-  isoDateTimeToUnixSeconds,
   isoDateToUnixSeconds,
   unixSecondsToISODate,
-  unixSecondsToISODateTime,
 } from './mobilePowerSearchUtils';
 
 const styles = stylex.create({
@@ -77,8 +74,13 @@ export interface MobilePowerSearchValueEditorProps {
   isDisabled?: boolean;
   /** Max suggestions in string and entity value typeaheads. */
   maxMenuItems?: number;
-  timezoneID?: string;
 }
+
+// The date editors read and write the UTC day, as the Core PowerSearch
+// editor does (`component:PowerSearch` DEC-3): a `date_absolute` is the UTC
+// midnight of the chosen day, and `isDateOnly: false` gets the same date-only
+// editor, so one filter means the same instant in both presentations.
+const DATE_ZONE = 'UTC';
 
 const EMPTY_SOURCE: SearchSource<SearchableItem> = {
   search: () => [],
@@ -213,7 +215,6 @@ export function MobilePowerSearchValueEditor({
   label,
   isDisabled = false,
   maxMenuItems,
-  timezoneID,
 }: MobilePowerSearchValueEditorProps) {
   const selectedValues = useMemo<ReadonlySet<string>>(() => {
     if (filterValue?.type === 'enum' || filterValue?.type === 'date_relative') {
@@ -384,31 +385,6 @@ export function MobilePowerSearchValueEditor({
         filterValue?.type === 'date_absolute'
           ? filterValue.unixSeconds
           : undefined;
-      if (operatorValue.isDateOnly === false) {
-        return (
-          <div {...stylex.props(styles.input)}>
-            <DateTimeInput
-              label="Date and time"
-              isLabelHidden
-              value={
-                unixSeconds == null
-                  ? undefined
-                  : unixSecondsToISODateTime(unixSeconds, timezoneID)
-              }
-              onChange={value => {
-                if (value != null) {
-                  onChange({
-                    type: 'date_absolute',
-                    unixSeconds: isoDateTimeToUnixSeconds(value, timezoneID),
-                  });
-                }
-              }}
-              isDisabled={isDisabled}
-              width="100%"
-            />
-          </div>
-        );
-      }
       return (
         <div {...stylex.props(styles.input)}>
           <DateInput
@@ -417,13 +393,13 @@ export function MobilePowerSearchValueEditor({
             value={
               unixSeconds == null
                 ? undefined
-                : unixSecondsToISODate(unixSeconds, timezoneID)
+                : unixSecondsToISODate(unixSeconds, DATE_ZONE)
             }
             onChange={value => {
               if (value != null) {
                 onChange({
                   type: 'date_absolute',
-                  unixSeconds: isoDateToUnixSeconds(value, timezoneID),
+                  unixSeconds: isoDateToUnixSeconds(value, DATE_ZONE),
                 });
               }
             }}
@@ -451,11 +427,11 @@ export function MobilePowerSearchValueEditor({
         current = {
           start: unixSecondsToISODate(
             resolveRangePart(filterValue.value.start, nowSeconds),
-            timezoneID,
+            DATE_ZONE,
           ),
           end: unixSecondsToISODate(
             resolveRangePart(filterValue.value.end, nowSeconds),
-            timezoneID,
+            DATE_ZONE,
           ),
         };
       }
@@ -476,14 +452,14 @@ export function MobilePowerSearchValueEditor({
                     type: 'ABSOLUTE',
                     unixSeconds: isoDateToUnixSeconds(
                       range.start as ISODateString,
-                      timezoneID,
+                      DATE_ZONE,
                     ),
                   },
                   end: {
                     type: 'ABSOLUTE',
                     unixSeconds: isoDateToUnixSeconds(
                       range.end as ISODateString,
-                      timezoneID,
+                      DATE_ZONE,
                     ),
                   },
                 },

@@ -74,6 +74,8 @@ export interface TabMenuProps extends Omit<
 const styles = stylex.create({
   trigger: {
     position: 'relative',
+    // Keeps its label's width in a strip that scrolls, as a hugging tab does.
+    flexShrink: 0,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',

@@ -86,6 +86,12 @@ export type {
 
 export {useScrollLock} from './useScrollLock';
 
+export {useAnimatedLayout} from './useAnimatedLayout';
+export type {
+  AnimatedLayout,
+  UseAnimatedLayoutOptions,
+} from './useAnimatedLayout';
+
 export {useEntryAnimation} from './useEntryAnimation';
 export type {EntryAnimationPreset} from './useEntryAnimation';
 

@@ -14,6 +14,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  applyLayoutChangeTransition,
   createAnimatedLayout,
   holdLayoutExit,
   playLayoutChange,
@@ -646,6 +647,42 @@ describe('two changes in one frame (spec:AST-105 FR3)', () => {
     report.animate();
     await flushMicrotasks();
     expect(played).toEqual([]);
+  });
+});
+
+describe('the indicator transition', () => {
+  it('takes the spring as a linear() easing with a handle, and clears without one', () => {
+    document.body.innerHTML = '<div id="area"><svg id="chevron"></svg></div>';
+    const area = document.getElementById('area') as HTMLElement;
+    const chevron = document.getElementById(
+      'chevron',
+    ) as unknown as SVGSVGElement;
+    applyLayoutChangeTransition(
+      createAnimatedLayout(() => area),
+      chevron,
+    );
+    expect(
+      chevron.style.getPropertyValue('transition-timing-function'),
+    ).toMatch(/^linear\(0 0%, .*1 100%\)$/);
+    expect(chevron.style.getPropertyValue('transition-duration')).toMatch(
+      /^\d+ms$/,
+    );
+    applyLayoutChangeTransition(null, chevron);
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('');
+  });
+
+  it('is immediate under Reduce Motion', () => {
+    media['(prefers-reduced-motion: reduce)'] = true;
+    document.body.innerHTML = '<div id="area"><svg id="chevron"></svg></div>';
+    const area = document.getElementById('area') as HTMLElement;
+    const chevron = document.getElementById(
+      'chevron',
+    ) as unknown as SVGSVGElement;
+    applyLayoutChangeTransition(
+      createAnimatedLayout(() => area),
+      chevron,
+    );
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('0s');
   });
 });
 

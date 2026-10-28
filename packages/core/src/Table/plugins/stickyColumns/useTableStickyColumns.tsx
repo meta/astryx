@@ -13,7 +13,15 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useCallback, useMemo, useRef, type CSSProperties} from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
 import type {
@@ -24,6 +32,8 @@ import type {
   ScrollWrapperRenderProps,
 } from '../../types';
 import {resolveColumnFloorWidths} from '../../columnUtils';
+import {collapsedBottom} from '../../rowDivider';
+import {useTheme, useThemeName} from '../../../theme/useTheme';
 
 // =============================================================================
 // Config
@@ -159,6 +169,33 @@ function resolveStickySide(
 const SHADOW_VAR_START = '--table-sticky-shadow-start';
 const SHADOW_VAR_END = '--table-sticky-shadow-end';
 
+// A pinned cell draws its own row divider. With collapsed borders the table
+// paints every border at its cell's static place: a sticky cell moves, its
+// border does not, so without this the line under a pinned column would be
+// whichever scrolled cell's border passes beneath it, and missing where that
+// cell has none. The cell's ::before (already the row overlay's layer) extends
+// over the cell's border area, covers whatever the table painted there with
+// the pinned base, and draws the divider in the cell's own border color and
+// style (inherited, so a theme, a token switch or an app's rule on the cell,
+// `:hover` included, carries over in CSS) at the cell's divider width
+// (TableCell.tsx). Where another border wins the collapse instead (an app's
+// border on the row, or the next row's top border), it is read after each
+// commit and on resize and carried as the cell's `carry` state
+// (syncPinnedDividers).
+const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
+/** Spread into a pinned cell's props: the attribute the divider sync finds. */
+const PINNED_PROPS: Record<string, string> = {[PINNED_ATTRIBUTE]: ''};
+const CARRY = 'carry';
+const CARRYING = '[data-astryx-table-pinned="carry"]';
+// The cell's own border wins at another width than its divider's: only the
+// width is carried, and style and colour keep inheriting from the cell.
+const CARRY_WIDTH = 'width';
+const PINNED_DIVIDER_WIDTH = '--_table-row-divider-app-width';
+const PINNED_DIVIDER_STYLE = '--_table-row-divider-app-style';
+const PINNED_DIVIDER_COLOR = '--_table-row-divider-app-color';
+const PINNED_BASE = `var(--table-sticky-background, ${colorVars['--color-background-card']})`;
+const DIVIDER_WIDTH = `var(${PINNED_DIVIDER_WIDTH}, var(--_table-row-divider-width, 0px))`;
+
 const stickyStyles = stylex.create({
   cell: {
     position: 'sticky',
@@ -176,6 +213,25 @@ const stickyStyles = stylex.create({
       zIndex: -1,
       pointerEvents: 'none',
       backgroundColor: 'var(--table-row-overlay, transparent)',
+      // The divider: the layer reaches the bottom of the cell's border area,
+      // paints the pinned base there (hiding the table's static border and any
+      // scrolled cell's border), then the divider over it.
+      marginBottom: `calc(-1 * ${DIVIDER_WIDTH})`,
+      borderBottomWidth: DIVIDER_WIDTH,
+      borderBottomStyle: {
+        default: 'inherit',
+        [CARRYING]: `var(${PINNED_DIVIDER_STYLE}, solid)`,
+      },
+      borderBottomColor: {
+        default: 'inherit',
+        [CARRYING]: `var(${PINNED_DIVIDER_COLOR}, ${colorVars['--color-border']})`,
+      },
+      backgroundImage: `linear-gradient(${PINNED_BASE}, ${PINNED_BASE})`,
+      backgroundSize: `100% ${DIVIDER_WIDTH}`,
+      backgroundPosition: 'bottom',
+      backgroundRepeat: 'no-repeat',
+      backgroundOrigin: 'border-box',
+      backgroundClip: 'border-box',
       transitionProperty: 'background-color',
       transitionDuration: durationVars['--duration-fast'],
       transitionTimingFunction: easeVars['--ease-standard'],
@@ -256,6 +312,116 @@ const shadowStyles = stylex.create({
   },
 });
 
+// =============================================================================
+// Pinned dividers: app overrides
+// =============================================================================
+
+/**
+ * The pinned divider draws the border the table would paint under the cell.
+ * The cell's own border at its divider width: drawn in CSS, nothing carried.
+ * The cell's own border at another width (an app's 2 px `td` border): only
+ * the width is carried; style and colour inherit, so a restyle reaches it.
+ * A row's or a row group's border: nothing drawn, since the table paints it
+ * along the whole row. The next row's cell top: carried as values. Read after each commit and on resize, never on scroll.
+ * Every read comes before any write, and a cell is written only when what it
+ * carries changes.
+ */
+function syncPinnedDividers(
+  root: HTMLElement,
+  rows?: ReadonlySet<Element>,
+): void {
+  const changes: [HTMLTableCellElement, string, string[] | null][] = [];
+  const cells =
+    rows == null
+      ? root.querySelectorAll<HTMLTableCellElement>(`[${PINNED_ATTRIBUTE}]`)
+      : [...rows].flatMap(row => [
+          ...row.querySelectorAll<HTMLTableCellElement>(
+            `:scope > [${PINNED_ATTRIBUTE}]`,
+          ),
+        ]);
+  for (const cell of cells) {
+    const edge = collapsedBottom(cell);
+    const dividerWidth =
+      parseFloat(
+        getComputedStyle(cell).getPropertyValue('--_table-row-divider-width'),
+      ) || 0;
+    const carried = cell.getAttribute(PINNED_ATTRIBUTE);
+    if (edge.isOwn && edge.width === dividerWidth) {
+      if (carried !== '') {
+        changes.push([cell, '', null]);
+      }
+      continue;
+    }
+    // The cell's own border at another width: carry the width alone, so a
+    // restyle of its colour or style reaches the pinned divider in CSS.
+    if (edge.isOwn) {
+      const width = `${edge.width}px`;
+      if (
+        carried !== CARRY_WIDTH ||
+        cell.style.getPropertyValue(PINNED_DIVIDER_WIDTH) !== width
+      ) {
+        changes.push([cell, CARRY_WIDTH, [width]]);
+      }
+      continue;
+    }
+    // A row's border (or a row group's) is painted by the table along the
+    // whole row, under the pinned cell too, and follows a restyle in CSS
+    // alone: the pinned cell draws nothing over it. Only a cell's border is
+    // copied as values.
+    const value = edge.isRow
+      ? ['0px', 'none', 'transparent']
+      : [`${edge.width}px`, edge.style, edge.color];
+    const isSame =
+      carried === CARRY &&
+      cell.style.getPropertyValue(PINNED_DIVIDER_WIDTH) === value[0] &&
+      cell.style.getPropertyValue(PINNED_DIVIDER_STYLE) === value[1] &&
+      cell.style.getPropertyValue(PINNED_DIVIDER_COLOR) === value[2];
+    if (!isSame) {
+      changes.push([cell, CARRY, value]);
+    }
+  }
+  for (const [cell, mode, value] of changes) {
+    cell.setAttribute(PINNED_ATTRIBUTE, mode);
+    const [width, style, color] = value ?? [];
+    for (const [name, next] of [
+      [PINNED_DIVIDER_WIDTH, width],
+      [PINNED_DIVIDER_STYLE, style],
+      [PINNED_DIVIDER_COLOR, color],
+    ] as const) {
+      if (next == null) {
+        cell.style.removeProperty(name);
+      } else {
+        cell.style.setProperty(name, next);
+      }
+    }
+  }
+}
+
+/**
+ * Rendered inside the table: when the colour mode or the theme around it
+ * changes (a Theme's, wherever that Theme sits above the table, or the
+ * operating system's mode under `system`), the colours resolve again with no
+ * commit of the hook's owner, so the pinned dividers' carried borders are
+ * read again.
+ */
+function PinnedDividerModeWatch({
+  refreshRef,
+}: {
+  refreshRef: RefObject<(() => void) | null>;
+}) {
+  const {mode} = useTheme();
+  const themeName = useThemeName();
+  const lastRef = useRef({mode, themeName});
+  useLayoutEffect(() => {
+    const last = lastRef.current;
+    if (last.mode !== mode || last.themeName !== themeName) {
+      lastRef.current = {mode, themeName};
+      refreshRef.current?.();
+    }
+  }, [mode, themeName, refreshRef]);
+  return null;
+}
+
 // Stable empty default so an unset start/end doesn't allocate a fresh array
 // (and bust the memo) on every render.
 const EMPTY: string[] = [];
@@ -288,9 +454,17 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
   // listeners (synchronizing with the DOM) rather than React state, so
   // scrolling never triggers re-renders.
   const detachRef = useRef<(() => void) | null>(null);
+  // Re-reads the edge shadows and the pinned dividers; set while attached.
+  const refreshRef = useRef<(() => void) | null>(null);
+  // The scroll container's merged ref, kept while the inner ref is the same.
+  const mergedScrollWrapperRef = useRef<{
+    inner: ScrollWrapperRenderProps['htmlProps']['ref'] | null;
+    merged: (node: HTMLDivElement | null) => void;
+  } | null>(null);
   const attachScrollShadow = useCallback((el: HTMLDivElement | null) => {
     detachRef.current?.();
     detachRef.current = null;
+    refreshRef.current = null;
     if (!el) {
       return;
     }
@@ -319,19 +493,110 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         );
       }
     };
+    // Whether the pinned dividers were read since this attach.
+    let hasRead = false;
+    const resize = () => {
+      update();
+      syncPinnedDividers(el);
+      hasRead = true;
+    };
+    // The observer's first callback reports the size at observe time. The
+    // hook owner's after-commit read usually came first; a table mounted
+    // from state below that owner (a tab, a disclosure) attached without it,
+    // so the dividers are read here then.
+    let hasObserved = false;
+    const onResize = () => {
+      if (hasObserved || !hasRead) {
+        hasObserved = true;
+        resize();
+        return;
+      }
+      hasObserved = true;
+      update();
+    };
     el.addEventListener('scroll', update, {passive: true});
+    // A row border can change by CSS state alone (`tr:hover`,
+    // `:focus-within`): on pointer and focus changes, the rows they touch
+    // (and the row above each, whose divider a row's top border joins) are
+    // read again, once per frame.
+    const touched = new Set<Element>();
+    let frame = 0;
+    const onStateChange = (event: Event) => {
+      for (const target of [
+        event.target,
+        (event as PointerEvent | FocusEvent).relatedTarget,
+      ]) {
+        const row = target instanceof Element ? target.closest('tr') : null;
+        if (row == null || !el.contains(row)) {
+          continue;
+        }
+        touched.add(row);
+        const above =
+          row.previousElementSibling ??
+          row.parentElement?.previousElementSibling?.lastElementChild;
+        if (above != null) {
+          touched.add(above);
+        }
+      }
+      if (touched.size > 0 && frame === 0) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          syncPinnedDividers(el, new Set(touched));
+          touched.clear();
+        });
+      }
+    };
+    const stateEvents = [
+      'pointerover',
+      'pointerout',
+      'focusin',
+      'focusout',
+    ] as const;
+    for (const type of stateEvents) {
+      el.addEventListener(type, onStateChange, {passive: true});
+    }
     const resizeObserver =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(onResize)
+        : null;
     resizeObserver?.observe(el);
+    // The table too: columns added or widened change what scrolls without
+    // resizing the wrapper.
+    const table = el.querySelector('table');
+    if (table != null) {
+      resizeObserver?.observe(table);
+    }
+    // The pinned dividers are read after the commit that attached this
+    // (the refresh layout effect below), not here as well.
     update();
+    refreshRef.current = resize;
     detachRef.current = () => {
       el.removeEventListener('scroll', update);
+      for (const type of stateEvents) {
+        el.removeEventListener(type, onStateChange);
+      }
+      cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
     };
   }, []);
 
+  // After each commit: a border that changed with the render (a row
+  // highlighted on click) reaches the pinned divider, and the edge shadows
+  // follow content that changed without a resize.
+  useLayoutEffect(() => {
+    refreshRef.current?.();
+  });
+
   return useMemo(
     (): TablePlugin<T> => ({
+      transformTableContext(children: ReactNode): ReactNode {
+        return (
+          <>
+            {children}
+            <PinnedDividerModeWatch refreshRef={refreshRef} />
+          </>
+        );
+      },
       transformHeaderCell(
         props: HeaderCellRenderProps,
         column: TableColumn<T>,
@@ -361,6 +626,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           ...props,
           htmlProps: {
             ...props.htmlProps,
+            ...PINNED_PROPS,
             style: {...props.htmlProps.style, ...offsetStyle},
           },
           xstyle: [
@@ -389,6 +655,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           ...props,
           htmlProps: {
             ...props.htmlProps,
+            ...PINNED_PROPS,
             style: {...props.htmlProps.style, ...offsetStyle},
           },
           xstyle: [
@@ -408,16 +675,28 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           return props;
         }
         // Compose with any ref a prior plugin (e.g. virtualization) set on the
-        // scroll container.
-        const existingRef = props.htmlProps.ref;
-        const mergedRef = (node: HTMLDivElement | null) => {
-          attachScrollShadow(node);
-          if (typeof existingRef === 'function') {
-            existingRef(node);
-          } else if (existingRef != null) {
-            // RefObject — assign through its writable `.current`.
-            existingRef.current = node;
-          }
+        // scroll container. One merged ref per inner ref, so React does not
+        // re-attach it on every render while the plugins composed with this
+        // one keep theirs stable too (column resize does): the scroll
+        // listeners and the resize observer attach once, and the pinned
+        // dividers are read after each commit (the refresh effect).
+        const existingRef = props.htmlProps.ref ?? null;
+        const cached = mergedScrollWrapperRef.current;
+        const mergedRef =
+          cached != null && cached.inner === existingRef
+            ? cached.merged
+            : (node: HTMLDivElement | null) => {
+                attachScrollShadow(node);
+                if (typeof existingRef === 'function') {
+                  existingRef(node);
+                } else if (existingRef != null) {
+                  // RefObject — assign through its writable `.current`.
+                  existingRef.current = node;
+                }
+              };
+        mergedScrollWrapperRef.current = {
+          inner: existingRef,
+          merged: mergedRef,
         };
         return {
           ...props,

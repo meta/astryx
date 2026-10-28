@@ -6,8 +6,9 @@
  *   internal `springs.settle` motion role (motion/roles.ts) and the Reduce Motion
  *   cross-fade clock (uikit/timing.ts)
  * @output Exports `createAnimatedLayout` and the opaque `AnimatedLayout`
- *   handle, `reportLayoutChange`, `playLayoutChange` and `holdLayoutExit` /
- *   `releaseLayoutExit`: the one module that produces the
+ *   handle, `reportLayoutChange`, `playLayoutChange`, `holdLayoutExit` /
+ *   `releaseLayoutExit` and `applyLayoutChangeTransition`: the one module
+ *   that produces the
  *   size-change glide `spec:AST-105` defines
  *   (`architecture:react-component-runtime` INV12)
  * @position Motion foundation, internal to core. A handle comes from the
@@ -36,7 +37,8 @@
  * - A measurement no commit claims by the next frame is dropped.
  * - The changed element plays its own entrance on the same spring, started in
  *   the same frame (`playLayoutChange`), or its exit: kept where it is while
- *   it gives up its space and conceals (`holdLayoutExit`).
+ *   it gives up its space and conceals (`holdLayoutExit`). A disclosure's
+ *   indicator turns on the same motion (`applyLayoutChangeTransition`).
  * - Every pointer (`spec:AST-105` FR5). Under Reduce Motion nothing travels
  *   (`design:reduced-motion` DR1–DR3): a cross-fade under a coarse primary
  *   pointer, an immediate change otherwise.
@@ -149,6 +151,18 @@ function sampleKeyframes(
   frame: (remaining: number) => Keyframe,
 ): Keyframe[] {
   return sampleOver(progress.durationMs, t => frame(progress.remaining(t)));
+}
+
+/** The spring as a CSS `linear()` easing, for a CSS transition. */
+function linearEasing(progress: SpringProgress): string {
+  const stops: string[] = [];
+  const count = 24;
+  for (let i = 0; i <= count; i++) {
+    const fraction = i / count;
+    const value = 1 - progress.remaining(fraction * progress.durationMs);
+    stops.push(`${round(value)} ${round(fraction * 100)}%`);
+  }
+  return `linear(${stops.join(', ')})`;
 }
 
 function round(value: number): number {
@@ -957,6 +971,42 @@ export function releaseLayoutExit(element: HTMLElement): void {
       element.style.setProperty(property, value, priority);
     }
   }
+}
+
+/**
+ * A disclosure's indicator (its chevron) turns on the same motion as the
+ * glide: its CSS transition takes the spring as a `linear()` easing, and an
+ * immediate change under Reduce Motion. Without a handle the inline values are
+ * cleared, so the component's own transition applies. An engine without
+ * `linear()` drops that value and keeps the component's easing.
+ */
+export function applyLayoutChangeTransition(
+  handle: AnimatedLayout | null | undefined,
+  element: HTMLElement | SVGElement | null,
+): void {
+  if (element == null) {
+    return;
+  }
+  const area = handle == null ? null : areaOf(handle, element);
+  if (area == null) {
+    element.style.removeProperty('transition-duration');
+    element.style.removeProperty('transition-timing-function');
+    return;
+  }
+  const motion = layoutMotion(area);
+  if (motion.kind !== 'spring') {
+    element.style.setProperty('transition-duration', '0s');
+    element.style.removeProperty('transition-timing-function');
+    return;
+  }
+  element.style.setProperty(
+    'transition-duration',
+    `${Math.round(motion.progress.durationMs)}ms`,
+  );
+  element.style.setProperty(
+    'transition-timing-function',
+    linearEasing(motion.progress),
+  );
 }
 
 /** @internal For tests: the motion a change in `area` plays. */

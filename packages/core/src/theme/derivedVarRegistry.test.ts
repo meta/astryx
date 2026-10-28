@@ -86,6 +86,10 @@ const STRUCTURAL_VARS = new Set([
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
   '--table-row-overlay',
+  // The width a cell's row divider draws (0 on the last row), which a pinned
+  // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
+  // Private runtime plumbing, never authored by a theme.
+  '--_table-row-divider-width',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
