@@ -460,8 +460,9 @@ function stylesheetDroppedActive(): boolean {
 
 /**
  * The surface a mouse button's or the Space key's press paints, if any: the
- * innermost marked surface, outside a menu. A key's press paints only a
- * focused element that is itself the surface, as `:active` does.
+ * innermost marked surface, outside a menu and off an action a group's
+ * tracker paints. A key's press paints only a focused element that is
+ * itself the surface, as `:active` does.
  */
 function buttonSurfaceAt(
   target: EventTarget | null,
@@ -472,6 +473,11 @@ function buttonSurfaceAt(
     return null;
   }
   if (pointerId == null && element !== target) {
+    return null;
+  }
+  // A group's tracker paints a pointer's press on its actions, a mouse's too;
+  // a key's press is the action's own.
+  if (pointerId != null && trackedByGroup(element)) {
     return null;
   }
   return element;
