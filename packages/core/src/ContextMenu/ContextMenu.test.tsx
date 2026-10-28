@@ -48,6 +48,7 @@ import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation
 import {COMPACT_QUERY, TOUCH_QUERY} from '../utils/touchPresentation';
 import {HAPTIC_VIBRATION_PATTERNS} from '../motion/uikit';
 import {contextMenu} from '../motion/uikit/contextMenu';
+import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {disarmClickGuard} from '../utils/clickGuard';
 
 // The touch sheet is loaded lazily; resolve its modules once up front, so
@@ -754,6 +755,35 @@ describe.each([
       );
       return screen.getByTestId('ctx');
     }
+
+    it('opens for a held finger at UIKit\u2019s long press, 500 ms, not a millisecond before: the context request\u2019s hold has no stages (spec:AST-094 FR43)', () => {
+      const trigger = renderMenu();
+      const press = finger(trigger);
+      press.down();
+      advance(LONG_PRESS_DURATION_MS - 1);
+      expect(menuShows()).toBe(0);
+      advance(1);
+      expect(menuShows()).toBe(1);
+      press.up();
+    });
+
+    it('opens nothing for a finger that lifts before the long press, and nothing for a drift past UIKit\u2019s 10 pt before it', () => {
+      const trigger = renderMenu();
+      const early = finger(trigger);
+      early.down();
+      advance(LONG_PRESS_DURATION_MS - 50);
+      early.up();
+      advance(500);
+      expect(menuShows()).toBe(0);
+      const drifting = finger(trigger, 2);
+      drifting.down();
+      advance(200);
+      // 11 pt on one axis: past UIKit's long press, measured as a distance.
+      drifting.moveTo(31, 20);
+      advance(LONG_PRESS_DURATION_MS);
+      expect(menuShows()).toBe(0);
+      drifting.up();
+    });
 
     it('opens for a finger still down at 735 ms (iOS 26.2), not a millisecond before', () => {
       const trigger = renderMenu();

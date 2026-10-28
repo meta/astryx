@@ -17,6 +17,7 @@ import {act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {contextMenu} from '../motion/uikit/contextMenu';
+import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {dataAttr, stableClassName} from '../naming';
 import {
   createContextMenu,
@@ -397,6 +398,49 @@ describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it('opens for a held finger at UIKit\u2019s long press, 500 ms, under any primary pointer (spec:AST-094 FR43)', () => {
+    for (const isCoarse of [true, false]) {
+      stubPointer(isCoarse);
+      attach({items: [{label: 'Archive'}]});
+      act(() => {
+        fingerDown(element);
+      });
+      act(() => {
+        vi.advanceTimersByTime(LONG_PRESS_DURATION_MS - 1);
+      });
+      expect(isOpen()).toBe(false);
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(isOpen()).toBe(true);
+      act(() => {
+        for (const controller of controllers.splice(0)) {
+          controller.destroy();
+        }
+      });
+      // The finger lifts before the next round.
+      const up = new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'touch',
+        isPrimary: true,
+      });
+      Object.defineProperty(up, 'timeStamp', {value: performance.now()});
+      element.dispatchEvent(up);
+      const end = new Event('touchend', {bubbles: true});
+      Object.defineProperties(end, {
+        touches: {value: []},
+        changedTouches: {
+          value: [{identifier: 1, target: element, clientX: 20, clientY: 20}],
+        },
+        timeStamp: {value: performance.now()},
+      });
+      element.dispatchEvent(end);
+      vi.advanceTimersByTime(1_000);
+      vi.unstubAllGlobals();
+    }
   });
 
   it('opens for a held finger at UIKit\u2019s moment where the primary pointer is coarse, as ContextMenu does, not at 500 ms', () => {
