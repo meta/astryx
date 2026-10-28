@@ -97,7 +97,7 @@ const tokensSrc = fs.readFileSync(
 /** Field names declared on `DefineThemeInput`. */
 function defineThemeFields() {
   const body = defineThemeSrc.match(
-    /export interface DefineThemeInput \{([\s\S]*?)\n\}/,
+    /export interface DefineThemeInput(?:<[\s\S]*?>)? \{([\s\S]*?)\n\}/,
   );
   if (!body) throw new Error('DefineThemeInput not found in defineTheme.ts');
   return [...body[1].matchAll(/^ {2}(\w+)\??:/gm)].map(m => m[1]);

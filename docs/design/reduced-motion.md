@@ -54,11 +54,12 @@ trackpad, or keyboard the change is immediate.
 
 ## State representation
 
-| State                             | Required representation                                                                         | Allowed variation          |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------- |
-| reduced motion, coarse pointer    | Opacity-only cross-fade of 200 ms or less (DR2); an in-place value change applies at once (DR2) | A shorter cross-fade       |
-| reduced motion, any other pointer | Immediate change (DR3), except a touch drag's release (DR2)                                     | None                       |
-| no reduced-motion preference      | Outside this record                                                                             | Component and theme motion |
+| State                                             | Required representation                                                                         | Allowed variation          |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------- |
+| reduced motion, coarse pointer                    | Opacity-only cross-fade of 200 ms or less (DR2); an in-place value change applies at once (DR2) | A shorter cross-fade       |
+| reduced motion, any other pointer                 | Immediate change (DR3), except a touch drag's release (DR2)                                     | None                       |
+| no reduced-motion preference, theme on `'system'` | Outside this record                                                                             | Component and theme motion |
+| a theme on `'always'` (DR2a)                      | As reduced motion, whatever the person's setting                                                | DR1–DR3                    |
 
 ## Responsive and input behavior
 
@@ -75,6 +76,10 @@ trackpad, or keyboard the change is immediate.
   under Reduce Motion. An in-place value change, such as a progress fill's length or
   another continuous value, does not cross-fade: under reduced motion it
   applies at once on any pointer, with no added element (DEC-3).
+- **DR2a — A theme may reduce motion for everyone.** A theme's
+  `reducedMotion: 'always'` applies DR1–DR3 for every person, whatever their
+  setting; `'system'` follows each person's setting (`spec:AST-108`). No theme
+  option loosens DR1–DR4.
 - **DR3 — Fine-pointer presentations change at once.** Under reduced motion,
   every other DR1 transition, when the primary pointer is not coarse, MUST complete
   immediately, with no animated property.
@@ -87,8 +92,9 @@ Content that moves with the person's own pointer or finger during a drag
 follows it as direct manipulation and is not a DR1 transition, and neither is
 the momentum that continues a throw (DR2). A transition a
 component starts when a touch drag is released, such as a swiped row sliding
-out or returning (`spec:AST-057` FR5), cross-fades as DR2 says, because a
-finger started it. Any other transition, such as one sheet handing off to
+out or returning after a finger's swipe (`spec:AST-057` FR5), cross-fades as
+DR2 says, because a finger started it; one a trackpad started follows DR2 on
+a coarse primary pointer and DR3 otherwise. Any other transition, such as one sheet handing off to
 another (`component:BottomSheetSwitcher` FR3), follows DR2 on a coarse primary
 pointer and DR3 otherwise.
 
@@ -113,7 +119,7 @@ No normative assets are included.
 
 ## Component contract links
 
-- `spec:AST-057` FR5 implements DR2 for a swiped row's slide out,
+- `spec:AST-057` FR5 implements DR2 and DR3 for a swiped row's slide out,
   spring back, and hold-out.
 - `component:BottomSheetSwitcher` FR3 and ORD1 implement DR2 and DR3 for a
   handoff between sheets.

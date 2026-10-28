@@ -107,7 +107,9 @@ wrapper, or a header-like visual treatment.
 
 - **FR1 — A region owns structure, not product meaning.** A member establishes a
   spatial boundary and renders caller content without adopting the content's
-  product semantics, state, or component contracts.
+  product semantics, state, or component contracts. Toolbar's press
+  tracking across its buttons (`family:action-groups` FR5) is the one
+  exception.
 - **FR2 — Region direction is logical.** Start and end follow writing direction.
   Divider placement and panel adjacency use the same logical region position.
 - **FR3 — Layout selects geometry from slot presence.** Header, Content, Footer,
@@ -176,7 +178,8 @@ wrapper, or a header-like visual treatment.
 - **AV4 — Size model.** Layout owns fill/auto container height and content-width
   propagation; individual regions own applicable height, width, padding, and
   scroll props; Section owns its box-size props.
-- **AV5 — Interaction.** Toolbar owns roving focus and keyboard hints. Other
+- **AV5 — Interaction.** Toolbar owns roving focus, keyboard hints, and the
+  press tracking `family:action-groups` FR5 gives it across its buttons. Other
   members add no toolbar behavior. Resizable owns resize interaction.
 - **AV6 — Composition mechanism.** Members may use Stack utilities, direct CSS
   layout, contexts, or component composition. The observable region contract is

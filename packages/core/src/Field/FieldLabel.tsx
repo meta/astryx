@@ -32,7 +32,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {useTranslator} from '../i18n';
 import {themeProps} from '../utils/themeProps';
-import {useInputContainer} from '../hooks';
+import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 
 const styles = stylex.create({

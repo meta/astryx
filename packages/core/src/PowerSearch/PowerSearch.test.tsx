@@ -9,7 +9,7 @@
  * SYNC: When PowerSearch.tsx changes, update tests to match
  */
 
-import {useState} from 'react';
+import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
 import {
   render,
@@ -473,6 +473,37 @@ describe('PowerSearch', () => {
       );
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('5 results');
+      });
+    });
+
+    it('does not announce the result count present on mount under StrictMode, only a later change', async () => {
+      // StrictMode replays the mount effects: a mounted-flag guard is reset by
+      // the replay and speaks the initial count unprompted; comparing against
+      // the last announced text does not.
+      const {rerender} = render(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={12}
+          />
+        </StrictMode>,
+      );
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(politeRegion()?.textContent ?? '').toBe('');
+      rerender(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={1}
+          />
+        </StrictMode>,
+      );
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('1 result');
       });
     });
 
