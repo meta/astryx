@@ -53,6 +53,21 @@ describe('Lightbox', () => {
     expect(dialog).toBeInTheDocument();
   });
 
+  it('opens once an item arrives when opened with none', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={[]} />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+    rerender(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        media={[{src: '/photo.jpg', alt: 'Photo'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toHaveAttribute('open');
+  });
+
   it('calls showModal when isOpen becomes true', () => {
     render(
       <Lightbox
