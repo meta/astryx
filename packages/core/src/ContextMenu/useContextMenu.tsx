@@ -184,9 +184,17 @@ function factoryOptions(
     : {...shared, items: options.items ?? []};
 }
 
+/** The element the hook's menu is attached to, and how to detach it. */
+interface Attached {
+  element: HTMLElement;
+  hasContent: boolean;
+  detach: () => void;
+}
+
 /**
  * Attaches a context menu to the element `ref` points at (spec:AST-107 FR8):
  * it opens on that element's context request, and unmounting removes it.
+ * When the ref moves to another element, the menu moves with it.
  */
 export function useContextMenu(
   ref: RefObject<HTMLElement | null>,
@@ -212,6 +220,7 @@ export function useContextMenu(
   const latestRef = useRef({options, wrap});
   const controllerRef = useRef<ContextMenuController | null>(null);
   const portalRef = useRef<MenuContentPortal | null>(null);
+  const attachedRef = useRef<Attached | null>(null);
   const handleOpenChange = useCallback((isOpen: boolean) => {
     latestRef.current.options.onOpenChange?.(isOpen);
   }, []);
@@ -233,8 +242,20 @@ export function useContextMenu(
     }
   });
 
+  // Every commit checks the element the ref points at now: a ref moved to
+  // another element moves the menu with it.
   useEffect(() => {
     const element = ref.current;
+    const attached = attachedRef.current;
+    if (
+      attached != null &&
+      attached.element === element &&
+      attached.hasContent === hasContent
+    ) {
+      return;
+    }
+    attached?.detach();
+    attachedRef.current = null;
     if (element == null) {
       return;
     }
@@ -250,15 +271,27 @@ export function useContextMenu(
     bridgeContextMenu(controller, latest.wrap);
     controllerRef.current = controller;
     portalRef.current = portal;
-    return () => {
-      destroyContextMenuFromReact(controller);
-      portal?.unmount();
-      if (controllerRef.current === controller) {
-        controllerRef.current = null;
-        portalRef.current = null;
-      }
+    attachedRef.current = {
+      element,
+      hasContent,
+      detach: () => {
+        destroyContextMenuFromReact(controller);
+        portal?.unmount();
+        if (controllerRef.current === controller) {
+          controllerRef.current = null;
+          portalRef.current = null;
+        }
+      },
     };
-  }, [ref, hasContent, handleOpenChange]);
+  });
+
+  useEffect(
+    () => () => {
+      attachedRef.current?.detach();
+      attachedRef.current = null;
+    },
+    [],
+  );
 
   return useMemo(
     () => ({
