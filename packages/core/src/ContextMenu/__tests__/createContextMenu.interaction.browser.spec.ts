@@ -6,8 +6,9 @@
  *   story, the engine's own finger, a mouse and the keyboard
  * @output Real-browser proof of the headless context menu (spec:AST-107
  *   FR8): a held finger, a right click and Shift+F10 each open it once on a
- *   list row; its lift clicks nothing; a key focuses the first row; Escape
- *   returns focus to the row; a choice runs once and the row hears no click;
+ *   list row; its lift clicks nothing; a held finger lifts the row (spec:AST-094
+ *   FR33), and Escape returns focus to it even from another row's focus; a
+ *   key focuses the first row; Escape returns focus to the row; a choice runs once and the row hears no click;
  *   the list keeps only its `li` rows; useContextMenu opens the same menu,
  *   and its `menuContent` rows act once under a mouse and close the menu; on
  *   a row inside a modal dialog the menu takes focus and a choice acts
@@ -49,6 +50,30 @@ test('a finger held on a list row opens its menu once, and the lift clicks nothi
   await page.waitForTimeout(300);
   await expect(page.getByRole('menu', {name: 'Inbox actions'})).toBeVisible();
   await expect(log(page)).toHaveText('open');
+});
+
+test('with another row focused, a finger held on a list row lifts the row and opens its menu, and Escape returns focus to that row (spec:AST-094 FR33, spec:AST-107 FR8)', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  await page.getByText('Drafts', {exact: true}).focus();
+  const driver = await touchDriver(page);
+  const at = await centerOf(page, 'headless-row');
+  await driver.play(tap(at, {holdMs: 1200, id: 1}));
+  const menu = page.getByRole('menu', {name: 'Inbox actions'});
+  await expect(menu).toBeVisible();
+  // The row lifts as UIKit's preview does: the lift layer is up beside the
+  // menu.
+  await expect(
+    page.locator('[data-astryx-context-menu-lift]').first(),
+  ).toBeAttached();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect
+    .poll(async () =>
+      page.evaluate(() => document.activeElement?.getAttribute('data-testid')),
+    )
+    .toBe('headless-row');
 });
 
 test('a right click and Shift+F10 open it with the first row focused, and Escape returns focus to the row (spec:AST-107 FR8)', async ({
