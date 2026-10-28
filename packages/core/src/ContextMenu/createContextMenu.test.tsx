@@ -52,7 +52,14 @@ afterEach(() => {
 function attach(
   options: Parameters<typeof createContextMenu>[1],
 ): ContextMenuController {
-  const controller = createContextMenu(element, options);
+  // The factory renders its menu in a root of its own as it attaches.
+  let controller: ContextMenuController | undefined;
+  act(() => {
+    controller = createContextMenu(element, options);
+  });
+  if (controller == null) {
+    throw new Error('createContextMenu returned nothing');
+  }
   controllers.push(controller);
   return controller;
 }
