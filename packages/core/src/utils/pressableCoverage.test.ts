@@ -35,8 +35,14 @@ import {describe, expect, it} from 'vitest';
 
 const SRC = path.resolve(__dirname, '..');
 
-/** The utility and the controller define the model; they are not surfaces. */
+/**
+ * The utility, the controller and the action-group tracker define the model;
+ * they are not surfaces. The tracker writes the press attribute on a group's
+ * rows itself (the second writer beside the controller), and reads it back
+ * only to finish its own fade, so no surface of its own paints from it.
+ */
 const MODEL_FILES = new Set([
+  'hooks/actionGroupTracker.ts',
   'utils/interactionOverlay.stylex.ts',
   'utils/pressFeedback.ts',
   'utils/pressGesture.ts',
