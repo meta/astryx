@@ -12,10 +12,11 @@
  *   every listener and node it added (spec:AST-107 FR8)
  * @position Public factory, framework-agnostic for its caller: ContextMenu's
  *   own menu renders in an internal React root, so a page without React can
- *   attach one. ContextMenu is built on it (spec:AST-107 FR8, FR7), and
- *   useContextMenu is its React wrapper (FR6); both hand it a `render` for
- *   React rows (contextMenuRows.tsx) and pass later options through
- *   updateContextMenu
+ *   attach one. ContextMenu is built on it (spec:AST-107 FR8, FR7) and hosts
+ *   the menu in its own tree (hostContextMenuInReact); useContextMenu is its
+ *   React wrapper (FR6), over the factory's own root. Both hand it a
+ *   `render` for React rows (contextMenuRows.tsx) and pass later options
+ *   through updateContextMenu
  *
  * Under the touch model the element's hold runs on UIKit's timeline, with
  * ContextMenu's press feedback and, on a block element, the lift.
@@ -50,7 +51,7 @@ import {LayerDepthContext} from '../Layer/LayerDepthContext';
 import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
 import {readPresentation} from '../utils/presentation';
 import {dataAttr} from '../naming';
-import {flushSync} from 'react-dom';
+import {createPortal, flushSync} from 'react-dom';
 import {
   attachContextMenuRequests,
   type ContextMenuForwarded,
@@ -215,6 +216,26 @@ export function bridgeContextMenu(
   wrapperAccess.get(controller)?.bridge(wrap);
 }
 
+/** Renders the menu in a React caller's own tree (ContextMenu's path). */
+type ContextMenuReactHost = (menu: ReactNode) => void;
+
+const reactHosts = new WeakMap<Element, ContextMenuReactHost>();
+
+/**
+ * @internal Hosts the menu createContextMenu attaches to `element` next in a
+ * React caller's own tree (ContextMenu's path): called just before
+ * `createContextMenu(element, …)`, the factory renders its menu through
+ * `host`, as a portal into its container, instead of in a root of its own.
+ * The caller's contexts then reach the menu, and the menu unmounts with the
+ * caller's tree.
+ */
+export function hostContextMenuInReact(
+  element: Element,
+  host: ContextMenuReactHost,
+): void {
+  reactHosts.set(element, host);
+}
+
 /**
  * @internal Destroys a menu from a React effect's cleanup (useContextMenu's
  * path). React cannot unmount a root while it commits another, so the menu's
@@ -226,6 +247,21 @@ export function destroyContextMenuFromReact(
   controller: ContextMenuController,
 ): void {
   wrapperAccess.get(controller)?.destroyFromReact();
+}
+
+/** Whether two option objects hold the same values under the same keys. */
+function isShallowEqual(a: object, b: object): boolean {
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const keys = Object.keys(aRecord);
+  return (
+    keys.length === Object.keys(bRecord).length &&
+    keys.every(
+      key =>
+        Object.prototype.hasOwnProperty.call(bRecord, key) &&
+        Object.is(aRecord[key], bRecord[key]),
+    )
+  );
 }
 
 const THEME_ATTRIBUTES = ['data-theme', dataAttr('theme')] as const;
@@ -417,7 +453,11 @@ export function createContextMenu(
       placeHost();
     }
   };
-  const root: Root = createRoot(host);
+  // A React caller (ContextMenu) renders the menu in its own tree; a page
+  // without React gets a root of the menu's own.
+  const reactHost = reactHosts.get(element) ?? null;
+  reactHosts.delete(element);
+  const root: Root | null = reactHost == null ? createRoot(host) : null;
 
   const onOpenChange = (next: boolean) => {
     if (next === isOpen) {
@@ -441,7 +481,12 @@ export function createContextMenu(
         onOpenChange={onOpenChange}
       />
     );
-    root.render(wrap != null ? wrap(menu) : menu);
+    const content = wrap != null ? wrap(menu) : menu;
+    if (reactHost != null) {
+      reactHost(createPortal(content, host));
+    } else {
+      root?.render(content);
+    }
   };
 
   const forward = (request: ContextMenuForwarded) => {
@@ -514,10 +559,13 @@ export function createContextMenu(
     const hadFocus = host.contains(doc.activeElement);
     isDestroyed = true;
     requests.destroy();
-    if (isInReact) {
-      root.render(null);
+    if (reactHost != null) {
+      // The menu is a portal in the caller's tree, which it leaves now.
+      reactHost(null);
+    } else if (isInReact) {
+      root?.render(null);
     } else {
-      root.unmount();
+      root?.unmount();
     }
     host.remove();
     if (isOpen) {
@@ -530,11 +578,19 @@ export function createContextMenu(
   }
   wrapperAccess.set(controller, {
     update(nextOptions) {
+      // The same options render nothing new (a React caller passes them on
+      // every render of its own).
+      if (isShallowEqual(options, nextOptions)) {
+        return;
+      }
       options = nextOptions;
       requests.update({isDisabled: options.isDisabled, ...requestConfig});
       render();
     },
     view(nextView) {
+      if (isShallowEqual(view, nextView)) {
+        return;
+      }
       view = nextView;
       if (!isOpen) {
         placeHost();

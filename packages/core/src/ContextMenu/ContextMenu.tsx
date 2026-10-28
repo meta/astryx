@@ -22,12 +22,13 @@
  * Reuses DropdownMenu item rendering and keyboard navigation.
  *
  * ContextMenu is built on createContextMenu (spec:AST-107 FR8, FR7). It renders
- * its trigger and attaches the factory to it: the factory renders the menu
- * beside the trigger, opens it on the trigger's context request (a held
- * finger or pen, a right click, Shift+F10 or the context-menu key, once per
- * gesture) and runs the touch model on it. `items` go to the factory as they
- * are; `menuContent` renders in ContextMenu's own tree and is portaled into
- * the menu, so the caller's contexts reach it.
+ * its trigger and attaches the factory to it: the factory opens the menu on
+ * the trigger's context request (a held finger or pen, a right click,
+ * Shift+F10 or the context-menu key, once per gesture), runs the touch model
+ * on it, and renders it through ContextMenu's own tree, as a portal into a
+ * container beside the trigger, so the caller's contexts reach it and it
+ * unmounts with ContextMenu. `items` go to the factory as they are;
+ * `menuContent` is portaled into the menu from ContextMenu's tree.
  *
  * Under a finger (a coarse primary pointer: one touch model on every touch
  * device, iOS and Android alike) the trigger behaves like UIKit's
@@ -129,12 +130,11 @@ import type {ContextMenuLiftResult} from './ContextMenuLift';
 import {
   createMenuRowsSlot,
   MenuRows,
-  useCoreBridge,
   type MenuRowsSlot,
 } from './contextMenuRows';
 import {
-  bridgeContextMenu,
   createContextMenu,
+  hostContextMenuInReact,
   updateContextMenu,
   viewContextMenu,
   type ContextMenuController,
@@ -472,7 +472,10 @@ export function ContextMenu(props: ContextMenuProps) {
   const cursorAnchorRef = useRef<HTMLSpanElement>(null);
   // The menu's container lives here, beside the trigger.
   const [menuSlot, setMenuSlot] = useState<HTMLSpanElement | null>(null);
-  const bridge = useCoreBridge();
+  // The factory's menu, which renders here, in ContextMenu's own tree, as a
+  // portal into its container: the caller's contexts reach it, and it
+  // unmounts with ContextMenu.
+  const [menu, setMenu] = useState<ReactNode>(null);
   // `menuContent` renders here, in ContextMenu's own tree (so the caller's
   // contexts reach it), into a host the menu's container adopts. The host is
   // a detached element, made once the menu has a place to live.
@@ -499,7 +502,7 @@ export function ContextMenu(props: ContextMenuProps) {
     };
     return rowsSlot != null
       ? {...shared, render: rowsSlot.render}
-      : {...shared, items: items ?? []};
+      : {...shared, items: items ?? NO_ITEMS};
   };
   const view: ContextMenuViewExtras = {
     size,
@@ -510,17 +513,16 @@ export function ContextMenu(props: ContextMenuProps) {
     cursorAnchor: cursorAnchorRef.current,
     isInline: triggerAs === 'span',
   };
-  const latestRef = useRef({factoryOptions, view, bridge});
+  const latestRef = useRef({factoryOptions, view});
 
   useIsomorphicLayoutEffect(() => {
     onOpenChangeRef.current = onOpenChange;
-    latestRef.current = {factoryOptions, view, bridge};
+    latestRef.current = {factoryOptions, view};
     const controller = controllerRef.current;
     if (controller == null) {
       return;
     }
     updateContextMenu(controller, factoryOptions(slot));
-    bridgeContextMenu(controller, bridge);
     viewContextMenu(controller, {
       ...view,
       cursorAnchor: cursorAnchorRef.current,
@@ -536,8 +538,8 @@ export function ContextMenu(props: ContextMenuProps) {
       return;
     }
     const latest = latestRef.current;
+    hostContextMenuInReact(trigger, setMenu);
     const controller = createContextMenu(trigger, latest.factoryOptions(slot));
-    bridgeContextMenu(controller, latest.bridge);
     viewContextMenu(controller, {
       ...latest.view,
       cursorAnchor: cursorAnchorRef.current,
@@ -584,6 +586,7 @@ export function ContextMenu(props: ContextMenuProps) {
         />
       </TriggerElement>
       <span ref={setMenuSlot} {...stylex.props(styles.menuSlot)} />
+      {menu}
       {slot != null
         ? createPortal(
             <MenuRows slot={slot}>{menuContent}</MenuRows>,
@@ -596,6 +599,9 @@ export function ContextMenu(props: ContextMenuProps) {
 
 /** The cursor anchor's place before the menu first places it. */
 const CURSOR_ANCHOR_START = {left: '0px', top: '0px'} as const;
+
+/** `items` when ContextMenu has none, one array for every render. */
+const NO_ITEMS: ContextMenuOption[] = [];
 
 /**
  * @internal What ContextMenu tells its menu beyond the factory's options: the
