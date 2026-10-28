@@ -414,6 +414,54 @@ describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec
     });
     expect(isOpen()).toBe(true);
   });
+
+  it('lifts a block element that a held finger opened its menu on, where the primary pointer is coarse, as ContextMenu does (spec:AST-094 FR33)', () => {
+    stubPointer(true);
+    // jsdom has no layout: the row is a block with a box.
+    element.style.display = 'block';
+    element.getBoundingClientRect = () =>
+      DOMRect.fromRect({x: 0, y: 0, width: 300, height: 48});
+    attach({items: [{label: 'Archive'}]});
+    act(() => {
+      fingerDown(element);
+    });
+    act(() => {
+      vi.advanceTimersByTime(contextMenu.press.menuDisplayMs);
+    });
+    expect(isOpen()).toBe(true);
+    expect(
+      document.querySelector(`[${dataAttr('context-menu-lift')}]`),
+    ).not.toBeNull();
+  });
+
+  it('keeps an inline element\u2019s menu at the finger, with no lift (spec:AST-094 FR33)', () => {
+    stubPointer(true);
+    const inline = document.createElement('span');
+    inline.tabIndex = 0;
+    inline.textContent = 'Inbox';
+    document.body.append(inline);
+    try {
+      const menu = createContextMenu(inline, {items: [{label: 'Archive'}]});
+      controllers.push(menu);
+      act(() => {
+        fingerDown(inline);
+      });
+      act(() => {
+        vi.advanceTimersByTime(contextMenu.press.menuDisplayMs);
+      });
+      expect(isOpen()).toBe(true);
+      expect(
+        document.querySelector(`[${dataAttr('context-menu-lift')}]`),
+      ).toBeNull();
+    } finally {
+      act(() => {
+        for (const controller of controllers.splice(-1)) {
+          controller.destroy();
+        }
+      });
+      inline.remove();
+    }
+  });
 });
 
 describe('createContextMenu: a finger\u2019s press outside (spec:AST-107 FR8)', () => {
