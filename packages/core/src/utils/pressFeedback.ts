@@ -4,9 +4,9 @@
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts) and the document's pointer,
  *   keyboard, scroll and visibility events
- * @output Exports paintPress and readPressPaint (the one writer of the press
- *   attribute for every painter), PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE,
- *   pressableProps and installPressFeedback
+ * @output Exports paintPress and readPressPaint (the press attribute's
+ *   writer for every press they track), PRESSABLE_ATTRIBUTE,
+ *   PRESSED_ATTRIBUTE, pressableProps and installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
  *   per document that writes `data-astryx-press` on the nearest pressable surface.
  *   Installed by usePressFeedback (hooks/usePressFeedback.ts) on first mount;
@@ -202,10 +202,12 @@ export function readPressPaint(element: Element): PressPaint | null {
 }
 
 /**
- * Write `next` on `element` if its state is one of `onlyFrom`: THE ONE
- * WRITER of the press attribute, for the controller and every other painter
- * (paintPress), so a fade's clock and the attribute never drift apart. Any
- * write ends a fade paintPress left running there. Returns whether it wrote.
+ * Write `next` on `element` if its state is one of `onlyFrom`: the press
+ * attribute's writer for the controller and every painter that uses
+ * paintPress, so a fade's clock and the attribute never drift apart (the
+ * action-group tracker, hooks/actionGroupTracker.ts, still writes its groups'
+ * presses itself). Any write ends a fade paintPress left running there.
+ * Returns whether it wrote.
  */
 function writePress(
   element: Element,
@@ -260,7 +262,7 @@ export function paintPress(
 }
 
 /**
- * The controller's paint, through the one writer: a state the controller did
+ * The controller's paint, through writePress: a state the controller did
  * not write is its owner's (a `held` row), so neither a new press nor a
  * release's end overwrites or clears it.
  */
@@ -751,31 +753,26 @@ function armTouchCancel(): void {
   hearTouchCancel(isCoarsePointer(window));
 }
 
-// Every listener is passive and on the window's capture phase, through the
-// shared input stream (utils/inputStream.ts): a page of pressables blocks no
-// scroll, and an app's capture-phase stopPropagation at the document cannot
-// starve the controller.
+// The pointer, drag, scroll and visibility listeners are passive and on the
+// window's capture phase, through the shared input stream
+// (utils/inputStream.ts): a page of pressables blocks no scroll, and an app's
+// capture-phase stopPropagation at the document cannot starve the controller.
 function addListeners(): void {
   unsubscribers = [
     subscribeInput(window, 'pointerdown', onPointerDown),
     subscribeInput(window, 'pointermove', onPointerMove),
     subscribeInput(window, 'pointerup', onPointerUp),
     subscribeInput(window, 'pointercancel', onCancel),
-    // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag
-    // has taken the gesture, but a right-click is a mouse act this controller
-    // never tracks, and listening for it would read as a takeover of the
-    // browser's own menu.
     subscribeInput(window, 'dragstart', onDragStart),
     // `scroll` does not bubble; the capture phase hears every scroller.
     subscribeInput(window, 'scroll', onScroll),
     subscribeInput(window, 'visibilitychange', onVisibilityChange),
   ];
-  // Space's press reads whether the page cancelled the key, so it listens in
-  // the window's bubble phase, after the element's own handlers, not through
-  // the capture-phase input stream. Only Space's press needs the key's
-  // release and focus loss, so those two are subscribed while it is held
-  // (holdKey).
-  window.addEventListener('keydown', onKeyDown, {passive: true});
+  // The key path listens after the page's own handlers, at the window's
+  // bubble phase: a Space press the page cancels (`defaultPrevented`) paints
+  // nothing. Only Space's press needs the key's release and focus loss, so
+  // those two are attached while it is held (holdKey).
+  window.addEventListener('keydown', onKeyDown, PASSIVE);
 }
 
 function removeListeners(): void {
@@ -789,29 +786,30 @@ function removeListeners(): void {
   holdKey(false);
 }
 
-/** The key-release subscriptions while Space holds a press. */
-let stopKeyHold: (() => void)[] = [];
+const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const PASSIVE = {passive: true} as const;
+
+/** Whether the key-release listeners are attached. */
+let keyHeld = false;
 
 /**
- * Subscribe to the key's release and focus loss while Space holds a press,
- * and drop them when it ends: at rest the key path costs one `keydown`
- * subscription.
+ * Attach the key's release and focus-loss listeners while Space holds a
+ * press, and take them down when it ends: at rest the key path costs one
+ * `keydown` listener.
  */
 function holdKey(held: boolean): void {
-  if (held === stopKeyHold.length > 0) {
+  if (held === keyHeld) {
     return;
   }
+  keyHeld = held;
   if (held) {
-    stopKeyHold = [
-      subscribeInput(window, 'keyup', onKeyUp),
-      // The window's capture phase hears the element losing focus and the
-      // window losing it.
-      subscribeInput(window, 'blur', onBlur),
-    ];
+    window.addEventListener('keyup', onKeyUp, PASSIVE);
+    // `blur` does not bubble: the capture phase hears the element losing
+    // focus and the window losing it.
+    window.addEventListener('blur', onBlur, PASSIVE_CAPTURE);
   } else {
-    for (const stop of stopKeyHold.splice(0)) {
-      stop();
-    }
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur, PASSIVE_CAPTURE);
   }
 }
 
