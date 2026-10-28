@@ -48,12 +48,6 @@ export const docs = {
         'Movement past this distance on either axis cancels the press, treating it as a scroll or drag.',
       default: '10',
     },
-    {
-      name: 'options.stages',
-      type: 'ReadonlyArray<{delayMs: number; onStage: (point: {x: number; y: number}) => void}>',
-      description:
-        'Later stages of the same hold, in order: each fires once the finger has stayed delayMs from the start, still within moveCancelPx, after the long press itself.',
-    },
   ],
   returns: [
     {
@@ -65,7 +59,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Detects a single-finger press-and-hold and reports where it happened, so touch users can reach affordances that a pointer gets from right-click. iOS Safari never synthesizes a contextmenu event on long-press, which makes this the touch route into a cursor-positioned surface you build; ContextMenu and createContextMenu open on their trigger\u2019s own context request, a held finger included. The press cancels on movement, lift, multi-touch or unmount.',
+      'Detects a single-finger press-and-hold and reports where it happened, so touch users can reach affordances that a pointer gets from right-click. iOS Safari never synthesizes a contextmenu event on long-press, which makes this the only touch route into a cursor-positioned surface such as ContextMenu. The press cancels on movement, lift, multi-touch or unmount.',
     bestPractices: [
       {
         guidance: true,
@@ -101,8 +95,6 @@ export const docsDense = {
     'options.delayMs': 'hold duration before firing, ms.',
     'options.moveCancelPx':
       'movement past this (px, either axis) cancels as scroll / drag.',
-    'options.stages':
-      'later stages of the same hold: each fires at its delayMs from the start while the finger stays near it.',
   },
   returnDescriptions: {
     handlers:

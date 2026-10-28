@@ -18,9 +18,9 @@
  *   passive `pointerdown` listener and the page has none; a press on it (a
  *   mouse's primary button, a pen, or a finger, whose `pointerdown` comes
  *   before its `touchstart`) installs the host's page listeners, which go
- *   once that press's contacts end (FR24). There a finger's claim rests on
- *   `touch-action`: an element's blocking `touchmove` listener stays a
- *   coarse pointer's, so the element keeps its one listener.
+ *   once that press's contacts end (FR24). Under every pointer, an element
+ *   whose recognizer claims a moving finger also keeps its blocking
+ *   `touchmove`, a listener FR24 counts apart from the press's one.
  * - A press consumer takes a mouse press as a press (DEC-21): PressTracker's
  *   fine-pointer profile paints at once and brakes no scroll (FR11).
  * - The host follows the query (a tablet docking or undocking a mouse):
@@ -136,7 +136,6 @@ import {
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
@@ -162,7 +161,11 @@ import {
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
-import {lockDragSelection, locksSelectionFor} from '../utils/selectionLock';
+import {
+  type DragSelectionReleaseOptions,
+  lockDragSelection,
+  locksSelectionFor,
+} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 import {
@@ -257,6 +260,7 @@ function inNextFrame(view: Window | null, task: () => void): void {
 
 /** An armed press tracker's own element listeners: they never cancel. */
 const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const PASSIVE = {passive: true} as const;
 
 /**
  * Whether a recognizer can take a touch while it moves, and so needs the
@@ -381,7 +385,10 @@ export class GestureHost {
   private readonly pendingCallerReads = new Set<HTMLElement>();
   private isCallerReadScheduled = false;
   /** The selection lock each contact holds, by host contact id. */
-  private readonly lockedBy = new Map<number, () => void>();
+  private readonly lockedBy = new Map<
+    number,
+    (options?: DragSelectionReleaseOptions) => void
+  >();
   private readonly presentedHitTesting: 'auto' | 'always' | 'never';
   /**
    * Contacts sent to what is drawn instead of what the engine hit, by host
@@ -495,6 +502,11 @@ export class GestureHost {
    * listens for a press itself; the page's listeners last that press (FR24).
    */
   private readonly armedElements = new Map<Element, () => void>();
+  /**
+   * Where the primary pointer is fine, the elements whose enabled hover
+   * recognizer listens on the element itself (syncHoverListeners).
+   */
+  private readonly hoverElements = new Map<Element, () => void>();
   private isArmedPress = false;
   /**
    * Whether the installed listeners include the cancelable ones (the
@@ -864,15 +876,30 @@ export class GestureHost {
     if (registration.manageStyle && element instanceof HTMLElement) {
       this.applyStyle(element, registration);
     }
-    // For every pointer: a finger's claim cancels its moves here (FR19), a
-    // listener FR24 counts outside the one-listener budget a fine pointer's
-    // element keeps for its press (syncArmed).
+    this.syncTouchMoveListener(element, registration);
+  }
+
+  /**
+   * The element's blocking `touchmove`. For every pointer a claiming
+   * recognizer keeps it: a finger's claim cancels its moves here (FR19), a
+   * listener FR24 counts outside the one-listener budget a fine pointer's
+   * element keeps for its press (syncArmed). A kept press needs it only
+   * while a press is held: a phone's before every touch (Safari honours a
+   * blocking listener only when registered before the touch began), a fine
+   * pointer's only during an armed press, whose `pointerdown` comes before
+   * the touch it brings (FR24).
+   */
+  private syncTouchMoveListener(
+    element: Element,
+    registration: Registration,
+  ): void {
     const needsListener =
       registration.recognizers.some(
         recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
       ) ||
       (registration.consumer?.keepsTouch != null &&
-        registration.consumer.isEnabled?.() !== false);
+        registration.consumer.isEnabled?.() !== false &&
+        (this.isCoarse || this.isArmedPress));
     // The blocking listener sits on the element itself (FR19: a scroll that
     // starts elsewhere never waits on it), but every element shares the
     // host's one handler, which routes through the arena.
@@ -1160,10 +1187,74 @@ export class GestureHost {
         );
       });
     }
-    if (wanted.size === 0) {
+    if (wanted.size === 0 && this.isArmedPress) {
       this.isArmedPress = false;
+      this.syncKeptPresses();
+    }
+    this.syncHoverListeners();
+  }
+
+  /**
+   * Where the primary pointer is fine, a mouse or a pen hovering an element
+   * with an enabled hover recognizer reaches it through two passive
+   * listeners on that element, `pointermove` and `pointerout`, and no page
+   * listener (`spec:AST-094` FR24, FR43). Where it is coarse, the page's
+   * listeners carry hover.
+   */
+  private syncHoverListeners(): void {
+    const wanted = new Set<Element>();
+    if (!this.isCoarse) {
+      for (const [element, registration] of this.registry) {
+        if (registration.hovers.some(hover => hover.isEnabled)) {
+          wanted.add(element);
+        }
+      }
+    }
+    for (const [element, release] of this.hoverElements) {
+      if (!wanted.has(element)) {
+        release();
+        this.hoverElements.delete(element);
+      }
+    }
+    for (const element of wanted) {
+      if (this.hoverElements.has(element)) {
+        continue;
+      }
+      element.addEventListener('pointermove', this.onElementHover, PASSIVE);
+      element.addEventListener('pointerout', this.onElementHoverOut, PASSIVE);
+      this.hoverElements.set(element, () => {
+        element.removeEventListener('pointermove', this.onElementHover);
+        element.removeEventListener('pointerout', this.onElementHoverOut);
+      });
     }
   }
+
+  /** A hovering mouse or pen moved over a hover element (fine pointer). */
+  private readonly onElementHover = (event: Event): void => {
+    const move = event as PointerEvent;
+    // While the page listeners are on, they carry hover.
+    if (
+      !this.isInstalled &&
+      move.pointerType !== 'touch' &&
+      move.buttons === 0
+    ) {
+      this.updateHover(move);
+    }
+  };
+
+  /** A hovering mouse or pen left a hover element, or one inside it (fine pointer). */
+  private readonly onElementHoverOut = (event: Event): void => {
+    const out = event as PointerEvent;
+    if (this.isInstalled || out.pointerType === 'touch') {
+      return;
+    }
+    if (out.relatedTarget == null) {
+      this.exitHover(out.pointerId);
+    } else {
+      // What it moved onto decides which hovers it is still over.
+      this.updateHover(out, out.relatedTarget);
+    }
+  };
 
   /** A press on an armed element, a mouse's primary button, a pen or a finger: listen for this press. */
   private readonly onArmedPress = (event: Event): void => {
@@ -1171,15 +1262,25 @@ export class GestureHost {
     if (
       this.isInstalled ||
       !isPointerKind(press.pointerType) ||
-      (press.pointerType === 'mouse' && !isPrimaryClick(press))
+      (press.pointerType !== 'touch' && !isPrimaryClick(press))
     ) {
       return;
     }
     this.isArmedPress = true;
+    this.syncKeptPresses();
     this.install();
     // The window's capture phase is over for this event: hand it on.
     this.onPointerDown(press);
   };
+
+  /** A kept press's blocking `touchmove` follows the armed press (syncTouchMoveListener). */
+  private syncKeptPresses(): void {
+    for (const [element, registration] of this.registry) {
+      if (registration.consumer?.keepsTouch != null) {
+        this.syncTouchMoveListener(element, registration);
+      }
+    }
+  }
 
   /** After a contact ends: an armed press that is over stops listening. */
   private releaseArmedPress(): void {
@@ -1189,6 +1290,7 @@ export class GestureHost {
     queueMicrotask(() => {
       if (this.isArmedPress && this.arena.touches.length === 0) {
         this.isArmedPress = false;
+        this.syncKeptPresses();
         this.syncListeners();
       }
     });
@@ -1434,11 +1536,9 @@ export class GestureHost {
       }
       const registration = this.registry.get(node);
       if (registration != null) {
-        // Every pointer (`spec:AST-094` FR43).
+        // Every pointer (`spec:AST-094` FR43), hover included.
         recognizers.push(...registration.recognizers);
-        if (this.isCoarse) {
-          hovers.push(...registration.hovers);
-        }
+        hovers.push(...registration.hovers);
       }
       if (hasConsumerOwner || pointerType == null) {
         continue;
@@ -1464,9 +1564,9 @@ export class GestureHost {
    * stepper's hold-repeat). Anything whose hold does nothing, a plain
    * press-tracked control or row included, keeps the browser's long-press
    * selection (`spec:AST-094` FR41). Restored when the contact ends. Callers
-   * lock only where the primary pointer is coarse (locksSelectionFor), so
-   * desktop selection is untouched, and only once the arena has admitted
-   * the contact: `recognizers` and `consumer` are the ones that took it.
+   * lock for a finger or a pen under any primary pointer, never for a mouse
+   * (locksSelectionFor), and only once the arena has admitted the contact:
+   * `recognizers` and `consumer` are the ones that took it.
    */
   private lockSelection(
     id: number,
@@ -1542,9 +1642,12 @@ export class GestureHost {
     }
   }
 
-  /** Undo `lockSelection` for a contact that ended; idempotent. */
-  private unlockSelection(id: number): void {
-    this.lockedBy.get(id)?.();
+  /**
+   * Undo `lockSelection` for a contact that ended, at once for a cancel;
+   * idempotent.
+   */
+  private unlockSelection(id: number, isCancel = false): void {
+    this.lockedBy.get(id)?.({isCancel});
     this.lockedBy.delete(id);
   }
 
@@ -1665,7 +1768,7 @@ export class GestureHost {
       }
       const id = this.nextId++;
       this.touchIds.set(touch.identifier, id);
-      if (locksSelectionFor('touch', this.doc.defaultView)) {
+      if (locksSelectionFor('touch')) {
         toLock.push({id, target, consumerElement});
       }
       // The finger's events keep going to what the engine hit.
@@ -2281,9 +2384,9 @@ export class GestureHost {
       });
       return;
     }
-    // A right click, or a ctrl-click on macOS (its context click), starts no
-    // press (FR43).
-    if (event.pointerType === 'mouse' && !isPrimaryClick(event)) {
+    // A right click, a pen's barrel button, or a ctrl-click on macOS (its
+    // context click) starts no press (FR43).
+    if (event.pointerType !== 'touch' && !isPrimaryClick(event)) {
       return;
     }
     const landed = landedOn(event);
@@ -2313,7 +2416,7 @@ export class GestureHost {
         consumer,
       },
     ]);
-    if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
+    if (locksSelectionFor(event.pointerType)) {
       // The presented target: what the pen is on, where the engine's own
       // hit test may still see the motion's start.
       this.lockSelection(
@@ -2413,7 +2516,7 @@ export class GestureHost {
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
       this.pointerIds.delete(event.pointerId);
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
       this.retargeted.delete(id);
       this.arena.cancelled([id], eventTime(event));
     }
@@ -2451,11 +2554,14 @@ export class GestureHost {
 
   // --- Hover -------------------------------------------------------------------
 
-  private updateHover(event: PointerEvent): void {
+  private updateHover(
+    event: PointerEvent,
+    target: unknown = landedOn(event),
+  ): void {
     if (!isPointerKind(event.pointerType)) {
       return;
     }
-    const {hovers} = this.participantsAt(landedOn(event), null);
+    const {hovers} = this.participantsAt(target, null);
     const next = new Set(hovers.filter(hover => hover.isEnabled));
     const previous = this.hovered.get(event.pointerId) ?? new Set();
     if (next.size === 0 && previous.size === 0) {
@@ -2661,13 +2767,16 @@ export class GestureHost {
 
   private readonly onBlur = (): void => {
     this.cancelEverything(this.arena.now());
+    // The press a blur ends sends no further pointer event: an armed press's
+    // page listeners go now, as at its lift (FR24).
+    this.releaseArmedPress();
   };
 
   /** The app lost focus: UIKit cancels every touch in flight. */
   private cancelEverything(time: number): void {
     const ids = [...this.pointerIds.values()];
     for (const id of ids) {
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
     }
     for (const identifier of [...this.touchIds.keys()]) {
       // The browser may keep the touch alive: its lift must not click.

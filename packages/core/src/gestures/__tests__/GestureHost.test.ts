@@ -601,6 +601,8 @@ describe('GestureHost', () => {
     expect(pinchLike.defaultPrevented).toBe(false);
     expect(pan.state).toBe('began');
     expect(pan.numberOfTouches).toBe(1);
+    // The second finger's move never moves the pan.
+    expect(pan.translation().x).toBe(before);
     // The claimed finger's own moves stay cancelled.
     const own = touch(
       'touchmove',
@@ -3923,6 +3925,43 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     expect(later.defaultPrevented).toBe(false);
   });
 
+  for (const ending of ['pointercancel', 'blur', 'detach'] as const) {
+    it(`lifts the document-wide selection hold at once when a claimed mouse press ends in a ${ending}: no mouseup or click follows a cancel (FR41: "lifted at the lift or a cancel")`, () => {
+      const {box, outside} = mount(
+        '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
+      );
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const detach = fine.attach(box, pan);
+      detachers.push(detach);
+      let time = 0;
+      for (const [type, x] of [
+        ['pointerdown', 10],
+        ['pointermove', 30],
+        ['pointermove', 50],
+      ] as const) {
+        time += 16;
+        pointer(type, box, {pointerType: 'mouse', x, y: 10, buttons: 1, time});
+      }
+      expect(['began', 'changed']).toContain(pan.state);
+      if (ending === 'pointercancel') {
+        pointer('pointercancel', document.body, {
+          pointerType: 'mouse',
+          x: 50,
+          y: 10,
+          time: time + 16,
+        });
+      } else if (ending === 'blur') {
+        window.dispatchEvent(new Event('blur'));
+      } else {
+        detach();
+      }
+      const later = new Event('selectstart', {bubbles: true, cancelable: true});
+      outside.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(false);
+    });
+  }
+
   it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
     const {box} = mount('<div id="box">Some selected text</div>');
     const fine = fineHost();
@@ -3993,6 +4032,31 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
       time: 1080,
     });
     expect(consumer.events.length).toBeGreaterThan(0);
+  });
+
+  it("starts no press for a pen's barrel button, as the README says, under a fine or a coarse pointer (FR43)", () => {
+    for (const target of [fineHost(), host]) {
+      document.body.innerHTML = '';
+      const {row} = mount('<div id="row"></div>');
+      const consumer = new RecordingConsumer();
+      detachers.push(target.attachConsumer(row, consumer));
+      pointer('pointerdown', row, {
+        pointerType: 'pen',
+        x: 5,
+        y: 5,
+        button: 2,
+        buttons: 2,
+        time: 0,
+      });
+      pointer('pointerup', row, {
+        pointerType: 'pen',
+        x: 5,
+        y: 5,
+        button: 2,
+        time: 80,
+      });
+      expect(consumer.events).toEqual([]);
+    }
   });
 
   it("ends a fine-pointer finger's press on an action group at its lift, and the group's next press begins and ends as well (FR43, FR19)", () => {

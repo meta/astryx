@@ -31,7 +31,6 @@
  * iOS query matches utils/touchPresentation.ts.
  */
 
-import {isCoarsePointer} from './coarsePointer';
 import {parentAcrossShadow} from './flatTree';
 
 /** What a held finger must not start on a control or a cell. */
@@ -54,16 +53,12 @@ const TEXT_ENTRY_TYPES = new Set([
 
 /**
  * Whether a contact of this pointer kind takes the lock: a finger or a pen,
- * and only where the primary pointer is coarse (a phone, an iPad and its
- * pencil). Where the primary pointer is fine (a laptop's touchscreen, a
- * desktop pen tablet), a finger and a pen get the browser's defaults, as a
- * mouse does (`spec:AST-094` FR19, `spec:AST-017` FR59). A mouse never does.
+ * under any primary pointer, a laptop's touchscreen and a desktop pen tablet
+ * included, since a pen's hold acts as a finger's (`spec:AST-094` FR41). A
+ * mouse never does: it keeps its released behavior (`spec:AST-017` FR59).
  */
-export function locksSelectionFor(
-  pointerType: string,
-  view: Window | null | undefined,
-): boolean {
-  return pointerType !== 'mouse' && isCoarsePointer(view);
+export function locksSelectionFor(pointerType: string): boolean {
+  return pointerType !== 'mouse';
 }
 
 /** Locked elements, how many contacts hold each, and what to restore. */
@@ -113,6 +108,15 @@ export function lockSelection(
   return lockStyles(set);
 }
 
+/** How a drag's selection hold ends: at a lift, or at a cancel. */
+export interface DragSelectionReleaseOptions {
+  /**
+   * The press was cancelled (a pointercancel, a blur, a detach): no mouseup
+   * or click follows.
+   */
+  isCancel?: boolean;
+}
+
 /**
  * Refuse a selection while a mouse or a pen drag a recognizer claimed runs,
  * until the returned function runs (`spec:AST-094` FR43, FR41). The drag has
@@ -123,13 +127,14 @@ export function lockSelection(
  * refused and a selection the drag extends is cleared. The press's own
  * `mouseup` and `click` come after its `pointerup` in the same task, and
  * WebKit settles the drag's selection there, so the document's hold ends a
- * task after the release. Page listeners only during a press (FR24).
+ * task after a lift; a cancel, which nothing follows, ends it at once. Page
+ * listeners only during a press (FR24).
  * Idempotent release.
  */
 export function lockDragSelection(
   elements: Iterable<Element>,
   view: Window | null | undefined,
-): () => void {
+): (options?: DragSelectionReleaseOptions) => void {
   const clear = () => {
     const selection = view?.getSelection();
     if (
@@ -161,7 +166,7 @@ export function lockDragSelection(
   doc?.addEventListener('selectionchange', clearOutsideEntry);
   const unlockStyles = lockStyles(set);
   let isReleased = false;
-  return () => {
+  return ({isCancel = false}: DragSelectionReleaseOptions = {}) => {
     if (isReleased) {
       return;
     }
@@ -175,7 +180,9 @@ export function lockDragSelection(
       doc?.removeEventListener('selectstart', refuse, true);
       doc?.removeEventListener('selectionchange', clearOutsideEntry);
     };
-    if (view == null) {
+    // A lift's own mouseup and click follow in its task and must still meet
+    // the hold; nothing follows a cancel, which lifts it at once (FR41).
+    if (view == null || isCancel) {
       release();
     } else {
       view.setTimeout(release, 0);

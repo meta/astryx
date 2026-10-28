@@ -145,100 +145,6 @@ afterEach(() => {
 });
 
 describe('attachContextRequest (spec:AST-094 FR43)', () => {
-  describe('a hold in two stages: a commit, then a request', () => {
-    function holdRequests(hold: Record<string, unknown>) {
-      const {row} = mount('<div id="row">Row</div>');
-      const phases: string[] = [];
-      const seen = requests(row, {
-        hold: {commitMs: 400, requestMs: 735, ...hold},
-        onHold: (phase: string) => phases.push(phase),
-      });
-      return {row, phases, seen};
-    }
-
-    it('requests at a lift after the commit and before its request time when the hold asks for it, as UIKit opens a context menu then, and ends', () => {
-      const {row, phases, seen} = holdRequests({requestOnLift: true});
-      touch('touchstart', row, {id: 1, x: 20, y: 20}, 0);
-      host.arena.advanceTime(400);
-      expect(phases).toEqual(['committed']);
-      touch('touchend', row, {id: 1, x: 22, y: 21}, 500, true);
-      expect(seen).toEqual([
-        {
-          kind: 'hold',
-          pointerType: 'touch',
-          point: {x: 22, y: 21},
-          pointerId: null,
-          time: 500,
-        },
-      ]);
-      expect(phases).toEqual(['committed', 'ended']);
-    });
-
-    it('requests nothing at such a lift otherwise: the hold is cancelled', () => {
-      const {row, phases, seen} = holdRequests({});
-      touch('touchstart', row, {id: 1, x: 20, y: 20}, 0);
-      host.arena.advanceTime(400);
-      touch('touchend', row, {id: 1, x: 20, y: 20}, 500, true);
-      expect(seen).toEqual([]);
-      expect(phases).toEqual(['committed', 'cancelled']);
-    });
-
-    it("cancels the hold at once when the finger drifts past a long press's movement after the commit: no request at its request time, nor at its lift", () => {
-      const {row, phases, seen} = holdRequests({requestOnLift: true});
-      touch('touchstart', row, {id: 1, x: 20, y: 20}, 0);
-      host.arena.advanceTime(400);
-      touch('touchmove', row, {id: 1, x: 40, y: 20}, 450);
-      expect(phases).toEqual(['committed', 'cancelled']);
-      host.arena.advanceTime(800);
-      touch('touchend', row, {id: 1, x: 40, y: 20}, 850, true);
-      expect(seen).toEqual([]);
-      expect(phases).toEqual(['committed', 'cancelled']);
-    });
-
-    it("measures the hold's drift on each axis against its own tolerance when asked, as a context menu does, before the commit and after it: (11, 11) holds with 11.5 per axis, (12, 12) does not", () => {
-      const perAxis = {allowableMovement: 11.5, isPerAxis: true};
-      const kept = holdRequests(perAxis);
-      touch('touchstart', kept.row, {id: 1, x: 20, y: 20}, 0);
-      touch('touchmove', kept.row, {id: 1, x: 31, y: 31}, 100);
-      host.arena.advanceTime(400);
-      touch('touchmove', kept.row, {id: 1, x: 9, y: 9}, 500);
-      host.arena.advanceTime(735);
-      expect(kept.phases).toEqual(['committed']);
-      expect(kept.seen.map(request => request.time)).toEqual([735]);
-      touch('touchend', kept.row, {id: 1, x: 9, y: 9}, 800, true);
-      for (const detach of detachers.splice(0)) {
-        detach();
-      }
-      const before = holdRequests(perAxis);
-      touch('touchstart', before.row, {id: 2, x: 20, y: 20}, 1000);
-      touch('touchmove', before.row, {id: 2, x: 32, y: 32}, 1100);
-      host.arena.advanceTime(1400);
-      expect(before.phases).toEqual([]);
-      touch('touchend', before.row, {id: 2, x: 32, y: 32}, 1500, true);
-      for (const detach of detachers.splice(0)) {
-        detach();
-      }
-      const after = holdRequests(perAxis);
-      touch('touchstart', after.row, {id: 3, x: 20, y: 20}, 2000);
-      host.arena.advanceTime(2400);
-      touch('touchmove', after.row, {id: 3, x: 32, y: 20}, 2500);
-      expect(after.phases).toEqual(['committed', 'cancelled']);
-      host.arena.advanceTime(2735);
-      expect(after.seen).toEqual([]);
-    });
-
-    it("requests on the host's clock: a lift that comes late, past the request time, finds the request made at that time first", () => {
-      const {row, phases, seen} = holdRequests({});
-      touch('touchstart', row, {id: 1, x: 20, y: 20}, 0);
-      host.arena.advanceTime(400);
-      // The main thread was blocked: the lift arrives stamped after 735 ms,
-      // with the request's timer not yet run.
-      touch('touchend', row, {id: 1, x: 20, y: 20}, 900, true);
-      expect(seen.map(request => request.time)).toEqual([735]);
-      expect(phases).toEqual(['committed', 'ended']);
-    });
-  });
-
   it('makes one request from a right click, at the pointer, and keeps the browser menu off', () => {
     coarse = false;
     const {row} = mount('<div id="row" tabindex="0">Row</div>');
@@ -317,6 +223,28 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("makes one request from a pen held still, and none from the browser menu that pen's hold also fires, during it or at the lift", () => {
+    const {row} = mount('<div id="row">Row</div>');
+    const seen = requests(row);
+    pointer('pointerdown', row, {
+      pointerType: 'pen',
+      x: 20,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    host.arena.advanceTime(600);
+    const during = contextmenu(row, {x: 20, y: 10, pointerType: 'pen'});
+    pointer('pointerup', row, {pointerType: 'pen', x: 20, y: 10, time: 700});
+    // Windows fires a pen's press-and-hold menu at the lift.
+    const atLift = contextmenu(row, {x: 20, y: 10, pointerType: 'pen'});
+    expect(during.defaultPrevented).toBe(true);
+    expect(atLift.defaultPrevented).toBe(true);
+    expect(seen.map(request => [request.kind, request.pointerType])).toEqual([
+      ['hold', 'pen'],
+    ]);
+  });
+
   it('makes no request for a finger that lifts before the hold or travels past its tolerance', () => {
     const {row} = mount('<div id="row">Row</div>');
     const seen = requests(row);
@@ -353,7 +281,7 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     expect(seen.map(request => request.kind)).toEqual(['pointer']);
   });
 
-  it('leaves a control that keeps its press for a hold-repeat its own long press, right click and Shift+F10', () => {
+  it("leaves a control that keeps its press for a hold-repeat only its hold: its right click and Shift+F10 reach the row's context request", () => {
     const {row, stepper} = mount(
       '<div id="row">Row <button id="stepper">+</button></div>',
     );
@@ -367,11 +295,14 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     touch('touchstart', stepper, {id: 1, x: 5, y: 5}, 0);
     host.arena.advanceTime(700);
     touch('touchend', stepper, {id: 1, x: 5, y: 5}, 800, true);
+    // The hold is the stepper's repeat: no request.
+    expect(seen).toEqual([]);
     const right = contextmenu(stepper, {x: 5, y: 5, pointerType: 'mouse'});
-    expect(right.defaultPrevented).toBe(false);
+    expect(right.defaultPrevented).toBe(true);
+    host.arena.advanceTime(2000);
     stepper.focus();
     key(stepper, {key: 'F10', shiftKey: true});
-    expect(seen).toEqual([]);
+    expect(seen.map(request => request.kind)).toEqual(['pointer', 'keyboard']);
   });
 
   it('starts no press for a right click or a ctrl-click on macOS', () => {

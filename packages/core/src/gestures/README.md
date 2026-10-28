@@ -212,7 +212,9 @@ assistive-technology activation keep working.
   the release takes the list's deselect clock.
 
 `paintPress(element, 'on' | 'held' | 'fading' | 'none', {releaseMs})`, in
-`utils/pressFeedback.ts`, is the one writer of `data-astryx-press`. It owns the release timer and writes
+`utils/pressFeedback.ts`, writes `data-astryx-press` for every press it tracks;
+the action-group tracker (`hooks/actionGroupTracker.ts`) writes its groups'
+presses itself. `paintPress` owns the release timer and writes
 only over values the caller may replace (by default none, `on` and
 `fading`), so a `held` row survives presses until its owner releases it
 with `onlyFrom: ['held']`.
@@ -227,6 +229,12 @@ presses nothing.
 
 ## What the browser is told
 
+- **Pens.** A pen drives every recognizer and press tracker as a finger
+  does: it pans, taps and long-presses; its hold, where the hold does
+  something, keeps text unselected as a finger's does (FR41); a hovering
+  pen reaches a hover recognizer as a mouse does; its barrel button is a
+  context click and starts no press; a pinch never mixes a pen with a
+  finger; and the screen-edge pan, a finger's only, ignores it (FR43).
 - **For every pointer.** Recognizers and press trackers attach for a mouse,
   a pen and a finger alike (`spec:AST-094` FR43, FR19). Where the primary
   pointer is coarse (`TOUCH_QUERY`, `../utils/coarsePointer.ts`), the host
@@ -236,11 +244,17 @@ presses nothing.
   FR24 counts outside that budget, FR19) and the page has none: a press on the element (a mouse's primary button, a
   pen, or a finger, whose `pointerdown` comes before its `touchstart`)
   adds the host's document and window listeners, and they go once that
-  press's contacts end (FR24). A component that uses no gesture, and a
+  press's contacts end, or when the window blurs during it (FR24). A press
+  tracker created with `keepsTouch` gets its blocking `touchmove` only
+  during such a press; where the pointer is coarse it keeps it, since
+  Safari honours a blocking listener only when it was registered before
+  the touch. An element with a hover recognizer listens for a hovering
+  mouse or pen with two passive listeners of its own, `pointermove` and
+  `pointerout`. A component that uses no gesture, and a
   disabled recognizer or consumer, registers nothing; after a consumer's
   `isEnabled()` changes, `host.update(element)` re-syncs. The screen-edge
   pan stays off under a mouse, a trackpad and a pen (its recognizer allows
-  touches only, unless the caller allows another pointer), and a pinch
+  touches only; it takes no `allowedPointerTypes`), and a pinch
   never mixes a pen with a finger (a recognizer takes one kind of pointer
   at a time) (FR43). A press tracker takes a mouse press as a press, with
   the fine-pointer profile: it paints at once, inside a scroller too, and
@@ -441,20 +455,15 @@ context-menu key. Each gesture makes one request, reporting its `kind`
 (`hold`, `pointer`, `keyboard`), its pointer, and its point (none from
 the keyboard). The hold is an arena participant, so it loses to a claim
 another recognizer made on that finger first (a reorder handle's hold); the
-browser's own menu that a held finger or a key also fires is refused, never
-requested again; and a mouse held still makes no request. A control that
-keeps its press for a hold-repeat keeps its long press, right click and
-Shift+F10 its own. A right click or a ctrl-click on macOS starts no press.
+browser's own menu that a held finger, a held pen or a key also fires is
+refused, never requested again; and a mouse held still makes no request. A
+control that keeps its press for a hold-repeat owns only its hold: its right
+click and Shift+F10 still reach the request. A right click or a ctrl-click on macOS starts no press.
 The request listens on its own element only, and only while enabled.
 
-A hold can come in two stages (`hold: {commitMs, requestMs}`, reported by
-`onHold`): it commits when the still finger claims its touch, then requests
-at `requestMs`, a deadline on the host's clock. With `requestOnLift`, a lift
-between the two requests at the lift, as UIKit opens a context menu then;
-without it, that lift cancels the hold. A finger that drifts past the hold's
-`allowableMovement` (UIKit's long press, 10 px as a distance, by default; a
-context menu's tolerance on each axis with `isPerAxis`) fails the hold before
-the commit and cancels it at once after it, before the request.
+The hold is UIKit's long press, 500 ms and 10 px as a distance, and it
+requests as it begins; `onHold` reports it committed, then ended at its lift
+or cancelled.
 
 ## Time
 
