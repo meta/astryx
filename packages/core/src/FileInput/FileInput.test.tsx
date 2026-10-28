@@ -511,6 +511,84 @@ describe('FileInput', () => {
   });
 
   describe('validation', () => {
+    it.each([
+      {maxSize: 0, expected: '0 B'},
+      {maxSize: 1023, expected: '1023 B'},
+      {maxSize: 1024, expected: '1.0 KB'},
+      {maxSize: 1048575, expected: '1024.0 KB'},
+      {maxSize: 1048576, expected: '1.0 MB'},
+      {maxSize: 1572864, expected: '1.5 MB'},
+    ])(
+      'preserves the English size boundary at $maxSize bytes',
+      ({maxSize, expected}) => {
+        render(
+          <FileInput
+            label="Upload"
+            value={null}
+            onChange={() => {}}
+            maxSize={maxSize}
+          />,
+        );
+        fireEvent.change(fileInputEl(), {
+          target: {files: [createFile('big.txt', maxSize + 1)]},
+        });
+        expect(
+          screen.getByText(`"big.txt" exceeds ${expected} limit`),
+        ).toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      {
+        maxSize: 512,
+        sizeKey: 'bytes',
+        message: '{size, number} octets',
+        expected: '512 octets',
+      },
+      {
+        maxSize: 1536,
+        sizeKey: 'kilobytes',
+        message: '{size, number, ::.0} ko',
+        expected: '1,5 ko',
+      },
+      {
+        maxSize: 1572864,
+        sizeKey: 'megabytes',
+        message: '{size, number, ::.0} Mo',
+        expected: '1,5 Mo',
+      },
+    ])(
+      'localizes the $sizeKey size in validation feedback',
+      ({maxSize, sizeKey, message, expected}) => {
+        const handleChange = vi.fn();
+        render(
+          <InternationalizationProvider
+            locale="fr"
+            overrides={{
+              fr: {
+                '@astryx.fileInput.errorMaxSize':
+                  '{maxSize} maximum pour {fileName}',
+                [`@astryx.fileInput.fileSize.${sizeKey}`]: message,
+              },
+            }}>
+            <FileInput
+              label="Upload"
+              value={null}
+              onChange={handleChange}
+              maxSize={maxSize}
+            />
+          </InternationalizationProvider>,
+        );
+        fireEvent.change(fileInputEl(), {
+          target: {files: [createFile('big.txt', maxSize + 1)]},
+        });
+        expect(
+          screen.getByText(`${expected} maximum pour big.txt`),
+        ).toBeInTheDocument();
+        expect(handleChange).toHaveBeenCalledWith(null);
+      },
+    );
+
     it('rejects files exceeding maxSize', () => {
       const handleChange = vi.fn();
       render(

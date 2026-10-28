@@ -202,7 +202,18 @@ those contracts.
   the gesture host, velocity tracking, rubber band, and haptics; long press,
   which has no public factory yet; the spring and curve helpers and UIKit's
   measured tables; the touch presentation query; layout-change reporting
-  (`spec:AST-105` FR1); and the touch hit-area expansion. Components import
+  (`spec:AST-105` FR1); a pull that a scroll area hands over only at its
+  edge (`spec:AST-094` FR14, FR19); a snap-point drag whose release can
+  dismiss its surface, judged by the use's measured projection (`spec:AST-094`
+  FR36); a drag on one element that moves another (a sheet's handle and
+  scrolling body move the sheet; its dim is the layer runtime's backdrop
+  tint, `architecture:layer-runtime` INV14); the animator's jobs beyond the
+  public handle: a motion role other than `springs.stateChange`
+  (`spec:AST-094` FR4, `spec:AST-108` FR3), a closed-form curve played with
+  retargets, a companion on its clock and a chosen start (`spec:AST-094` FR5,
+  FR6), and the Reduce Motion substitution for a move, an entrance or an exit
+  (`design:reduced-motion` DR1–DR3); and the touch hit-area expansion.
+  Components import
   them statically, and the bundler
   keeps one copy per page however many components use them. There is no
   install call, no public entry, and no public installed check; tests reset

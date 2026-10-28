@@ -91,9 +91,11 @@ export const myTheme = defineTheme({
 
   /**
    * Start from another theme instead of the defaults. Tokens are copied then
-   * overridden, `components` deep-merge, `icons` shallow-merge — but the scale
-   * configs below REPLACE the base's rather than merging, because they are
-   * inputs to a generator, not values.
+   * overridden, `components` deep-merge, `icons` shallow-merge — but the
+   * typography, radius and color scale configs below REPLACE the base's rather
+   * than merging, because they are inputs to a generator, not values. `motion`
+   * inherits field by field: `fast`, `medium` and `ratio` regenerate the fast
+   * and medium durations, and a `slow` or `easing` left unset keeps the base's.
    *
    * Reference: `astryx theme list` (themes you can install and extend).
    */
