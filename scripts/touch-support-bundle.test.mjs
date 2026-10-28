@@ -6,10 +6,14 @@
  *   (.github/scripts/lib/component-size.js); core's package.json; core's and
  *   the CLI's docs; core's and Lab's component source
  * @output Pins architecture:react-component-runtime INV13's bundle and
- *   boundary claims: Core's public entries carry none of the touch and gesture
- *   module until a component imports it; two components that import it share
- *   one copy per page; only the internal `internal/touch` entry reaches it,
- *   and no consumer doc or component `import()` does
+ *   boundary claims: a public import of Core (each subpath, and each hook on
+ *   its own) carries none of the gesture code unless it is listed as using a
+ *   gesture, Button and TextInput never do, and a failure names the import
+ *   chain that brings it; the root entry
+ *   carries only the gesture code its touch components import; two components
+ *   that import the touch module share one copy per page; only the internal
+ *   `internal/touch` entry reaches it, and no consumer doc or component
+ *   `import()` does
  * @position Node test over source, so it needs no build
  */
 
@@ -37,28 +41,36 @@ afterAll(() => {
  * in it, built as the size report builds a component import. React and StyleX
  * stay external: they hold no touch code.
  */
+/**
+ * The size report's build of a component import (minified ESM for the
+ * browser). React and StyleX stay external: they hold no touch code.
+ */
+const BUILD_OPTIONS = {
+  absWorkingDir: REPO,
+  outdir: path.join(scratch, 'out'),
+  bundle: true,
+  minify: true,
+  format: 'esm',
+  platform: 'browser',
+  define: {'process.env.NODE_ENV': '"production"'},
+  loader: {'.css': 'empty'},
+  external: [
+    'react',
+    'react/*',
+    'react-dom',
+    'react-dom/*',
+    '@stylexjs/stylex',
+  ],
+  metafile: true,
+  write: false,
+  logLevel: 'silent',
+};
+
 function outputsOf(entries) {
   const result = esbuild.buildSync({
-    absWorkingDir: REPO,
+    ...BUILD_OPTIONS,
     entryPoints: entries,
-    outdir: path.join(scratch, 'out'),
-    bundle: true,
     splitting: true,
-    minify: true,
-    format: 'esm',
-    platform: 'browser',
-    define: {'process.env.NODE_ENV': '"production"'},
-    loader: {'.css': 'empty'},
-    external: [
-      'react',
-      'react/*',
-      'react-dom',
-      'react-dom/*',
-      '@stylexjs/stylex',
-    ],
-    metafile: true,
-    write: false,
-    logLevel: 'silent',
   });
   return Object.values(result.metafile.outputs).map(output =>
     Object.fromEntries(
@@ -100,13 +112,247 @@ function filesUnder(dir, pattern) {
   return found;
 }
 
+/**
+ * The public imports that may carry the gesture code: those that use a
+ * gesture, or reach one through a component that does. Each is named here, so
+ * an import that starts carrying it shows up in review. An entry only allows:
+ * one that carries nothing yet passes, so a component is listed before its
+ * touch work lands.
+ */
+const GESTURE_USERS = new Set([
+  // AppShell's scroll-edge bar.
+  'AppShell',
+  // The action-group tracker.
+  'ButtonGroup',
+  'ToggleButton',
+  // Carousel's paging.
+  'Carousel',
+  // Chat's keyboard dismissal on a transcript drag.
+  'Chat',
+  // Item's swipe actions, and the imports that reach Item.
+  'Item',
+  'List',
+  'CheckboxList',
+  'RadioList',
+  'Breadcrumbs',
+  // NumberInput's steppers.
+  'NumberInput',
+  // SegmentedControl's press and drag to select.
+  'SegmentedControl',
+  // Switch's thumb drag.
+  'Switch',
+  // Toast's swipe to dismiss.
+  'Toast',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
+  // The public snap-point drag.
+  'dragToSnapPoints',
+  'hooks: useDragToSnapPoints',
+  // Slider's thumb.
+  'Slider',
+  // The List reorder, through createReorderable.
+  'reorderable',
+  // DateInput's and TimeInput's wheel, and the imports that reach it.
+  'DateInput',
+  'DateTimeInput',
+  'PowerSearch',
+  'Table',
+  'TimeInput',
+  // useMenuPress's trigger, which waits on a scroll view under a finger.
+  'hooks: useMenuPress',
+  // useScrollLock's page hold, and the layered components that reach it.
+  'hooks: useScrollLock',
+  'Layer',
+  'AlertDialog',
+  'BottomSheet',
+  'CommandPalette',
+  'ContextMenu',
+  'Dialog',
+  'Drawer',
+  'DropdownMenu',
+  'Lightbox',
+  'Markdown',
+  'MoreMenu',
+  'MultiSelector',
+  'Pagination',
+  'Popover',
+  'Selector',
+  'MobileNav',
+  'SideNav',
+  'TopNav',
+]);
+
+/** Public imports that carry no gesture code, whatever the list above says. */
+const NEVER_GESTURE_USERS = ['Button', 'TextInput'];
+
+/**
+ * Each public import of Core, built alone as the size report builds one:
+ * every subpath export but the root and the internal entries, and each export
+ * of the hooks entry on its own, since that barrel gathers independent hooks.
+ * The root re-exports all of them, so it is not one import: under INV13 a
+ * component that uses a gesture imports it statically, and the root then
+ * carries it by design.
+ */
+function publicImports() {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(REPO, 'packages/core/package.json'), 'utf8'),
+  );
+  const imports = [];
+  for (const [subpath, target] of Object.entries(pkg.exports)) {
+    const source = target?.source;
+    if (
+      typeof source !== 'string' ||
+      !/\.tsx?$/.test(source) ||
+      subpath === '.' ||
+      subpath.includes('*') ||
+      subpath.startsWith('./internal/')
+    ) {
+      continue;
+    }
+    const file = path.join(REPO, 'packages/core', source);
+    if (subpath === './hooks') {
+      for (const name of exportNamesOf(file)) {
+        imports.push({
+          name: `hooks: ${name}`,
+          source: `export {${name}} from ${JSON.stringify(file)};\n`,
+        });
+      }
+    } else {
+      imports.push({
+        name: subpath.slice(2),
+        source: `export * from ${JSON.stringify(file)};\n`,
+      });
+    }
+  }
+  return imports;
+}
+
+/** The names a module exports at runtime, read from its build. */
+function exportNamesOf(file) {
+  const result = esbuild.buildSync({...BUILD_OPTIONS, entryPoints: [file]});
+  const entry = path.relative(REPO, file);
+  return Object.values(result.metafile.outputs).find(
+    output => output.entryPoint === entry,
+  ).exports;
+}
+
+/**
+ * The gesture modules each of `imports` ships, with their bytes and the import
+ * chain that brings the first of them, building each import on its own.
+ */
+async function gestureCarriers(imports) {
+  const probe = path.join(scratch, 'public-import.ts');
+  fs.writeFileSync(probe, '');
+  const context = await esbuild.context({
+    ...BUILD_OPTIONS,
+    entryPoints: [probe],
+  });
+  const carriers = [];
+  try {
+    for (const {name, source} of imports) {
+      fs.writeFileSync(probe, source);
+      const {metafile} = await context.rebuild();
+      const [output] = Object.values(metafile.outputs);
+      const gestureModules = bytesOf(
+        Object.fromEntries(
+          Object.entries(output.inputs).map(([input, {bytesInOutput}]) => [
+            input,
+            bytesInOutput,
+          ]),
+        ),
+      );
+      if (gestureModules.length > 0) {
+        carriers.push({
+          name,
+          gestureModules,
+          chain: importChain(
+            metafile,
+            path.relative(REPO, probe),
+            gestureModules[0][0],
+          ),
+        });
+      }
+    }
+  } finally {
+    await context.dispose();
+  }
+  return carriers;
+}
+
+/** The first import chain from `from` to `to` in a build's metafile. */
+function importChain(metafile, from, to) {
+  const previous = new Map([[from, null]]);
+  const queue = [from];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current === to) {
+      break;
+    }
+    for (const {path: next} of metafile.inputs[current]?.imports ?? []) {
+      if (!previous.has(next) && metafile.inputs[next] != null) {
+        previous.set(next, current);
+        queue.push(next);
+      }
+    }
+  }
+  const chain = [];
+  for (let at = to; at != null; at = previous.get(at)) {
+    chain.unshift(at.replace('packages/core/src/', ''));
+  }
+  return chain.slice(1).join(' -> ');
+}
+
 describe('the touch module in bundles', () => {
-  it.each([
-    ['the root entry', 'index.ts'],
-    ['the hooks entry', 'hooks/index.ts'],
-    ['the utils entry', 'utils/index.ts'],
-  ])('is absent from %s', (_name, entry) => {
-    for (const bytes of outputsOf([path.join(CORE_SRC, entry)])) {
+  it('is in no public import that uses no gesture', async () => {
+    const carriers = await gestureCarriers(publicImports());
+    const unexpected = carriers.filter(({name}) => !GESTURE_USERS.has(name));
+    expect(
+      unexpected.map(
+        ({name, gestureModules, chain}) =>
+          `${name}: ${gestureModules
+            .map(
+              ([input, size]) =>
+                `${input.replace('packages/core/src/', '')} ${size} B`,
+            )
+            .join(', ')} (via ${chain})`,
+      ),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('is in none of the imports that never use a gesture', async () => {
+    const strict = publicImports().filter(({name}) =>
+      NEVER_GESTURE_USERS.includes(name),
+    );
+    expect(strict.map(({name}) => name).sort()).toEqual(
+      [...NEVER_GESTURE_USERS].sort(),
+    );
+    expect(
+      (await gestureCarriers(strict)).map(
+        ({name, chain}) => `${name} (via ${chain})`,
+      ),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('is in the root entry only as much as its touch components import', async () => {
+    const used = new Set(
+      (
+        await gestureCarriers(
+          publicImports().filter(({name}) => GESTURE_USERS.has(name)),
+        )
+      ).flatMap(({gestureModules}) => gestureModules.map(([input]) => input)),
+    );
+    const inRoot = outputsOf([path.join(CORE_SRC, 'index.ts')]).flatMap(bytes =>
+      bytesOf(bytes).map(([input]) => input),
+    );
+    expect(
+      [...new Set(inRoot)]
+        .filter(input => !used.has(input))
+        .map(input => input.replace('packages/core/src/', '')),
+    ).toEqual([]);
+  }, 120_000);
+
+  it('is absent from the utils entry', () => {
+    for (const bytes of outputsOf([path.join(CORE_SRC, 'utils/index.ts')])) {
       expect(bytesOf(bytes)).toEqual([]);
     }
   });
