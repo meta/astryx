@@ -8,6 +8,7 @@ import Foundation
 /// app then keeps drawing the rest of a newer core's tree.
 public enum AstryxNode: Decodable, Equatable, Sendable {
   case avatar(AvatarNode)
+  case avatarStatusDot(AvatarStatusDotNode)
   case badge(BadgeNode)
   case button(ButtonNode)
   case card(CardNode)
@@ -19,6 +20,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
   case selector(SelectorNode)
   case `switch`(SwitchNode)
   case text(TextNode)
+  case thumbnail(ThumbnailNode)
   case textInput(TextInputNode)
   case vStack(VStackNode)
   case unsupported(component: String, key: String)
@@ -26,6 +28,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
   public var key: String {
     switch self {
     case .avatar(let node): return node.key
+    case .avatarStatusDot(let node): return node.key
     case .badge(let node): return node.key
     case .button(let node): return node.key
     case .card(let node): return node.key
@@ -37,6 +40,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
     case .selector(let node): return node.key
     case .`switch`(let node): return node.key
     case .text(let node): return node.key
+    case .thumbnail(let node): return node.key
     case .textInput(let node): return node.key
     case .vStack(let node): return node.key
     case .unsupported(_, let key): return key
@@ -52,6 +56,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
     do {
       switch component {
       case "Avatar": self = .avatar(try AvatarNode(from: decoder))
+      case "AvatarStatusDot": self = .avatarStatusDot(try AvatarStatusDotNode(from: decoder))
       case "Badge": self = .badge(try BadgeNode(from: decoder))
       case "Button": self = .button(try ButtonNode(from: decoder))
       case "Card": self = .card(try CardNode(from: decoder))
@@ -63,6 +68,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
       case "Selector": self = .selector(try SelectorNode(from: decoder))
       case "Switch": self = .`switch`(try SwitchNode(from: decoder))
       case "Text": self = .text(try TextNode(from: decoder))
+      case "Thumbnail": self = .thumbnail(try ThumbnailNode(from: decoder))
       case "TextInput": self = .textInput(try TextInputNode(from: decoder))
       case "VStack": self = .vStack(try VStackNode(from: decoder))
       default: self = .unsupported(component: component, key: key)

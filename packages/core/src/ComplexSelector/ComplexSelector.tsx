@@ -840,7 +840,13 @@ export function ComplexSelector<Value>({
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
           }
-          aria-labelledby={labelId}
+          // The field's label names the trigger unless the selector was
+          // given a name: a caller's `aria-label` or `aria-labelledby`
+          // replaces it (family:input-fields FR10), as on `renderTrigger`.
+          aria-labelledby={
+            rest['aria-labelledby'] ??
+            (rest['aria-label'] != null ? undefined : labelId)
+          }
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={status?.type === 'error' ? 'true' : undefined}
           aria-busy={isBusy || undefined}

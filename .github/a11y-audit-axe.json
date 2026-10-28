@@ -11,7 +11,16 @@
   "ChatMessageList": {"evidence": null},
   "ChatMessageMetadata": {"evidence": null},
   "ChatTokenizedText": {
-    "env": {"ASTRYX_AUDIT_BASELINE_HEAD": "a7c6c7ecdf6b422df331124e8f6fc6d33cf1bd63"}
+    "env": {
+      "ASTRYX_AUDIT_BASELINE_HEAD": "a7c6c7ecdf6b422df331124e8f6fc6d33cf1bd63"
+    }
+  },
+  "CommandPaletteEmpty": {
+    "components": ["CommandPaletteEmpty", "CommandPalette"],
+    "stories": [
+      "core-commandpaletteempty--content-matrix",
+      "core-commandpalette--audit-matrix"
+    ]
   },
   "ContextMenuItem": {"readySelector": "[role=\"menu\"]", "evidence": null},
   "DateInput": {

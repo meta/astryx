@@ -78,6 +78,7 @@ import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {focusForLastInput} from '../utils/focusReturn';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 /**
@@ -820,9 +821,11 @@ export function Dialog({
       // imperatively in `attachDialog`; a consumer-provided aria-labelledby
       // flows through {...safeProps} above and wins.
       {...(purpose === 'required' ? {role: 'alertdialog'} : undefined)}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>{innerContent}</LayerContentBoundary>
-      </LayerDepthProvider>
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>{innerContent}</LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

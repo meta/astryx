@@ -578,11 +578,9 @@ export default function DiffViewerPerfPage() {
         <VStack gap={1}>
           <Heading level={2}>DiffViewer Performance</Heading>
           <Text type="body" color="secondary">
-            Render a whole change set, one DiffViewer per file, and measure the
-            diff model, the first file on screen, the full render, long tasks,
-            DOM size and heap, then scroll the list and time collapse, expand
-            and view switches. Multi-file workloads mix many small files with a
-            few very large ones.
+            Render a whole change set, one DiffViewer per file, while observing
+            the first file on screen, the full render, long tasks, DOM size,
+            heap, scroll frames, and collapse, expand and view switches.
           </Text>
         </VStack>
 
@@ -671,6 +669,24 @@ export default function DiffViewerPerfPage() {
               onClick={runBenchmark}
               isDisabled={controlsDisabled}
             />
+            <Button
+              label="Scroll test"
+              variant="secondary"
+              onClick={runScrollTest}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
+            <Button
+              label="Collapse all"
+              variant="secondary"
+              onClick={collapseAll}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
+            <Button
+              label="Expand all"
+              variant="secondary"
+              onClick={expandAll}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
           </HStack>
         </Section>
 
@@ -743,26 +759,6 @@ export default function DiffViewerPerfPage() {
                   value={formatDuration(interaction?.ms ?? null)}
                 />
               </Grid>
-              <HStack gap={2} wrap="wrap">
-                <Button
-                  label="Scroll test"
-                  variant="secondary"
-                  onClick={runScrollTest}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-                <Button
-                  label="Collapse all"
-                  variant="secondary"
-                  onClick={collapseAll}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-                <Button
-                  label="Expand all"
-                  variant="secondary"
-                  onClick={expandAll}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-              </HStack>
               <Text type="body" color="secondary">
                 Full render runs from the commit to the next painted frame;
                 first file on screen runs from the commit to the paint after a
@@ -782,33 +778,37 @@ export default function DiffViewerPerfPage() {
             </VStack>
           </Card>
 
-          <ScrollableArea
-            key={runKey}
-            ref={surfaceRef}
-            label="Rendered change set"
-            height={640}>
-            <VStack gap={3}>
-              {files.map(file => {
-                const path = file.newPath ?? file.oldPath ?? '';
-                const fileProps = {
-                  file,
-                  viewMode,
-                  language,
-                  isCollapsed: collapsed.has(path),
-                  onToggle: toggleFile,
-                };
-                return listMount === 'visible' ? (
-                  <OnScreenFile
-                    key={path}
-                    viewportRef={surfaceRef}
-                    {...fileProps}
-                  />
-                ) : (
-                  <BenchmarkFile key={path} {...fileProps} />
-                );
-              })}
-            </VStack>
-          </ScrollableArea>
+          <Card padding={3}>
+            {/* A named scroll area keeps a keyboard stop for the list, even
+                when the files on screen unmount (AST-025 FR12). */}
+            <ScrollableArea
+              key={runKey}
+              ref={surfaceRef}
+              label="Rendered change set"
+              height={616}>
+              <VStack gap={3}>
+                {files.map(file => {
+                  const path = file.newPath ?? file.oldPath ?? '';
+                  const fileProps = {
+                    file,
+                    viewMode,
+                    language,
+                    isCollapsed: collapsed.has(path),
+                    onToggle: toggleFile,
+                  };
+                  return listMount === 'visible' ? (
+                    <OnScreenFile
+                      key={path}
+                      viewportRef={surfaceRef}
+                      {...fileProps}
+                    />
+                  ) : (
+                    <BenchmarkFile key={path} {...fileProps} />
+                  );
+                })}
+              </VStack>
+            </ScrollableArea>
+          </Card>
         </Grid>
       </VStack>
     </AppShell>

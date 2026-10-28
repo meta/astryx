@@ -41,6 +41,7 @@
 
 import {useCallback, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {Icon} from '../Icon';
 import {InputClearButton} from './InputClearButton';
 import {mergeProps} from '../utils';
@@ -177,6 +178,14 @@ export interface PanelSearchInputProps extends Omit<
    * handler of its own.
    */
   onContainerKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+
+  /**
+   * Styles for the field box itself (the rounded row that draws the focus
+   * ring), as opposed to `xstyle`, which lands on the outer gutter. A panel
+   * whose rows are taller than a dropdown's — a touch sheet — uses it to grow
+   * the field to the same height as its rows.
+   */
+  fieldXstyle?: StyleXStyles;
 }
 
 /**
@@ -199,6 +208,7 @@ export function PanelSearchInput({
   onFocus,
   onBlur,
   onContainerKeyDown,
+  fieldXstyle,
   xstyle,
   className,
   style,
@@ -258,6 +268,7 @@ export function PanelSearchInput({
         {...stylex.props(
           styles.field,
           isKeyboardFocus && styles.fieldKeyboardFocus,
+          fieldXstyle,
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />
         <input

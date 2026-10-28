@@ -36,6 +36,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
+  type ModalOutletChange,
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
@@ -348,6 +349,9 @@ export function ToastViewport({
   // Toast ids whose exit has begun — guards onHide from double-firing (see
   // removeToast). Mirrors exitingIds state, readable synchronously.
   const exitingIdsRef = useRef<Set<string>>(new Set());
+  // Toasts dispatched since the last commit, by id: a dismiss() called
+  // before the toast first renders still finds it (and its onHide).
+  const pendingEntriesRef = useRef<Map<string, ToastEntry>>(new Map());
   // The element that was focused before the user jumped into the viewport
   // (via F6). Used to restore focus once all toasts are dismissed so focus
   // never falls to <body>.
@@ -423,6 +427,16 @@ export function ToastViewport({
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
       }
+      const pending = pendingEntriesRef.current;
+      if (uniqueID) {
+        // An overwrite replaces a toast that has not rendered yet too.
+        for (const [pendingId, pendingEntry] of pending) {
+          if (pendingEntry.options.uniqueID === uniqueID) {
+            pending.delete(pendingId);
+          }
+        }
+      }
+      pending.set(entry.id, entry);
       // An overwrite swaps a new entry, with a new id, into the replaced
       // toast's place, so the old row leaves the DOM without ever being
       // dismissed. Its settled id is dropped by the prune below, which covers
@@ -449,11 +463,15 @@ export function ToastViewport({
     if (exitingIdsRef.current.has(id)) {
       return;
     }
-    exitingIdsRef.current.add(id);
-    const entry = toastsRef.current.find(t => t.id === id);
-    if (entry) {
-      entry.options.onHide?.(reason);
+    const entry =
+      toastsRef.current.find(t => t.id === id) ??
+      pendingEntriesRef.current.get(id);
+    if (entry == null) {
+      // Already gone: nothing to hide or report.
+      return;
     }
+    exitingIdsRef.current.add(id);
+    entry.options.onHide?.(reason);
     // If focus currently lives inside the toast being dismissed, remember
     // that its removal must hand focus off to a neighbor (or the element
     // focused before the user entered the viewport) rather than <body>.
@@ -480,6 +498,20 @@ export function ToastViewport({
         pendingFocusRef.current = 'restore';
       }
     }
+    if (dismissedNode == null) {
+      // No row is mounted for it: it is hidden past `maxVisible`, or it has
+      // not rendered yet. Nothing animates out, so it leaves the list now.
+      // Waiting for its row to finish exiting would keep it forever: when it
+      // surfaced, its row would mount already collapsed, with no transition
+      // left to end, and hold a visible slot as an empty row.
+      // It leaves the committed list now too, so a second dismissal before
+      // the next render finds nothing to report.
+      exitingIdsRef.current.delete(id);
+      pendingEntriesRef.current.delete(id);
+      toastsRef.current = toastsRef.current.filter(t => t.id !== id);
+      setToasts(prev => prev.filter(t => t.id !== id));
+      return;
+    }
     setExitingIds(prev => {
       if (prev.has(id)) {
         return prev;
@@ -490,6 +522,7 @@ export function ToastViewport({
 
   const handleExited = useCallback((id: string) => {
     exitingIdsRef.current.delete(id);
+    pendingEntriesRef.current.delete(id);
     setExitingIds(withoutId(id));
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
@@ -583,7 +616,7 @@ export function ToastViewport({
     if (!isTopLayer || host == null) {
       return;
     }
-    const place = () => {
+    const place = (change: ModalOutletChange = 'outlet') => {
       const parent = getActiveModalOutlet() ?? rootOutletRef.current;
       if (parent == null) {
         return;
@@ -599,7 +632,9 @@ export function ToastViewport({
       }
       // Leaving the document hid the popover. Showing it again puts it above
       // the modal that just opened, or above everything once the last modal
-      // closed.
+      // closed. A non-modal surface that entered the top layer (`entry`)
+      // moved nothing, so the viewport leaves and re-enters in place to get
+      // above it; focus inside it is kept across the re-entry.
       const el = viewportRef.current;
       if (el == null || typeof el.showPopover !== 'function') {
         return;
@@ -609,6 +644,28 @@ export function ToastViewport({
         isShowing = el.matches(':popover-open');
       } catch {
         /* :popover-open unsupported */
+      }
+      if (isShowing && change === 'entry') {
+        const active = document.activeElement;
+        const hadFocus = active instanceof HTMLElement && el.contains(active);
+        try {
+          el.hidePopover();
+          isShowing = false;
+        } catch {
+          /* not a showing popover */
+        }
+        if (isShowing) {
+          return;
+        }
+        try {
+          el.showPopover();
+        } catch {
+          /* already showing */
+        }
+        if (hadFocus) {
+          active.focus({preventScroll: true});
+        }
+        return;
       }
       if (!isShowing) {
         try {

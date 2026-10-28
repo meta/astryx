@@ -104,16 +104,22 @@ the behavior from hooks; every such field behaves and announces the same way.
   contract carries the same obligations to a field the caller renders.
 - `component:ChatComposerInput` exposes combobox semantics for its trigger menu
   inside its own contenteditable field only, through an internal hook.
-- `useCombobox` (exported from `@astryxdesign/core/Selector`) already tracks the
-  active option, opens and closes, and handles the keys for Selector and
-  CommandPalette; `useMultiCombobox` (exported from
-  `@astryxdesign/core/MultiSelector`) does the same for MultiSelector. Both take
-  their own component's option type, leave the ARIA wiring to the caller, and do
-  not yet guard keys during an input-method composition (FR5).
+- `useCombobox` (exported from `@astryxdesign/core/Selector`) tracks the active
+  option, opens and closes, and handles the keys for Selector and CommandPalette.
+  For a single-line `input` the caller renders, over any option type with a
+  string `value`, its `getFieldProps`, `getListboxProps`, and `getOptionProps`
+  carry FR1–FR6. It does not yet take a multi-line field (DEC-3), and the
+  caller announces the result count through `useAnnounce` (FR7), as DEC-2
+  describes.
+- `useMultiCombobox` (exported from `@astryxdesign/core/MultiSelector`) does the
+  same for MultiSelector's own control. It takes MultiSelector's option type,
+  leaves the ARIA wiring to the caller, and does not guard keys during an
+  input-method composition.
 - `useTypeahead` already ignores keys during an input-method composition, and
   `useAnnounce` is the shared announcer FR7 names.
 - Both combobox hooks ship hook docs that `astryx hook` and `astryx search`
-  return, but neither yet names the requirements above it satisfies (FR8).
+  return. The `useCombobox` doc names the requirements above it satisfies (FR8);
+  the `useMultiCombobox` doc covers no caller-rendered field and names none.
 
 ## Verification
 

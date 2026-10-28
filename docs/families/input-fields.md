@@ -176,8 +176,10 @@ another implementation helper.
 - **FR7 — Component-owned source work keeps family geometry and accessibility.**
   Typeahead and Tokenizer own asynchronous search state through BaseTypeahead,
   not through the family `isLoading` meaning. Their visible source-busy feedback
-  still MUST be named, expose busy semantics on the combobox, and satisfy FR1,
-  FR2, and FR3 where grouped.
+  still MUST be named, expose busy semantics on the combobox — or, in a
+  presentation without a combobox, such as Tokenizer's sheet
+  (`component:Tokenizer` DEC-3), on the result list the search updates — and
+  satisfy FR1, FR2, and FR3 where grouped.
 - **FR8 — Status placement follows member capability.** Every input MUST offer
   `detached` and `tooltip`. A member supports `attached` only when its direct
   control is opaque, bordered, fixed-height (a height set by its resolved size,
@@ -287,21 +289,21 @@ another implementation helper.
 
 ### Current shipped facts
 
-| Component       | Current adoption                                                                                                           | Recorded exception                                                                                                                              |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| TextInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | none                                                                                                                                            |
-| TextArea        | Field, FormLayout, size, width, `isLoading`, `changeAction`, status, and disabled reason; block-axis growth                | not InputGroup-compatible                                                                                                                       |
-| NumberInput     | Field, FormLayout, InputGroup, size, width, clear, status, and disabled reason                                             | no shipped `isLoading` or `changeAction`                                                                                                        |
-| DateInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | none                                                                                                                                            |
-| DateRangeInput  | Field, FormLayout, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                            | not InputGroup-compatible                                                                                                                       |
-| DateTimeInput   | Field, FormLayout, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                            | not InputGroup-compatible                                                                                                                       |
-| TimeInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | none                                                                                                                                            |
-| FileInput       | Field, FormLayout, width, `isLoading`, `changeAction`, clear, status, and disabled reason                                  | no public `size`; compact and dropzone modes are component-owned                                                                                |
-| Selector        | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | DEC-1 permits standalone content-sized width                                                                                                    |
-| MultiSelector   | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | trigger-display modes remain component-owned                                                                                                    |
-| ComplexSelector | Field, FormLayout, size, width, `isLoading`, `changeAction`, and status                                                    | no InputGroup or disabled-reason API                                                                                                            |
-| Typeahead       | Field, FormLayout, InputGroup, size, width, clear, status, disabled reason, and BaseTypeahead source loading               | no family `isLoading` or `changeAction`; search lifecycle is component-owned                                                                    |
-| Tokenizer       | Field, FormLayout, size, width, clear, status, disabled reason, BaseTypeahead source loading, and multi-token block growth | Not InputGroup-compatible on current main; DEC-5 approves admission after the grouped adaptation lands; no family `isLoading` or `changeAction` |
+| Component       | Current adoption                                                                                                           | Recorded exception                                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TextInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | none                                                                                                                                               |
+| TextArea        | Field, FormLayout, size, width, `isLoading`, `changeAction`, status, and disabled reason; block-axis growth                | not InputGroup-compatible                                                                                                                          |
+| NumberInput     | Field, FormLayout, InputGroup, size, width, clear, status, and disabled reason                                             | no shipped `isLoading` or `changeAction`                                                                                                           |
+| DateInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | none                                                                                                                                               |
+| DateRangeInput  | Field, FormLayout, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                            | not InputGroup-compatible                                                                                                                          |
+| DateTimeInput   | Field, FormLayout, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                            | not InputGroup-compatible                                                                                                                          |
+| TimeInput       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | grouped sheet surface lacks the hidden label, description, and status, and a grouped tooltip status describes nothing (`component:TimeInput` FR10) |
+| FileInput       | Field, FormLayout, width, `isLoading`, `changeAction`, clear, status, and disabled reason                                  | no public `size`; compact and dropzone modes are component-owned                                                                                   |
+| Selector        | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | DEC-1 permits standalone content-sized width                                                                                                       |
+| MultiSelector   | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                | trigger-display modes remain component-owned                                                                                                       |
+| ComplexSelector | Field, FormLayout, size, width, `isLoading`, `changeAction`, and status                                                    | no InputGroup or disabled-reason API                                                                                                               |
+| Typeahead       | Field, FormLayout, InputGroup, size, width, clear, status, disabled reason, and BaseTypeahead source loading               | no family `isLoading` or `changeAction`; search lifecycle is component-owned                                                                       |
+| Tokenizer       | Field, FormLayout, size, width, clear, status, disabled reason, BaseTypeahead source loading, and multi-token block growth | Not InputGroup-compatible on current main; DEC-5 approves admission after the grouped adaptation lands; no family `isLoading` or `changeAction`    |
 
 The current text-entry controls that already carry a 16px anti-zoom floor apply it
 only on iOS. This includes input-family members and the existing shared or
@@ -359,24 +361,18 @@ DEC-6 does not require unrelated components to add a new floor.
   below accepts root `xstyle`/`className`/`style`, and none accepts `container*`
   or `control*`. Today's targets:
 
-  | Component                          | Root styling reaches | Base props reach                       | Primary semantic control    | Root styling migrates to |
-  | ---------------------------------- | -------------------- | -------------------------------------- | --------------------------- | ------------------------ |
-  | TextInput                          | control box          | native input                           | native input                | `control*`               |
-  | TextArea                           | control box          | native textarea                        | native textarea             | `control*`               |
-  | NumberInput                        | control box          | native input                           | native input                | `control*`               |
-  | FileInput                          | control box          | native file input                      | native file input           | `control*`               |
-  | DateInput (pointer, native, touch) | control box          | control box                            | date input                  | `control*`               |
-  | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger               | `control*`               |
-  | DateTimeInput (pointer, touch)     | control box          | control box                            | date-time input             | `control*`               |
-  | TimeInput (typed, native, touch)   | control box          | not forwarded                          | time input                  | `control*`               |
-  | Selector                           | control box          | trigger button                         | trigger button              | `control*`               |
-  | MultiSelector                      | control box          | not forwarded                          | trigger button              | `control*`               |
-  | ComplexSelector                    | control box          | control box                            | trigger button              | `control*`               |
-  | Typeahead                          | Field                | Field                                  | combobox input              | `container*`             |
-  | Tokenizer                          | Field                | Field                                  | combobox input              | `container*`             |
-  | CheckboxList                       | Field                | Field                                  | `role="group"` element      | `container*`             |
-  | RadioList                          | Field                | not forwarded; `ref` on Field          | `role="radiogroup"` element | `container*`             |
-  | Slider                             | Field                | not forwarded; `ref` on the track      | slider control              | `container*`             |
+  | Component                          | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
+  | ---------------------------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
+  | FileInput                          | control box          | native file input                      | native file input        | `control*`               |
+  | DateInput (pointer, native, touch) | control box          | control box                            | date input               | `control*`               |
+  | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
+  | DateTimeInput (pointer, touch)     | control box          | control box                            | date-time input          | `control*`               |
+  | Selector                           | control box          | trigger button                         | trigger button           | `control*`               |
+  | MultiSelector                      | control box          | not forwarded                          | trigger button           | `control*`               |
+  | ComplexSelector                    | control box          | control box                            | trigger button           | `control*`               |
+  | Typeahead                          | Field                | Field                                  | combobox input           | `container*`             |
+  | Tokenizer                          | Field                | Field                                  | combobox input           | `container*`             |
+  | Slider                             | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
 
   Conformance is an approved removal of root
   styling; an `astryx upgrade` codemod rewrites each component's root styling to

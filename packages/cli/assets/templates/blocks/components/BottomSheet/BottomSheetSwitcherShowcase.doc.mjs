@@ -4,16 +4,18 @@
 export const doc = {
   type: 'block',
   exampleFor: 'BottomSheetSwitcher',
-  name: 'Bottom Sheet Switcher',
-  displayName: 'Bottom Sheet Switcher',
+  alsoExampleFor: ['BottomSheet'],
+  // The published registry identity predates the rewrite; keep it.
+  registry: {slug: 'default'},
+  name: 'Bottom Sheet — Multi-step flow',
+  displayName: 'Bottom Sheet — Multi-step flow',
   description:
-    'A three-step flow that transitions between content-hugging sheets of different heights, each step in its own native dialog with one scrim handed between them.',
+    'A three-step flow of standalone sheets of different heights, driven by one state value: moving on replaces the open step in place. This is the replacement for the deprecated BottomSheetSwitcher.',
   isReady: true,
   isShowcase: true,
   aspectRatio: 3 / 4,
   componentsUsed: [
     'BottomSheet',
-    'BottomSheetSwitcher',
     'Button',
     'CheckboxInput',
     'Divider',

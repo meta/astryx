@@ -11,12 +11,15 @@ import os
 /// Avatar("Ada Lovelace", src: "https://example.com/ada.jpg")
 /// Avatar("Ada Lovelace", size: .lg, shape: .rounded)
 /// Avatar("Ada Lovelace", href: "https://example.com/ada")
-/// Avatar("Ada Lovelace") { showProfile() }
+/// Avatar("Ada Lovelace") { AvatarStatusDot(variant: .success, label: "Online") }
+/// Avatar("Ada Lovelace", onClick: showProfile)
 /// ```
-public struct Avatar: View {
+public struct Avatar<Status: View>: View {
   /// The contract the view draws, the same for both initializers.
   public let props: AvatarProps
+  let status: Status
   @Environment(\.astryx) private var astryx
+  @State private var statusLabel: String?
 
   /// An avatar from its labeled props.
   /// - Parameters:
@@ -28,6 +31,7 @@ public struct Avatar: View {
   ///   - shape: `circle`, `rounded`, or `square`; `nil` is `circle` (core `shape`).
   ///   - tooltip: Words shown where there is a pointer: `nil` or `true` the name, a string those words, `false` none (core `tooltip`).
   ///   - href: A URL the system opens when the avatar is tapped; the avatar becomes a link (core `href`).
+  ///   - status: An `AvatarStatusDot` in the bottom trailing corner; a single trailing closure is this (core `status`).
   ///   - onClick: Runs when the avatar is tapped; without `href` the avatar becomes a button (core `onClick`).
   public init(
     _ name: String? = nil,
@@ -38,18 +42,21 @@ public struct Avatar: View {
     shape: AvatarShape? = nil,
     tooltip: AvatarTooltip? = nil,
     href: String? = nil,
+    @ViewBuilder status: () -> Status = { EmptyView() },
     onClick: (() -> Void)? = nil
   ) {
     self.init(
       AvatarProps(
         src: src, fallbackSrc: fallbackSrc, name: name, alt: alt, size: size, shape: shape, tooltip: tooltip, href: href,
         onClick: onClick
-      ))
+      ),
+      status: status)
   }
 
   /// An avatar from its generated contract, for generated and wire-driven callers.
-  public init(_ props: AvatarProps) {
+  public init(_ props: AvatarProps, @ViewBuilder status: () -> Status = { EmptyView() }) {
     self.props = props
+    self.status = status()
   }
 
   public var body: some View {
@@ -74,7 +81,9 @@ public struct Avatar: View {
       assertionFailure(
         "Avatar href \"\(props.href ?? "")\" is not an absolute URL an app can open; it draws without a link.")
     }
-    if Avatar.needsNameWarning(tap: tap, isNamed: accessibilityLabel != nil) {
+    // The avatar's own name: a status label alone does not name a person.
+    let ownName = Avatar.meaningful(props.alt) ?? Avatar.meaningful(props.name)
+    if Avatar.needsNameWarning(tap: tap, isNamed: ownName != nil) {
       Logger(subsystem: "Astryx", category: "Avatar").warning(
         "An Avatar with href or onClick has no alt or name, so VoiceOver reads it without a name.")
     }
@@ -184,7 +193,39 @@ public struct Avatar: View {
     }
     .frame(width: side, height: side)
     .clipShape(AvatarShapeOutline(shape: resolvedShape, radius: cornerRadius))
+    .overlay {
+      // Outside the clip, so the status is never cut off. The layout places
+      // it from its own size; SwiftUI mirrors the placement in right-to-left
+      // layouts, so it sits on the bottom leading corner there.
+      AvatarStatusPlacement(side: side, shape: resolvedShape) {
+        status
+          .environment(\.astryxAvatarSide, side)
+          // The owner sizes what it holds (slots S4): status content never
+          // grows with text faster than the avatar does.
+          .dynamicTypeSize(...Avatar<EmptyView>.statusTypeSizeCap)
+      }
+    }
+    .onPreferenceChange(AvatarStatusLabelKey.self) { label in
+      statusLabel = label?.text
+    }
   }
+
+  /// How far the status content's bottom trailing corner moves out from the
+  /// avatar's, sized from the content itself, as core places any status: on a
+  /// circle its center sits on the edge at the bottom trailing 45° point; on a
+  /// rounded or square avatar it overhangs the corner by a quarter of its size.
+  nonisolated static func statusOffset(content: CGSize, side: CGFloat, shape: AvatarShape) -> CGSize {
+    switch shape {
+    case .circle:
+      return CGSize(width: content.width / 2 - side * circleEdgeInset, height: content.height / 2 - side * circleEdgeInset)
+    case .rounded, .square:
+      return CGSize(width: content.width / 4, height: content.height / 4)
+    }
+  }
+
+  /// Where a 45-degree line meets a circle, as a fraction of its side from
+  /// the square's corner: (1 − 1/√2) / 2.
+  nonisolated static var circleEdgeInset: CGFloat { (1 - 1 / 2.squareRoot()) / 2 }
 
   /// The fallback: initials on the neutral plate, else a person symbol.
   private var plate: some View {
@@ -219,6 +260,12 @@ public struct Avatar: View {
   /// The most an avatar grows with Dynamic Type.
   nonisolated static var maximumTextScale: CGFloat { 1.6 }
 
+  /// The largest text size status content grows to: the largest whose text
+  /// scale stays within the avatar's own growth (`maximumTextScale`).
+  nonisolated static var statusTypeSizeCap: DynamicTypeSize {
+    DynamicTypeSize.allCases.last { astryxTextScale(for: $0) <= maximumTextScale } ?? .large
+  }
+
   nonisolated static func side(for size: AvatarSize, textScale: CGFloat) -> CGFloat {
     (points(for: size) * min(max(textScale, 1), maximumTextScale)).rounded()
   }
@@ -248,7 +295,16 @@ public struct Avatar: View {
   /// The name VoiceOver reads: `alt`, else `name`; `nil` when neither
   /// carries anything, and then a static avatar is decorative.
   var accessibilityLabel: String? {
-    Avatar.meaningful(props.alt) ?? Avatar.meaningful(props.name)
+    Avatar.accessibleName(name: Avatar.meaningful(props.alt) ?? Avatar.meaningful(props.name), status: statusLabel)
+  }
+
+  /// The name with the status dot's label: "Ada Lovelace, Online" in the
+  /// person's language; either alone when the other is absent.
+  nonisolated static func accessibleName(name: String?, status: String?) -> String? {
+    switch (name, status) {
+    case let (name?, status?): AstryxStrings.avatarNameWithStatus(name: name, status: status)
+    case let (name, status): name ?? status
+    }
   }
 
   /// The URL the avatar opens, or `nil` when it has no usable `href`.
@@ -291,21 +347,21 @@ public struct Avatar: View {
   /// words that have one, uppercased. Leading punctuation in a word is skipped.
   nonisolated static func initials(from name: String) -> String {
     let letters = name.split(whereSeparator: { $0.isWhitespace }).compactMap { word in
-      word.first(where: canStandForAWord)
+      word.first(where: avatarCanStandForAWord)
     }
     guard let first = letters.first else { return "" }
     guard letters.count > 1, let last = letters.last else { return String(first).uppercased() }
     return (String(first) + String(last)).uppercased()
   }
+}
 
-  /// A letter, a digit, or an emoji, as core's `\p{L}`, `\p{N}`,
-  /// `\p{Extended_Pictographic}`, and `\p{Regional_Indicator}`.
-  nonisolated static func canStandForAWord(_ character: Character) -> Bool {
-    if character.isLetter || character.isNumber { return true }
-    guard let scalar = character.unicodeScalars.first else { return false }
-    // `isEmoji` also covers `#`, `*`, and the digits, which are ASCII.
-    return scalar.value > 0x7F && scalar.properties.isEmoji
-  }
+/// A letter, a digit, or an emoji, as core's `\p{L}`, `\p{N}`,
+/// `\p{Extended_Pictographic}`, and `\p{Regional_Indicator}`.
+func avatarCanStandForAWord(_ character: Character) -> Bool {
+  if character.isLetter || character.isNumber { return true }
+  guard let scalar = character.unicodeScalars.first else { return false }
+  // `isEmoji` also covers `#`, `*`, and the digits, which are ASCII.
+  return scalar.value > 0x7F && scalar.properties.isEmoji
 }
 
 /// Draws the image at a URL: `loading` while it loads, `failure` when it
@@ -366,16 +422,37 @@ private struct AvatarShapeOutline: Shape {
   }
 }
 
+/// Places the status content at the avatar's bottom trailing corner from the
+/// content's own size (`Avatar.statusOffset`), in the same layout pass, so it
+/// is in place from the first frame whatever it holds.
+private struct AvatarStatusPlacement: Layout {
+  let side: CGFloat
+  let shape: AvatarShape
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    proposal.replacingUnspecifiedDimensions(by: CGSize(width: side, height: side))
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    for subview in subviews {
+      let size = subview.sizeThatFits(.unspecified)
+      let offset = Avatar<EmptyView>.statusOffset(content: size, side: side, shape: shape)
+      let origin = CGPoint(x: bounds.maxX - size.width + offset.width, y: bounds.maxY - size.height + offset.height)
+      subview.place(at: origin, anchor: .topLeading, proposal: ProposedViewSize(size))
+    }
+  }
+}
+
 /// One element named by the avatar's label. A static avatar without a label
 /// is hidden; an interactive one keeps its link or button trait.
 private struct AvatarName: ViewModifier {
   let label: String?
-  let tap: Avatar.Tap
+  let tap: Avatar<EmptyView>.Tap
 
   func body(content: Content) -> some View {
     let isNamed = label != nil
-    let added = Avatar.addedTraits(tap: tap, isNamed: isNamed)
-    let removed = Avatar.removedTraits(tap: tap, isNamed: isNamed)
+    let added = Avatar<EmptyView>.addedTraits(tap: tap, isNamed: isNamed)
+    let removed = Avatar<EmptyView>.removedTraits(tap: tap, isNamed: isNamed)
     if let label {
       if tap == .none {
         // One image element named by the name.
@@ -400,7 +477,7 @@ private struct AvatarTarget: ViewModifier {
   let side: CGFloat
 
   func body(content: Content) -> some View {
-    content.contentShape(.interaction, Rectangle().inset(by: -Avatar.tapOutset(side: side)))
+    content.contentShape(.interaction, Rectangle().inset(by: -Avatar<EmptyView>.tapOutset(side: side)))
   }
 }
 

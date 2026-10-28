@@ -125,7 +125,7 @@ export const docs = {
       name: 'tokenizer',
       type: '(code: string, language: string) => Array<{type: string; start: number; end: number}>',
       description:
-        'Your own tokenizer; it wins over the language\'s grammar. The same function also makes a custom language: createCodeLanguage({name, identifiers, tokenize}).',
+        'Deprecated: pass language={createCodeLanguage({name, identifiers, tokenize})} with this same function instead. Still works exactly as released and wins over the language; astryx upgrade rewrites static uses.',
     },
     {
       name: 'syntaxTheme',

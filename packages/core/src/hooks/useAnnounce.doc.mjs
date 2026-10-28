@@ -24,12 +24,12 @@ export const docs = {
       name: 'announce',
       type: '(message: string, politeness?: "polite" | "assertive") => void',
       description:
-        'Speaks a message through the shared live region. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
+        'Speaks a message through the live region the caller can be heard from: the shared one on the page body, or, when the calling component is rendered inside an open Astryx modal (Dialog, modal BottomSheet, modal Drawer, Lightbox, MobileNav, CommandPalette), a persistent region inside that modal, since a native modal hides the page-body region from assistive technology. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
     },
   ],
   usage: {
     description:
-      'Imperatively announces a message to screen readers through a visually-hidden live region. Use it for state that is only conveyed visually; search result counts, "no results", loading and saved confirmations, validation errors (WCAG 4.1.3 Status Messages). The polite and assertive regions are created empty on first use and stay mounted, which is what makes announcements reliable: most screen readers ignore a live region that is inserted together with its content. Each message is cleared a couple of seconds after it is announced so stale status does not linger in the accessibility tree.',
+      'Imperatively announces a message to screen readers through a visually-hidden live region. Use it for state that is only conveyed visually; search result counts, "no results", loading and saved confirmations, validation errors (WCAG 4.1.3 Status Messages). The polite and assertive regions are created empty on first use and stay mounted, which is what makes announcements reliable: most screen readers ignore a live region that is inserted together with its content. Each message is cleared a couple of seconds after it is announced so stale status does not linger in the accessibility tree. A message is delivered where its caller is: from inside an open Astryx modal it goes to a region inside that modal and is heard there with no change to the calling code; a message sent just as the modal is dismissed is delivered through whatever is exposed afterwards rather than lost. A call made outside the modal, even by the component that renders it, uses the page-body region.',
     bestPractices: [
       {
         guidance: true,
@@ -62,10 +62,10 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Imperative screen-reader announcements via a visually-hidden live region. Polite + assertive regions created empty on first use + kept mounted, so announcements are reliable (most AT ignore a live region inserted together w/ its content). Messages auto-clear after ~2s.',
+    'Imperative screen-reader announcements via a visually-hidden live region: the page-body one, or one inside the open Astryx modal the caller is rendered in (a native modal hides the body region). Polite + assertive regions created empty on first use + kept mounted, so announcements are reliable (most AT ignore a live region inserted together w/ its content). Messages auto-clear after ~2s.',
   returnDescriptions: {
     announce:
-      'speaks message through shared live region. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once; empty message clears lingering + not-yet-spoken status.',
+      'speaks message through the live region the caller is heard from: page body, or inside the open Astryx modal (Dialog, modal BottomSheet/Drawer, Lightbox, MobileNav, CommandPalette) the calling component is rendered in. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once; empty message clears lingering + not-yet-spoken status.',
   },
   usage: {
     description:

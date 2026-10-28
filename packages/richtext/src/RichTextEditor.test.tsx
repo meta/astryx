@@ -318,6 +318,7 @@ describe('RichTextEditor', () => {
       'plugins',
       'hasMarkdownShortcuts',
       'markdownExtensions',
+      'codeLanguages',
       'transformers',
       'hasAutoFocus',
       'tabEscapeHint',

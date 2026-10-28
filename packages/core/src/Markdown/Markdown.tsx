@@ -9,7 +9,7 @@
  * @position Core implementation; renders markdown as Astryx components
  */
 
-import {Suspense, useMemo, useRef} from 'react';
+import {Suspense, useMemo, useRef, useState} from 'react';
 import type React from 'react';
 import {Fragment} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -28,6 +28,8 @@ import {
 import type {TextDisplay} from '../theme/types';
 import {CodeBlock, Code} from '../CodeBlock';
 import {parseFenceLanguage} from '../CodeBlock/tokenizer';
+import {listedLanguage, sameCodeLanguageList} from '../CodeBlock/grammar';
+import type {CodeLanguage} from '../CodeBlock/grammar';
 import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {Blockquote} from '../Blockquote/Blockquote';
@@ -319,6 +321,15 @@ export interface MarkdownProps<
    * literal text.
    */
   autolink?: 'gfm';
+  /**
+   * CodeBlock language values a fence may name: each one imported on its
+   * own, such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. A fence whose language word is one of
+   * a listed value's identifiers renders with that value, ahead of a built-in
+   * with the same identifier; a later entry wins. Without it, fences render
+   * as they do today.
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1326,6 +1337,8 @@ function renderBlock(
   components: Partial<MarkdownComponents> | undefined,
   preparedPlugins: PreparedMarkdownPlugins | undefined,
   t: TranslatorFn,
+  // Language values fences may name (component:Markdown FR30).
+  codeLanguages: ReadonlyArray<CodeLanguage> | undefined,
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
@@ -1500,7 +1513,10 @@ function renderBlock(
       const diffLanguage = isDiff
         ? fence.language.match(/^\w*/)?.[0] || 'plaintext'
         : undefined;
-      const language = diffLanguage ?? legacyLanguage;
+      const fenceWord = diffLanguage ?? legacyLanguage;
+      // A listed language value claims its identifiers ahead of a built-in
+      // with the same identifier (component:Markdown FR30).
+      const language = listedLanguage(codeLanguages, fenceWord) ?? fenceWord;
       // A semantic-fence proposal claims its fence before the host's code
       // renderer (spec:AST-036 FR17). The host renderer, or the default Code
       // block without one, draws every unclaimed fence and is the fallback
@@ -1617,6 +1633,7 @@ function renderBlock(
             components,
             preparedPlugins,
             t,
+            codeLanguages,
             headingProjection,
             listDepth,
           ),
@@ -1660,6 +1677,7 @@ function renderBlock(
               components,
               preparedPlugins,
               t,
+              codeLanguages,
               headingProjection,
               listDepth,
             ),
@@ -1739,6 +1757,7 @@ function renderBlock(
                         components,
                         preparedPlugins,
                         t,
+                        codeLanguages,
                         headingProjection,
                         listDepth + 1,
                       ),
@@ -1828,6 +1847,7 @@ function renderBlock(
                       components,
                       preparedPlugins,
                       t,
+                      codeLanguages,
                       headingProjection,
                       listDepth + 1,
                     ),
@@ -2114,6 +2134,7 @@ export function Markdown<
   plugins,
   inlinePlugins,
   autolink,
+  codeLanguages: codeLanguagesProp,
   xstyle,
   className,
   style,
@@ -2122,6 +2143,13 @@ export function Markdown<
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
   const t = useTranslator();
+  // Keep one list while it names the same values, so an inline
+  // `codeLanguages={[…]}` does not re-render every block on each parent
+  // render (adjusting state during render, not in an Effect).
+  const [codeLanguages, setCodeLanguages] = useState(codeLanguagesProp);
+  if (!sameCodeLanguageList(codeLanguages, codeLanguagesProp)) {
+    setCodeLanguages(codeLanguagesProp);
+  }
   const LinkComponent = useLinkComponent();
   // Links read the caller's handler when clicked, so a handler recreated on
   // every caller render does not invalidate the memoized document below.
@@ -2384,6 +2412,7 @@ export function Markdown<
         components,
         preparedPlugins,
         t,
+        codeLanguages,
         headingProjection,
       ),
     );
@@ -2405,6 +2434,7 @@ export function Markdown<
     preparedPlugins,
     t,
     headingProjection,
+    codeLanguages,
   ]);
 
   if (display === 'inline') {

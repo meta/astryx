@@ -4,7 +4,7 @@
 
 /**
  * @file FileInput.tsx
- * @input Uses React, useId, Field, Icon, Spinner, VisuallyHidden
+ * @input Uses React, useId, Field, Icon, Spinner, VisuallyHidden, provider-bound translator
  * @output Exports FileInput component, public types, and its root/icon theme targets
  * @position Core implementation; consumed by index.ts, tested by FileInput.test.tsx
  *
@@ -68,14 +68,16 @@ import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-function formatFileSize(bytes: number): string {
+function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
-    return `${bytes} B`;
+    return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
   }
   if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
+    return t('@astryx.fileInput.fileSize.kilobytes', {size: bytes / 1024});
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return t('@astryx.fileInput.fileSize.megabytes', {
+    size: bytes / (1024 * 1024),
+  });
 }
 
 function validateFiles(
@@ -116,7 +118,7 @@ function validateFiles(
         errors.push(
           t('@astryx.fileInput.errorMaxSize', {
             fileName: file.name,
-            maxSize: formatFileSize(maxSize),
+            maxSize: formatFileSize(maxSize, t),
           }),
         );
         return false;
@@ -485,6 +487,7 @@ export function FileInput({
   const statusMessageID = useId();
   const requiredID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -649,14 +652,16 @@ export function FileInput({
       }
       if (inputRef.current) {
         inputRef.current.value = '';
-        const targetInput = inputRef.current;
+        // Focus returns to the trigger button, the control a person operates;
+        // the native input is aria-hidden and outside the tab order.
+        const trigger = triggerRef.current;
         if (e.detail === 0) {
-          targetInput.focus();
+          trigger?.focus();
         } else {
           // Defer focus restoration past the button's unmount task so iOS Safari
           // and touch browsers don't jump the page scroll to 0 on tap.
           requestAnimationFrame(() => {
-            targetInput.focus({preventScroll: true});
+            trigger?.focus({preventScroll: true});
           });
         }
       }
@@ -882,6 +887,7 @@ export function FileInput({
             keyboard activation still fires here. */}
         <VisuallyHidden>
           <button
+            ref={triggerRef}
             type="button"
             // A disabled trigger keeps its Tab stop (spec:AST-085 FR1).
             tabIndex={0}

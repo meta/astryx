@@ -863,6 +863,31 @@ export const BottomSheetPresentationOption: Story = {
   },
 };
 
+export const AdaptivePresentation: Story = {
+  name: 'Adaptive Presentation',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'presentation="adaptive": on a compact touch screen (a phone) the content is presented in a BottomSheet, the way iOS presents a popover on an iPhone; with a mouse or on a larger screen it stays anchored to its trigger.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover
+        label="Filter by status"
+        presentation="adaptive"
+        width={280}
+        content={<FilterContent />}>
+        <Button label="Filter">Filter</Button>
+      </Popover>
+    </div>
+  ),
+};
+
 export const AdaptivePopoverRecipe: PresentationRecipeStory = {
   name: 'Adaptive Popover Recipe',
   args: {

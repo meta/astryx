@@ -40,6 +40,7 @@ import {useCallback, useEffect, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useListFocus} from './useListFocus';
 import {useMediaQuery} from './useMediaQuery';
+import {focusForLastInput} from '../utils/focusReturn';
 
 const DEFAULT_CLICK_GUARD_MS = 500;
 
@@ -279,8 +280,11 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     const menuHadFocus =
       menuRef.current?.contains(document.activeElement) ?? false;
     hide();
-    if (menuHadFocus) {
-      triggerElRef.current?.focus();
+    const trigger = triggerElRef.current;
+    if (menuHadFocus && trigger != null) {
+      // A pointer's pick leaves no keyboard ring on the trigger; a keyboard's
+      // keeps it (`architecture:interaction-modality` INV1).
+      focusForLastInput(trigger);
     }
   }, [hide, menuRef]);
 

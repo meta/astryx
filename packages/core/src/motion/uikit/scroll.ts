@@ -18,6 +18,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
+import {registerMotionTable} from '../roles';
+
 // The value of `scroll.delaysContentTouchesMs` (sourced there), its own
 // export so the press clocks read it without the rest of the table
 // (`architecture:component-style-authoring` INV6).
@@ -113,12 +115,27 @@ export const scroll = {
    * approaches the top as 1 − e^(−9.7 t) whatever the distance (done in about
    * 1.6 s for 500, 2000 or 8000 pt), which is a decay at this per-millisecond
    * rate (e^(−0.0097)) whose rest point is the top: a decay with a
-   * starting velocity of 9.7 × the distance per second. It is not a throw's
-   * momentum, so under Reduce Motion it does not coast: it follows
-   * `design:reduced-motion` DR2 (the coast exception covers only a throw).
+   * starting velocity of 9.7 × the distance per second. A tap starts it, not
+   * a throw, so under Reduce Motion it is a transition, not a coast: it
+   * cross-fades to the top within 200 ms on a coarse pointer (DR2) and jumps
+   * there on any other (DR3). Only momentum that continues a throw keeps
+   * decaying under Reduce Motion (`design:reduced-motion` DR2, DEC-2), so a
+   * component checks for Reduce Motion before it plays this decay.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, setContentOffset log after status-bar taps (starts 85–95
    *   ms after the tap), Oct 23 2026
    */
   scrollToTopRate: 0.99035,
 } as const;
+
+/**
+ * Registers this table with the motion registry (motion/roles.ts). It lists
+ * no role: spec:AST-094 FR4 names none of its values, so each plays as
+ * measured. Nothing registers on import, and a second call does nothing.
+ */
+export function registerScrollTable(): void {
+  registerMotionTable('scroll', scroll, {
+    // Arbitration: who gets the touch, not how anything moves.
+    exclude: ['delaysContentTouchesMs'],
+  });
+}

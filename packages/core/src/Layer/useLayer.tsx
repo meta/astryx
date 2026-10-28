@@ -21,6 +21,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefCallback,
 } from 'react';
@@ -851,6 +852,81 @@ interface ContextLayerMount {
   portalStyle: React.CSSProperties;
 }
 
+/**
+ * Where a context layer is hosted, published to the one component that
+ * renders it. The hook resolves the mount from the marker's parent once the
+ * marker is in the DOM, and the slot below subscribes to it, so the render
+ * that places the layer re-renders the slot alone: the hook's host (a
+ * Tooltip, a Popover, a menu) and everything under it render once on mount.
+ */
+interface ContextLayerMountStore {
+  readonly get: () => ContextLayerMount | null;
+  readonly set: (mount: ContextLayerMount | null) => void;
+  readonly subscribe: (onChange: () => void) => () => void;
+}
+
+function createContextLayerMountStore(): ContextLayerMountStore {
+  let mount: ContextLayerMount | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => mount,
+    set: next => {
+      if (next === mount) {
+        return;
+      }
+      mount = next;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: onChange => {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+  };
+}
+
+const readNoMount = (): ContextLayerMount | null => null;
+
+/**
+ * The marker and, once the hook has resolved where it goes, the layer. The
+ * server and the hydrating render carry the marker alone, so block content
+ * never enters server markup inside `<p>` and its kin; the mount arrives from
+ * the marker's ref callback, and only this component re-renders to place the
+ * layer.
+ */
+function ContextLayerSlot({
+  mountStore,
+  renderLayer,
+  sentinelRef,
+}: {
+  readonly mountStore: ContextLayerMountStore;
+  readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
+  readonly sentinelRef: RefCallback<HTMLTemplateElement>;
+}) {
+  const mount = useSyncExternalStore(
+    mountStore.subscribe,
+    mountStore.get,
+    readNoMount,
+  );
+  // Keep the marker mounted after resolving the layer. Apart from giving
+  // us the real JSX parent on first show, this lets its ref report when a
+  // persistent hook's render call moves to a different host.
+  const sentinel = <template ref={sentinelRef} />;
+  if (mount === null) {
+    return <>{sentinel}</>;
+  }
+  const layer = renderLayer(mount);
+  return (
+    <>
+      {sentinel}
+      {mount.portalTarget ? createPortal(layer, mount.portalTarget) : layer}
+    </>
+  );
+}
+
 function readPortalWritingContext(
   element: HTMLElement,
   portalTarget: HTMLElement,
@@ -1113,9 +1189,13 @@ function useLayerImplementation(
   // corrective portal, including after the render call moves.
   const sentinelRef = useRef<HTMLTemplateElement | null>(null);
   const contextMountRef = useRef<ContextLayerMount | null>(null);
-  const [contextMount, setContextMount] = useState<ContextLayerMount | null>(
-    null,
-  );
+  // The resolved mount reaches the slot through this store, never through
+  // state on this hook, so placing the layer renders the slot alone. The
+  // generation counts mounts that REPLACE a resolved one (a render call that
+  // moved to another host): the layer element is recreated then, and the
+  // effects below that bind to it re-run.
+  const [mountStore] = useState(createContextLayerMountStore);
+  const [mountGeneration, setMountGeneration] = useState(0);
   // A show() that cannot run yet is remembered here and replayed: one that
   // arrives before the final layer mounts runs when its popover ref attaches;
   // one that arrives while another popover is mid show/hide runs once that
@@ -1198,6 +1278,12 @@ function useLayerImplementation(
       return;
     }
 
+    // The slide options' `@position-try` rules (FR4) are installed in the
+    // layer's document before its first paint, here where the mount resolves:
+    // the marker's arrival is the one event every mount has, whether the
+    // render call mounts with its host or later. One sheet serves every layer.
+    ensureSlideRules(sentinel.ownerDocument);
+
     const portalTarget = resolveLayerPortalTarget(inlineParent);
     const mount: ContextLayerMount = {
       portalTarget,
@@ -1205,17 +1291,21 @@ function useLayerImplementation(
         ? readPortalWritingContext(sentinel, portalTarget)
         : {},
     };
+    const replaced = contextMountRef.current !== null;
     contextMountRef.current = mount;
-    setContextMount(mount);
-  }, [mode]);
+    mountStore.set(mount);
+    if (replaced) {
+      setMountGeneration(generation => generation + 1);
+    }
+  }, [mode, mountStore]);
 
   const clearContextMount = useCallback(() => {
     if (mode !== 'context' || !lazyMount) {
       return;
     }
     contextMountRef.current = null;
-    setContextMount(null);
-  }, [mode, lazyMount]);
+    mountStore.set(null);
+  }, [mode, lazyMount, mountStore]);
 
   const show = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
@@ -1509,19 +1599,6 @@ function useLayerImplementation(
     };
   }, [handleToggle, bindToggleListener]);
 
-  // The slide options' `@position-try` rules (FR4) are installed in the
-  // layer's document before its first paint; one sheet serves every layer.
-  useIsomorphicLayoutEffect(() => {
-    if (mode !== 'context') {
-      return;
-    }
-    const doc =
-      popoverRef.current?.ownerDocument ?? sentinelRef.current?.ownerDocument;
-    if (doc) {
-      ensureSlideRules(doc);
-    }
-  }, [mode, contextMount]);
-
   // Anchor visibility (FR5). The first frame must already be right (FR8), so
   // the opening read is synchronous — a layout effect runs before paint, and a
   // state change inside it re-renders before paint — against the visual
@@ -1567,8 +1644,9 @@ function useLayerImplementation(
   // give the layer a scroll range (`observeAnchorClearance`). The external
   // systems are those browser observers and listeners; this effect binds them
   // while the layer is open and removes them when it closes, unmounts or is
-  // remounted by a moved render call (`contextMount`). A trigger replaced while
-  // open is rebound by the trigger callback ref, so no DOM node enters state.
+  // remounted by a moved render call (`mountGeneration`). A trigger replaced
+  // while open is rebound by the trigger callback ref, so no DOM node enters
+  // state.
   useIsomorphicLayoutEffect(() => {
     if (!keepsAnchorClear || !isOpen || mode !== 'context') {
       return;
@@ -1588,20 +1666,11 @@ function useLayerImplementation(
       clearObserversRef.current?.();
       clearObserversRef.current = null;
     };
-  }, [keepsAnchorClear, isOpen, mode, contextMount]);
+  }, [keepsAnchorClear, isOpen, mode, mountGeneration]);
 
   // Render function for context mode
   const renderContext = useCallback(
     (children: ReactNode, props?: ContextRenderProps) => {
-      // Keep the marker mounted after resolving the layer. Apart from giving
-      // us the real JSX parent on first show, this lets its ref report when a
-      // persistent hook's render call moves to a different host.
-      const sentinel = <template ref={sentinelRefCallback} />;
-
-      if (contextMount === null) {
-        return <>{sentinel}</>;
-      }
-
       const {
         placement = 'above',
         alignment = 'center',
@@ -1687,7 +1756,8 @@ function useLayerImplementation(
       // The marker gives us the actual JSX parent without mounting arbitrary
       // children there. Safe positions preserve the existing DOM order and
       // cascade; unsafe positions use the nearest corrective portal target.
-      const layer = (
+      // The slot renders the layer once the hook has resolved that mount.
+      const renderLayer = (mount: ContextLayerMount) => (
         <Container
           ref={popoverRefCallback}
           id={id}
@@ -1701,7 +1771,7 @@ function useLayerImplementation(
             ...clearanceProperty,
             ...clearFallbacksProperty,
             ...layerInsetProperties(declaredInset),
-            ...contextMount.portalStyle,
+            ...mount.portalStyle,
             ...extraStyle,
           }}
           onMouseEnter={onMouseEnter}
@@ -1711,22 +1781,21 @@ function useLayerImplementation(
       );
 
       return (
-        <>
-          {sentinel}
-          {contextMount.portalTarget
-            ? createPortal(layer, contextMount.portalTarget)
-            : layer}
-        </>
+        <ContextLayerSlot
+          mountStore={mountStore}
+          renderLayer={renderLayer}
+          sentinelRef={sentinelRefCallback}
+        />
       );
     },
     [
       anchorId,
-      contextMount,
       declaredInset,
       id,
       isAnchorInView,
       keepsAnchorClear,
       lightDismiss,
+      mountStore,
       popoverRefCallback,
       sentinelRefCallback,
     ],

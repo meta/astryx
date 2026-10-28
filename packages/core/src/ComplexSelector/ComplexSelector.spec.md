@@ -166,7 +166,7 @@ durable constraints and their verification target.
 
 ## Accessibility contract
 
-- **AR1 — Built-in name and state.** The trigger plays the combobox role, receives its accessible name from Field, and exposes its dialog popup (`aria-haspopup="dialog"`, `aria-expanded`, `aria-controls`), required and invalid state, description/status references, busy state, and disabled state through `aria-disabled` while it keeps its tab stop.
+- **AR1 — Built-in name and state.** The trigger plays the combobox role and is named by the field's `label` unless the selector was given `aria-label` or `aria-labelledby`, which replaces it (`family:input-fields` FR10), and exposes its dialog popup (`aria-haspopup="dialog"`, `aria-expanded`, `aria-controls`), required and invalid state, description/status references, busy state, and disabled state through `aria-disabled` while it keeps its tab stop.
 - **AR2 — Caller-rendered field.** The handed-back trigger props carry the anchor ref, id, click and ArrowDown handlers, `role="combobox"`, `aria-haspopup="dialog"`, `aria-expanded`, `aria-controls`, `aria-busy`, `aria-required`, and `aria-disabled`, and name the control with `label` unless the selector was given `aria-label` or `aria-labelledby`, because a combobox takes no name from its content; the caller control renders unwrapped as the only opener.
 - **AR3 — Focus lifecycle.** The popup autofocuses its content through the Popover owner, and every supported close route returns focus to the current trigger before `onOpenChange(false)` runs.
 - **AR4 — Content responsibility.** Caller content supplies the role, name, keyboard model, selected state, and focus navigation appropriate to its own selection pattern.
