@@ -229,6 +229,12 @@ presses nothing.
 
 ## What the browser is told
 
+- **Pens.** A pen drives every recognizer and press tracker as a finger
+  does: it pans, taps and long-presses; its hold, where the hold does
+  something, keeps text unselected as a finger's does (FR41); a hovering
+  pen reaches a hover recognizer as a mouse does; its barrel button is a
+  context click and starts no press; a pinch never mixes a pen with a
+  finger; and the screen-edge pan, a finger's only, ignores it (FR43).
 - **For every pointer.** Recognizers and press trackers attach for a mouse,
   a pen and a finger alike (`spec:AST-094` FR43, FR19). Where the primary
   pointer is coarse (`TOUCH_QUERY`, `../utils/coarsePointer.ts`), the host
@@ -238,7 +244,13 @@ presses nothing.
   FR24 counts outside that budget, FR19) and the page has none: a press on the element (a mouse's primary button, a
   pen, or a finger, whose `pointerdown` comes before its `touchstart`)
   adds the host's document and window listeners, and they go once that
-  press's contacts end (FR24). A component that uses no gesture, and a
+  press's contacts end, or when the window blurs during it (FR24). A press
+  tracker created with `keepsTouch` gets its blocking `touchmove` only
+  during such a press; where the pointer is coarse it keeps it, since
+  Safari honours a blocking listener only when it was registered before
+  the touch. An element with a hover recognizer listens for a hovering
+  mouse or pen with two passive listeners of its own, `pointermove` and
+  `pointerout`. A component that uses no gesture, and a
   disabled recognizer or consumer, registers nothing; after a consumer's
   `isEnabled()` changes, `host.update(element)` re-syncs. The screen-edge
   pan stays off under a mouse, a trackpad and a pen (its recognizer allows
