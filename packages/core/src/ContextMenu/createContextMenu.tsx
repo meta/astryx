@@ -172,6 +172,7 @@ interface ContextMenuWrapperAccess {
   update(options: CreateContextMenuOptions): void;
   bridge(wrap: (menu: ReactNode) => ReactNode): void;
   view(view: ContextMenuViewExtras): void;
+  destroyFromReact(): void;
 }
 
 const wrapperAccess = new WeakMap<
@@ -212,6 +213,19 @@ export function bridgeContextMenu(
   wrap: (menu: ReactNode) => ReactNode,
 ): void {
   wrapperAccess.get(controller)?.bridge(wrap);
+}
+
+/**
+ * @internal Destroys a menu from a React effect's cleanup (useContextMenu's
+ * path). React cannot unmount a root while it commits another, so the menu's
+ * own root renders nothing instead, an update React takes in its own time,
+ * and is dropped with its node; the element's request and the menu's node go
+ * at once, as `destroy` does.
+ */
+export function destroyContextMenuFromReact(
+  controller: ContextMenuController,
+): void {
+  wrapperAccess.get(controller)?.destroyFromReact();
 }
 
 const THEME_ATTRIBUTES = ['data-theme', dataAttr('theme')] as const;
@@ -489,23 +503,31 @@ export function createContextMenu(
       forward('close');
     },
     destroy() {
-      if (isDestroyed) {
-        return;
-      }
-      const hadFocus = host.contains(doc.activeElement);
-      isDestroyed = true;
-      requests.destroy();
-      root.unmount();
-      host.remove();
-      if (isOpen) {
-        isOpen = false;
-        options.onOpenChange?.(false);
-      }
-      if (hadFocus && element.isConnected) {
-        element.focus();
-      }
+      teardown(false);
     },
   };
+  /** `destroy`; from React's commit, the root renders nothing instead. */
+  function teardown(isInReact: boolean) {
+    if (isDestroyed) {
+      return;
+    }
+    const hadFocus = host.contains(doc.activeElement);
+    isDestroyed = true;
+    requests.destroy();
+    if (isInReact) {
+      root.render(null);
+    } else {
+      root.unmount();
+    }
+    host.remove();
+    if (isOpen) {
+      isOpen = false;
+      options.onOpenChange?.(false);
+    }
+    if (hadFocus && element.isConnected) {
+      element.focus();
+    }
+  }
   wrapperAccess.set(controller, {
     update(nextOptions) {
       options = nextOptions;
@@ -525,6 +547,9 @@ export function createContextMenu(
       }
       wrap = nextWrap;
       render();
+    },
+    destroyFromReact() {
+      teardown(true);
     },
   });
   return controller;

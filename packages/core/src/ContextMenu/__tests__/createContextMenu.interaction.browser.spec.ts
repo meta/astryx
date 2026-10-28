@@ -121,6 +121,49 @@ test("useContextMenu's menuContent rows act once under a mouse, and choosing one
   await expect(log(page)).toHaveText('restore');
 });
 
+test('on a row inside a transformed dialog, as a Drawer is, the menu opens at the pointer (spec:AST-107 FR8)', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  // The row moves into a modal dialog on the right that keeps a transform,
+  // as a Drawer's does: the dialog is then the containing block of every
+  // fixed box inside it.
+  await page.evaluate(() => {
+    const row = document.querySelector('[data-testid="headless-row"]');
+    if (row == null) {
+      throw new Error('no row');
+    }
+    const dialog = document.createElement('dialog');
+    dialog.style.transform = 'translateX(0)';
+    dialog.style.margin = '80px 0 0 auto';
+    dialog.style.width = '360px';
+    const list = document.createElement('ul');
+    list.append(row);
+    dialog.append(list);
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+  const at = await centerOf(page, 'headless-row');
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  const menu = page.getByRole('menu', {name: 'Inbox actions'});
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  if (box == null) {
+    throw new Error('no menu box');
+  }
+  // The pointer sits at one of the menu's corners, whichever way it opens.
+  const nearestX = Math.min(
+    Math.abs(box.x - at.x),
+    Math.abs(box.x + box.width - at.x),
+  );
+  const nearestY = Math.min(
+    Math.abs(box.y - at.y),
+    Math.abs(box.y + box.height - at.y),
+  );
+  expect(nearestX).toBeLessThan(12);
+  expect(nearestY).toBeLessThan(12);
+});
+
 test('on a row inside a modal dialog, the menu takes focus and a choice acts (spec:AST-107 FR8)', async ({
   page,
 }) => {

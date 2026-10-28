@@ -263,3 +263,53 @@ describe('useContextMenu', () => {
     expect(rightClick(element).defaultPrevented).toBe(false);
   });
 });
+
+describe('useContextMenu: its element and its React roots', () => {
+  it('attaches to the element its ref points at now, when that element changes', () => {
+    function Switching({which}: {which: 'a' | 'b'}) {
+      const ref = useRef<HTMLLIElement>(null);
+      useContextMenu(ref, {items: [{label: 'Rename'}], label: 'Row actions'});
+      return (
+        <ul>
+          {which === 'a' ? (
+            <li key="a" ref={ref} tabIndex={0} data-testid="row-a">
+              A
+            </li>
+          ) : (
+            <li key="b" ref={ref} tabIndex={0} data-testid="row-b">
+              B
+            </li>
+          )}
+        </ul>
+      );
+    }
+    const view = render(<Switching which="a" />);
+    view.rerender(<Switching which="b" />);
+    const request = rightClick(screen.getByTestId('row-b'));
+    expect(request.defaultPrevented).toBe(true);
+    expect(isOpen()).toBe(true);
+  });
+
+  it('unmounting leaves React no root to unmount during its own commit, so it logs no error', () => {
+    const errors = vi.spyOn(console, 'error');
+    try {
+      const view = render(
+        <Row
+          label="Inbox actions"
+          menuContent={<DropdownMenuItem label="Restore" />}
+        />,
+      );
+      rightClick(screen.getByText('Inbox'));
+      expect(isOpen()).toBe(true);
+      view.unmount();
+      const messages = errors.mock.calls.map(call => String(call[0]));
+      expect(
+        messages.filter(message =>
+          message.includes('synchronously unmount a root'),
+        ),
+      ).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});

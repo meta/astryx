@@ -182,6 +182,31 @@ const LazyMenuBottomSheet = lazy(async () =>
     default: module.MenuBottomSheet,
   })),
 );
+/**
+ * The `left` and `top` that put a fixed box's corner at a client point. A
+ * fixed box's containing block is the viewport unless an ancestor sets one
+ * up (a transform, a filter, `contain: paint`), as a Drawer's dialog does
+ * while it is open: the box is placed at two offsets, where it lands is
+ * measured, and the point is mapped through that block's offset and scale.
+ */
+function fixedOffsetOfClientPoint(
+  box: HTMLElement,
+  point: {x: number; y: number},
+): {x: number; y: number} {
+  box.style.left = '0px';
+  box.style.top = '0px';
+  const origin = box.getBoundingClientRect();
+  box.style.left = '100px';
+  box.style.top = '100px';
+  const shifted = box.getBoundingClientRect();
+  const scaleX = (shifted.left - origin.left) / 100 || 1;
+  const scaleY = (shifted.top - origin.top) / 100 || 1;
+  return {
+    x: (point.x - origin.left) / scaleX,
+    y: (point.y - origin.top) / scaleY,
+  };
+}
+
 const styles = stylex.create({
   // Trigger wrapper. `position: relative` establishes the containing block
   // for the absolutely positioned cursor anchor below, so the anchor point
@@ -1019,11 +1044,13 @@ export function ContextMenuView({
   // at the client point in the factory's own container.
   const openAtClientPoint = useCallback(
     (point: {x: number; y: number}, focusTarget: 'first' | 'menu') => {
-      positionRef.current = {x: point.x, y: point.y};
       const anchorEl = cursorAnchorRef.current;
+      const local =
+        anchorEl != null ? fixedOffsetOfClientPoint(anchorEl, point) : point;
+      positionRef.current = local;
       if (anchorEl != null) {
-        anchorEl.style.left = `${point.x}px`;
-        anchorEl.style.top = `${point.y}px`;
+        anchorEl.style.left = `${local.x}px`;
+        anchorEl.style.top = `${local.y}px`;
       }
       showMenu(triggerRef.current, focusTarget);
     },
