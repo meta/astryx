@@ -155,6 +155,26 @@ describe('createContextMenu', () => {
     expect(document.activeElement).toBe(element);
   });
 
+  it('returns focus to the element on close, even when another control had it before the menu opened (spec:AST-107 FR8)', async () => {
+    const other = document.createElement('button');
+    other.textContent = 'Drafts';
+    document.body.append(other);
+    try {
+      const menu = attach({items: [{label: 'Archive'}]});
+      // Another control has the focus, as after a tap on it.
+      other.focus();
+      act(() => {
+        menu.open();
+      });
+      await waitFor(() => expect(document.activeElement).toBe(rows()[0]));
+      press(rows()[0], 'Escape');
+      await waitFor(() => expect(isOpen()).toBe(false));
+      expect(document.activeElement).toBe(element);
+    } finally {
+      other.remove();
+    }
+  });
+
   it('Home and End jump to the first and last rows (spec:AST-107 FR8)', async () => {
     attach({items: [{label: 'Archive'}, {label: 'Move'}, {label: 'Delete'}]});
     element.focus();
@@ -348,6 +368,41 @@ describe('createContextMenu: a finger\u2019s press outside (spec:AST-107 FR8)', 
     });
     target.dispatchEvent(start);
   }
+
+  it('returns focus to the element after a hold opened it while another control had the focus (spec:AST-107 FR8)', () => {
+    const other = document.createElement('button');
+    other.textContent = 'Drafts';
+    document.body.append(other);
+    try {
+      attach({items: [{label: 'Archive'}]});
+      // A tap on Drafts focused it; a held finger on the element moves no
+      // focus.
+      other.focus();
+      act(() => {
+        fingerDown(element, 1);
+      });
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(isOpen()).toBe(true);
+      const menu = document.querySelector<HTMLElement>('[role="menu"]');
+      if (menu == null) {
+        throw new Error('no menu');
+      }
+      act(() => {
+        menu.dispatchEvent(
+          new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+        );
+      });
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(isOpen()).toBe(false);
+      expect(document.activeElement).toBe(element);
+    } finally {
+      other.remove();
+    }
+  });
 
   it("leaves the menu open through the opening press's own compatibility mousedown, and closes on a later press outside", () => {
     attach({items: [{label: 'Archive'}]});
