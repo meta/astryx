@@ -751,31 +751,26 @@ function armTouchCancel(): void {
   hearTouchCancel(isCoarsePointer(window));
 }
 
-// Every listener is passive and on the window's capture phase, through the
-// shared input stream (utils/inputStream.ts): a page of pressables blocks no
-// scroll, and an app's capture-phase stopPropagation at the document cannot
-// starve the controller.
+// The pointer, drag, scroll and visibility listeners are passive and on the
+// window's capture phase, through the shared input stream
+// (utils/inputStream.ts): a page of pressables blocks no scroll, and an app's
+// capture-phase stopPropagation at the document cannot starve the controller.
 function addListeners(): void {
   unsubscribers = [
     subscribeInput(window, 'pointerdown', onPointerDown),
     subscribeInput(window, 'pointermove', onPointerMove),
     subscribeInput(window, 'pointerup', onPointerUp),
     subscribeInput(window, 'pointercancel', onCancel),
-    // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag
-    // has taken the gesture, but a right-click is a mouse act this controller
-    // never tracks, and listening for it would read as a takeover of the
-    // browser's own menu.
     subscribeInput(window, 'dragstart', onDragStart),
     // `scroll` does not bubble; the capture phase hears every scroller.
     subscribeInput(window, 'scroll', onScroll),
     subscribeInput(window, 'visibilitychange', onVisibilityChange),
   ];
-  // Space's press reads whether the page cancelled the key, so it listens in
-  // the window's bubble phase, after the element's own handlers, not through
-  // the capture-phase input stream. Only Space's press needs the key's
-  // release and focus loss, so those two are subscribed while it is held
-  // (holdKey).
-  window.addEventListener('keydown', onKeyDown, {passive: true});
+  // The key path listens after the page's own handlers, at the window's
+  // bubble phase: a Space press the page cancels (`defaultPrevented`) paints
+  // nothing. Only Space's press needs the key's release and focus loss, so
+  // those two are attached while it is held (holdKey).
+  window.addEventListener('keydown', onKeyDown, PASSIVE);
 }
 
 function removeListeners(): void {
@@ -789,29 +784,30 @@ function removeListeners(): void {
   holdKey(false);
 }
 
-/** The key-release subscriptions while Space holds a press. */
-let stopKeyHold: (() => void)[] = [];
+const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const PASSIVE = {passive: true} as const;
+
+/** Whether the key-release listeners are attached. */
+let keyHeld = false;
 
 /**
- * Subscribe to the key's release and focus loss while Space holds a press,
- * and drop them when it ends: at rest the key path costs one `keydown`
- * subscription.
+ * Attach the key's release and focus-loss listeners while Space holds a
+ * press, and take them down when it ends: at rest the key path costs one
+ * `keydown` listener.
  */
 function holdKey(held: boolean): void {
-  if (held === stopKeyHold.length > 0) {
+  if (held === keyHeld) {
     return;
   }
+  keyHeld = held;
   if (held) {
-    stopKeyHold = [
-      subscribeInput(window, 'keyup', onKeyUp),
-      // The window's capture phase hears the element losing focus and the
-      // window losing it.
-      subscribeInput(window, 'blur', onBlur),
-    ];
+    window.addEventListener('keyup', onKeyUp, PASSIVE);
+    // `blur` does not bubble: the capture phase hears the element losing
+    // focus and the window losing it.
+    window.addEventListener('blur', onBlur, PASSIVE_CAPTURE);
   } else {
-    for (const stop of stopKeyHold.splice(0)) {
-      stop();
-    }
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur, PASSIVE_CAPTURE);
   }
 }
 
