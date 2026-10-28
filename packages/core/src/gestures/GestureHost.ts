@@ -1262,7 +1262,7 @@ export class GestureHost {
     if (
       this.isInstalled ||
       !isPointerKind(press.pointerType) ||
-      (press.pointerType === 'mouse' && !isPrimaryClick(press))
+      (press.pointerType !== 'touch' && !isPrimaryClick(press))
     ) {
       return;
     }
@@ -2358,9 +2358,9 @@ export class GestureHost {
       });
       return;
     }
-    // A right click, or a ctrl-click on macOS (its context click), starts no
-    // press (FR43).
-    if (event.pointerType === 'mouse' && !isPrimaryClick(event)) {
+    // A right click, a pen's barrel button, or a ctrl-click on macOS (its
+    // context click) starts no press (FR43).
+    if (event.pointerType !== 'touch' && !isPrimaryClick(event)) {
       return;
     }
     const landed = landedOn(event);
