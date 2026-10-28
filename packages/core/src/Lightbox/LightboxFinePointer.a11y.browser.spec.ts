@@ -1,0 +1,574 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file LightboxFinePointer.a11y.browser.spec.ts
+ * @input The built Lightbox "with zoom" story, a desktop browser (a fine
+ *   primary pointer) and real mouse input; in Chromium, pen input
+ * @output Browser evidence that the zoom's gestures attach for every
+ *   pointer where the primary pointer is fine too. The zoom target takes its
+ *   touches as on a phone. A mouse's double-click zooms 2× about the clicked
+ *   point, and the next zooms back; a pen's double-click zooms 2× too. The
+ *   keyboard's zoom plays the released 200 ms ease-out, a pen drag pans a
+ *   zoomed photo, and a mouse drag stops at the photo's edges
+ * @position Cross-browser proof for Lightbox's mouse, pen and keyboard zoom
+ *   where the primary pointer is fine
+ */
+
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  DEFAULT_STORYBOOK_DIR,
+  serveStorybook,
+  type StaticServer,
+} from '@astryxdesign/a11y-spec/storybook';
+
+let storybook: StaticServer;
+test.beforeAll(async () => {
+  storybook = await serveStorybook(
+    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
+  );
+});
+test.afterAll(async () => {
+  await storybook?.close();
+});
+
+const PHOTO = {width: 3000, height: 2000};
+
+/** A landscape test photo: a checker with a red disc at its centre. */
+function photoSvg(width: number, height: number): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="#fff"/><circle cx="${width / 2}" cy="${height / 2}" r="${height / 4}" fill="#d22"/></svg>`;
+}
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Opens the story's viewer with the mouse and waits for the photo. */
+async function openViewer(page: Page) {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--with-zoom&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open with zoom'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const stage = dialog.getByRole('button', {name: 'Zoom'});
+  const img = dialog.getByRole('img', {name: 'Forest path'});
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(PHOTO.width);
+  await settled(page);
+  const fitted = await boxOf(img);
+  const stageBox = await boxOf(stage);
+  return {dialog, stage, img, fitted, stageBox};
+}
+
+async function boxOf(locator: {
+  evaluate: <R>(fn: (el: Element) => R) => Promise<R>;
+}): Promise<Box> {
+  return locator.evaluate(el => {
+    const r = el.getBoundingClientRect();
+    return {x: r.x, y: r.y, width: r.width, height: r.height};
+  });
+}
+
+/** Waits until the photo's box holds still for six frames (at most 3 s). */
+async function settled(page: Page): Promise<void> {
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        const img = document.querySelector('dialog img');
+        const started = performance.now();
+        let last = '';
+        let still = 0;
+        const tick = (now: number) => {
+          const r = img?.getBoundingClientRect();
+          const key = r ? `${r.x},${r.y},${r.width},${r.height}` : '';
+          still = key === last ? still + 1 : 0;
+          last = key;
+          if (still >= 6 || now - started > 3000) {
+            resolve();
+          } else {
+            requestAnimationFrame(tick);
+          }
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+function centre(box: Box) {
+  return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+}
+
+test("the zoom target's focus ring sits inside the stage, which a clipping group holds", async ({
+  page,
+}) => {
+  const {stage} = await openViewer(page);
+  await stage.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  await expect(stage).toBeFocused();
+  const ring = await stage.evaluate(el => {
+    const style = getComputedStyle(el);
+    return {
+      width: parseFloat(style.outlineWidth),
+      offset: parseFloat(style.outlineOffset),
+      clips: getComputedStyle(el.parentElement as Element).overflow,
+    };
+  });
+  expect(ring.clips).toBe('hidden');
+  expect(ring.width).toBeGreaterThan(0);
+  // The whole ring is drawn inside the stage's box.
+  expect(ring.offset).toBeLessThanOrEqual(-ring.width);
+});
+
+test('a caption sits under the fitted photo, as it does without zoom', async ({
+  page,
+}) => {
+  // A 3:1 panorama leaves the filling stage most of its height free.
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(3000, 1000),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--zoom-with-caption&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open zoom with caption'}).click();
+  const dialog = page.getByRole('dialog');
+  const img = dialog.getByRole('img', {name: 'Forest path'});
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(3000);
+  const caption = dialog.getByText('A winding path through the forest');
+  await expect
+    .poll(async () => {
+      const photo = await boxOf(img);
+      const below = await boxOf(caption);
+      return Math.round(below.y - (photo.y + photo.height));
+    })
+    .toBe(0);
+  // Zoomed, the photo fills the stage, and the caption goes back below it.
+  const stage = dialog.getByRole('button', {name: 'Zoom'});
+  const stageBox = await boxOf(stage);
+  await page.mouse.dblclick(centre(stageBox).x, centre(stageBox).y);
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(async () => (await boxOf(caption)).y - (stageBox.y + stageBox.height))
+    .toBeGreaterThanOrEqual(-0.5);
+});
+
+test('the zoom target takes its touches as on a phone where the primary pointer is fine too', async ({
+  page,
+}) => {
+  const {stage} = await openViewer(page);
+  // Gestures attach for every pointer. A touchscreen laptop's finger pinches
+  // and pans the photo as on a phone, so the zoom target claims its touches,
+  // as under a coarse pointer.
+  expect(await stage.evaluate(el => getComputedStyle(el).touchAction)).toBe(
+    'none',
+  );
+});
+
+test('a mouse double-click zooms 2× about the clicked point, and the next zooms back', async ({
+  page,
+}) => {
+  const {stage, img, fitted, stageBox} = await openViewer(page);
+  // A quarter of the way in from the photo's top-left corner.
+  const click = {
+    x: fitted.x + fitted.width / 4,
+    y: fitted.y + fitted.height / 4,
+  };
+  await page.mouse.dblclick(click.x, click.y);
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await settled(page);
+  const zoomed = await boxOf(img);
+  expect(zoomed.width / fitted.width).toBeCloseTo(2, 2);
+  // The clicked photo point stays under the pointer on each axis where the
+  // zoomed photo overflows the stage. At least one axis does.
+  const overflowsX = zoomed.width > stageBox.width + 1;
+  const overflowsY = zoomed.height > stageBox.height + 1;
+  expect(overflowsX || overflowsY).toBe(true);
+  if (overflowsX) {
+    expect(zoomed.x + (click.x - fitted.x) * 2).toBeCloseTo(click.x, 0);
+  }
+  if (overflowsY) {
+    expect(zoomed.y + (click.y - fitted.y) * 2).toBeCloseTo(click.y, 0);
+  }
+  await page.mouse.dblclick(centre(stageBox).x, centre(stageBox).y);
+  await expect(stage).toHaveAttribute('aria-pressed', 'false');
+  await settled(page);
+  const back = await boxOf(img);
+  expect(back.width).toBeCloseTo(fitted.width, 1);
+  expect(back.x).toBeCloseTo(fitted.x, 1);
+});
+
+/**
+ * Samples the photo's width every frame from the first `startEvent` on,
+ * while `act` zooms it 2×, and checks Lightbox's released 200 ms ease-out.
+ */
+async function expectReleasedZoom(
+  page: Page,
+  fitted: Box,
+  startEvent: 'keydown' | 'dblclick',
+  act: () => Promise<void>,
+): Promise<void> {
+  // The sampler is in place before the input, through an awaited install. A
+  // sampler the page gets later would wait for an input that already came.
+  await page.evaluate(type => {
+    (window as unknown as {__samples: Promise<[number, number][]>}).__samples =
+      new Promise<[number, number][]>(resolve => {
+        const img = document.querySelector('dialog img');
+        const samples: [number, number][] = [];
+        let start: number | null = null;
+        window.addEventListener(
+          type,
+          () => {
+            start = performance.now();
+          },
+          {capture: true, once: true},
+        );
+        const tick = (now: number) => {
+          if (start != null && img != null) {
+            samples.push([now - start, img.getBoundingClientRect().width]);
+          }
+          if (start == null || now - start < 800) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(samples);
+          }
+        };
+        requestAnimationFrame(tick);
+      });
+  }, startEvent);
+  await act();
+  const samples = await page.evaluate(
+    async () =>
+      (window as unknown as {__samples: Promise<[number, number][]>}).__samples,
+  );
+  const to = fitted.width * 2;
+  const progress = (width: number) =>
+    (width - fitted.width) / (to - fitted.width);
+  // Timed from the last frame before the photo moved. An engine can start
+  // the animation a frame or more after the input, more on a busy runner.
+  // The start-up is not the curve.
+  const first = samples.findIndex(([, width]) => progress(width) > 0.001);
+  expect(first).toBeGreaterThanOrEqual(0);
+  const origin = first > 0 ? samples[first - 1][0] : 0;
+  // Progress 100 ms in, interpolated between the frames around it. CSS
+  // `ease-out` over 200 ms is past 0.6 there (0.69 at its middle).
+  // UIScrollView's eased settle over its ~0.31 s is near 0.25 there.
+  const after = samples.findIndex(([t]) => t - origin >= 100);
+  expect(after).toBeGreaterThan(0);
+  const [t0, w0] = samples[after - 1];
+  const [t1, w1] = samples[after];
+  const at100 = progress(w0 + ((w1 - w0) * (origin + 100 - t0)) / (t1 - t0));
+  expect(at100).toBeGreaterThan(0.5);
+  // It ends within the 200 ms and a frame or two.
+  const doneAt = samples.find(([, width]) => progress(width) > 0.995)?.[0];
+  expect(doneAt).toBeDefined();
+  expect((doneAt ?? Number.POSITIVE_INFINITY) - origin).toBeLessThan(250);
+}
+
+test('the keyboard’s zoom plays the released 200 ms ease-out', async ({
+  page,
+}) => {
+  const {stage, fitted} = await openViewer(page);
+  // The keyboard keeps Lightbox's released zoom: Enter zooms 2× about the
+  // centre.
+  await expectReleasedZoom(page, fitted, 'keydown', async () => {
+    await stage.focus();
+    await page.keyboard.press('Enter');
+  });
+});
+
+test('a mouse double-click plays the released 200 ms ease-out too', async ({
+  page,
+}) => {
+  const {stageBox, fitted} = await openViewer(page);
+  const middle = centre(stageBox);
+  await expectReleasedZoom(page, fitted, 'dblclick', async () => {
+    await page.mouse.dblclick(middle.x, middle.y);
+  });
+});
+
+test('a pen double-click zooms 2× too', async ({page, browserName}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Pen input is dispatched through the Chrome DevTools Protocol.',
+  );
+  const {stage, img, fitted, stageBox} = await openViewer(page);
+  const cdp = await page.context().newCDPSession(page);
+  const {x, y} = centre(stageBox);
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x,
+    y,
+    pointerType: 'pen',
+  });
+  for (const clickCount of [1, 2]) {
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x,
+        y,
+        button: 'left',
+        clickCount,
+        pointerType: 'pen',
+      });
+    }
+  }
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await settled(page);
+  expect((await boxOf(img)).width / fitted.width).toBeCloseTo(2, 2);
+});
+
+test('a pen drag pans a zoomed photo through the stage’s pan', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Pen input is dispatched through the Chrome DevTools Protocol.',
+  );
+  const {stage, img, stageBox} = await openViewer(page);
+  const middle = centre(stageBox);
+  // 2x about the centre, with room to pan either way.
+  await stage.focus();
+  await page.keyboard.press('+');
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await settled(page);
+  const before = await boxOf(img);
+  const cdp = await page.context().newCDPSession(page);
+  const pen = async (
+    type: 'mouseMoved' | 'mousePressed' | 'mouseReleased',
+    x: number,
+    pressed: boolean,
+  ) =>
+    cdp.send('Input.dispatchMouseEvent', {
+      type,
+      x,
+      y: middle.y,
+      pointerType: 'pen',
+      button: type === 'mouseMoved' && !pressed ? 'none' : 'left',
+      buttons: pressed ? 1 : 0,
+      clickCount: type === 'mouseMoved' ? 0 : 1,
+    });
+  await pen('mouseMoved', middle.x, false);
+  await pen('mousePressed', middle.x, true);
+  for (let i = 1; i <= 8; i++) {
+    await pen('mouseMoved', middle.x - i * 10, true);
+  }
+  await pen('mouseReleased', middle.x - 80, false);
+  await settled(page);
+  const after = await boxOf(img);
+  // The stage's pan takes the pen and follows it from the first move.
+  expect(after.x - before.x).toBeLessThanOrEqual(-70);
+});
+
+test('a mouse drag stops at the photo’s edges instead of carrying it out of view', async ({
+  page,
+}) => {
+  const {stage, img, stageBox} = await openViewer(page);
+  const middle = centre(stageBox);
+  await page.mouse.dblclick(middle.x, middle.y);
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await settled(page);
+  await page.mouse.move(middle.x, middle.y);
+  await page.mouse.down();
+  await page.mouse.move(middle.x + 1500, middle.y + 900, {steps: 12});
+  await page.mouse.up();
+  await settled(page);
+  const dragged = await boxOf(img);
+  // The photo's left edge stops on the stage's left edge. It still covers the
+  // stage's width, since 2× a fitted photo is wider than the stage.
+  expect(dragged.x).toBeLessThanOrEqual(stageBox.x + 0.5);
+  expect(dragged.x + dragged.width).toBeGreaterThanOrEqual(
+    stageBox.x + stageBox.width - 0.5,
+  );
+  // Vertically it stays where a zoomed photo may rest: inside the stage
+  // where it is shorter, covering it where taller.
+  if (dragged.height <= stageBox.height) {
+    expect(dragged.y).toBeGreaterThanOrEqual(stageBox.y - 0.5);
+    expect(dragged.y + dragged.height).toBeLessThanOrEqual(
+      stageBox.y + stageBox.height + 0.5,
+    );
+  } else {
+    expect(dragged.y).toBeLessThanOrEqual(stageBox.y + 0.5);
+  }
+});
+
+/** Clicks `point` with the mouse; true when the viewer is still open. */
+async function staysOpenAfterClick(
+  page: Page,
+  point: {x: number; y: number},
+): Promise<boolean> {
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(400);
+  return page.evaluate(() => document.querySelector('dialog')?.open === true);
+}
+
+test('a mouse click beside the fitted photo, level with it, leaves the viewer open, as on main', async ({
+  page,
+}) => {
+  const {fitted, stageBox} = await openViewer(page);
+  // The fitted photo leaves dark stage on both sides. Main's media spans the
+  // viewer's width there, so a click beside the photo does not close.
+  expect(fitted.x - stageBox.x).toBeGreaterThan(40);
+  const level = fitted.y + fitted.height / 2;
+  expect(await staysOpenAfterClick(page, {x: stageBox.x + 20, y: level})).toBe(
+    true,
+  );
+  expect(
+    await staysOpenAfterClick(page, {
+      x: fitted.x + fitted.width + 20,
+      y: level,
+    }),
+  ).toBe(true);
+});
+
+test('with zoom on, a mouse click on the photo leaves the viewer open and one below it closes, as on main', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 1000});
+  const {fitted} = await openViewer(page);
+  expect(await staysOpenAfterClick(page, centre(fitted))).toBe(true);
+  const bottom = fitted.y + fitted.height;
+  expect(1000 - bottom).toBeGreaterThan(40);
+  expect(
+    await staysOpenAfterClick(page, {
+      x: fitted.x + fitted.width / 2,
+      y: (bottom + 1000) / 2,
+    }),
+  ).toBe(false);
+});
+
+test('after a 2× double-click, a mouse click on the zoomed photo above the fitted box leaves the viewer open', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 1000});
+  const {stage, img, fitted, stageBox} = await openViewer(page);
+  expect(fitted.y - stageBox.y).toBeGreaterThan(40);
+  await page.mouse.dblclick(centre(fitted).x, centre(fitted).y);
+  await expect(stage).toHaveAttribute('aria-pressed', 'true');
+  await settled(page);
+  // 30 px from the top: above the fitted box, on the zoomed photo.
+  const point = {x: centre(fitted).x, y: stageBox.y + 30};
+  const zoomed = await boxOf(img);
+  expect(point.y).toBeLessThan(fitted.y);
+  expect(point.y).toBeGreaterThan(zoomed.y);
+  expect(await staysOpenAfterClick(page, point)).toBe(true);
+});
+
+test('a mouse press on the fitted photo released above it closes the viewer, as main’s click does', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 1000});
+  const {fitted} = await openViewer(page);
+  expect(fitted.y).toBeGreaterThan(40);
+  const middle = centre(fitted);
+  await page.mouse.move(middle.x, middle.y);
+  await page.mouse.down();
+  await page.mouse.move(middle.x, fitted.y / 2, {steps: 5});
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  expect(
+    await page.evaluate(() => document.querySelector('dialog')?.open === true),
+  ).toBe(false);
+});
+
+test('without zoom, a mouse click beside the photo leaves the viewer open and one above it closes, as on main', async ({
+  page,
+}) => {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  const open = async () => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-lightbox--default&viewMode=story`,
+    );
+    await page.getByRole('button', {name: 'Open lightbox'}).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    const img = page.getByRole('dialog').getByRole('img').first();
+    await expect
+      .poll(async () =>
+        img.evaluate(el => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(PHOTO.width);
+    await settled(page);
+    return boxOf(img);
+  };
+  const fitted = await open();
+  expect(fitted.x).toBeGreaterThan(40);
+  expect(
+    await staysOpenAfterClick(page, {
+      x: fitted.x / 2,
+      y: fitted.y + fitted.height / 2,
+    }),
+  ).toBe(true);
+  await page.setViewportSize({width: 1280, height: 1100});
+  const tall = await open();
+  expect(tall.y).toBeGreaterThan(40);
+  expect(
+    await staysOpenAfterClick(page, {
+      x: tall.x + tall.width / 2,
+      y: tall.y / 2,
+    }),
+  ).toBe(false);
+});
+
+test('in a gallery with zoom, a mouse click beside a small photo closes past its caption’s width and stays open within it, as on main', async ({
+  page,
+}) => {
+  // A photo narrower than the viewer: the media is as wide as its caption,
+  // which is wider than the photo here.
+  await page.setViewportSize({width: 1280, height: 1100});
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: photoSvg(200, 1200)}),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const img = dialog.getByRole('img').first();
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(200);
+  await settled(page);
+  const photo = await boxOf(img);
+  // The caption follows the stage in the media group.
+  const caption = await dialog
+    .getByRole('button', {name: 'Zoom'})
+    .evaluate(stage => {
+      const r = stage.nextElementSibling?.getBoundingClientRect();
+      return r == null ? null : {x: r.x, width: r.width};
+    });
+  if (caption == null) {
+    throw new Error('no caption');
+  }
+  const level = photo.y + photo.height / 2;
+  // Within the caption's width, beside the photo.
+  expect(caption.x).toBeLessThan(photo.x - 10);
+  expect(
+    await staysOpenAfterClick(page, {x: (caption.x + photo.x) / 2, y: level}),
+  ).toBe(true);
+  // Past the caption's width.
+  expect(caption.x).toBeGreaterThan(60);
+  expect(await staysOpenAfterClick(page, {x: caption.x - 30, y: level})).toBe(
+    false,
+  );
+});

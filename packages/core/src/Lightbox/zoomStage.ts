@@ -3,15 +3,15 @@
 /**
  * @file zoomStage.ts
  * @input The stage's size, the photo's fitted box and pixel size, a
- *   transform (offset from the fitted box, and scale), and finger positions
+ *   transform (offset from the fitted box, and scale), and pointer positions
  * @output The zoom stage's pure geometry: zoom limits, resting places, a
  *   drag's rubber band and a pinch's overshoot. Also the transform that keeps
- *   a point in place, and the eased settle curves
- * @position Pure math for Lightbox's touch zoom. No DOM and no React.
+ *   a point in place, the eased settle curves and the keyboard's zoom
+ * @position Pure math under useZoomCore and useZoomStage; no DOM, no React.
  *
- * The model is a zooming UIScrollView in a photo viewer. Its constants come
- * from motion/uikit/zoomMedia.ts and motion/uikit/scroll.ts.
- * SYNC: When modified, update zoomStage.test.ts.
+ * The model is a zooming UIScrollView; its constants come from motion/uikit.
+ * SYNC: When modified, update zoomStage.test.ts, useZoomCore.ts and
+ * useZoomStage.ts.
  */
 
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
@@ -60,7 +60,10 @@ export const IDENTITY: ZoomTransform = {x: 0, y: 0, scale: 1};
 /** Within this of the fitted size the photo counts as not zoomed. */
 export const ZOOMED_EPSILON = 0.001;
 
-/** Lightbox's zoom step: a double tap zooms at least this many times. */
+/**
+ * Lightbox's zoom step. A double tap zooms at least this many times, and a
+ * double-click and the keyboard zoom this many times.
+ */
 export const ZOOM_STEP = 2;
 
 /**
@@ -160,8 +163,8 @@ export function restingTransform(
 }
 
 /**
- * The scale a pinch shows for its own scale `scale`: 1:1 inside the
- * limits, giving way past them (`zoomMedia.overshoot.limitFactor`).
+ * The scale a pinch shows for its own scale `scale`. It is 1:1 inside the
+ * limits and gives way past them (`zoomMedia.overshoot.limitFactor`).
  */
 export function overshootScale(geometry: ZoomGeometry, scale: number): number {
   const f = zoomMedia.overshoot.limitFactor;
@@ -219,7 +222,7 @@ export function transformKeepingPoint(
 }
 
 /**
- * Where a drag shows the photo: `raw` is where the finger's travel would put
+ * Where a drag shows the photo: `raw` is where the pointer's travel would put
  * it with no edges. Past an edge it gives way with UIScrollView's rubber band
  * over the stage's size on that axis. On an axis where the photo is smaller
  * than the stage, it stays centred, as a scroll view whose content fits does
@@ -243,7 +246,7 @@ export function draggedTransform(
   };
 }
 
-/** The finger-travel position behind a shown one: `draggedTransform` undone. */
+/** The pointer-travel position behind a shown one: `draggedTransform` undone. */
 export function rawForDragged(
   geometry: ZoomGeometry,
   shown: ZoomTransform,
@@ -330,8 +333,9 @@ export function settleSeconds(fromScale: number, toScale: number): number {
 /**
  * UIScrollView's zoom settle as curves for the animator. The offset and the
  * scale move together on one eased curve, from `from` to `to`, over
- * `settleSeconds`. The curve is `zoomMedia.settle.curve` by default. Each
- * axis is the eased move an animated page scroll plays.
+ * `duration` (`settleSeconds` by default). The curve is
+ * `zoomMedia.settle.curve` by default. Each axis is the eased move an
+ * animated page scroll plays.
  */
 export function settleCurves(
   from: ZoomTransform,
@@ -340,13 +344,13 @@ export function settleCurves(
     null,
     zoomMedia.settle.curve,
   ),
+  duration: number = settleSeconds(from.scale, to.scale),
 ): {
   readonly duration: number;
   readonly x: MotionCurve;
   readonly y: MotionCurve;
   readonly scale: MotionCurve;
 } {
-  const duration = settleSeconds(from.scale, to.scale);
   const along = (a: number, b: number): MotionCurve =>
     solveAnimatedPageScroll({
       from: a,
@@ -360,6 +364,41 @@ export function settleCurves(
     y: along(from.y, to.y),
     scale: along(from.scale, to.scale),
   };
+}
+
+/**
+ * Lightbox's released zoom, which the keyboard keeps. Enter, Space or `+`
+ * zooms `ZOOM_STEP` times about the stage's centre, or back to the fitted
+ * size when zoomed. Every such change, a keyboard pan included, plays the
+ * released 200 ms CSS `ease-out`.
+ */
+export const RELEASED_ZOOM = {
+  seconds: 0.2,
+  curve: [0, 0, 0.58, 1] as readonly [number, number, number, number],
+};
+
+/** Where a zoom key goes from `from` (see RELEASED_ZOOM). */
+export function releasedZoomTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+): ZoomTransform {
+  return doubleClickTarget(geometry, from, {
+    x: geometry.width / 2,
+    y: geometry.height / 2,
+  });
+}
+
+/**
+ * Where a double-click at `point` goes from `from`. It zooms `ZOOM_STEP`
+ * times about the clicked point, kept inside the stage, or goes back to the
+ * fitted size when zoomed.
+ */
+export function doubleClickTarget(
+  geometry: ZoomGeometry,
+  from: ZoomTransform,
+  point: StagePoint,
+): ZoomTransform {
+  return doubleTapTarget({...geometry, doubleTapScale: ZOOM_STEP}, from, point);
 }
 
 /** The resting transform after panning by (dx, dy): a keyboard step. */

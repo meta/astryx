@@ -1,0 +1,502 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file useZoomStage.ts
+ * @input The zoom core (useZoomCore.ts), the stage element ref, whether the
+ *   gestures and the touch presentation are on, and tap and drag callbacks
+ * @output Exports `useZoomStage`: Lightbox's gestures, those of a zooming
+ *   UIScrollView for every pointer, on top of the core, whose API it returns
+ * @position Lightbox's gesture module, internal, with one import site
+ *   (Lightbox.tsx). It builds on the gesture recognizers and the core's
+ *   animator; the geometry is in zoomStage.ts.
+ *
+ * SYNC: When modified, update useZoomCore.ts, zoomStage.ts, Lightbox.tsx and
+ * __tests__/LightboxZoom.interaction.browser.spec.ts.
+ */
+
+import {useRef, useState, type RefObject} from 'react';
+import {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
+import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {PinchGestureRecognizer} from '../gestures/PinchGestureRecognizer';
+import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
+import type {Point} from '../gestures/types';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
+import {coast as coastCurves} from '../motion/coast';
+import {decayRestDistance} from '../motion/decay';
+import {
+  doubleTapTarget,
+  draggedTransform,
+  isZoomed,
+  overshootScale,
+  pinchScaleFor,
+  rawForDragged,
+  releaseTarget,
+  restRange,
+  transformKeepingPoint,
+  type StagePoint,
+  type ZoomGeometry,
+  type ZoomTransform,
+} from './zoomStage';
+import {
+  ZOOM_DRAGGING_ATTRIBUTE,
+  type ZoomCore,
+  type ZoomStage,
+} from './useZoomCore';
+
+export {ZOOM_DRAGGING_ATTRIBUTE, type ZoomStage};
+
+export interface UseZoomStageOptions {
+  /** The stage: the photo's clipping parent, which centres it. */
+  stageRef: RefObject<HTMLElement | null>;
+  /** The gestures are on (zoom is on), for every pointer. */
+  isEnabled: boolean;
+  /** A finger's single tap landed outside the photo. */
+  onTapOutside?: () => void;
+  /** A pan began (a release over the backdrop must not close). */
+  onDragStart?: () => void;
+  /**
+   * The touch presentation is on. A pan's give past the edges and its coast
+   * belong to it. Otherwise a drag or a trackpad's scroll pans 1:1, and it
+   * stops at the edges and at the release.
+   */
+  isTouchPresentation?: boolean;
+}
+
+interface PinchSession {
+  readonly start: ZoomTransform;
+  /** The pinch's own scale the start corresponds to (past a limit, more). */
+  readonly startPinchScale: number;
+  readonly anchor: StagePoint;
+  centroid: StagePoint;
+}
+
+interface PanSession {
+  /** The pointer-travel transform when the session started. */
+  readonly raw: ZoomTransform;
+  readonly translation: Point;
+  /** It gives past the edges and coasts at the release. */
+  readonly hasGive: boolean;
+}
+
+/** Every pointer: a mouse, a pen and a finger. */
+const EVERY_POINTER = ['touch', 'pen', 'mouse'] as const;
+/** Fingers only: a pen does not pinch. A ctrl-wheel pinches too. */
+const PINCH_POINTERS = ['touch'] as const;
+/** Fingers only: a mouse's or a pen's double-click is the browser's. */
+const DOUBLE_TAP_POINTERS = ['touch'] as const;
+/** A mouse's or a pen's click beside the photo is the browser's `click`. */
+const TAP_POINTERS = ['touch'] as const;
+
+/** Sets the zoom pan's begin threshold for the press that just landed. */
+function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
+  pan.hysteresis = px;
+}
+
+/**
+ * Lightbox's zoom gestures. They take every pointer: a mouse, a pen and a
+ * finger alike. The pinch is the fingers', and a ctrl-wheel pinches too. The
+ * pan also takes a trackpad's scroll; a mouse wheel's notches never pan. The
+ * keyboard is the core's.
+ *
+ * Tracking writes the photo's `translate` and `scale` once per input event,
+ * with no React render and no layout read after a gesture begins. Every
+ * release and double tap runs on the compositor as baked keyframes. A press
+ * on a moving photo takes it from its presentation value.
+ *
+ * The recognizers on the stage, as UIScrollView arranges its own:
+ * - pinch, with the pan, so two fingers zoom and move at once. A finger left
+ *   down after the pinch keeps panning.
+ * - pan: one or two fingers, a mouse's or a pen's drag, or a trackpad's
+ *   scroll. It moves a zoomed photo. In the touch presentation, its release
+ *   carries a scroll view's velocity.
+ * - double tap, a finger's: it fills the viewer, at least 2×, and keeps the
+ *   point in place. When zoomed it goes back to the fitted size. A mouse's or
+ *   a pen's double-click is the browser's `dblclick` (the core's
+ *   `doubleClickAt`).
+ * - single tap, which waits for a finger's double tap to fail. A tap outside
+ *   the photo is reported, and Lightbox closes on it. A mouse's or a pen's
+ *   click ends it at once.
+ * - a zero-duration press beside them all, UIKit's touch-down idiom. A press
+ *   on a moving photo stops it where it shows, and a lift with no drag lets
+ *   it settle.
+ *
+ * The stage's `touch-action` is the caller's (none while zoom is on), since a
+ * disabled recognizer would still claim it.
+ *
+ * It follows UIKit's measured behavior (motion/uikit/zoomMedia.ts). Inside the
+ * limits the zoom follows the pinch 1:1. The content point under the centroid
+ * stays under it, past the limits too. No scale momentum follows the lift.
+ * Past a limit, the return is one eased animation anchored at the last
+ * centroid. In the touch presentation, a zoomed pan coasts and bounces like a
+ * scroll view. A two-finger tap does nothing.
+ */
+export function useZoomStage(
+  core: ZoomCore,
+  options: UseZoomStageOptions,
+): ZoomStage {
+  const {
+    animator,
+    geometryRef,
+    targetRef,
+    measure,
+    toStage,
+    current,
+    write,
+    setTarget,
+    setZoomed,
+    settleTo,
+  } = core;
+  const pinchRef = useRef<PinchSession | null>(null);
+  const panRef = useRef<PanSession | null>(null);
+  /** A touch stopped a moving photo; a pan or pinch has since taken over. */
+  const caughtRef = useRef(false);
+  const draggedSinceCatchRef = useRef(false);
+  /** A pan gives past the edges and coasts only in the touch presentation. */
+  const hasGive = () => options.isTouchPresentation === true;
+
+  /**
+   * A zoomed pan's release: UIScrollView's coast, bouncing at the edges.
+   */
+  const coast = (geometry: ZoomGeometry, velocity: Point) => {
+    const from = current();
+    // Under Reduce Motion too, a coast keeps its momentum and its settle at
+    // an edge. That is the person's own movement, and iOS keeps decelerating
+    // scrolls under Reduce Motion. The animator's policy leaves `decay` alone.
+    const range = restRange(geometry, from.scale);
+    const vx = range.x.min === range.x.max ? 0 : velocity.x;
+    const vy = range.y.min === range.y.max ? 0 : velocity.y;
+    const rest = (value: number, v: number, {min, max}: typeof range.x) =>
+      Math.min(max, Math.max(min, value + decayRestDistance(v)));
+    setTarget({
+      x: rest(from.x, vx, range.x),
+      y: rest(from.y, vy, range.y),
+      scale: from.scale,
+    });
+    setZoomed(isZoomed(geometry, from));
+    animator.decay(
+      coastCurves(animator, {x: vx, y: vy}, {bounds: {x: range.x, y: range.y}}),
+    );
+  };
+
+  // Whether a finger began each gesture, read from its first touch as it
+  // begins. Under reduced motion a finger's release cross-fades. A mouse's, a
+  // trackpad's or a pen's release completes at once where the primary pointer
+  // is fine.
+  const fingerRef = useRef({pinch: false, catch: false});
+  const [recognizers] = useState(() => {
+    const pinch = new PinchGestureRecognizer({
+      name: 'Lightbox.zoomPinch',
+      allowedPointerTypes: PINCH_POINTERS,
+    });
+    // A zoomed photo is a scroll view: its coast reads the pan's scroll-view
+    // release (`scrollVelocity()`), so it coasts as far as UIKit's.
+    const pan = new PanGestureRecognizer({
+      name: 'Lightbox.zoomPan',
+      maximumNumberOfTouches: 2,
+      allowedPointerTypes: EVERY_POINTER,
+      allowedScrollTypes: ['continuous'],
+      // A mouse, a pen or a trackpad pans only a zoomed photo. On a fitted
+      // photo it starts no pan, so its press and release stay a click.
+      shouldBegin: recognizer => {
+        if (recognizer.trackedTouches[0]?.pointerType === 'touch') {
+          return true;
+        }
+        const geometry = geometryRef.current;
+        return geometry != null && isZoomed(geometry, current());
+      },
+    });
+    // A finger's double tap. A mouse's or a pen's double-click is the
+    // browser's `dblclick`, which keeps the system's double-click speed.
+    const doubleTap = new TapGestureRecognizer({
+      name: 'lightbox-zoom-double-tap',
+      numberOfTapsRequired: 2,
+      allowedPointerTypes: DOUBLE_TAP_POINTERS,
+    });
+    const tap = new TapGestureRecognizer({
+      name: 'lightbox-zoom-tap',
+      allowedPointerTypes: TAP_POINTERS,
+    });
+    const touchDown = new LongPressGestureRecognizer({
+      name: 'lightbox-zoom-touch-down',
+      minimumPressDuration: 0,
+      allowableMovement: Number.POSITIVE_INFINITY,
+      cancelsTouchesInView: false,
+      delaysTouchesEnded: false,
+      allowedPointerTypes: EVERY_POINTER,
+    });
+    pinch.recognizeSimultaneouslyWith(pan);
+    tap.requireToFail(doubleTap);
+    for (const other of [pinch, pan, doubleTap, tap]) {
+      touchDown.recognizeSimultaneouslyWith(other);
+    }
+    return {pinch, pan, doubleTap, tap, touchDown};
+  });
+
+  const recognizerOptions = {isEnabled: options.isEnabled, manageStyle: false};
+
+  useGestureRecognizer(
+    options.stageRef,
+    () => recognizers.pinch,
+    pinch => {
+      if (pinch.state === 'began') {
+        fingerRef.current.pinch =
+          pinch.trackedTouches[0]?.pointerType === 'touch';
+        const geometry = measure();
+        if (geometry == null) {
+          return;
+        }
+        draggedSinceCatchRef.current = true;
+        animator.stop();
+        const start = current();
+        const anchor = toStage(pinch.focalPoint());
+        pinchRef.current = {
+          start,
+          startPinchScale: pinchScaleFor(geometry, start.scale),
+          anchor,
+          centroid: anchor,
+        };
+      }
+      const session = pinchRef.current;
+      const geometry = geometryRef.current;
+      const isMoving = pinch.state === 'began' || pinch.state === 'changed';
+      if (!isMoving) {
+        // The session ends with the pinch, even one that outlived its photo:
+        // a session left behind would block every later pan.
+        pinchRef.current = null;
+      }
+      if (session == null || geometry == null) {
+        return;
+      }
+      if (isMoving) {
+        session.centroid = toStage(pinch.focalPoint());
+        const shown = overshootScale(
+          geometry,
+          session.startPinchScale * pinch.scale,
+        );
+        write(
+          transformKeepingPoint(
+            geometry,
+            session.start,
+            session.anchor,
+            session.centroid,
+            shown,
+          ),
+        );
+        return;
+      }
+      // Ended (a finger lifted) or cancelled (the browser took the touches).
+      const shown = current();
+      const target = releaseTarget(geometry, shown, session.centroid);
+      if (target !== shown) {
+        // Past a limit: UIKit's eased return, anchored at the last centroid.
+        // A finger still down rests until it lands again.
+        panRef.current = null;
+        settleTo(geometry, target, {
+          touchRelease: fingerRef.current.pinch,
+        });
+        return;
+      }
+      const pan = recognizers.pan;
+      if (pan.state === 'began' || pan.state === 'changed') {
+        // The finger left down keeps panning from here, without a jump.
+        const give = hasGive();
+        panRef.current = {
+          raw: rawForDragged(geometry, shown),
+          translation: give ? pan.translation() : pan.totalTranslation(),
+          hasGive: give,
+        };
+        setZoomed(isZoomed(geometry, shown));
+        return;
+      }
+      coast(geometry, {x: 0, y: 0});
+    },
+    recognizerOptions,
+  );
+
+  useGestureRecognizer(
+    options.stageRef,
+    () => recognizers.pan,
+    pan => {
+      const stage = options.stageRef.current;
+      if (pan.state === 'began') {
+        const geometry = measure();
+        if (geometry == null) {
+          return;
+        }
+        draggedSinceCatchRef.current = true;
+        animator.stop();
+        options.onDragStart?.();
+        const shown = current();
+        if (isZoomed(geometry, shown)) {
+          stage?.setAttribute(ZOOM_DRAGGING_ATTRIBUTE, '');
+        }
+        // The translation already leaves out the begin threshold's travel,
+        // and what the finger moved past it shows at once, as in UIKit.
+        // Without give, the photo follows the pointer's whole travel from the
+        // press, so it catches up the threshold's travel at once.
+        panRef.current = {
+          raw: rawForDragged(geometry, shown),
+          translation: {x: 0, y: 0},
+          hasGive: hasGive(),
+        };
+      }
+      if (pan.state === 'began' || pan.state === 'changed') {
+        const session = panRef.current;
+        const geometry = geometryRef.current;
+        if (pinchRef.current != null || session == null || geometry == null) {
+          return;
+        }
+        const translation = session.hasGive
+          ? pan.translation()
+          : pan.totalTranslation();
+        const raw = {
+          x: session.raw.x + translation.x - session.translation.x,
+          y: session.raw.y + translation.y - session.translation.y,
+          scale: session.raw.scale,
+        };
+        if (session.hasGive) {
+          write(draggedTransform(geometry, raw));
+          return;
+        }
+        const range = restRange(geometry, raw.scale);
+        write({
+          x: Math.min(range.x.max, Math.max(range.x.min, raw.x)),
+          y: Math.min(range.y.max, Math.max(range.y.min, raw.y)),
+          scale: raw.scale,
+        });
+        return;
+      }
+      // Ended or cancelled.
+      stage?.removeAttribute(ZOOM_DRAGGING_ATTRIBUTE);
+      const session = panRef.current;
+      panRef.current = null;
+      const geometry = geometryRef.current;
+      if (pinchRef.current != null || session == null || geometry == null) {
+        return;
+      }
+      // The release carries the shared filter's velocity at the lift: a scroll
+      // view's, at rest after a silent hold.
+      coast(
+        geometry,
+        pan.state === 'ended' && session.hasGive
+          ? pan.scrollVelocity()
+          : {x: 0, y: 0},
+      );
+    },
+    recognizerOptions,
+  );
+
+  useGestureRecognizer(
+    options.stageRef,
+    () => recognizers.touchDown,
+    touchDown => {
+      if (touchDown.state === 'began') {
+        const isFinger = touchDown.trackedTouches[0]?.pointerType === 'touch';
+        fingerRef.current.catch = isFinger;
+        // A mouse's or a pen's drag on a zoomed photo pans from its first
+        // move. A finger keeps UIKit's begin threshold, which tells a tap from
+        // a pan.
+        const geometry = geometryRef.current;
+        setBeginThreshold(
+          recognizers.pan,
+          !isFinger && geometry != null && isZoomed(geometry, current())
+            ? 0
+            : UIKIT_PAN.hysteresis.value,
+        );
+        draggedSinceCatchRef.current = false;
+        const shown = current();
+        const target = targetRef.current;
+        const moving =
+          Math.abs(shown.x - target.x) > 0.01 ||
+          Math.abs(shown.y - target.y) > 0.01 ||
+          Math.abs(shown.scale - target.scale) > 0.0001;
+        caughtRef.current = moving;
+        if (moving) {
+          // Stopped where it shows: the presentation value, from the curve.
+          animator.stop();
+          setTarget(shown);
+        }
+        return;
+      }
+      if (touchDown.state === 'changed') {
+        return;
+      }
+      // Lifted, or taken. With no drag since the catch, the photo settles from
+      // where it was stopped. It goes back inside the stage, or back to a zoom
+      // limit it passed.
+      const caught = caughtRef.current;
+      caughtRef.current = false;
+      const geometry = geometryRef.current ?? measure();
+      if (!caught || draggedSinceCatchRef.current || geometry == null) {
+        return;
+      }
+      const shown = current();
+      const limit = releaseTarget(geometry, shown, {
+        x: geometry.width / 2,
+        y: geometry.height / 2,
+      });
+      if (limit !== shown) {
+        settleTo(geometry, limit, {
+          touchRelease: fingerRef.current.catch,
+        });
+        return;
+      }
+      coast(geometry, {x: 0, y: 0});
+    },
+    recognizerOptions,
+  );
+
+  useGestureRecognizer(
+    options.stageRef,
+    () => recognizers.doubleTap,
+    doubleTap => {
+      if (doubleTap.state !== 'ended') {
+        return;
+      }
+      const geometry = measure();
+      if (geometry == null) {
+        return;
+      }
+      // A finger's double tap fills the viewer, at least 2×, and keeps the
+      // tapped point in place. A tap starts it, so it plays the theme's move
+      // easing and medium duration.
+      const point = toStage(doubleTap.location());
+      settleTo(geometry, doubleTapTarget(geometry, current(), point), {
+        tapped: true,
+      });
+    },
+    recognizerOptions,
+  );
+
+  useGestureRecognizer(
+    options.stageRef,
+    () => recognizers.tap,
+    tap => {
+      if (tap.state !== 'ended') {
+        return;
+      }
+      const geometry = measure();
+      if (geometry == null) {
+        return;
+      }
+      const point = toStage(tap.location());
+      const {x, y, scale} = current();
+      const left = geometry.fit.x + x;
+      const top = geometry.fit.y + y;
+      const inside =
+        point.x >= left &&
+        point.x <= left + geometry.fit.width * scale &&
+        point.y >= top &&
+        point.y <= top + geometry.fit.height * scale;
+      if (!inside) {
+        options.onTapOutside?.();
+      }
+    },
+    recognizerOptions,
+  );
+
+  return core.api;
+}
