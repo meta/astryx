@@ -925,14 +925,13 @@ export function DropdownMenuSubMenu(
           );
           return;
         }
-        // In a menu with a header or footer above this level, Tab leaves the
-        // flyout stack: every open level closes as the key bubbles past it,
-        // this one's own rows or a deeper level's, and the level with the
-        // regions moves focus on.
-        if (rootHasRegions) {
-          close({focusTrigger: false});
-          return;
-        }
+        // Otherwise Tab leaves the flyout stack: every open level closes as
+        // the key bubbles past it, this one's own rows or a deeper level's.
+        // In a menu with a header or footer above this level, that level
+        // moves focus on; in a plain menu the root closes the whole menu,
+        // and focus moves on from its trigger (APG menu button).
+        close({focusTrigger: false});
+        return;
       }
       if (!ownsEvent(e)) {
         return;
