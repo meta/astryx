@@ -409,7 +409,7 @@
   },
   "@astryx.commandPalette.noResultsFor": {
     "defaultMessage": "Niciun rezultat pentru {query}",
-    "description": "Screen-reader-only announcement when a CommandPalette query matches nothing. `{query}` is the user's verbatim search text; keep it last if your language allows so truncation-by-AT still conveys the outcome."
+    "description": "Not read by any component: CommandPalette announces its rendered empty-search message (`emptySearchText`) instead. Formerly the screen-reader-only announcement when a query matched nothing; `{query}` was the user's verbatim search text."
   },
   "@astryx.commandPalette.loading": {
     "defaultMessage": "Se încarcă",

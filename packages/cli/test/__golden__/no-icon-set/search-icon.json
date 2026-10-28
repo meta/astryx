@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 220,
+    "matchCount": 223,
     "results": [
       {
         "domain": "component",
@@ -59,6 +59,34 @@
         "description": "<text>",
         "import": "@astryxdesign/core/hooks",
         "command": "astryx hook useInputStatusIcon",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons theme-overrides",
+        "parent": "astryx docs icons --index",
+        "mentions": [
+          "This lets you swap the icon set (e.g."
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons icon-variants",
+        "parent": "astryx docs icons --index",
         "mentions": []
       },
       {
@@ -215,30 +243,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ChatComposerFullFeatured --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatMessageBubbleMetadata",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatMessageBubbleMetadata --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatMessageMetadataFooter",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatMessageMetadataFooter --type block",
         "mentions": []
       }
     ]

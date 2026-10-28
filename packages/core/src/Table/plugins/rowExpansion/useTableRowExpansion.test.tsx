@@ -296,9 +296,10 @@ describe('useTableRowExpansion (detail panel)', () => {
       for (const cell of cellsOf('Ada')) {
         expect(cell).toHaveStyle({borderBottomWidth: '0'});
       }
-      expect(panelCell()).toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      // The token width, unless the row hands down its own.
+      expect(getComputedStyle(panelCell()).borderBottomWidth).toMatch(
+        /var\(--_table-panel-divider-width,\s*var\(--border-width\)\)/,
+      );
     });
 
     it('leaves collapsed rows keeping their own divider', () => {
@@ -310,16 +311,97 @@ describe('useTableRowExpansion (detail panel)', () => {
 
     it('draws no panel divider on a table without row dividers', () => {
       render(<Harness initialExpanded={new Set(['a'])} dividers="none" />);
-      expect(panelCell()).not.toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      expect(getComputedStyle(panelCell()).borderBottomWidth).not.toMatch(
+        /--border-width/,
+      );
+    });
+
+    it('reads the colour mode once per table, however many panels are open', () => {
+      const original = window.matchMedia;
+      const listeners = (open: Set<string>) => {
+        let count = 0;
+        window.matchMedia = (query: string) => {
+          const list = original
+            ? original(query)
+            : ({matches: false, media: query} as MediaQueryList);
+          return {
+            ...list,
+            matches: list.matches,
+            media: query,
+            addEventListener: () => {
+              count += 1;
+            },
+            removeEventListener: () => {},
+            addListener: () => {
+              count += 1;
+            },
+            removeListener: () => {},
+          } as MediaQueryList;
+        };
+        const {unmount} = render(<Harness initialExpanded={open} />);
+        unmount();
+        return count;
+      };
+      try {
+        expect(listeners(new Set(['a', 'b', 'c']))).toBe(
+          listeners(new Set(['a'])),
+        );
+      } finally {
+        window.matchMedia = original;
+      }
+    });
+
+    it("carries the row's own divider onto the panel (Table FR14)", () => {
+      render(<Harness />);
+      const row = cellsOf('Ada')[0].parentElement as HTMLTableRowElement;
+      // An app's (or a theme's) border on the row's cells.
+      for (const cell of row.cells) {
+        cell.style.borderBottomColor = 'rgb(255, 0, 0)';
+        cell.style.borderBottomStyle = 'dashed';
+      }
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      const cell = panelCell();
+      expect(cell.style.getPropertyValue('--_table-panel-divider-color')).toBe(
+        'rgb(255, 0, 0)',
+      );
+      expect(cell.style.getPropertyValue('--_table-panel-divider-style')).toBe(
+        'dashed',
+      );
+      // The panel keeps its own width (a value, never inherited from a panel
+      // around it) while the row's own border does not win.
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        'initial',
+      );
+      // A width set on the row's cells is the divider's too.
+      for (const rowCell of row.cells) {
+        rowCell.style.borderBottomWidth = '3px';
+      }
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        '3px',
+      );
+      fireEvent.click(screen.getAllByRole('button', {name: /collapse/i})[1]);
+      for (const rowCell of row.cells) {
+        rowCell.style.borderBottomWidth = '';
+      }
+      // An app's wider border on the row itself wins; the next commit
+      // (opening another row) reads it.
+      row.style.borderBottom = '3px solid rgb(0, 0, 255)';
+      fireEvent.click(screen.getAllByRole('button', {name: /expand/i})[0]);
+      expect(cell.style.getPropertyValue('--_table-panel-divider-width')).toBe(
+        '3px',
+      );
+      expect(cell.style.getPropertyValue('--_table-panel-divider-color')).toBe(
+        'rgb(0, 0, 255)',
+      );
     });
 
     it('draws the panel divider under grid dividers too', () => {
       render(<Harness initialExpanded={new Set(['a'])} dividers="grid" />);
-      expect(panelCell()).toHaveStyle({
-        borderBottomWidth: 'var(--border-width)',
-      });
+      // The token width, unless the row hands down its own.
+      expect(getComputedStyle(panelCell()).borderBottomWidth).toMatch(
+        /var\(--_table-panel-divider-width,\s*var\(--border-width\)\)/,
+      );
     });
   });
 
