@@ -89,6 +89,7 @@ function buildFixture() {
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.tsx'), 'export function Badge() {}\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.doc.mjs'), "export default {name: 'Badge'};\n");
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/index.ts'), "export {Badge} from './Badge';\n");
+  fs.mkdirSync(path.join(upstream, 'docs/specs/components/Badge'), {recursive: true});
   fs.writeFileSync(path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.tsx'), 'export function Card() {}\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.doc.mjs'), "export default {name: 'Card'};\n");

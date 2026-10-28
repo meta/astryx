@@ -221,7 +221,7 @@ describe('classifyPath — what ships to consumers', () => {
     ['packages/core/src/Button/Button.test.tsx', /test/],
     ['packages/core/src/Button/Button.a11y.chromium.spec.ts', /test/],
     ['packages/core/src/Button/Button.stories.tsx', /story/],
-    ['docs/specs/components/Button/Button.spec.md', /spec record/],
+    ['docs/specs/components/Button/Button.spec.md', /outside/],
     ['packages/core/src/Button/__fixtures__/data.ts', /fixture/],
     ['packages/cli/api/doctor/doctor.test.mjs', /test/],
     ['packages/cli/test/__golden__/docs-list.json', /test/],

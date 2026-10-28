@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   composeKnowledgeSchemas,
@@ -29,6 +30,29 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const roots = [];
+const {componentSpecPathForSource} = createRequire(import.meta.url)(
+  '../.github/scripts/knowledge-paths.cjs',
+);
+
+/**
+ * Fixtures describe a record by the source path it governs; the record itself
+ * lives under docs/specs/components/, mirroring that path.
+ */
+function recordPath(codeSidePath) {
+  const match =
+    /^(.*)[\\/]packages[\\/]([^\\/]+)[\\/]src[\\/](.+\.spec\.md)$/.exec(
+      codeSidePath,
+    );
+  if (!match) return codeSidePath;
+  const target = path.join(
+    match[1],
+    componentSpecPathForSource(match[2], match[3].split(path.sep).join('/')),
+  );
+  // The source directory the record mirrors exists, as it does beside real code.
+  fs.mkdirSync(path.dirname(codeSidePath), {recursive: true});
+  fs.mkdirSync(path.dirname(target), {recursive: true});
+  return target;
+}
 
 function fixtureRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-knowledge-'));
@@ -1001,7 +1025,7 @@ describe('component theming anatomy metadata', () => {
     fs.mkdirSync(directory);
     const consumerDoc = writeButtonDoc(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       withAnatomyTheming(componentRecord(), {
         ...valid,
         Icon: {none: {reason: 'intentional: Fixture-owned icon.'}},
@@ -1018,7 +1042,10 @@ describe('component theming anatomy metadata', () => {
     const root = fixtureRoot();
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
-    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Button.spec.md')),
+      componentRecord(),
+    );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
   });
 });
@@ -1215,7 +1242,7 @@ describe('component delegation ownership', () => {
       fs.mkdirSync(directory);
       writeButtonDoc(directory);
       fs.writeFileSync(
-        path.join(directory, 'Button.spec.md'),
+        recordPath(path.join(directory, 'Button.spec.md')),
         withAnatomyTheming(componentRecord(overrides), {
           Root: {target: 'button'},
           Label: {inherits: 'button'},
@@ -1246,7 +1273,7 @@ describe('component delegation ownership', () => {
     fs.mkdirSync(directory);
     writeButtonDoc(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       withAnatomyTheming(
         componentRecord({
           authority: 'archived',
@@ -1369,7 +1396,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord().replace(
         '## Intent',
         '## Contract at a glance\n\nProjection.\n\n## Intent',
@@ -1405,7 +1432,10 @@ describe('knowledge validation', () => {
     const root = fixtureRoot();
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
-    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Button.spec.md')),
+      componentRecord(),
+    );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
   });
 
@@ -1421,7 +1451,7 @@ describe('knowledge validation', () => {
       'export function VegaChart() {}\n',
     );
     fs.writeFileSync(
-      path.join(directory, 'VegaChart.spec.md'),
+      recordPath(path.join(directory, 'VegaChart.spec.md')),
       componentRecord({id: 'component:VegaChart'}),
     );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
@@ -1438,8 +1468,13 @@ describe('knowledge validation', () => {
       path.join(directory, 'Chart.tsx'),
       'export function Chart() {}\n',
     );
+    // Ghost.tsx exists but the package barrel does not export it.
     fs.writeFileSync(
-      path.join(directory, 'Ghost.spec.md'),
+      path.join(directory, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    fs.writeFileSync(
+      recordPath(path.join(directory, 'Ghost.spec.md')),
       componentRecord({id: 'component:Ghost'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -1450,7 +1485,9 @@ describe('knowledge validation', () => {
   it('accepts a flat-package module beneath its declared parent component', async () => {
     const root = fixtureRoot();
     const source = path.join(root, 'packages/charts/src');
-    const modulePath = path.join(source, 'Chart/plugins/useChartThing.spec.md');
+    const modulePath = recordPath(
+      path.join(source, 'Chart/plugins/useChartThing.spec.md'),
+    );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
       path.join(source, 'index.ts'),
@@ -1461,7 +1498,7 @@ describe('knowledge validation', () => {
       'export function Chart() {}\n',
     );
     fs.writeFileSync(
-      path.join(source, 'Chart.spec.md'),
+      recordPath(path.join(source, 'Chart.spec.md')),
       componentRecord({
         id: 'component:Chart',
         modules: '[module:Chart/useChartThing]',
@@ -1481,7 +1518,9 @@ describe('knowledge validation', () => {
   it('rejects a flat-package module beneath a different path root', async () => {
     const root = fixtureRoot();
     const source = path.join(root, 'packages/charts/src');
-    const modulePath = path.join(source, 'Ghost/plugins/useChartThing.spec.md');
+    const modulePath = recordPath(
+      path.join(source, 'Ghost/plugins/useChartThing.spec.md'),
+    );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
       path.join(source, 'index.ts'),
@@ -1492,7 +1531,7 @@ describe('knowledge validation', () => {
       'export function Chart() {}\n',
     );
     fs.writeFileSync(
-      path.join(source, 'Chart.spec.md'),
+      recordPath(path.join(source, 'Chart.spec.md')),
       componentRecord({
         id: 'component:Chart',
         modules: '[module:Chart/useChartThing]',
@@ -1507,7 +1546,7 @@ describe('knowledge validation', () => {
     );
 
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
-      /flat-package module module:Chart\/useChartThing must live under packages\/charts\/src\/Chart\//,
+      /flat-package module module:Chart\/useChartThing must live under docs\/specs\/components\/Chart\//,
     );
   });
 
@@ -1520,7 +1559,7 @@ describe('knowledge validation', () => {
       "export const docs = {name: 'NavHeadingMenu'};\n",
     );
     fs.writeFileSync(
-      path.join(directory, 'NavHeadingMenu.spec.md'),
+      recordPath(path.join(directory, 'NavHeadingMenu.spec.md')),
       componentRecord({id: 'component:NavHeadingMenu'}),
     );
 
@@ -1539,7 +1578,7 @@ describe('knowledge validation', () => {
 };\n`,
     );
     fs.writeFileSync(
-      path.join(directory, 'TableRow.spec.md'),
+      recordPath(path.join(directory, 'TableRow.spec.md')),
       componentRecord({id: 'component:TableRow'}),
     );
 
@@ -1556,7 +1595,7 @@ describe('knowledge validation', () => {
     );
     fs.writeFileSync(path.join(directory, 'Button.doc.mjs'), parentDoc);
     fs.writeFileSync(
-      path.join(directory, 'Wrong.spec.md'),
+      recordPath(path.join(directory, 'Wrong.spec.md')),
       componentRecord({id: 'component:Wrong'}),
     );
 
@@ -1568,13 +1607,12 @@ describe('knowledge validation', () => {
   it('discovers a nested module beside its flat parent and ignores non-record trees', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1591,13 +1629,13 @@ describe('knowledge validation', () => {
       'plugins/thing/snapshot.generated.spec.md',
     ];
     for (const relative of ignored) {
-      const ignoredPath = path.join(componentDirectory, relative);
+      const ignoredPath = recordPath(path.join(componentDirectory, relative));
       fs.mkdirSync(path.dirname(ignoredPath), {recursive: true});
       fs.writeFileSync(ignoredPath, moduleRecord());
     }
     const topLevelIgnored = path.join(
       root,
-      'packages/core/src/__tests__/TopLevel.spec.md',
+      'docs/specs/components/__tests__/TopLevel.spec.md',
     );
     fs.mkdirSync(path.dirname(topLevelIgnored), {recursive: true});
     fs.writeFileSync(topLevelIgnored, moduleRecord());
@@ -1607,24 +1645,81 @@ describe('knowledge validation', () => {
     );
     expect(discovered).toContain('docs/specs/components/Button/Button.spec.md');
     expect(discovered).toContain(
-      'packages/core/src/Button/plugins/thing/useButtonThing.spec.md',
+      'docs/specs/components/Button/plugins/thing/useButtonThing.spec.md',
     );
     for (const relative of ignored) {
-      expect(discovered).not.toContain(`packages/core/src/Button/${relative}`);
+      expect(discovered).not.toContain(
+        `docs/specs/components/Button/${relative}`,
+      );
     }
     expect(discovered).not.toContain(
-      'packages/core/src/__tests__/TopLevel.spec.md',
+      'docs/specs/components/__tests__/TopLevel.spec.md',
     );
     expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('rejects a component spec left beside its code and names where it belongs', async () => {
+    const root = fixtureRoot();
+    const directory = path.join(root, 'packages/core/src/Button');
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'Button.spec.md'), componentRecord());
+    fs.writeFileSync(
+      path.join(root, 'packages/charts/src/Chart.spec.md'),
+      componentRecord({id: 'component:Chart'}),
+    );
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).toContain(
+      'packages/core/src/Button/Button.spec.md: component records live under docs/specs/components/; move this record to docs/specs/components/Button/Button.spec.md.',
+    );
+    expect(problems).toContain(
+      'packages/charts/src/Chart.spec.md: component records live under docs/specs/components/; move this record to docs/specs/components/Chart/Chart.spec.md.',
+    );
+  });
+
+  it('rejects a Swift spec left beside its view and names its place beside the core record', async () => {
+    const root = fixtureRoot();
+    const view = path.join(
+      root,
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.spec.md',
+    );
+    fs.mkdirSync(path.dirname(view), {recursive: true});
+    fs.writeFileSync(view, '# Swift\n');
+    expect((await validateKnowledgeRoot(root)).join('\n')).toContain(
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.spec.md: Swift component records live beside the core record; move this record to docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md.',
+    );
+  });
+
+  it('accepts a platform record beside the core record and rejects other stray files', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    const folder = path.join(root, 'docs/specs/components/Button');
+    // Platform records are not checked yet (no platform_of in the schema).
+    fs.writeFileSync(path.join(folder, 'Button.swift.spec.md'), '# Swift\n');
+    fs.writeFileSync(path.join(folder, 'Button.klingon.spec.md'), '# ?\n');
+    fs.writeFileSync(
+      path.join(root, 'docs/specs/components/Loose.spec.md'),
+      '# ?\n',
+    );
+    const problems = await validateKnowledgeRoot(root);
+    expect(problems.join('\n')).not.toContain('Button.swift.spec.md');
+    expect(
+      problems.filter(problem => problem.includes('must be <ComponentRoot>')),
+    ).toHaveLength(2);
   });
 
   it('rejects a nested component record instead of treating it as a module', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const nestedPath = path.join(componentDirectory, 'notes/Extra.spec.md');
+    const nestedPath = recordPath(
+      path.join(componentDirectory, 'notes/Extra.spec.md'),
+    );
     fs.mkdirSync(path.dirname(nestedPath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord(),
     );
     fs.writeFileSync(nestedPath, componentRecord({id: 'component:Extra'}));
@@ -1639,11 +1734,11 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
-      path.join(componentDirectory, 'useButtonThing.spec.md'),
+      recordPath(path.join(componentDirectory, 'useButtonThing.spec.md')),
       moduleRecord(),
     );
 
@@ -1655,13 +1750,12 @@ describe('knowledge validation', () => {
   it('rejects missing parent links and orphan module records', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/orphan/useOrphan.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/orphan/useOrphan.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useMissing]'}),
     );
     fs.writeFileSync(
@@ -1683,18 +1777,17 @@ describe('knowledge validation', () => {
     const root = fixtureRoot();
     const buttonDirectory = path.join(root, 'packages/core/src/Button');
     const otherDirectory = path.join(root, 'packages/core/src/Other');
-    const modulePath = path.join(
-      otherDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(otherDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(buttonDirectory, {recursive: true});
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(buttonDirectory, 'Button.spec.md'),
+      recordPath(path.join(buttonDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Other/useButtonThing]'}),
     );
     fs.writeFileSync(
-      path.join(otherDirectory, 'Other.spec.md'),
+      recordPath(path.join(otherDirectory, 'Other.spec.md')),
       componentRecord({
         id: 'component:Other',
         modules: '[module:Other/useButtonThing]',
@@ -1728,9 +1821,10 @@ describe('knowledge validation', () => {
         'id: component:Button',
       ),
     );
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
     const modulePath = path.join(
       root,
-      'packages/core/src/Button/plugins/thing/useButtonThing.spec.md',
+      'docs/specs/components/Button/plugins/thing/useButtonThing.spec.md',
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1753,7 +1847,7 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[family:actions]'}),
     );
 
@@ -1767,15 +1861,17 @@ describe('knowledge validation', () => {
     const componentDirectory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(componentDirectory, {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({
         modules: '[module:Button/useButtonThing,module:Button/useButtonThing]',
       }),
     );
     for (const owner of ['first', 'second']) {
-      const modulePath = path.join(
-        componentDirectory,
-        `plugins/${owner}/useButtonThing.spec.md`,
+      const modulePath = recordPath(
+        path.join(
+          componentDirectory,
+          `plugins/${owner}/useButtonThing.spec.md`,
+        ),
       );
       fs.mkdirSync(path.dirname(modulePath), {recursive: true});
       fs.writeFileSync(modulePath, moduleRecord());
@@ -1791,13 +1887,12 @@ describe('knowledge validation', () => {
   it('requires module ids and filenames to encode the same public name', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/WrongName.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/WrongName.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(modulePath, moduleRecord());
@@ -1810,13 +1905,12 @@ describe('knowledge validation', () => {
   it('validates module anatomy only against the module consumer doc', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
@@ -1846,9 +1940,8 @@ describe('knowledge validation', () => {
   it('never validates a module map against parent aggregate anatomy', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');
-    const modulePath = path.join(
-      componentDirectory,
-      'plugins/thing/useButtonThing.spec.md',
+    const modulePath = recordPath(
+      path.join(componentDirectory, 'plugins/thing/useButtonThing.spec.md'),
     );
     fs.mkdirSync(path.dirname(modulePath), {recursive: true});
     const parentDoc = writeButtonDoc(componentDirectory).replace(
@@ -1860,7 +1953,7 @@ describe('knowledge validation', () => {
       parentDoc,
     );
     fs.writeFileSync(
-      path.join(componentDirectory, 'Button.spec.md'),
+      recordPath(path.join(componentDirectory, 'Button.spec.md')),
       componentRecord({modules: '[module:Button/useButtonThing]'}),
     );
     fs.writeFileSync(
@@ -2127,7 +2220,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord().replace(
         'authority: draft',
         'authority: draft\nauthority: "current"',
@@ -2149,7 +2242,7 @@ describe('knowledge validation', () => {
       [
         'module',
         'module-spec.md',
-        'packages/core/src/Button/hooks/useButtonThing.spec.md',
+        'docs/specs/components/Button/hooks/useButtonThing.spec.md',
       ],
       ['family', 'family-contract.md', 'docs/families/approval.md'],
       ['system-spec', 'system-spec.md', 'docs/specs/AST-900/spec.md'],
@@ -2222,7 +2315,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({authority: 'current'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2235,7 +2328,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         authority: 'current',
         approved_by: 'someone-else',
@@ -2252,7 +2345,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         authority: 'current',
         approved_by: 'cixzhang',
@@ -2267,7 +2360,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({authority: 'archived', archive_reason: 'superseded'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2280,7 +2373,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({template_version: '8'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2294,7 +2387,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({schema_version: '0'}),
     );
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
@@ -2308,7 +2401,7 @@ describe('knowledge validation', () => {
     const directory = path.join(root, 'packages/core/src/Button');
     fs.mkdirSync(directory);
     fs.writeFileSync(
-      path.join(directory, 'Button.spec.md'),
+      recordPath(path.join(directory, 'Button.spec.md')),
       componentRecord({
         schema_version: '0',
         authority: 'archived',
@@ -2364,7 +2457,7 @@ describe('knowledge validation', () => {
       const directory = path.join(root, `packages/core/src/${name}`);
       fs.mkdirSync(directory);
       fs.writeFileSync(
-        path.join(directory, `${name}.spec.md`),
+        recordPath(path.join(directory, `${name}.spec.md`)),
         componentRecord(),
       );
     }

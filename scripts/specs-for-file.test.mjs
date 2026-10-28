@@ -142,13 +142,17 @@ function popoverFixture() {
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.test.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogFooter.tsx');
-  writeRecord(root, 'docs/specs/components/Dialog/modules/DialogHeader.spec.md', {
-    kind: 'module',
-    id: 'module:Dialog/DialogHeader',
-    parent_component: 'component:Dialog',
-    references: [],
-  });
-  writeRecord(root, 'packages/core/src/Dialog/modules/DialogBody.spec.md', {
+  writeRecord(
+    root,
+    'docs/specs/components/Dialog/modules/DialogHeader.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Dialog/DialogHeader',
+      parent_component: 'component:Dialog',
+      references: [],
+    },
+  );
+  writeRecord(root, 'docs/specs/components/Dialog/modules/DialogBody.spec.md', {
     kind: 'module',
     id: 'module:Dialog/DialogBody',
     parent_component: 'component:Dialog',
@@ -224,18 +228,26 @@ function popoverFixture() {
   write(root, 'packages/core/src/Markdown/Markdown.tsx');
   write(root, 'packages/core/src/Markdown/plugins/headingLinks.ts');
   write(root, 'packages/core/src/Markdown/plugins/softBreaks.ts');
-  writeRecord(root, 'docs/specs/components/Markdown/modules/headingLinks.spec.md', {
-    kind: 'module',
-    id: 'module:Markdown/headingLinks',
-    parent_component: 'component:Markdown',
-    references: [],
-  });
-  writeRecord(root, 'docs/specs/components/Markdown/modules/softBreaks.spec.md', {
-    kind: 'module',
-    id: 'module:Markdown/softBreaks',
-    parent_component: 'component:Markdown',
-    references: [],
-  });
+  writeRecord(
+    root,
+    'docs/specs/components/Markdown/modules/headingLinks.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Markdown/headingLinks',
+      parent_component: 'component:Markdown',
+      references: [],
+    },
+  );
+  writeRecord(
+    root,
+    'docs/specs/components/Markdown/modules/softBreaks.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Markdown/softBreaks',
+      parent_component: 'component:Markdown',
+      references: [],
+    },
+  );
   write(root, 'packages/core/src/hooks/useMenuPress.ts');
   write(root, 'packages/core/src/hooks/useMenuPress.test.tsx');
   write(root, 'packages/core/src/hooks/useEntryAnimation.ts');
