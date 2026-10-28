@@ -787,11 +787,24 @@ export function ContextMenuView({
       endTouchOpen();
       setIsOpen(false);
       onOpenChange?.(false);
-      // Restore focus to the element that was focused before opening.
-      const toRestore = triggerFocusRef.current;
+      // Focus returns to the element the menu is attached to (spec:AST-107
+      // FR8): to what had focus inside it before the open, or to the element
+      // itself when focus was elsewhere (a tap on another control, then a
+      // hold or open() here). An element that takes no focus (ContextMenu's
+      // trigger wrapper has no tab stop) leaves it where it was.
+      const before = triggerFocusRef.current;
       triggerFocusRef.current = null;
-      if (toRestore && document.contains(toRestore)) {
-        toRestore.focus();
+      const element = triggerRef.current;
+      const isBeforeInElement =
+        before != null && element != null && element.contains(before);
+      if (!isBeforeInElement && element != null && element.isConnected) {
+        element.focus({preventScroll: true});
+        if (element.ownerDocument.activeElement === element) {
+          return;
+        }
+      }
+      if (before != null && before.isConnected) {
+        before.focus();
       }
     }, [endTouchOpen, onOpenChange]),
     onShow: useCallback(() => {

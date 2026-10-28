@@ -72,8 +72,7 @@ export const docs = {
     {
       name: 'close',
       type: '() => void',
-      description:
-        'Closes the menu; focus returns to what had it before the menu opened.',
+      description: 'Closes the menu; focus returns to the element.',
     },
     {
       name: 'destroy',
