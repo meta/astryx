@@ -208,6 +208,18 @@ describe('createContextMenu', () => {
     shadowHost.remove();
   });
 
+  it('a mouse press outside the menu closes it (spec:AST-107 FR8)', () => {
+    attach({items: [{label: 'Archive'}]});
+    rightClick(element);
+    expect(isOpen()).toBe(true);
+    act(() => {
+      document.body.dispatchEvent(
+        new MouseEvent('mousedown', {bubbles: true, cancelable: true}),
+      );
+    });
+    expect(isOpen()).toBe(false);
+  });
+
   it('choosing a row runs it and closes the menu', async () => {
     const onArchive = vi.fn();
     attach({items: [{label: 'Archive', onClick: onArchive}]});
@@ -279,6 +291,80 @@ describe('createContextMenu', () => {
     expect(document.body.childElementCount).toBe(before);
     const event = rightClick(element);
     expect(event.defaultPrevented).toBe(false);
+    expect(isOpen()).toBe(false);
+  });
+});
+
+describe('createContextMenu: a finger\u2019s press outside (spec:AST-107 FR8)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+        'Date',
+      ],
+    });
+    // The gesture host remembers the latest event time across cases.
+    vi.advanceTimersByTime(100_000);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A finger's press as a browser reports it: pointer, then touch. */
+  function fingerDown(target: Element, id: number) {
+    const pointer = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: id,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+      buttons: 1,
+    });
+    Object.defineProperty(pointer, 'timeStamp', {value: performance.now()});
+    target.dispatchEvent(pointer);
+    const touch = {identifier: id, target, clientX: 20, clientY: 20};
+    const start = new Event('touchstart', {bubbles: true, cancelable: true});
+    Object.defineProperties(start, {
+      touches: {value: [touch]},
+      targetTouches: {value: [touch]},
+      changedTouches: {value: [touch]},
+      timeStamp: {value: performance.now()},
+    });
+    target.dispatchEvent(start);
+  }
+
+  it("leaves the menu open through the opening press's own compatibility mousedown, and closes on a later press outside", () => {
+    attach({items: [{label: 'Archive'}]});
+    act(() => {
+      fingerDown(element, 1);
+    });
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(isOpen()).toBe(true);
+    // The compatibility mousedown the browser sends for the same press.
+    act(() => {
+      element.dispatchEvent(
+        new MouseEvent('mousedown', {bubbles: true, cancelable: true}),
+      );
+    });
+    expect(isOpen()).toBe(true);
+    // A new press outside is a new gesture.
+    act(() => {
+      fingerDown(document.body, 2);
+      document.body.dispatchEvent(
+        new MouseEvent('mousedown', {bubbles: true, cancelable: true}),
+      );
+    });
     expect(isOpen()).toBe(false);
   });
 });
