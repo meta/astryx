@@ -14,8 +14,12 @@
  *
  * Detects a single-finger long-press: fires `onLongPress` with the press
  * start point after `delayMs`. Cancels if the finger moves past
- * `moveCancelPx` (treated as a scroll/drag), lifts, or the touch is
- * cancelled. The pending timer is also cleared on unmount.
+ * `moveCancelPx` on either axis (treated as a scroll/drag), lifts, or the
+ * touch is cancelled. The pending timer is also cleared on unmount. The
+ * default duration and tolerance are the long-press recognizer's
+ * (motion/uikit/longPress.ts); the recognizer measures its tolerance as a
+ * distance, as UIKit does, and this hook on each axis, as ContextMenu's
+ * measured hold and the menu trigger's released behavior do.
  *
  * Two ways in, one detector. Spread the touch handlers onto an element, or —
  * when the caller already runs its own pointer-event machine, as
@@ -30,10 +34,15 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
 
-// Default long-press tuning.
-const DEFAULT_DELAY_MS = 500;
-const DEFAULT_MOVE_CANCEL_PX = 10;
+// The long-press numbers have one source, shared with the gesture
+// recognizers (motion/uikit/longPress.ts).
+const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
+const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
 
 export interface UseLongPressOptions {
   /** Fired with the touch start point once the press is held for `delayMs`. */
@@ -43,6 +52,14 @@ export interface UseLongPressOptions {
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
   /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
+  moveCancelPx?: number;
+}
+
+/**
+ * @internal A press's own movement tolerance, for a core caller that decides
+ * it as the press starts (useMenuPress's trigger). Not in the hooks entry.
+ */
+export interface LongPressTolerance {
   moveCancelPx?: number;
 }
 
@@ -66,9 +83,32 @@ export interface UseLongPressHandlers {
   cancel: () => void;
 }
 
+/**
+ * @internal The handlers with a per-press tolerance on `start`, for a core
+ * caller that decides it as the press starts (useMenuPress's trigger). Not in
+ * the hooks entry: the public `useLongPress` takes its tolerance from
+ * `moveCancelPx`.
+ */
+export interface LongPressDetectorHandlers extends Omit<
+  UseLongPressHandlers,
+  'start'
+> {
+  start: (
+    point: {x: number; y: number},
+    tolerance?: LongPressTolerance,
+  ) => void;
+}
+
 export function useLongPress(
   options: UseLongPressOptions,
 ): UseLongPressHandlers {
+  return useLongPressDetector(options);
+}
+
+/** @internal useLongPress with a per-press tolerance (LongPressDetectorHandlers). */
+export function useLongPressDetector(
+  options: UseLongPressOptions,
+): LongPressDetectorHandlers {
   const {
     onLongPress,
     disabled = false,
@@ -78,6 +118,8 @@ export function useLongPress(
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startRef = useRef<{x: number; y: number} | null>(null);
+  // The press in progress's tolerance, when its caller chose one at start.
+  const pressToleranceRef = useRef<LongPressTolerance | null>(null);
   // Keep the latest callback without re-creating handlers on every render.
   const onLongPressRef = useRef(onLongPress);
   onLongPressRef.current = onLongPress;
@@ -91,7 +133,7 @@ export function useLongPress(
   }, []);
 
   const start = useCallback(
-    (point: {x: number; y: number}) => {
+    (point: {x: number; y: number}, tolerance?: LongPressTolerance) => {
       if (disabled) {
         return;
       }
@@ -99,6 +141,7 @@ export function useLongPress(
       // also nulls startRef, so order matters.
       clear();
       startRef.current = {x: point.x, y: point.y};
+      pressToleranceRef.current = tolerance ?? null;
       timerRef.current = setTimeout(() => {
         const from = startRef.current;
         if (from == null) {
@@ -116,9 +159,11 @@ export function useLongPress(
       if (from == null) {
         return false;
       }
+      // This press's own tolerance when its caller chose one, on either axis.
+      const limit = pressToleranceRef.current?.moveCancelPx ?? moveCancelPx;
       if (
-        Math.abs(point.x - from.x) > moveCancelPx ||
-        Math.abs(point.y - from.y) > moveCancelPx
+        Math.abs(point.x - from.x) > limit ||
+        Math.abs(point.y - from.y) > limit
       ) {
         // Treat as a scroll/drag, not a long-press.
         clear();
