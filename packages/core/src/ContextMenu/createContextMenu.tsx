@@ -18,7 +18,7 @@
  *   `render` for React rows (contextMenuRows.tsx) and pass later options
  *   through updateContextMenu
  *
- * Under the touch model the element's hold runs on UIKit's timeline, with
+ * The element's hold is UIKit's long press; under the touch model it plays
  * ContextMenu's press feedback and, on a block element, the lift.
  *
  * The `render` slot publishes what the menu's rows read from inside the menu
@@ -48,8 +48,6 @@ import {
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {LayerContext, type LayerContextValue} from '../Layer/LayerContext';
 import {LayerDepthContext} from '../Layer/LayerDepthContext';
-import {DEFAULT_COMPACT_DEFINITION} from '../theme/themeAdaptations';
-import {readPresentation} from '../utils/presentation';
 import {dataAttr} from '../naming';
 import {createPortal, flushSync} from 'react-dom';
 import {
@@ -58,7 +56,6 @@ import {
   type ContextMenuRequestOptions,
 } from './contextMenuRequests';
 import {
-  CONTEXT_MENU_TOUCH_HOLD,
   ContextMenuView,
   type ContextMenuViewExtras,
   type ContextMenuAttachedHandle,
@@ -506,18 +503,10 @@ export function createContextMenu(
     render();
   };
 
-  // The element's context request, from the start, with UIKit's timeline
-  // where the touch model applies; the menu refines its hold once it renders
-  // (the theme's compact definition, and the haptic at the commit).
-  let requestConfig: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'> = {
-    hold: readPresentation(options.presentation, {
-      whenOmitted: 'touch',
-      view: doc.defaultView,
-      compact: DEFAULT_COMPACT_DEFINITION,
-    }).touchModes
-      ? CONTEXT_MENU_TOUCH_HOLD
-      : undefined,
-  };
+  // The element's context request, from the start: UIKit's long press,
+  // which requests as it begins; the menu follows its progress once it
+  // renders (the haptic at the commit).
+  let requestConfig: Pick<ContextMenuRequestOptions, 'onHold'> = {};
   const requests = attachContextMenuRequests(
     element,
     {isDisabled: options.isDisabled, ...requestConfig},
@@ -538,7 +527,7 @@ export function createContextMenu(
     },
   );
   function configureRequests(
-    config: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'>,
+    config: Pick<ContextMenuRequestOptions, 'onHold'>,
   ) {
     requestConfig = config;
     requests.update({isDisabled: options.isDisabled, ...requestConfig});

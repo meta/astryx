@@ -5,10 +5,10 @@
  * @input The motion registry (registerContextMenuTable only)
  * @output Exports `contextMenu`: UIContextMenuInteraction's touch timeline
  *   (when the press feedback starts, when the long press commits, when the
- *   menu displays), how far the finger may drift, the press feedback's growth,
- *   spring and display latency, and the commit haptic's stand-in where only a
- *   vibration motor exists; and `registerContextMenuTable`, which registers
- *   its visual values with the motion registry (none is a motion role)
+ *   menu displays), the press feedback's growth, spring and display latency,
+ *   and the commit haptic's stand-in where only a vibration motor exists;
+ *   and `registerContextMenuTable`, which registers its visual values with
+ *   the motion registry (none is a motion role)
  * @position The context-menu domain of the UIKit constants table
  *   (motion/uikit), imported by ContextMenu's own modules and not re-exported
  *   from the table's barrel, so only a page that animates a context menu
@@ -22,6 +22,9 @@
  * tap. The menu displays at 735 ms if the finger is still down, or as soon as
  * it lifts after the commit. A finger that lifts before the commit, or drifts
  * too far before the menu displays, gets no menu, and the copy springs back.
+ * ContextMenu's own hold is UIKit's plain long press (its context request's,
+ * spec:AST-094 FR43); its press feedback plays this table's press curve until
+ * the menu shows.
  *
  * UIKit runs this on display-link ticks, so a 60 Hz screen shows each moment
  * on the first frame after it (the feedback at 151 ms, the commit at 417 ms).
@@ -36,9 +39,8 @@
  * `@measure` task that will confirm or replace them. uikit.test.ts enforces
  * both.
  *
- * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md,
- * /packages/core/src/ContextMenu/contextMenuPressCurve.ts and
- * /packages/core/src/ContextMenu/ContextMenu.tsx (the touch hold)
+ * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md and
+ * /packages/core/src/ContextMenu/contextMenuPressCurve.ts
  */
 
 import {registerMotionTable} from '../roles';
@@ -59,8 +61,8 @@ export const contextMenu = {
     feedbackOnsetMs: 150,
     /**
      * When the long press commits: the click haptic plays and the touch
-     * belongs to the menu from then on (it is no longer a tap); the menu
-     * itself waits for `menuDisplayMs` or the lift.
+     * belongs to the menu from then on (it is no longer a tap); UIKit's
+     * menu itself waits for `menuDisplayMs` or the lift.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, recognizer state log, Oct 23 2026: the
      *   clickPresentationExclusion and clickPresentationFailure recognizers
@@ -70,20 +72,6 @@ export const contextMenu = {
      * @measure M-CM6
      */
     commitMs: 400,
-    /**
-     * How far the finger may drift on either axis, from where it landed,
-     * until the menu displays; past it the press ends with no menu. Not the
-     * long press's `UIKIT_GESTURES.longPress.allowableMovement` (a distance):
-     * a diagonal drift of 15.6 pt still opens the menu.
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, drifts at 100, 250 and 500 ms, Oct 23 2026: (7, 7),
-     *   (8, 8), (10, 0) and (11, 11) pt open the menu; (12, 0) and (0, 12)
-     *   cancel it, before and after the onset alike, and a 30 pt drag after
-     *   the commit cancels it too
-     * @source GUESS — the value, midway in the measured bracket (11, 12)
-     * @measure M-CM3
-     */
-    allowableMovement: 11.5,
     /**
      * When the menu displays for a finger still down (the delegate's
      * willDisplay, with the backdrop and the menu); until then only the

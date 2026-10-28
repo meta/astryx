@@ -785,22 +785,11 @@ describe.each([
       drifting.up();
     });
 
-    it('opens for a finger still down at 735 ms (iOS 26.2), not a millisecond before', () => {
-      const trigger = renderMenu();
-      const press = finger(trigger);
-      press.down();
-      advance(contextMenu.press.menuDisplayMs - 1);
-      expect(menuShows()).toBe(0);
-      advance(1);
-      expect(menuShows()).toBe(1);
-      press.up();
-    });
-
     it('lights no row when a touch opens it: focus goes to the menu itself, not its first item', () => {
       const trigger = renderMenu();
       const press = finger(trigger);
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       // The focus moves on the next frame.
       advance(20);
       expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
@@ -810,35 +799,11 @@ describe.each([
       press.up();
     });
 
-    it('opens at the lift for a finger lifted after the commit (400 ms), as UIKit does', () => {
-      const trigger = renderMenu();
-      const press = finger(trigger);
-      press.down();
-      advance(529);
-      expect(menuShows()).toBe(0);
-      act(() => {
-        press.up();
-      });
-      expect(menuShows()).toBe(1);
-    });
-
-    it('opens nothing for a drag past the tolerance after the commit, before the menu', () => {
-      const trigger = renderMenu();
-      const press = finger(trigger, 1, 20, 20);
-      press.down();
-      advance(500);
-      press.moveTo(20, 50);
-      advance(500);
-      press.up();
-      advance(100);
-      expect(menuShows()).toBe(0);
-    });
-
     it('keeps the menu open as the finger lifts: the lift sends no click or compatibility mouse events', () => {
       const trigger = renderMenu();
       const press = finger(trigger);
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       const lift = press.up();
       // A cancelled touchend is the one signal that stops the browser's click
       // and its compatibility mousedown, which would read as a press outside.
@@ -847,13 +812,13 @@ describe.each([
       expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
     });
 
-    it('still opens at 735 ms beside a consumer onTouchStart, which runs (#7167)', () => {
+    it('still opens at the long press beside a consumer onTouchStart, which runs (#7167)', () => {
       const onTouchStart = vi.fn();
       const trigger = renderMenu({onTouchStart});
       const press = finger(trigger);
       press.down();
       expect(onTouchStart).toHaveBeenCalledTimes(1);
-      advance(contextMenu.press.menuDisplayMs - 1);
+      advance(LONG_PRESS_DURATION_MS - 1);
       expect(menuShows()).toBe(0);
       advance(1);
       expect(menuShows()).toBe(1);
@@ -890,7 +855,7 @@ describe.each([
       );
       const press = finger(screen.getByTestId('ctx'));
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       expect(menuShows()).toBe(1);
       press.up();
     });
@@ -917,13 +882,13 @@ describe.each([
       press.up();
     });
 
-    it('still opens after a drift inside the tolerance', () => {
+    it('still opens after a drift inside UIKit\u2019s 10 pt, measured as a distance', () => {
       const trigger = renderMenu();
       const press = finger(trigger, 1, 20, 20);
       press.down();
       advance(50);
-      press.moveTo(31, 31); // 15.6 px away, 11 px on each axis
-      advance(contextMenu.press.menuDisplayMs);
+      press.moveTo(27, 27); // 9.9 px away
+      advance(LONG_PRESS_DURATION_MS);
       expect(menuShows()).toBe(1);
       press.up();
     });
@@ -955,12 +920,12 @@ describe.each([
       trigger.dispatchEvent(native);
       expect(native.defaultPrevented).toBe(true);
       expect(menuShows()).toBe(0);
-      advance(contextMenu.press.menuDisplayMs - 380);
+      advance(LONG_PRESS_DURATION_MS - 380);
       expect(menuShows()).toBe(1);
       press.up();
     });
 
-    it('plays the click haptic at the commit where the platform vibrates, and none for an early lift', () => {
+    it('plays the click haptic at the long press where the platform vibrates, and none for an early lift', () => {
       const vibrate = vi.fn(() => true);
       Object.defineProperty(navigator, 'vibrate', {
         value: vibrate,
@@ -977,12 +942,12 @@ describe.each([
 
         const held = finger(trigger);
         held.down();
-        advance(contextMenu.press.commitMs - 1);
+        advance(LONG_PRESS_DURATION_MS - 1);
         expect(vibrate).not.toHaveBeenCalled();
         advance(1);
-        // At the commit, before the menu shows.
+        // At the commit, which is the long press: the menu shows with it.
         expect(vibrate).toHaveBeenCalledTimes(1);
-        expect(menuShows()).toBe(0);
+        expect(menuShows()).toBe(1);
         expect(vibrate).toHaveBeenCalledWith([
           ...HAPTIC_VIBRATION_PATTERNS[contextMenu.commitHaptic].value,
         ]);
@@ -997,8 +962,7 @@ describe.each([
       const trigger = renderMenu();
       const press = finger(trigger);
       press.down();
-      advance(contextMenu.press.commitMs);
-      // Lifted after the commit: the menu opens at the lift.
+      advance(LONG_PRESS_DURATION_MS);
       act(() => {
         press.up();
       });
@@ -1094,7 +1058,7 @@ describe.each([
       );
       const press = finger(screen.getByTestId('ctx'));
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       press.up();
       expect(onOpenChange).toHaveBeenLastCalledWith(true);
       // The trigger is in the top layer itself, and an empty placeholder
@@ -1141,7 +1105,7 @@ describe.each([
       );
       const press = finger(screen.getByTestId('ctx'));
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       press.up();
       expect(
         document.querySelector('[data-astryx-context-menu-lift]'),
@@ -1172,7 +1136,7 @@ describe.each([
       ).toBeNull();
       const press = finger(screen.getByTestId('ctx'));
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       press.up();
       const layer = document.querySelector<HTMLElement>(
         '[data-astryx-context-menu-lift]',
@@ -1193,7 +1157,7 @@ describe.each([
       const trigger = renderMenu({triggerAs: 'span'});
       const press = finger(trigger);
       press.down();
-      advance(contextMenu.press.menuDisplayMs);
+      advance(LONG_PRESS_DURATION_MS);
       expect(menuShows()).toBe(1);
       expect(
         document.querySelector('[data-astryx-context-menu-lift]'),
@@ -1314,7 +1278,7 @@ describe('ContextMenu: the primary pointer alone picks a finger’s rules (spec:
     vi.unstubAllGlobals();
   });
 
-  it('opens for the same held finger at 735 ms where the primary pointer is coarse, and at 500 ms where it is fine', () => {
+  it('opens for the same held finger at the long press, 500 ms, whether the primary pointer is coarse or fine', () => {
     // The menu's popover only (not the lift layer or its hold's shield).
     const shows = menuShows;
     const renderTrigger = () => {
@@ -1325,14 +1289,14 @@ describe('ContextMenu: the primary pointer alone picks a finger’s rules (spec:
       );
       return {trigger: screen.getByTestId('ctx'), unmount: view.unmount};
     };
-    // Coarse: the touch model's timeline, no menu at 500 ms.
+    // Coarse: the touch model, whose hold is the same long press.
     stubPointer(true);
     const coarse = renderTrigger();
     let press = finger(coarse.trigger);
     press.down();
-    advance(600);
+    advance(LONG_PRESS_DURATION_MS - 1);
     expect(shows()).toBe(0);
-    advance(contextMenu.press.menuDisplayMs - 600);
+    advance(1);
     expect(shows()).toBe(1);
     press.up();
     coarse.unmount();

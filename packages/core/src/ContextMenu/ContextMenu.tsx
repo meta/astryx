@@ -32,18 +32,17 @@
  *
  * Under a finger (a coarse primary pointer: one touch model on every touch
  * device, iOS and Android alike) the trigger behaves like UIKit's
- * UIContextMenuInteraction: the request's hold runs on UIKit's timeline
- * (`contextMenu.press`: the commit, then the menu at its moment or at a lift
- * after the commit, a drift tolerance on each axis), with the press feedback,
+ * UIContextMenuInteraction: the request's hold is UIKit's long press, which
+ * opens the menu as it begins (spec:AST-094 FR43), with the press feedback,
  * the page stays put while that menu is up, and the press sends no click. When the
  * menu shows, a block trigger lifts itself as UIKit's preview does
  * (ContextMenuLift.tsx, on the lift module) and the menu sits beside it
  * (`contextMenu.lift`); an inline trigger keeps the menu at the finger. The
  * touch layer, the lift included, is part of ContextMenu, so it runs from the
  * first render under the touch model (a phone pays no extra request for it).
- * A fine primary pointer keeps the right-click menu and the request's own long
- * press for a finger (500 ms), as `presentation="popover"` does; UIKit's
- * timeline applies only under the touch model.
+ * A fine primary pointer keeps the right-click menu and the same long press
+ * for a finger, with no press feedback or lift, as `presentation="popover"`
+ * does.
  *
  * Supports two content modes with a single keyboard/focus path:
  * - **Data-driven**: pass `items` array (converted to components internally)
@@ -81,7 +80,7 @@ import React, {
   Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
-import {createPortal, flushSync} from 'react-dom';
+import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Heading} from '../Heading';
@@ -109,7 +108,6 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
 import type {ContextRequestOptions} from '../gestures/contextRequest';
-import {contextMenu} from '../motion/uikit/contextMenu';
 import {PRESSABLE_ATTRIBUTE} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -163,19 +161,6 @@ import type {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
-
-/**
- * @internal UIContextMenuInteraction's hold (contextMenu.press, measured on
- * iOS 26.2): the commit at 400 ms, the menu at 735 ms or at a lift after the
- * commit, and a drift tolerance on each axis.
- */
-export const CONTEXT_MENU_TOUCH_HOLD = {
-  commitMs: contextMenu.press.commitMs,
-  requestMs: contextMenu.press.menuDisplayMs,
-  requestOnLift: true,
-  allowableMovement: contextMenu.press.allowableMovement,
-  isPerAxis: true,
-};
 
 const LazyMenuBottomSheet = lazy(async () =>
   import('../DropdownMenu/MenuBottomSheet').then(module => ({
@@ -646,12 +631,12 @@ export interface ContextMenuAttachment {
   readonly element: HTMLElement;
   readonly handleRef: React.Ref<ContextMenuAttachedHandle | null>;
   /**
-   * Gives the element's context request (which createContextMenu attaches)
-   * the menu's hold: UIKit's timeline under the touch model, and the haptic
-   * at its commit.
+   * Lets the menu follow the element's context request's hold (which
+   * createContextMenu attaches): the haptic at its commit, under the touch
+   * model.
    */
   readonly configureRequests: (
-    config: Pick<ContextMenuRequestOptions, 'hold' | 'onHold'>,
+    config: Pick<ContextMenuRequestOptions, 'onHold'>,
   ) => void;
 }
 
@@ -670,7 +655,7 @@ export interface ContextMenuViewProps extends ContextMenuViewExtras {
  * @internal ContextMenu's menu, attached to an element: the menu of
  * createContextMenu (spec:AST-107 FR8), which ContextMenu is built on. It
  * attaches the element's context request, runs the touch model on it (press
- * feedback, UIKit's timeline, the lift), and opens at the cursor anchor
+ * feedback, the haptic, the lift), and opens at the cursor anchor
  * inside the element (ContextMenu's) or at a client point (a plain element).
  */
 export function ContextMenuView({
@@ -1325,14 +1310,13 @@ export function ContextMenuView({
       touchHandleRef.current?.commit();
     }
   };
-  // The element's request runs the menu's hold: UIKit's timeline under the
-  // touch model, today's long press otherwise.
+  // The element's request is UIKit's long press, which requests as it begins
+  // (spec:AST-094 FR43); under the touch model its commit plays the haptic.
   useEffect(() => {
     attachment.configureRequests({
-      hold: touchModes ? CONTEXT_MENU_TOUCH_HOLD : undefined,
       onHold: phase => onHoldRef.current(phase),
     });
-  }, [attachment, touchModes]);
+  }, [attachment]);
   // Under the touch model the element is a pressable surface of core's one
   // press machine (utils/pressFeedback.ts): the touch layer installs the
   // machine, and its press feedback follows the pressed state.

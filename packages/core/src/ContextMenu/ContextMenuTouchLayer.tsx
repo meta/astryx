@@ -68,11 +68,10 @@ export interface ContextMenuTouchLayerProps {
 
 /**
  * UIContextMenuInteraction's press feedback and lift. The trigger's context
- * request runs the hold on UIKit's timeline (contextMenu.press) and claims the
- * finger at the commit (the page stops scrolling under it, and its lift sends
- * no click and no compatibility mouse events); ContextMenu calls `commit()`
- * there, for the haptic, and `hold()` as the menu opens where the finger
- * landed. The press feedback grows the trigger while core's press machine
+ * request is UIKit's long press, and claims the finger as it begins, the
+ * commit (the page stops scrolling under it, and its lift sends no click and
+ * no compatibility mouse events); ContextMenu calls `commit()` there, for the
+ * haptic, and `hold()` as the menu opens where the finger landed. The press feedback grows the trigger while core's press machine
  * believes the press, springs back when it ends with no menu, and holds while
  * the menu it opened is up.
  */

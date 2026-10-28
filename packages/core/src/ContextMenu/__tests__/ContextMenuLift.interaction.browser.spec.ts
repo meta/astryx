@@ -43,9 +43,13 @@ import {
 import {solveSpring, toSpring} from '../../motion/spring';
 import {springs} from '../../motion/uikit';
 import {contextMenu} from '../../motion/uikit/contextMenu';
+import {LONG_PRESS_DURATION_MS} from '../../motion/uikit/longPress';
+import {
+  PRESS_FEEDBACK_START_MS,
+  pressFeedbackCurve,
+} from '../contextMenuPressCurve';
 
 const storybook = withStorybook(test);
-const {menuDisplayMs} = contextMenu.press;
 const {menuGap} = contextMenu.lift;
 // The layer runtime's viewport gutter in these pages (spec:AST-059): the
 // spacing-4 step, with no safe area and no app-declared inset.
@@ -247,7 +251,7 @@ async function untilGrown(page: Page) {
 }
 
 async function liftAndSettle(page: Page, {driver, center}: LiftStory) {
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 100}));
+  await driver.play(tap(center, {holdMs: LONG_PRESS_DURATION_MS + 100}));
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   // The lift settles within about half a second (Linux WebKit starts a
   // page's first animations late, so wait for the shadow to be in, too).
@@ -486,7 +490,7 @@ test('the card itself lifts into the top layer while its spot in the page holds,
       })(),
     };
   });
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 100}));
+  await driver.play(tap(center, {holdMs: LONG_PRESS_DURATION_MS + 100}));
   await expect(menu).toBeVisible();
   const lifted = await trigger.evaluate(el => {
     const placeholder = document.querySelector(
@@ -546,7 +550,9 @@ test('the card grows on from the press, and the backdrop fades in, on springs.co
   page,
 }, testInfo) => {
   const {driver, center} = await openLiftStory(page);
-  const playing = driver.play(tap(center, {holdMs: menuDisplayMs + 600}));
+  const playing = driver.play(
+    tap(center, {holdMs: LONG_PRESS_DURATION_MS + 600}),
+  );
   const lifted = page.locator('[data-testid="touch-context-menu"][popover]');
   await expect(lifted).toBeAttached({timeout: 5_000});
   await holdAnimations(page);
@@ -597,9 +603,14 @@ test('the card grows on from the press, and the backdrop fades in, on springs.co
     },
     testInfo,
   );
-  // The press left the card at about 1.06 (UIKit: 1.0618 at 733 ms).
-  expect(from).toBeGreaterThan(1.04);
-  expect(from).toBeLessThan(1.07);
+  // The press left the card where its curve is at the long press, the menu's
+  // moment.
+  expect(from).toBeCloseTo(
+    pressFeedbackCurve().at(
+      (LONG_PRESS_DURATION_MS - PRESS_FEEDBACK_START_MS) / 1000,
+    ),
+    2,
+  );
   expect(Math.max(...errors.map(e => e.widthErrorPx))).toBeLessThan(0.3);
   expect(Math.max(...errors.map(e => e.backdropError))).toBeLessThan(0.01);
   // It overshoots, as UIKit's does (226.39 pt at +279 ms).
@@ -610,7 +621,9 @@ test('the menu grows out of the finger on springs.contextMenuMorph, translate, s
   page,
 }) => {
   const {driver, center} = await openLiftStory(page);
-  const playing = driver.play(tap(center, {holdMs: menuDisplayMs + 600}));
+  const playing = driver.play(
+    tap(center, {holdMs: LONG_PRESS_DURATION_MS + 600}),
+  );
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   // The menu's own animations, timed from the menu's start.
   await holdAnimations(page, page.locator('[popover]:has([role="menu"])'));
@@ -787,7 +800,9 @@ test('a close while the menu is still growing shrinks it back from where it stan
 }) => {
   const story = await openLiftStory(page);
   // The finger lifts just after the menu shows (it stays open).
-  await story.driver.play(tap(story.center, {holdMs: menuDisplayMs + 40}));
+  await story.driver.play(
+    tap(story.center, {holdMs: LONG_PRESS_DURATION_MS + 40}),
+  );
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   // In one task: the menu's drawn width as the close comes, the close
   // (Escape on the menu), and the width its exit copy starts from.
@@ -870,7 +885,7 @@ test('a press during the close lands on the fading dim and, held past the closeâ
   const during = await heldState();
   // A new finger held on the card while it is still on its way back, and on
   // well past the close's end: the layer stays up (bare) under it.
-  const holdMs = menuDisplayMs + 200;
+  const holdMs = LONG_PRESS_DURATION_MS + 200;
   const playing = story.driver.play(tap(story.center, {holdMs}));
   await page.waitForTimeout(holdMs - 150);
   const heldPastExit = await readLift(page);
@@ -986,7 +1001,9 @@ test('a tap on the tint while the lift is still growing is swallowed: the menu f
       {capture: true},
     );
   });
-  await story.driver.play(tap(story.center, {holdMs: menuDisplayMs + 100}));
+  await story.driver.play(
+    tap(story.center, {holdMs: LONG_PRESS_DURATION_MS + 100}),
+  );
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
   // At once, while the card grows and the menu fades in: a tap on the tint.
   await story.driver.play(tap({x: 12, y: 12}));
@@ -1058,11 +1075,16 @@ test('the lift keeps moving while the main thread is blocked: the card grows on 
   );
   const {driver, center} = await openLiftStory(page);
   await markSelector(page, '[data-testid="touch-context-menu"]');
-  // Blocked from 20 ms after the menu's moment for 1 s (spec:AST-094's FR5
-  // row), past the card's whole growth; the finger lifts after the block.
-  const busyWindow = await blockAfterTouch(page, menuDisplayMs + 20, 1000);
+  // Blocked from 20 ms after the menu's moment (the long press) for 1 s
+  // (spec:AST-094's FR5 row), past the card's whole growth; the finger lifts
+  // after the block.
+  const busyWindow = await blockAfterTouch(
+    page,
+    LONG_PRESS_DURATION_MS + 20,
+    1000,
+  );
   const cast = await startScreencast(page);
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 1300}));
+  await driver.play(tap(center, {holdMs: LONG_PRESS_DURATION_MS + 1300}));
   const castFrames = await cast.stop();
   const block = await busyWindow();
   const tracked = await trackMarker(page, castFrames);
@@ -1204,10 +1226,22 @@ test('under Reduce Motion the lift cross-fades in place, as UIKitâ€™s reduced pa
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const {driver, center} = await openLiftStory(page);
-  const playing = driver.play(tap(center, {holdMs: menuDisplayMs + 600}));
-  const lifted = page.locator('[data-testid="touch-context-menu"][popover]');
-  await expect(lifted).toBeAttached({timeout: 5_000});
-  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  const playing = driver.play(
+    tap(center, {holdMs: LONG_PRESS_DURATION_MS + 600}),
+  );
+  // Caught within a frame of the lift and its menu: the fade lasts 200 ms,
+  // less than a locator's poll can take.
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="touch-context-menu"][popover]') !=
+        null &&
+      document
+        .querySelector('[role="menu"]')
+        ?.closest('[popover]')
+        ?.matches(':popover-open') === true,
+    undefined,
+    {polling: 'raf', timeout: 5_000},
+  );
   // The lift's and the menu's animations, timed from the lift's start (the
   // menu starts in the commit after it).
   await holdAnimations(page);
@@ -1287,7 +1321,7 @@ test('under Reduce Motion closing fades the card out where it is, with no return
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const {driver, center} = await openLiftStory(page);
-  await driver.play(tap(center, {holdMs: menuDisplayMs + 600}));
+  await driver.play(tap(center, {holdMs: LONG_PRESS_DURATION_MS + 600}));
   const menu = page.getByRole('menu', {name: 'Photo actions'});
   await expect(menu).toBeVisible();
   await page.waitForTimeout(700);
@@ -1354,7 +1388,9 @@ test(
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
     const {driver, center} = await openLiftStory(page);
-    const playing = driver.play(tap(center, {holdMs: menuDisplayMs + 900}));
+    const playing = driver.play(
+      tap(center, {holdMs: LONG_PRESS_DURATION_MS + 900}),
+    );
     await expect(
       page.locator('[data-testid="touch-context-menu"][popover]'),
     ).toBeAttached({timeout: 5_000});

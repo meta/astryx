@@ -5,7 +5,7 @@
 /**
  * @file contextMenuRequests.ts
  * @input An element, whether its menu is disabled, where to forward each
- *   request, and the hold's timeline, drift tolerance and stages
+ *   request, and who follows the hold's progress
  * @output attachContextMenuRequests: the headless context menu's request core
  *   (spec:AST-107 FR8). It attaches the element's context request
  *   (gestures/contextRequest.ts) and forwards each request, and `open(at)`
@@ -26,9 +26,7 @@ export type ContextMenuForwarded = ContextMenuAttachedRequest | 'close';
 export interface ContextMenuRequestOptions {
   /** While true, the element makes no request and keeps the browser's menu. */
   isDisabled?: boolean;
-  /** The hold's timeline and drift tolerance (the context request's `hold`). */
-  hold?: ContextRequestOptions['hold'];
-  /** The hold's stages (the context request's `onHold`). */
+  /** The hold's progress (the context request's `onHold`). */
   onHold?: ContextRequestOptions['onHold'];
 }
 
@@ -37,7 +35,7 @@ export interface ContextMenuRequests {
   open(at?: {readonly x: number; readonly y: number}): void;
   /** Forwards a close. */
   close(): void;
-  /** Takes new options; enabling, disabling or a new hold attaches again. */
+  /** Takes new options; enabling or disabling attaches again. */
   update(options: ContextMenuRequestOptions): void;
   /** Detaches the request. */
   destroy(): void;
@@ -79,7 +77,6 @@ export function attachContextMenuRequests(
         );
       },
       isEnabled: () => !isDestroyed && options.isDisabled !== true,
-      hold: options.hold,
       onHold: phase => options.onHold?.(phase),
     });
   };
@@ -98,9 +95,6 @@ export function attachContextMenuRequests(
     },
     update(next) {
       const wasDisabled = options.isDisabled === true;
-      const holdChanged =
-        JSON.stringify(options.hold ?? null) !==
-        JSON.stringify(next.hold ?? null);
       options = next;
       if (isDestroyed) {
         return;
@@ -109,7 +103,7 @@ export function attachContextMenuRequests(
       if (isDisabled && !wasDisabled) {
         forward('close');
       }
-      if (wasDisabled !== isDisabled || holdChanged) {
+      if (wasDisabled !== isDisabled) {
         attach();
       }
     },

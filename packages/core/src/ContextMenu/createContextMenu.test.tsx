@@ -16,7 +16,6 @@
 import {act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {contextMenu} from '../motion/uikit/contextMenu';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {dataAttr, stableClassName} from '../naming';
 import {
@@ -443,22 +442,6 @@ describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec
     }
   });
 
-  it('opens for a held finger at UIKit\u2019s moment where the primary pointer is coarse, as ContextMenu does, not at 500 ms', () => {
-    stubPointer(true);
-    attach({items: [{label: 'Archive'}]});
-    act(() => {
-      fingerDown(element);
-    });
-    act(() => {
-      vi.advanceTimersByTime(600);
-    });
-    expect(isOpen()).toBe(false);
-    act(() => {
-      vi.advanceTimersByTime(contextMenu.press.menuDisplayMs - 600);
-    });
-    expect(isOpen()).toBe(true);
-  });
-
   it('lifts a block element that a held finger opened its menu on, where the primary pointer is coarse, as ContextMenu does (spec:AST-094 FR33)', () => {
     stubPointer(true);
     // jsdom has no layout: the row is a block with a box.
@@ -470,7 +453,7 @@ describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec
       fingerDown(element);
     });
     act(() => {
-      vi.advanceTimersByTime(contextMenu.press.menuDisplayMs);
+      vi.advanceTimersByTime(LONG_PRESS_DURATION_MS);
     });
     expect(isOpen()).toBe(true);
     expect(
@@ -491,7 +474,7 @@ describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec
         fingerDown(inline);
       });
       act(() => {
-        vi.advanceTimersByTime(contextMenu.press.menuDisplayMs);
+        vi.advanceTimersByTime(LONG_PRESS_DURATION_MS);
       });
       expect(isOpen()).toBe(true);
       expect(

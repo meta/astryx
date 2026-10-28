@@ -611,7 +611,7 @@ export const TouchLongPress: Story = {
     docs: {
       description: {
         story:
-          'On a touch screen (iOS or Android), hold a finger on the card. As on iOS, it starts to grow after 150 ms, a haptic plays at 400 ms where the device can play one, and the menu opens at 735 ms, or as soon as the finger lifts after 400 ms. A finger that lifts before 400 ms, or drifts more than 11.5 px on either axis before the menu opens, gets no menu, and the card springs back. While the menu is up the page stays still, and the card returns to its size when the menu closes.',
+          'On a touch screen (iOS or Android), hold a finger on the card. As on iOS, it starts to grow after 150 ms; at 500 ms, UIKit’s long press, a haptic plays where the device can play one and the menu opens. A finger that lifts before 500 ms, or drifts more than 10 px before it, gets no menu, and the card springs back. While the menu is up the page stays still, and the card returns to its size when the menu closes.',
       },
     },
   },
@@ -642,7 +642,7 @@ export const TouchLongPressPopover: Story = {
     docs: {
       description: {
         story:
-          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth and no iOS timeline. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
+          'With `presentation="popover"`, ContextMenu keeps today’s menu on every device: a finger held for 500 ms opens it at the finger, with no growth. A finger on a device whose primary pointer is fine (a mouse or a trackpad) gets the same long press.',
       },
     },
   },
