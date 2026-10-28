@@ -14,7 +14,6 @@
 import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
-  durationToMs,
   hasReleaseFade,
   readsPressStrength,
   declaresPressPaint,
@@ -29,6 +28,7 @@ import {
   PRESSABLE_ATTRIBUTE,
   PRESSED_ATTRIBUTE,
   installPressFeedback,
+  paintPress,
 } from './pressFeedback';
 import {
   PRESS_FADE_MS,
@@ -563,6 +563,17 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     rows[3].appendChild(disabled);
     press(disabled, 'pointerdown', 10, 300, 'mouse');
     expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+
+  it('leaves a row another painter holds to its owner: a mouse press there neither repaints nor clears it, even when the next press ends it early', () => {
+    expect(paintPress(rows[1], 'held')).toBe(true);
+    press(rows[1], 'pointerdown', 10, 100, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('held');
+    press(rows[1], 'pointerup', 10, 100, 'mouse');
+    // The next press ends the first one's release at once.
+    press(rows[2], 'pointerdown', 10, 200, 'mouse');
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('held');
+    expect(rows[2].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
   it('drops the paint at once when the pointer is cancelled or a drag starts', () => {
