@@ -12,45 +12,38 @@
  *   a `render` that portals `menuContent` into the menu's container, carries
  *   the caller's Core providers (theme, layer, link, i18n) into the menu, and
  *   passes later options through updateContextMenu. `menuContent` stays
- *   rendered, in a root the hook owns, into a host the container adopts
- *   while the menu is open, so its first enabled row is there when focus
- *   starts; its rows read the menu's own row context, open state and layer
+ *   rendered, in a root the hook owns, into a host the menu's container
+ *   adopts (contextMenuRows.tsx), so its first enabled row is there when
+ *   focus starts; its rows read the menu's own row context, open state,
+ *   layer and layer depth
  */
 
 import {
-  use,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
-  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from 'react';
 import {createPortal} from 'react-dom';
 import {createRoot} from 'react-dom/client';
-import {
-  DropdownMenuContext,
-  DropdownMenuRootOpenContext,
-} from '../DropdownMenu/DropdownMenuContext';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
-import {InternationalizationContext} from '../i18n/InternationalizationContext';
-import {LayerContext} from '../Layer/LayerContext';
-import {LayerDepthContext} from '../Layer/LayerDepthContext';
-import {LinkContext} from '../Link/LinkContext';
-import {ThemeContext} from '../theme/useTheme';
 import type {ContextMenuOption} from './ContextMenu';
+import {
+  createMenuRowsSlot,
+  MenuRows,
+  useCoreBridge,
+  type CoreBridge,
+} from './contextMenuRows';
 import {
   bridgeContextMenu,
   destroyContextMenuFromReact,
   createContextMenu,
-  readRowsContext,
-  subscribeRowsContext,
   updateContextMenu,
   type ContextMenuController,
   type ContextMenuPoint,
-  type ContextMenuRowsContext,
   type CreateContextMenuOptions,
 } from './createContextMenu';
 
@@ -79,93 +72,36 @@ export interface UseContextMenuResult {
   close: () => void;
 }
 
-type Wrap = (menu: ReactNode) => ReactNode;
-
-interface RowsStore {
-  subscribe(listener: () => void): () => void;
-  get(): ContextMenuRowsContext | null;
-}
-
-/** `menuContent`, kept rendered into a host the menu's container adopts. */
+/** `menuContent`, kept rendered in a root the hook owns, into its slot. */
 interface MenuContentPortal {
-  /** The factory's `render`: the container adopts the host while open. */
+  /** The factory's `render`: the container adopts the slot's host. */
   readonly render: (container: HTMLElement) => () => void;
   /** Renders `content` with the caller's providers. */
-  draw(content: ReactNode, wrap: Wrap): void;
+  draw(content: ReactNode, wrap: CoreBridge): void;
   unmount(): void;
 }
 
 function createMenuContentPortal(doc: Document): MenuContentPortal {
-  const host = doc.createElement('div');
+  const slot = createMenuRowsSlot(doc);
   const root = createRoot(doc.createElement('div'));
-  let rows: ContextMenuRowsContext | null = null;
-  const listeners = new Set<() => void>();
-  const notify = () => {
-    for (const listener of listeners) {
-      listener();
-    }
-  };
-  const store: RowsStore = {
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    get: () => rows,
-  };
   return {
-    render(container) {
-      container.append(host);
-      rows = readRowsContext(container);
-      const stop = subscribeRowsContext(container, () => {
-        rows = readRowsContext(container);
-        notify();
-      });
-      notify();
-      return () => {
-        stop();
-        rows = null;
-        notify();
-        host.remove();
-      };
-    },
+    render: slot.render,
     draw(content, wrap) {
       root.render(
-        createPortal(wrap(<MenuRows store={store}>{content}</MenuRows>), host),
+        createPortal(
+          wrap(<MenuRows slot={slot}>{content}</MenuRows>),
+          slot.host,
+        ),
       );
     },
     unmount() {
-      host.remove();
+      slot.host.remove();
       // Called from an effect's cleanup: React cannot unmount a root while
       // it commits another, so this one renders nothing instead, an update
       // React takes in its own time, and is dropped with its node.
       root.render(null);
     },
   };
-}
-
-/**
- * Gives `menuContent`'s rows what they read from inside the menu while it is
- * open: its row context (a choice closes it, a sub-menu drills in), its open
- * state, its layer (a flyout stacks above it) and its layer depth (a layer in
- * the rows takes Escape before the menu).
- */
-function MenuRows({store, children}: {store: RowsStore; children: ReactNode}) {
-  const rows = useSyncExternalStore(store.subscribe, store.get, store.get);
-  const callerLayer = use(LayerContext);
-  const callerDepth = use(LayerDepthContext);
-  return (
-    <LayerContext value={rows?.layer ?? callerLayer}>
-      <LayerDepthContext value={rows?.depth ?? callerDepth}>
-        <DropdownMenuContext value={rows?.menu ?? null}>
-          <DropdownMenuRootOpenContext value={rows?.isOpen ?? false}>
-            {children}
-          </DropdownMenuRootOpenContext>
-        </DropdownMenuContext>
-      </LayerDepthContext>
-    </LayerContext>
-  );
 }
 
 function factoryOptions(
@@ -200,22 +136,7 @@ export function useContextMenu(
   ref: RefObject<HTMLElement | null>,
   options: UseContextMenuOptions,
 ): UseContextMenuResult {
-  const theme = use(ThemeContext);
-  const layer = use(LayerContext);
-  const link = use(LinkContext);
-  const intl = use(InternationalizationContext);
-  const wrap = useCallback<Wrap>(
-    menu => (
-      <InternationalizationContext value={intl}>
-        <ThemeContext value={theme}>
-          <LayerContext value={layer}>
-            <LinkContext value={link}>{menu}</LinkContext>
-          </LayerContext>
-        </ThemeContext>
-      </InternationalizationContext>
-    ),
-    [intl, theme, layer, link],
-  );
+  const wrap = useCoreBridge();
   const hasContent = options.menuContent !== undefined;
   const latestRef = useRef({options, wrap});
   const controllerRef = useRef<ContextMenuController | null>(null);

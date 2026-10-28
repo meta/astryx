@@ -38,7 +38,7 @@
  *
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md,
  * /packages/core/src/ContextMenu/contextMenuPressCurve.ts and
- * /packages/core/src/ContextMenu/contextMenuPress.ts
+ * /packages/core/src/ContextMenu/ContextMenu.tsx (the touch hold)
  */
 
 import {registerMotionTable} from '../roles';

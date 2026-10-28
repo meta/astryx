@@ -5,8 +5,7 @@
 /**
  * @file ContextMenuTouch.ts
  * @input ContextMenu's touch modules
- * @output ContextMenu's touch layer, its one import site: the press
- *   recognizer (contextMenuPress.ts), the press feedback
+ * @output ContextMenu's touch layer, its one import site: the press feedback
  *   (contextMenuPressFeedback.ts) and the lift presentation
  *   (ContextMenuLift.tsx, contextMenuLiftGeometry.ts)
  * @position ContextMenuTouchLayer.tsx, which ContextMenu imports
@@ -16,7 +15,6 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx
  */
 
-export {ContextMenuPressRecognizer} from './contextMenuPress';
 export {useContextMenuPressFeedback} from './contextMenuPressFeedback';
 export {
   useContextMenuLift,

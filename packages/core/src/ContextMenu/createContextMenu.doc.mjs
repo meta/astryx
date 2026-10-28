@@ -35,7 +35,7 @@ export const docs = {
       name: 'options.render',
       type: '(container: HTMLElement) => (() => void) | undefined',
       description:
-        "Fills the menu's container with custom content in plain DOM each time the menu opens; return a cleanup, which runs as it closes. Give rows the `menuitem` role so the keys reach them.",
+        "Fills the menu's container with custom content in plain DOM, once, as the menu is attached; return a cleanup, which runs as it is destroyed. Give rows the `menuitem` role so the keys reach them.",
     },
     {
       name: 'options.label',

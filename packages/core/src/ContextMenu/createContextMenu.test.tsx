@@ -16,6 +16,7 @@
 import {act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {contextMenu} from '../motion/uikit/contextMenu';
 import {dataAttr, stableClassName} from '../naming';
 import {
   createContextMenu,
@@ -281,7 +282,7 @@ describe('createContextMenu', () => {
     expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
   });
 
-  it('fills the menu through `render` in plain DOM, and runs its cleanup on close', () => {
+  it('fills the menu through `render` in plain DOM once, and runs its cleanup when destroyed', () => {
     const cleanup = vi.fn();
     const controller = attach({
       render: container => {
@@ -296,6 +297,12 @@ describe('createContextMenu', () => {
     expect(rows().map(row => row.textContent)).toEqual(['Custom']);
     act(() => {
       controller.close();
+    });
+    rightClick(element);
+    expect(rows().map(row => row.textContent)).toEqual(['Custom']);
+    expect(cleanup).not.toHaveBeenCalled();
+    act(() => {
+      controller.destroy();
     });
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
@@ -322,6 +329,93 @@ describe('createContextMenu', () => {
   });
 });
 
+// The gesture host lives as long as the document and remembers the latest
+// event time; each install of fake timers restarts `performance.now()` near 0,
+// so every case moves the faked clock past the ones before it.
+let clockEpoch = 0;
+
+/** The primary pointer answers `matches` to `(pointer: coarse)`. */
+function stubPointer(isCoarse: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockImplementation((query: string) => ({
+      matches: isCoarse && query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+/** A finger as a browser reports it: its pointer event, then its touch event. */
+function fingerDown(target: Element, x = 20, y = 20) {
+  const pointer = new PointerEvent('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: x,
+    clientY: y,
+    buttons: 1,
+  });
+  Object.defineProperty(pointer, 'timeStamp', {value: performance.now()});
+  target.dispatchEvent(pointer);
+  const touch = {identifier: 1, target, clientX: x, clientY: y};
+  const start = new Event('touchstart', {bubbles: true, cancelable: true});
+  Object.defineProperties(start, {
+    touches: {value: [touch]},
+    targetTouches: {value: [touch]},
+    changedTouches: {value: [touch]},
+    timeStamp: {value: performance.now()},
+  });
+  target.dispatchEvent(start);
+}
+
+describe('createContextMenu under a finger: ContextMenu\u2019s touch model (spec:AST-107 FR8)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: [
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'requestAnimationFrame',
+        'cancelAnimationFrame',
+        'performance',
+        'Date',
+      ],
+    });
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('opens for a held finger at UIKit\u2019s moment where the primary pointer is coarse, as ContextMenu does, not at 500 ms', () => {
+    stubPointer(true);
+    attach({items: [{label: 'Archive'}]});
+    act(() => {
+      fingerDown(element);
+    });
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(isOpen()).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(contextMenu.press.menuDisplayMs - 600);
+    });
+    expect(isOpen()).toBe(true);
+  });
+});
+
 describe('createContextMenu: a finger\u2019s press outside (spec:AST-107 FR8)', () => {
   beforeEach(() => {
     vi.useFakeTimers({
@@ -337,7 +431,8 @@ describe('createContextMenu: a finger\u2019s press outside (spec:AST-107 FR8)', 
       ],
     });
     // The gesture host remembers the latest event time across cases.
-    vi.advanceTimersByTime(100_000);
+    clockEpoch += 100_000;
+    vi.advanceTimersByTime(clockEpoch);
   });
   afterEach(() => {
     vi.useRealTimers();
