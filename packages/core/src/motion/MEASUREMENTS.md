@@ -322,8 +322,9 @@ and Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the
 overshoot past the limits, the settle curve and its duration law, the absence
 of scale momentum and of a two-finger-tap action, the content point under the
 centroid staying put, Photos' aspect-fill double tap and its maximum zoom on
-3000 × 2000 and 2000 × 3000 photos. M-ZM2 confirms that maximum on two other
-sizes. A zoomed pan flicked into an edge coasts and bounces like any scroll
+3000 × 2000 and 2000 × 3000 photos, and the 40 pt gap between Photos' pages.
+M-ZM2 confirms that maximum on two other sizes. A zoomed pan flicked into an
+edge coasts and bounces like any scroll
 view (`scroll.*`).
 
 | ID    | What         | App and gesture                                                      | Extract                                                                   | Method |

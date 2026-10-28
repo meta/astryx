@@ -4,11 +4,13 @@
 
 /**
  * @file useZoomCore.ts
- * @input A stage element ref (clipping and centring the photo), the current
- *   item's key, and the zoom and fit callbacks
+ * @input A stage element ref, which clips and centres the photo, and the
+ *   element the gestures attach to: the stage, or a gallery's track. Also
+ *   whether zoom is on, the current item's key and the zoom and fit callbacks
  * @output Exports `useZoomCore`: Lightbox's zoom stage for every pointer. It
  *   writes the photo's transform through the compositor animator and plays
- *   the eased settle and the keyboard's zoom and pan
+ *   the eased settle and the keyboard's zoom and pan. Its API tells an outer
+ *   pager when the photo is at an edge (`isAtEdge`)
  * @position Lightbox's shared zoom stage, internal. useZoomStage.ts drives
  *   its pointer paths; the geometry is in zoomStage.ts.
  *
@@ -40,6 +42,7 @@ import {
   maxScaleFor,
   pannedBy,
   releasedZoomTarget,
+  restRange,
   restingTransform,
   settleCurves,
   transformForResize,
@@ -51,9 +54,21 @@ import {
 /** Set on the stage while a finger or the mouse drags a zoomed photo. */
 export const ZOOM_DRAGGING_ATTRIBUTE = 'data-zoom-dragging';
 
+/** A drag's initial direction on screen. */
+export type PanDirection = 'left' | 'right';
+
 export interface UseZoomCoreOptions {
-  /** The stage: the photo's clipping parent, which centres it. */
+  /** The stage: the box the photo is fitted and centred in, clipping it. */
   stageRef: RefObject<HTMLElement | null>;
+  /**
+   * Where the gestures attach and what the resize observer watches: the
+   * stage by default. In a pager, the track (the pager's own pan sits on
+   * the stage, each element has one `touch-action`, and every page shares
+   * the track's size).
+   */
+  surfaceRef?: RefObject<HTMLElement | null>;
+  /** Zoom is on (an image item with `hasZoom`). */
+  isEnabled: boolean;
   /** Changes when another item shows; the photo returns to the fitted size. */
   itemKey: unknown;
   /** The photo became zoomed or returned to the fitted size. */
@@ -93,6 +108,12 @@ export interface ZoomStage {
    * keeps the system's double-click speed.
    */
   doubleClickAt(clientX: number, clientY: number): void;
+  /**
+   * Whether a zoomed photo can no longer move with a drag toward
+   * `direction`, since its edge on that side is at the stage's. A pager takes
+   * such a drag, as an outer paging scroll view does.
+   */
+  isAtEdge(direction: PanDirection): boolean;
 }
 
 /** The core as the gestures (useZoomStage.ts) drive it. */
@@ -117,6 +138,10 @@ export interface ZoomCore {
   /** Where the photo is going, when an animation the core did not start ends there. */
   setTarget(transform: ZoomTransform): void;
   setZoomed(next: boolean): void;
+  /** Whether the photo is moving (shown away from where it is going). */
+  isMoving(): boolean;
+  /** Whether a zoomed photo's edge toward `direction` is at the stage's. */
+  isAtEdgeOf(geometry: ZoomGeometry, direction: PanDirection): boolean;
   /**
    * UIScrollView's eased settle (a release past a limit, a zoom to a rect).
    * With `released` it plays Lightbox's released 200 ms ease-out instead,
@@ -287,6 +312,27 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     targetRef.current = transform;
   }, []);
 
+  const isMoving = useCallback((): boolean => {
+    const shown = current();
+    const target = targetRef.current;
+    return (
+      Math.abs(shown.x - target.x) > 0.01 ||
+      Math.abs(shown.y - target.y) > 0.01 ||
+      Math.abs(shown.scale - target.scale) > 0.0001
+    );
+  }, [current]);
+
+  const isAtEdgeOf = useCallback(
+    (geometry: ZoomGeometry, direction: PanDirection): boolean => {
+      const {x, scale} = targetRef.current;
+      const range = restRange(geometry, scale);
+      return direction === 'left'
+        ? x <= range.x.min + 0.5
+        : x >= range.x.max - 0.5;
+    },
+    [],
+  );
+
   const setZoomed = useCallback((next: boolean) => {
     if (zoomedRef.current !== next) {
       zoomedRef.current = next;
@@ -372,7 +418,9 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
   }, [animator, options.itemKey, setAtFit]);
 
   // A rotation or resize keeps the same photo point centred at the same
-  // on-screen size (the shared resize observer).
+  // on-screen size (the shared resize observer). It watches the surface: in
+  // a gallery the stage moves to each current page, while the track, whose
+  // size every page shares, stays.
   const onResize = useCallback(() => {
     const before = geometryRef.current;
     if (before == null || !zoomedRef.current) {
@@ -387,17 +435,23 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     write(next);
     setZoomed(isZoomed(after, next));
   }, [animator, measure, setZoomed, write]);
-  // The stage mounts with the viewer's first media, which can come after the
+  // The surface mounts with the viewer's first media, which can come after the
   // viewer, as in a gallery mounted closed while its photos load.
-  // `useAttachment` follows the element after every commit.
+  // `useAttachment` follows the element, and zoom turning on or off, after
+  // every commit.
+  const surfaceRef = options.surfaceRef ?? options.stageRef;
+  const isEnabled = options.isEnabled;
   const onResizeRef = useRef(onResize);
   useIsomorphicLayoutEffect(() => {
     onResizeRef.current = onResize;
   });
   useAttachment(
-    options.stageRef,
-    stage => observeResize(stage, () => onResizeRef.current()),
-    null,
+    surfaceRef,
+    surface =>
+      isEnabled
+        ? observeResize(surface, () => onResizeRef.current())
+        : () => {},
+    isEnabled,
   );
 
   // The keyboard works on where the photo is going, like UIKit's model
@@ -450,8 +504,24 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
           released: true,
         });
       },
+      isAtEdge: (direction: PanDirection) => {
+        const geometry = geometryRef.current ?? measure();
+        if (geometry == null || !zoomedRef.current) {
+          return true;
+        }
+        return isAtEdgeOf(geometry, direction);
+      },
     }),
-    [contentRef, current, measure, settleTo, toStage, zoomIn, zoomOut],
+    [
+      contentRef,
+      current,
+      isAtEdgeOf,
+      measure,
+      settleTo,
+      toStage,
+      zoomIn,
+      zoomOut,
+    ],
   );
 
   // One object for the component's lifetime: every member is stable.
@@ -469,6 +539,8 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
+      isMoving,
+      isAtEdgeOf,
       settleTo,
     }),
     [
@@ -480,6 +552,8 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
+      isMoving,
+      isAtEdgeOf,
       settleTo,
     ],
   );

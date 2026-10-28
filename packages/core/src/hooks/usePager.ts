@@ -1355,6 +1355,12 @@ export interface UsePagerOptions extends PagerOptions {
   index?: number;
   /** Live toggle for the pan; turning it off mid-drag cancels the drag. */
   isPanEnabled?: boolean;
+  /**
+   * Whether a change of the controlled `index` animates. Off, the pager moves
+   * there at once. A page the pager reported and the owner refused returns
+   * animated either way, as a released drag springs back. Default true.
+   */
+  isControlledChangeAnimated?: boolean;
 }
 
 /**
@@ -1375,6 +1381,7 @@ export function usePager({
   trackRef,
   index,
   isPanEnabled = true,
+  isControlledChangeAnimated = true,
   ...options
 }: UsePagerOptions): Pager {
   const latestRef = useRef(options);
@@ -1435,12 +1442,20 @@ export function usePager({
   // reported and the owner did not take, such as a refused swipe. A
   // controlled input returns to its value the same way. The move is the
   // owner's own, so it is not reported back. It moves only while the two
-  // differ.
-  useEffect(() => {
+  // differ, and before the browser paints the new `index`. The same `index`
+  // after a report is a refused page, which springs back whatever
+  // `isControlledChangeAnimated` says.
+  const syncedIndexRef = useRef(index);
+  useIsomorphicLayoutEffect(() => {
     if (index != null && index !== pager.index) {
-      pager.goTo(index, {reason: 'controlled'});
+      pager.goTo(index, {
+        reason: 'controlled',
+        animated:
+          isControlledChangeAnimated || index === syncedIndexRef.current,
+      });
     }
-  }, [pager, index, reported]);
+    syncedIndexRef.current = index;
+  }, [pager, index, reported, isControlledChangeAnimated]);
 
   return pager;
 }

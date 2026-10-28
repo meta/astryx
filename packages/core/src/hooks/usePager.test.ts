@@ -2482,6 +2482,7 @@ describe('usePager (React)', () => {
     defaultIndex?: number;
     viewportKey?: string;
     isPanEnabled?: boolean;
+    isControlledChangeAnimated?: boolean;
     onIndexChange?: (index: number) => void;
     onSettle?: (index: number, previous: number) => void;
     onPager?: (pager: Pager) => void;
@@ -2495,6 +2496,7 @@ describe('usePager (React)', () => {
       index: props.index,
       defaultIndex: props.defaultIndex,
       isPanEnabled: props.isPanEnabled,
+      isControlledChangeAnimated: props.isControlledChangeAnimated,
       onIndexChange: props.onIndexChange,
       onSettle: props.onSettle,
     });
@@ -2731,6 +2733,84 @@ describe('usePager (React)', () => {
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(3, 'goTo');
     expect(box.pager?.index).toBe(2);
+    view.unmount();
+  });
+
+  // Off, a new controlled index moves the pager at once. A drag the owner
+  // refuses still springs back over frames, as any released drag does.
+  it('with isControlledChangeAnimated off, a drag the owner refuses springs back animated', async () => {
+    const runFrames = handFrames();
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(
+      WIDTH,
+    );
+    const box: {pager: Pager | null} = {pager: null};
+    const onIndexChange = vi.fn();
+    const view = render(
+      createElement(Paged, {
+        index: 0,
+        isControlledChangeAnimated: false,
+        onIndexChange,
+        onPager: p => {
+          box.pager = p;
+        },
+      }),
+    );
+    const pager = box.pager;
+    if (pager == null) {
+      throw new Error('no pager');
+    }
+    const goTo = vi.spyOn(pager, 'goTo');
+    const track = view.getByTestId('viewport').firstElementChild as Element;
+    // Past half a page: the release pages, and the owner keeps page 0.
+    heldDrag(track);
+    now += 8;
+    vi.advanceTimersByTime(8);
+    touch('touchend', track, 60, 100, now);
+    // The release reports its page once its settle runs, a few frames on.
+    for (let i = 0; i < 6; i++) {
+      await act(async () => {
+        for (const animation of recorded) {
+          if (animation.startTime == null && !animation.cancelled) {
+            animation.commit(now);
+          }
+        }
+        runFrames(1);
+        await Promise.resolve();
+        await Promise.resolve();
+        now += 16;
+        await vi.advanceTimersByTimeAsync(16);
+      });
+    }
+    expect(onIndexChange).toHaveBeenCalledWith(1, 'drag');
+    expect(goTo).toHaveBeenCalledWith(0, {
+      reason: 'controlled',
+      animated: true,
+    });
+    view.unmount();
+  });
+
+  it('with isControlledChangeAnimated off, a new controlled index moves the pager at once', () => {
+    const box: {pager: Pager | null} = {pager: null};
+    const props = {
+      isControlledChangeAnimated: false,
+      onPager: (p: Pager) => {
+        box.pager = p;
+      },
+    };
+    const view = render(createElement(Paged, {...props, index: 2}));
+    const pager = box.pager;
+    if (pager == null) {
+      throw new Error('no pager');
+    }
+    const goTo = vi.spyOn(pager, 'goTo');
+    act(() => {
+      view.rerender(createElement(Paged, {...props, index: 4}));
+    });
+    expect(goTo).toHaveBeenCalledWith(4, {
+      reason: 'controlled',
+      animated: false,
+    });
+    expect(pager.index).toBe(4);
     view.unmount();
   });
 

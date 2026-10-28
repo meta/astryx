@@ -950,6 +950,9 @@ test('a finger left down after a pinch keeps panning without a jump', async ({
   const xs: {type: string; x: number}[] = [];
   await driver.play(script, {
     onEvent: async step => {
+      // A touchmove nothing has cancelled yet reaches the page with the next
+      // frame (Chromium aligns them to it): read once it has.
+      await frames(page, 1);
       xs.push({type: step.type, x: (await state()).x});
     },
   });
