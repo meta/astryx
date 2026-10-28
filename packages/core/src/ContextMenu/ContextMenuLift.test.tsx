@@ -42,7 +42,7 @@ function Lifted({onReady}: {onReady: (lift: () => void) => void}) {
   return <div ref={ref}>card</div>;
 }
 
-it('plays every spring of the lift through an internal motion role (spec:AST-094 FR4)', () => {
+it('plays the menu\u2019s close on its motion role, and the lift\u2019s own springs as internal constants until spec:AST-094 FR4 names them', () => {
   let run: () => void = () => {};
   render(
     <Lifted
@@ -61,12 +61,12 @@ it('plays every spring of the lift through an internal motion role (spec:AST-094
       ]),
     ),
   ).toEqual({
-    lift: 'springs.contextMenuLift',
-    drop: 'springs.contextMenuDismiss',
-    clear: 'springs.contextMenuDismiss',
-    shadowIn: 'springs.contextMenuMorph',
-    shadowOut: 'springs.contextMenuMorph',
-    surfaceIn: 'springs.contextMenuMorph',
+    lift: null,
+    drop: null,
+    clear: null,
+    shadowIn: null,
+    shadowOut: null,
+    surfaceIn: null,
     surfaceOut: 'springs.menuClose',
   });
 });

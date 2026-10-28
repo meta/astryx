@@ -499,6 +499,8 @@ export const springs = {
 /**
  * The springs spec:AST-094 FR4 names: the only ones that are motion roles.
  * The registry takes these rows alone, so registering ships no other spring.
+ * ContextMenu's lift, dismissal and morph springs stay internal constants
+ * until FR4 names them.
  */
 const SPRING_ROLES = {
   fingerTracking: FINGER_TRACKING_SPRING,
@@ -513,9 +515,6 @@ const SPRING_ROLES = {
   menuClose: MENU_CLOSE_SPRING,
   subMenuOpen: SUB_MENU_OPEN_SPRING,
   subMenuBack: SUB_MENU_BACK_SPRING,
-  contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
-  contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
-  contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
 };
 
 /**
