@@ -1,16 +1,28 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:CheckboxList
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-28
 owners: [cixzhang]
 review_triggers:
-  [public-api, behavior, interaction, theming, accessibility, visual]
+  [
+    public-api,
+    behavior,
+    layout,
+    interaction,
+    motion,
+    theming,
+    styling,
+    accessibility,
+    visual,
+    react-runtime,
+    compatibility,
+  ]
 verified_by:
   [
     packages/core/src/CheckboxList/CheckboxList.test.tsx,
@@ -18,11 +30,11 @@ verified_by:
     packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.test.tsx,
     packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
-    apps/storybook/stories/CheckboxList.stories.tsx,
+    packages/core/src/CheckboxList/CheckboxList.fr10.test.tsx,
     scripts/check-knowledge.mjs,
   ]
 modules: []
-families: []
+families: [family:input-fields]
 design_specs: []
 architecture:
   [
@@ -32,24 +44,24 @@ architecture:
     architecture:interaction-modality,
   ]
 contributing: []
-system_specs: [spec:AST-011, spec:AST-021, spec:AST-038]
+system_specs: [spec:AST-011, spec:AST-021, spec:AST-038, spec:AST-085]
 ---
 
 # CheckboxList component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `CheckboxList` is a labeled `role="group"` of `CheckboxListItem` rows. A `value` array selects controlled collection mode (`onChange`, `changeAction`); without it, its items are standalone. The group owns naming, description, disabled, disabled-reason, read-only, pending values, and status. Each option's behavior is `component:CheckboxListItem`. |
-| Behavior                | The group names and describes its options, tracks every value whose `changeAction` is pending so each saving option stays busy while the others stay interactive, and applies disabled, read-only, and status to every option.                                                                                                                              |
-| End-user impact         | People can identify the group, operate every option by pointer, touch, and keyboard, learn why a group is unavailable, and see which options are still saving.                                                                                                                                                                                              |
-| Builder impact          | Builders choose collection mode by passing `value`, and then supply stable item `value`s. Invalid-status and group pass-through-target meaning remain owner decisions here; per-option owner decisions are recorded in `component:CheckboxListItem`.                                                                                                        |
-| Compatibility/readiness | Released API, defaults, DOM ownership, and targets are unchanged. This draft records shipped behavior, including the concurrent-pending fix from the CheckboxList audit (#6777).                                                                                                                                                                            |
-| Review checks           | Reject a pending value that loses its busy state or re-toggle guard when another option is toggled, dropped group naming or description ids, a toggle while the group is disabled or read-only, or new target or state API introduced without an owner decision. Per-option checks are in `component:CheckboxListItem`.                                     |
-| Governing rules         | `architecture:public-component-api/INV1–INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:interaction-modality/INV1–INV5`; `architecture:component-test-sufficiency/INV1–INV7`; `architecture:knowledge-contracts/INV2`; `spec:AST-021/FR8–FR10`; `spec:AST-038/FR7`; WCAG 2.2 1.3.1, 2.1.1, 4.1.2.                                  |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `CheckboxList` is a labeled `role="group"` of `CheckboxListItem` rows. A `value` array selects controlled collection mode (`onChange`, `changeAction`); without it, its items are standalone. The group owns naming, description, disabled, disabled-reason, read-only, pending values, and status. Each option's behavior is `component:CheckboxListItem`.                     |
+| Behavior                | The group names and describes its options, tracks every value whose `changeAction` is pending so each saving option stays busy while the others stay interactive, and applies disabled, read-only, and status to every option.                                                                                                                                                  |
+| End-user impact         | People can identify the group, operate every option by pointer, touch, and keyboard, learn why a group is unavailable, and see which options are still saving.                                                                                                                                                                                                                  |
+| Builder impact          | Builders choose collection mode by passing `value`, and then supply stable item `value`s. Invalid-status meaning stays an open question here (OQ3); per-option open questions are in `component:CheckboxListItem`.                                                                                                                                                              |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. An error status exposes no invalid state; listed under Current-state impact.                                                                                                                                                                                                                                          |
+| Review checks           | Reject a pending value that loses its busy state or re-toggle guard when another option is toggled, dropped group naming or description ids, a toggle while the group is disabled or read-only, or new target or state API introduced without an owner decision. Per-option checks are in `component:CheckboxListItem`.                                                         |
+| Governing rules         | `architecture:public-component-api/INV1–INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:interaction-modality/INV1–INV5`; `architecture:component-test-sufficiency/INV1–INV7`; `architecture:knowledge-contracts/INV2`; `spec:AST-021/FR8–FR10`; `spec:AST-038/FR7`; `spec:AST-085/FR1, FR7`; `family:input-fields/FR10`; WCAG 2.2 1.3.1, 2.1.1, 4.1.2. |
 
-This table is a review projection; the body below becomes authoritative only after owner approval.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -60,9 +72,8 @@ touch, keyboard, and assistive technology.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: observational record, including the CheckboxList audit's
-  concurrent-pending fix; public types, defaults, DOM ownership, targets, and
-  focus order are unchanged
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change
 - Controlled/uncontrolled behavior: collection mode is controlled by `value`;
   standalone items follow `component:CheckboxListItem`; no uncontrolled mode
   exists
@@ -74,8 +85,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- The labeled checkbox group, its `checkbox-list` target, and the group's
-  description, status, and disabled-reason relationships.
+- The labeled checkbox group, its `checkbox-list` target, the group's
+  description, status, and disabled-reason relationships, and where its
+  base, `container*`, and `control*` props land.
 - Collection state shared with CheckboxListItem: checked membership, change
   ordering, optimistic pending values, and group-level availability.
 - The composed option anatomy and its target dispositions (Theming anatomy
@@ -90,8 +102,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - List and option-row presentation — owned by `component:List`; its
   `list-item` target reaches only the row root.
 - The checkbox control, its indicator, focus ring, and pressed overlay — owned
-  by `component:CheckboxInput` and `component:CheckboxIndicator`.
-- Group-label and validation-message presentation — owned by `component:Field`
+  by `component:CheckboxInput` and CheckboxIndicator.
+- Group-label and validation-message presentation — owned by Field under `family:input-fields` (shared owner section)
   and `component:FieldStatus`.
 - Loading-indicator presentation — owned by `component:Spinner`; tooltip
   behavior — owned by `useTooltip`.
@@ -99,17 +111,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept          | Closed values or states                                     | Meaning                                                                                                              | Availability by variant/orientation/state | Default                   | Owner                  | Stability                              | Invalid-value behavior                                       |
-| ---------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------ |
-| group naming     | `label`, `isLabelHidden`, `description`                     | Names and describes the `role="group"`; a hidden label still names it.                                               | All states.                               | label required; visible   | caller and Field       | stable                                 | rejected by the public type                                  |
-| collection value | `value` array present or absent                             | Present: the group owns checked membership and change handling for its items. Absent: its items are standalone.      | All states.                               | absent                    | caller and component   | stable                                 | an item without `value` in collection mode throws (item FR4) |
-| change path      | `onChange`, `changeAction`, both, neither                   | Reports the next value array; `changeAction` runs after `onChange` in a transition with an optimistic value.         | Collection mode.                          | neither                   | caller and component   | shipped; handlerless meaning unsettled | no handler means no component-owned mutation                 |
-| availability     | enabled, `isDisabled`, `isDisabled` with `disabledMessage`  | Blocks toggling on every item; a reason keeps the items focusable through `aria-disabled` and shows a group tooltip. | Reason applies only with `isDisabled`.    | enabled                   | component              | stable                                 | a reason without `isDisabled` renders nothing                |
-| read-only        | `isReadOnly`                                                | Makes every item read-only.                                                                                          | Group-wide.                               | false                     | component              | stable                                 | boolean only                                                 |
-| pending values   | the values whose `changeAction` is pending                  | Each pending value's item renders busy; toggling another item does not clear it; concurrent values settle together.  | Collection mode with `changeAction`.      | none                      | component              | stable                                 | transition state only                                        |
-| status           | `warning`, `error`, `success`, optional message             | A message renders a detached FieldStatus after the list and describes the group.                                     | All states.                               | none                      | caller and FieldStatus | shipped; invalid semantics unsettled   | a status without a message renders nothing                   |
-| row layout       | `density` compact/balanced/spacious; `hasDividers`; `width` | Density reaches the List and its rows; dividers separate rows; width sizes the label, list, and status together.     | All states.                               | balanced; none; intrinsic | component and List     | stable                                 | rejected by the public types                                 |
-| pass-through     | CheckboxList rest, `ref`, `className`, `style`, `xstyle`    | Reach the field root.                                                                                                | All states.                               | none                      | component              | shipped; ARIA target unsettled         | component-owned attributes win                               |
+| Concept          | Closed values or states                                     | Meaning                                                                                                             | Availability by variant/orientation/state | Default                   | Owner                  | Stability                              | Invalid-value behavior                                       |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ------------------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| group naming     | `label`, `isLabelHidden`, `description`                     | Names and describes the `role="group"`; a hidden label still names it.                                              | All states.                               | label required; visible   | caller and Field       | stable                                 | rejected by the public type                                  |
+| collection value | `value` array present or absent                             | Present: the group owns checked membership and change handling for its items. Absent: its items are standalone.     | All states.                               | absent                    | caller and component   | stable                                 | an item without `value` in collection mode throws (item FR4) |
+| change path      | `onChange`, `changeAction`, both, neither                   | Reports the next value array; `changeAction` runs after `onChange` in a transition with an optimistic value.        | Collection mode.                          | neither                   | caller and component   | shipped; handlerless meaning unsettled | no handler means no component-owned mutation                 |
+| availability     | enabled, `isDisabled`, `isDisabled` with `disabledMessage`  | Blocks toggling on every item, which stays focusable through `aria-disabled`; a reason adds a group tooltip.        | Reason applies only with `isDisabled`.    | enabled                   | component              | stable                                 | a reason without `isDisabled` renders nothing                |
+| read-only        | `isReadOnly`                                                | Makes every item read-only.                                                                                         | Group-wide.                               | false                     | component              | stable                                 | boolean only                                                 |
+| pending values   | the values whose `changeAction` is pending                  | Each pending value's item renders busy; toggling another item does not clear it; concurrent values settle together. | Collection mode with `changeAction`.      | none                      | component              | stable                                 | transition state only                                        |
+| status           | `warning`, `error`, `success`, optional message             | A message renders a detached FieldStatus after the list and describes the group.                                    | All states.                               | none                      | caller and FieldStatus | shipped; invalid semantics unsettled   | a status without a message renders nothing                   |
+| row layout       | `density` compact/balanced/spacious; `hasDividers`; `width` | Density reaches the List and its rows; dividers separate rows; width sizes the label, list, and status together.    | All states.                               | balanced; none; intrinsic | component and List     | stable                                 | rejected by the public types                                 |
+| pass-through     | CheckboxList rest, `ref`, `container*`, `control*`          | Base props and `ref` reach the `role="group"`; `container*` the Field box; `control*` the group element.            | All states.                               | none                      | component              | stable                                 | root `xstyle`, `className`, `style` are not accepted         |
 
 Item props (`label`, `aria-label`, `description`, `endContent`, `isChecked`,
 `onCheck`, item `isDisabled`, `isLoading`, and item pass-through) are concepts
@@ -117,28 +129,21 @@ of `component:CheckboxListItem`.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision. A `current` contract contains no unresolved rows.
+| ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                       | Basis                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| FR1  | The render MUST place CheckboxListItem children inside a List within a `role="group"` named by the group label through `aria-labelledby`; its `aria-describedby` MUST list any caller description, then the description, status message, and disabled-reason tooltip that are present, in that order.                                                                                                                           | shipped source; focused tests; WCAG 1.3.1 and 4.1.2                                              |
+| FR2  | The CheckboxList root MUST carry the current `checkbox-list` target.                                                                                                                                                                                                                                                                                                                                                            | shipped source and public docs                                                                   |
+| FR4  | A status message MUST render through a detached FieldStatus after the list.                                                                                                                                                                                                                                                                                                                                                     | shipped source, focused tests, and the Chromium accessibility suite                              |
+| FR6  | With a `value` array, the group MUST provide membership to its items, call `onChange` with the next array an item proposes (`component:CheckboxListItem` FR4), and then run `changeAction` with the same array in a transition with an optimistic value.                                                                                                                                                                        | shipped source and focused tests                                                                 |
+| FR7  | The group MUST track every value whose `changeAction` is pending and expose it to its items, each of which renders busy (`component:CheckboxListItem` FR7); toggling another item MUST NOT clear an earlier pending value. Concurrent pending values settle together, after which every busy state clears.                                                                                                                      | shipped public `changeAction` promise; focused regression test; the Chromium accessibility suite |
+| FR9  | Group `isDisabled` MUST make every checkbox focusable-disabled through `aria-disabled` (`component:CheckboxInput` FR4) and refuse toggling. With `disabledMessage`, the reason tooltip opens on group hover and keyboard focus, and the reason MUST describe each focusable checkbox (`spec:AST-085` FR5, FR7). Implementation gap: the reason describes only the `role="group"`, so a focused checkbox is not described by it. | `spec:AST-085` FR1, FR7; shipped source, focused tests, and shared checkbox binding              |
+| FR10 | Group `isReadOnly` MUST make every item in the group read-only (`component:CheckboxListItem` FR8 and FR10).                                                                                                                                                                                                                                                                                                                     | shipped source; shared checkbox binding; `spec:AST-011` read-only vocabulary                     |
+| FR13 | `density` MUST reach the List and its rows (the checkbox size follows `component:CheckboxListItem` FR11); `hasDividers` MUST separate rows without a divider after the last row; `width` MUST size the label, list, and status together.                                                                                                                                                                                        | shipped source, docs, and the Chromium accessibility suite                                       |
+| FR14 | An error `status` with a message renders it (FR4). Implementation gap: an error exposes no programmatic invalid state on the group or its checkboxes, and a status without a message renders nothing; their meaning is OQ3.                                                                                                                                                                                                     | shipped source; `spec:AST-002/FR15`                                                              |
+| FR15 | Base props, including ARIA and `ref`, MUST reach the `role="group"`; a caller `aria-labelledby` joins the group label and a caller `aria-describedby` comes first. `container*` MUST reach the Field box where one renders (in a `horizontal-labels` FormLayout none renders, and `container*` has no effect and warns), and `control*` the group element; root `xstyle`, `className`, and `style` are not accepted.            | `family:input-fields` FR10; `CheckboxList.fr10.test.tsx`                                         |
 
-| ID   | Candidate invariant                                                                                                                                                                                                                                                                                        | Basis                                                                             | Draft review state |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------ |
-| FR1  | The render MUST place CheckboxListItem children inside a List within a `role="group"` named by the group label through `aria-labelledby`; its `aria-describedby` MUST list the description, status message, and disabled-reason tooltip that are present, in that order.                                   | shipped source; focused tests; WCAG 1.3.1 and 4.1.2                               | verify             |
-| FR2  | The CheckboxList root MUST carry the current `checkbox-list` target.                                                                                                                                                                                                                                       | shipped source and public docs                                                    | settled            |
-| FR4  | A status message MUST render through a detached FieldStatus after the list.                                                                                                                                                                                                                                | shipped source, focused tests, and Chromium receipts                              | verify             |
-| FR6  | With a `value` array, the group MUST provide membership to its items, call `onChange` with the next array an item proposes (`component:CheckboxListItem` FR4), and then run `changeAction` with the same array in a transition with an optimistic value.                                                   | shipped source and focused tests                                                  | verify             |
-| FR7  | The group MUST track every value whose `changeAction` is pending and expose it to its items, each of which renders busy (`component:CheckboxListItem` FR7); toggling another item MUST NOT clear an earlier pending value. Concurrent pending values settle together, after which every busy state clears. | shipped public `changeAction` promise; focused regression test; Chromium receipts | verify             |
-| FR9  | Group `isDisabled` MUST natively disable every checkbox unless `disabledMessage` is set; with a reason, checkboxes MUST stay focusable through `aria-disabled`, show the reason tooltip on group hover and focus, and refuse toggling.                                                                     | shipped source, focused tests, and shared checkbox binding                        | verify             |
-| FR10 | Group `isReadOnly` MUST make every item in the group read-only (`component:CheckboxListItem` FR8 and FR10).                                                                                                                                                                                                | shipped source; shared checkbox binding; `spec:AST-011` read-only vocabulary      | verify             |
-| FR13 | `density` MUST reach the List and its rows (the checkbox size follows `component:CheckboxListItem` FR11); `hasDividers` MUST separate rows without a divider after the last row; `width` MUST size the label, list, and status together.                                                                   | shipped source, docs, and Chromium receipts                                       | verify             |
-| GAP3 | An error `status` exposes no programmatic invalid state on the group or its checkboxes, and a status without a message renders nothing.                                                                                                                                                                    | shipped source; `spec:AST-002/FR15`                                               | owner decision     |
-| GAP4 | Consumer ARIA pass-throughs on CheckboxList reach the field root rather than the named `role="group"`.                                                                                                                                                                                                     | shipped source; `architecture:public-component-api/INV5`                          | owner decision     |
-
-Per-option requirements and gaps that earlier drafts listed here have one owner
-(`architecture:knowledge-contracts/INV2`): former FR3 is
-`component:CheckboxListItem` FR1; FR5 is its FR2, FR3, and content concept (the
-target dispositions stay in the theming anatomy below); FR8 is its FR5; FR11 is
-its FR1, FR9, and FR10; FR12 is its FR2 and FR3; and GAP1, GAP2, GAP5, and GAP6
-keep their numbers there.
+Per-option requirements are owned by `component:CheckboxListItem`
+(`architecture:knowledge-contracts/INV2`).
 
 ### Allowed variation
 
@@ -167,8 +172,9 @@ Option variation is `component:CheckboxListItem` AV1–AV3.
 - **ORD2 — Toggle.** An item's proposed next array (`component:CheckboxListItem`
   ORD2) → `onChange` → `changeAction` in a transition that adds the toggled value
   to the pending set.
-- **ORD3 — Availability.** Group disabled wins; a group reason changes
-  focusability, not operability; group read-only applies to mutation only.
+- **ORD3 — Availability.** Group disabled wins and keeps every checkbox
+  focusable; a group reason adds the tooltip, not operability; group read-only
+  applies to mutation only.
 
 ### Performance and resources
 
@@ -256,7 +262,7 @@ untargeted spans, so neither delegates to Text nor inherits the row-root
 `list-item` target; future exposure remains unsettled. Rich label content and end
 content are caller-provided, and end content intentionally stays outside
 CheckboxList's public theming ownership. The `Option row` delegation reaches the
-row surface, but not a checked-row state (`component:CheckboxListItem` GAP2).
+row surface, but not a checked-row state (`component:CheckboxListItem` FR15).
 
 ## Family and system relationships
 
@@ -282,34 +288,42 @@ row surface, but not a checked-row state (`component:CheckboxListItem` GAP2).
 
 ## Verification map
 
-| Contract            | Verification                                                                                  | Representative states                                               | Mutation or failure expectation                                                                                                     | Audit section                   |
-| ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1, AR1            | `CheckboxList.test.tsx` group naming, description, status, and disabled-reason assertions     | Named group; description plus status; disabled reason               | Dropping the label, description, status, or tooltip id from the group fails the accessible name or description assertions.          | `audit:CheckboxList/a11y`       |
-| FR4, FR6, FR7       | `CheckboxList.test.tsx` collection, status, and pending suites; Chromium `pending-*` receipts | add, remove; status; one pending value; two pending values; settled | A wrong array, a missing status, clearing an earlier pending value, allowing its re-toggle, or leaving busy after settlement fails. | `audit:CheckboxList/behavior`   |
-| FR9, FR10, AR4      | `CheckboxList.test.tsx` disabled and read-only suites; shared checkbox bindings               | Group disabled; disabled with reason; group read-only               | A focusability, state, or reason expectation fails, or a toggle succeeds while the group is disabled or read-only.                  | `audit:CheckboxList/a11y`       |
-| FR13                | Chromium density, divider, long-content, and RTL receipts                                     | compact, balanced, spacious; dividers; 320px long content; RTL      | A density, divider, width, overflow, or direction sensor fails.                                                                     | `audit:CheckboxList/responsive` |
-| Local target source | `themingTargets.test.ts`                                                                      | `checkbox-list`                                                     | Source/docs target drift fails the repository target guard.                                                                         | `audit:CheckboxList/theming`    |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                 | Canonical anatomy and current local target                          | Canonical-key drift, invalid dispositions or target spelling, or an unclaimed current local target fails repository validation.     | `audit:CheckboxList/theming`    |
+| Contract            | Verification                                                                                                                                                     | Representative states                                 | Mutation or failure expectation                                                                                                                                | Audit section                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| FR1, AR1            | `CheckboxList.test.tsx` group-role, group-description, and disabledMessage cases                                                                                 | Named group; description plus status; disabled reason | A missing group name, or a description and status out of order, fails. Evidence gap: no test asserts the caller description first or the disabled reason last. | `audit:CheckboxList/accessibility` |
+| FR2, FR15           | `CheckboxList.test.tsx` ref and container case; `CheckboxList.fr10.test.tsx`                                                                                     | Standalone; `horizontal-labels` FormLayout            | A ref off the group, `container*` off the Field box, or a base prop off the group fails.                                                                       | `audit:CheckboxList/api`           |
+| FR4, FR14           | `CheckboxList.test.tsx` error-status case                                                                                                                        | Error with message                                    | A missing status message fails. Evidence gap: no test asserts the absent invalid state or the empty render without a message.                                  | `audit:CheckboxList/accessibility` |
+| FR6, FR7            | `CheckboxList.test.tsx` add, remove, and pending cases; `CheckboxList.a11y.chromium.spec.ts` `pending-single`, `pending-concurrent`, and `pending-settled` cases | Add; remove; one and two pending values; settled      | A wrong array, a cleared earlier pending value, or a busy state that outlives settlement fails.                                                                | `audit:CheckboxList/behavior`      |
+| FR9, FR10, AR4      | `CheckboxList.test.tsx` group-disabled, disabledMessage, and read-only cases; shared checkbox bindings                                                           | Group disabled; with reason; read-only item           | A lost tab stop, a toggle while disabled, or a read-only toggle fails. Evidence gap: no test asserts that a focused checkbox is not described by the reason.   | `audit:CheckboxList/accessibility` |
+| FR13                | `CheckboxList.test.tsx` density cases; `CheckboxList.a11y.chromium.spec.ts` density, divider, 320-pixel, and RTL cases                                           | Compact, balanced, spacious; dividers; narrow; RTL    | A density, divider, overflow, or direction sensor fails. Evidence gap: no test asserts `width` sizing the label, list, and status together.                    | `audit:CheckboxList/layout`        |
+| ORD1–ORD3, PR1      | ORD1 and ORD2 are covered by the FR6 and FR7 rows, ORD3 by the FR9 and FR10 rows. Evidence gap: no test asserts the absence of observers or global listeners     | —                                                     | —                                                                                                                                                              | `audit:CheckboxList/behavior`      |
+| Local target source | `themingTargets.test.ts`; `CheckboxList.test.tsx` ref and container case                                                                                         | `checkbox-list`                                       | A rendered class absent from the documented targets, or a missing `astryx-checkbox-list` on the Field root, fails.                                             | `audit:CheckboxList/theming`       |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                    | Canonical anatomy and current local target            | Canonical-key drift, invalid dispositions or target spelling, or an unclaimed current local target fails validation.                                           | `audit:CheckboxList/theming`       |
 
 Per-option verification is owned by `component:CheckboxListItem`'s
 verification map. No current repository check resolves `delegatesTo`
-owner/target pairs; the pairs in this draft were verified manually, so semantic
-delegation drift remains a validation gap.
+owner and target pairs; the pairs above match the current Field, List,
+CheckboxInput, Spinner, and FieldStatus targets.
+
+## Current-state impact
+
+- **Group reason (FR9).** A group `disabledMessage` describes only the
+  `role="group"`, so a focused disabled checkbox is not described by it,
+  against `spec:AST-085` FR5 and FR7.
+- **Error status (FR14).** An error `status` sets no invalid state on the group
+  or its checkboxes, and a status without a message renders nothing; the
+  meaning is OQ3.
 
 ## Decision log
 
-None. This draft records shipped behavior; it introduces no new API, default,
-target, or subjective visual decision.
+No component-local decision. CheckboxList applies `spec:AST-021`,
+`spec:AST-085`, and `family:input-fields` FR10.
 
 ## Open questions
 
 - **OQ3 — Should an error status expose invalid state, and what should a status
   without a message render?** (`human-api`)
-- **OQ4 — Which element owns consumer ARIA pass-throughs on CheckboxList?**
-  (`human-api`) They currently reach the field root rather than the group.
-
-Former OQ1, OQ2, OQ5, and OQ6 are per-option questions and keep their numbers in
-`component:CheckboxListItem`.
+  Per-option questions live in `component:CheckboxListItem`.
 
 ## Content boundary
 
