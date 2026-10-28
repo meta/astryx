@@ -468,7 +468,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   own record. Keyboard and assistive-technology selection are unchanged. A pen's hold
   acts as a finger's; a mouse makes the context request by a right click, not
   a long press (FR43), and otherwise keeps its released behavior
-  (`spec:AST-017` FR59; DEC-9).
+  (`spec:AST-017` FR59; DEC-9). A mouse or pen drag that a recognizer claims
+  suppresses text selection for that drag only; an unclaimed mouse drag keeps
+  today's behavior.
 
   Guidance: a caller whose menu element carries text a person may want offers
   a Copy action in its menu.
