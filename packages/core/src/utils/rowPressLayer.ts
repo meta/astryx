@@ -14,8 +14,7 @@
  * @position Internal to core: core's `exports` do not list this module
  *   (`architecture:public-component-api` INV12). Composed by Item and
  *   TreeList after their overlay variant (interactionOverlay.stylex.ts);
- *   a selection hold (selectionHold.ts) writes the held state it shows.
- *   Tested by interactionOverlay.cell.test.ts.
+ *   tested by interactionOverlay.cell.test.ts.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -31,17 +30,11 @@ const COARSE = '@media (pointer: coarse)';
 const PRESSED_ON = '[data-astryx-press="on"]';
 const PRESSED_FADING = '[data-astryx-press="fading"]';
 /**
- * Written by a selection hold (selectionHold.ts) on the row it keeps
- * selected through a navigation push; the controller never overwrites it.
- */
-const PRESSED_HELD = '[data-astryx-press="held"]';
-/**
- * A press in any of its states (on, releasing, or held by a selection hold):
- * the row layer exists only then, so at rest a row's own `::before` and its
- * stacking are untouched.
+ * A press in any of its states: the row layer exists only then, so at rest a
+ * row's own `::before` and its stacking are untouched.
  */
 const PRESSED_ANY =
-  ':is([data-astryx-press="on"],[data-astryx-press="fading"],[data-astryx-press="held"])';
+  ':is([data-astryx-press="on"],[data-astryx-press="fading"])';
 
 const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
@@ -90,14 +83,10 @@ export const rowPressLayerStyles = stylex.create({
    * variant keeps the hover and a mouse's `:active`. The row must be
    * positioned (the layer is placed absolutely); `isolation: isolate` keeps
    * the layer above the row's background (a selected fill) and below its
-   * content. The layer exists only while a press is on or releasing, or a
-   * selection hold keeps the row: at rest a row's own `::before` and its
-   * stacking are as they were; during a press the layer is the row's
-   * `::before`, so a caller's decoration there is replaced for that time
-   * (decorate with a child). A selection hold (selectionHold.ts)
-   * writes `held` on the row it keeps selected through a navigation push: the
-   * layer shows at full strength, and the hold's own Web Animations move it
-   * from there.
+   * content. The layer exists only while a press is on or releasing: at rest
+   * a row's own `::before` and its stacking are as they were; during a press
+   * the layer is the row's `::before`, so a caller's decoration there is
+   * replaced for that time (decorate with a child).
    *
    * Under a finger only (a coarse primary pointer): a fine pointer keeps the
    * variant exactly, with no layer, no stacking context and its own touch
@@ -164,17 +153,10 @@ export const rowPressLayerStyles = stylex.create({
           [PRESSED_ANY]: colorVars['--color-overlay-pressed'],
         },
       },
-      // On at once while the press is believed, and while a selection hold
-      // keeps the row selected (its own animations move it from there);
-      // nothing transitions it.
+      // On at once while the press is believed; nothing transitions it.
       opacity: {
         default: null,
-        [COARSE]: {
-          default: null,
-          [PRESSED_ON]: 1,
-          [PRESSED_HELD]: 1,
-          [PRESSED_FADING]: 0,
-        },
+        [COARSE]: {default: null, [PRESSED_ON]: 1, [PRESSED_FADING]: 0},
       },
       animationName: {
         default: null,
@@ -203,17 +185,6 @@ export const rowPressLayerStyles = stylex.create({
       animationFillMode: {
         default: null,
         [COARSE]: {default: null, [PRESSED_FADING]: 'both'},
-      },
-      // The motion foundation's animator promotes the layer it animates (a
-      // held row's deselect) through this variable on the row, so the
-      // animation has its own compositing layer: iOS Safari keeps a script
-      // animation running through a busy main thread only on a layer.
-      willChange: {
-        default: null,
-        [COARSE]: {
-          default: null,
-          [PRESSED_ANY]: 'var(--astryx-motion-will-change-before, auto)',
-        },
       },
     },
   },

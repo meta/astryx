@@ -88,6 +88,7 @@ export interface ListProps extends BaseProps<
   hasAnimatedChanges?: boolean;
 
   /**
+<<<<<<< 9e84c6c7eecfd2984e21bf34e6afc656da049de1
    * Makes the rows reorderable, with the object `createReorderable` makes:
    * each ListItem with an `itemKey` gets a reorder handle at its end (one the
    * object's `isReorderable` rejects keeps its place), and each committed
@@ -113,6 +114,9 @@ export interface ListProps extends BaseProps<
    * Whether to show dividers between list items. Under a finger, a touch
    * press hides the dividers on either side of the pressed row until the
    * finger lifts, as iOS lists do.
+=======
+   * Whether to show dividers between list items.
+>>>>>>> ba48dc6e844c518b06bf5061cb06b81aa3ad8a88
    * @default false
    */
   hasDividers?: boolean;
