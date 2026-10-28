@@ -589,6 +589,32 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
+  function groupAction(row: HTMLElement): HTMLButtonElement {
+    const action = focusedButton(row);
+    for (const [name, value] of Object.entries(pressGroupItemProps)) {
+      action.setAttribute(name, value);
+    }
+    return action;
+  }
+
+  it("leaves a mouse press on an action its group tracks to the group's tracker (family:action-groups)", () => {
+    const action = groupAction(rows[1]);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    // The tracker's own paint is left alone through the release.
+    action.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still paints a Space press on a focused action its group tracks: the group tracks pointers only', () => {
+    const action = groupAction(rows[1]);
+    key(action, 'keydown');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    key(action, 'keyup');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {
     press(rows[1], 'pointerdown', 10, 100, 'mouse');
     press(document.body, 'pointermove', 400, 900, 'mouse');
