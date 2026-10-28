@@ -148,3 +148,11 @@ export type {
   ContainerRevealOptions,
   ContentRevealOptions,
 } from './useContainerReveal';
+
+// Lives beside ContextMenu, which shares its menu; AST-107 imports it from
+// here, with the other public gesture hooks.
+export {useContextMenu} from '../ContextMenu/useContextMenu';
+export type {
+  UseContextMenuOptions,
+  UseContextMenuResult,
+} from '../ContextMenu/useContextMenu';

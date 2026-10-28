@@ -7,7 +7,9 @@
  * @input A ref to the element, and createContextMenu's options with a
  *   ReactNode `menuContent`
  * @output useContextMenu: the React wrapper over createContextMenu,
- *   returning `{open, close}` (spec:AST-107 FR8, FR6)
+ *   returning `{open, close}` (spec:AST-107 FR8, FR6); exported from the
+ *   hooks entry point (@astryxdesign/core/hooks), as AST-107 imports it,
+ *   and from ContextMenu's
  * @position Public hook over the public factory: it hands createContextMenu
  *   a `render` that portals `menuContent` into the menu's container, carries
  *   the caller's Core providers (theme, layer, link, i18n) into the menu, and

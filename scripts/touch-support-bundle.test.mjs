@@ -160,6 +160,9 @@ const GESTURE_USERS = new Set([
   'TimeInput',
   // useMenuPress's trigger, which waits on a scroll view under a finger.
   'hooks: useMenuPress',
+  // useContextMenu's element, which opens on its context request's hold
+  // (spec:AST-107 FR8, from the hooks entry as AST-107 imports it).
+  'hooks: useContextMenu',
   // useScrollLock's page hold, and the layered components that reach it.
   'hooks: useScrollLock',
   'Layer',

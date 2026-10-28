@@ -107,7 +107,7 @@ export const docs = {
   },
   relatedComponents: ['ContextMenu', 'MoreMenu'],
   relatedHooks: ['createContextMenu'],
-  importPath: '@astryxdesign/core/ContextMenu',
+  importPath: '@astryxdesign/core/hooks',
   category: 'interaction',
 };
 
