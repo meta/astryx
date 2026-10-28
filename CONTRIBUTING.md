@@ -517,8 +517,10 @@ and CI picks it up:
 
 A browser spec runs on a pull request when the PR changes the spec, its
 component folder, or the component it is named after (`ChatSendButton.a11y.chromium.spec.ts`
-belongs to `core/ChatSendButton`). Routing lines in the spec's header comment
-change that, and the runner rejects any other value:
+belongs to `core/ChatSendButton`). A changed knowledge record (`<Name>.spec.md`)
+counts toward neither the folder nor a path token, since no browser renders it.
+Routing lines in the spec's header comment change that, and the runner rejects
+any other value:
 
 ```ts
 // @pr-a11y always                 every PR that changes components

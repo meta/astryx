@@ -93,4 +93,20 @@ describe('PR CI duration budget', () => {
     expect(script).toContain('row.minutes > 12');
     expect(script).toContain('Run span');
   });
+
+  it('retries a server error on its job listing', () => {
+    // The listing is one request for every job of the run with its steps,
+    // and GitHub can answer it 502 at its gateway limit. github-script
+    // retries a server error only when the step sets `retries`; the client
+    // errors it exempts stay final.
+    const step = ci.jobs['ci-duration'].steps[0];
+    expect(step.uses).toMatch(/^actions\/github-script@/);
+    expect(step.with.retries).toBeGreaterThanOrEqual(1);
+    const exempt = String(
+      step.with['retry-exempt-status-codes'] ?? '400,401,403,404,422',
+    )
+      .split(',')
+      .map(Number);
+    expect(exempt.filter(code => code >= 500)).toEqual([]);
+  });
 });
