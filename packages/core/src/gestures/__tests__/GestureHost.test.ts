@@ -4034,6 +4034,31 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     expect(consumer.events.length).toBeGreaterThan(0);
   });
 
+  it("starts no press for a pen's barrel button, as the README says, under a fine or a coarse pointer (FR43)", () => {
+    for (const target of [fineHost(), host]) {
+      document.body.innerHTML = '';
+      const {row} = mount('<div id="row"></div>');
+      const consumer = new RecordingConsumer();
+      detachers.push(target.attachConsumer(row, consumer));
+      pointer('pointerdown', row, {
+        pointerType: 'pen',
+        x: 5,
+        y: 5,
+        button: 2,
+        buttons: 2,
+        time: 0,
+      });
+      pointer('pointerup', row, {
+        pointerType: 'pen',
+        x: 5,
+        y: 5,
+        button: 2,
+        time: 80,
+      });
+      expect(consumer.events).toEqual([]);
+    }
+  });
+
   it("ends a fine-pointer finger's press on an action group at its lift, and the group's next press begins and ends as well (FR43, FR19)", () => {
     vi.useFakeTimers();
     try {
