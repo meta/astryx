@@ -130,6 +130,11 @@ export interface ZoomCore {
   /** Where the photo is going, when an animation the core did not start ends there. */
   setTarget(transform: ZoomTransform): void;
   setZoomed(next: boolean): void;
+  /**
+   * Reports that the photo shows at its fitted size again, when an animation
+   * the core did not start lands there (`onFitChange`).
+   */
+  setAtFit(next: boolean): void;
   /** Whether the photo is moving (shown away from where it is going). */
   isMoving(): boolean;
   /** Whether a zoomed photo's edge toward `direction` is at the stage's. */
@@ -493,6 +498,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
+      setAtFit,
       isMoving,
       isAtEdgeOf,
       settleTo,
@@ -506,6 +512,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
+      setAtFit,
       isMoving,
       isAtEdgeOf,
       settleTo,
