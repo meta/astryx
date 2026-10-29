@@ -141,7 +141,6 @@ import {
 } from './GestureArena';
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
@@ -193,6 +192,8 @@ interface Registration {
   manageStyle: boolean;
   /** An action group (`family:action-groups` FR5). */
   actionGroup: boolean;
+  /** The attachments that asked for the action group; it lasts while one does. */
+  actionGroupAsks: number;
   /** The group's passive `pointerdown` listener under a fine pointer. */
   groupDownListener: EventListener | null;
 }
@@ -563,7 +564,12 @@ export class GestureHost {
   ): () => void {
     const registration = this.registrationFor(element);
     registration.manageStyle = options.manageStyle ?? registration.manageStyle;
-    registration.actionGroup = options.actionGroup ?? registration.actionGroup;
+    // An action group while any attachment asks, whatever their order.
+    const asksForGroup = options.actionGroup === true;
+    if (asksForGroup) {
+      registration.actionGroupAsks += 1;
+      registration.actionGroup = true;
+    }
     recognizer.view = element;
     if (options.perEventPointer === true) {
       this.perEventRecognizers.add(recognizer);
@@ -584,6 +590,10 @@ export class GestureHost {
     return () => {
       recognizer.onEnabledChange = null;
       this.perEventRecognizers.delete(recognizer);
+      if (asksForGroup) {
+        registration.actionGroupAsks -= 1;
+        registration.actionGroup = registration.actionGroupAsks > 0;
+      }
       const index = registration.recognizers.indexOf(recognizer);
       if (index >= 0) {
         registration.recognizers.splice(index, 1);
@@ -714,15 +724,27 @@ export class GestureHost {
     // drawn now; the hit test below flushes them. The engine then gets
     // z-order, pointer-events and clipping right, which no box math would.
     resolvePresented(movers);
-    const hit = this.doc.elementFromPoint(x, y);
+    let hit = this.doc.elementFromPoint(x, y);
+    // The document answers a shadow host for anything inside its open root:
+    // descend to what is drawn there.
+    while (hit?.shadowRoot != null) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (inner == null || inner === hit) {
+        break;
+      }
+      hit = inner;
+    }
     if (hit == null || hit === native) {
       return native;
     }
+    const found = hit;
     const node = native instanceof Node ? native : null;
     const isAboutMover = movers.some(
-      mover => mover.contains(hit) || (node != null && mover.contains(node)),
+      mover =>
+        containsAlongFlatTree(mover, found) ||
+        (node != null && containsAlongFlatTree(mover, node)),
     );
-    return isAboutMover ? hit : native;
+    return isAboutMover ? found : native;
   }
 
   /** The browser took these touches (a scroll): no click of ours for them. */
@@ -854,7 +876,11 @@ export class GestureHost {
 
   /** @internal Whether a finger that landed inside `node` is down now. */
   isFingerDownIn(node: Node): boolean {
-    return this.fingerTargets.some(target => node.contains(target));
+    // Along the flat tree: a finger on content inside an open shadow root is
+    // in the scroller around that root.
+    return this.fingerTargets.some(target =>
+      containsAlongFlatTree(node, target),
+    );
   }
 
   private registrationFor(element: Element): Registration {
@@ -870,6 +896,7 @@ export class GestureHost {
         authorTouchAction: null,
         manageStyle: true,
         actionGroup: false,
+        actionGroupAsks: 0,
         groupDownListener: null,
       };
       this.registry.set(element, registration);
@@ -1456,12 +1483,14 @@ export class GestureHost {
       return;
     }
     // The window's capture phase, through the shared input stream
-    // (utils/inputStream.ts): the earliest point a page can intercept input,
-    // so an app's capture-phase stopPropagation at the document starves no
-    // recognizer, as UIKit's recognizers see touches before views do. Only
-    // the listeners that cancel are non-passive, and only while a claimer is
-    // attached (syncClaimingListeners); none of them is a touchstart or
-    // touchmove, so none of them holds a scroll.
+    // (utils/inputStream.ts): ahead of any document listener, so an app's
+    // window-capture stopPropagation, or a document-capture
+    // stopImmediatePropagation registered first, no longer hides a touch
+    // from the recognizers. A recognizer that must claim mid-gesture still
+    // needs the touch to reach its element, where its blocking touchmove
+    // sits. Only the listeners that cancel are non-passive, and only while a
+    // claimer is attached (syncClaimingListeners); none of them is a
+    // touchstart or touchmove, so none of them holds a scroll.
     this.unsubscribers = [
       // Pointer Events only: a finger comes from its pointer events alone. A
       // browser that has Touch Events still sends them for the same finger,
@@ -1879,10 +1908,11 @@ export class GestureHost {
         finger.phase === 'cancelled' ||
         !(finger.target instanceof Node) ||
         !(touch.target instanceof Node) ||
+        // Along the flat tree, both ways: the finger's target can be inside
+        // an open shadow root while its touches reach the host retargeted.
         !(
-          finger.target === touch.target ||
-          finger.target.contains(touch.target) ||
-          touch.target.contains(finger.target)
+          containsAlongFlatTree(finger.target, touch.target) ||
+          containsAlongFlatTree(touch.target, finger.target)
         )
       ) {
         continue;
@@ -2911,7 +2941,9 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
 /**
  * iOS WebKit, by the one property only it implements (the engine check of
  * utils/touchPresentation.ts, which this module cannot import: it brings
- * React).
+ * React). It gates one behaviour, presented hit testing, an engine
+ * workaround (`spec:AST-013` FR6) with its review condition and regression
+ * fixture in motion/presentation.ts.
  */
 function isIosWebKit(
   view: (Window & {CSS?: Partial<typeof CSS>}) | null,

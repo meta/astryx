@@ -37,7 +37,7 @@ describe('SwipeGestureRecognizer', () => {
     // 40 across), failed once the drift passes the 50 px across limit.
     const diagonal = createHarness();
     const b = new SwipeGestureRecognizer({name: 'b'});
-    const drift = diagonal
+    diagonal
       .finger(1)
       .down(0, 0, 0, {recognizers: [b]})
       .move(45, 55, 60);

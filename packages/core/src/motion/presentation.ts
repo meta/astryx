@@ -16,8 +16,9 @@
  * the compositor where the animation STARTED: it keeps the transform it
  * resolved when the animation went to the compositor, so event targets,
  * `elementFromPoint` and `getBoundingClientRect` stay there for the whole
- * curve, while the inline style already holds the end and the computed
- * style is live (iOS 26.2, measured). A style write on the element makes it
+ * curve, while the inline style holds the value the curve starts from (the
+ * animator writes it there while the curve runs) and the computed style is
+ * live (iOS 26.2, measured). A style write on the element makes it
  * resolve the transform again, to the value drawn at that moment, and it
  * stays there. UIKit keeps an interruptible animation hit-testable where it
  * is drawn (UIViewPropertyAnimator), so the host corrects for it from this
@@ -25,6 +26,11 @@
  *
  * Translation only: a scale or a rotation (a zoom transition, a lifted
  * preview) is still hit at its untransformed box.
+ *
+ * An engine workaround (`spec:AST-013` FR6). Review condition: re-measure on
+ * each iOS release, and remove this registry and the host's correction once
+ * iOS WebKit hit-tests a compositor-moved element where it is drawn.
+ * Regression fixture: gestures/__tests__/presentedHitTesting.test.ts.
  */
 
 /** How far an element is drawn from where the engine hit-tests it, CSS px. */
