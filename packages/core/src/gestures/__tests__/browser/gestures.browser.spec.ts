@@ -1209,6 +1209,91 @@ async function openTapInScroller(page: Page, engine: string): Promise<Driver> {
   return driver;
 }
 
+test('a still finger with sub-pixel jitter over a scroll view keeps its tap and scrolls nothing (spec:AST-094 FR18–FR22)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openTapInScroller(page, browserName);
+  const at = await center(page, 'row');
+  // A resting fingertip: a few tenths of a pixel back and forth.
+  const jitter = [
+    [0.3, 0.2],
+    [-0.2, 0.4],
+    [0.4, -0.3],
+    [-0.3, -0.2],
+    [0.2, 0.3],
+    [0, 0],
+  ];
+  const steps: Step[] = [{t: 0, down: [{...at, id: 1}]}];
+  jitter.forEach(([dx, dy], i) =>
+    steps.push({
+      t: (i + 1) * 16,
+      down: [{x: at.x + dx, y: at.y + dy, id: 1}],
+    }),
+  );
+  steps.push({t: (jitter.length + 1) * 16, down: []});
+  await driver.play(steps);
+  await page.waitForTimeout(100);
+  const taps = await page.evaluate(
+    () => (window as unknown as {__taps: string[]}).__taps,
+  );
+  expect(taps).toContain('ended');
+  expect(await scrollTop(page, 'list')).toBe(0);
+});
+
+for (const stop of [
+  {
+    label: "an app's window-capture stopPropagation",
+    install: 'window' as const,
+  },
+  {
+    label:
+      "a document-capture stopImmediatePropagation registered before core's",
+    install: 'document' as const,
+  },
+]) {
+  test(`a tap is still recognized under ${stop.label}, since the recognizers hear touches on the window's capture phase`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openBare(page, browserName);
+    await page.evaluate(install => {
+      // The app's stop comes first, before any recognizer attaches.
+      for (const type of ['touchstart', 'touchmove', 'touchend']) {
+        if (install === 'window') {
+          window.addEventListener(type, event => event.stopPropagation(), {
+            capture: true,
+          });
+        } else {
+          document.addEventListener(
+            type,
+            event => event.stopImmediatePropagation(),
+            {capture: true},
+          );
+        }
+      }
+      const {host, TapGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="row" style="height: 80px; background: #cfc">row</div>';
+      const taps: string[] = [];
+      (window as unknown as {__taps: string[]}).__taps = taps;
+      const tap = new TapGestureRecognizer({name: 'tap'});
+      tap.addTransitionListener((_current, _from, to) => taps.push(to));
+      host.attach(document.getElementById('row') as HTMLElement, tap);
+    }, stop.install);
+    const at = await center(page, 'row');
+    await driver.play([
+      {t: 0, down: [{...at, id: 1}]},
+      {t: 60, down: []},
+    ]);
+    await page.waitForTimeout(100);
+    const taps = await page.evaluate(
+      () => (window as unknown as {__taps: string[]}).__taps,
+    );
+    expect(taps).toContain('ended');
+  });
+}
+
 for (const travel of [
   {dx: 0, dy: 9, label: '9 px straight', keeps: true},
   {dx: 0, dy: 10, label: '10 px straight', keeps: false},
@@ -1283,6 +1368,53 @@ for (const run of [
     await logTouchMoves(page);
     await driver.play(
       drag({x: 40, y: 150}, {x: 40 + run.travel, y: 150}, 7, false),
+    );
+    await page.waitForTimeout(100);
+    const edges = await page.evaluate(
+      () => (window as unknown as {__edge: string[]}).__edge,
+    );
+    expect(edges.includes('began')).toBe(run.begins);
+    await driver.play([{t: 0, down: []}]);
+  });
+}
+
+/**
+ * A screen-edge pan on an element that reaches beyond its band (200 px wide,
+ * from the left edge), over the same horizontal scroller.
+ */
+async function openWideEdgePan(page: Page, engine: string): Promise<Driver> {
+  const driver = await openBare(page, engine);
+  await page.evaluate(() => {
+    const {host, ScreenEdgePanGestureRecognizer} = window.__api;
+    document.body.innerHTML = `
+      <div id="hscroll" style="height: 300px; overflow-x: auto; overscroll-behavior: contain">
+        <div style="width: 3000px; height: 300px; background: linear-gradient(90deg, #eef, #cce)">wide</div>
+      </div>
+      <div id="edge" style="position: fixed; left: 0; top: 0; width: 200px; height: 300px"></div>`;
+    const edges: string[] = [];
+    (window as unknown as {__edge: string[]}).__edge = edges;
+    const pan = new ScreenEdgePanGestureRecognizer({
+      name: 'edge',
+      edges: ['left'],
+    });
+    pan.addTransitionListener((_current, _from, to) => edges.push(to));
+    host.attach(document.getElementById('edge') as HTMLElement, pan);
+  });
+  return driver;
+}
+
+for (const run of [
+  {travel: 9, begins: false},
+  {travel: 10, begins: true},
+]) {
+  test(`a screen-edge pan on an element wider than its band ${run.begins ? 'claims at' : 'has not claimed at'} ${run.travel} px of travel from a touch in the band (spec:AST-094 FR18–FR22, DEC-22)`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openWideEdgePan(page, browserName);
+    await logTouchMoves(page);
+    await driver.play(
+      drag({x: 20, y: 150}, {x: 20 + run.travel, y: 150}, 7, false),
     );
     await page.waitForTimeout(100);
     const edges = await page.evaluate(

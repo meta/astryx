@@ -4,11 +4,15 @@
 
 /**
  * @description Analyzes PR changes to detect new/modified components and gather stats
- * @input --base <branch> --head <ref> --output <file> [--base-root <dir> [--base-only]]
+ * @input --base <branch> --head <ref> --output <file> [--base-root <dir> [--base-only]] [--force-full]
  * @output JSON file with component analysis; exits non-zero if the base...head diff fails (e.g. shallow clone without a merge base).
  *   With --base-root (a built checkout of the merge base), the analysis also
  *   records baseComponentStats and baseBundlePackages measured in that tree;
  *   --base-only writes just those, with the head and base commits they belong to.
+ *   A changed module outside every component folder (a shared hook, the
+ *   animator) owns the components whose bundle reaches it, so browser audits
+ *   run for those reverse dependents; one no component reaches, or --force-full
+ *   (a change to shared infrastructure), asks for full audits.
  */
 
 const fs = require('node:fs');
@@ -40,6 +44,7 @@ const headRef = getArg('head') || 'HEAD';
 const outputFile = getArg('output') || 'analysis.json';
 const baseRoot = getArg('base-root');
 const baseOnly = args.includes('--base-only');
+const forceFull = args.includes('--force-full');
 if (baseOnly && !baseRoot) {
   console.error('::error::--base-only needs --base-root');
   process.exit(1);
@@ -62,6 +67,58 @@ const pkgDist = (pkg) => `${pkg.dir}/dist`;
 
 // Get canonical direct public component names for a package. Nested family,
 // context, and shared directories deliberately stay unresolved so audits widen.
+// The canonical components a nested package's folder implements (its docs
+// name them, and the barrel exports them from inside it).
+const familyIndex = new Map();
+function familyMembers(pkg, folder) {
+  const sourceDir = path.join(process.cwd(), pkgSrc(pkg));
+  if (!familyIndex.has(pkg.name)) {
+    familyIndex.set(pkg.name, {
+      canonical: new Set(nestedPackageComponentNames(process.cwd(), pkg)),
+      exports: componentExportsFromBarrel(path.join(sourceDir, 'index.ts'), sourceDir),
+    });
+  }
+  const { canonical, exports } = familyIndex.get(pkg.name);
+  const directory = path.join(sourceDir, folder);
+  try {
+    return documentedComponentNames(directory).filter(
+      (name) => canonical.has(name) && exports.get(name)?.startsWith(`${directory}${path.sep}`),
+    );
+  } catch {
+    return [];
+  }
+}
+
+// Every canonical component a folder implements: the package barrel exports
+// it from inside that folder, documented or not (FieldLabel in Field,
+// DrawerHeader in Drawer). RTL matches owners by these names.
+const folderIndex = new Map();
+function folderComponents(pkg, folder, repoRoot = process.cwd()) {
+  const sourceDir = path.join(repoRoot, pkgSrc(pkg));
+  const key = `${repoRoot}\0${pkg.name}`;
+  if (!folderIndex.has(key)) {
+    folderIndex.set(key, {
+      canonical:
+        pkg.layout === 'flat'
+          ? new Set(flatPackageComponentNames(repoRoot, pkg))
+          : new Set(nestedPackageComponentNames(repoRoot, pkg)),
+      exports:
+        pkg.layout === 'flat'
+          ? new Map()
+          : componentExportsFromBarrel(path.join(sourceDir, 'index.ts'), sourceDir),
+    });
+  }
+  const { canonical, exports } = folderIndex.get(key);
+  if (pkg.layout === 'flat') return canonical.has(folder) ? [folder] : [];
+  const directory = path.join(sourceDir, folder);
+  return [...canonical]
+    .filter((name) => {
+      const file = exports.get(name);
+      return file === directory || file?.startsWith(`${directory}${path.sep}`);
+    })
+    .sort();
+}
+
 function getComponentNames(pkg) {
   if (pkg.layout === 'flat') {
     return flatPackageComponentNames(process.cwd(), pkg);
@@ -556,10 +613,16 @@ function packageTargets(pkg) {
 // Every canonical public component a change can affect: its own folder or
 // file changed, or its bundle, import() targets included, reaches a changed
 // module of its package, such as a shared hook or style module. Family folders
-// that hold several components yield each of them.
-function sizeTargets(changedFiles) {
+// that hold several components yield each of them. `reach`, when given,
+// collects each changed source path some component reaches (its folder, or a
+// module in its bundle) in `paths`, and in `measured` each package whose
+// bundles could be read: there, a module no bundle holds reaches nothing.
+function sizeTargets(changedFiles, reached = null) {
   const withoutExtension = (file) => file.replace(/\.(tsx?|jsx?|mjs)$/, '');
-  const targets = [];
+  // Each package's changed modules, and its built dist to find them in: a
+  // bundle in any package can reach them (Lab, Charts, Rich Text and Vega
+  // import Core).
+  const changed = [];
   for (const pkg of PACKAGES) {
     const prefix = pkgSrc(pkg) + '/';
     const changedModules = new Set(
@@ -568,20 +631,44 @@ function sizeTargets(changedFiles) {
         .map((file) => withoutExtension(file.slice(prefix.length))),
     );
     if (changedModules.size === 0) continue;
-    const changedTops = new Set([...changedModules].map((file) => file.split('/')[0]));
     const dist = path.join(process.cwd(), pkgDist(pkg));
-    // esbuild reports inputs by real path.
-    const distReal = fs.existsSync(dist) ? fs.realpathSync(dist) : dist;
+    changed.push({
+      pkg,
+      prefix,
+      changedModules,
+      changedTops: new Set([...changedModules].map((file) => file.split('/')[0])),
+      // esbuild reports inputs by real path.
+      distReal: fs.existsSync(dist) ? fs.realpathSync(dist) : dist,
+    });
+  }
+  if (changed.length === 0) return [];
+  const targets = [];
+  for (const pkg of PACKAGES) {
+    const own = changed.find((entry) => entry.pkg === pkg) ?? null;
+    const dist = path.join(process.cwd(), pkgDist(pkg));
     const all = packageTargets(pkg);
     const reach = bundleInputsByEntry(all.map((target) => path.join(dist, target.distModule)));
     for (const target of all) {
       const top = withoutExtension(target.distModule.split('/')[0]);
       const inputs = reach?.get(path.join(dist, target.distModule)) ?? [];
-      const reachesChange = inputs.some((input) => {
-        const relative = path.relative(distReal, input);
-        return !relative.startsWith('..') && changedModules.has(withoutExtension(relative));
-      });
-      if (changedTops.has(top) || reachesChange) targets.push(target);
+      const reachedPaths = inputs.flatMap((input) =>
+        changed.flatMap((entry) => {
+          const relative = path.relative(entry.distReal, input);
+          const module = withoutExtension(relative);
+          return !relative.startsWith('..') && entry.changedModules.has(module)
+            ? [entry.prefix + module]
+            : [];
+        }),
+      );
+      const isOwnFolder = own != null && own.changedTops.has(top);
+      if (isOwnFolder || reachedPaths.length > 0) targets.push(target);
+      if (reached != null) {
+        for (const reachedPath of reachedPaths) reached.paths.add(reachedPath);
+        if (isOwnFolder) reached.paths.add(own.prefix + top);
+      }
+    }
+    if (reached != null && own != null && reach != null && reach.size > 0) {
+      reached.measured.add(own.prefix);
     }
   }
   return targets;
@@ -691,6 +778,8 @@ function analyze() {
   const newComponentOwners = [];
   const modifiedComponentOwners = [];
   const unresolvedComponentSources = [];
+  // Each changed file under an unresolved source, to decide its reach.
+  const unresolvedFiles = [];
   const componentStats = {};
   const changedPackages = new Set();
 
@@ -727,6 +816,7 @@ function analyze() {
 
       if (!allComponents.includes(componentName)) {
         const source = `${pkg.packageName}/${componentName}`;
+        unresolvedFiles.push({ source, file });
         if (!unresolvedComponentSources.includes(source)) {
           unresolvedComponentSources.push(source);
         }
@@ -788,7 +878,8 @@ function analyze() {
   // Components a change can affect, by reach in the head build and, when the
   // merge base is built, in the base build too: CI's size-base job builds only
   // the base, and a module change can add or remove reach.
-  const headTargets = sizeTargets(changedFiles);
+  const reachedSources = { paths: new Set(), measured: new Set() };
+  const headTargets = sizeTargets(changedFiles, reachedSources);
   let targets = headTargets;
   let baseComponentSizes = null;
   if (baseRoot) {
@@ -814,6 +905,59 @@ function analyze() {
   }
   const componentSizes = baseOnly ? null : measureSizes(targets);
 
+  // Every changed module, inside a component folder or not (a shared hook,
+  // the animator, a family folder), adds the components whose head bundle
+  // reaches it as reverse dependents: visual and RTL audits run them, PR
+  // accessibility stays with changed components (spec:AST-030 FR12, FR13).
+  // In a package whose bundles were read, a module no bundle holds adds none.
+  // One outside every component folder in a package whose bundles could not
+  // be read stays unresolved and asks for full audits, as does --force-full.
+  const isDecided = (file) =>
+    [...reachedSources.measured].some((prefix) => file.startsWith(prefix)) ||
+    [...reachedSources.paths].some((reachedPath) => {
+      const module = file.replace(/\.(tsx?|jsx?|mjs)$/, '');
+      return module === reachedPath || module.startsWith(reachedPath + '/');
+    });
+  const unreachedSources = unresolvedComponentSources.filter((source) =>
+    unresolvedFiles.some((entry) => entry.source === source && !isDecided(entry.file)),
+  );
+  // One affected set of component folders, which visual and RTL both audit
+  // (spec:AST-030 FR13): each reverse dependent's folder, and each changed
+  // multi-component folder that documents components. Visual reads the
+  // folders (its stories are keyed by folder); RTL reads every component each
+  // folder implements (its routes are keyed by component: FieldLabel, not
+  // Field).
+  const folderOf = (target) => target.distModule.split('/')[0].replace(/\.(tsx?|jsx?|mjs)$/, '');
+  const dependentComponentFolders = [];
+  const dependentComponentOwners = [];
+  if (!baseOnly) {
+    const touched = new Set([...newComponentOwners, ...modifiedComponentOwners]);
+    const addFolder = (pkg, folder) => {
+      const qualified = `${pkg.packageName}/${folder}`;
+      if (dependentComponentFolders.includes(qualified)) return;
+      const members = folderComponents(pkg, folder);
+      const owners = (members.length > 0 ? members : [folder]).map(
+        (name) => `${pkg.packageName}/${name}`,
+      );
+      if (owners.every((owner) => touched.has(owner))) return;
+      dependentComponentFolders.push(qualified);
+      for (const owner of owners) {
+        if (!touched.has(owner) && !dependentComponentOwners.includes(owner)) {
+          dependentComponentOwners.push(owner);
+        }
+      }
+    };
+    for (const target of headTargets) addFolder(target.pkg, folderOf(target));
+    for (const source of unresolvedComponentSources) {
+      const [packageName, folder] = source.split('/');
+      const pkg = PACKAGES.find((candidate) => candidate.packageName === packageName);
+      if (pkg != null && pkg.layout !== 'flat' && familyMembers(pkg, folder).length > 0) {
+        addFolder(pkg, folder);
+      }
+    }
+    console.log(`Reverse dependents: ${dependentComponentOwners.join(', ') || 'none'}`);
+  }
+
   if (baseOnly) {
     const baseResult = {
       headSha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(),
@@ -833,8 +977,13 @@ function analyze() {
     modifiedComponents,
     newComponentOwners,
     modifiedComponentOwners,
+    dependentComponentOwners,
+    dependentComponentFolders,
+    // Every changed multi-component folder stays listed: PR accessibility
+    // expands it to its members (spec:AST-030 FR12, DEC-5). Only the sources
+    // no bundle decided ask for full audits.
     unresolvedComponentSources,
-    forceFullComponentAudits: unresolvedComponentSources.length > 0,
+    forceFullComponentAudits: forceFull || unreachedSources.length > 0,
     newExports,
     componentStats,
     changedPackages: [...changedPackages],
@@ -857,4 +1006,6 @@ function analyze() {
   return result;
 }
 
-analyze();
+if (require.main === module) analyze();
+
+module.exports = { folderComponents };

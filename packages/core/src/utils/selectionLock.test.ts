@@ -8,11 +8,11 @@
  *   callout included (`spec:AST-094` FR41, DEC-9). Where iOS WebKit runs the
  *   lock is a style; elsewhere `selectstart` is cancelled and no style is
  *   written
- * @position Unit tests for gestures/selectionLock.ts
+ * @position Unit tests for utils/selectionLock.ts
  */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {lockSelection} from '../selectionLock';
+import {lockSelection} from './selectionLock';
 
 /** Make `CSS.supports` answer as iOS WebKit does for its touch callout. */
 function asIosWebKit(): () => void {
