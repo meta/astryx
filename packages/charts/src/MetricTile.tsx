@@ -23,6 +23,7 @@
 import type {Ref, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
+import {useTranslator} from '@astryxdesign/core';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {themeProps} from '@astryxdesign/core/utils';
 import {
@@ -163,11 +164,16 @@ const DIRECTION_SENTIMENT: Record<
   flat: 'neutral',
 };
 
-/** Screen-reader text announced after the delta value. */
-const DIRECTION_TEXT: Record<MetricTileDeltaDirection, string> = {
-  up: 'trending up',
-  down: 'trending down',
-  flat: 'flat',
+/** Catalog keys for the screen-reader text announced after the delta value. */
+const DIRECTION_MESSAGE_KEYS: Record<
+  MetricTileDeltaDirection,
+  | '@astryx.chart.deltaTrendingUp'
+  | '@astryx.chart.deltaTrendingDown'
+  | '@astryx.chart.deltaFlat'
+> = {
+  up: '@astryx.chart.deltaTrendingUp',
+  down: '@astryx.chart.deltaTrendingDown',
+  flat: '@astryx.chart.deltaFlat',
 };
 
 /** Inline glyph paths (12x12 viewBox): up-right arrow, down-right arrow, dash. */
@@ -230,6 +236,7 @@ export function MetricTile({
     delta == null
       ? null
       : (delta.sentiment ?? DIRECTION_SENTIMENT[delta.direction]);
+  const t = useTranslator();
 
   return (
     <div
@@ -263,7 +270,7 @@ export function MetricTile({
             </svg>
             {delta.value}
             <span {...stylex.props(styles.srOnly)}>
-              ({DIRECTION_TEXT[delta.direction]})
+              ({t(DIRECTION_MESSAGE_KEYS[delta.direction])})
             </span>
           </span>
         ) : null}

@@ -36,6 +36,8 @@ export interface AreaOptions {
   stack?: string;
   gradient?: boolean;
   stroke?: boolean;
+  /** Width of the top-edge stroke path. Defaults to 2. */
+  strokeWidth?: number;
   label?: string;
 }
 
@@ -55,6 +57,12 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
   const curve = options.curve ?? 'monotone';
   const gradient = options.gradient ?? false;
   const stroke = options.stroke ?? true;
+  const strokeWidth =
+    typeof options.strokeWidth === 'number' &&
+    Number.isFinite(options.strokeWidth) &&
+    options.strokeWidth > 0
+      ? options.strokeWidth
+      : 2;
 
   const seriesDef: SeriesDef = {
     type: 'area',
@@ -131,7 +139,12 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
             stroke="none"
           />
           {stroke && (
-            <path d={strokeD} fill="none" stroke={fillColor} strokeWidth={2} />
+            <path
+              d={strokeD}
+              fill="none"
+              stroke={fillColor}
+              strokeWidth={strokeWidth}
+            />
           )}
         </g>
       );

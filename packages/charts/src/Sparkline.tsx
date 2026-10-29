@@ -77,7 +77,7 @@ export function Sparkline({
   const series = useMemo(
     () =>
       fill
-        ? [area('value', {color, curve, opacity: 0.25})]
+        ? [area('value', {color, curve, opacity: 0.25, strokeWidth})]
         : [line('value', {color, curve, strokeWidth})],
     [fill, color, curve, strokeWidth],
   );

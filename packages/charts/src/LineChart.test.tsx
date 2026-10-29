@@ -10,7 +10,7 @@
 
 import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, screen, act, within} from '@testing-library/react';
 import {LineChart} from './LineChart';
 
 const data = [
@@ -93,8 +93,12 @@ describe('LineChart series composition', () => {
     render(<LineChart data={data} xKey="month" yKeys={['revenue', 'trend']} />);
     reportWidth(600);
 
-    expect(screen.getByText('revenue')).toBeInTheDocument();
-    expect(screen.getByText('trend')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('revenue'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('trend'),
+    ).toBeInTheDocument();
   });
 
   it('omits the legend for a single series by default', () => {

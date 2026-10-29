@@ -10,7 +10,7 @@
 
 import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, screen, act, within} from '@testing-library/react';
 import {AreaChart} from './AreaChart';
 
 const data = [
@@ -95,8 +95,12 @@ describe('AreaChart series composition', () => {
     );
     reportWidth(600);
 
-    expect(screen.getByText('revenue')).toBeInTheDocument();
-    expect(screen.getByText('profit')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('revenue'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('profit'),
+    ).toBeInTheDocument();
   });
 
   it('omits the legend for a single series by default', () => {

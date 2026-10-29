@@ -22,7 +22,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give the sparkline a title so assistive technology announces what the trend shows.',
+          'Give the sparkline a title so assistive technology announces what the trend shows. The title also paints a visible heading above the plot, so only set it when the surrounding layout has room for one; otherwise leave it off and the chart falls back to a localized generic name.',
       },
       {
         guidance: true,
