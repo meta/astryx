@@ -31,6 +31,10 @@ const styles = stylex.create({
     width: 160,
     flexShrink: 0,
   },
+  pagingCard: {
+    width: 200,
+    flexShrink: 0,
+  },
   cardInner: {
     padding: spacingVars['--spacing-3'],
   },
@@ -59,7 +63,67 @@ const styles = stylex.create({
     marginBottom: spacingVars['--spacing-2'],
     fontFamily: typographyVars['--font-family-body'],
   },
+  // One page per item: the pages are as wide as their inline-size container.
+  pages: {
+    maxWidth: 400,
+    containerType: 'inline-size',
+  },
+  page: {
+    width: '100cqw',
+    boxSizing: 'border-box',
+    height: 220,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+    gap: spacingVars['--spacing-1'],
+    padding: spacingVars['--spacing-4'],
+    borderRadius: radiusVars['--radius-element'],
+    color: '#fff',
+    fontFamily: typographyVars['--font-family-body'],
+  },
+  pageTitle: {
+    margin: 0,
+    fontSize: 22,
+    fontWeight: 700,
+    color: 'inherit',
+  },
+  pageBody: {
+    margin: 0,
+    fontSize: 14,
+    color: 'inherit',
+  },
+  longPageSpacer: {
+    height: 120,
+  },
+  longPageTail: {
+    height: 1600,
+  },
 });
+
+const PAGES = [
+  {title: 'Plan', body: 'Pick a place and the dates.', color: '#3a6ea5'},
+  {title: 'Pack', body: 'A checklist for every trip.', color: '#527e51'},
+  {title: 'Go', body: 'Tickets and directions offline.', color: '#b05f34'},
+  {title: 'Share', body: 'Photos and notes for the group.', color: '#7a4f9a'},
+  {title: 'Remember', body: 'Your trips, a year later.', color: '#3a797f'},
+];
+
+function PagePanel({
+  title,
+  body,
+  color,
+}: {
+  title: string;
+  body: string;
+  color: string;
+}) {
+  return (
+    <div {...stylex.props(styles.page)} style={{backgroundColor: color}}>
+      <h3 {...stylex.props(styles.pageTitle)}>{title}</h3>
+      <p {...stylex.props(styles.pageBody)}>{body}</p>
+    </div>
+  );
+}
 
 const IMAGES = [
   {id: 1, src: 'https://picsum.photos/id/1042/200/200', label: 'dark.jpg'},
@@ -101,7 +165,8 @@ const meta: Meta<typeof Carousel> = {
     },
     hasSnap: {
       control: 'boolean',
-      description: 'Enable scroll-snap',
+      description:
+        'Enable scroll-snap; under a finger, with the buttons, one child per swipe',
     },
   },
   decorators: [
@@ -319,6 +384,80 @@ export const Loop: Story = {
             alt={img.label}
             label={img.label}
           />
+        ))}
+      </Carousel>
+    </div>
+  ),
+};
+
+export const Paging: Story = {
+  name: 'Paging (Snap, Full-Width Pages)',
+  render: () => (
+    <div {...stylex.props(styles.pages)}>
+      <p {...stylex.props(styles.label)}>
+        Under a finger each swipe moves one page and settles like an iOS paging
+        scroll view; a mouse, a trackpad and the keyboard snap natively
+      </p>
+      <Carousel hasSnap gap={2} aria-label="Trip planner">
+        {PAGES.map(page => (
+          <PagePanel key={page.title} {...page} />
+        ))}
+      </Carousel>
+    </div>
+  ),
+};
+
+export const PagingLoop: Story = {
+  name: 'Paging (Loop)',
+  render: () => (
+    <div {...stylex.props(styles.pages)}>
+      <p {...stylex.props(styles.label)}>
+        Next on the last page returns to the first; Prev on the first goes to
+        the last
+      </p>
+      <Carousel hasSnap hasLoop gap={2} aria-label="Trip planner, looping">
+        {PAGES.map(page => (
+          <PagePanel key={page.title} {...page} />
+        ))}
+      </Carousel>
+    </div>
+  ),
+};
+
+export const PagingInLongPage: Story = {
+  name: 'Paging (In a Long Page)',
+  render: () => (
+    <div {...stylex.props(styles.pages)}>
+      <p {...stylex.props(styles.label)}>
+        A vertical drag on the pages scrolls the page; a horizontal one pages
+      </p>
+      <div {...stylex.props(styles.longPageSpacer)} />
+      <Carousel hasSnap gap={2} aria-label="Trip planner in a long page">
+        {PAGES.map(page => (
+          <PagePanel key={page.title} {...page} />
+        ))}
+      </Carousel>
+      <div {...stylex.props(styles.longPageTail)} />
+    </div>
+  ),
+};
+
+export const PagingCards: Story = {
+  name: 'Paging (Cards)',
+  render: () => (
+    <div {...stylex.props(styles.constrainedWidth)}>
+      <p {...stylex.props(styles.label)}>
+        Under a finger each swipe moves one card; the last cards rest where the
+        row ends
+      </p>
+      <Carousel hasSnap gap={2} aria-label="Feature cards, paging">
+        {PAGES.map(page => (
+          <Card key={page.title} xstyle={styles.pagingCard}>
+            <div {...stylex.props(styles.cardInner)}>
+              <p {...stylex.props(styles.cardTitle)}>{page.title}</p>
+              <p {...stylex.props(styles.cardDesc)}>{page.body}</p>
+            </div>
+          </Card>
         ))}
       </Carousel>
     </div>
