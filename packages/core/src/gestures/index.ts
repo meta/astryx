@@ -4,8 +4,9 @@
  * @file index.ts
  * @input The modules of packages/core/src/gestures
  * @output Re-exports the gesture system for core's own components
- * @position Core's own barrel. Not exported from the package; Lab imports it
- *   through internal workspace imports.
+ * @position Core's own barrel, imported by relative path. Lab reaches the
+ *   gesture primitives through `@astryxdesign/core/internal/touch`
+ *   (architecture:react-component-runtime INV13), never this file.
  */
 
 export {GestureArena, browserClock} from './GestureArena';
