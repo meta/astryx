@@ -176,7 +176,7 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     // Presenting: the sheet started below the screen, where iOS still
     // hit-tests it, and is drawn 544 px higher.
     mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
-    const {gestures, scrimTap, sheetDrag} = host();
+    const {scrimTap, sheetDrag} = host();
     const onDone = {x: 340, y: 330};
     // The engine hit the scrim, under the drawn button at the sheet's start.
     touch('touchstart', scrim, onDone, 0);
@@ -200,6 +200,96 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     expect(clicks).toEqual(['done']);
     // One click only: the guard is spent.
     expect(late()).toBe(false);
+  });
+
+  it("clicks the drawn button once with only watchers attached: the shared click guard swallows the engine's own click", () => {
+    mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
+    // Nothing that claims: the host's touchend listener is passive, so the
+    // tap's single activation rests on the click guard alone.
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    cleanups.push(
+      gestures.attach(
+        scrim,
+        new TapGestureRecognizer({name: 'scrim', claimsTouches: false}),
+      ),
+      gestures.attach(
+        sheet,
+        new PanGestureRecognizer({
+          name: 'sheet',
+          direction: 'down',
+          claimsTouches: false,
+        }),
+      ),
+    );
+    const onDone = {x: 340, y: 330};
+    touch('touchstart', scrim, onDone, 0);
+    touch('touchend', scrim, onDone, 80);
+    expect(clicks).toEqual(['done']);
+    const late = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    scrim.dispatchEvent(late);
+    expect(late.defaultPrevented).toBe(true);
+    expect(clicks).toEqual(['done']);
+  });
+
+  it('descends into an open shadow root on the drawn sheet: the tap reaches and clicks the control inside it', () => {
+    // A sheet whose content lives in an open shadow root: the document's hit
+    // test answers its host, the root's answers the control.
+    document.body.innerHTML = '<div id="scrim"></div><div id="sheet"></div>';
+    scrim = document.getElementById('scrim') as HTMLElement;
+    sheet = document.getElementById('sheet') as HTMLElement;
+    const shadow = sheet.attachShadow({mode: 'open'});
+    shadow.innerHTML = '<button id="done">Done</button>';
+    const inner = shadow.getElementById('done') as HTMLElement;
+    let drawnOffset = -544;
+    let isResolved = false;
+    const isOnSheet = (y: number) => (isResolved ? y >= 300 : y >= 844);
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (_x: number, y: number) => (isOnSheet(y) ? sheet : scrim),
+    });
+    Object.defineProperty(shadow, 'elementFromPoint', {
+      configurable: true,
+      value: () => inner,
+    });
+    inner.addEventListener('click', () => clicks.push('inner'));
+    sheet.addEventListener('click', () => clicks.push('sheet'));
+    scrim.addEventListener('click', () => clicks.push('scrim'));
+    cleanups.push(
+      registerPresentedOffset(sheet, {
+        offset: () => ({x: 0, y: drawnOffset}),
+        resolve: () => {
+          isResolved = true;
+          drawnOffset = 0;
+        },
+      }),
+    );
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    // A recognizer inside the root that watches without claiming, so the tap
+    // still earns its click.
+    const innerWatch = new PanGestureRecognizer({
+      name: 'inner',
+      direction: 'down',
+      claimsTouches: false,
+    });
+    cleanups.push(
+      gestures.attach(scrim, new TapGestureRecognizer({name: 'scrim'})),
+      gestures.attach(inner, innerWatch),
+    );
+    const onDone = {x: 340, y: 330};
+    touch('touchstart', scrim, onDone, 0);
+    expect(innerWatch.numberOfTouches).toBe(1);
+    touch('touchend', scrim, onDone, 80);
+    expect(clicks).toEqual(['inner', 'sheet']);
   });
 
   it('sends a finger where the sheet is going, but not yet drawn, to what is drawn there', () => {
