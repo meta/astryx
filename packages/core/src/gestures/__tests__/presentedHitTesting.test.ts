@@ -202,6 +202,42 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     expect(late()).toBe(false);
   });
 
+  it("clicks the drawn button once with only watchers attached: the shared click guard swallows the engine's own click", () => {
+    mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
+    // Nothing that claims: the host's touchend listener is passive, so the
+    // tap's single activation rests on the click guard alone.
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    cleanups.push(
+      gestures.attach(
+        scrim,
+        new TapGestureRecognizer({name: 'scrim', claimsTouches: false}),
+      ),
+      gestures.attach(
+        sheet,
+        new PanGestureRecognizer({
+          name: 'sheet',
+          direction: 'down',
+          claimsTouches: false,
+        }),
+      ),
+    );
+    const onDone = {x: 340, y: 330};
+    touch('touchstart', scrim, onDone, 0);
+    touch('touchend', scrim, onDone, 80);
+    expect(clicks).toEqual(['done']);
+    const late = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    scrim.dispatchEvent(late);
+    expect(late.defaultPrevented).toBe(true);
+    expect(clicks).toEqual(['done']);
+  });
+
   it('descends into an open shadow root on the drawn sheet: the tap reaches and clicks the control inside it', () => {
     // A sheet whose content lives in an open shadow root: the document's hit
     // test answers its host, the root's answers the control.
