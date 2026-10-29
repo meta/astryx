@@ -853,7 +853,11 @@ export class GestureHost {
 
   /** @internal Whether a finger that landed inside `node` is down now. */
   isFingerDownIn(node: Node): boolean {
-    return this.fingerTargets.some(target => node.contains(target));
+    // Along the flat tree: a finger on content inside an open shadow root is
+    // in the scroller around that root.
+    return this.fingerTargets.some(target =>
+      containsAlongFlatTree(node, target),
+    );
   }
 
   private registrationFor(element: Element): Registration {
@@ -1878,10 +1882,11 @@ export class GestureHost {
         finger.phase === 'cancelled' ||
         !(finger.target instanceof Node) ||
         !(touch.target instanceof Node) ||
+        // Along the flat tree, both ways: the finger's target can be inside
+        // an open shadow root while its touches reach the host retargeted.
         !(
-          finger.target === touch.target ||
-          finger.target.contains(touch.target) ||
-          touch.target.contains(finger.target)
+          containsAlongFlatTree(finger.target, touch.target) ||
+          containsAlongFlatTree(touch.target, finger.target)
         )
       ) {
         continue;
