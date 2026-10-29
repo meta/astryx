@@ -1297,6 +1297,13 @@ export class GestureHost {
     this.isArmedPress = true;
     this.syncKeptPresses();
     this.install();
+    // A finger's or a pen's press brings the cancelable touchend and the
+    // contextmenu canceller, as wherever the host installs, so a claimed
+    // lift clicks nothing and a claimed hold opens no browser menu (FR21). A
+    // mouse's press needs neither.
+    if (press.pointerType !== 'mouse') {
+      this.syncClaimingListeners();
+    }
     // The window's capture phase is over for this event: hand it on.
     this.onPointerDown(press);
   };
@@ -1779,8 +1786,7 @@ export class GestureHost {
       this.watchTarget(
         touch.identifier,
         native,
-        recognizers.some(claimsWhileMoving) ||
-          (this.isCoarse && consumer?.keepsTouch != null),
+        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
         consumer != null ||
           recognizers.some(recognizer => recognizer.claimsTouches),
       );
@@ -1949,8 +1955,8 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          (this.isCoarse &&
-            this.arena.consumerOf(id)?.keepsTouch?.(id) === true) ||
+          // A kept press keeps its finger under any pointer (FR11, DEC-21).
+          this.arena.consumerOf(id)?.keepsTouch?.(id) === true ||
           // A recognizer that holds the finger before it begins: a
           // scroll-edge pan pulling away from an edge (FR19, DEC-18), only
           // while this is the one finger on the screen: with a second one
@@ -2767,6 +2773,9 @@ export class GestureHost {
   private readonly onVisibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
       this.cancelEverything(this.arena.now());
+      // As at a blur: the press sends no further pointer event, so an armed
+      // press's page listeners go now (FR24).
+      this.releaseArmedPress();
     }
   };
 
