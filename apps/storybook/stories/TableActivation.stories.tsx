@@ -9,8 +9,6 @@ import {
   proportional,
 } from '@astryxdesign/core/Table';
 import type {TableColumn} from '@astryxdesign/core/Table';
-import {Theme} from '@astryxdesign/core/theme';
-import {neutralTheme} from '@astryxdesign/theme-neutral';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
@@ -126,7 +124,7 @@ function ServiceDetail({service}: {service: Service | null}) {
   );
 }
 
-function MasterDetailDemo({mode}: {mode?: 'light' | 'dark'}) {
+function MasterDetailDemo() {
   const [activeKey, setActiveKey] = useState<string | null>('svc-search');
   const activation = useTableActivation<Service>({
     activeKey,
@@ -151,13 +149,7 @@ function MasterDetailDemo({mode}: {mode?: 'light' | 'dark'}) {
       </div>
     </HStack>
   );
-  return mode == null ? (
-    content
-  ) : (
-    <Theme theme={neutralTheme} mode={mode}>
-      {content}
-    </Theme>
-  );
+  return content;
 }
 
 const meta: Meta = {
@@ -178,7 +170,8 @@ export const MasterDetail: Story = {
   render: () => <MasterDetailDemo />,
 };
 
-/** The same master-detail layout pinned to the dark theme. */
+/** The same master-detail layout with the canvas pinned to the dark theme. */
 export const MasterDetailDark: Story = {
-  render: () => <MasterDetailDemo mode="dark" />,
+  globals: {colorMode: 'dark'},
+  render: () => <MasterDetailDemo />,
 };

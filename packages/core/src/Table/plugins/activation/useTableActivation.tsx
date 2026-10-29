@@ -124,8 +124,6 @@ function createActivationStore<T extends Record<string, unknown>>(
  * background over the row, and replays this variable so the active state
  * reads on through the freeze line.
  */
-const ROW_OVERLAY_VAR = '--table-row-overlay';
-
 const activeWash = colorVars['--color-accent-muted'];
 const activeBarColor = colorVars['--color-accent'];
 
@@ -136,11 +134,16 @@ const ACTIVE_BAR_WIDTH_PX = 3;
  * Apply or remove active styling on a `<tr>` element.
  *
  * Active state is a `data-active` attribute plus a component-owned fallback
- * on the existing row anatomy: an accent wash (republished through the row
- * overlay variable so pinned cells replay it) and a leading-edge accent bar
- * on the first cell, which keeps the state legible independent of colour.
- * No selection or navigation semantics are inferred: `aria-selected` and
- * `aria-current` are never written here.
+ * on the existing row anatomy: an accent wash (a stylesheet class, so a
+ * selected row deterministically keeps the selection fill however the two
+ * plugins interleave) and a leading-edge accent bar on the first cell, which
+ * keeps the state legible independent of colour. The wash rides the shared
+ * row-overlay variable so pinned cells replay it through the freeze line;
+ * the bar is painted as an inset shadow on the first cell, which a pinned
+ * column's opaque overlay covers — the wash remains the pinned-cell cue
+ * until the OQ3 paint matrix settles effective pinned paint. No selection
+ * or navigation semantics are inferred: `aria-selected` and `aria-current`
+ * are never written here.
  */
 function applyRowActivationStyle(
   row: HTMLTableRowElement,
@@ -148,25 +151,15 @@ function applyRowActivationStyle(
 ): void {
   if (isActive) {
     row.setAttribute('data-active', 'true');
+    row.classList.add(...getActiveWashClassNames());
   } else {
-    row.removeAttribute('data-active');
-  }
-  const wash = isActive ? activeWash : '';
-  if (row.style.backgroundColor !== wash) {
-    row.style.backgroundColor = wash;
-  }
-  const currentOverlay = row.style.getPropertyValue(ROW_OVERLAY_VAR);
-  if (wash === '') {
-    if (currentOverlay !== '') {
-      row.style.removeProperty(ROW_OVERLAY_VAR);
-    }
-  } else if (currentOverlay !== wash) {
-    row.style.setProperty(ROW_OVERLAY_VAR, wash);
+    clearRowActivationStyle(row);
+    return;
   }
   // The bar lives on the first cell rather than the row: box-shadow does not
-  // paint reliably on `<tr>`, while a cell shadow sits above the cell's own
-  // (possibly pinned-opaque) background. Logical side resolves from the
-  // row's direction at apply time.
+  // paint reliably on `<tr>`. A pinned column's opaque overlay covers it, so
+  // on pinned tables the wash above remains the visible cue. Logical side
+  // resolves from the row's direction at apply time.
   const firstCell = row.cells[0];
   const previousBarCell = row.querySelector<HTMLTableCellElement>(
     '[data-activation-bar="true"]',
@@ -175,11 +168,7 @@ function applyRowActivationStyle(
     previousBarCell.style.boxShadow = '';
     previousBarCell.removeAttribute('data-activation-bar');
   }
-  if (!isActive || firstCell == null) {
-    if (previousBarCell != null && !isActive) {
-      previousBarCell.style.boxShadow = '';
-      previousBarCell.removeAttribute('data-activation-bar');
-    }
+  if (firstCell == null) {
     return;
   }
   const isRTL = row.closest('[dir="rtl"]') != null;
@@ -188,6 +177,25 @@ function applyRowActivationStyle(
     firstCell.style.boxShadow = bar;
   }
   firstCell.setAttribute('data-activation-bar', 'true');
+}
+/**
+ * Remove everything this module wrote on a `<tr>`: the active attribute and
+ * wash, plus the bar from whichever cell carries it. Cleanup paths call this
+ * rather than only unsubscribing, so a row that becomes ineligible, loses its
+ * plugin, or loses `idKey` while mounted never keeps stale active paint.
+ */
+function clearRowActivationStyle(row: HTMLTableRowElement): void {
+  row.removeAttribute('data-active');
+  if (activeWashClassNames != null && activeWashClassNames.length > 0) {
+    row.classList.remove(...activeWashClassNames);
+  }
+  const barCell = row.querySelector<HTMLTableCellElement>(
+    '[data-activation-bar="true"]',
+  );
+  if (barCell != null) {
+    barCell.style.boxShadow = '';
+    barCell.removeAttribute('data-activation-bar');
+  }
 }
 
 // =============================================================================
@@ -242,7 +250,33 @@ const activationStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
+  /**
+   * Active-row wash as a stylesheet rule rather than an inline style.
+   * Selection writes its wash inline, so a selected row deterministically
+   * keeps the selection fill however the two plugins interleave; an
+   * unselected active row shows this wash. The overlay variable rides along
+   * so pinned cells replay the active state through the freeze line, under
+   * the same contract striping, hover, and selection honour.
+   */
+  activeWash: {
+    backgroundColor: activeWash,
+    '--table-row-overlay': activeWash,
+  },
 });
+
+/** Stylesheet classes for the active wash, resolved once and toggled imperatively. */
+let activeWashClassNames: ReadonlyArray<string> | null = null;
+
+function getActiveWashClassNames(): ReadonlyArray<string> {
+  if (activeWashClassNames == null) {
+    activeWashClassNames = Object.freeze(
+      (stylex.props(activationStyles.activeWash).className ?? '')
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  }
+  return activeWashClassNames;
+}
 
 // =============================================================================
 // Hook
@@ -358,12 +392,14 @@ export function useTableActivation<T extends Record<string, unknown>>(
           applyStyle();
           const unsubscribe = store.subscribe(() => {
             if (!row.isConnected) {
+              clearRowActivationStyle(row);
               unsubscribe();
               return;
             }
             applyStyle();
           });
           return () => {
+            clearRowActivationStyle(row);
             unsubscribe();
           };
         };

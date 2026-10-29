@@ -14,6 +14,7 @@ import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {Table} from '../../Table';
 import {useTableActivation} from './useTableActivation';
+import {useTableSelection} from '../selection/useTableSelection';
 import type {TableColumn, TablePlugin} from '../../types';
 
 // =============================================================================
@@ -670,5 +671,99 @@ describe('row eligibility', () => {
     expect(onActivate).not.toHaveBeenCalled();
     // Eligible rows are unaffected.
     expect(rows[0].getAttribute('tabindex')).toBe('0');
+  });
+});
+
+// =============================================================================
+// Paint ownership and cleanup
+// =============================================================================
+
+describe('paint ownership and cleanup', () => {
+  it('paints the active wash through a stylesheet class, never an inline style', () => {
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '2',
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    // The wash must not be inline: selection writes its fill inline, so an
+    // inline active wash would race it. A stylesheet class always loses to
+    // inline, making selection precedence deterministic.
+    expect(rows[1].style.backgroundColor).toBe('');
+    const activeClasses = new Set(rows[1].className.split(/\s+/));
+    for (const row of [rows[0], rows[2]]) {
+      for (const cls of row.className.split(/\s+/)) {
+        activeClasses.delete(cls);
+      }
+    }
+    // Only the wash classes distinguish the active row.
+    expect(activeClasses.size).toBeGreaterThan(0);
+  });
+
+  it('composes with selection without clobbering either state', () => {
+    function Harness() {
+      const activation = useTableActivation<Member>({
+        activeKey: '2',
+        onActivate: () => {},
+      });
+      const selection = useTableSelection<Member>({
+        getIsItemSelected: item => item.id === '2',
+        onSelectItem: () => {},
+        onSelectAll: () => {},
+        getIsAllSelected: () => false,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{selection, activation}}
+        />
+      );
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    const activeRow = rows.find(
+      row => row.getAttribute('data-active') === 'true',
+    );
+    expect(activeRow).toBeDefined();
+    // Both owners reflect state on the same row; neither clears the other.
+    expect(activeRow!.getAttribute('aria-selected')).toBe('true');
+    // Activation contributes no inline fill of its own.
+    expect(activeRow!.style.backgroundColor).not.toBe('');
+  });
+
+  it('clears active paint when the plugin is removed while mounted', () => {
+    function Harness({withActivation}: {withActivation: boolean}) {
+      const activation = useTableActivation<Member>({
+        activeKey: '2',
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={withActivation ? {activation} : {}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness withActivation={true} />);
+    expect(bodyRows()[1].getAttribute('data-active')).toBe('true');
+    rerender(<Harness withActivation={false} />);
+    for (const row of bodyRows()) {
+      expect(row.hasAttribute('data-active')).toBe(false);
+      expect(row.querySelector('[data-activation-bar]')).toBeNull();
+    }
   });
 });
