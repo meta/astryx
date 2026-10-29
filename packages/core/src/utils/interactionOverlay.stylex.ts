@@ -126,6 +126,15 @@ export const pressConsts = stylex.defineConsts({
 const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
 /** The control release's clock as CSS: the table's value. */
 const CONTROL_RELEASE_DURATION = `${controlPressConsts.controlReleaseMs}ms`;
+/**
+ * Under reduced motion each clock is capped by the Reduce Motion cross-fade's
+ * duration (`design:reduced-motion` DR2: a touch transition is opacity only
+ * and finishes within it), read from its constant (`spec:AST-094` FR4: the
+ * cap is a role, never a literal), so a longer table value never outlasts
+ * it; pressFeedback.ts caps its release clock the same way.
+ */
+const PRESS_RELEASE_DURATION_REDUCED = `min(${PRESS_RELEASE_DURATION}, ${reducedMotionFadeConsts.duration})`;
+const CONTROL_RELEASE_DURATION_REDUCED = `min(${CONTROL_RELEASE_DURATION}, ${reducedMotionFadeConsts.duration})`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
@@ -248,10 +257,10 @@ const pressReleaseAnimation = {
         '[data-astryx-press-input]': {
           default: PRESS_RELEASE_DURATION,
           '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-            reducedMotionFadeConsts.duration,
+            PRESS_RELEASE_DURATION_REDUCED,
         },
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-          reducedMotionFadeConsts.duration,
+          CONTROL_RELEASE_DURATION_REDUCED,
       },
     },
   },

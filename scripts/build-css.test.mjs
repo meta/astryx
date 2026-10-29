@@ -401,6 +401,11 @@ describe('build-css astryx.css', () => {
   });
   describe('the press releases under reduced motion (design:reduced-motion)', () => {
     const toMs = value => {
+      // A clock capped by the Reduce Motion constant: `min(<clock>, <cap>)`.
+      const capped = /^min\((.+),\s*([\d.]+m?s)\)$/.exec(value.trim());
+      if (capped != null) {
+        return Math.min(toMs(capped[1]), toMs(capped[2]));
+      }
       const match = value.trim().match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
