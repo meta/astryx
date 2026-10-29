@@ -141,6 +141,71 @@ function stableSerialize(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined';
 }
 
+/**
+ * Stable identities for the Filters rows and the trigger's tokens across
+ * controlled updates, so a row keeps its element — and its focus — when the
+ * parent reorders the filters or removes one above it. A filter object seen
+ * before keeps its id; a new object takes the id of a filter from the
+ * previous update with the same signature that no present object claims (a
+ * parent that clones its values on every change); anything else mints a new
+ * id. Two equal filters are told apart by order. Call `next` once per render
+ * with the current list.
+ */
+export function createFilterIdentities(): {
+  next: (filters: ReadonlyArray<PowerSearchFilter>) => number[];
+} {
+  const byObject = new WeakMap<PowerSearchFilter, number>();
+  let previousBySignature = new Map<string, number[]>();
+  let nextId = 0;
+  return {
+    next(filters) {
+      const used = new Set<number>();
+      const ids: (number | null)[] = filters.map(filter => {
+        const known = byObject.get(filter);
+        if (known == null || used.has(known)) {
+          return null;
+        }
+        used.add(known);
+        return known;
+      });
+      const bySignature = new Map<string, number[]>();
+      filters.forEach((filter, index) => {
+        const signature = filterSignature(filter);
+        let id = ids[index];
+        if (id == null) {
+          id =
+            previousBySignature
+              .get(signature)
+              ?.find(candidate => !used.has(candidate)) ?? nextId++;
+          used.add(id);
+          byObject.set(filter, id);
+          ids[index] = id;
+        }
+        bySignature.set(signature, [...(bySignature.get(signature) ?? []), id]);
+      });
+      previousBySignature = bySignature;
+      return ids as number[];
+    },
+  };
+}
+
+/**
+ * A `date_absolute` value as the Core PowerSearch token shows it
+ * (`component:PowerSearch` FR11, FR12): year, abbreviated month and day in
+ * the locale's Gregorian calendar, with no time of day, read in the
+ * browser's zone — the same text, so a Lab token or row and a Core token
+ * agree byte for byte. (The editors read the UTC day the value stores, as
+ * Core's do; Core's record carries the zone difference as a known gap.)
+ */
+export function formatDateDay(unixSeconds: number, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    calendar: 'gregory',
+  }).format(unixSeconds * 1000);
+}
+
 /** Structural snapshot of a filter, for parents that clone their values. */
 export function filterSignature(filter: PowerSearchFilter): string {
   return stableSerialize({
@@ -187,9 +252,11 @@ export function resolveFilterIdentityIndex(
 export function nearestEditableIndex(
   nextFilters: ReadonlyArray<PowerSearchFilter>,
   removedIndex: number,
+  isRowButton: (filter: PowerSearchFilter) => boolean = filter =>
+    !filter.isReadOnly,
 ): number | undefined {
   const editableIndices = nextFilters.flatMap((candidate, candidateIndex) =>
-    candidate.isReadOnly ? [] : [candidateIndex],
+    isRowButton(candidate) ? [candidateIndex] : [],
   );
   return editableIndices.reduce<number | undefined>((nearest, candidate) => {
     if (nearest == null) {

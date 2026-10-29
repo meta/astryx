@@ -1080,6 +1080,49 @@ describe('NumberInput', () => {
       }
     });
 
+    it('names the input by its label and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <NumberInput
+            label="Amount"
+            value={null}
+            onChange={() => {}}
+            aria-labelledby="shipping-heading"
+          />
+        </>,
+      );
+      const input = screen.getByRole('spinbutton', {name: 'Amount Shipping'});
+      expect(input.getAttribute('aria-labelledby')?.split(' ')).toContain(
+        'shipping-heading',
+      );
+    });
+
+    it('names a grouped input by the group, its label, and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <InputGroup label="Price">
+            <NumberInput
+              label="Amount"
+              value={null}
+              onChange={() => {}}
+              aria-labelledby="shipping-heading"
+            />
+          </InputGroup>
+        </>,
+      );
+      expect(
+        screen.getByRole('spinbutton', {name: 'Price Amount Shipping'}),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves a standalone input named by its label element without a caller aria-labelledby', () => {
+      render(<NumberInput label="Amount" value={null} onChange={() => {}} />);
+      const input = screen.getByRole('spinbutton', {name: 'Amount'});
+      expect(input).not.toHaveAttribute('aria-labelledby');
+    });
+
     it('does not render status message when not provided', () => {
       render(
         <NumberInput

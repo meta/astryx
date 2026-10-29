@@ -72,11 +72,12 @@ in `Lightbox.doc.mjs`.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                    | Basis                           | Draft review state                                 |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------- |
-| FR1 | The current viewer contains one active Media item and a Close button; galleries additionally contain Previous and Next buttons plus a Counter, and Caption renders only when supplied. | Current source, docs, and tests | Verified current behavior; no new behavior decided |
-| FR2 | Viewer overlay carries the current `lightbox` target. Media, Caption, and Counter carry no Lightbox public target.                                                                     | Current source and public docs  | Verified current reachability; no target change    |
-| FR3 | Close, Previous, and Next button surfaces use Button's `button` target through IconButton rather than Lightbox-owned button targets.                                                   | Current source and target docs  | Verified current delegation; no ownership change   |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                | Basis                           | Draft review state                                 |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------- |
+| FR1 | The current viewer contains one active Media item and a Close button; galleries additionally contain Previous and Next buttons plus a Counter, and Caption renders only when supplied.                                                                                             | Current source, docs, and tests | Verified current behavior; no new behavior decided |
+| FR2 | Viewer overlay carries the current `lightbox` target. Media, Caption, and Counter carry no Lightbox public target.                                                                                                                                                                 | Current source and public docs  | Verified current reachability; no target change    |
+| FR3 | Close, Previous, and Next button surfaces use Button's `button` target through IconButton rather than Lightbox-owned button targets.                                                                                                                                               | Current source and target docs  | Verified current delegation; no ownership change   |
+| FR4 | The open viewer is a focus region through Core's shared focus-region module (`component:Dialog/DEC-2`): Tab from its last control moves focus to its first and Shift+Tab from its first moves focus to its last, so focus never leaves the viewer for the browser's own interface. | `component:Dialog/DEC-2`        | Owner decision; tests land with the implementation |
 
 ### Allowed variation
 
@@ -106,9 +107,9 @@ in `Lightbox.doc.mjs`.
 
 ## Accessibility contract
 
-This draft does not change or extend Lightbox's existing dialog naming, focus,
-media alternatives, announcements, button labels, keyboard behavior, or
-dismissal behavior.
+Apart from Tab containment (FR4), this draft does not change or extend
+Lightbox's existing dialog naming, focus, media alternatives, announcements,
+button labels, keyboard behavior, or dismissal behavior.
 
 ## Design relationships
 
