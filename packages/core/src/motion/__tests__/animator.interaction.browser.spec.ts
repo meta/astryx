@@ -306,6 +306,21 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       {spring: Motion.springs.navigationPush},
     );
     const start = await handle.started;
+    // What the dip animates, read while it runs.
+    const animated = box
+      .getAnimations()
+      .flatMap(animation =>
+        (animation.effect as KeyframeEffect)
+          .getKeyframes()
+          .flatMap(frame =>
+            Object.keys(frame).filter(
+              key =>
+                !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                  key,
+                ),
+            ),
+          ),
+      );
     // The main thread is busy from 60 to 180 ms into the dip, so the task
     // that lands it (due at 100 ms) runs 80 ms late.
     await new Promise(resolve =>
@@ -322,20 +337,7 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       at: performance.now() - start,
       opacity: Number(style.opacity),
       translate: style.translate,
-      animated: box
-        .getAnimations()
-        .flatMap(animation =>
-          (animation.effect as KeyframeEffect)
-            .getKeyframes()
-            .flatMap(frame =>
-              Object.keys(frame).filter(
-                key =>
-                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
-                    key,
-                  ),
-              ),
-            ),
-        ),
+      animated,
     };
   }, TRAVEL);
   test.info().annotations.push({
@@ -345,7 +347,8 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
   // Landed, and fully back in by then: the late landing did not stretch it.
   expect(read.translate).toBe(`${TRAVEL}px`);
   expect(read.opacity).toBeCloseTo(1, 2);
-  // Opacity only: the travel is never animated.
+  // Opacity only, read while the dip ran: the travel is never animated.
+  expect(read.animated).toContain('opacity');
   expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
