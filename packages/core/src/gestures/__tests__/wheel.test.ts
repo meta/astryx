@@ -14,6 +14,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
+import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
@@ -610,6 +611,87 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(pan.state).not.toBe('possible');
     expect(selection.rangeCount).toBe(1);
     expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+
+  it('keeps a watcher pan off the wheel: its element gets no wheel listener, and the page keeps the wheel (spec:AST-094 FR20, DEC-7)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(box, 'addEventListener');
+    const watcher = new PanGestureRecognizer({
+      direction: 'horizontal',
+      claimsTouches: false,
+    });
+    const states = statesOf(watcher);
+    detachers.push(host.attach(box, watcher));
+    expect(
+      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toEqual([]);
+    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+  });
+
+  it('leaves a first wheel already prevented, or one that cannot be cancelled, to the page for its whole gesture', () => {
+    const {box, inner} = mount('<div id="box"><div id="inner"></div></div>');
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    // An app's own handler below the pan prevented the first wheel.
+    inner.addEventListener('wheel', event => event.preventDefault(), {
+      once: true,
+    });
+    wheel(inner, {dx: 30, time: 0});
+    expect(wheel(inner, {dx: 30, time: 16}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+    clock.runDue(400);
+    // A wheel the browser lets no one cancel.
+    const uncancelable = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: false,
+      composed: true,
+      clientX: 20,
+      clientY: 20,
+      deltaX: 30,
+    });
+    Object.defineProperty(uncancelable, 'timeStamp', {value: 500});
+    clock.time = 500;
+    inner.dispatchEvent(uncancelable);
+    expect(wheel(inner, {dx: 30, time: 516}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+  });
+
+  it("stamps a notch gesture's release no later than the press that ends it: a long press right after keeps its own clock (spec:AST-094 FR16)", () => {
+    const {box, other} = mount('<div id="box"></div><div id="other"></div>');
+    detachers.push(
+      host.attach(box, new PanGestureRecognizer({direction: 'vertical'})),
+    );
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    const began: number[] = [];
+    press.addListener(recognizer => {
+      if (recognizer.state === 'began') {
+        began.push(clock.time);
+      }
+    });
+    detachers.push(host.attach(other, press));
+    // A mouse wheel's notch.
+    expect(wheel(box, {dy: 100, time: 0}).defaultPrevented).toBe(true);
+    // A pen comes down 20 ms later, ending the wheel gesture.
+    clock.time = 20;
+    const down = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: 5,
+      pointerType: 'pen',
+      clientX: 5,
+      clientY: 5,
+      buttons: 1,
+    });
+    Object.defineProperty(down, 'timeStamp', {value: 20});
+    other.dispatchEvent(down);
+    clock.runDue(519);
+    expect(began).toEqual([]);
+    clock.runDue(521);
+    // 500 ms after the pen landed, not after the notch's release time.
+    expect(began).toHaveLength(1);
   });
 
   it('removes the wheel listener when the pan is disabled or detached', () => {
