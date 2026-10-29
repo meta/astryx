@@ -1107,6 +1107,8 @@ export class GestureHost {
     const needsWheel = registration.recognizers.some(
       recognizer =>
         recognizer.isEnabled &&
+        // A watcher never takes the wheel: the page keeps it (FR20, DEC-7).
+        recognizer.claimsTouches &&
         recognizer.allowedScrollTypes.size > 0 &&
         // A wheel drives a pan or a pinch only.
         (internals(recognizer).family === 'pan' ||
@@ -1899,7 +1901,7 @@ export class GestureHost {
       gesture != null &&
       (gesture.kind !== kind || time - gesture.last >= WHEEL_END_MS)
     ) {
-      this.endWheel();
+      this.endWheel(time);
       gesture = null;
     }
     if (
@@ -1973,7 +1975,14 @@ export class GestureHost {
       takers: [],
     };
     // A contact already down keeps its gesture; the wheel stays the page's.
-    if (this.arena.touches.length > 0 || (dx === 0 && dy === 0)) {
+    // So does a first wheel another handler already prevented, or one that
+    // cannot be cancelled: no recognizer could take it from the page.
+    if (
+      this.arena.touches.length > 0 ||
+      (dx === 0 && dy === 0) ||
+      wheel.defaultPrevented ||
+      !wheel.cancelable
+    ) {
       return kept;
     }
     const view = this.doc.defaultView;
@@ -1998,6 +2007,7 @@ export class GestureHost {
       for (const recognizer of this.registry.get(node)?.recognizers ?? []) {
         if (
           !recognizer.isEnabled ||
+          !recognizer.claimsTouches ||
           !recognizer.allowedScrollTypes.has(type) ||
           internals(recognizer).family !== kind
         ) {
@@ -2112,7 +2122,7 @@ export class GestureHost {
   }
 
   /** End the wheel gesture in progress, at its last wheel's time. */
-  private endWheel(): void {
+  private endWheel(endTime: number = this.clock.now()): void {
     const gesture = this.wheel;
     if (this.isWheelLatched) {
       this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
@@ -2132,9 +2142,12 @@ export class GestureHost {
     // momentum arrives as more wheel. A mouse wheel's notches release still,
     // past the velocity's stillness interval, so position alone decides
     // where a pan settles (the coordinator's ruling; FR43 is silent).
+    // Never later than the input that ends it (a press, the next gesture's
+    // first wheel): the arena's clock only moves forward, so a later stamp
+    // would move that input's times too (FR16).
     const time =
       gesture.scrollType === 'discrete'
-        ? gesture.last + WHEEL_END_MS
+        ? Math.max(gesture.last, Math.min(gesture.last + WHEEL_END_MS, endTime))
         : gesture.last;
     this.arena.ended(
       gesture.kind === 'pan'
@@ -2188,7 +2201,7 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
-    this.endWheel();
+    this.endWheel(eventTime(event));
     this.noteFingersDown(event);
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
@@ -2843,7 +2856,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    this.endWheel();
+    this.endWheel(eventTime(event));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
     if (!isPointerKind(event.pointerType)) {
