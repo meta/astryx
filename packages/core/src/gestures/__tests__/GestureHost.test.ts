@@ -1442,6 +1442,48 @@ describe('GestureHost', () => {
     }
   });
 
+  it('leaves no touch-action rule in a document or shadow root once its last marked element lets go (spec:AST-094 FR24)', () => {
+    const restore = touchActionFromData();
+    try {
+      const {box, other, outer} = mount(
+        '<div id="box"></div><div id="other"></div><div id="outer"></div>',
+      );
+      const shadow = outer.attachShadow({mode: 'open'});
+      shadow.innerHTML = '<div id="inner"></div>';
+      const inner = shadow.getElementById('inner') as HTMLElement;
+      const releaseBox = host.attach(
+        box,
+        new PanGestureRecognizer({direction: 'horizontal'}),
+      );
+      const releaseOther = host.attach(
+        other,
+        new PanGestureRecognizer({direction: 'vertical'}),
+      );
+      const releaseInner = host.attach(
+        inner,
+        new PanGestureRecognizer({direction: 'horizontal'}),
+      );
+      expect(hostRules(document)).toContain('data-astryx-touch-action');
+      expect(hostRules(shadow)).toContain('data-astryx-touch-action');
+      // One element still marked keeps its root's rules.
+      releaseBox();
+      expect(hostRules(document)).toContain('data-astryx-touch-action');
+      releaseOther();
+      expect(hostRules(document)).not.toContain('data-astryx-touch-action');
+      releaseInner();
+      expect(hostRules(shadow)).not.toContain('data-astryx-touch-action');
+      // A later attach brings its rule back.
+      detachers.push(
+        host.attach(box, new PanGestureRecognizer({direction: 'horizontal'})),
+      );
+      expect(hostRules(document)).toContain(
+        ':where([data-astryx-touch-action="pan-y pinch-zoom"])',
+      );
+    } finally {
+      restore();
+    }
+  });
+
   it("keeps an author rule in force from the first frame, and writes the intersection inline only where it is narrower than the author's (spec:AST-094 FR18)", () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'requestAnimationFrame']});
     const restore = touchActionFromData();
