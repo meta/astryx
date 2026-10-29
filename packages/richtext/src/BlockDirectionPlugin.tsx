@@ -57,7 +57,6 @@ import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {
   $getRoot,
   $isElementNode,
-  getTextDirection,
   HISTORY_MERGE_TAG,
   ParagraphNode,
   TextNode,
@@ -104,9 +103,51 @@ function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
   return !node.getChildren().some($isListNode);
 }
 
+/**
+ * The strongly right-to-left characters of UAX #9 — Bidi_Class `R` and `AL`.
+ * Living scripts are named so the set reads as what it is; the two ranges
+ * cover the historic right-to-left scripts in the Supplementary Multilingual
+ * Plane (Phoenician, Kharoshthi, Old Hungarian, Mende Kikakui, …), which have
+ * no settled script escapes across engines.
+ *
+ * Not `getTextDirection` from `lexical`: its left-to-right class spans
+ * `\u2C00-\uFB1C`, which swallows the whole UTF-16 surrogate range, so every
+ * character outside the Basic Multilingual Plane reads as strongly
+ * left-to-right — `🎉 מזל טוב`, `👍 مرحبا` and all of Adlam come back `ltr`.
+ * The same class spans `\u0800-\u1FFF`, which takes Samaritan and Mandaic
+ * with it. A browser's own `dir="auto"` gets these right, so writing Lexical's
+ * answer out would have been worse than leaving the attribute alone.
+ */
+const STRONG_RTL =
+  /[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u200F\u061C\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+
+/**
+ * Bidi_Class `L`: any other letter, plus the left-to-right mark. Digits,
+ * punctuation, emoji and other symbols are deliberately absent — UAX #9 P2
+ * skips them, so `123 — מזל טוב` and `🎉 מזל טוב` both read right-to-left.
+ */
+const STRONG_LTR = /[\p{Letter}\u200E]/u;
+
+/**
+ * UAX #9 P2–P3: the direction of the first strongly directional character,
+ * or null when the text has none. Iterating the string yields whole code
+ * points, so a surrogate pair is classified as the character it encodes.
+ */
+export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
+  for (const character of text) {
+    if (STRONG_RTL.test(character)) {
+      return 'rtl';
+    }
+    if (STRONG_LTR.test(character)) {
+      return 'ltr';
+    }
+  }
+  return null;
+}
+
 /** The direction this container's own text asks for; null when it has none. */
 function $ownDirection(node: ElementNode): 'ltr' | 'rtl' | null {
-  return getTextDirection(node.getTextContent());
+  return firstStrongDirection(node.getTextContent());
 }
 
 /** Whether this node is a container, which carries no direction of its own. */

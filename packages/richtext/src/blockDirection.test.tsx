@@ -17,6 +17,7 @@ import {render, waitFor} from '@testing-library/react';
 import {RichTextEditor} from './RichTextEditor';
 import {RichTextView} from './RichTextView';
 import {markdownToEditorStateJSON} from './markdownSerializers';
+import {firstStrongDirection} from './BlockDirectionPlugin';
 
 const HEBREW = 'פסקה בעברית לבדיקת כיוון הטקסט.';
 const ENGLISH = 'An English paragraph.';
@@ -187,5 +188,36 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     );
     // The item reads its own text, which is English.
     expect(container.querySelector('li')?.getAttribute('dir')).toBe('ltr');
+  });
+  it('reads past an emoji to the first strongly directional character', async () => {
+    // Lexical's own getTextDirection answers 'ltr' for all of these: its
+    // left-to-right class spans the UTF-16 surrogates and the Samaritan and
+    // Mandaic blocks. A browser's dir="auto" reads them right-to-left, and so
+    // must the attribute we write in its place.
+    expect(firstStrongDirection('🎉 מזל טוב')).toBe('rtl');
+    expect(firstStrongDirection('👍 مرحبا')).toBe('rtl');
+    expect(firstStrongDirection('𞤀𞤣𞤤𞤢𞤥')).toBe('rtl'); // Adlam, outside the BMP
+    expect(firstStrongDirection('ࠀࠁࠂ')).toBe('rtl'); // Samaritan
+    expect(firstStrongDirection('ࡀࡁࡂ')).toBe('rtl'); // Mandaic
+
+    // An emoji is not strong in either direction, so it decides nothing.
+    expect(firstStrongDirection('🎉 mazel tov')).toBe('ltr');
+    expect(firstStrongDirection('🎉👍')).toBeNull();
+
+    // UAX #9 P2 skips digits and punctuation the same way.
+    expect(firstStrongDirection('123 — מזל טוב')).toBe('rtl');
+    expect(firstStrongDirection('123 456')).toBeNull();
+  });
+
+  it('writes rtl on a paragraph whose Hebrew text opens with an emoji', async () => {
+    const {container} = render(
+      <RichTextView value={markdownToEditorStateJSON('🎉 מזל טוב')} />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector('p')).not.toBeNull(),
+    );
+    // Fails before the fix with 'ltr': the emoji is a surrogate pair, which
+    // Lexical's left-to-right class matches.
+    expect(container.querySelector('p')?.getAttribute('dir')).toBe('rtl');
   });
 });
