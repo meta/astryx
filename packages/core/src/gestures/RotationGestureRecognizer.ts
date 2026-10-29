@@ -48,12 +48,10 @@ export class RotationGestureRecognizer extends GestureRecognizer {
   }
 
   set rotation(value: number) {
-    const delta = value - this.rotationValue;
     this.initialAngle = this.lastAngle - value;
     this.rotationValue = value;
-    // The velocity continues from the re-based value, without a jump: the
-    // samples shift with it (as the pinch's scale setter scales them).
-    this.tracker.offsetBy(delta, 0);
+    // The velocity needs nothing: the tracker samples the raw angle, which a
+    // re-base does not move.
   }
 
   /** Radians per second. */
