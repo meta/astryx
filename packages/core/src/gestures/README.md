@@ -406,9 +406,10 @@ mid-gesture still needs the touch to reach its element, where its blocking
 window-capture listener only until a type's listener is re-added (a
 passivity switch, or a subscription after its last subscriber left), which
 appends it after the app's. A type's listener is passive unless a
-subscriber cancels it: the host cancels `touchend`, `click` and
-`contextmenu` there while a claiming participant is attached, never a
-`touchstart` or a `touchmove`. A blocking `touchmove` sits on a claiming
+subscriber cancels it: the host cancels `touchend` and `contextmenu` there
+while a claiming participant is attached, never a `touchstart` or a
+`touchmove`, and the click guard (`../utils/clickGuard.ts`) keeps one
+cancelling `click` once it first arms. A blocking `touchmove` sits on a claiming
 element and on a claimed touch's target, on the document while an element a
 claiming recognizer lives in is moving (Touches on moving elements), or on
 the window only while a page hold is held, so a page of pressables blocks
