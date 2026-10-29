@@ -68,6 +68,7 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
 import {TOUCH_QUERY} from './touchPresentation';
+import {timing} from '../motion/uikit/timing';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -174,8 +175,10 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 /**
  * How long a timer runs on `element`. The release's clock is the table's
  * (PRESS_FADE_MS, the value the stylesheet's release plays), capped under
- * reduced motion as the stylesheet caps its fade (`design:reduced-motion`
- * DR2: a touch transition finishes in 200 ms or less).
+ * reduced motion by the Reduce Motion cross-fade's duration, as the
+ * stylesheet caps its fade (`design:reduced-motion` DR2: a touch transition
+ * finishes within it; `spec:AST-094` FR4: the cap is a role, never a
+ * literal).
  */
 function timerMs(
   kind: NonNullable<PressStep['timer']>,
@@ -189,12 +192,9 @@ function timerMs(
       '(prefers-reduced-motion: reduce)',
     ).matches ?? false;
   return reduced
-    ? Math.min(TIMER_MS.fade, REDUCED_MOTION_MAX_MS)
+    ? Math.min(TIMER_MS.fade, timing.reducedMotionCrossFadeMs)
     : TIMER_MS.fade;
 }
-
-/** The longest a touch transition runs under reduced motion (DR2). */
-const REDUCED_MOTION_MAX_MS = 200;
 
 const TIMER_EVENT = {
   fade: 'fadeEnd',

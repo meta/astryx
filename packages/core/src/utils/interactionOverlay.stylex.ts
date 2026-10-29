@@ -88,6 +88,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 
 /**
  * The touch press's strength on the surface the controller painted, 0 to 1.
@@ -120,12 +121,13 @@ export const pressConsts = stylex.defineConsts({
 /** The release's clock as CSS. */
 const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
 /**
- * Under reduced motion the clock is capped at 200 ms
- * (`design:reduced-motion` DR2: a touch transition is opacity only and
- * finishes in 200 ms or less), so a longer table value never outlasts it;
- * pressFeedback.ts caps its release clock the same way.
+ * Under reduced motion the clock is capped by the Reduce Motion cross-fade's
+ * duration (`design:reduced-motion` DR2: a touch transition is opacity only
+ * and finishes within it), read from its constant (`spec:AST-094` FR4: the
+ * cap is a role, never a literal), so a longer table value never outlasts
+ * it; pressFeedback.ts caps its release clock the same way.
  */
-const PRESS_RELEASE_DURATION_REDUCED = `min(${PRESS_RELEASE_DURATION}, 200ms)`;
+const PRESS_RELEASE_DURATION_REDUCED = `min(${PRESS_RELEASE_DURATION}, ${reducedMotionFadeConsts.duration})`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
