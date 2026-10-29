@@ -2,8 +2,10 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`, and Lab through internal workspace imports; nothing here is
-exported from the package.
+`../gestures`. Lab reaches its primitives through
+`@astryxdesign/core/internal/touch`, an internal entry reserved for Astryx's
+own packages (`architecture:react-component-runtime` INV13); nothing here is
+part of the public API.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each
@@ -394,14 +396,24 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 The host listens through `utils/inputStream.ts`, which it shares with the
 press feedback controller: one native listener per event type, on the
-window's capture phase, fanned out to every subscriber in order. Window
-capture is the earliest point a page can intercept input, so an app's
-capture-phase `stopPropagation` at the document starves neither, as UIKit's
-recognizers see touches before views do. A type's listener is passive
-unless a subscriber cancels it: the host cancels `touchend`, `click` and
-`contextmenu` there, never a `touchstart` or a `touchmove` (a blocking
-`touchmove` sits on a claiming element, or on the window only while a page
-hold is held), so a page of pressables blocks no scroll.
+window's capture phase, fanned out to every subscriber in order. It runs
+ahead of any document listener, so an app's window-capture
+`stopPropagation`, or a document-capture `stopImmediatePropagation`
+registered before core, no longer hides a touch from either, as UIKit's
+recognizers see touches before views do. A recognizer that must claim
+mid-gesture still needs the touch to reach its element, where its blocking
+`touchmove` sits, below such a stop. The stream stays ahead of an app's own
+window-capture listener only until a type's listener is re-added (a
+passivity switch, or a subscription after its last subscriber left), which
+appends it after the app's. A type's listener is passive unless a
+subscriber cancels it: the host cancels `touchend` and `contextmenu` there
+while a claiming participant is attached, never a `touchstart` or a
+`touchmove`, and the click guard (`../utils/clickGuard.ts`) keeps one
+cancelling `click` once it first arms. A blocking `touchmove` sits on a claiming
+element and on a claimed touch's target, on the document while an element a
+claiming recognizer lives in is moving (Touches on moving elements), or on
+the window only while a page hold is held, so a page of pressables blocks
+no scroll.
 
 ### Holding the page still
 
@@ -583,8 +595,8 @@ iOS WebKit hit-tests an element that a compositor animation moves where
 the animation started: it keeps the transform it resolved when the
 animation went to the compositor, so event targets, `elementFromPoint` and
 `getBoundingClientRect` stay there for the whole curve, though the inline
-style holds the end and the computed style is live (iOS 26.2, measured;
-Chromium and Linux WebKit hit what is drawn). A finger on a settling sheet
+style holds the value the curve starts from and the computed style is live
+(iOS 26.2, measured; Chromium and Linux WebKit hit what is drawn). A finger on a settling sheet
 lands on whatever sat under the sheet's start (an upward release can hit
 the scrim and close the sheet). UIKit keeps an interruptible animation
 hit-testable where it is drawn (UIViewPropertyAnimator).
@@ -606,6 +618,11 @@ moving, the document carries the blocking listener, and a scroll starting
 anywhere waits on the main thread only for that long. Not covered:
 scale and rotate (a zoom transition, a lifted preview is hit at its
 unscaled box) and CSS transitions or animations the animator did not start.
+
+This is an engine workaround (`spec:AST-013` FR6). Its review condition:
+re-measure on each iOS release, and remove the correction once iOS WebKit
+hit-tests a compositor-moved element where it is drawn. Its regression
+fixture is `__tests__/presentedHitTesting.test.ts`.
 
 ## Where the web differs from UIKit
 
