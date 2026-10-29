@@ -31,7 +31,10 @@
  * dropped and the press is written by the touch press controller
  * (`utils/pressFeedback.ts`) as `data-astryx-press="on"` once the press is
  * believed (150 ms, no travel, no scroll) and `data-astryx-press="fading"` for the
- * 200 ms release. The two arms paint those through ONE number:
+ * 200 ms release. The query reads the PRIMARY pointer, so on a phone or tablet
+ * a mouse, trackpad or Space-key press loses `:active` too; the controller
+ * writes the same attribute for those, at once. The two arms paint those
+ * through ONE number:
  *
  *  - `--astryx-press-alpha` is the press's strength, 0 to 1. It is a
  *    registered custom property (`@property`, syntax `<number>`, declared once

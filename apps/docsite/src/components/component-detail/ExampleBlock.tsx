@@ -2,6 +2,13 @@
 
 'use client';
 
+/**
+ * @file Renders one generated component example and its supporting content.
+ * @input An ExampleEntry and owning component name.
+ * @output A live, deep-linkable preview with description, code, and install tabs.
+ * @position Used by ComponentDetailClient's Examples section.
+ */
+
 import {useEffect, useState, type ComponentType} from 'react';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
@@ -14,6 +21,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import type {ExampleEntry} from '../../generated/exampleRegistry';
 import {ComponentPreviewTheme} from './ComponentPreviewTheme';
+import {ExampleAnchor} from './ExampleAnchor';
 import {buildPlaygroundHref} from '../playgroundLink';
 import {trackOpenPlayground} from '../../lib/analytics';
 import {MarkdownText} from '../MarkdownText';
@@ -91,75 +99,77 @@ export function ExampleBlock({entry, componentName}: ExampleBlockProps) {
   const [tab, setTab] = useState<string>('description');
 
   return (
-    <ComponentPreviewTheme>
-      <Card padding={3}>
-        <Text type="body" weight="medium">
-          {entry.name}
-        </Text>
+    <ExampleAnchor id={entry.anchorId}>
+      <ComponentPreviewTheme>
+        <Card padding={3}>
+          <Text type="body" weight="medium">
+            {entry.name}
+          </Text>
 
-        <LivePreview entry={entry} componentName={componentName} />
+          <LivePreview entry={entry} componentName={componentName} />
 
-        <Section variant="muted" padding={1} dividers={['top']}>
-          <HStack
-            gap={1}
-            style={{justifyContent: 'space-between', alignItems: 'center'}}>
-            <TabList value={tab} onChange={setTab} size="sm">
-              <Tab value="description" label="Description" />
-              <Tab value="code" label="Code" />
-              {entry.registryItemPath && (
-                <Tab value="install" label="Install" />
-              )}
-            </TabList>
-            {entry.source && (
-              <Button
-                label="Open in Playground"
-                variant="ghost"
-                size="sm"
-                // Real anchor (Button renders <a> with href) so right-click /
-                // Cmd-click / middle-click "open in new tab" work. onClick stays
-                // for analytics; the href handles navigation natively.
-                href={buildPlaygroundHref(entry.source)}
-                onClick={() => {
-                  trackOpenPlayground({page: 'components', item: entry.name});
-                }}
-              />
-            )}
-          </HStack>
-        </Section>
-        <Section variant="muted" padding={tab === 'code' ? 0 : 4}>
-          {tab === 'description' ? (
-            <MarkdownText type="body">
-              {entry.description || 'No description available.'}
-            </MarkdownText>
-          ) : tab === 'code' ? (
-            <CodeExampleBlock
-              code={entry.source}
-              language="tsx"
-              hasCopyButton
-              container="section"
-              width="100%"
-            />
-          ) : entry.registryItemPath ? (
-            <VStack gap={2}>
-              {shadcnRegistryIsPreview && (
-                <Text type="supporting" color="secondary">
-                  This install URL expires with the draft preview.
-                </Text>
-              )}
-              <CodeExampleBlock
-                code={shadcnInstallCommand(
-                  entry.registryItemPath,
-                  shadcnRegistryOrigin,
+          <Section variant="muted" padding={1} dividers={['top']}>
+            <HStack
+              gap={1}
+              style={{justifyContent: 'space-between', alignItems: 'center'}}>
+              <TabList value={tab} onChange={setTab} size="sm">
+                <Tab value="description" label="Description" />
+                <Tab value="code" label="Code" />
+                {entry.registryItemPath && (
+                  <Tab value="install" label="Install" />
                 )}
-                language="bash"
+              </TabList>
+              {entry.source && (
+                <Button
+                  label="Open in Playground"
+                  variant="ghost"
+                  size="sm"
+                  // Real anchor (Button renders <a> with href) so right-click /
+                  // Cmd-click / middle-click "open in new tab" work. onClick stays
+                  // for analytics; the href handles navigation natively.
+                  href={buildPlaygroundHref(entry.source)}
+                  onClick={() => {
+                    trackOpenPlayground({page: 'components', item: entry.name});
+                  }}
+                />
+              )}
+            </HStack>
+          </Section>
+          <Section variant="muted" padding={tab === 'code' ? 0 : 4}>
+            {tab === 'description' ? (
+              <MarkdownText type="body">
+                {entry.description || 'No description available.'}
+              </MarkdownText>
+            ) : tab === 'code' ? (
+              <CodeExampleBlock
+                code={entry.source}
+                language="tsx"
                 hasCopyButton
                 container="section"
                 width="100%"
               />
-            </VStack>
-          ) : null}
-        </Section>
-      </Card>
-    </ComponentPreviewTheme>
+            ) : entry.registryItemPath ? (
+              <VStack gap={2}>
+                {shadcnRegistryIsPreview && (
+                  <Text type="supporting" color="secondary">
+                    This install URL expires with the draft preview.
+                  </Text>
+                )}
+                <CodeExampleBlock
+                  code={shadcnInstallCommand(
+                    entry.registryItemPath,
+                    shadcnRegistryOrigin,
+                  )}
+                  language="bash"
+                  hasCopyButton
+                  container="section"
+                  width="100%"
+                />
+              </VStack>
+            ) : null}
+          </Section>
+        </Card>
+      </ComponentPreviewTheme>
+    </ExampleAnchor>
   );
 }

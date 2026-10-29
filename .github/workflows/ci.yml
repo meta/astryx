@@ -761,6 +761,16 @@ jobs:
       - uses: ./.github/actions/setup
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true'
 
+      # Before Vitest starts. A scoped run's `--changed` walks the tests'
+      # import graphs before the global setup builds Core, and Vite answers an
+      # unresolvable Core, an optional peer of the CLI, with a stub it caches
+      # for the run: every theme-build test then fails with "Could not resolve
+      # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
+      # setup then finds Core built and skips its own build.
+      - name: Build core package
+        if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.spec_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
       # Scoped like test-ui's run.
       - name: Run this shard of the Node tests
         env:
@@ -816,14 +826,18 @@ jobs:
           echo "Change scope could not be classified; refusing to skip required work."
           exit 1
 
+      # The merge commit and its parents (see interaction-scope).
       - uses: actions/checkout@v7
         if: needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        with:
+          fetch-depth: 2
 
       # The helper comes from the base, since an older head lacks it. Exit 1
       # means out of scope; 0 in scope; 2 unknown, so the Swift work runs.
       - name: Decide whether native Swift changed
         id: scope
         env:
+          EVENT_NAME: ${{ github.event_name }}
           DOCSITE_ONLY: ${{ needs.check-scope.outputs.docsite_only }}
           TOOLING_ONLY: ${{ needs.check-scope.outputs.tooling_only }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
@@ -832,6 +846,12 @@ jobs:
             echo 'Specialized lane; no native Swift work.'
             echo 'applies=false' >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          # A pull request diffs against its merge commit's first parent, as
+          # interaction-scope does; the merge queue keeps its base.
+          if [ "$EVENT_NAME" = pull_request ] \
+            && [ "$(git rev-list --parents -n 1 HEAD 2>/dev/null | wc -w)" -eq 3 ]; then
+            BASE_SHA="$(git rev-parse HEAD^1)"
           fi
           scope=2
           helper="$(mktemp)"
@@ -1510,7 +1530,8 @@ jobs:
           path: a11y-report.json
           retention-days: 1
 
-  pr-a11y:
+  pr-a11y-guards:
+    name: pr-a11y (audit and guards)
     needs: [build-storybook, check-components]
     if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')) && needs.check-components.outputs.has_components == 'true'
     runs-on: 2-core-ubuntu-arm
@@ -1612,16 +1633,53 @@ jobs:
       - name: Run story play guard
         run: node .github/scripts/story-play-guard.js --storybook-dir apps/storybook/dist
 
-      # Browser accessibility specs. The runner runs every spec
-      # playwright.config.ts matches whose own `@pr-a11y` routing lines select
-      # it for this pull request (its component folder or named component is in
-      # scope, a scope token matches, a "[Component Audit] <Name>:" title names
-      # it, or it runs always), in one Playwright run with its own --output
-      # directory. A new spec needs no step here. The runner and the routing
-      # lines come from the merge commit these steps come from, so an older PR
-      # head is routed by current policy; the specs themselves run at the head.
-      # Release checks run only the always-on specs here: every spec runs in
-      # a11y-contracts.
+  # Browser accessibility specs get their own budget. The scoped axe sweep and
+  # the always-on Chromium guards consume most of a pull request's 15-minute
+  # job budget before these specs start; running beside them keeps both owners
+  # inside the budget without weakening the stable pr-a11y join.
+  pr-a11y-specs:
+    name: pr-a11y (browser specs)
+    needs: [build-storybook, check-components]
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')) && needs.check-components.outputs.has_components == 'true'
+    runs-on: 2-core-ubuntu-arm
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify evidence checkout
+        if: github.event_name == 'pull_request'
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download analysis artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # The runner runs every spec playwright.config.ts matches whose own
+      # `@pr-a11y` routing lines select it for this pull request. The runner and
+      # routing lines come from the merge commit these steps come from, so an
+      # older PR head is routed by current policy while specs run at that head.
       - name: Run browser accessibility specs
         if: ${{ !cancelled() }}
         env:
@@ -1635,9 +1693,6 @@ jobs:
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
           node "$runner"
 
-      # One artifact for every spec's evidence: the selection and JSON report,
-      # Playwright's own output, and the receipts specs write under
-      # test-results/ or a top-level *-audit-evidence/ folder.
       - name: Upload browser accessibility evidence
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -1650,6 +1705,25 @@ jobs:
             *-audit-evidence/
           retention-days: 30
           if-no-files-found: ignore
+
+  # Stable required context joining the scoped audit/guards and browser specs.
+  pr-a11y:
+    needs: [check-components, pr-a11y-guards, pr-a11y-specs]
+    if: ${{ always() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')) && needs.check-components.outputs.has_components == 'true' }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require every accessibility owner
+        env:
+          GUARDS_RESULT: ${{ needs.pr-a11y-guards.result }}
+          SPECS_RESULT: ${{ needs.pr-a11y-specs.result }}
+        run: |
+          if [ "$GUARDS_RESULT" != success ] || [ "$SPECS_RESULT" != success ]; then
+            echo "Accessibility owners did not all succeed: guards=$GUARDS_RESULT specs=$SPECS_RESULT"
+            exit 1
+          fi
 
   # Release-only accessibility contracts run beside pr-a11y instead of after
   # its full axe sweep, so the release check waits for the longer of the two
@@ -1797,8 +1871,12 @@ jobs:
           echo "Change scope could not be classified; refusing to skip required work."
           exit 1
 
+      # The PR merge commit and its parents: the first parent is the base it
+      # merged into, so the PR's own change is one diff away (see below).
       - uses: actions/checkout@v7
         if: github.event_name == 'pull_request' && needs.check-scope.outputs.docsite_only != 'true' && needs.check-scope.outputs.tooling_only != 'true'
+        with:
+          fetch-depth: 2
 
       # The helper comes from the base, since an older head lacks it. Exit 1
       # means out of scope; 0 in scope; 2 unknown, so the proofs run.
@@ -1824,6 +1902,13 @@ jobs:
             echo 'Not a pull request; the proofs ran on the pull request itself.'
             echo 'applies=false' >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          # Diff against the merge commit's first parent, not the PR's
+          # recorded base: from an old base the diff would count main's own
+          # changes since as the PR's, and from the PR head the helper would
+          # deepen history back to an old fork point.
+          if [ "$(git rev-list --parents -n 1 HEAD 2>/dev/null | wc -w)" -eq 3 ]; then
+            BASE_SHA="$(git rev-parse HEAD^1)"
           fi
           scope=2
           helper="$(mktemp)"
@@ -2388,6 +2473,23 @@ jobs:
       - name: Install Playwright
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
+      # The D7 native-size regression test lives on the PR head. A head cut
+      # before it has no native-size enforcement for the test to check (its
+      # audit still checks D7's centering and hit-testing), so the step says
+      # so and passes; a head that has the file always runs it, and a failure
+      # fails. ci-rtl-d7.test.mjs keeps the path pointing at a real file.
+      - name: Verify D7 native target regression
+        if: matrix.package == 'core' && matrix.part == 1
+        env:
+          ASTRYX_RTL_BROWSER: '1'
+        run: |
+          D7_TEST=.github/scripts/rtl-audit-coarse-hit.browser.test.mjs
+          if [ ! -f "$D7_TEST" ]; then
+            echo '::notice title=D7 regression skipped::skipped: head predates D7 native-size enforcement; its D7 results cover centering and hit-testing only'
+            exit 0
+          fi
+          pnpm exec vitest run --project node "$D7_TEST" --maxWorkers=1
+
       # A registry/classifier mutation runs the full audit from the PR checkout,
       # while eligibility itself came from trusted base policy. Scope resolution
       # is strict: malformed or missing analysis fails before the soft findings
@@ -2639,6 +2741,8 @@ jobs:
         typecheck,
         build-sandbox,
         build,
+        pr-a11y-guards,
+        pr-a11y-specs,
         pr-a11y,
         interaction-scope,
         pr-interaction,
@@ -2660,6 +2764,10 @@ jobs:
       - name: Report job durations
         uses: actions/github-script@v9
         with:
+          # The listing is one request for every job of the run with its
+          # steps, and GitHub can answer it 502 at its gateway limit: retry a
+          # server error. The action's exempt client errors stay final.
+          retries: 3
           script: |
             const jobs = await github.paginate(
               github.rest.actions.listJobsForWorkflowRunAttempt,

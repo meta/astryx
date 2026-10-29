@@ -42,14 +42,16 @@
  * current value with the current velocity (`spec:AST-094` FR6). A gesture's release velocity
  * can be handed in explicitly instead.
  *
- * End state without a flicker frame: the element's inline style always holds
- * the values the animations END on, and the keyframes hold that end state for
- * a while after the curve ends (END_HOLD_MS). The main thread drops a finished
- * animation as soon as it runs after the curve's end; the inline style already
- * shows the same values, so nothing moves. The hold matters when the curve
- * ends during a main-thread block: WebKit's compositor ends an animation by
- * falling back to the value its main thread last committed, which is
- * mid-flight.
+ * No frame shows a value the element is not at. While a curve runs, the
+ * element's inline style holds the value the curve starts from (the value on
+ * screen when it was built), so a frame painted before the compositor has the
+ * curve (WebKit can receive a new curve a few updates late) shows the element
+ * where it is, never where it is going. The keyframes hold the end state for a
+ * while after the curve ends (END_HOLD_MS); the main thread retires a finished
+ * animation as soon as it runs after the curve's end, writing the end values
+ * inline in the same task that cancels it, so nothing moves. The hold matters
+ * when the curve ends during a main-thread block: WebKit's compositor ends an
+ * animation by falling back to the value its main thread last committed.
  *
  * Start time: a call that starts from rest (nothing on its channels moving,
  * no `options.at`) gets no start time, so the browser starts it when it
@@ -62,7 +64,17 @@
  * `options.at` to line several animators up, so the new curve continues
  * from the frame on screen. Keyframes are sampled from the call's start, so
  * a value that keeps moving through a rebuild stays on its curve to the
- * frame.
+ * frame. `options.start` changes that per call: `'commit'` dates a retarget
+ * by the browser's commit as well, and `'presented'` creates the animations
+ * of a call from rest two frames later, once its element at rest has been
+ * presented (a UI process that applies commits late); a retarget still starts
+ * now, from the value and velocity on screen.
+ * `handle.curve(property)` hands out the curve a call plays, so a
+ * companion can follow it on the same clock.
+ * `options.additive` retargets as UIKit does: the old curve keeps going and a
+ * curve of the change between the targets is added on top, baked into one
+ * animation (two animations on one property leave the compositor in both
+ * engines), so the retarget keeps the velocity on screen.
  *
  * WebKit starts an animation created just before a block at its last frame
  * time before the block, so there the motion still skips into its curve;
@@ -160,6 +172,7 @@
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -220,6 +233,36 @@ export interface AnimateOptions {
    * changes nothing.
    */
   crossfadeAs?: 'entrance' | 'exit';
+  /**
+   * When the call's animations start. By default a call from rest starts
+   * when the browser commits it, and a call that continues motion on screen
+   * (a retarget) starts now, from the value on screen. Ignored with `at`.
+   * - `'commit'`: a call that continues motion also starts when the browser
+   *   commits it, dated by the browser rather than by the main thread, as a
+   *   call from rest is.
+   * - `'presented'`: a call from rest leaves its element at rest and creates
+   *   its animations two frames later, once the frame that carries the
+   *   element at rest has been presented; they then start at their commit. A
+   *   busy UI process delays the motion instead of skipping into it, for two
+   *   frames more before an idle start. Any other change to the animator
+   *   before then creates the animations first, in call order. A call that
+   *   continues motion on screen (a retarget) starts now, as by default.
+   */
+  start?: 'commit' | 'presented';
+  /**
+   * A call that retargets a curve on screen adds to it instead of replacing
+   * it, as UIKit's animations do: the old curve keeps going (past its end, at
+   * its target) and a spring of the difference between the two targets runs
+   * from 0 on top, in the same animation. Its value and velocity at the call
+   * are the old curve's, so whichever frame first shows it (WebKit can apply
+   * a new curve tens of ms late), nothing steps back. Ignored for a property
+   * at rest or still waiting for the browser's start, for a property given a
+   * velocity, and under Reduced Motion. Use it for a played curve that starts
+   * at rest (an eased reversal) while the property moves; a spring retarget
+   * on the same spring moves the same either way, and a curve that already
+   * continues the velocity on screen must not add to it.
+   */
+  additive?: boolean;
 }
 
 /**
@@ -301,6 +344,14 @@ export interface MotionHandle {
   value(property: MotionProperty, time?: number): number;
   /** Presentation velocity of a property at `time`, units/s. */
   velocity(property: MotionProperty, time?: number): number;
+  /**
+   * The curve this call started on `property` (`scale` reads `scaleX`),
+   * in seconds from the call's start: what the keyframes play. Null for a
+   * property the call does not move, or moves without travel (Reduced
+   * Motion). Map it onto a companion property with `mapProgress`, and play
+   * that on the same clock.
+   */
+  curve(property: MotionProperty | 'scale'): MotionCurve | null;
   /** New targets for this call's properties, keeping their velocity. */
   retarget(
     to: MotionValues,
@@ -435,6 +486,11 @@ interface Segment {
  */
 interface StartGroup {
   readonly provisional: number;
+  /**
+   * Its animations were created in the running task: the browser cannot have
+   * started them yet, so nothing reads their start time until it ends.
+   */
+  fresh: boolean;
   readonly segments: Segment[];
   readonly animations: Animation[];
   readonly channels: Set<Channel>;
@@ -547,15 +603,24 @@ export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
   opacity: 0.001,
 };
 
-/** Keyframes are added until linear interpolation is within this. */
+/**
+ * Keyframes are added until linear interpolation is within this: a quarter of
+ * a device pixel (this quarter of a CSS pixel, divided by the device pixel
+ * ratio where it is above 1), a twentieth of a degree, a 2000th of the size,
+ * about one step of an 8-bit alpha. Every one is below what a moving element
+ * can show.
+ */
 const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
-  x: 0.05,
-  y: 0.05,
-  rotate: 0.02,
-  scaleX: 0.0002,
-  scaleY: 0.0002,
-  opacity: 0.002,
+  x: 0.25,
+  y: 0.25,
+  rotate: 0.05,
+  scaleX: 0.0005,
+  scaleY: 0.0005,
+  opacity: 0.004,
 };
+
+/** Keyframes start on this grid (ms) and are split where the curve needs it. */
+const SAMPLE_GRID_MS = 1000 / 30;
 
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
@@ -564,11 +629,27 @@ const MAX_KEYFRAMES = 1200;
 /**
  * The keyframes hold the end state this long after a curve ends. An engine
  * whose compositor ends an animation while the main thread is blocked falls
- * back to the value its main thread last committed, mid-flight (WebKit); the
- * hold keeps the end state on screen through such a block. The main thread
- * drops the animation as soon as it runs after the curve's end.
+ * back to the value its main thread last committed, the curve's start
+ * (WebKit on Linux); the hold keeps the end state on screen through any such
+ * block. It only stretches the last keyframe. The main thread retires the
+ * animation as soon as it runs after the curve's end.
+ *
+ * Why a tail inside the curve's own animation, with a bound (measured Oct 24
+ * 2026; do not replace it without these proofs):
+ * - WebKit on Linux (WebKitGTK and WPE) ignores `fill` on its compositor:
+ *   a 400 ms move that ends during a 1 s main-thread block snaps back to the
+ *   block-start position 13 ms after its end, with `fill: forwards` or with
+ *   no fill, and holds with this tail. iOS 26.2 Mobile Safari holds the end
+ *   in all three forms, so there the tail is unneeded but harmless (measured
+ *   Oct 25 2026). The browser proof "a spring that ends inside the block
+ *   keeps showing its end state" catches it.
+ * - A separate static animation of the end state under the curve would hold
+ *   it without a bound, but two animations on one property push Chromium to
+ *   run the curve on the main thread: the 1 s block proof moved in 0 of 57
+ *   frames, the start-before-a-block proof failed, and seeking the curve
+ *   broke.
  */
-export const END_HOLD_MS = 5000;
+export const END_HOLD_MS = 60_000;
 
 /** How often a paused animation is looked at again for retiring, ms. */
 const RETIRE_RECHECK_MS = 100;
@@ -577,6 +658,9 @@ const RETIRE_RECHECK_MS = 100;
 export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
+
+/** The custom property whose writes make WebKit resolve a moving element. */
+const RESOLVE_PROPERTY = '--astryx-presented';
 
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
@@ -819,6 +903,16 @@ export function createAnimator(
   };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
+  /** The element reported to presentation.ts while translate moves. */
+  let presented: Element | null = null;
+  /**
+   * The translate the engine hit-tests the element at while the compositor
+   * moves it: where the animation started, or where a `resolve` left it.
+   */
+  let hitTested = {x: 0, y: 0};
+  /** Counts the style writes that make WebKit resolve the element again. */
+  let resolutions = 0;
+  let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
@@ -917,21 +1011,82 @@ export function createAnimator(
   const finalValue = (property: MotionProperty): number =>
     segments.get(property)?.target ?? resting[property];
 
+  /**
+   * Where translate is drawn relative to where the translate animation
+   * started, read live when a touch lands. iOS WebKit keeps the transform it
+   * resolved when the animation went to the compositor (iOS 26.2: the
+   * element's rect and its hit tests stay at the start for the whole curve,
+   * while the computed style is live), until the animation is retired. A
+   * segment whose start still waits for the browser's commit has painted
+   * nothing of its curve yet.
+   */
+  const drawnTranslate = (property: MotionProperty, time: number) => {
+    const segment = segments.get(property);
+    return segment?.group != null && !segment.group.resolved
+      ? segment.at(0)
+      : valueAt(property, time);
+  };
+
+  const presentedSource: PresentedSource = {
+    offset: () => {
+      syncPending();
+      const time = now();
+      return {
+        x: drawnTranslate('x', time) - hitTested.x,
+        y: drawnTranslate('y', time) - hitTested.y,
+      };
+    },
+    resolve: () => {
+      if (target == null) {
+        return;
+      }
+      syncPending();
+      const time = now();
+      // Any style write makes WebKit resolve the element's transform again,
+      // to the value drawn now, where it then stays (iOS 26.2: in the same
+      // task); a custom property changes nothing else.
+      resolutions += 1;
+      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
+    },
+  };
+
+  /** Reports the element while its translate moves (not a pseudo-element's). */
+  const present = (isMoving: boolean) => {
+    const element = isMoving && pseudoElement == null ? target : null;
+    if (element === presented) {
+      return;
+    }
+    unpresent?.();
+    unpresent = null;
+    if (presented instanceof HTMLElement) {
+      presented.style.removeProperty(RESOLVE_PROPERTY);
+    }
+    presented = element;
+    if (element != null) {
+      unpresent = registerPresentedOffset(element, presentedSource);
+    }
+  };
+
   const writeInline = (
     channel: Channel,
     value: (property: MotionProperty) => number,
+    release = true,
   ) => {
     if (target == null || pseudoElement != null) {
       return;
     }
     touched.add(channel);
     const text = inlineText(channel, value);
-    if (text === IDENTITY_TEXT[channel]) {
+    // An unchanged value is not written: a style write invalidates the
+    // element, and WebKit can repaint sticky content stale when that lands in
+    // the frame a scroll commits.
+    if (target.style.getPropertyValue(channel) !== text) {
+      target.style.setProperty(channel, text);
+    }
+    if (release && text === IDENTITY_TEXT[channel]) {
       // Identity leaves the element when nothing else would move it.
-      target.style.setProperty(channel, text);
       releaseIdentity(channel);
-    } else {
-      target.style.setProperty(channel, text);
     }
   };
 
@@ -959,9 +1114,9 @@ export function createAnimator(
     for (let e = 0; e + 1 < edges.length; e++) {
       const a = edges[e];
       const b = edges[e + 1];
-      // A 120 Hz grid, each interval split until the chord is within the
+      // A 30 Hz grid, each interval split until the chord is within the
       // tolerance at its quarter points.
-      const steps = Math.max(1, Math.ceil((b - a) / (1000 / 120)));
+      const steps = Math.max(1, Math.ceil((b - a) / SAMPLE_GRID_MS));
       const split = (t0: number, t1: number, depth: number) => {
         const v0 = value(t0);
         const v1 =
@@ -1006,9 +1161,10 @@ export function createAnimator(
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
-    // An element's inline style holds the end state, so its old animation can
-    // go first. A pseudo-element has none: its old animation keeps holding the
-    // value until the new one exists (same task, no frame in between).
+    // An element's inline style takes the value on screen below, so its old
+    // animation can go first. A pseudo-element has none: its old animation
+    // keeps holding the value until the new one exists (same task, no frame in
+    // between).
     if (pseudoElement == null) {
       previous?.cancel();
     }
@@ -1021,8 +1177,28 @@ export function createAnimator(
         segments.delete(property);
       }
     }
-    writeInline(channel, finalValue);
     const moving = properties.filter(p => segments.has(p));
+    if (channel === 'translate') {
+      // The animation built below starts from the value at `time` (its first
+      // keyframe); a rebase or a retarget builds a new one, so a new start.
+      hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
+      present(
+        moving.length > 0 &&
+          target != null &&
+          typeof target.animate === 'function',
+      );
+    }
+    if (
+      moving.length === 0 ||
+      target == null ||
+      typeof target.animate !== 'function'
+    ) {
+      writeInline(channel, finalValue);
+    } else {
+      // The value on screen as the curve starts: what a frame painted before
+      // the compositor has the curve shows. The end is written at retire.
+      writeInline(channel, p => valueAt(p, time));
+    }
     if (target == null || typeof target.animate !== 'function') {
       previous?.cancel();
       return;
@@ -1084,15 +1260,17 @@ export function createAnimator(
         }
       }
     }
+    // Read where the keyframes are baked: a page moved to another screen
+    // bakes its next motion for that screen.
+    const devicePixel = 1 / Math.max(1, globalThis.devicePixelRatio || 1);
     const collect = (scale: number) => {
       const times = new Set<number>([from, end]);
       for (const property of moving) {
-        for (const t of sampleTimes(
-          property,
-          from,
-          end,
-          SAMPLE_TOLERANCE[property] * scale,
-        )) {
+        const tolerance =
+          SAMPLE_TOLERANCE[property] *
+          scale *
+          (property === 'x' || property === 'y' ? devicePixel : 1);
+        for (const t of sampleTimes(property, from, end, tolerance)) {
           times.add(t);
         }
       }
@@ -1141,8 +1319,8 @@ export function createAnimator(
       duration: span,
       // The last keyframes hold the end state (END_HOLD_MS); filling both
       // ways also keeps it where an engine honors the fill on its compositor.
-      // The main thread drops the animation once it runs after the end; the
-      // inline style already holds the same values, so that changes no pixel.
+      // The main thread retires the animation once it runs after the end,
+      // writing the end inline in that task, so that changes no pixel.
       fill: 'both',
       easing: 'linear',
       ...(pseudoElement != null ? {pseudoElement} : {}),
@@ -1166,9 +1344,16 @@ export function createAnimator(
 
   /**
    * Once the main thread runs after the curve's end, the animation leaves the
-   * running state: an element's inline style already shows the end values; a
-   * pseudo-element's end value moves to a static holding animation, created
-   * before the long one goes.
+   * running state: an element's end values are written inline in the task
+   * that cancels it; a pseudo-element's end value moves to a static holding
+   * animation, created before the long one goes.
+   *
+   * Why a timer at the curve's end: no browser event reports that an
+   * animation's time has reached a point inside its effect, and its
+   * `finished` comes only after the END_HOLD_MS tail, which would keep the
+   * element promoted and the animation alive for a minute. The timer is set
+   * on the curve's own clock and re-armed while a sampler pauses or seeks the
+   * animation, so it never retires a held one.
    */
   const scheduleRetire = (
     channel: Channel,
@@ -1195,6 +1380,9 @@ export function createAnimator(
         return;
       }
       running.delete(channel);
+      if (channel === 'translate') {
+        present(false);
+      }
       // A pseudo-element holds its resting value, unless the stylesheet
       // takes it back now (a borrowed dip that has ended).
       const handsBack =
@@ -1203,6 +1391,12 @@ export function createAnimator(
         ![...landings].some(landing => landing.fadeIn?.isBorrowed === true);
       if (pseudoElement != null && !handsBack) {
         hold(channel, now());
+      } else {
+        // The end goes inline in the task that cancels the animation. Whether
+        // an identity end may leave the element is judged after the cancel:
+        // until then the end-state tail still holds the end, so the computed
+        // style would hide a stylesheet value (an opacity 0) under it.
+        writeInline(channel, finalValue, false);
       }
       animation.cancel();
       releaseIdentity(channel);
@@ -1546,6 +1740,7 @@ export function createAnimator(
     time: number,
     properties: Iterable<MotionProperty>,
     at: number | undefined,
+    start?: AnimateOptions['start'],
   ): StartGroup | null => {
     if (target == null || typeof target.animate !== 'function') {
       return null;
@@ -1573,7 +1768,11 @@ export function createAnimator(
       }
       return null;
     }
-    for (const channel of channels) {
+    // A call that continues motion starts now unless it asks for the
+    // browser's start (`commit`). `presented` asks only for a call from rest:
+    // an element still moving is not at rest, so a retarget starts now, from
+    // the value and velocity on screen (spec:AST-094 FR6).
+    for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
         if (
@@ -1591,6 +1790,7 @@ export function createAnimator(
     });
     return {
       provisional: time,
+      fresh: false,
       segments: [],
       animations: [],
       channels: new Set(),
@@ -1606,6 +1806,7 @@ export function createAnimator(
     owner: HandleState,
     changed: MotionProperty[],
     time: number,
+    presented = false,
   ) => {
     if (group != null) {
       for (const property of changed) {
@@ -1616,6 +1817,75 @@ export function createAnimator(
         }
       }
     }
+    if (presented && group != null && requestFrame != null) {
+      // At rest until then: the animations, and the layer they promote, come
+      // two frames later. Promoting now, a layer at rest for two frames, left
+      // a stale paint of the element's rest in WebKit on iOS 26.2 (a title in
+      // a scroller inside a clipped card) after the motion ended.
+      // Each call waits its own two frames: one queued after another change
+      // flushed the queue, or after an earlier call's first frame, still
+      // waits its two.
+      const call = {group, changed};
+      deferredCalls.push(call);
+      requestFrame(() => requestFrame(() => flushDeferredThrough(call)));
+      return;
+    }
+    startCall(group, changed, time);
+  };
+
+  /** Calls with `start: 'presented'` waiting for their second frame. */
+  const deferredCalls: {group: StartGroup; changed: MotionProperty[]}[] = [];
+
+  /** Creates the animations of the given waiting calls, in call order. */
+  const startDeferred = (
+    calls: {group: StartGroup; changed: MotionProperty[]}[],
+  ) => {
+    for (const {group, changed} of calls) {
+      // Not a channel that holds the curve of a later call still waiting: a
+      // later presented call that took a property over starts that channel
+      // with its own two frames. Every other property starts here, whatever
+      // its segment's group: a value Reduce Motion writes at once, or lands
+      // under a dip, has no curve of this call's.
+      const own = changed.filter(
+        property =>
+          !CHANNELS[CHANNEL_OF[property]].some(other => {
+            const waiting = segments.get(other)?.group;
+            return (
+              waiting != null &&
+              waiting !== group &&
+              deferredCalls.some(call => call.group === waiting)
+            );
+          }),
+      );
+      // From the call's own time: the curve starts at the browser's commit.
+      startCall(group, own, group.provisional);
+    }
+  };
+
+  /** Creates the animations of every waiting call, in call order. */
+  const flushDeferred = () => {
+    startDeferred(deferredCalls.splice(0));
+  };
+
+  /**
+   * A call's second frame: it starts, with every call queued before it (in
+   * call order), unless another change created it already.
+   */
+  const flushDeferredThrough = (call: {
+    group: StartGroup;
+    changed: MotionProperty[];
+  }) => {
+    const index = deferredCalls.indexOf(call);
+    if (index >= 0) {
+      startDeferred(deferredCalls.splice(0, index + 1));
+    }
+  };
+
+  const startCall = (
+    group: StartGroup | null,
+    changed: MotionProperty[],
+    time: number,
+  ) => {
     callGroup = group;
     try {
       commit(changed, time);
@@ -1630,6 +1900,10 @@ export function createAnimator(
       return;
     }
     pendingGroups.add(group);
+    group.fresh = true;
+    queueMicrotask(() => {
+      group.fresh = false;
+    });
     for (const animation of group.animations) {
       // A cancel before the first frame rejects each one's ready promise.
       (animation as Partial<Animation>).ready?.catch(() => {});
@@ -1733,10 +2007,16 @@ export function createAnimator(
     }
   };
 
-  /** Reads the start of every call whose first frame has been committed. */
+  /**
+   * Reads the start of every call whose first frame may have been committed:
+   * not those created in the running task, whose start the browser cannot
+   * have set (reading it there can cost a style update per call).
+   */
   const syncPending = () => {
     for (const group of pendingGroups) {
-      syncGroup(group);
+      if (!group.fresh) {
+        syncGroup(group);
+      }
     }
     syncFinished();
   };
@@ -1876,10 +2156,33 @@ export function createAnimator(
         Math.max(0, end - now()),
       );
     }
+    // The call's own curves, as it started them.
+    const curves = new Map<MotionProperty, Segment>();
+    for (const property of properties) {
+      const segment = segments.get(property);
+      if (segment != null && segment.owner === owner) {
+        curves.set(property, segment);
+      }
+    }
     const handle: MotionHandle = {
       properties,
       finished,
       started: group?.started ?? Promise.resolve(time),
+      curve: property => {
+        const segment = curves.get(property === 'scale' ? 'scaleX' : property);
+        if (segment == null) {
+          return null;
+        }
+        return {
+          duration: segment.duration / 1000,
+          at: t =>
+            t * 1000 >= segment.duration
+              ? segment.target
+              : segment.at(Math.max(0, t * 1000)),
+          velocity: t =>
+            t * 1000 >= segment.duration ? 0 : segment.speed(t * 1000),
+        };
+      },
       value: (property, at = now()) => {
         syncPending();
         return valueAt(property, at);
@@ -1954,6 +2257,80 @@ export function createAnimator(
       jumps: [],
       owner,
       spring: resolved,
+    };
+  };
+
+  /** The retarget of `additive`: the old curve plus a spring of the difference. */
+  const additiveSegment = (
+    owner: HandleState,
+    property: MotionProperty,
+    start: number,
+    to: number,
+    spring: SpringDescription,
+    old: Segment,
+  ): Segment => {
+    const oldEnd = old.start + old.duration;
+    const resolved = resolveMotion(target, spring);
+    const delta = solveSpring(toSpring(resolved), {
+      from: 0,
+      to: to - old.target,
+      velocity: 0,
+    });
+    const deltaMs = Math.min(
+      MAX_DURATION_MS,
+      delta.settleTime(SETTLE_THRESHOLD[property]) * 1000,
+    );
+    const ownAt = (t: number) =>
+      t >= deltaMs ? to - old.target : delta.value(t / 1000);
+    const oldAt = (time: number) =>
+      time >= oldEnd ? old.target : old.at(Math.max(0, time - old.start));
+    return {
+      start,
+      duration: Math.min(MAX_DURATION_MS, Math.max(oldEnd - start, deltaMs)),
+      target: to,
+      at: t => oldAt(start + t) + ownAt(t),
+      speed: t =>
+        (start + t >= oldEnd ? 0 : old.speed(start + t - old.start)) +
+        (t >= deltaMs ? 0 : delta.velocity(t / 1000)),
+      jumps: old.jumps
+        .map(jump => old.start + jump - start)
+        .filter(jump => jump > 0),
+      owner,
+      spring: resolved,
+    };
+  };
+
+  /**
+   * `additive` for a played curve: the old curve plus the new curve's shape,
+   * scaled to the difference between the two targets.
+   */
+  const additiveCurveSegment = (
+    owner: HandleState,
+    start: number,
+    curve: MotionCurve,
+    old: Segment,
+  ): Segment => {
+    const from = curve.at(0);
+    const to = curve.at(curve.duration);
+    const scale = (to - old.target) / (to - from);
+    const ms = Math.min(MAX_DURATION_MS, curve.duration * 1000);
+    const oldEnd = old.start + old.duration;
+    const oldAt = (time: number) =>
+      time >= oldEnd ? old.target : old.at(Math.max(0, time - old.start));
+    return {
+      start,
+      duration: Math.min(MAX_DURATION_MS, Math.max(oldEnd - start, ms)),
+      target: to,
+      at: t =>
+        oldAt(start + t) +
+        (t >= ms ? to - old.target : (curve.at(t / 1000) - from) * scale),
+      speed: t =>
+        (start + t >= oldEnd ? 0 : old.speed(start + t - old.start)) +
+        (t >= ms ? 0 : curve.velocity(t / 1000) * scale),
+      jumps: old.jumps
+        .map(jump => old.start + jump - start)
+        .filter(jump => jump > 0),
+      owner,
     };
   };
 
@@ -2390,6 +2767,8 @@ export function createAnimator(
       if (next === target) {
         return;
       }
+      flushDeferred();
+      present(false);
       if (next == null) {
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
@@ -2550,6 +2929,7 @@ export function createAnimator(
 
     set(values, setOptions = {}) {
       syncPending();
+      flushDeferred();
       const time = now();
       const next = expand(values);
       for (const [property, value] of Object.entries(next) as [
@@ -2571,6 +2951,9 @@ export function createAnimator(
 
     animate(to, transition, animateOptions = {}) {
       syncPending();
+      if (animateOptions.start !== 'presented') {
+        flushDeferred();
+      }
       const time = animateOptions.at ?? now();
       const targets = expand(to);
       const velocities = expand(transition.velocity ?? {});
@@ -2592,6 +2975,21 @@ export function createAnimator(
         Object.assign(next, plan.next);
       } else {
         for (const property of properties) {
+          const running =
+            animateOptions.additive === true && velocities[property] == null
+              ? segmentAt(property, time)
+              : null;
+          if (running != null && !isHeld(running)) {
+            next[property] = additiveSegment(
+              owner,
+              property,
+              time,
+              targets[property] as number,
+              transition.spring,
+              running,
+            );
+            continue;
+          }
           const velocity = velocities[property] ?? velocityAt(property, time);
           next[property] = springSegment(
             owner,
@@ -2608,6 +3006,7 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         animateOptions.at,
+        animateOptions.start,
       );
       const adopted =
         plan?.landing != null
@@ -2632,7 +3031,13 @@ export function createAnimator(
           segments.set(property, segment);
         }
       }
-      commitCall(group, owner, changed, time);
+      commitCall(
+        group,
+        owner,
+        changed,
+        time,
+        animateOptions.start === 'presented' && animateOptions.at == null,
+      );
       if (plan?.borrowed != null) {
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
@@ -2652,6 +3057,9 @@ export function createAnimator(
 
     play(curves, playOptions = {}) {
       syncPending();
+      if (playOptions.start !== 'presented') {
+        flushDeferred();
+      }
       const time = playOptions.at ?? now();
       const {owner, finished} = newOwner();
       const byProperty: Partial<Record<MotionProperty, MotionCurve>> = {};
@@ -2699,6 +3107,17 @@ export function createAnimator(
           continue;
         }
         const curve = byProperty[property] as MotionCurve;
+        const running =
+          playOptions.additive === true ? segmentAt(property, time) : null;
+        if (
+          running != null &&
+          !isHeld(running) &&
+          curve.duration > 0 &&
+          Math.abs(curve.at(curve.duration) - curve.at(0)) > 1e-9
+        ) {
+          next[property] = additiveCurveSegment(owner, time, curve, running);
+          continue;
+        }
         next[property] =
           curve.duration === 0
             ? null
@@ -2716,6 +3135,7 @@ export function createAnimator(
         time,
         Object.keys(next) as MotionProperty[],
         playOptions.at,
+        playOptions.start,
       );
       const adopted =
         plan?.landing != null
@@ -2740,7 +3160,13 @@ export function createAnimator(
           segments.set(property, segment);
         }
       }
-      commitCall(group, owner, changed, time);
+      commitCall(
+        group,
+        owner,
+        changed,
+        time,
+        playOptions.start === 'presented' && playOptions.at == null,
+      );
       if (plan?.borrowed != null) {
         // The dip's own commit cleared it; the borrow lasts the dip.
         borrowedOpacity = plan.borrowed;
@@ -2760,6 +3186,7 @@ export function createAnimator(
 
     decay(curves, decayOptions = {}) {
       syncPending();
+      flushDeferred();
       const time = decayOptions.at ?? now();
       // Under Reduce Motion only momentum keeps moving (DR2, DEC-2): a curve
       // that is a transition plays as `animate` does, a cross-fade or at once.
@@ -2841,6 +3268,7 @@ export function createAnimator(
 
     stop(properties) {
       syncPending();
+      flushDeferred();
       const time = now();
       const list = properties == null ? PROPERTIES : expandList(properties);
       const changed: MotionProperty[] = [];
@@ -2876,6 +3304,7 @@ export function createAnimator(
 
     rebase(deltas, rebaseOptions = {}) {
       syncPending();
+      flushDeferred();
       const time = rebaseOptions.at ?? now();
       const changed: MotionProperty[] = [];
       const owners = new Set<HandleState>();
@@ -3003,6 +3432,7 @@ export function createAnimator(
     },
 
     dispose() {
+      flushDeferred();
       // A Reduce Motion move still waiting to land is written at its end
       // state, so the element is left visible where it was going (the node
       // just detached, when an unmount is pending); its call and the calls
@@ -3029,6 +3459,7 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      present(false);
       handBackBorrow();
       demote();
       cancelSheetWillChangeRead();
