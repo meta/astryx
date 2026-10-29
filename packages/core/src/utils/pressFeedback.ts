@@ -2,8 +2,9 @@
 
 /**
  * @file pressFeedback.ts
- * @input The press state machine (pressGesture.ts) and the document's pointer,
- *   keyboard, scroll and visibility events
+ * @input The press state machine (pressGesture.ts), the flat-tree parent
+ *   (flatTree.ts), and the document's pointer, keyboard, scroll and
+ *   visibility events
  * @output Exports paintPress and readPressPaint (the press attribute's
  *   writer for every press they track), PRESSABLE_ATTRIBUTE,
  *   PRESSED_ATTRIBUTE, pressableProps and installPressFeedback
@@ -75,6 +76,7 @@ import {
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
+import {parentAcrossShadow} from './flatTree';
 import {TOUCH_QUERY} from './touchPresentation';
 
 /**
@@ -187,10 +189,9 @@ function isInsideScroller(element: Element): boolean {
         return false;
       }
     }
-    node =
-      node.parentNode instanceof ShadowRoot
-        ? node.parentNode.host
-        : node.parentNode;
+    // The flat tree the browser scrolls: a slotted node goes to its slot, a
+    // shadow root to its host.
+    node = parentAcrossShadow(node);
   }
   return (
     (panY &&
