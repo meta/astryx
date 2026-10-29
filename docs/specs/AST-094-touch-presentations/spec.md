@@ -469,10 +469,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   acts as a finger's; a mouse makes the context request by a right click, not
   a long press (FR43), and otherwise keeps its released behavior
   (`spec:AST-017` FR59; DEC-9). A mouse or pen drag that a recognizer claims
-  takes no new text selection for that drag only, and a drag that moved
-  before the claim loses the selection it started; a press claimed at its
-  own pointerdown, before it moves, keeps the page's existing selection. An
-  unclaimed mouse drag keeps today's behavior.
+  takes no new text selection for that drag only. A claim made after the
+  drag has moved clears the page's selection; a press claimed at its own
+  pointerdown, before it moves, keeps it. An unclaimed mouse drag keeps its
+  released behavior.
 
   Guidance: a caller whose menu element carries text a person may want offers
   a Copy action in its menu.
