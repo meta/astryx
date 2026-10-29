@@ -10,7 +10,9 @@
  *   `::before` shown at once on the on arm, an opacity release on the fading
  *   arm on the cell clock, and none of the overlay's own main-thread release,
  *   all under a finger; a fine pointer's row as it was (no layer, no
- *   stacking context, the overlay's own paint)
+ *   stacking context, the overlay's own paint); and that the layer and the
+ *   overlay cap their release under reduced motion with the Reduce Motion
+ *   constant, never a literal
  * @position Unit test of the row press layer (utils/rowPressLayer.ts
  *   `rowPressLayerStyles.cell`, its clocks in utils/rowPressLayer.stylex.ts
  *   `cellPressConsts`); the real-engine proofs (compositor, busy main
@@ -18,6 +20,8 @@
  *   List/__tests__/ListRowPress.interaction.browser.spec.ts
  */
 
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {createElement} from 'react';
 import {render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
@@ -86,6 +90,18 @@ const values = (rules: string[], property: string) =>
   });
 
 describe('press layer clock', () => {
+  it('caps its release under reduced motion with the Reduce Motion constant, as the overlay does, never a literal (spec:AST-094 FR4)', () => {
+    for (const file of ['rowPressLayer.ts', 'interactionOverlay.stylex.ts']) {
+      const source = readFileSync(resolve(__dirname, file), 'utf8');
+      const caps = source.match(/`min\([^`]*\)`/g) ?? [];
+      expect(caps.length, file).toBeGreaterThan(0);
+      for (const cap of caps) {
+        expect(cap, file).toContain('${reducedMotionFadeConsts.duration}');
+        expect(cap, file).not.toMatch(/[\d.]+m?s\)/);
+      }
+    }
+  });
+
   it('is the constants table’s cell release, mirrored for the stylesheet', () => {
     expect(cellPressConsts.cellReleaseMs).toBe(list.highlight.releaseMs);
     expect(cellPressConsts.cellReleaseEase).toBe(
