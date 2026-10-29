@@ -2598,12 +2598,16 @@ describe('GestureHost', () => {
     expect(slider.style.getPropertyValue('user-select')).toBe('');
   });
 
-  it("keeps selection for every contact where the primary pointer is fine: a touchscreen laptop's finger, a desktop pen and a mouse (spec:AST-094 FR19, spec:AST-017 FR59)", () => {
+  it("locks for a finger and a pen where the primary pointer is fine, a touchscreen laptop's finger and a desktop pen, and never for a mouse (spec:AST-094 FR41, FR43; spec:AST-017 FR59)", () => {
+    detachers.push(asIosWebKit());
     detachers.push(pointerQuery(false).restore);
-    const {row, slider} = mount('<div id="row"></div><div id="slider"></div>');
+    const {slider} = mount('<div id="slider"></div>');
+    const laptop = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
     detachers.push(
-      host.attachConsumer(row, new RecordingConsumer()),
-      host.attach(
+      laptop.attach(
         slider,
         new PanGestureRecognizer({
           direction: 'horizontal',
@@ -2612,24 +2616,45 @@ describe('GestureHost', () => {
       ),
     );
     const at = {x: 5, y: 5};
-    for (const [time, pointerType] of [
-      [0, 'mouse'],
-      [100, 'pen'],
-      [200, 'touch'],
-    ] as const) {
-      pointer('pointerdown', row, {
-        pointerType,
-        ...at,
-        buttons: 1,
-        time,
-      });
-      expect(row.style.getPropertyValue('user-select')).toBe('');
-      pointer('pointerup', row, {pointerType, ...at, time: time + 50});
-    }
-    const finger = {id: 1, ...at};
-    touch('touchstart', slider, [finger], [finger], 300);
+    // A mouse keeps its released behavior: no lock.
+    pointer('pointerdown', slider, {
+      pointerType: 'mouse',
+      ...at,
+      buttons: 1,
+      time: 0,
+    });
     expect(slider.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', slider, [finger], [], 350);
+    pointer('pointerup', slider, {pointerType: 'mouse', ...at, time: 50});
+    // A pen's hold acts as a finger's.
+    pointer('pointerdown', slider, {
+      pointerType: 'pen',
+      ...at,
+      buttons: 1,
+      time: 100,
+    });
+    expect(slider.style.getPropertyValue('user-select')).toBe('none');
+    pointer('pointerup', slider, {pointerType: 'pen', ...at, time: 150});
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
+    // A touchscreen laptop's finger: its pointerdown arms the press, then
+    // its touchstart takes the lock.
+    pointer('pointerdown', slider, {
+      id: 7,
+      pointerType: 'touch',
+      ...at,
+      buttons: 1,
+      time: 200,
+    });
+    const finger = {id: 1, ...at};
+    touch('touchstart', slider, [finger], [finger], 200);
+    expect(slider.style.getPropertyValue('user-select')).toBe('none');
+    pointer('pointerup', slider, {
+      id: 7,
+      pointerType: 'touch',
+      ...at,
+      time: 250,
+    });
+    touch('touchend', slider, [finger], [], 250);
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('locks a checkbox under the finger inside a locked element, which WebKit makes selectable, but never a text field', () => {
@@ -4027,8 +4052,49 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
       box.dispatchEvent(start);
       expect(start.defaultPrevented).toBe(true);
       pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
-      await Promise.resolve();
+      // The document's hold ends a task after the lift: wait for it, so no
+      // hold outlives the press.
+      await new Promise(resolve => setTimeout(resolve, 0));
       expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it("keeps the page's selection when a press claims at its own pointerdown, before any movement: a plain click on an action group's button leaves it for the group's Copy, while the hold still refuses a new one (FR41)", async () => {
+    const {text, group, copy} = mount(
+      '<p id="text">Text the page selected</p><div id="group"><button id="copy">Copy</button></div>',
+    );
+    const fine = fineHost();
+    // The action-group adapter's recognizer: a long press with no minimum
+    // duration and no movement limit, which claims at the press's pointerdown.
+    const press = new LongPressGestureRecognizer({
+      minimumPressDuration: 0,
+      allowableMovement: Number.POSITIVE_INFINITY,
+    });
+    detachers.push(fine.attach(group, press, {actionGroup: true}));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      selection.addRange(range);
+      time += 1000;
+      pointer('pointerdown', copy, {
+        pointerType,
+        x: 10,
+        y: 10,
+        buttons: 1,
+        time,
+      });
+      expect(press.state).toBe('began');
+      expect(selection.toString()).toBe('Text the page selected');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      copy.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', copy, {pointerType, x: 10, y: 10, time: time + 80});
+      await Promise.resolve();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(selection.toString()).toBe('Text the page selected');
     }
   });
 

@@ -313,11 +313,11 @@ presses nothing.
   hold-repeat) gets the same for each press. A press-tracked
   control or row whose hold does nothing, and the document press
   controller's surfaces (`usePressFeedback` rows), keep the browser's
-  long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. Only where the
-  primary pointer is coarse: a mouse never takes the lock, nor a finger or a
-  pen where the primary pointer is fine (a touchscreen laptop, a desktop pen
-  tablet), so desktop selection is unchanged (`spec:AST-094` FR19); content
-  under a sheet's or a pager's pan stays selectable.
+  long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. A
+  finger or a pen takes the lock under any primary pointer, a touchscreen
+  laptop and a desktop pen tablet included; a mouse never does, so mouse
+  selection is unchanged (`spec:AST-017` FR59); content under a sheet's or a
+  pager's pan stays selectable.
 
 - **Claiming.** When a recognizer recognizes, it owns its touches. Each
   element with a recognizer that can claim a moving touch (a pan, a swipe, a
@@ -335,9 +335,11 @@ presses nothing.
   `touchesShouldCancel(in:)` is false for a tracking control). Its element
   also gets `touch-action: manipulation`, for every pointer, as a tap
   recognizer's does (`spec:AST-094` FR18), so taps in quick succession
-  never zoom. Where the primary pointer is fine no element gets the
-  blocking listener: it keeps its one `pointerdown` listener (FR24), and a
-  finger's claim there rests on `touch-action`. A scroll that starts on such a control waits on the main
+  never zoom. Where the primary pointer is fine the blocking listener comes
+  only with a press: the element keeps its one `pointerdown` listener
+  (FR24), the press adds the `touchmove` before its `touchstart`, and the
+  kept finger's moves are cancelled from then on, as on a phone (FR11,
+  DEC-21). A scroll that starts on such a control waits on the main
   thread; a move before the press is delivered still scrolls. The listener the host
   adds to a finger's target at touch-down, for a target that leaves the
   document mid-gesture, is passive too unless a recognizer on that touch can

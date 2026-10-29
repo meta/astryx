@@ -81,9 +81,9 @@
  *   are off only where the hold does something (`spec:AST-094` FR41): on the
  *   elements of recognizers that bring a `selectionLock`, and on a non-text
  *   input under the finger inside them (WebKit's own style makes every
- *   input selectable); restored when the contact ends. Only where the
- *   primary pointer is coarse: a mouse never takes this lock, nor a finger
- *   or a pen where the primary pointer is fine.
+ *   input selectable); restored when the contact ends. A finger or a pen
+ *   takes it under any primary pointer; a mouse never does (`spec:AST-017`
+ *   FR59).
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch, a rotation) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
@@ -1487,6 +1487,13 @@ export class GestureHost {
     this.isArmedPress = true;
     this.syncKeptPresses();
     this.install();
+    // A finger's or a pen's press brings the cancelable touchend and the
+    // contextmenu canceller, as wherever the host installs, so a claimed
+    // lift clicks nothing and a claimed hold opens no browser menu (FR21). A
+    // mouse's press needs neither.
+    if (press.pointerType !== 'mouse') {
+      this.syncClaimingListeners();
+    }
     // The window's capture phase is over for this event: hand it on.
     this.onPointerDown(press);
   };
@@ -1835,10 +1842,14 @@ export class GestureHost {
   /**
    * A mouse or a pen that a recognizer claims for a continuous gesture (a
    * pan's drag) takes no text selection from then on (`spec:AST-094` FR43,
-   * FR41): its drag started selecting before the claim, so that selection
-   * goes and the claiming recognizers' elements refuse one until the pointer
-   * lifts, as a held finger's do. A tap claims only at its lift, so a click
-   * keeps the selection it made. A finger keeps the touch-down lock alone.
+   * FR41): a drag that moved before the claim started selecting, so that
+   * selection goes, and the claiming recognizers' elements refuse one until
+   * the pointer lifts, as a held finger's do. A press that claims at its own
+   * pointerdown, before any movement (an action group's press), has
+   * selected nothing: the page's selection stays, for the group's Copy or
+   * Cut, while a new one is still refused. A tap claims only at its lift,
+   * so a click keeps the selection it made. A finger keeps the touch-down
+   * lock alone.
    */
   private lockClaimedDrags(ids: ReadonlyArray<number>): void {
     for (const id of ids) {
@@ -1867,7 +1878,10 @@ export class GestureHost {
       if (elements.size > 0) {
         this.lockedBy.set(
           id,
-          lockDragSelection(elements, this.doc.defaultView),
+          lockDragSelection(elements, this.doc.defaultView, {
+            keepsSelection:
+              touch.x === touch.startX && touch.y === touch.startY,
+          }),
         );
       }
     }
@@ -2264,8 +2278,7 @@ export class GestureHost {
       this.watchTarget(
         touch.identifier,
         native,
-        recognizers.some(claimsWhileMoving) ||
-          (this.isCoarse && consumer?.keepsTouch != null),
+        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
         consumer != null ||
           recognizers.some(recognizer => recognizer.claimsTouches),
       );
@@ -2434,8 +2447,8 @@ export class GestureHost {
       if (
         id != null &&
         (this.arena.isClaimed(id) ||
-          (this.isCoarse &&
-            this.arena.consumerOf(id)?.keepsTouch?.(id) === true) ||
+          // A kept press keeps its finger under any pointer (FR11, DEC-21).
+          this.arena.consumerOf(id)?.keepsTouch?.(id) === true ||
           // A recognizer that holds the finger before it begins: a
           // scroll-edge pan pulling away from an edge (FR19, DEC-18), only
           // while this is the one finger on the screen: with a second one
@@ -3253,6 +3266,9 @@ export class GestureHost {
   private readonly onVisibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
       this.cancelEverything(this.arena.now());
+      // As at a blur: the press sends no further pointer event, so an armed
+      // press's page listeners go now (FR24).
+      this.releaseArmedPress();
     }
   };
 
