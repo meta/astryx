@@ -344,22 +344,6 @@ export default defineConfig(
       '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
     },
   },
-  // Temporary relationship-only exemption for the three known coarse-pointer
-  // centering defects. Every other no-physical-properties check remains active.
-  // Remove this block when #5170 lands.
-  {
-    files: [
-      'packages/core/src/CheckboxInput/CheckboxInput.tsx',
-      'packages/core/src/RadioList/RadioListItem.tsx',
-      'packages/core/src/Switch/Switch.tsx',
-    ],
-    rules: {
-      '@astryx/no-physical-properties': [
-        'error',
-        {allowLogicalCentering: true},
-      ],
-    },
-  },
   // What a disabled control says to the pointer is a defect wherever it
   // ships, so these two rules reach past core: lab components are consumed
   // the same way, and lab is where the next core component comes from.

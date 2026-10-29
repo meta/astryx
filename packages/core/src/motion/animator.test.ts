@@ -26,6 +26,11 @@ import {
 } from './animator';
 import {cubicBezier} from './bezier';
 import {coast} from './coast';
+import {
+  presentedElements,
+  presentedOffsetOf,
+  resolvePresented,
+} from './presentation';
 import {solveDecay} from './decay';
 import {solveSpring, solveSpringTowardRamp, toSpring} from './spring';
 import {scroll} from './uikit/scroll';
@@ -521,6 +526,56 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       curve.value(0.1),
       1,
     );
+  });
+
+  it('a start the browser dates before the block (WebKit) moves to after it', async () => {
+    // WebKit dates a pending animation at its last frame time before the
+    // task that made it, so after a block its first frame would show the
+    // motion that far in; the call's first read of that start moves it to
+    // the read. Chromium's commit start (the case above) stays.
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      get: () => ({currentTime: clock}),
+    });
+    try {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      // The task blocks for 300 ms; the browser dates the animation at 1000.
+      clock = 1300;
+      animation.startTime = 1000;
+      await commitFrame(1300);
+      await expect(handle.started).resolves.toBe(1300);
+      expect(animation.startTime).toBe(1300);
+      expect(animator.get('x', 1300)).toBeCloseTo(0, 9);
+      expect(animator.get('x', 1400)).toBeCloseTo(curve.value(0.1), 9);
+    } finally {
+      Reflect.deleteProperty(document, 'timeline');
+    }
+  });
+
+  it('a start read after the first frame stays the browser\u2019s', async () => {
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      get: () => ({currentTime: clock}),
+    });
+    try {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      // Paused before its first frame (a harness), then started late: the
+      // first frame passed with no start to read.
+      animation.paused = true;
+      await commitFrame(1016);
+      clock = 1600;
+      animation.paused = false;
+      animation.startTime = 1000;
+      await commitFrame(1600);
+      await expect(handle.started).resolves.toBe(1000);
+      expect(animation.startTime).toBe(1000);
+    } finally {
+      Reflect.deleteProperty(document, 'timeline');
+    }
   });
 
   it('holds its start until the browser starts it', async () => {
@@ -1577,6 +1632,52 @@ describe('finished', () => {
     const c = animator.animate({rotate: 40}, {spring: springs.quickChange});
     animator.stop(['rotate']);
     await expect(c.finished).resolves.toBe(false);
+  });
+
+  it('waits while a sampler holds the animation past the curve\u2019s end', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    await advance(16);
+    // A harness pauses it (holdAnimations) and keeps it held well past the
+    // end of the curve on the wall clock: the motion has not ended.
+    const [animation] = live('translate');
+    animation.paused = true;
+    await advance(5000);
+    expect(result).toBeUndefined();
+  });
+
+  it('resolves true once a held animation resumes and reaches its end', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    await advance(16);
+    const [animation] = live('translate');
+    animation.paused = true;
+    await advance(5000);
+    animation.paused = false;
+    await advance(1000);
+    expect(result).toBe(true);
+  });
+
+  it('resolves on time for an animation nobody holds', async () => {
+    const {animator} = setup();
+    const handle = animator.animate({x: 40}, {spring: springs.quickChange});
+    let result: boolean | undefined;
+    void handle.finished.then(value => {
+      result = value;
+    });
+    const end = (handle.curve('x')?.duration ?? NaN) * 1000;
+    await advance(end - 50);
+    expect(result).toBeUndefined();
+    await advance(100);
+    expect(result).toBe(true);
   });
 
   it('dispose cancels and settles everything', async () => {
@@ -3349,5 +3450,93 @@ describe('attach', () => {
     const element = document.createElement('div');
     createAnimator(element);
     expect(element.getAttribute('style')).toBeNull();
+  });
+});
+
+describe('the presented offset iOS hit testing reads', () => {
+  it('reports translate while it moves: drawn minus where its animation started, zero before the browser starts it', async () => {
+    const {element, animator} = setup();
+    animator.animate({y: 300}, {spring: springs.sheetPresent});
+    // A call from rest starts at the browser's commit: nothing has moved yet.
+    expect(presentedOffsetOf(element)).toEqual({x: 0, y: 0});
+    await commitFrame(clock);
+    expect(presentedElements()).toContain(element);
+    expect(presentedOffsetOf(element)).toEqual({x: 0, y: 0});
+    clock += 120;
+    await vi.advanceTimersByTimeAsync(120);
+    const offset = presentedOffsetOf(element);
+    expect(offset.x).toBe(0);
+    expect(offset.y).toBeCloseTo(animator.get('y'), 9);
+    expect(offset.y).toBeGreaterThan(0);
+    expect(offset.y).toBeLessThan(300);
+    // The curve ends and its animation retires: nothing left to report.
+    clock += 5000;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(presentedElements()).not.toContain(element);
+  });
+
+  it('stops reporting on stop, set, dispose and detach, and never for a pseudo-element or opacity alone', async () => {
+    const {element, animator} = setup();
+    const play = async () => {
+      animator.animate({x: 200}, {spring: springs.sheetPresent});
+      await advance(16);
+      expect(presentedElements()).toContain(element);
+    };
+    await play();
+    animator.stop();
+    expect(presentedElements()).not.toContain(element);
+    await play();
+    animator.set({x: 10});
+    expect(presentedElements()).not.toContain(element);
+    await play();
+    const other = document.createElement('div');
+    animator.attach(other);
+    expect(presentedElements()).not.toContain(element);
+    expect(presentedElements()).toContain(other);
+    animator.dispose();
+    expect(presentedElements()).not.toContain(other);
+
+    const fade = setup();
+    fade.animator.animate({opacity: 0}, {spring: springs.sheetPresent});
+    await advance(16);
+    expect(presentedElements()).not.toContain(fade.element);
+
+    const backdrop = setup({pseudoElement: '::backdrop'});
+    backdrop.animator.animate({y: 100}, {spring: springs.sheetPresent});
+    await advance(16);
+    expect(presentedElements()).not.toContain(backdrop.element);
+    backdrop.animator.dispose();
+    fade.animator.dispose();
+  });
+
+  it('resolves where it is drawn on request: one custom-property write, the offset restarting there', async () => {
+    const {element, animator} = setup();
+    animator.play({y: {duration: 1, at: t => 300 * t, velocity: () => 300}});
+    await advance(400);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(120, 6);
+    resolvePresented([element]);
+    expect(element.style.getPropertyValue('--astryx-presented')).toBe('1');
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    await advance(100);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(30, 6);
+    // Unreported once at rest, the property goes too.
+    animator.stop();
+    expect(element.style.getPropertyValue('--astryx-presented')).toBe('');
+    animator.dispose();
+  });
+
+  it('starts over from the current value when a rebase or a retarget builds a new animation', async () => {
+    const {element, animator} = setup();
+    animator.play({y: {duration: 1, at: t => 300 * t, velocity: () => 300}});
+    await advance(500);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(150, 6);
+    animator.rebase({y: 40});
+    // The new animation starts where the element is drawn now.
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    await advance(100);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(30, 6);
+    animator.animate({y: 0}, {spring: springs.sheetPresent});
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    animator.dispose();
   });
 });

@@ -39,6 +39,15 @@ export class HoverGestureRecognizer extends GestureRecognizer {
     return false;
   }
 
+  /**
+   * @internal The host's brand for a hover recognizer, which it drives
+   * outside the touch arena, read without importing this class
+   * (recognizerInternals).
+   */
+  protected get family(): 'hover' {
+    return 'hover';
+  }
+
   override location(): Point {
     return this.point;
   }
