@@ -78,12 +78,12 @@
  *
  * WebKit dates an animation created just before a block at its last frame
  * time before the block, where the first frame after it would show the
- * motion skipped into its curve; the call's first read of that start (its
- * `ready`, once the task has ended, or the first frame after it) moves the
- * start to that read, so WebKit delays the motion as Chromium's commit does
- * (startAfterBlock). Only a block in the call's own task does: a read that
- * other tasks delay keeps the browser's start, so a sequence chained on a
- * call's end (a Reduce Motion cross-fade's second half) keeps its clock.
+ * motion skipped into its curve; the call's first read of that start moves it
+ * to the end of the call's own task, as Core Animation dates an animation at
+ * the commit, so WebKit delays the motion as Chromium's commit does
+ * (startAfterBlock). A read that other tasks delay changes nothing, so a
+ * sequence chained on a call's end (a Reduce Motion cross-fade's second
+ * half) keeps its clock.
  *
  * Promotion: Mobile Safari runs an animation whose start time is set from
  * script on its compositor at its first commit only if the element (or the
@@ -506,8 +506,8 @@ interface StartGroup {
    */
   framed?: boolean;
   /**
-   * When the call's task ended, at its first microtask: only a block in that
-   * task, between the call and here, moves its start (startAfterBlock).
+   * When the call's task ended, at its first microtask: the earliest its
+   * start can be (startAfterBlock).
    */
   taskEnded?: number;
   /** A later call in the same task that took over its curves. */
@@ -640,13 +640,6 @@ const SAMPLE_GRID_MS = 1000 / 30;
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
 
-/**
- * How far before the call's first read a browser's start for a call from
- * rest can lie and still be that read's own frame: two frames at 60 Hz. A
- * start dated by the call and further back came from a frame before a
- * main-thread block in the call's task (WebKit; startAfterBlock).
- */
-const LATE_START_MS = 34;
 /** Above this many keyframes the tolerance is relaxed. */
 const MAX_KEYFRAMES = 1200;
 /**
@@ -2099,51 +2092,28 @@ export function createAnimator(
   };
 
   /**
-   * The start of a call from rest, on the frame that commits it. Chromium,
-   * like Core Animation, starts a pending animation when it commits it, so a
-   * main-thread block later in the call's task delays the motion; WebKit
-   * dates it at its last frame time before that task, so the first frame
-   * after the block would show it skipped into its curve. A start the browser
-   * put by the call and more than LATE_START_MS before the call's first read
-   * (its `ready`, once the task has ended, or the first frame after it) moves
-   * to that read, with every animation of the call, when the call's own task
-   * ran that long past the call: a read delayed by other tasks keeps the
-   * browser's start.
+   * The start of a call from rest: no earlier than the end of the task that
+   * made it, as Core Animation dates an animation at the commit, when the
+   * calling task ends. Chromium starts a pending animation at its commit, so
+   * its start is never earlier; WebKit dates it at its last frame time before
+   * that task, so a block in the task would show the motion skipped into its
+   * curve at the first frame after it. Such a start moves to the task's end,
+   * with every animation of the call, however short the block. A read that
+   * other tasks delay changes nothing: the task ended when it did. A start read
+   * after the first frame stays the browser's.
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
-    const timeline =
-      typeof document === 'undefined'
-        ? null
-        : (document.timeline?.currentTime as number | null | undefined);
-    // A start well after the call is the browser's commit of it.
-    if (
-      timeline == null ||
-      group.framed === true ||
-      start > group.provisional + LATE_START_MS
-    ) {
-      return start;
-    }
-    // Only a block in the call's own task: under load from other tasks the
-    // first read can come late with nothing in the call's task delaying it,
-    // and moving the start there would make whatever chains on its end
-    // (a cross-fade's second half) run that much late.
     // A read in the call's first microtasks comes after its task ended too.
     const taskEnded = group.taskEnded ?? now();
-    if (taskEnded - group.provisional <= LATE_START_MS) {
-      return start;
-    }
-    // Read once the call's task has ended (its `ready`) or in the first
-    // frame after it, both after any block in that task.
-    const at = Math.max(now(), timeline);
-    if (at - start <= LATE_START_MS) {
+    if (group.framed === true || start >= taskEnded) {
       return start;
     }
     for (const animation of group.animations) {
       if (animation.playState !== 'idle') {
-        animation.startTime = at;
+        animation.startTime = taskEnded;
       }
     }
-    return at;
+    return taskEnded;
   };
 
   /** Moves a call from rest onto the time the browser started it. */
