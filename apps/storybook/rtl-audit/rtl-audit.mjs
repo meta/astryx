@@ -19,7 +19,7 @@
  *           - D6 (directional-decoration): single-glyph, aria-hidden decorations
  *             in repeated-item or between-sibling contexts mirror exactly once.
  *     (B) CURATED PRECISION — targets.json entries add D2 (order-flip),
- *         D3 (behavior-flip), D4 (overlay-side), D7 (coarse hit alignment),
+ *         D3 (behavior-flip), D4 (overlay-side), D7 (coarse native size/alignment),
  *         D8 (logical inline-edge mirroring), and D9 (logical grouped corners):
  *         the geometry/behavior dims that genuinely need hand-written selectors.
  *     (C) APPLICABILITY: every component is measured, explicitly verified N/A,
@@ -810,6 +810,12 @@ async function checkD4(page, port, t, card) {
 async function checkD7CoarseHit(page, port, t, card) {
   const wrapperSel = t.selectors?.wrapperSelector;
   const sizes = t.sizes || ['md'];
+  const minimumTargetSize = t.minimumTargetSize;
+  if (!['width', 'height'].every(axis =>
+    Number.isFinite(minimumTargetSize?.[axis]) && minimumTargetSize[axis] > 0,
+  )) {
+    throw new Error('D7 requires positive minimumTargetSize width and height from the owning target contract');
+  }
 
   const testDir = async (rtl, size) => {
     const inputSel = t.selectors?.inputSelectorBySize?.[size] ||
@@ -818,7 +824,7 @@ async function checkD7CoarseHit(page, port, t, card) {
     await settle(page);
     await doSetup(page, t);
 
-    return page.evaluate(({inputSel, wrapperSel, size, rtl}) => {
+    return page.evaluate(({inputSel, wrapperSel, size, rtl, minimumTargetSize}) => {
       const coarse = window.matchMedia('(pointer: coarse)').matches;
       const touchPoints = navigator.maxTouchPoints;
       const inputs = Array.from(document.querySelectorAll(inputSel));
@@ -839,16 +845,20 @@ async function checkD7CoarseHit(page, port, t, card) {
         const isHit = hit === input || input.contains(hit);
         const isCentered = Math.abs(inputBox.x + inputBox.width / 2 - cx) < 0.5 &&
           Math.abs(inputBox.y + inputBox.height / 2 - cy) < 0.5;
-        if (!isHit || !isCentered) allHitsOk = false;
+        const meetsMinimum = inputBox.width >= minimumTargetSize.width &&
+          inputBox.height >= minimumTargetSize.height;
+        if (!isHit || !isCentered || !meetsMinimum) allHitsOk = false;
         centers.push({
           wrapper: {x: b.x, y: b.y, width: b.width, height: b.height},
+          native: {x: inputBox.x, y: inputBox.y, width: inputBox.width, height: inputBox.height},
           hit: isHit,
           centered: isCentered,
+          meetsMinimum,
         });
         count++;
       }
       return {coarse, touchPoints, size, rtl, count, allHitsOk, centers};
-    }, {inputSel, wrapperSel, size, rtl}).catch(() => null);
+    }, {inputSel, wrapperSel, size, rtl, minimumTargetSize}).catch(() => null);
   };
 
   const results = [];
@@ -863,15 +873,16 @@ async function checkD7CoarseHit(page, port, t, card) {
     return;
   }
 
+  card.coarseHits = {minimumTargetSize, results};
   const pass = results.every(result => result.allHitsOk);
   card.dims.D7 = pass ? 'pass' : 'fail';
   const formatTarget = target => {
     const {width, height} = target.wrapper;
     const cx = target.wrapper.x + width / 2;
     const cy = target.wrapper.y + height / 2;
-    return `${width}x${height}@(${cx.toFixed(0)},${cy.toFixed(0)})->${target.hit && target.centered ? 'HIT' : 'MISS'}`;
+    return `wrapper ${width}x${height}@(${cx.toFixed(0)},${cy.toFixed(0)}) native ${target.native.width}x${target.native.height} hit=${target.hit} centered=${target.centered} size=${target.meetsMinimum}`;
   };
-  card.notes.push(`D7 coarse hit-target center: ${results.map(result => `${result.rtl ? 'RTL' : 'LTR'} ${result.size}:${result.centers.map(formatTarget).join(',')}`).join('; ')}`);
+  card.notes.push(`D7 coarse native target (minimum ${minimumTargetSize.width}x${minimumTargetSize.height}): ${results.map(result => `${result.rtl ? 'RTL' : 'LTR'} ${result.size}:${result.centers.map(formatTarget).join(',')}`).join('; ')}`);
 }
 
 async function measureLogicalInlineSubject(page, subject) {

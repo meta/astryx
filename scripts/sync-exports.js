@@ -238,6 +238,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // public API, and allowed by lint only in Core and Lab
   // (architecture:react-component-runtime INV13).
   'internal/touch',
+  'internal/tokenizer-presentation',
 ];
 
 /**
