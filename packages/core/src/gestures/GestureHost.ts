@@ -1483,12 +1483,14 @@ export class GestureHost {
       return;
     }
     // The window's capture phase, through the shared input stream
-    // (utils/inputStream.ts): the earliest point a page can intercept input,
-    // so an app's capture-phase stopPropagation at the document starves no
-    // recognizer, as UIKit's recognizers see touches before views do. Only
-    // the listeners that cancel are non-passive, and only while a claimer is
-    // attached (syncClaimingListeners); none of them is a touchstart or
-    // touchmove, so none of them holds a scroll.
+    // (utils/inputStream.ts): ahead of any document listener, so an app's
+    // window-capture stopPropagation, or a document-capture
+    // stopImmediatePropagation registered first, no longer hides a touch
+    // from the recognizers. A recognizer that must claim mid-gesture still
+    // needs the touch to reach its element, where its blocking touchmove
+    // sits. Only the listeners that cancel are non-passive, and only while a
+    // claimer is attached (syncClaimingListeners); none of them is a
+    // touchstart or touchmove, so none of them holds a scroll.
     this.unsubscribers = [
       // Pointer Events only: a finger comes from its pointer events alone. A
       // browser that has Touch Events still sends them for the same finger,
