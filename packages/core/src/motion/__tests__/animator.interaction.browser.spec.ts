@@ -32,7 +32,7 @@ import {
 } from '@astryxdesign/interaction-harness';
 import {expect, test, type Page} from '@playwright/test';
 import {build} from 'esbuild';
-import type {Animator} from '../animator';
+import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
 
 let script = '';
@@ -60,41 +60,30 @@ const TRAVEL = 300;
 /** The marker chip sits this far inside the box\u2019s top-left corner. */
 const MARKER_INSET = 8;
 
-// A real navigation (not setContent): the page keeps its own window.
 /**
- * Waits until the box runs no animation, on the animations' own clock: each
- * one it runs has finished, including one the animator starts when an earlier
- * one ends (the fade back in after a dip's fade out). A wall-clock timeout
- * would fail a page whose main thread runs late; this waits for the motion
- * itself, and the test's own timeout still bounds it.
+ * Waits for the held-dip call to end: on the call's own `finished`, then on
+ * the browser's own animations still running or waiting for their first
+ * frame, never on a count of frames. The dip lands on a timer due on the
+ * call's clock, which a loaded page runs whenever it can, so a frame window
+ * can close before the landing. Reads no animator value: a call would look
+ * for the start again.
  */
-async function settled(page: Page) {
+async function dipDone(page: Page) {
   await page.evaluate(async () => {
+    await (window as unknown as {dip: MotionHandle}).dip.finished;
     const box = document.getElementById('box') as HTMLElement;
-    const running = () =>
+    await Promise.all(
       box
         .getAnimations()
-        .filter(animation => animation.playState === 'running');
-    for (;;) {
-      const now = running();
-      if (now.length > 0) {
-        await Promise.all(
-          now.map(async animation => animation.finished.catch(() => undefined)),
-        );
-        continue;
-      }
-      // An animation that just ended starts the next step from its handler,
-      // within a frame.
-      await new Promise<void>(resolve =>
-        requestAnimationFrame(() => setTimeout(resolve, 0)),
-      );
-      if (running().length === 0) {
-        return;
-      }
-    }
+        .filter(
+          animation => animation.pending || animation.playState === 'running',
+        )
+        .map(async animation => animation.finished.catch(() => undefined)),
+    );
   });
 }
 
+// A real navigation (not setContent): the page keeps its own window.
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -363,7 +352,7 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
   await page.emulateMedia({reducedMotion: 'reduce'});
   await open(page);
   await page.evaluate(travel => {
-    window.animator.animate(
+    (window as unknown as {dip: MotionHandle}).dip = window.animator.animate(
       {x: travel},
       {spring: Motion.springs.navigationPush},
     );
@@ -394,7 +383,7 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await settled(page);
+  await dipDone(page);
   expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
@@ -407,7 +396,7 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
   await page.emulateMedia({reducedMotion: 'reduce'});
   await open(page);
   await page.evaluate(travel => {
-    window.animator.animate(
+    (window as unknown as {dip: MotionHandle}).dip = window.animator.animate(
       {x: travel},
       {spring: Motion.springs.navigationPush},
     );
@@ -436,7 +425,7 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await settled(page);
+  await dipDone(page);
   expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
