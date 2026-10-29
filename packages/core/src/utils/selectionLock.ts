@@ -108,6 +108,17 @@ export function lockSelection(
   return lockStyles(set);
 }
 
+/** How a drag's selection hold begins. */
+export interface DragSelectionLockOptions {
+  /**
+   * The press claimed at its own pointerdown, before any movement (an action
+   * group's press): it has selected nothing, so the page's selection stays.
+   * The hold still refuses a new one, and puts the page's back over any
+   * selection that appears while it runs.
+   */
+  keepsSelection?: boolean;
+}
+
 /** How a drag's selection hold ends: at a lift, or at a cancel. */
 export interface DragSelectionReleaseOptions {
   /**
@@ -119,8 +130,10 @@ export interface DragSelectionReleaseOptions {
 
 /**
  * Refuse a selection while a mouse or a pen drag a recognizer claimed runs,
- * until the returned function runs (`spec:AST-094` FR43, FR41). The drag has
- * already started selecting when it claims, so that selection goes first.
+ * until the returned function runs (`spec:AST-094` FR43, FR41). A drag that
+ * moved before it claims has already started selecting, so that selection
+ * goes first; a press that claims at its own pointerdown keeps the page's
+ * (`keepsSelection`).
  * `elements` refuse one with inline styles, on every engine. The document
  * refuses one too, as WebKit extends a drag's selection over text outside
  * the elements without another `selectstart`: a `selectstart` anywhere is
@@ -134,18 +147,27 @@ export interface DragSelectionReleaseOptions {
 export function lockDragSelection(
   elements: Iterable<Element>,
   view: Window | null | undefined,
+  {keepsSelection = false}: DragSelectionLockOptions = {},
 ): (options?: DragSelectionReleaseOptions) => void {
+  const kept = keepsSelection ? rangesOf(view?.getSelection()) : [];
   const clear = () => {
     const selection = view?.getSelection();
     if (
-      selection != null &&
-      selection.rangeCount > 0 &&
-      !selection.isCollapsed
+      selection == null ||
+      selection.rangeCount === 0 ||
+      selection.isCollapsed ||
+      holdsRanges(selection, kept)
     ) {
-      selection.removeAllRanges();
+      return;
+    }
+    selection.removeAllRanges();
+    for (const range of kept) {
+      selection.addRange(range.cloneRange());
     }
   };
-  view?.getSelection()?.removeAllRanges();
+  if (!keepsSelection) {
+    view?.getSelection()?.removeAllRanges();
+  }
   const set = new Set(elements);
   const refuse = (event: Event) => {
     if (!isTextEntry(event.target)) {
@@ -307,4 +329,35 @@ function isWithin(node: Node, ancestor: Element): boolean {
 function styleOf(element: Element): CSSStyleDeclaration | null {
   const style = (element as Partial<ElementCSSInlineStyle>).style;
   return style instanceof Object ? style : null;
+}
+
+/** A selection's ranges, copied; none for a collapsed or empty one. */
+function rangesOf(selection: Selection | null | undefined): Range[] {
+  if (selection == null || selection.isCollapsed) {
+    return [];
+  }
+  const ranges: Range[] = [];
+  for (let index = 0; index < selection.rangeCount; index++) {
+    ranges.push(selection.getRangeAt(index).cloneRange());
+  }
+  return ranges;
+}
+
+/** Whether `selection` holds exactly `ranges`, in order. */
+function holdsRanges(
+  selection: Selection,
+  ranges: ReadonlyArray<Range>,
+): boolean {
+  if (ranges.length === 0 || selection.rangeCount !== ranges.length) {
+    return false;
+  }
+  return ranges.every((range, index) => {
+    const held = selection.getRangeAt(index);
+    return (
+      held.startContainer === range.startContainer &&
+      held.startOffset === range.startOffset &&
+      held.endContainer === range.endContainer &&
+      held.endOffset === range.endOffset
+    );
+  });
 }

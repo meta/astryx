@@ -1647,10 +1647,14 @@ export class GestureHost {
   /**
    * A mouse or a pen that a recognizer claims for a continuous gesture (a
    * pan's drag) takes no text selection from then on (`spec:AST-094` FR43,
-   * FR41): its drag started selecting before the claim, so that selection
-   * goes and the claiming recognizers' elements refuse one until the pointer
-   * lifts, as a held finger's do. A tap claims only at its lift, so a click
-   * keeps the selection it made. A finger keeps the touch-down lock alone.
+   * FR41): a drag that moved before the claim started selecting, so that
+   * selection goes, and the claiming recognizers' elements refuse one until
+   * the pointer lifts, as a held finger's do. A press that claims at its own
+   * pointerdown, before any movement (an action group's press), has
+   * selected nothing: the page's selection stays, for the group's Copy or
+   * Cut, while a new one is still refused. A tap claims only at its lift,
+   * so a click keeps the selection it made. A finger keeps the touch-down
+   * lock alone.
    */
   private lockClaimedDrags(ids: ReadonlyArray<number>): void {
     for (const id of ids) {
@@ -1673,7 +1677,10 @@ export class GestureHost {
       if (elements.size > 0) {
         this.lockedBy.set(
           id,
-          lockDragSelection(elements, this.doc.defaultView),
+          lockDragSelection(elements, this.doc.defaultView, {
+            keepsSelection:
+              touch.x === touch.startX && touch.y === touch.startY,
+          }),
         );
       }
     }

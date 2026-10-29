@@ -4025,7 +4025,9 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
       box.dispatchEvent(start);
       expect(start.defaultPrevented).toBe(true);
       pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
-      await Promise.resolve();
+      // The document's hold ends a task after the lift: wait for it, so no
+      // hold outlives the press.
+      await new Promise(resolve => setTimeout(resolve, 0));
       expect(box.style.getPropertyValue('user-select')).toBe('');
     }
   });
