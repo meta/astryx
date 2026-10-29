@@ -14,6 +14,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
+import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
@@ -301,6 +302,49 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toEqual([]);
   });
 
+  it('makes no touch listener cancelling for a scroll-only claimer: with it beside a watcher, the touchend stays passive and the contextmenu off (spec:AST-094 FR20, FR24)', () => {
+    const {watched, pull} = mount(
+      '<div id="watched"></div><div id="pull"></div>',
+    );
+    const added = vi.spyOn(window, 'addEventListener');
+    detachers.push(() => added.mockRestore());
+    const coarse = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    // A watcher installs the host's touch listeners, all passive (FR20).
+    detachers.push(
+      coarse.attach(
+        watched,
+        new PanGestureRecognizer({claimsTouches: false, direction: 'vertical'}),
+      ),
+    );
+    added.mockClear();
+    // A pull that takes only the wheel claims no touch.
+    detachers.push(
+      coarse.attach(
+        pull,
+        new PanGestureRecognizer({
+          direction: 'vertical',
+          allowedPointerTypes: [],
+          allowedScrollTypes: ['continuous'],
+        }),
+      ),
+    );
+    const calls = added.mock.calls as unknown as [
+      string,
+      unknown,
+      AddEventListenerOptions | undefined,
+    ][];
+    expect(
+      calls.filter(
+        ([type, , options]) =>
+          type === 'touchend' && options?.passive === false,
+      ),
+    ).toEqual([]);
+    expect(calls.filter(([type]) => type === 'contextmenu')).toEqual([]);
+  });
+
   it('listens for the wheel only where a recognizer a wheel can drive allows it: a tap that allows scroll input adds no wheel listener', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
@@ -401,6 +445,42 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).not.toContain('ended');
     clock.runDue(48 + 100);
     expect(states).toContain('ended');
+  });
+
+  it("releases a mouse wheel's notches still, so position alone decides, while a trackpad's scroll keeps its speed (coordinator ruling; FR43 is silent)", () => {
+    const {notched, smooth} = mount(
+      '<div id="notched"></div><div id="smooth"></div>',
+    );
+    const released: Record<string, {velocity: number; scroll: number}> = {};
+    for (const [key, element] of [
+      ['notched', notched],
+      ['smooth', smooth],
+    ] as const) {
+      const pan = new PanGestureRecognizer({direction: 'vertical'});
+      pan.addTransitionListener((current, _from, to) => {
+        if (to === 'ended') {
+          released[key] = {
+            velocity: current.velocity().y,
+            scroll: current.scrollVelocity().y,
+          };
+        }
+      });
+      detachers.push(host.attach(element, pan));
+    }
+    // Three quick 100 px notches, as a mouse wheel reports them.
+    for (const time of [0, 16, 32]) {
+      expect(wheel(notched, {dy: 100, time}).defaultPrevented).toBe(true);
+    }
+    clock.runDue(32 + 100);
+    expect(Math.abs(released.notched.velocity)).toBe(0);
+    expect(Math.abs(released.notched.scroll)).toBe(0);
+    // A trackpad's steady scroll keeps its speed at the release.
+    for (const time of [500, 516, 532, 548]) {
+      wheel(smooth, {dy: 8, time});
+    }
+    clock.runDue(548 + 100);
+    expect(Math.abs(released.smooth.velocity)).toBeGreaterThan(0);
+    expect(Math.abs(released.smooth.scroll)).toBeGreaterThan(0);
   });
 
   it('starts a new wheel gesture after a quiet gap even when the end timer has not run yet (a blocked main thread)', () => {
@@ -531,6 +611,87 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(pan.state).not.toBe('possible');
     expect(selection.rangeCount).toBe(1);
     expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+
+  it('keeps a watcher pan off the wheel: its element gets no wheel listener, and the page keeps the wheel (spec:AST-094 FR20, DEC-7)', () => {
+    const {box} = mount('<div id="box"></div>');
+    const added = vi.spyOn(box, 'addEventListener');
+    const watcher = new PanGestureRecognizer({
+      direction: 'horizontal',
+      claimsTouches: false,
+    });
+    const states = statesOf(watcher);
+    detachers.push(host.attach(box, watcher));
+    expect(
+      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+    ).toEqual([]);
+    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+  });
+
+  it('leaves a first wheel already prevented, or one that cannot be cancelled, to the page for its whole gesture', () => {
+    const {box, inner} = mount('<div id="box"><div id="inner"></div></div>');
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    // An app's own handler below the pan prevented the first wheel.
+    inner.addEventListener('wheel', event => event.preventDefault(), {
+      once: true,
+    });
+    wheel(inner, {dx: 30, time: 0});
+    expect(wheel(inner, {dx: 30, time: 16}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+    clock.runDue(400);
+    // A wheel the browser lets no one cancel.
+    const uncancelable = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: false,
+      composed: true,
+      clientX: 20,
+      clientY: 20,
+      deltaX: 30,
+    });
+    Object.defineProperty(uncancelable, 'timeStamp', {value: 500});
+    clock.time = 500;
+    inner.dispatchEvent(uncancelable);
+    expect(wheel(inner, {dx: 30, time: 516}).defaultPrevented).toBe(false);
+    expect(states).toEqual([]);
+  });
+
+  it("stamps a notch gesture's release no later than the press that ends it: a long press right after keeps its own clock (spec:AST-094 FR16)", () => {
+    const {box, other} = mount('<div id="box"></div><div id="other"></div>');
+    detachers.push(
+      host.attach(box, new PanGestureRecognizer({direction: 'vertical'})),
+    );
+    const press = new LongPressGestureRecognizer({name: 'press'});
+    const began: number[] = [];
+    press.addListener(recognizer => {
+      if (recognizer.state === 'began') {
+        began.push(clock.time);
+      }
+    });
+    detachers.push(host.attach(other, press));
+    // A mouse wheel's notch.
+    expect(wheel(box, {dy: 100, time: 0}).defaultPrevented).toBe(true);
+    // A pen comes down 20 ms later, ending the wheel gesture.
+    clock.time = 20;
+    const down = new PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: 5,
+      pointerType: 'pen',
+      clientX: 5,
+      clientY: 5,
+      buttons: 1,
+    });
+    Object.defineProperty(down, 'timeStamp', {value: 20});
+    other.dispatchEvent(down);
+    clock.runDue(519);
+    expect(began).toEqual([]);
+    clock.runDue(521);
+    // 500 ms after the pen landed, not after the notch's release time.
+    expect(began).toHaveLength(1);
   });
 
   it('removes the wheel listener when the pan is disabled or detached', () => {

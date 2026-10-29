@@ -78,7 +78,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Does not own / non-goals**
 
 - Each member's own surface, naming, activation, pending, and disabled rendering
-  — owned by `component:Button` and `component:IconButton`.
+  — owned by `component:Button` and `component:IconButton`. A press that slides across
+  members acts on the lifted member, as `family:action-groups` owns.
 - A member's menu or other layer, and keys pressed inside it — owned by that
   member (for example `component:DropdownMenu`).
 - Selection state across toggles — owned by `component:ToggleButtonGroup`.
@@ -140,7 +141,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Performance and resources
 
 - **PR1 — Tab-stop repair.** The group repairs the Tab stop after each of its
-  own renders and when focus enters a member; it adds no global listener.
+  own renders and when focus enters a member; it adds no global listener
+  beyond the press tracking `family:action-groups` FR5 gives it.
 
 ## Accessibility contract
 

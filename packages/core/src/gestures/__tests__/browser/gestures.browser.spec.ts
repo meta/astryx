@@ -1409,10 +1409,10 @@ test.describe('where the primary pointer is fine', () => {
     }));
     expect(seen.isCoarse).toBe(false);
     expect(seen.page).toEqual([]);
-    // Only the elements whose recognizer claims a moving finger (or keeps
-    // its press) carry a touch listener: the blocking touchmove, which FR24
-    // counts outside the one-listener budget, so a touchscreen laptop's
-    // finger claims as on a phone (FR19).
+    // Only the elements whose recognizer claims a moving finger carry a
+    // touch listener: the blocking touchmove, which FR24 counts outside the
+    // one-listener budget, so a touchscreen laptop's finger claims as on a
+    // phone (FR19). A kept press gets its own only during a press.
     expect(seen.elements).toEqual(
       [
         'hpan',
@@ -1423,7 +1423,6 @@ test.describe('where the primary pointer is fine', () => {
         'slider',
         'switchRow',
         'onePan',
-        'kept',
       ].map(id => `${id}:touchmove:false`),
     );
     expect(seen.styles).toEqual(['||', '||', '||', '||']);
@@ -1471,6 +1470,91 @@ async function openTapInScroller(page: Page, engine: string): Promise<Driver> {
     host.attach(document.getElementById('row') as HTMLElement, tap);
   });
   return driver;
+}
+
+test('a still finger with sub-pixel jitter over a scroll view keeps its tap and scrolls nothing (spec:AST-094 FR18–FR22)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openTapInScroller(page, browserName);
+  const at = await center(page, 'row');
+  // A resting fingertip: a few tenths of a pixel back and forth.
+  const jitter = [
+    [0.3, 0.2],
+    [-0.2, 0.4],
+    [0.4, -0.3],
+    [-0.3, -0.2],
+    [0.2, 0.3],
+    [0, 0],
+  ];
+  const steps: Step[] = [{t: 0, down: [{...at, id: 1}]}];
+  jitter.forEach(([dx, dy], i) =>
+    steps.push({
+      t: (i + 1) * 16,
+      down: [{x: at.x + dx, y: at.y + dy, id: 1}],
+    }),
+  );
+  steps.push({t: (jitter.length + 1) * 16, down: []});
+  await driver.play(steps);
+  await page.waitForTimeout(100);
+  const taps = await page.evaluate(
+    () => (window as unknown as {__taps: string[]}).__taps,
+  );
+  expect(taps).toContain('ended');
+  expect(await scrollTop(page, 'list')).toBe(0);
+});
+
+for (const stop of [
+  {
+    label: "an app's window-capture stopPropagation",
+    install: 'window' as const,
+  },
+  {
+    label:
+      "a document-capture stopImmediatePropagation registered before core's",
+    install: 'document' as const,
+  },
+]) {
+  test(`a tap is still recognized under ${stop.label}, since the recognizers hear touches on the window's capture phase`, async ({
+    page,
+    browserName,
+  }) => {
+    const driver = await openBare(page, browserName);
+    await page.evaluate(install => {
+      // The app's stop comes first, before any recognizer attaches.
+      for (const type of ['touchstart', 'touchmove', 'touchend']) {
+        if (install === 'window') {
+          window.addEventListener(type, event => event.stopPropagation(), {
+            capture: true,
+          });
+        } else {
+          document.addEventListener(
+            type,
+            event => event.stopImmediatePropagation(),
+            {capture: true},
+          );
+        }
+      }
+      const {host, TapGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="row" style="height: 80px; background: #cfc">row</div>';
+      const taps: string[] = [];
+      (window as unknown as {__taps: string[]}).__taps = taps;
+      const tap = new TapGestureRecognizer({name: 'tap'});
+      tap.addTransitionListener((_current, _from, to) => taps.push(to));
+      host.attach(document.getElementById('row') as HTMLElement, tap);
+    }, stop.install);
+    const at = await center(page, 'row');
+    await driver.play([
+      {t: 0, down: [{...at, id: 1}]},
+      {t: 60, down: []},
+    ]);
+    await page.waitForTimeout(100);
+    const taps = await page.evaluate(
+      () => (window as unknown as {__taps: string[]}).__taps,
+    );
+    expect(taps).toContain('ended');
+  });
 }
 
 for (const travel of [

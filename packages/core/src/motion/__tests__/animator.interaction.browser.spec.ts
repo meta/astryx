@@ -61,6 +61,40 @@ const TRAVEL = 300;
 const MARKER_INSET = 8;
 
 // A real navigation (not setContent): the page keeps its own window.
+/**
+ * Waits until the box runs no animation, on the animations' own clock: each
+ * one it runs has finished, including one the animator starts when an earlier
+ * one ends (the fade back in after a dip's fade out). A wall-clock timeout
+ * would fail a page whose main thread runs late; this waits for the motion
+ * itself, and the test's own timeout still bounds it.
+ */
+async function settled(page: Page) {
+  await page.evaluate(async () => {
+    const box = document.getElementById('box') as HTMLElement;
+    const running = () =>
+      box
+        .getAnimations()
+        .filter(animation => animation.playState === 'running');
+    for (;;) {
+      const now = running();
+      if (now.length > 0) {
+        await Promise.all(
+          now.map(async animation => animation.finished.catch(() => undefined)),
+        );
+        continue;
+      }
+      // An animation that just ended starts the next step from its handler,
+      // within a frame.
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => setTimeout(resolve, 0)),
+      );
+      if (running().length === 0) {
+        return;
+      }
+    }
+  });
+}
+
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -272,6 +306,21 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       {spring: Motion.springs.navigationPush},
     );
     const start = await handle.started;
+    // What the dip animates, read while it runs.
+    const animated = box
+      .getAnimations()
+      .flatMap(animation =>
+        (animation.effect as KeyframeEffect)
+          .getKeyframes()
+          .flatMap(frame =>
+            Object.keys(frame).filter(
+              key =>
+                !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                  key,
+                ),
+            ),
+          ),
+      );
     // The main thread is busy from 60 to 180 ms into the dip, so the task
     // that lands it (due at 100 ms) runs 80 ms late.
     await new Promise(resolve =>
@@ -288,20 +337,7 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       at: performance.now() - start,
       opacity: Number(style.opacity),
       translate: style.translate,
-      animated: box
-        .getAnimations()
-        .flatMap(animation =>
-          (animation.effect as KeyframeEffect)
-            .getKeyframes()
-            .flatMap(frame =>
-              Object.keys(frame).filter(
-                key =>
-                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
-                    key,
-                  ),
-              ),
-            ),
-        ),
+      animated,
     };
   }, TRAVEL);
   test.info().annotations.push({
@@ -311,7 +347,8 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
   // Landed, and fully back in by then: the late landing did not stretch it.
   expect(read.translate).toBe(`${TRAVEL}px`);
   expect(read.opacity).toBeCloseTo(1, 2);
-  // Opacity only: the travel is never animated.
+  // Opacity only, read while the dip ran: the travel is never animated.
+  expect(read.animated).toContain('opacity');
   expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
@@ -357,9 +394,8 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('under Reduce Motion, a dip held before its first frame lands once the hold is resumed', async ({
@@ -400,9 +436,8 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('a spring started right before a block plays in full after it', async ({

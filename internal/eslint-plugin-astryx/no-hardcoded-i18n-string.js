@@ -2,9 +2,9 @@
 
 /**
  * @file no-hardcoded-i18n-string.js
- * @description Disallow hardcoded English string literals in user-facing
- * props. Any package that ships translatable UI can enable this rule; scope
- * it with the standard flat-config `files: [...]` pattern.
+ * @description Disallow hardcoded English in user-facing text sinks and
+ * formatter/helper returns. Any package that ships translatable UI can enable
+ * this rule; scope it with the standard flat-config `files: [...]` pattern.
  *
  * The rule itself is filesystem-agnostic — it does not hardcode any path.
  * The caller decides where to run it via `files` / `ignores` in the ESLint
@@ -34,6 +34,14 @@
  *      literals reached through a ternary or an `||`/`??` fallback and the
  *      literal chunks of an interpolated template are flagged too;
  *      identifiers and t(...) results are allowed.
+ *   5. Returns from format* and get*String/Text/Label/Message helpers, including
+ *      expression-bodied arrows. Helper names are a heuristic, not data-flow
+ *      analysis. Obvious CSS serializer names (color, style, shadow, transform,
+ *      gradient, length, angle, RGB/HSL/hex) are excluded; text-sink suffixes
+ *      such as formatColorLabel remain checked. Standalone px/s/ms/deg unit
+ *      chunks after interpolations are CSS fragments, not English. Nested
+ *      callbacks are not the enclosing helper's returns. Concatenations and
+ *      TypeScript assertions are walked along with templates and fallbacks.
  *
  * Ignores:
  *   - Test files (*.test.*, __tests__/**)
@@ -203,6 +211,7 @@ function reportUserFacingLiteralsIn(expr, name, context, isDefault, opts = {}) {
   const allowed = opts.allowed;
   // Returns true when a report was actually emitted (i.e. not allowlisted).
   const report = (node, value) => {
+    if (opts.requireEnglish && !/[A-Za-z]/.test(value)) return false;
     if (allowed?.has(value)) return false;
     context.report({
       node,
@@ -218,13 +227,39 @@ function reportUserFacingLiteralsIn(expr, name, context, isDefault, opts = {}) {
       }
       return;
     case 'TemplateLiteral':
-      for (const quasi of expr.quasis) {
+      for (const [index, quasi] of expr.quasis.entries()) {
         const raw = quasi.value?.cooked ?? quasi.value?.raw ?? '';
+        // A unit directly following an interpolation is CSS, not English.
+        // Keep space-separated display units and prose such as "s remaining".
+        if (opts.requireEnglish && index > 0 && /^(?:px|s|ms|deg)\s*$/.test(raw)) {
+          continue;
+        }
         if (typeof raw === 'string' && looksUserFacing(raw)) {
           // One report per template is enough.
           if (report(quasi, raw)) return;
         }
       }
+      for (const expression of expr.expressions) {
+        reportUserFacingLiteralsIn(expression, name, context, isDefault, opts);
+      }
+      return;
+    case 'BinaryExpression':
+      if (expr.operator === '+') {
+        reportUserFacingLiteralsIn(expr.left, name, context, isDefault, opts);
+        reportUserFacingLiteralsIn(expr.right, name, context, isDefault, opts);
+      }
+      return;
+    case 'TSAsExpression':
+    case 'TSTypeAssertion':
+    case 'TSNonNullExpression':
+    case 'TSSatisfiesExpression':
+      reportUserFacingLiteralsIn(
+        expr.expression,
+        name,
+        context,
+        isDefault,
+        opts,
+      );
       return;
     case 'ConditionalExpression':
       reportUserFacingLiteralsIn(expr.consequent, name, context, isDefault, opts);
@@ -240,6 +275,59 @@ function reportUserFacingLiteralsIn(expr, name, context, isDefault, opts = {}) {
     default:
       return;
   }
+}
+
+function isFormatterName(name) {
+  if (typeof name !== 'string') return false;
+  if (
+    !/^format(?:[A-Z_]|$)|^get(?:[A-Z].*)?(?:String|Text|Label|Message)$/.test(name)
+  ) {
+    return false;
+  }
+  // These names describe CSS output, not interface copy. A text-sink suffix
+  // still wins: formatColorLabel is not a color serializer.
+  return !/(?:CSS|Css|Style|Styles|Color|Shadow|Transform|Gradient|Length|Angle|RGB|Rgb|HSL|Hsl|Hex|Transition|Font|Border|GridTemplate|ClassName|MediaQuery|Selector|Path)(?:String|Value)?$/.test(
+    name,
+  );
+}
+
+function getFunctionName(node) {
+  const parent = node.parent;
+  if (
+    parent?.type === 'VariableDeclarator' &&
+    parent.id.type === 'Identifier'
+  ) {
+    return parent.id.name;
+  }
+  if (
+    (parent?.type === 'Property' || parent?.type === 'MethodDefinition' || parent?.type === 'PropertyDefinition') &&
+    !parent.computed
+  ) {
+    return parent.key.type === 'Identifier'
+      ? parent.key.name
+      : parent.key.value;
+  }
+  if (parent?.type === 'AssignmentExpression' && parent.right === node) {
+    const target = parent.left;
+    if (target.type === 'Identifier') return target.name;
+    if (target.type === 'MemberExpression' && !target.computed) return target.property.name;
+  }
+  if (
+    parent?.type === 'CallExpression' && parent.arguments[0] === node &&
+    parent.callee.type === 'Identifier' &&
+    (parent.callee.name === 'useCallback' || parent.callee.name === 'useMemo')
+  ) {
+    return getFunctionName(parent);
+  }
+  return node.id?.name;
+}
+
+function isFunction(node) {
+  return (
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression'
+  );
 }
 
 const rule = {
@@ -259,6 +347,9 @@ const rule = {
         'Hardcoded default {{value}} for prop `{{name}}`. ' +
         'Use the alias-and-resolve pattern: `{{name}}: {{name}}FromProps` in the destructure, then ' +
         '`const {{name}} = {{name}}FromProps ?? t(\'<namespace>.<component>.<key>\');` inside the body.',
+      hardcodedReturn:
+        'Hardcoded user-facing string {{value}} returned by `{{name}}()`. ' +
+        'Use one catalog message via the provider-bound translator instead of constructing English text.',
       hardcodedCallArg:
         'Hardcoded user-facing string {{value}} passed to `{{name}}()`. ' +
         'Route through `t(\'<namespace>.<component>.<key>\')` via `useTranslator()` so it can be localized.',
@@ -289,6 +380,27 @@ const rule = {
     const allowedCalleeStrings = new Set(options.allowedCalleeStrings ?? []);
 
     return {
+      ReturnStatement(node) {
+        let owner = node.parent;
+        while (owner && !isFunction(owner)) owner = owner.parent;
+        const name = owner && getFunctionName(owner);
+        if (!isFormatterName(name)) return;
+        reportUserFacingLiteralsIn(node.argument, name, context, false, {
+          messageId: 'hardcodedReturn',
+          requireEnglish: true,
+        });
+      },
+
+      ArrowFunctionExpression(node) {
+        if (node.body.type === 'BlockStatement') return;
+        const name = getFunctionName(node);
+        if (!isFormatterName(name)) return;
+        reportUserFacingLiteralsIn(node.body, name, context, false, {
+          messageId: 'hardcodedReturn',
+          requireEnglish: true,
+        });
+      },
+
       // 1. JSX attribute string literals:  <X label="Cancel">
       JSXAttribute(node) {
         if (!node.name || node.name.type === 'JSXNamespacedName') return;

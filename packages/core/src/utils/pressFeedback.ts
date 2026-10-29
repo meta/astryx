@@ -3,10 +3,10 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts) and the document's pointer,
- *   scroll and visibility events
- * @output Exports paintPress and readPressPaint (the one writer of the press
- *   attribute for every painter), PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE,
- *   pressableProps and installPressFeedback
+ *   keyboard, scroll and visibility events
+ * @output Exports paintPress and readPressPaint (the press attribute's
+ *   writer for every press they track), PRESSABLE_ATTRIBUTE,
+ *   PRESSED_ATTRIBUTE, pressableProps and installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
  *   per document that writes `data-astryx-press` on the nearest pressable surface.
  *   Installed by usePressFeedback (hooks/usePressFeedback.ts) on first mount;
@@ -19,15 +19,26 @@
  * Why a delegated document-level controller and not a hook on the element: a
  * virtualized list can carry more than a thousand rows, and four listeners
  * plus a state hook per row is not a cost a list like that can pay. This is
- * six listeners for the whole document, and a press costs one attribute write
- * on one element: no React render, no subscription, no per-element anything.
- * It also makes the behaviour uniform for free: every component that paints a
- * press carries {@link PRESSABLE_ATTRIBUTE}, so all of them change together.
+ * a handful of listeners for the whole document, and a press costs one
+ * attribute write on one element: no React render, no subscription, no
+ * per-element anything. It also makes the behaviour uniform for free: every
+ * component that paints a press carries {@link PRESSABLE_ATTRIBUTE}, so all of
+ * them change together.
  *
- * Under a mouse the controller does nothing and CSS `:active` keeps the press,
- * as it always has. Under a finger the `:active` arm is dropped by the CSS
- * (`@media (pointer: coarse)`) and this writes `data-astryx-press="on"` when the
- * press is believed and `data-astryx-press="fading"` for the release's exit.
+ * Where the primary pointer is fine (a desktop), the controller ignores the
+ * mouse and the keyboard: CSS `:active` keeps their press, as it always has,
+ * and the mouse path costs nothing. Under a finger the `:active` arm is
+ * dropped by the CSS (`@media (pointer: coarse)`) and this writes
+ * `data-astryx-press="on"` when the press is believed and
+ * `data-astryx-press="fading"` for the release's exit.
+ *
+ * That query reads the PRIMARY pointer, so on a phone or a tablet the
+ * stylesheet drops `:active` for every press, including a mouse or trackpad
+ * click and a Space press on a focused button. There, the controller paints
+ * those too: at once (no scroller can claim a mouse button or a key, so
+ * nothing waits), held while the button or key is down, and faded at the
+ * release, the way a finger's press leaves. The query is the stylesheet's
+ * own, so the two cannot disagree about which presses are the controller's.
  *
  * A surface's hold does nothing, so it keeps the browser's long-press text
  * selection (`spec:AST-094` FR41); only an element whose hold does something
@@ -37,7 +48,8 @@
  * pointer is coarse (coarsePointer.ts, `spec:AST-094` FR24).
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
- * utils/interactionOverlay.stylex.ts and pressFeedback.test.ts.
+ * hooks/usePressFeedback.doc.mjs, utils/interactionOverlay.stylex.ts and
+ * pressFeedback.test.ts.
  */
 
 import type {
@@ -55,6 +67,7 @@ import {
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
+import {TOUCH_QUERY} from './touchPresentation';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -65,7 +78,11 @@ import {subscribeInput} from './inputStream';
  */
 export const PRESSABLE_ATTRIBUTE = 'data-astryx-pressable';
 
-/** `on` while the press is believed and the finger is down; `fading` for the release's exit. */
+/**
+ * `on` while the press is believed and the finger (or, where the controller
+ * paints them, the mouse button or Space key) is down; `fading` for the
+ * release's exit.
+ */
 export const PRESSED_ATTRIBUTE = 'data-astryx-press';
 
 /** Spread onto the element that paints the press. */
@@ -84,17 +101,55 @@ export const PRESS_GESTURE_MEMORY_MS = 3000;
 /** A surface that is not enabled does not press, however it is touched. */
 const DISABLED = ':disabled, [aria-disabled="true"]';
 
+/**
+ * The `<input>` types a Space press activates as a button. Browsers hold
+ * `:active` on these (and on `<button>`) while Space is down; on a link or a
+ * `role="button"` element Space does nothing, so neither paints there. A
+ * checkbox or radio is left out: its pressable surface is the row around it,
+ * and desktop Chromium and WebKit leave that row at rest for a Space press
+ * (only the input matches `:active`), so it paints nothing here either.
+ */
+const SPACE_ACTIVATED_INPUT_TYPES: ReadonlySet<string> = new Set([
+  'button',
+  'image',
+  'reset',
+  'submit',
+]);
+
+/**
+ * A menu's own highlight is its only paint (`module:DropdownMenu/useMenuPress`
+ * FR6, DEC-6): a press held on one row while the highlight follows the
+ * pointer to another would light two rows.
+ */
+const MENU_PRESS_ROOT = '[data-astryx-menu-press]';
+
 interface LiveGesture {
   element: HTMLElement;
   gesture: PressGesture;
-  /** The pointer this gesture belongs to; a second finger is ignored. */
+  /**
+   * The pointer this gesture belongs to; a second finger is ignored. `null`
+   * for a press of the Space key.
+   */
   pointerId: number | null;
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-let live: LiveGesture | null = null;
+/**
+ * One tracking slot. A finger's press runs the whole machine (the delay, the
+ * slop, the scroll that takes it away). A mouse button's or the Space key's
+ * press is believed at once and only waits for its release, so it has a slot
+ * of its own: a finger landing never ends it, and it never swallows a
+ * finger's press.
+ */
+interface Slot {
+  live: LiveGesture | null;
+}
+
+const finger: Slot = {live: null};
+const button: Slot = {live: null};
 /** How many callers hold the controller installed; listeners exist while > 0. */
 let holders = 0;
+/** Whether the stylesheet left mouse and keyboard presses to the controller; read at the first one. */
 /**
  * When a scroller last moved UNDER A FINGER OF ITS OWN, and which one.
  *
@@ -147,10 +202,12 @@ export function readPressPaint(element: Element): PressPaint | null {
 }
 
 /**
- * Write `next` on `element` if its state is one of `onlyFrom`: THE ONE
- * WRITER of the press attribute, for the controller and every other painter
- * (paintPress), so a fade's clock and the attribute never drift apart. Any
- * write ends a fade paintPress left running there. Returns whether it wrote.
+ * Write `next` on `element` if its state is one of `onlyFrom`: the press
+ * attribute's writer for the controller and every painter that uses
+ * paintPress, so a fade's clock and the attribute never drift apart (the
+ * action-group tracker, hooks/actionGroupTracker.ts, still writes its groups'
+ * presses itself). Any write ends a fade paintPress left running there.
+ * Returns whether it wrote.
  */
 function writePress(
   element: Element,
@@ -205,7 +262,7 @@ export function paintPress(
 }
 
 /**
- * The controller's paint, through the one writer: a state the controller did
+ * The controller's paint, through writePress: a state the controller did
  * not write is its owner's (a `held` row), so neither a new press nor a
  * release's end overwrites or clears it.
  */
@@ -213,10 +270,10 @@ function paintElement(element: HTMLElement, paint: GesturePaint): void {
   writePress(element, paint);
 }
 
-function clearTimer(): void {
-  if (live?.timer != null) {
-    clearTimeout(live.timer);
-    live.timer = null;
+function clearTimer(slot: Slot): void {
+  if (slot.live?.timer != null) {
+    clearTimeout(slot.live.timer);
+    slot.live.timer = null;
   }
 }
 
@@ -240,18 +297,19 @@ function clearTimer(): void {
  *    controller's single tracking slot, holding a reference to an element a
  *    virtualized list may already have unmounted.
  */
-function apply(step: PressStep): void {
+function apply(slot: Slot, step: PressStep): void {
+  const live = slot.live;
   if (live == null) {
     return;
   }
   const phaseMoved = step.gesture.phase !== live.gesture.phase;
   if (step.timer != null || phaseMoved) {
-    clearTimer();
+    clearTimer(slot);
   }
   live.gesture = step.gesture;
   paintElement(live.element, step.paint);
   if (step.gesture.phase === 'idle') {
-    live = null;
+    slot.live = null;
     return;
   }
   if (step.timer != null) {
@@ -260,11 +318,12 @@ function apply(step: PressStep): void {
     // while a scroll runs, so a frame-based delay would fire late, after the
     // scroll, and paint a control nobody is pressing any more.
     live.timer = setTimeout(() => {
-      if (live != null) {
-        live.timer = null;
+      if (slot.live != null) {
+        slot.live.timer = null;
       }
       apply(
-        pressGestureStep(live?.gesture ?? idlePressGesture(), {
+        slot,
+        pressGestureStep(slot.live?.gesture ?? idlePressGesture(), {
           kind: TIMER_EVENT[kind],
         }),
       );
@@ -320,51 +379,137 @@ function scrollerIsBraking(element: HTMLElement): boolean {
 }
 
 /**
- * Let go of the controller's one tracking slot once the gesture is over.
+ * Let go of a slot once its gesture is over.
  *
  * A gesture that became a scroll ends in `pointercancel`, not `pointerup`, so
  * without this the dead gesture holds the slot for ever and every press after
  * the first scroll is swallowed.
  */
-function releaseIfDead(): void {
-  if (live?.gesture.phase === 'dead') {
-    clearTimer();
-    live = null;
+function releaseIfDead(slot: Slot): void {
+  if (slot.live?.gesture.phase === 'dead') {
+    clearTimer(slot);
+    slot.live = null;
   }
 }
 
 /** Drop the paint and forget the gesture, without running the machine. */
-function finish(): void {
+function finish(slot: Slot): void {
+  const live = slot.live;
   if (live == null) {
     return;
   }
-  clearTimer();
+  clearTimer(slot);
   writePress(live.element, 'none');
-  live = null;
+  slot.live = null;
+  if (slot === button) {
+    holdKey(false);
+  }
+}
+
+/** A new press on an element owns its paint: the other slot's gesture there ends. */
+function takeOver(other: Slot, element: HTMLElement): void {
+  if (other.live?.element === element) {
+    finish(other);
+  }
+}
+
+/**
+ * Whether presses with a mouse or a key are the controller's to paint here.
+ * Asked at each such press: rendering a pressable never queries the pointer,
+ * so a layout that must not depend on it stays independent.
+ */
+function stylesheetDroppedActive(): boolean {
+  // The shared touch resolver's key (`spec:AST-012` FR2): the condition the
+  // stylesheet drops `:active` under (`COARSE` in
+  // interactionOverlay.stylex.ts), read once per press.
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(TOUCH_QUERY).matches
+  );
+}
+
+/**
+ * The surface a mouse button's or the Space key's press paints, if any: the
+ * innermost marked surface, outside a menu. A key's press paints only a
+ * focused element that is itself the surface, as `:active` does.
+ */
+function buttonSurfaceAt(
+  target: EventTarget | null,
+  pointerId: number | null,
+): HTMLElement | null {
+  const element = surfaceAt(target);
+  if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
+    return null;
+  }
+  if (pointerId == null && element !== target) {
+    return null;
+  }
+  return element;
+}
+
+/** Start a mouse button's or the Space key's press on the surface, if there is one. */
+function pressButton(
+  target: EventTarget | null,
+  pointerId: number | null,
+): void {
+  // A press still fading elsewhere goes now: the new one owns the slot.
+  finish(button);
+  const element = buttonSurfaceAt(target, pointerId);
+  if (element == null) {
+    return;
+  }
+  takeOver(finger, element);
+  button.live = {element, gesture: idlePressGesture(), pointerId, timer: null};
+  holdKey(pointerId == null);
+  apply(button, pressGestureStep(button.live.gesture, {kind: 'buttonDown'}));
+}
+
+/** The mouse button or the key came up: the press fades like a finger's. */
+function releaseButton(): void {
+  holdKey(false);
+  if (button.live == null) {
+    return;
+  }
+  apply(button, pressGestureStep(button.live.gesture, {kind: 'up'}));
+}
+
+/** The platform took the mouse's press away: the paint goes at once. */
+function cancelButton(): void {
+  holdKey(false);
+  if (button.live == null) {
+    return;
+  }
+  apply(button, pressGestureStep(button.live.gesture, {kind: 'cancel'}));
+  releaseIfDead(button);
 }
 
 function onPointerDown(event: PointerEvent): void {
-  // A mouse already has hover and keeps `:active`; the treatment's CSS is
-  // inside `@media (pointer: coarse)`. Not tracking it keeps desktop identical
-  // and costs the mouse path nothing.
   if (event.pointerType === 'mouse') {
+    // A mouse already has hover and keeps `:active` where the primary pointer
+    // is fine; the touch treatment's CSS is inside `@media (pointer: coarse)`.
+    // Not tracking it there keeps desktop identical and costs the mouse path
+    // nothing. Only the primary button: that is the press `:active` paints.
+    if (event.button === 0 && stylesheetDroppedActive()) {
+      pressButton(event.target, event.pointerId);
+    }
     return;
   }
   armTouchCancel();
-  if (live != null) {
+  if (finger.live != null) {
     const fingerIsUp =
-      live.gesture.phase === 'fading' || live.gesture.phase === 'flash';
+      finger.live.gesture.phase === 'fading' ||
+      finger.live.gesture.phase === 'flash';
     // A finger still down means a SECOND finger: a pinch or a two-finger
     // scroll is not a press, so the first gesture ends and the second paints
     // nothing.
     if (!fingerIsUp) {
-      finish();
+      finish(finger);
       return;
     }
     // A finger already up means the last tap is still fading. The new touch
     // owns the surface from here; swallowing it would make the second of two
     // quick taps answer with nothing.
-    finish();
+    finish(finger);
   }
   const element = surfaceAt(event.target);
   // The touch clock is stamped AFTER the brake reads it, deliberately: the
@@ -377,14 +522,16 @@ function onPointerDown(event: PointerEvent): void {
   if (element == null || braking) {
     return;
   }
-  live = {
+  takeOver(button, element);
+  finger.live = {
     element,
     gesture: idlePressGesture(),
     pointerId: event.pointerId,
     timer: null,
   };
   apply(
-    pressGestureStep(live.gesture, {
+    finger,
+    pressGestureStep(finger.live.gesture, {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
@@ -393,6 +540,7 @@ function onPointerDown(event: PointerEvent): void {
 }
 
 function onPointerMove(event: PointerEvent): void {
+  const live = finger.live;
   if (
     live == null ||
     (live.pointerId != null && event.pointerId !== live.pointerId)
@@ -400,6 +548,7 @@ function onPointerMove(event: PointerEvent): void {
     return;
   }
   apply(
+    finger,
     pressGestureStep(live.gesture, {
       kind: 'move',
       x: event.clientX,
@@ -415,6 +564,9 @@ function onPointerUp(event: PointerEvent): void {
   // press landing inside the brake window. A coarse pointer and a mouse can
   // both be present on one device.
   if (event.pointerType === 'mouse') {
+    if (button.live != null && button.live.pointerId === event.pointerId) {
+      releaseButton();
+    }
     return;
   }
   // The lift is when momentum starts, so it is the clock the brake wants most.
@@ -422,14 +574,15 @@ function onPointerUp(event: PointerEvent): void {
   if (event.target instanceof Node) {
     lastTouchTarget = event.target;
   }
+  const live = finger.live;
   if (
     live == null ||
     (live.pointerId != null && event.pointerId !== live.pointerId)
   ) {
     return;
   }
-  apply(pressGestureStep(live.gesture, {kind: 'up'}));
-  releaseIfDead();
+  apply(finger, pressGestureStep(live.gesture, {kind: 'up'}));
+  releaseIfDead(finger);
 }
 
 /**
@@ -440,14 +593,34 @@ function onPointerUp(event: PointerEvent): void {
  * against +47 ms on a fling), which is what puts this cancel one frame ahead
  * of the list's motion, the way UIKit's `touchesCancelled` is.
  */
-function onCancel(): void {
+function onCancel(event?: Event): void {
+  // A cancelled mouse pointer ends the mouse's press, not a finger's.
+  const pointer = event as Partial<PointerEvent> | undefined;
+  if (pointer?.pointerType === 'mouse') {
+    if (button.live != null && button.live.pointerId === pointer.pointerId) {
+      cancelButton();
+    }
+    return;
+  }
+  const live = finger.live;
   if (live == null) {
     return;
   }
-  apply(pressGestureStep(live.gesture, {kind: 'cancel'}));
+  apply(finger, pressGestureStep(live.gesture, {kind: 'cancel'}));
   // The pointer is gone: a scroll-claimed gesture sends no further pointer
   // events, so nothing else would ever free the slot.
-  releaseIfDead();
+  releaseIfDead(finger);
+}
+
+/**
+ * `dragstart`, and NOT `contextmenu`: a press that becomes a drag has taken
+ * the gesture, whatever pressed it, but a right-click is a mouse act this
+ * controller never tracks, and listening for it would read as a takeover of
+ * the browser's own menu.
+ */
+function onDragStart(): void {
+  onCancel();
+  cancelButton();
 }
 
 /** A scroll anywhere above the pressed element, caught in the capture phase. */
@@ -464,16 +637,69 @@ function onScroll(event: Event): void {
     lastScrollAt = Date.now();
     lastScroller = scroller;
   }
+  const live = finger.live;
   if (live == null) {
     return;
   }
   // The CANCEL arm is deliberately wider than the brake: any scroll above the
-  // pressed element takes the gesture, driven by a finger or not.
+  // pressed element takes the gesture, driven by a finger or not. A mouse's
+  // or a key's press is not a finger's and keeps going, as `:active` does.
   const reaches = scroller === document || scroller.contains(live.element);
   if (!reaches) {
     return;
   }
   onCancel();
+}
+
+/** Whether a Space press on this element is an activation browsers paint as `:active`. */
+function activatesOnSpace(target: EventTarget | null): boolean {
+  if (target instanceof HTMLButtonElement) {
+    return true;
+  }
+  return (
+    target instanceof HTMLInputElement &&
+    SPACE_ACTIVATED_INPUT_TYPES.has(target.type)
+  );
+}
+
+/**
+ * Space went down on a focused button that is itself a pressable surface.
+ * Heard in the BUBBLE phase, after the page's own handlers, so a press the
+ * page cancelled (`preventDefault`) paints nothing, exactly as `:active` does
+ * not engage for one.
+ */
+function onKeyDown(event: KeyboardEvent): void {
+  if (
+    event.key !== ' ' ||
+    event.repeat ||
+    event.isComposing ||
+    event.defaultPrevented ||
+    !activatesOnSpace(event.target) ||
+    !stylesheetDroppedActive()
+  ) {
+    return;
+  }
+  pressButton(event.target, null);
+}
+
+function onKeyUp(event: KeyboardEvent): void {
+  if (
+    event.key === ' ' &&
+    button.live != null &&
+    button.live.pointerId == null
+  ) {
+    releaseButton();
+  }
+}
+
+/**
+ * Focus left the pressed button, or the window lost focus: the key's release
+ * may never arrive here, so the press ends now, with its fade.
+ */
+function onBlur(): void {
+  if (button.live != null && button.live.pointerId == null) {
+    releaseButton();
+  }
 }
 
 /**
@@ -485,7 +711,8 @@ function onScroll(event: Event): void {
  */
 function onVisibilityChange(): void {
   if (document.visibilityState === 'hidden') {
-    finish();
+    finish(finger);
+    finish(button);
   }
 }
 
@@ -526,25 +753,26 @@ function armTouchCancel(): void {
   hearTouchCancel(isCoarsePointer(window));
 }
 
-// Every listener is passive and on the window's capture phase, through the
-// shared input stream (utils/inputStream.ts): a page of pressables blocks no
-// scroll, and an app's capture-phase stopPropagation at the document cannot
-// starve the controller.
+// The pointer, drag, scroll and visibility listeners are passive and on the
+// window's capture phase, through the shared input stream
+// (utils/inputStream.ts): a page of pressables blocks no scroll, and an app's
+// capture-phase stopPropagation at the document cannot starve the controller.
 function addListeners(): void {
   unsubscribers = [
     subscribeInput(window, 'pointerdown', onPointerDown),
     subscribeInput(window, 'pointermove', onPointerMove),
     subscribeInput(window, 'pointerup', onPointerUp),
     subscribeInput(window, 'pointercancel', onCancel),
-    // `dragstart`, and NOT `contextmenu`: a long press that becomes a drag
-    // has taken the gesture, but a right-click is a mouse act this controller
-    // never tracks, and listening for it would read as a takeover of the
-    // browser's own menu.
-    subscribeInput(window, 'dragstart', onCancel),
+    subscribeInput(window, 'dragstart', onDragStart),
     // `scroll` does not bubble; the capture phase hears every scroller.
     subscribeInput(window, 'scroll', onScroll),
     subscribeInput(window, 'visibilitychange', onVisibilityChange),
   ];
+  // The key path listens after the page's own handlers, at the window's
+  // bubble phase: a Space press the page cancels (`defaultPrevented`) paints
+  // nothing. Only Space's press needs the key's release and focus loss, so
+  // those two are attached while it is held (holdKey).
+  window.addEventListener('keydown', onKeyDown, PASSIVE);
 }
 
 function removeListeners(): void {
@@ -554,6 +782,35 @@ function removeListeners(): void {
   stopWatchingPointer?.();
   stopWatchingPointer = null;
   hearTouchCancel(false);
+  window.removeEventListener('keydown', onKeyDown);
+  holdKey(false);
+}
+
+const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const PASSIVE = {passive: true} as const;
+
+/** Whether the key-release listeners are attached. */
+let keyHeld = false;
+
+/**
+ * Attach the key's release and focus-loss listeners while Space holds a
+ * press, and take them down when it ends: at rest the key path costs one
+ * `keydown` listener.
+ */
+function holdKey(held: boolean): void {
+  if (held === keyHeld) {
+    return;
+  }
+  keyHeld = held;
+  if (held) {
+    window.addEventListener('keyup', onKeyUp, PASSIVE);
+    // `blur` does not bubble: the capture phase hears the element losing
+    // focus and the window losing it.
+    window.addEventListener('blur', onBlur, PASSIVE_CAPTURE);
+  } else {
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur, PASSIVE_CAPTURE);
+  }
 }
 
 /**
@@ -588,7 +845,8 @@ export function installPressFeedback(): () => void {
       return;
     }
     removeListeners();
-    finish();
+    finish(finger);
+    finish(button);
     lastScrollAt = 0;
     lastScroller = null;
     lastTouchAt = 0;

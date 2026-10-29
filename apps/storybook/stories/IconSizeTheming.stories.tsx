@@ -24,11 +24,9 @@ const FRUITS: string[] = ['Apple', 'Banana', 'Orange'];
 
 /**
  * Icon's own scale is 12/16/20/24px. A theme re-points the whole scale by
- * targeting each `size:*` key on the `icon` target.
- *
- * `fontSize` is set alongside the box because registry icons (`icon="search"`)
- * are 1em-based SVGs inside a span — without it the span resizes and the glyph
- * inside it does not.
+ * setting `width` and `height` on each `size:*` key of the `icon` target. A
+ * registry icon (`icon="search"`) sizes its 1em artwork from that dimension
+ * itself, so no `fontSize` is needed.
  */
 function iconScale(
   xsm: string,
@@ -39,7 +37,7 @@ function iconScale(
   return Object.fromEntries(
     ([xsm, sm, md, lg] as const).map((value, i) => [
       `size:${SIZES[i]}`,
-      {width: value, height: value, fontSize: value},
+      {width: value, height: value},
     ]),
   );
 }
@@ -198,16 +196,17 @@ const meta: Meta = {
           "  name: 'spacious-icons',\n" +
           '  components: {\n' +
           '    icon: {\n' +
-          "      'size:sm': {width: '1.375rem', height: '1.375rem', fontSize: '1.375rem'},\n" +
-          "      'size:md': {width: '1.75rem', height: '1.75rem', fontSize: '1.75rem'},\n" +
+          "      'size:sm': {width: '1.375rem', height: '1.375rem'},\n" +
+          "      'size:md': {width: '1.75rem', height: '1.75rem'},\n" +
           '    },\n' +
           '  },\n' +
           '});\n' +
           '```\n\n' +
-          'Set `fontSize` alongside the box: registry icons (`icon="search"`) ' +
-          'are 1em-based SVGs in a span, so the box alone resizes the span and ' +
-          'not the glyph. Component-mode icons (`icon={BellIcon}`) need only ' +
-          'width/height, and setting `fontSize` on them is harmless.',
+          'Width and height size both registry icons (`icon="search"`), whose ' +
+          '1em artwork follows the dimension, and component-mode icons ' +
+          '(`icon={BellIcon}`). Give them in `px` or `rem`: a registry icon ' +
+          'takes its font size from the dimension, so an `em` value would ' +
+          'also grow its box.',
       },
     },
   },

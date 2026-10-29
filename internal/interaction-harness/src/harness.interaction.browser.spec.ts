@@ -8,8 +8,9 @@
  *   control beside their positive checks): scripted timestamps reach the
  *   page; a flick flings natively (Chromium); a wheel step arrives as
  *   exactly its deltas, with Control when held, and a pen stroke as trusted
- *   pen pointers with its pressure and times (Chromium); a second finger
- *   and a pinch arrive as distinct pointers; the screencast shows a compositor animation
+ *   pen pointers with its pressure and times (Chromium); a second finger and
+ *   a pinch
+ *   arrive as distinct pointers; the screencast shows a compositor animation
  *   advancing through a blocked main thread while a rAF animation freezes;
  *   the trace counts zero Layout for a transform animation and one per frame
  *   for a `top` animation, and none from the harness's own animation recorder
