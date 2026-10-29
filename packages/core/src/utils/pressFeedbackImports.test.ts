@@ -5,8 +5,8 @@
  * @input The source of utils/pressFeedback.ts and every module it imports
  * @output The press feedback controller's import graph reaches no module
  *   under gestures/: a page whose only touch work is press feedback carries
- *   none of the gesture system (`spec:AST-094` FR24, FR43: pointer queries
- *   live with the environment queries)
+ *   none of the gesture system (`spec:AST-094` FR24: pointer queries live
+ *   with the environment queries)
  * @position Source boundary test of packages/core/src/utils/pressFeedback.ts
  */
 

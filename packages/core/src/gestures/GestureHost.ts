@@ -1708,13 +1708,15 @@ export class GestureHost {
 
   private readonly onTouchStart = (event: TouchEvent): void => {
     this.noteFingersDown(event);
+    // A second finger leaves the two to the page's pinch, whichever events
+    // the host reads fingers from (FR10).
+    if (this.fingerTargets.length > 1) {
+      this.failUnclaimedLoneFingerPans();
+    }
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
     if (!this.usesTouchEvents || !this.takeEvent(event)) {
       return;
-    }
-    if (this.fingerTargets.length > 1) {
-      this.failUnclaimedLoneFingerPans();
     }
     const time = eventTime(event);
     const inputs: ArenaBeganInput[] = [];
@@ -1809,6 +1811,11 @@ export class GestureHost {
     }
     for (const input of untracked) {
       this.arena.untrackedBegan(input);
+    }
+    // Again once the new fingers are delivered: a pinch's second finger may
+    // have landed on another one-finger pan, the next row (FR10).
+    if (this.fingerTargets.length > 1) {
+      this.failUnclaimedLoneFingerPans();
     }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
@@ -2367,6 +2374,19 @@ export class GestureHost {
       });
       return;
     }
+    if (
+      event.pointerType === 'touch' &&
+      this.arena.touches.some(
+        touch =>
+          touch.pointerType === 'touch' &&
+          touch.phase !== 'ended' &&
+          touch.phase !== 'cancelled',
+      )
+    ) {
+      // Fingers from pointer events: a second one, wherever it lands,
+      // leaves the two to the page's pinch, as onTouchStart does (FR10).
+      this.failUnclaimedLoneFingerPans();
+    }
     if (event.pointerType === 'mouse' && event.button !== 0) {
       return;
     }
@@ -2398,6 +2418,19 @@ export class GestureHost {
         ...(this.isCoarse ? {} : {isFeedbackOnly: true}),
       },
     ]);
+    if (
+      event.pointerType === 'touch' &&
+      this.arena.touches.filter(
+        touch =>
+          touch.pointerType === 'touch' &&
+          touch.phase !== 'ended' &&
+          touch.phase !== 'cancelled',
+      ).length > 1
+    ) {
+      // Again once this finger is delivered: it may have landed on another
+      // one-finger pan (FR10).
+      this.failUnclaimedLoneFingerPans();
+    }
     if (locksSelectionFor(event.pointerType, this.doc.defaultView)) {
       // The presented target: what the pen is on, where the engine's own
       // hit test may still see the motion's start.
