@@ -176,7 +176,7 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     // Presenting: the sheet started below the screen, where iOS still
     // hit-tests it, and is drawn 544 px higher.
     mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
-    const {gestures, scrimTap, sheetDrag} = host();
+    const {scrimTap, sheetDrag} = host();
     const onDone = {x: 340, y: 330};
     // The engine hit the scrim, under the drawn button at the sheet's start.
     touch('touchstart', scrim, onDone, 0);
