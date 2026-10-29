@@ -3582,6 +3582,56 @@ describe('an action group under a fine pointer (family:action-groups FR5; spec:A
       groupAdded.mock.calls.filter(call => call[0] === 'pointerdown'),
     ).toEqual([]);
   });
+
+  it("keeps an element's passive pointerdown while any of its gestures stays attached, whichever goes first, and drops it with the last (family:action-groups; spec:AST-094 FR24)", () => {
+    const fine = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+    for (const order of ['group first', 'plain first'] as const) {
+      document.body.innerHTML = '<div id="group"></div>';
+      const element = document.getElementById('group') as HTMLElement;
+      let pointerDowns = 0;
+      const add = element.addEventListener.bind(element);
+      const remove = element.removeEventListener.bind(element);
+      element.addEventListener = ((type: string, ...rest: [never, never?]) => {
+        if (type === 'pointerdown') {
+          pointerDowns += 1;
+        }
+        add(type, ...rest);
+      }) as typeof element.addEventListener;
+      element.removeEventListener = ((
+        type: string,
+        ...rest: [never, never?]
+      ) => {
+        if (type === 'pointerdown') {
+          pointerDowns -= 1;
+        }
+        remove(type, ...rest);
+      }) as typeof element.removeEventListener;
+      const detachGroup = fine.attach(
+        element,
+        new TapGestureRecognizer({name: 'group'}),
+        {actionGroup: true},
+      );
+      const detachPlain = fine.attach(
+        element,
+        new TapGestureRecognizer({name: 'plain'}),
+        {actionGroup: false},
+      );
+      expect(pointerDowns).toBe(1);
+      const [first, last] =
+        order === 'group first'
+          ? [detachGroup, detachPlain]
+          : [detachPlain, detachGroup];
+      // One gesture left: the element is still a group.
+      first();
+      expect(pointerDowns).toBe(1);
+      // The last one gone: nothing stays on it.
+      last();
+      expect(pointerDowns).toBe(0);
+    }
+  });
 });
 
 describe("inputMode 'pointer-events'", () => {
