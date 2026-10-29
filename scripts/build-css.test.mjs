@@ -7,7 +7,9 @@
  * Validates that astryx.css contains expected @media wrappers and
  * prefers-reduced-motion rules, and that the touch press's release ships as a
  * real fade: the press strength is a registered `<number>` the fading arm
- * animates on the machine's own clock (utils/interactionOverlay.stylex.ts).
+ * animates on the machine's own clock (utils/interactionOverlay.stylex.ts),
+ * and a list row's compositor press layer (utils/rowPressLayer.ts) releases
+ * its opacity on the cell clock and curve.
  */
 
 import {describe, it, expect, beforeAll} from 'vitest';
@@ -361,11 +363,7 @@ describe('build-css astryx.css', () => {
       if (capped != null) {
         return Math.min(toMs(capped[1]), toMs(capped[2]));
       }
-      // The release plays a theme motion role: `var(--motion-…, 200ms)`.
-      const role = value.trim().match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-      const match = (role == null ? value : role[1])
-        .trim()
-        .match(/^([\d.]+)(ms|s)$/);
+      const match = value.trim().match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
         : Number(match[1]) * (match[2] === 's' ? 1000 : 1);

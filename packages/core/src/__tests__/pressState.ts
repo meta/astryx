@@ -19,7 +19,8 @@
  * The touch arms are asserted the same way: the paint reads the press's
  * strength (`--astryx-press-alpha`, see utils/interactionOverlay.stylex.ts)
  * and the element the controller writes to runs the release animation on the
- * machine's own clock.
+ * machine's own clock; a list row's compositor layer (utils/rowPressLayer.ts)
+ * runs its own release on the row's `::before`, which these checks leave out.
  *
  * SYNC: When modified, update this header.
  */
