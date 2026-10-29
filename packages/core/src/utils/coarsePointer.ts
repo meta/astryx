@@ -10,10 +10,11 @@
  *   the press controller (pressFeedback.ts): touch-only work registers only
  *   while it holds
  *
- * Touch work runs only where the primary pointer is coarse; where it is
- * fine, no recognizer attaches and no touch-only listener is registered, so
- * a finger on a touchscreen whose primary pointer is fine gets the browser's
- * defaults (`spec:AST-094` FR19, FR24). The query is TOUCH_QUERY
+ * Where the primary pointer is coarse, a phone's touch work stays
+ * registered: the gesture host's page listeners, the page hold and the
+ * finger scroll. Where it is fine, recognizers still attach for every
+ * pointer, and the host listens on the page only during a press
+ * (`spec:AST-094` FR19, FR24, FR43). The query is TOUCH_QUERY
  * (touchPresentation.ts), spelled here because that module brings
  * React; a test keeps the two equal. The answer can change while the page is
  * open (a tablet docking a mouse), so a holder watches it.

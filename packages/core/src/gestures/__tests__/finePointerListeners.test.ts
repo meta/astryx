@@ -15,6 +15,8 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
+import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
+import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PressTracker} from '../PressTracker';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import type * as InputStreamModule from '../../utils/inputStream';
@@ -218,5 +220,97 @@ describe('a fine primary pointer', () => {
       'ended',
     ]);
     expect(pageListeners()).toEqual([]);
+  });
+
+  it("cancels a claimed finger's lift and the browser's menu during an armed press, as where the primary pointer is coarse (spec:AST-094 FR21)", () => {
+    const {sheet} = mount('<div id="sheet"></div>');
+    detachers.push(
+      host.attach(sheet, new PanGestureRecognizer({direction: 'horizontal'})),
+      host.attach(sheet, new LongPressGestureRecognizer({name: 'press'})),
+    );
+    // A touchscreen laptop's finger: its pointerdown arms the press.
+    pointer('pointerdown', sheet, {
+      pointerType: 'touch',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', sheet, {id: 1, x: 5, y: 5}, 0);
+    // The finger's pointer events sample it; its touchmove follows each.
+    pointer('pointermove', sheet, {
+      pointerType: 'touch',
+      x: 40,
+      y: 5,
+      buttons: 1,
+      time: 32,
+    });
+    touch('touchmove', sheet, {id: 1, x: 40, y: 5}, 32);
+    // The browser's own menu for that finger stays off.
+    const menu = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+    });
+    sheet.dispatchEvent(menu);
+    expect(menu.defaultPrevented).toBe(true);
+    // The claimed finger's lift clicks nothing.
+    pointer('pointerup', sheet, {pointerType: 'touch', x: 40, y: 5, time: 48});
+    const lift = new Event('touchend', {bubbles: true, cancelable: true});
+    const entry = {identifier: 1, clientX: 40, clientY: 5, target: sheet};
+    Object.defineProperty(lift, 'changedTouches', {value: [entry]});
+    Object.defineProperty(lift, 'touches', {value: []});
+    Object.defineProperty(lift, 'timeStamp', {value: 48});
+    sheet.dispatchEvent(lift);
+    expect(lift.defaultPrevented).toBe(true);
+  });
+
+  it("keeps a kept press's finger during an armed press: its moves are cancelled, as on a phone (spec:AST-094 FR11, DEC-21)", () => {
+    const {stepper} = mount('<div id="stepper"></div>');
+    detachers.push(
+      host.attachConsumer(
+        stepper,
+        new PressTracker({getBounds: () => null, keepsTouch: true}),
+      ),
+    );
+    pointer('pointerdown', stepper, {
+      pointerType: 'touch',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', stepper, {id: 1, x: 5, y: 5}, 0);
+    const move = new Event('touchmove', {bubbles: true, cancelable: true});
+    const entry = {identifier: 1, clientX: 9, clientY: 5, target: stepper};
+    Object.defineProperty(move, 'changedTouches', {value: [entry]});
+    Object.defineProperty(move, 'touches', {value: [entry]});
+    Object.defineProperty(move, 'timeStamp', {value: 16});
+    stepper.dispatchEvent(move);
+    expect(move.defaultPrevented).toBe(true);
+    touch('touchend', stepper, {id: 1, x: 9, y: 5}, 50, true);
+  });
+
+  it('takes down the page listeners when the page is hidden during a press (spec:AST-094 FR24)', async () => {
+    const {box} = mount('<div id="box"></div>');
+    detachers.push(host.attach(box, new TapGestureRecognizer()));
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 5,
+      y: 5,
+      buttons: 1,
+      time: 0,
+    });
+    expect(pageListeners()).toContain('pointermove');
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    try {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+      expect(pageListeners()).toEqual([]);
+    } finally {
+      Reflect.deleteProperty(document, 'visibilityState');
+    }
   });
 });
