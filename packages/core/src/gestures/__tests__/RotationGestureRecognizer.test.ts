@@ -90,9 +90,10 @@ describe('RotationGestureRecognizer', () => {
         time,
       );
     }
-    // Lift 8 ms after the last move: 2 degrees every 16 ms, about 2.18 rad/s.
+    // Lift 8 ms after the last move: 2 degrees every 16 ms, about 2.18 rad/s,
+    // the same release as with no re-base (spec:AST-100 FR2).
     h.finger(2).up(time + 8);
-    expect(released).toBeGreaterThan(1.5);
+    expect(released).toBeCloseTo((2 * Math.PI) / 180 / 0.016, 1);
   });
 
   it('setting rotation (UIKit\u2019s incremental read) never moves the velocity', () => {
