@@ -13,7 +13,7 @@
  * jsdom-visible, plugin-owned signal that a column is pinned and at what offset.
  */
 
-import {describe, it, expect} from 'vitest';
+import {afterEach, describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Table} from '../../Table';
 import {useTableStickyColumns} from './useTableStickyColumns';
@@ -280,5 +280,55 @@ describe('useTableStickyColumns', () => {
       // resize plugin's own styles give them.
       expect(getHeaderCell('team').style.position).toBe('');
     });
+  });
+
+  describe('the scroll container attaches once', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it.each([true, false])(
+      'keeps one attach across renders with column resize composed (resize first: %s)',
+      resizeFirst => {
+        let observers = 0;
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor() {
+              observers += 1;
+            }
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+          },
+        );
+        function Harness({tick}: {tick: number}) {
+          const sticky = useTableStickyColumns<Row>({startKeys: ['name']});
+          const resize = useTableColumnResize<Row>({
+            columns: columns as TableColumn<Record<string, unknown>>[],
+          });
+          return (
+            <Table
+              data={data}
+              columns={columns}
+              idKey="id"
+              aria-describedby={`tick-${tick}`}
+              plugins={
+                resizeFirst
+                  ? {resize, stickyColumns: sticky}
+                  : {stickyColumns: sticky, resize}
+              }
+            />
+          );
+        }
+        const {rerender} = render(<Harness tick={0} />);
+        const attached = observers;
+        rerender(<Harness tick={1} />);
+        rerender(<Harness tick={2} />);
+        rerender(<Harness tick={3} />);
+        // Three plain re-renders: no plugin's scroll container re-attaches.
+        expect(observers).toBe(attached);
+      },
+    );
   });
 });

@@ -154,15 +154,15 @@ component does not join merely because its source uses flexbox or grid.
 
 ## Representative matrix
 
-| Member and state               | Shared invariant                                                    | Deliberate variation                                              |
-| ------------------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Stack / vertical or horizontal | Shared spacing and sizing values; direction resolves alignment axes | May wrap, scroll, or render a chosen element                      |
-| HStack or VStack               | Same Stack contract with a fixed direction                          | Narrower alignment types match the fixed axes                     |
-| StackItem / `size="fill"`      | One child may consume remaining Stack space                         | `isScrollable` pairs overflow with StackItem's flex minimum reset |
-| Grid / fixed columns           | Shared size and gap values                                          | Explicit equal-width track count (`columns={N}`); never reflows   |
-| Grid / intrinsic columns       | Shared size and gap values                                          | `{minWidth, max?, repeat?}` constructs fluid tracks that reflow   |
-| GridSpan / columns or rows     | Modifier participates in Grid                                       | Spans tracks rather than controlling parent geometry              |
-| Center / one or both axes      | Shared size and padding values                                      | Needs available size on an axis before centering is observable    |
+| Member and state               | Shared invariant                                                    | Deliberate variation                                                                             |
+| ------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Stack / vertical or horizontal | Shared spacing and sizing values; direction resolves alignment axes | May wrap, scroll, or render a chosen element                                                     |
+| HStack or VStack               | Same Stack contract with a fixed direction                          | Narrower alignment types match the fixed axes                                                    |
+| StackItem / `size="fill"`      | One child may consume remaining Stack space                         | `isScrollable` pairs overflow with StackItem's flex minimum reset                                |
+| Grid / fixed columns           | Shared size and gap values                                          | Explicit count of `1fr` tracks (`columns={N}`); never reflows; minimum content may widen a track |
+| Grid / intrinsic columns       | Shared size and gap values                                          | `{minWidth, max?, repeat?}` constructs fluid tracks that reflow                                  |
+| GridSpan / columns or rows     | Modifier participates in Grid                                       | Spans tracks rather than controlling parent geometry                                             |
+| Center / one or both axes      | Shared size and padding values                                      | Needs available size on an axis before centering is observable                                   |
 
 ## Adoption and exceptions
 
