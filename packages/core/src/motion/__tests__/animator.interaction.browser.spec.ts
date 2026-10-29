@@ -61,6 +61,40 @@ const TRAVEL = 300;
 const MARKER_INSET = 8;
 
 // A real navigation (not setContent): the page keeps its own window.
+/**
+ * Waits until the box runs no animation, on the animations' own clock: each
+ * one it runs has finished, including one the animator starts when an earlier
+ * one ends (the fade back in after a dip's fade out). A wall-clock timeout
+ * would fail a page whose main thread runs late; this waits for the motion
+ * itself, and the test's own timeout still bounds it.
+ */
+async function settled(page: Page) {
+  await page.evaluate(async () => {
+    const box = document.getElementById('box') as HTMLElement;
+    const running = () =>
+      box
+        .getAnimations()
+        .filter(animation => animation.playState === 'running');
+    for (;;) {
+      const now = running();
+      if (now.length > 0) {
+        await Promise.all(
+          now.map(async animation => animation.finished.catch(() => undefined)),
+        );
+        continue;
+      }
+      // An animation that just ended starts the next step from its handler,
+      // within a frame.
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => setTimeout(resolve, 0)),
+      );
+      if (running().length === 0) {
+        return;
+      }
+    }
+  });
+}
+
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -272,6 +306,21 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       {spring: Motion.springs.navigationPush},
     );
     const start = await handle.started;
+    // What the dip animates, read while it runs.
+    const animated = box
+      .getAnimations()
+      .flatMap(animation =>
+        (animation.effect as KeyframeEffect)
+          .getKeyframes()
+          .flatMap(frame =>
+            Object.keys(frame).filter(
+              key =>
+                !['offset', 'easing', 'composite', 'computedOffset'].includes(
+                  key,
+                ),
+            ),
+          ),
+      );
     // The main thread is busy from 60 to 180 ms into the dip, so the task
     // that lands it (due at 100 ms) runs 80 ms late.
     await new Promise(resolve =>
@@ -288,20 +337,7 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
       at: performance.now() - start,
       opacity: Number(style.opacity),
       translate: style.translate,
-      animated: box
-        .getAnimations()
-        .flatMap(animation =>
-          (animation.effect as KeyframeEffect)
-            .getKeyframes()
-            .flatMap(frame =>
-              Object.keys(frame).filter(
-                key =>
-                  !['offset', 'easing', 'composite', 'computedOffset'].includes(
-                    key,
-                  ),
-              ),
-            ),
-        ),
+      animated,
     };
   }, TRAVEL);
   test.info().annotations.push({
@@ -311,7 +347,8 @@ test('under Reduce Motion, a dip a busy main thread lands late still ends within
   // Landed, and fully back in by then: the late landing did not stretch it.
   expect(read.translate).toBe(`${TRAVEL}px`);
   expect(read.opacity).toBeCloseTo(1, 2);
-  // Opacity only: the travel is never animated.
+  // Opacity only, read while the dip ran: the travel is never animated.
+  expect(read.animated).toContain('opacity');
   expect(read.animated.every(key => key === 'opacity')).toBe(true);
 });
 
@@ -357,9 +394,8 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('under Reduce Motion, a dip held before its first frame lands once the hold is resumed', async ({
@@ -400,19 +436,13 @@ test('under Reduce Motion, a dip held before its first frame lands once the hold
       const style = getComputedStyle(box);
       return {opacity: Number(style.opacity), translate: style.translate};
     });
-  await expect
-    .poll(read, {timeout: 2000})
-    .toEqual({opacity: 1, translate: `${TRAVEL}px`});
+  await settled(page);
+  expect(await read()).toEqual({opacity: 1, translate: `${TRAVEL}px`});
 });
 
 test('a spring started right before a block plays in full after it', async ({
   page,
-  browserName,
 }) => {
-  test.skip(
-    browserName === 'webkit',
-    'WebKit starts a pending animation at its last frame time before the block (animator header, known limits)',
-  );
   await open(page);
   const box = page.locator('#box');
   await markElement(box, {inset: MARKER_INSET});
@@ -438,17 +468,23 @@ test('a spring started right before a block plays in full after it', async ({
   const xs = tracked
     .filter(f => f.box != null)
     .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
-  const firstMoving = xs.find(f => f.x > 0.5);
+  // Judged on the first frame after the block, whatever the frames before
+  // it showed: it is at the start of the curve, and the frames after it
+  // move on from there.
+  const first = xs.find(f => f.t >= busy.to);
+  const later = xs.filter(f => f.t >= busy.to + 100);
   test.info().annotations.push({
-    type: 'first moving frame after the block',
+    type: 'first frame after the block',
     description: JSON.stringify({
-      x: firstMoving?.x,
-      after: firstMoving == null ? null : firstMoving.t - busy.to,
+      x: first?.x,
+      after: first == null ? null : first.t - busy.to,
     }),
   });
-  expect(firstMoving).toBeDefined();
+  expect(first).toBeDefined();
   // 400 ms into this spring is 107 px; the start of the curve is a few px.
-  expect(firstMoving?.x ?? Infinity).toBeLessThan(30);
+  expect(first?.x ?? Infinity).toBeLessThan(30);
+  expect(later.length).toBeGreaterThan(0);
+  expect(Math.max(...later.map(f => f.x))).toBeGreaterThan((first?.x ?? 0) + 1);
 });
 
 test('no Layout or Paint runs while it animates', async ({

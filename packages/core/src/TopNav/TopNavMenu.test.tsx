@@ -9,13 +9,15 @@
  * SYNC: When TopNavMenu changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {TopNavRenderContext} from './TopNavRenderContext';
 import {TopNavMenu} from './TopNavMenu';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 
 const mockItems = [
   {
@@ -417,5 +419,67 @@ describe('TopNavMenu — owned handlers on the trigger', () => {
 
     await user.hover(screen.getByRole('button', {name: /Products/}));
     expect(handleMouseEnter).toHaveBeenCalledOnce();
+  });
+});
+
+describe('TopNavMenu as an action group (family:action-groups)', () => {
+  beforeEach(() => {
+    __resetMenuPressForTest();
+  });
+
+  const item = (name: RegExp) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  it('renders a link item undraggable, so a mouse press that slides to another item is not a drag', () => {
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Docs', href: '/docs'},
+          {title: 'Status', onClick: () => {}},
+        ]}
+      />,
+    );
+    expect(item(/Docs/)).toHaveAttribute('draggable', 'false');
+    expect(item(/Status/)).not.toHaveAttribute('draggable');
+  });
+
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item to the browser', () => {
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Docs', href: '/docs'},
+          {title: 'Status', href: '/status'},
+        ]}
+      />,
+    );
+    expectNativeLinkClicks(item(/Docs/));
+  });
+
+  it('acts on the item a press lifts on, once, after sliding from another (FR1, FR2, FR5)', () => {
+    const onAnalytics = vi.fn();
+    const onMessaging = vi.fn();
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Analytics', onClick: onAnalytics},
+          {title: 'Messaging', onClick: onMessaging},
+        ]}
+      />,
+    );
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      onAnalytics.mockClear();
+      onMessaging.mockClear();
+      fireEvent.pointerDown(item(/Analytics/), pointer);
+      fireEvent.pointerMove(item(/Messaging/), pointer);
+      fireEvent.pointerUp(item(/Messaging/), pointer);
+      expect(onMessaging).toHaveBeenCalledTimes(1);
+      expect(onAnalytics).not.toHaveBeenCalled();
+    }
   });
 });

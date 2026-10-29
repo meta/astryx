@@ -220,8 +220,13 @@ hand-written selectors, run **in addition** to auto-discovery:
 - **D3 behavior-flip** — directional behavior inverts, e.g. Carousel's scroll
   axis: "next" makes `scrollLeft` go positive in LTR and negative in RTL.
 - **D4 overlay-side** — a positioned affordance flips side (`boundingBox`).
-- **D7 coarse hit alignment** — each configured native input remains centered
-  under its visible coarse-pointer wrapper and receives a center-point hit.
+- **D7 coarse native size/alignment** — each configured native input remains
+  centered under its visible coarse-pointer wrapper, receives a center-point
+  hit, and meets both dimensions of the target's `minimumTargetSize` in LTR/RTL
+  at every configured size. The minimum belongs to the component/composition,
+  not a universal audit default; missing or invalid dimensions are errors.
+  Reports retain native and wrapper boxes separately so a large wrapper cannot
+  conceal an undersized input.
 - **D8 logical inline-edge mirror** — one configured, visible, non-zero subject
   carries an intentionally asymmetric logical start/end padding pair whose
   logical values stay stable while the resolved physical inline-axis sides swap
@@ -320,6 +325,13 @@ pnpm rtl:audit -- --concurrency 4
 # Just the broad auto-discovery net, or just the curated dims:
 pnpm rtl:audit -- --auto-only
 pnpm rtl:audit -- --curated-only
+```
+
+For the D7 gate's native-width, native-height, alignment, hit-testing, and
+minimum-contract mutations (Chromium required):
+
+```bash
+ASTRYX_RTL_BROWSER=1 pnpm exec vitest run --project node .github/scripts/rtl-audit-coarse-hit.browser.test.mjs --maxWorkers=1
 ```
 
 Exit code is non-zero if auto-discovery finds a not-RTL component, a curated

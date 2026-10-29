@@ -86,8 +86,14 @@ export const docs = {
       name: 'size',
       type: "'xsm' | 'sm' | 'md' | 'lg'",
       description:
-        'Icon size. An explicit value wins. When omitted, Icon uses the nearest default supplied by an owning Astryx component for its icon slot, then falls back to md when no contextual default exists.',
+        "Icon size. xsm, sm, md, and lg are 12, 16, 20, and 24px at a 16px root and scale with the root font size; a theme sets a size's glyph dimension with width and height, in px or rem, on components.icon['size:sm'] (and the other sizes). An explicit value wins. When omitted, Icon uses the nearest default supplied by an owning Astryx component for its icon slot, then falls back to md when no contextual default exists.",
       default: "Contextual; otherwise 'md'",
+    },
+    {
+      name: 'variant',
+      type: 'IconVariant',
+      description:
+        "Requests the active theme's alternate artwork for a semantic icon name, such as 'filled'. Names come from IconVariantMap, which an application augments from @astryxdesign/core/Icon; Astryx defines none. The theme's icon entry receives the variant only when the active theme lists it in iconVariants (and, for an entry the theme inherited, the theme that defined the entry lists it too); otherwise it draws its normal artwork. Ignored by an icon component passed directly. Selects artwork only: it is not written to the DOM and has no theming selector.",
     },
     {
       name: 'label',
@@ -104,6 +110,26 @@ export const docs = {
   ],
   theming: {
     targets: [{className: 'astryx-icon', visualProps: ['color', 'size']}],
+    vars: [
+      {
+        name: '--_icon-width',
+        description:
+          'Glyph width for the size; set by width on the icon target',
+        default: '0.75rem, 1rem, 1.25rem, or 1.5rem by size',
+        private: true,
+      },
+      {
+        name: '--_icon-height',
+        description:
+          'Glyph height for the size; set by height on the icon target',
+        default: '0.75rem, 1rem, 1.25rem, or 1.5rem by size',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'width', vars: ['--_icon-width'], replaces: true},
+      {property: 'height', vars: ['--_icon-height'], replaces: true},
+    ],
   },
   usage: {
     description:
@@ -119,6 +145,11 @@ export const docs = {
         guidance: true,
         description:
           "Override icons through the theme, not globally: defineTheme({icons: {close: <XMarkIcon />}}) scopes the swap to the active <Theme>, and extends shallow-merges it into derived themes. registerIcons() mutates a process-wide registry and warns in dev, so keep it for app bootstrap rather than making it a library's theming seam.",
+      },
+      {
+        guidance: true,
+        description:
+          "To match artwork to the rendered size, make a theme or registered icon entry a pure, synchronous function of {size, variant}: defineTheme({icons: {info: ({size}) => <InfoIcon weight={size === 'sm' ? 'bold' : 'regular'} />}}). Icon passes the size it renders at; getIcon(), useIcon(), getIconRegistry() and theme.icons read the function at size md. A function that returns null draws nothing instead of falling back to the default icon. Do not use hooks, measure the DOM, or read browser or mutable state inside it.",
       },
       {
         guidance: true,
@@ -191,8 +222,14 @@ export const docsZh = {
       name: 'size',
       type: "'xsm' | 'sm' | 'md' | 'lg'",
       description:
-        '图标尺寸。显式值优先。省略时，Icon 使用最近的 Astryx 所属组件为其图标槽提供的默认尺寸；如果没有上下文默认值，则回退为 md。',
+        "图标尺寸。xsm、sm、md、lg 在 16px 根字号下分别为 12、16、20、24px，并随根字号缩放；主题在 components.icon['size:sm']（及其他尺寸）上以 px 或 rem 设置 width 和 height，即可决定该尺寸的图标尺寸。显式值优先。省略时，Icon 使用最近的 Astryx 所属组件为其图标槽提供的默认尺寸；如果没有上下文默认值，则回退为 md。",
       default: "上下文默认值；否则为 'md'",
+    },
+    {
+      name: 'variant',
+      type: 'IconVariant',
+      description:
+        "为语义图标名称请求当前主题的替代图稿，例如 'filled'。名称来自 IconVariantMap，由应用从 @astryxdesign/core/Icon 扩充；Astryx 本身不定义任何名称。只有当前主题在 iconVariants 中列出该变体时（对于主题继承来的条目，还需定义该条目的主题也列出它），主题的图标条目才会收到它；否则绘制常规图稿。直接传入的图标组件会忽略它。它只选择图稿：不会写入 DOM，也没有主题样式选择器。",
     },
     {
       name: 'label',
@@ -209,6 +246,24 @@ export const docsZh = {
   ],
   theming: {
     targets: [{className: 'astryx-icon', visualProps: ['color', 'size']}],
+    vars: [
+      {
+        name: '--_icon-width',
+        description: '该尺寸的图标宽度；由 icon 目标上的 width 设置',
+        default: '按尺寸为 0.75rem、1rem、1.25rem 或 1.5rem',
+        private: true,
+      },
+      {
+        name: '--_icon-height',
+        description: '该尺寸的图标高度；由 icon 目标上的 height 设置',
+        default: '按尺寸为 0.75rem、1rem、1.25rem 或 1.5rem',
+        private: true,
+      },
+    ],
+    derived: [
+      {property: 'width', vars: ['--_icon-width'], replaces: true},
+      {property: 'height', vars: ['--_icon-height'], replaces: true},
+    ],
   },
   usage: {
     description:
@@ -285,6 +340,11 @@ export const docsDense = {
       {
         guidance: true,
         description:
+          "Size-aware artwork: a theme/registered entry may be a pure sync function of {size, variant}, e.g. info: ({size}) => <InfoIcon weight={size === 'sm' ? 'bold' : 'regular'} />. Icon passes its rendered size; getIcon/useIcon/getIconRegistry/theme.icons read it at md. A null result draws nothing (no fallback). No hooks, DOM measurement, or browser/mutable state.",
+      },
+      {
+        guidance: true,
+        description:
           'Pair icons with text labels for accessibility; icon-only elements need an accessible label.',
       },
       {
@@ -332,7 +392,9 @@ export const docsDense = {
   propDescriptions: {
     icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. For others, pass an SVG component.',
     color: 'Color variant mapped to Astryx icon color tokens.',
-    size: "explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",
+    size: "xsm/sm/md/lg = 12/16/20/24px at a 16px root, scale w/ root font size; theme sets a size's glyph dimension via width + height (px or rem) on components.icon['size:sm'] etc. Explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",
+    variant:
+      "Requests the active theme's alternate artwork (e.g. 'filled'); names from augmentable IconVariantMap. Reaches the entry only if the active theme's iconVariants lists it (and an inherited entry's defining theme does too); else normal artwork. Ignored by a directly passed component; never in the DOM; no theming selector.",
     label:
       'Accessible name for a meaningful, standalone icon. Sets role="img" + aria-label and drops the default aria-hidden. Omit (default) for decorative icons (stays aria-hidden). Empty string = decorative. The accessible-name/alt-text prop for icons.',
     xstyle:

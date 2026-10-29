@@ -17,9 +17,10 @@ import type {SelectionLock} from '../GestureRecognizer';
 import {getGestureHost} from '../GestureHost';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import type {ControlEvent} from '../PressTracker';
-import {lockSelection} from '../selectionLock';
+import {lockSelection} from '../../utils/selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
-import {useGestureRecognizer, usePressTracker} from '../useGestureRecognizer';
+import {useGestureRecognizer} from '../useGestureRecognizer';
+import {usePressTracker} from '../usePressTracker';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
 
 function touch(
@@ -485,8 +486,9 @@ function Button({
 
 describe('usePressTracker', () => {
   it('gives the host no listener while the control is disabled (FR24)', () => {
-    const add = vi.spyOn(document, 'addEventListener');
-    const remove = vi.spyOn(document, 'removeEventListener');
+    // The host listens through the window's input stream (utils/inputStream).
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
     const {rerender, unmount} = render(
       <Button onEvent={() => {}} isDisabled />,
     );

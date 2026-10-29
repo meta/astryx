@@ -89,6 +89,7 @@ current family and architecture owners.
 | FR4 | Closing a native Dialog MUST return focus to the still-connected external element that invoked the modal when that element can receive focus. Descendant mount focus MUST NOT replace that return owner.                                                                                                                                                                                                  | shipped trigger-return intent and regression history         | settled            |
 | FR5 | Inline rendering MUST NOT open a modal, apply modal initial focus, trap focus, or return focus as if a modal had closed.                                                                                                                                                                                                                                                                                  | documented `isInline` preview behavior                       | settled            |
 | FR6 | Initial-focus selection MUST follow the rendered eligible descendants, not a private component type or source-only assumption.                                                                                                                                                                                                                                                                            | composable descendant contract                               | settled            |
+| FR7 | A native modal Dialog MUST be a focus region through Core's shared focus-region module: Tab from its last tabbable control moves focus to its first, and Shift+Tab from its first moves focus to its last, so focus never leaves the modal for the browser's own interface. When a Dialog opens from a Dialog, the innermost one holding focus answers Tab.                                               | owner decision DEC-2                                         | settled            |
 
 ### Allowed variation
 
@@ -110,6 +111,7 @@ current family and architecture owners.
 | native modal with explicit descendant request | requested eligible descendant receives focus                | descendant type and location               |
 | native modal without request                  | focus remains within valid native modal behavior            | browser-selected eligible descendant       |
 | modal close                                   | connected invoking element regains focus                    | no restoration when invoker is unavailable |
+| Tab or Shift+Tab at the modal's edge          | focus wraps to the other end inside the modal               | which controls are tabbable                |
 | inline preview                                | surrounding page focus remains unchanged                    | inline content and layout                  |
 
 ## Accessibility contract
@@ -147,6 +149,7 @@ component design and theming owners.
 | FR4, AR2     | shared modal-dialog browser binding plus the local unavailable-invoker close test                                        | external trigger, descendant mount focus, removed trigger | the shared contract records an exact current failure when descendant focus replaces the return owner; the local test keeps close safe after invoker removal | audit:Dialog/behavior      |
 | FR5          | inline Dialog tests                                                                                                      | DialogHeader and focusable children                       | inline preview steals focus or invokes native modal methods                                                                                                 | audit:Dialog/behavior      |
 | FR6, AR3     | shared modal-dialog binding plus the local composed-action focus fixture                                                 | DialogHeader heading, TextInput, action button            | focus depends on a private React child type or strips semantics from the target                                                                             | audit:Dialog/public-api    |
+| FR7          | `Dialog.test.tsx`, `AlertDialog.test.tsx` and `CommandPalette.test.tsx` focus-region suites                              | last and first tabbable control, Dialog in Dialog, inline | Tab from the last control leaves the modal, or an outer Dialog answers an inner one's Tab                                                                   | audit:Dialog/accessibility |
 
 ## Decision log
 
@@ -159,12 +162,25 @@ Dialog waits until native modal presentation before applying the selected reques
 Descendant components own their supported focus intent; the DOM marker used today is
 implementation evidence, not a permanent or newly admitted public API.
 
+### DEC-2 — Every modal presentation is a focus region through one module
+
+**Reference:** `component:Dialog/DEC-2`
+**Decider:** `cixzhang`, `2026-10-28`
+
+A modal surface contains Tab the way the APG modal dialog pattern describes:
+Tab and Shift+Tab move through the modal's controls and wrap at either end.
+Core's shared focus-region module provides that containment: the Tab
+containment `useFocusTrap` applies for Drawer and Popover. Each modal
+presentation applies the same module instead of
+leaving Tab to the browser: Dialog, and AlertDialog and CommandPalette through
+it, a modal BottomSheet, Lightbox, and a modal Drawer. A fault in the wrapping
+is fixed in that module, not worked around in a component.
+
+Rejected: leaving Tab to native `showModal()`, which sends focus to the browser's own interface from inside a modal.
+
 ## Open questions
 
-- **Dialog focus containment.** Should native modal Dialog adopt APG forward and
-  reverse Tab wrapping as a required public behavior? Current authority owns focus
-  entry and return but does not settle this containment mechanic, so the shared
-  contract does not gate it.
+None. DEC-2 settles focus containment.
 
 ## Content boundary
 
