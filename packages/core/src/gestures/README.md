@@ -475,7 +475,10 @@ as a mouse wheel, anything else as a trackpad.
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
 pan's element is at its edge that way, decided at the gesture's first wheel:
-a wheel the pan does not take is never prevented. A scroll-edge pan (a pull to
+a wheel the pan does not take is never prevented. A watcher
+(`claimsTouches: false`) never takes one, and a gesture whose first wheel
+another handler already prevented, or that cannot be cancelled, stays the
+page's. A scroll-edge pan (a pull to
 refresh) takes one only if no scroller under the pointer could scroll for it,
 its own scroll owner and the page included, as its finger's rule reads them
 (`spec:AST-094` FR19); `touch-action` narrows only a finger's pan, so a wheel
@@ -484,8 +487,9 @@ pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
 `exp(-deltaY / 100)`; a pinch takes it by default. A wheel gesture ends
 100 ms after its last wheel (provisional, an owner question), at that wheel's
 time, so its release keeps its velocity; macOS's momentum wheels arrive as
-more wheel, and the gesture follows them. A finger, mouse or pen that comes
-down ends it, and a wheel claim keeps the page's text selection. A gesture a
+more wheel, and the gesture follows them. A mouse wheel's notches release
+still, at that time or at the input that ends the gesture sooner, never
+later (FR16). A finger, mouse or pen that comes down ends it, and a wheel claim keeps the page's text selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it
 lasts, a document `wheel` listener routes every step to it wherever it lands,
 so a pan whose element moves from under a still pointer keeps the gesture.
