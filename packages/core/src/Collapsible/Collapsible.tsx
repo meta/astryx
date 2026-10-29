@@ -27,7 +27,16 @@
  * - /packages/cli/assets/templates/blocks/components/Collapsible/ (showcase blocks)
  */
 
-import {use, useId, type ReactNode} from 'react';
+import {
+  use,
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   borderVars,
@@ -41,6 +50,15 @@ import {
 } from '../theme/tokens.stylex';
 
 import {useCollapsible} from './useCollapsible';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {
+  applyLayoutChangeTransition,
+  holdLayoutExit,
+  playLayoutChange,
+  releaseLayoutExit,
+  reportLayoutChange,
+  type AnimatedLayout,
+} from '../motion/animatedLayout';
 import {CollapsibleGroupPresentationContext} from './CollapsibleGroupContext';
 import type {CollapsibleChevronPosition} from './CollapsibleGroupContext';
 import {Icon} from '../Icon';
@@ -242,6 +260,12 @@ export interface CollapsibleProps extends BaseProps {
    * CollapsibleGroup owns grouped state and calls its `onChange` instead.
    */
   onOpenChange?: (isOpen: boolean) => void;
+  /**
+   * The handle from `useAnimatedLayout({containerRef})`. With it, opening and
+   * closing glides the content after this Collapsible, up to that container,
+   * instead of jumping, and the chevron turns on the same timing.
+   */
+  animatedLayout?: AnimatedLayout;
 
   /**
    * Logical position of the disclosure chevron.
@@ -317,6 +341,7 @@ export function Collapsible({
   onOpenChange,
   chevronPosition,
   value,
+  animatedLayout,
   ref,
   xstyle,
   className,
@@ -334,6 +359,95 @@ export function Collapsible({
     isCollapsible: collapsibleConfig,
     value,
   });
+
+  // With an `animatedLayout` handle, the content's size change animates: the
+  // content after this Collapsible, up to the handle's container, glides, and
+  // the revealed content plays its own entrance on the same timing
+  // (`architecture:react-component-runtime` INV12). Without one, nothing
+  // changes.
+  const contentRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const layoutChange = useMemo(
+    () => reportLayoutChange(animatedLayout, contentRef),
+    [animatedLayout],
+  );
+  // Every open-state change, whatever caused it (a click, an owner-set
+  // `isOpen`, a group's value), is measured before it lands (`spec:AST-105`
+  // FR1): LayoutChangeSnapshot calls this in the commit, before the DOM
+  // changes. The chevron (the trigger's Icon, its `icon` theming target)
+  // turns on the glide's motion too.
+  const measureChange = useCallback(() => {
+    applyLayoutChangeTransition(
+      animatedLayout,
+      triggerRef.current?.querySelector<HTMLElement>(':scope > .astryx-icon') ??
+        null,
+    );
+    layoutChange.measureBefore();
+  }, [animatedLayout, layoutChange]);
+  // Without a handle the chevron keeps the theme's own turn: a spring a handle
+  // set stays only while it is passed (`spec:AST-105` FR2).
+  useLayoutEffect(() => {
+    if (animatedLayout == null) {
+      applyLayoutChangeTransition(
+        null,
+        triggerRef.current?.querySelector<HTMLElement>(
+          ':scope > .astryx-icon',
+        ) ?? null,
+      );
+    }
+  }, [animatedLayout]);
+  // A close with a handle keeps the content rendered while it plays its exit
+  // (the exit makes it inert and gives up its space), then hides it
+  // (`spec:AST-105` FR4). Derived from the open state as it changes, during
+  // render, so the closing commit already keeps it.
+  const [renderedIsOpen, setRenderedIsOpen] = useState(isOpen);
+  const [isExiting, setIsExiting] = useState(false);
+  if (renderedIsOpen !== isOpen) {
+    setRenderedIsOpen(isOpen);
+    setIsExiting(!isOpen && animatedLayout != null);
+  }
+  const endExit = useCallback(() => {
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- holdLayoutExit decides from layout read in the closing commit (the content's place in the area's visible part, Reduce Motion and the pointer, and whether an end margin frees its space); an exit it does not hold hides the content before the frame paints
+    setIsExiting(false);
+  }, []);
+  const wasOpenRef = useRef(isOpen);
+  useLayoutEffect(() => {
+    if (wasOpenRef.current === isOpen) {
+      return;
+    }
+    wasOpenRef.current = isOpen;
+    const content = contentRef.current;
+    if (content == null) {
+      return;
+    }
+    // A change that was not measured (no handle) lands at once, entrance and
+    // exit included, so the content and what follows stay in step.
+    const isMeasured = layoutChange.animate();
+    if (isOpen) {
+      // Opened again mid-exit: the content takes its place in flow.
+      releaseLayoutExit(content);
+      if (isMeasured) {
+        playLayoutChange(animatedLayout, content);
+      }
+      return;
+    }
+    const isHeld =
+      isExiting &&
+      isMeasured &&
+      holdLayoutExit(animatedLayout, content, endExit);
+    if (isExiting && !isHeld) {
+      // An exit holdLayoutExit did not hold (unmeasured, out of view, Reduce
+      // Motion with a fine pointer, or no margin frees its space): hide the
+      // content before this frame paints.
+      endExit();
+    }
+  }, [isOpen, isExiting, layoutChange, animatedLayout, endExit]);
+  useLayoutEffect(() => {
+    if (!isOpen && !isExiting && contentRef.current != null) {
+      // Hidden again after its exit: drop the exit's inline values.
+      releaseLayoutExit(contentRef.current);
+    }
+  }, [isOpen, isExiting]);
 
   // Activation is blocked by this guard rather than the native `disabled`
   // attribute, so the trigger keeps `aria-disabled` semantics and stays
@@ -399,6 +513,7 @@ export function Collapsible({
       )}
       {...props}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleToggle}
         aria-disabled={isDisabled || undefined}
@@ -432,7 +547,11 @@ export function Collapsible({
         <span {...stylex.props(styles.triggerLabel)}>{trigger}</span>
         {!isChevronAtStart && chevron}
       </button>
+      {animatedLayout != null && (
+        <LayoutChangeSnapshot value={isOpen} onBeforeChange={measureChange} />
+      )}
       <div
+        ref={contentRef}
         id={contentId}
         {...mergeProps(
           themeProps('collapsible-content', {
@@ -442,7 +561,7 @@ export function Collapsible({
           stylex.props(
             styles.content,
             density != null && contentDensity[density],
-            !isOpen && styles.contentHidden,
+            !isOpen && !isExiting && styles.contentHidden,
           ),
         )}>
         {presentation != null ? (

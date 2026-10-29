@@ -21,7 +21,7 @@
  */
 
 import {UIKIT_LONG_PRESS, UIKIT_TAP} from '../motion/uikit/gestures';
-import {lockSelection} from './selectionLock';
+import {lockSelection} from '../utils/selectionLock';
 import {travel} from './geometry';
 import {
   GestureRecognizer,

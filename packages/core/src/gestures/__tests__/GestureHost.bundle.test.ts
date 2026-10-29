@@ -60,9 +60,8 @@ function bundle(name: string): string {
 describe('the gesture host bundle', () => {
   const text = bundle('GestureHost');
 
-  it('carries the press and click groups it reads', () => {
+  it('carries the press group it reads', () => {
     expect(text).toContain('scrollBrake:');
-    expect(text).toContain('strayClickWindow:');
   });
 
   it('never carries the whole UIKit gesture table', () => {

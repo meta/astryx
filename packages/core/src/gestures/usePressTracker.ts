@@ -98,8 +98,12 @@ export function usePressTracker(
   const [tracker] = useState(
     () =>
       new PressTracker({
-        getBounds: () =>
-          refRef.current.current?.getBoundingClientRect() ?? null,
+        getBounds: () => {
+          const element = refRef.current.current;
+          return element == null
+            ? null
+            : getGestureHost(element.ownerDocument).presentedRect(element);
+        },
         get view() {
           return refRef.current.current;
         },

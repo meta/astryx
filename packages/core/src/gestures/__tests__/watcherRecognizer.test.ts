@@ -170,10 +170,7 @@ describe('a recognizer that never claims (a watcher)', () => {
         ['window', onWindow],
       ] as const) {
         for (const [type, , options] of spy.mock.calls) {
-          if (
-            typeof options === 'object' &&
-            (options).passive === false
-          ) {
+          if (typeof options === 'object' && options.passive === false) {
             listed.push(`${target} ${type}`);
           }
         }
@@ -200,11 +197,10 @@ describe('a recognizer that never claims (a watcher)', () => {
         new PanGestureRecognizer({name: 'claimer', direction: 'horizontal'}),
       ),
     );
-    expect(active().sort()).toEqual([
-      'document contextmenu',
-      'document touchend',
-      'window click',
-    ]);
+    // At this layer every host listener comes through the shared input
+    // stream (utils/inputStream.ts), on the window's capture phase; clicks
+    // are the click guard's, whose listener comes only once a gesture acts.
+    expect(active().sort()).toEqual(['window contextmenu', 'window touchend']);
   });
 
   it('leaves the browser every touch behavior: its direction writes no touch-action', () => {

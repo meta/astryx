@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import userEvent from '@testing-library/user-event';
 import {
   hasPressedArm,
@@ -732,6 +733,32 @@ describe('TabMenu', () => {
     // The heading is a presentation span with the menu label
     const heading = screen.getByRole('presentation', {hidden: true});
     expect(heading).toHaveTextContent('More');
+  });
+
+  it('picks the option a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    render(
+      <TabList value="home" onChange={handleChange}>
+        <Tab value="home" label="Home" />
+        <TabMenu label="More" options={menuOptions} />
+      </TabList>,
+    );
+    await user.click(screen.getByRole('button', {name: /More/}));
+    const option = (name: string) =>
+      screen.getByRole('menuitemradio', {name, hidden: true});
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      handleChange.mockClear();
+      fireEvent.pointerDown(option('Analytics'), pointer);
+      fireEvent.pointerMove(option('Reports'), pointer);
+      fireEvent.pointerUp(option('Reports'), pointer);
+      expect(handleChange).toHaveBeenCalledTimes(1);
+      expect(handleChange).toHaveBeenCalledWith('reports');
+    }
   });
 
   it('selects a menu item and calls onChange', async () => {
