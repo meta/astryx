@@ -19,6 +19,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {pressVars} from './interactionOverlay.stylex';
 import {cellPressConsts} from './rowPressLayer.stylex';
 
@@ -54,8 +55,12 @@ const pressRelease = stylex.keyframes({
 
 /** The row layer's clock as CSS: the table's, as the strength's release. */
 const CELL_RELEASE = `${cellPressConsts.cellReleaseMs}ms`;
-/** The row layer's clock under reduced motion: capped as the strength's is. */
-const CELL_RELEASE_REDUCED = `min(${CELL_RELEASE}, 200ms)`;
+/**
+ * The row layer's clock under reduced motion: capped by the Reduce Motion
+ * cross-fade's duration, as the strength's is (`spec:AST-094` FR4: the cap is
+ * a role, never a literal).
+ */
+const CELL_RELEASE_REDUCED = `min(${CELL_RELEASE}, ${reducedMotionFadeConsts.duration})`;
 const REDUCED_MOTION = '@media (prefers-reduced-motion: reduce)';
 
 /** Opacity 1 → 0: the row layer leaves; its fading arm runs it. */
