@@ -456,6 +456,24 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
     expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
+  it('slotted into a scroller inside a shadow tree, waits the content-touch delay', () => {
+    // The browser scrolls the flat tree: a slotted pressable sits in the
+    // shadow tree's scroller, not beside it in the light tree.
+    const host = document.createElement('div');
+    const shadowScroller = document.createElement('div');
+    makeScroller(shadowScroller);
+    shadowScroller.appendChild(document.createElement('slot'));
+    host.attachShadow({mode: 'open'}).appendChild(shadowScroller);
+    const control = pressable('button');
+    host.appendChild(control);
+    document.body.appendChild(host);
+    expect(control.assignedSlot).not.toBeNull();
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
   it('in a fixed bar above a scrolling list, paints in the frame the finger lands', () => {
     const bar = document.createElement('div');
     bar.style.position = 'fixed';
