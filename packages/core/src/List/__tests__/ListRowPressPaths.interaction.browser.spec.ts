@@ -8,9 +8,7 @@
  *   browser takes for a scroll drops the highlight at once (the press
  *   controller's cancel, unchanged by the compositor layer); Reduce
  *   Motion keeps the fade (a fade, not a movement); a mouse press and hover on
- *   a fine pointer leave the press layer out of it; without `scrollend`
- *   (Chromium with it removed), a finger landing on a gliding list still brakes it,
- *   and presses once the list has rested for the brake window
+ *   a fine pointer leave the press layer out of it
  * @position Interaction evidence for the row press layer (utils/interactionOverlay.stylex.ts `cell`), beside
  *   ListRowPress.interaction.browser.spec.ts
  */
@@ -18,7 +16,6 @@
 import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   drag,
-  flick,
   holdAnimations,
   openStory,
   releaseAnimations,
@@ -360,80 +357,4 @@ test('under a finger, a row at rest is as it was: its own ::before keeps its loo
   // The press over, the row's own decoration is back as it was.
   await expect.poll(async () => pressState(row)).toBeNull();
   expect(await look()).toEqual(own);
-});
-
-test('on an engine without scrollend (Chromium with it removed), a finger landing on a gliding list brakes it, and presses once the list has rested', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(
-    browserName !== 'chromium',
-    'injected touches start no native fling in this WebKit build; the iOS simulator covers it',
-  );
-  // An engine without `scrollend`: the handler property is gone, and no
-  // scrollend event reaches the page's listeners (window's capture runs
-  // first and stops it).
-  await page.addInitScript(() => {
-    for (const proto of [
-      Window.prototype,
-      Document.prototype,
-      Element.prototype,
-      HTMLElement.prototype,
-    ]) {
-      delete (proto as {onscrollend?: unknown}).onscrollend;
-    }
-    // `onscrollend` is also an own property of `window` itself.
-    delete (window as {onscrollend?: unknown}).onscrollend;
-    window.addEventListener(
-      'scrollend',
-      event => event.stopImmediatePropagation(),
-      true,
-    );
-  });
-  await openStory(page, storybook(), 'core-press-feedback-touch--rows');
-  await touchOnly(page);
-  expect(await page.evaluate(() => 'onscrollend' in window)).toBe(false);
-  const driver = await touchDriver(page);
-  const row = page
-    .locator('[data-astryx-pressable]')
-    .filter({hasText: 'Conversation 2'})
-    .first();
-  await expect(row).toBeVisible();
-  const box = await row.boundingBox();
-  if (box == null) {
-    throw new Error('no row');
-  }
-  const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
-  // Every press state the controller writes, on any row.
-  await page.evaluate(() => {
-    const log: string[] = [];
-    (window as unknown as {__pressLog: string[]}).__pressLog = log;
-    new MutationObserver(records => {
-      for (const record of records) {
-        const value = (record.target as Element).getAttribute(
-          'data-astryx-press',
-        );
-        log.push(`press:${value}`);
-      }
-    }).observe(document.body, {
-      subtree: true,
-      attributeFilter: ['data-astryx-press'],
-    });
-  });
-  const readLog = async () =>
-    page.evaluate(() =>
-      (window as unknown as {__pressLog: string[]}).__pressLog.splice(0),
-    );
-  // A flick sets the list gliding; a finger lands on it 60 ms after the lift
-  // and stays past the content-touch delay: a brake, not a press.
-  await driver.play(flick(at, {velocity: {x: 0, y: -2500}, durationMs: 80}));
-  await page.waitForTimeout(60);
-  await driver.play(tap(at, {holdMs: 400}));
-  const braked = await readLog();
-  expect(braked, JSON.stringify(braked)).not.toContain('press:on');
-  // The list at rest for well past the brake window: a held finger presses.
-  await page.waitForTimeout(1000);
-  await driver.play(tap(at, {holdMs: 400}));
-  const pressed = await readLog();
-  expect(pressed, JSON.stringify(pressed)).toContain('press:on');
 });

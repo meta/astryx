@@ -24,9 +24,6 @@
  *    element carrying the scope.
  *  - A styles-only module (`*.stylex.ts`) is covered when every file that
  *    imports it is marked.
- *  - A composer whose arms ride `xstyle` onto a marked component's root
- *    (ListItem's divider arms on Item's row) is covered by that component,
- *    since the controller writes `data-astryx-press` on that root.
  */
 
 import fs from 'node:fs';
@@ -116,29 +113,6 @@ function importers(file: string): string[] {
     .map(([other]) => other);
 }
 
-/** Components (by exported name) whose own file is marked. */
-const markedComponents = new Set(
-  [...source.entries()]
-    .filter(([file]) => isMarked(file))
-    .flatMap(([, text]) =>
-      [...text.matchAll(/export function ([A-Z]\w*)\(/g)].map(m => m[1]),
-    ),
-);
-
-/**
- * Marked components `file` renders and styles through `xstyle`: its arms land
- * on their root, the element that carries the marker.
- */
-function xstyleHosts(file: string): string[] {
-  const text = source.get(file) ?? '';
-  if (!/\bxstyle=\{/.test(text)) {
-    return [];
-  }
-  return [...markedComponents].filter(name =>
-    new RegExp(`<${name}\\b`).test(text),
-  );
-}
-
 const pressArmFiles = [...source.entries()]
   .filter(([file, text]) => !MODEL_FILES.has(file) && PRESS_ARM.test(text))
   .map(([file]) => file)
@@ -176,12 +150,9 @@ describe('every surface that paints a press is reachable by the touch press cont
         // A component whose arms read an ancestor scope marker: the owners that
         // apply the marker are the pressables, and each must be marked.
         const scopes = [...text.matchAll(ANCESTOR_ARM)].map(m => m[1]);
-        if (scopes.length === 0 && xstyleHosts(file).length > 0) {
-          return;
-        }
         expect(
           scopes,
-          `${file} paints a press without usePressFeedback(), an ancestor scope, or a marked component to style through xstyle`,
+          `${file} paints a press without usePressFeedback() and without an ancestor scope`,
         ).not.toHaveLength(0);
         for (const scope of new Set(scopes)) {
           const owners = referrers(scope, file);

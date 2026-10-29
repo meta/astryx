@@ -23,9 +23,12 @@
  */
 
 import {
+  use,
   useCallback,
   useId,
   useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -52,6 +55,15 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {
+  createRailLayout,
+  playRail,
+  snapshotRail,
+  SideNavShellContext,
+  type RailMotion,
+  type RailSnapshot,
+} from './railMotion';
 // =============================================================================
 // Constants
 // =============================================================================
@@ -474,6 +486,70 @@ export function SideNav({
 
   const collapsed = resizableHook.isCollapsed;
 
+  // Every collapse or expand, whatever caused it, plays the rail's motion
+  // (`component:SideNav` FR6): measured in the commit before the DOM changes,
+  // played after it before paint. Inside AppShell the content area moves with
+  // it through AppShell's own handle (`component:AppShell` FR17); outside,
+  // SideNav holds its own over its parent.
+  const shell = use(SideNavShellContext);
+  const ownLayout = useMemo(() => createRailLayout(() => navRef.current), []);
+  const railSnapshotRef = useRef<RailSnapshot | null>(null);
+  const motionRef = useRef<{rail: RailMotion; endContent: () => void} | null>(
+    null,
+  );
+  const measureRail = useCallback(
+    (wasCollapsed: boolean) => {
+      // A change during a running motion starts from what the rail shows.
+      const running = motionRef.current;
+      const shown = running?.rail.shown() ?? null;
+      running?.rail.end();
+      running?.endContent();
+      motionRef.current = null;
+      railSnapshotRef.current = snapshotRail(
+        shell?.rail() ?? navRef.current,
+        shell?.animatedLayout ?? ownLayout,
+        shown,
+        wasCollapsed,
+      );
+      // A collapse covers the old rail with its copy; when the rail cannot
+      // be copied, the page lands at once with it, on one clock, a running
+      // glide included.
+      const snapshot = railSnapshotRef.current;
+      if (snapshot != null && snapshot.swap == null && !wasCollapsed) {
+        shell?.landContent();
+        return;
+      }
+      shell?.beforeRailChange();
+    },
+    [shell, ownLayout],
+  );
+  useLayoutEffect(() => {
+    const snapshot = railSnapshotRef.current;
+    railSnapshotRef.current = null;
+    if (snapshot == null) {
+      return;
+    }
+    // The content moves first: its glide starts before the rail rides it.
+    const endContent = shell?.afterRailChange() ?? (() => {});
+    motionRef.current = {
+      rail: playRail(
+        snapshot,
+        shell?.rail() ?? navRef.current,
+        shell?.animatedLayout ?? ownLayout,
+        shell?.column() ?? null,
+      ),
+      endContent,
+    };
+  }, [collapsed, shell, ownLayout]);
+  // An unmount mid-motion removes the copy at once.
+  useLayoutEffect(
+    () => () => {
+      motionRef.current?.rail.end();
+      motionRef.current?.endContent();
+    },
+    [],
+  );
+
   const toggle = useCallback(() => {
     const next = !collapsed;
 
@@ -673,7 +749,7 @@ export function SideNav({
   // Overlay drag handle inside the nav when resizable.
   // Uses ResizeHandle in overlay mode so the handle sits inside
   // the panel's overflow: clip bounds.
-  const content = showResizeHandle ? (
+  const rail = showResizeHandle ? (
     <div {...stylex.props(styles.resizableContainer)}>
       {navElement}
       <ResizeHandle
@@ -690,6 +766,14 @@ export function SideNav({
     </div>
   ) : (
     navElement
+  );
+  // The snapshot stays mounted outside the resize wrapper, which comes and
+  // goes with the collapse it measures.
+  const content = (
+    <>
+      <LayoutChangeSnapshot value={collapsed} onBeforeChange={measureRail} />
+      {rail}
+    </>
   );
 
   if (isCollapsible) {

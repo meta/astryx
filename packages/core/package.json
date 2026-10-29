@@ -823,6 +823,11 @@
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
+    },
+    "./internal/tokenizer-presentation": {
+      "source": "./src/internal/tokenizer-presentation.ts",
+      "types": "./dist/internal/tokenizer-presentation.d.ts",
+      "default": "./dist/internal/tokenizer-presentation.js"
     }
   },
   "files": [

@@ -6,10 +6,16 @@
  * @file Tokenizer.tsx
  * @input Uses React, BaseTypeahead, Field, Token, useAnnounce,
  *   useAdaptivePresentation, and TokenizerBottomSheet (lazy)
- * @output Exports Tokenizer multi-select typeahead component
+ * @output Exports Tokenizer multi-select typeahead component, and the
+ *   internal TokenizerWithPresentation signature the `internal/tokenizer-presentation`
+ *   entry re-exports
  * @position Composed component; forwards DOM ref and exposes focus control via
- *   handleRef. The experimental `presentation` option swaps the inline
- *   combobox for a trigger that opens TokenizerBottomSheet.
+ *   handleRef. The sheet presentation — a trigger that opens
+ *   TokenizerBottomSheet — is implemented but not exposed: `TokenizerProps`
+ *   offers no `experimental.presentation` while its user experience is being
+ *   finished (`component:Tokenizer` DEC-3, implementation gap), and only
+ *   Astryx's own packages reach it through the internal entry
+ *   (`architecture:react-component-runtime` INV13).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/index.ts
@@ -124,11 +130,12 @@ export interface TokenizerHandle {
 }
 
 /**
- * Experimental options, outside the stable compatibility promise: anything in
- * this object may change or be removed in a patch release.
- * @experimental
+ * The presentation options the sheet-capable signature admits. Not public:
+ * `TokenizerProps` has no `experimental` while the sheet's user experience is
+ * being finished; Astryx's own packages reach the sheet through
+ * `@astryxdesign/core/internal/tokenizer-presentation`.
  */
-interface TokenizerExperimentalOptions {
+export interface TokenizerPresentationOptions {
   /**
    * How the field presents its choices.
    * - `'popover'`: the inline combobox with its anchored suggestion menu —
@@ -147,7 +154,6 @@ interface TokenizerExperimentalOptions {
    * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
    * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
    * and warn once in development.
-   * @experimental
    * @default 'popover'
    */
   presentation?: 'popover' | 'bottom-sheet' | 'adaptive';
@@ -304,34 +310,26 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   ref?: React.Ref<HTMLInputElement>;
   /** Imperative handle ref for focus/blur control. */
   handleRef?: React.Ref<TokenizerHandle>;
-  /**
-   * Experimental options, outside the stable compatibility promise: anything
-   * in this object may change or be removed in a patch release. Omit it for
-   * the stable behavior.
-   * @experimental
-   */
-  experimental?: TokenizerExperimentalOptions;
 }
 
 /**
- * The props the experimental opt-in admits: `TokenizerProps` with
- * `experimental` present and a `ref` that also accepts the sheet
- * presentation's trigger button, the control it stands for there. Reached
- * only through the overload below; `TokenizerProps` — an interface, so
- * `interface X extends TokenizerProps<T>`, `Omit<TokenizerProps<T>, …>` and
- * `ComponentProps<typeof Tokenizer>` keep their released shapes — stays the
- * component's declared props type.
+ * The props of the sheet-capable signature: `TokenizerProps` plus the
+ * presentation options and a `ref` that also accepts the sheet presentation's
+ * trigger button, the control it stands for there. Not public: reached only
+ * as `TokenizerWithPresentation` through the internal entry, so the released
+ * `TokenizerProps` — an interface, so `interface X extends TokenizerProps<T>`,
+ * `Omit<TokenizerProps<T>, …>` and `ComponentProps<typeof Tokenizer>` keep
+ * their released shapes — names no presentation.
  */
-type TokenizerExperimentalProps<T extends SearchableItem> = Omit<
+export type TokenizerWithPresentationProps<T extends SearchableItem> = Omit<
   TokenizerProps<T>,
-  'ref' | 'experimental'
+  'ref'
 > & {
-  /** @experimental */
-  experimental: TokenizerExperimentalOptions;
+  /** How the field presents its choices; see `TokenizerPresentationOptions`. */
+  experimental?: TokenizerPresentationOptions;
   /**
    * Ref forwarded to the control: the combobox input in the popover
    * presentation, the trigger button in the sheet presentation.
-   * @experimental
    */
   ref?: React.Ref<HTMLInputElement | HTMLButtonElement>;
 };
@@ -701,13 +699,10 @@ function EndLane({
   );
 }
 
-// The experimental arm first: TypeScript resolves `ComponentProps<typeof
-// Tokenizer>` and a call without `experimental` against the last overload, the
-// stable signature, while a call that passes `experimental` matches this one
-// and may pass the wider `ref`.
-export function Tokenizer<T extends SearchableItem>(
-  props: TokenizerExperimentalProps<T>,
-): React.JSX.Element;
+// The public signature names no presentation: `ComponentProps<typeof
+// Tokenizer>` and every public call resolve against `TokenizerProps`. The
+// implementation also reads the presentation options, reached only through
+// `TokenizerWithPresentation` below.
 export function Tokenizer<T extends SearchableItem>(
   props: TokenizerProps<T>,
 ): React.JSX.Element;
@@ -760,7 +755,7 @@ export function Tokenizer<T extends SearchableItem>({
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
   ...restProps
-}: TokenizerProps<T> | TokenizerExperimentalProps<T>): React.JSX.Element {
+}: TokenizerWithPresentationProps<T>): React.JSX.Element {
   const {rest, container} = useFieldInputStyling('Tokenizer', restProps, {
     containerXstyle,
     containerClassName,
@@ -1736,3 +1731,19 @@ export function Tokenizer<T extends SearchableItem>({
 }
 
 Tokenizer.displayName = 'Tokenizer';
+
+/**
+ * The same component with the sheet presentation reachable: `experimental`
+ * (`presentation: 'popover' | 'bottom-sheet' | 'adaptive'`) and a `ref` that
+ * also takes the trigger button. Not public — re-exported only by
+ * `@astryxdesign/core/internal/tokenizer-presentation`, the entry reserved
+ * for Astryx's own packages (`architecture:react-component-runtime` INV13),
+ * while the sheet's user experience is being finished (`component:Tokenizer`
+ * DEC-3). The public `Tokenizer` renders the popover presentation for every
+ * field.
+ */
+export const TokenizerWithPresentation = Tokenizer as <
+  T extends SearchableItem,
+>(
+  props: TokenizerWithPresentationProps<T>,
+) => React.JSX.Element;

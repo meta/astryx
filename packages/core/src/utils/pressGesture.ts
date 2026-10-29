@@ -23,11 +23,12 @@
  * here as `buttonDown`: painted at once, held through any travel, faded on
  * release like a finger's.
  *
- * A CONTROL OUTSIDE A SCROLLER does not wait at all. UIKit delays a touch
- * only for a view inside a scroll view (`delaysContentTouches`); a UIControl
- * anywhere else highlights in the frame the finger lands. The controller
- * says which touch is which (`down`'s `delayed`, from the surface's profile
- * and its ancestors), and an undelayed touch goes straight to `pressed`.
+ * A SURFACE OUTSIDE A SCROLLER does not wait at all. UIKit delays a touch
+ * only for a view inside a scroll view (`delaysContentTouches`); anywhere
+ * else a UIControl highlights in the frame the finger lands, and a row does
+ * too (`spec:AST-094` FR11). The controller says which touch is which
+ * (`down`'s `delayed`, from the surface's ancestors), and an undelayed touch
+ * goes straight to `pressed`.
  * Everything after that is the same machine: travel past the slop or a
  * cancel ends it with no fade, the lift fades it.
  *
@@ -127,8 +128,8 @@ export type PressEvent =
       y: number;
       /**
        * Whether this touch waits {@link PRESS_ONSET_MS} before it paints:
-       * a cell or a control inside a scroller (`spec:AST-094` FR11).
-       * Defaults to `true`.
+       * a surface inside a scroller (`spec:AST-094` FR11). Defaults to
+       * `true`.
        */
       delayed?: boolean;
     }
@@ -193,7 +194,7 @@ export function pressGestureStep(
   event: PressEvent,
 ): PressStep {
   if (event.kind === 'down') {
-    // A control with no scroller above it: nothing can turn this touch into a
+    // A surface with no scroller above it: nothing can turn this touch into a
     // scroll, so it paints in the frame it lands, as a UIControl highlights.
     if (event.delayed === false) {
       return {

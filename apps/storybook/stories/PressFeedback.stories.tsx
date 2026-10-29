@@ -26,13 +26,11 @@ import {VStack} from '@astryxdesign/core/Layout';
  * View these with a coarse pointer: in Chromium, open DevTools, toggle the
  * device toolbar (a phone preset), and use the touch cursor; or open Storybook
  * on a phone. Under a finger the bare `:active` arm is dropped and the press
- * follows UIKit. A control (a button, a card) highlights in the frame the
- * finger lands, or 150 ms later inside a scroller, where a flick paints
- * nothing; the browser taking the touch to scroll cancels it with no fade; a
- * tap shorter than the delay paints at the lift; the lift fades it out. A
- * cell (a list row) waits 150 ms inside a scroller and highlights at once
- * outside one, is cancelled by 10 px of travel, and releases on the deselect clock. A mouse keeps
- * `:active` on a desktop.
+ * follows UIKit. A surface highlights in the frame the finger lands, or
+ * 150 ms later inside a scroller, where a flick paints nothing; travelling
+ * 10 px, or the browser taking the touch to scroll, cancels it with no fade;
+ * a tap shorter than the delay paints at the lift; the lift fades it out. A
+ * mouse keeps `:active` on a desktop.
  */
 const meta: Meta = {
   title: 'Core/Press feedback (touch)',
@@ -41,7 +39,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'The touch press model on every pressable surface. View with a coarse pointer (DevTools device toolbar, or a phone). Under a finger the bare `:active` arm is dropped and one document-level controller writes `data-astryx-press="on"` while a press is held and `data-astryx-press="fading"` for the release. A control highlights in the frame the finger lands (150 ms later inside a scroller) and fades at the lift; a cell (a list row) waits 150 ms inside a scroller and highlights at once outside one, is cancelled by 10 px of travel, and releases on the deselect clock. A scroll claiming the touch cancels with no fade. A mouse keeps `:active` on a desktop. Scroll the list stories with a finger: nothing paints while the list moves.',
+          'The touch press model on every pressable surface. View with a coarse pointer (DevTools device toolbar, or a phone). Under a finger the bare `:active` arm is dropped and one document-level controller writes `data-astryx-press="on"` while a press is held and `data-astryx-press="fading"` for the release. A surface highlights in the frame the finger lands (150 ms later inside a scroller) and fades at the lift; 10 px of travel or a scroll claiming the touch cancels it with no fade. A mouse keeps `:active` on a desktop. Scroll the list stories with a finger: nothing paints while the list moves.',
       },
     },
   },
@@ -73,7 +71,7 @@ export const Rows: Story = {
     docs: {
       description: {
         story:
-          'Item rows, a menu, and a clickable card. The rows sit in a scroller, so a held row paints after 150 ms, a tap paints at the lift, and a drag or scroll never paints; the card, outside it, paints in the frame the finger lands. Flick the list and no row paints; stop it with a finger and that touch is a brake, not a press.',
+          'Item rows, a menu, and a clickable card. The rows sit in a scroller, so a held row paints after 150 ms, a tap paints at the lift, and a drag or scroll never paints; the card, outside it, paints in the frame the finger lands. Flick the list and no row paints.',
       },
     },
   },

@@ -341,7 +341,7 @@ describe.each(Object.entries(WORKFLOWS))(
 );
 
 describe('ci.yml pr-a11y browser specs', () => {
-  const steps = load('ci.yml').jobs['pr-a11y'].steps;
+  const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
   const run = steps.find(
     step => step.name === 'Run browser accessibility specs',
   );
@@ -419,7 +419,8 @@ describe('ci.yml RTL package sharding', () => {
     for (const name of [
       'build-storybook',
       'pr-a11y-shard',
-      'pr-a11y',
+      'pr-a11y-guards',
+      'pr-a11y-specs',
       'a11y-contracts-shard',
       'pr-rtl-shard',
     ]) {
@@ -439,7 +440,11 @@ describe('ci.yml RTL package sharding', () => {
     expect(runLines(workflow.jobs['build-storybook'])).toContain(
       'astryx-build-sha.txt',
     );
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain('git rev-parse HEAD');
+    for (const name of ['pr-a11y-guards', 'pr-a11y-specs']) {
+      expect(runLines(workflow.jobs[name]), name).toContain(
+        'git rev-parse HEAD',
+      );
+    }
     expect(runLines(shard)).toContain('git rev-parse HEAD');
 
     const evidence = read(
@@ -456,10 +461,10 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('keeps PR accessibility scoped while RTL retains its canonical resolver', () => {
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain(
+    expect(runLines(workflow.jobs['pr-a11y-guards'])).toContain(
       '.github/scripts/a11y-pr-scope.mjs',
     );
-    expect(runLines(workflow.jobs['pr-a11y'])).toContain(
+    expect(runLines(workflow.jobs['pr-a11y-guards'])).toContain(
       'SCOPE_ARGS=(--components "$COMPONENTS")',
     );
     expect(runLines(shard)).toContain('.github/scripts/rtl-shard-scope.mjs');
