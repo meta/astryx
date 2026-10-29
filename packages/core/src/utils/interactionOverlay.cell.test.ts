@@ -38,11 +38,6 @@ const layerRules = (el: Element, arm: string) =>
     const selector = selectorOf(rule);
     return selector.includes('::before') && selector.includes(arm);
   });
-const hostRules = (el: Element, arm: string) =>
-  rulesDeclaredFor(el).filter(rule => {
-    const selector = selectorOf(rule);
-    return !selector.includes('::before') && selector.includes(arm);
-  });
 
 const COARSE = '(pointer: coarse)';
 

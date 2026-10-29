@@ -303,12 +303,8 @@ describe('build-css astryx.css', () => {
       // press's strength, declared by the shared overlay styles on the element
       // the controller writes to. StyleX deduplicates the identical
       // declaration across the variants, so the shipped sheet carries it once.
-      // (The compositor press layer's rows turn this paint off with
-      // `--_press-paint: transparent`; that declaration is its own, below.)
-      const declarations = lines().filter(
-        line =>
-          /\{--_press-paint:/.test(line) &&
-          !/\{--_press-paint:transparent/.test(line),
+      const declarations = lines().filter(line =>
+        /\{--_press-paint:/.test(line),
       );
       expect(declarations).toHaveLength(1);
       expect(declarations[0]).toContain('var(--color-overlay-pressed)');
