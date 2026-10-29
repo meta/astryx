@@ -12,8 +12,9 @@
  *   engines); the release keeps fading on every frame while the main thread
  *   is blocked (Chromium screencast, WebKit video); the release does no
  *   Layout or Paint; storyboards of the release and of the blocked window
- * @position Interaction evidence for the row press layer (utils/interactionOverlay.stylex.ts `cell`) as composed
- *   by Item (List rows) and TreeList rows
+ * @position Interaction evidence for the row press layer
+ *   (utils/rowPressLayer.ts `rowPressLayerStyles.cell`) as composed by Item
+ *   (List rows) and TreeList rows
  *
  * The press strength is read from pixels: the row's own background before
  * the press is strength 0, the frame the press is believed is strength 1, and
@@ -220,9 +221,9 @@ test('a held row paints the pressed token and its release follows the cell relea
 }, testInfo) => {
   const {driver, row, center} = await openRow(page, LIST_ROW);
   expect(await layerOpacity(row)).toBe(0);
-  // Gate the page's timers before the press, so the controller's own release
-  // timer (which removes the attribute after the clock) can be held while the
-  // release is seeked.
+  // Gate the page's timers before the press, so the controller's check at
+  // the release clock (after which the release ends with its animation) can
+  // be held while the release is seeked.
   await installTimerGate(page);
   await driver.play(tap(center, {holdMs: HOLD_MS}));
   expect(await pressState(row)).toBe('fading');

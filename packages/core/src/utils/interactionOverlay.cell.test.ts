@@ -11,8 +11,10 @@
  *   arm on the cell clock, and none of the overlay's own main-thread release,
  *   all under a finger; a fine pointer's row as it was (no layer, no
  *   stacking context, the overlay's own paint)
- * @position Unit test beside utils/interactionOverlay.stylex.ts (`cell`); the real-engine
- *   proofs (compositor, busy main thread, curve) are in
+ * @position Unit test of the row press layer (utils/rowPressLayer.ts
+ *   `rowPressLayerStyles.cell`, its clocks in utils/rowPressLayer.stylex.ts
+ *   `cellPressConsts`); the real-engine proofs (compositor, busy main
+ *   thread, curve) are in
  *   List/__tests__/ListRowPress.interaction.browser.spec.ts
  */
 
@@ -35,11 +37,6 @@ const layerRules = (el: Element, arm: string) =>
   rulesDeclaredFor(el).filter(rule => {
     const selector = selectorOf(rule);
     return selector.includes('::before') && selector.includes(arm);
-  });
-const hostRules = (el: Element, arm: string) =>
-  rulesDeclaredFor(el).filter(rule => {
-    const selector = selectorOf(rule);
-    return !selector.includes('::before') && selector.includes(arm);
   });
 
 const COARSE = '(pointer: coarse)';
@@ -96,7 +93,7 @@ describe('press layer clock', () => {
     );
   });
 
-  it('runs on the clock the controller removes the attribute on', () => {
+  it('runs on the clock the controller checks the release at', () => {
     expect(cellPressConsts.cellReleaseMs).toBe(PRESS_FADE_MS);
   });
 

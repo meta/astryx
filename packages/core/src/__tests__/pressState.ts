@@ -19,7 +19,8 @@
  * The touch arms are asserted the same way: the paint reads the press's
  * strength (`--astryx-press-alpha`, see utils/interactionOverlay.stylex.ts)
  * and the element the controller writes to runs the release animation on the
- * machine's own clock.
+ * machine's own clock; a list row's compositor layer (utils/rowPressLayer.ts)
+ * runs its own release on the row's `::before`, which these checks leave out.
  *
  * SYNC: When modified, update this header.
  */
@@ -190,12 +191,7 @@ export function durationToMs(value: string): number {
   if (capped != null) {
     return Math.min(durationToMs(capped[1]), durationToMs(capped[2]));
   }
-  // A theme motion role, `var(--motion-…, 200ms)`, reads as the table's
-  // value it falls back to.
-  const role = text.match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-  const match = (role == null ? text : role[1])
-    .trim()
-    .match(/^([\d.]+)(ms|s)$/);
+  const match = text.match(/^([\d.]+)(ms|s)$/);
   if (match == null) {
     return Number.NaN;
   }
