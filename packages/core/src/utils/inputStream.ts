@@ -33,8 +33,9 @@
  * A type's native listener is passive, so a page that only paints presses
  * blocks no scroll. It is registered non-passive only while a subscriber
  * that cancels the event (`{cancels: true}`) is subscribed (the gesture
- * host's `touchend`, `click` and `contextmenu` while a claiming participant
- * is attached; the page hold's `touchmove` while it holds), and passive
+ * host's `touchend` and `contextmenu` while a claiming participant is
+ * attached; the page hold's `touchmove` while it holds; the click guard's
+ * `click`, which stays once a window's first guard arms it), and passive
  * again once that subscriber leaves. With no subscriber left, it is
  * removed.
  *
