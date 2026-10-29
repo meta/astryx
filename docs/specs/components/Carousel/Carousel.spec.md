@@ -20,7 +20,7 @@ families: [family:buttons]
 design_specs: []
 architecture: [architecture:interaction-modality]
 contributing: []
-system_specs: [spec:AST-085, spec:AST-025]
+system_specs: [spec:AST-085, spec:AST-025, spec:AST-094]
 ---
 
 # Carousel component contract
@@ -83,6 +83,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR2 | When the focused edge scroll button runs out, focus moves to the scroll area without scrolling it. This holds when the content no longer overflows and the scroll area is out of the tab order (`spec:AST-025` FR12): it still takes focus programmatically. Focus never lands on the page body or on a hidden button. | DEC-1; `spec:AST-085` FR4                | settled            |
 | FR3 | The handoff happens once per edge transition, and only while the edge button held focus. An edge reached by swipe, resize, or wheel while focus is elsewhere moves nothing.                                                                                                                                            | `architecture:interaction-modality` INV8 | settled            |
 | FR4 | An edge scroll button that is available behaves as an ordinary Button.                                                                                                                                                                                                                                                 | `family:buttons`                         | settled            |
+| FR5 | With `hasSnap`, touch paging follows `spec:AST-094`'s pager paging rule (FR3, FR6): under a finger, a release picks its page and starts its settle as the pager does. Under a mouse or trackpad, the scroll area keeps native scroll snapping.                                                                         | `spec:AST-094` FR3, FR6, DEC-25          | settled            |
 
 ### Representative states
 
@@ -112,14 +113,16 @@ visual evidence.
   removes; FR2 names the scroll area.
 - `spec:AST-025` FR12 owns the scroll area's tab stop and naming.
 - `family:buttons` owns the edge buttons' behavior while available.
+- `spec:AST-094` FR3 and FR6 own touch paging with `hasSnap` (FR5).
 
 ## Verification map
 
-| Contract | Verification                            | Representative states                                    | Mutation or failure expectation                                                | Audit section                  |
-| -------- | --------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------ |
-| FR1, AR1 | Unit and accessibility-tree tests       | at rest at each edge; no overflow                        | A hidden button that is focusable or exposed fails                             | `audit:Carousel/accessibility` |
-| FR2, AR2 | Real-browser keyboard test              | Enter on "Scroll right" until the end; same on the start | Focus on the page body, a hidden button, or the opposite button fails          | `audit:Carousel/accessibility` |
-| FR3      | Real-browser test with swipe and resize | edge reached with focus outside the carousel             | Focus moving without an edge-button press, or moving twice for one edge, fails | `audit:Carousel/accessibility` |
+| Contract | Verification                                                    | Representative states                                                                 | Mutation or failure expectation                                                                                                                  | Audit section                  |
+| -------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| FR1, AR1 | Unit and accessibility-tree tests                               | at rest at each edge; no overflow                                                     | A hidden button that is focusable or exposed fails                                                                                               | `audit:Carousel/accessibility` |
+| FR2, AR2 | Real-browser keyboard test                                      | Enter on "Scroll right" until the end; same on the start                              | Focus on the page body, a hidden button, or the opposite button fails                                                                            | `audit:Carousel/accessibility` |
+| FR3      | Real-browser test with swipe and resize                         | edge reached with focus outside the carousel                                          | Focus moving without an edge-button press, or moving twice for one edge, fails                                                                   | `audit:Carousel/accessibility` |
+| FR5      | Real-browser test with touch input on a Carousel with `hasSnap` | a short flick over 300 pt/s; a slow push before half a page; a slow release past half | a page choice or settle start that differs from the pager's, or a mouse or trackpad scroll that runs the pager instead of native snapping, fails | —                              |
 
 ## Decision log
 
