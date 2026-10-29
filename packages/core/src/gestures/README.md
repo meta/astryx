@@ -2,8 +2,10 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`, and Lab through internal workspace imports; nothing here is
-exported from the package.
+`../gestures`. Lab reaches its primitives through
+`@astryxdesign/core/internal/touch`, an internal entry reserved for Astryx's
+own packages (`architecture:react-component-runtime` INV13); nothing here is
+part of the public API.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each
