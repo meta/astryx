@@ -24,7 +24,11 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  */
 
 /** @typedef {{kind: 'reference', module: any, binding: any, members: string[]}} RegistryReference */
-/** @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan}} RegistryPlan */
+/**
+ * `entries` marks a package theme read for its icon entries: its node-valued
+ * `icons` merged with the `__icons` that hold its function entries, if any.
+ * @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean, entries?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan}} RegistryPlan
+ */
 
 /** @param {any} node */
 function unwrap(node) {
@@ -98,15 +102,26 @@ function invalidRegistry(name, reason = '') {
  * Local base themes are traced to their registry imports. Package bases remain
  * public theme imports, so their implementation and private files stay private.
  *
+ * A theme whose resolved icon entries include a function keeps them: a package
+ * base is read for its entries (`__icons`) as well as its node-valued `icons`,
+ * and a built base module's `__icons` field is followed instead of `icons`.
+ *
  * @param {string} filePath
  * @param {string | undefined} exportName
- * @param {{hasIcons: boolean, readSource: (filename: string) => string, resolveModule: (specifier: string, fromFile: string) => string | Promise<string>, reservedNames?: string[], rawInput?: boolean}} options
+ * @param {{hasIcons: boolean, functionEntries?: boolean, readSource: (filename: string) => string, resolveModule: (specifier: string, fromFile: string) => string | Promise<string>, reservedNames?: string[], rawInput?: boolean}} options
  * @returns {Promise<IconImports | null>}
  */
 export async function resolveIconImports(
   filePath,
   exportName,
-  {hasIcons, readSource, resolveModule, reservedNames = [], rawInput = false},
+  {
+    hasIcons,
+    functionEntries = false,
+    readSource,
+    resolveModule,
+    reservedNames = [],
+    rawInput = false,
+  },
 ) {
   if (exportName === undefined) {
     if (!hasIcons) return null;
@@ -391,11 +406,16 @@ export async function resolveIconImports(
 
   /** @param {RegistryReference} ref @returns {RegistryPlan} */
   function packageTheme(ref) {
-    return {
-      kind: 'registry',
-      ref: {...ref, members: [...ref.members, 'icons']},
-      preferredName: 'themeIcons',
-    };
+    // A theme's `icons` is node-valued; its function entries live in
+    // `__icons`. Read both only when the built theme needs its functions, so
+    // a theme without them keeps its existing output.
+    return functionEntries
+      ? {kind: 'registry', ref, preferredName: 'themeIcons', entries: true}
+      : {
+          kind: 'registry',
+          ref: {...ref, members: [...ref.members, 'icons']},
+          preferredName: 'themeIcons',
+        };
   }
 
   /** @param {any} module @param {string} name @param {boolean} [rejectOpaque] @returns {Promise<RegistryPlan | null>} */
@@ -513,7 +533,7 @@ export async function resolveIconImports(
         : propertyName(item.key);
       if (key === null)
         invalidRegistry(undefined, 'Computed theme keys cannot be resolved.');
-      if (!['icons', 'extends'].includes(key)) continue;
+      if (!['icons', '__icons', 'extends'].includes(key)) continue;
       if (
         !['ObjectProperty', 'Property'].includes(item.type) ||
         item.method ||
@@ -566,7 +586,9 @@ export async function resolveIconImports(
     }
     const config = await fields(module, node);
     const baseField = config.get('extends');
-    const iconField = config.get('icons');
+    // A built module keeps its function entries in `__icons` beside its
+    // node-valued `icons`; the entries are the registry to carry.
+    const iconField = config.get('__icons') ?? config.get('icons');
     const base = baseField
       ? await theme(baseField.module, baseField.node)
       : null;
@@ -655,10 +677,13 @@ export async function resolveIconImports(
         localName,
       });
     }
-    const expression = ref.members.reduce(
+    const target = ref.members.reduce(
       (result, member) => `${result}[${JSON.stringify(member)}]`,
       localName,
     );
+    const expression = value.entries
+      ? `{...${target}["icons"], ...${target}["__icons"]}`
+      : target;
     return {
       expression,
       preferredName:

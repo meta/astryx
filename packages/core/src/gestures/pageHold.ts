@@ -23,6 +23,7 @@
  * SYNC: When modified, update the gestures README ("Holding the page still").
  */
 
+import {subscribeInput} from '../utils/inputStream';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
@@ -47,10 +48,6 @@ export type PageScrollDecision = (
  */
 const PAGE_HOLD_SLOP = 5;
 
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
-const ACTIVE_CAPTURE = {capture: true, passive: false} as const;
-const CAPTURE = PASSIVE_CAPTURE;
-
 interface PageHolds {
   readonly decisions: Set<{readonly decide: PageScrollDecision}>;
   /** The one finger of the gesture the holds are judging. */
@@ -64,8 +61,10 @@ interface PageHolds {
   readonly onPointerDown: (event: PointerEvent) => void;
   readonly onTouchStart: (event: TouchEvent) => void;
   readonly onTouchMove: (event: TouchEvent) => void;
-  /** Whether its listeners are on: while held, and the pointer is coarse. */
-  isListening: boolean;
+  /** The input stream subscriptions while held and the pointer is coarse. */
+  unsubscribers: (() => void)[];
+  /** The pointerdown subscription until the hold's first touch or pen contact. */
+  stopPointerDown: (() => void) | null;
   stopWatchingPointer: (() => void) | null;
 }
 
@@ -79,7 +78,8 @@ function createHolds(doc: Document): PageHolds {
   const holds: PageHolds = {
     decisions: new Set(),
     touch: null,
-    isListening: false,
+    unsubscribers: [],
+    stopPointerDown: null,
     stopWatchingPointer: null,
     onPointerDown: event => {
       if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
@@ -87,7 +87,8 @@ function createHolds(doc: Document): PageHolds {
       }
       // The hold's first touch or pen contact reads the primary pointer and
       // follows it from then on.
-      doc.removeEventListener('pointerdown', holds.onPointerDown, CAPTURE);
+      holds.stopPointerDown?.();
+      holds.stopPointerDown = null;
       const view = doc.defaultView;
       holds.stopWatchingPointer = watchCoarsePointer(view, isCoarse =>
         listen(doc, holds, isCoarse),
@@ -179,16 +180,21 @@ function createHolds(doc: Document): PageHolds {
  * primary pointer is coarse (`spec:AST-094` FR19, FR24).
  */
 function listen(doc: Document, holds: PageHolds, on: boolean): void {
-  if (on === holds.isListening) {
+  const view = doc.defaultView;
+  if (view == null || on === holds.unsubscribers.length > 0) {
     return;
   }
-  holds.isListening = on;
   if (on) {
-    doc.addEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
-    doc.addEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+    // The window's capture phase, through the shared input stream, as the
+    // host listens; only the touchmove that cancels is non-passive.
+    holds.unsubscribers = [
+      subscribeInput(view, 'touchstart', holds.onTouchStart),
+      subscribeInput(view, 'touchmove', holds.onTouchMove, {cancels: true}),
+    ];
   } else {
-    doc.removeEventListener('touchstart', holds.onTouchStart, PASSIVE_CAPTURE);
-    doc.removeEventListener('touchmove', holds.onTouchMove, ACTIVE_CAPTURE);
+    for (const unsubscribe of holds.unsubscribers.splice(0)) {
+      unsubscribe();
+    }
     holds.touch = null;
   }
 }
@@ -197,7 +203,7 @@ function listen(doc: Document, holds: PageHolds, on: boolean): void {
  * Hold the page of `doc` still under a finger until the returned release runs
  * (a scroll lock under a modal presentation): `holdPageScroll(document,
  * decide)`. Never creates a gesture host. Until its first touch or pen
- * contact it registers only a passive `pointerdown` and asks nothing; where
+ * contact it subscribes only to `pointerdown` and asks nothing; where
  * the primary pointer is fine it registers no touch listener, following the
  * pointer while held.
  * Proposed; pending owner review.
@@ -214,8 +220,13 @@ export function holdPageScroll(
   const owned = holds;
   const hold = {decide};
   owned.decisions.add(hold);
-  if (owned.decisions.size === 1) {
-    doc.addEventListener('pointerdown', owned.onPointerDown, CAPTURE);
+  const view = doc.defaultView;
+  if (owned.decisions.size === 1 && view != null) {
+    owned.stopPointerDown = subscribeInput(
+      view,
+      'pointerdown',
+      owned.onPointerDown,
+    );
   }
   let isHeld = true;
   return () => {
@@ -225,7 +236,8 @@ export function holdPageScroll(
     isHeld = false;
     owned.decisions.delete(hold);
     if (owned.decisions.size === 0) {
-      doc.removeEventListener('pointerdown', owned.onPointerDown, CAPTURE);
+      owned.stopPointerDown?.();
+      owned.stopPointerDown = null;
       owned.stopWatchingPointer?.();
       owned.stopWatchingPointer = null;
       listen(doc, owned, false);

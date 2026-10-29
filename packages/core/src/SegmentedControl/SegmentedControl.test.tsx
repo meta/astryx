@@ -849,3 +849,49 @@ describe('pressed state', () => {
     );
   });
 });
+
+describe("SegmentedControl keeps a caller's aria-describedby", () => {
+  it('describes the radiogroup by the caller ids', () => {
+    render(
+      <>
+        <span id="caller-help">Applies to every board</span>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          aria-describedby="caller-help">
+          <SegmentedControlItem value="grid" label="Grid" />
+        </SegmentedControl>
+      </>,
+    );
+    expect(screen.getByRole('radiogroup')).toHaveAccessibleDescription(
+      'Applies to every board',
+    );
+  });
+
+  it('describes the disabled radiogroup by the caller ids and then the reason', () => {
+    render(
+      <>
+        <span id="caller-help">Applies to every board</span>
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          isDisabled
+          disabledMessage="Choose a project to switch views"
+          aria-describedby="caller-help">
+          <SegmentedControlItem value="grid" label="Grid" />
+        </SegmentedControl>
+      </>,
+    );
+    const ids = screen
+      .getByRole('radiogroup')
+      .getAttribute('aria-describedby')
+      ?.split(' ');
+    expect(ids).toHaveLength(2);
+    expect(ids?.[0]).toBe('caller-help');
+    expect(document.getElementById(ids?.[1] ?? '')).toHaveTextContent(
+      'Choose a project to switch views',
+    );
+  });
+});

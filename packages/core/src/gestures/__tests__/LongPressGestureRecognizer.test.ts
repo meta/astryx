@@ -11,7 +11,7 @@ import {describe, expect, it} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import type {SelectionLock} from '../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
-import {lockSelection} from '../selectionLock';
+import {lockSelection} from '../../utils/selectionLock';
 import {createHarness} from './harness';
 
 describe('LongPressGestureRecognizer', () => {

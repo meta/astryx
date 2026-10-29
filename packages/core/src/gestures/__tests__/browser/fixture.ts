@@ -15,7 +15,7 @@ import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {lockSelection} from '../../../utils/selectionLock';
 import {PinchGestureRecognizer} from '../../PinchGestureRecognizer';
 import {PressTracker} from '../../PressTracker';
 import {holdPageScroll} from '../../pageHold';
