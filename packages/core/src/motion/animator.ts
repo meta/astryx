@@ -81,7 +81,9 @@
  * motion skipped into its curve; the call's first read of that start (its
  * `ready`, once the task has ended, or the first frame after it) moves the
  * start to that read, so WebKit delays the motion as Chromium's commit does
- * (startAfterBlock).
+ * (startAfterBlock). Only a block in the call's own task does: a read that
+ * other tasks delay keeps the browser's start, so a sequence chained on a
+ * call's end (a Reduce Motion cross-fade's second half) keeps its clock.
  *
  * Promotion: Mobile Safari runs an animation whose start time is set from
  * script on its compositor at its first commit only if the element (or the
@@ -503,6 +505,11 @@ interface StartGroup {
    * browser's, whatever it says (startAfterBlock).
    */
   framed?: boolean;
+  /**
+   * When the call's task ended, at its first microtask: only a block in that
+   * task, between the call and here, moves its start (startAfterBlock).
+   */
+  taskEnded?: number;
   /** A later call in the same task that took over its curves. */
   adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
@@ -1943,6 +1950,7 @@ export function createAnimator(
     group.fresh = true;
     queueMicrotask(() => {
       group.fresh = false;
+      group.taskEnded = now();
     });
     for (const animation of group.animations) {
       // A cancel before the first frame rejects each one's ready promise.
@@ -2098,7 +2106,9 @@ export function createAnimator(
    * after the block would show it skipped into its curve. A start the browser
    * put by the call and more than LATE_START_MS before the call's first read
    * (its `ready`, once the task has ended, or the first frame after it) moves
-   * to that read, with every animation of the call.
+   * to that read, with every animation of the call, when the call's own task
+   * ran that long past the call: a read delayed by other tasks keeps the
+   * browser's start.
    */
   const startAfterBlock = (group: StartGroup, start: number): number => {
     const timeline =
@@ -2111,6 +2121,15 @@ export function createAnimator(
       group.framed === true ||
       start > group.provisional + LATE_START_MS
     ) {
+      return start;
+    }
+    // Only a block in the call's own task: under load from other tasks the
+    // first read can come late with nothing in the call's task delaying it,
+    // and moving the start there would make whatever chains on its end
+    // (a cross-fade's second half) run that much late.
+    // A read in the call's first microtasks comes after its task ended too.
+    const taskEnded = group.taskEnded ?? now();
+    if (taskEnded - group.provisional <= LATE_START_MS) {
       return start;
     }
     // Read once the call's task has ended (its `ready`) or in the first
