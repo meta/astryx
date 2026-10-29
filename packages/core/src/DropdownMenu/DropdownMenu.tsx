@@ -79,6 +79,7 @@ import {moveRegionsTab} from './menuRegionStops';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useMenuDrillIn} from './useMenuDrillIn';
 import {resolveMenuWidth} from './menuWidth';
+import {menuTouchActionStyles} from './menuTouchAction.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   useAdaptivePresentation,
@@ -213,18 +214,6 @@ const styles = stylex.create({
   region: {
     flexShrink: 0,
     padding: spacingVars['--spacing-1'],
-  },
-  // Scroll ownership by the browser's own signal. A menu whose rows fit keeps
-  // every one-finger move: a slide over its rows stays a slide. One that
-  // scrolls lets the browser pan it vertically and cancel the press when it
-  // does. Both leave a two-finger pinch to the browser, so the page stays
-  // zoomable over an open menu; `pinch-zoom` admits no one-finger pan.
-  touchPinchZoom: {
-    touchAction: 'pinch-zoom',
-  },
-  touchPanYPinchZoom: {
-    touchAction: 'pan-y pinch-zoom',
-    overscrollBehavior: 'contain',
   },
   // The menu's lower block cap rides on the layer box too, so the layer's
   // flip decision sees the same height the menu paints.
@@ -1715,7 +1704,9 @@ function DropdownMenuPopover({
                 styles.dropdown,
                 resolvedMaxHeight != null &&
                   dynamicStyles.menuMaxHeight(resolvedMaxHeight),
-                hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom,
+                hasOverflow
+                  ? menuTouchActionStyles.scrolls
+                  : menuTouchActionStyles.fits,
                 hasOverflow && styles.scrollable,
                 hasRegions && styles.menuInFrame,
                 // Between a header and a footer the menu is a Tab stop, so

@@ -649,6 +649,7 @@ export class GestureArena {
       return;
     }
     internals(recognizer).pending = null;
+    // apply() gives back any claim it held (releaseClaim), waiting or not.
     this.apply(recognizer, 'failed');
     this.reviewPending();
   }

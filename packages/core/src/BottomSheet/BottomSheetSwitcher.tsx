@@ -90,7 +90,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
-import {useScrollLock} from '../hooks';
+import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusTrapEscapeCompatibilitySignal} from '../hooks/useFocusTrap';
 import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';

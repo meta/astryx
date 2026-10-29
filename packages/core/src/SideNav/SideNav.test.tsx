@@ -26,6 +26,9 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {Button} from '../Button';
 import {SideNav} from './SideNav';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
+import {NavHeadingMenu, NavHeadingMenuItem} from '../NavMenu';
 import {SideNavCollapseButton} from './SideNavCollapseButton';
 import {SideNavHeading} from './SideNavHeading';
 import {SideNavItem} from './SideNavItem';
@@ -424,6 +427,138 @@ describe('SideNavHeading', () => {
         <div role="menuitem">Beta</div>
       </>
     );
+
+    it('leaves a press on caller content that is not an item to that content: a button click and a link click run (interaction-modality INV4)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      const onButton = vi.fn();
+      const onLink = vi.fn((event: React.MouseEvent) => event.preventDefault());
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <>
+              <button type="button" onClick={onButton}>
+                Switch account
+              </button>
+              <a href="#docs" onClick={onLink}>
+                Docs
+              </a>
+            </>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      for (const pointer of [
+        {pointerType: 'mouse', pointerId: 1, button: 0},
+        {pointerType: 'touch', pointerId: 2},
+      ]) {
+        onButton.mockClear();
+        onLink.mockClear();
+        const button = screen.getByRole('button', {
+          name: 'Switch account',
+          hidden: true,
+        });
+        fireEvent.pointerDown(button, pointer);
+        fireEvent.pointerUp(button, pointer);
+        // A pointer's click reports detail 1 (a keyboard's reports 0).
+        fireEvent.click(button, {detail: 1});
+        expect(onButton).toHaveBeenCalledTimes(1);
+        const link = screen.getByRole('link', {name: 'Docs', hidden: true});
+        fireEvent.pointerDown(link, pointer);
+        fireEvent.pointerUp(link, pointer);
+        fireEvent.click(link, {detail: 1});
+        expect(onLink).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its menu to the browser', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      expectNativeLinkClicks(
+        screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
+      );
+    });
+
+    it('closes when a mouse pressed on a NavHeadingMenu item is released outside the menu (useMenuPress FR3)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <>
+          <SideNavHeading
+            heading="My App"
+            menu={
+              <NavHeadingMenu>
+                <NavHeadingMenuItem label="Alpha" onClick={() => {}} />
+                <NavHeadingMenuItem label="Beta" onClick={() => {}} />
+              </NavHeadingMenu>
+            }
+          />
+          <button type="button">Outside</button>
+        </>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      const mouse = {pointerType: 'mouse', pointerId: 3, button: 0};
+      const outside = screen.getByRole('button', {name: 'Outside'});
+      fireEvent.pointerDown(
+        screen.getByRole('menuitem', {name: 'Alpha', hidden: true}),
+        mouse,
+      );
+      fireEvent.pointerMove(outside, mouse);
+      fireEvent.pointerUp(outside, mouse);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('acts on the item a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      const onAlpha = vi.fn();
+      const onBeta = vi.fn();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <>
+              <div role="menuitem" tabIndex={-1} onClick={onAlpha}>
+                Alpha
+              </div>
+              <div role="menuitem" tabIndex={-1} onClick={onBeta}>
+                Beta
+              </div>
+            </>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      for (const pointer of [
+        {pointerType: 'touch', pointerId: 1},
+        {pointerType: 'mouse', pointerId: 2, button: 0},
+      ]) {
+        onAlpha.mockClear();
+        onBeta.mockClear();
+        fireEvent.pointerDown(item('Alpha'), pointer);
+        fireEvent.pointerMove(item('Beta'), pointer);
+        fireEvent.pointerUp(item('Beta'), pointer);
+        expect(onBeta).toHaveBeenCalledTimes(1);
+        expect(onAlpha).not.toHaveBeenCalled();
+      }
+    });
 
     it('does not wrap the heading menu popup in a modal dialog', async () => {
       const user = userEvent.setup();

@@ -2,13 +2,11 @@
 
 /**
  * @file hapticSwitch.ts
- * @input Nothing
- * @output Exports HAPTIC_SWITCH_ATTRIBUTE
- * @position Shared by haptics.ts, which marks its hidden switch with it, and
- *   the gesture host, whose click swallower skips that switch, so the host
- *   never imports the haptics module (a component that plays no haptic pays
- *   nothing for it)
+ * @input utils/hapticSwitch.ts
+ * @output Re-exports HAPTIC_SWITCH_ATTRIBUTE
+ * @position Kept for importers written before the attribute moved to
+ *   utils/hapticSwitch.ts, where Core's own modules read it
+ * @deprecated Import HAPTIC_SWITCH_ATTRIBUTE from utils/hapticSwitch.ts.
  */
 
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+export {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';

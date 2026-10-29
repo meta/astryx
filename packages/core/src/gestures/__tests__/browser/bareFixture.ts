@@ -15,7 +15,7 @@ import {getGestureHost} from '../../GestureHost';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../../ScreenEdgePanGestureRecognizer';
-import {lockSelection} from '../../selectionLock';
+import {lockSelection} from '../../../utils/selectionLock';
 import {TapGestureRecognizer} from '../../TapGestureRecognizer';
 
 declare global {
