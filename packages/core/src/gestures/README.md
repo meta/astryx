@@ -396,14 +396,23 @@ shadow-tree scroller scrolls with it, as the hit path does).
 
 The host listens through `utils/inputStream.ts`, which it shares with the
 press feedback controller: one native listener per event type, on the
-window's capture phase, fanned out to every subscriber in order. Window
-capture is the earliest point a page can intercept input, so an app's
-capture-phase `stopPropagation` at the document starves neither, as UIKit's
-recognizers see touches before views do. A type's listener is passive
-unless a subscriber cancels it: the host cancels `touchend`, `click` and
-`contextmenu` there, never a `touchstart` or a `touchmove` (a blocking
-`touchmove` sits on a claiming element, or on the window only while a page
-hold is held), so a page of pressables blocks no scroll.
+window's capture phase, fanned out to every subscriber in order. It runs
+ahead of any document listener, so an app's window-capture
+`stopPropagation`, or a document-capture `stopImmediatePropagation`
+registered before core, no longer hides a touch from either, as UIKit's
+recognizers see touches before views do. A recognizer that must claim
+mid-gesture still needs the touch to reach its element, where its blocking
+`touchmove` sits, below such a stop. The stream stays ahead of an app's own
+window-capture listener only until a type's listener is re-added (a
+passivity switch, or a subscription after its last subscriber left), which
+appends it after the app's. A type's listener is passive unless a
+subscriber cancels it: the host cancels `touchend`, `click` and
+`contextmenu` there while a claiming participant is attached, never a
+`touchstart` or a `touchmove`. A blocking `touchmove` sits on a claiming
+element and on a claimed touch's target, on the document while an element a
+claiming recognizer lives in is moving (Touches on moving elements), or on
+the window only while a page hold is held, so a page of pressables blocks
+no scroll.
 
 ### Holding the page still
 
