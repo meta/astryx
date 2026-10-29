@@ -81,9 +81,9 @@
  *   are off only where the hold does something (`spec:AST-094` FR41): on the
  *   elements of recognizers that bring a `selectionLock`, and on a non-text
  *   input under the finger inside them (WebKit's own style makes every
- *   input selectable); restored when the contact ends. Only where the
- *   primary pointer is coarse: a mouse never takes this lock, nor a finger
- *   or a pen where the primary pointer is fine.
+ *   input selectable); restored when the contact ends. A finger or a pen
+ *   takes it under any primary pointer; a mouse never does (`spec:AST-017`
+ *   FR59).
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch, a rotation) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a

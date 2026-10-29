@@ -2596,12 +2596,16 @@ describe('GestureHost', () => {
     expect(slider.style.getPropertyValue('user-select')).toBe('');
   });
 
-  it("keeps selection for every contact where the primary pointer is fine: a touchscreen laptop's finger, a desktop pen and a mouse (spec:AST-094 FR19, spec:AST-017 FR59)", () => {
+  it("locks for a finger and a pen where the primary pointer is fine, a touchscreen laptop's finger and a desktop pen, and never for a mouse (spec:AST-094 FR41, FR43; spec:AST-017 FR59)", () => {
+    detachers.push(asIosWebKit());
     detachers.push(pointerQuery(false).restore);
-    const {row, slider} = mount('<div id="row"></div><div id="slider"></div>');
+    const {slider} = mount('<div id="slider"></div>');
+    const laptop = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
     detachers.push(
-      host.attachConsumer(row, new RecordingConsumer()),
-      host.attach(
+      laptop.attach(
         slider,
         new PanGestureRecognizer({
           direction: 'horizontal',
@@ -2610,24 +2614,45 @@ describe('GestureHost', () => {
       ),
     );
     const at = {x: 5, y: 5};
-    for (const [time, pointerType] of [
-      [0, 'mouse'],
-      [100, 'pen'],
-      [200, 'touch'],
-    ] as const) {
-      pointer('pointerdown', row, {
-        pointerType,
-        ...at,
-        buttons: 1,
-        time,
-      });
-      expect(row.style.getPropertyValue('user-select')).toBe('');
-      pointer('pointerup', row, {pointerType, ...at, time: time + 50});
-    }
-    const finger = {id: 1, ...at};
-    touch('touchstart', slider, [finger], [finger], 300);
+    // A mouse keeps its released behavior: no lock.
+    pointer('pointerdown', slider, {
+      pointerType: 'mouse',
+      ...at,
+      buttons: 1,
+      time: 0,
+    });
     expect(slider.style.getPropertyValue('user-select')).toBe('');
-    touch('touchend', slider, [finger], [], 350);
+    pointer('pointerup', slider, {pointerType: 'mouse', ...at, time: 50});
+    // A pen's hold acts as a finger's.
+    pointer('pointerdown', slider, {
+      pointerType: 'pen',
+      ...at,
+      buttons: 1,
+      time: 100,
+    });
+    expect(slider.style.getPropertyValue('user-select')).toBe('none');
+    pointer('pointerup', slider, {pointerType: 'pen', ...at, time: 150});
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
+    // A touchscreen laptop's finger: its pointerdown arms the press, then
+    // its touchstart takes the lock.
+    pointer('pointerdown', slider, {
+      id: 7,
+      pointerType: 'touch',
+      ...at,
+      buttons: 1,
+      time: 200,
+    });
+    const finger = {id: 1, ...at};
+    touch('touchstart', slider, [finger], [finger], 200);
+    expect(slider.style.getPropertyValue('user-select')).toBe('none');
+    pointer('pointerup', slider, {
+      id: 7,
+      pointerType: 'touch',
+      ...at,
+      time: 250,
+    });
+    touch('touchend', slider, [finger], [], 250);
+    expect(slider.style.getPropertyValue('user-select')).toBe('');
   });
 
   it('locks a checkbox under the finger inside a locked element, which WebKit makes selectable, but never a text field', () => {
