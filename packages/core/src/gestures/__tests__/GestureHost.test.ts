@@ -4030,6 +4030,45 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     }
   });
 
+  it("keeps the page's selection when a press claims at its own pointerdown, before any movement: a plain click on an action group's button leaves it for the group's Copy, while the hold still refuses a new one (FR41)", async () => {
+    const {text, group, copy} = mount(
+      '<p id="text">Text the page selected</p><div id="group"><button id="copy">Copy</button></div>',
+    );
+    const fine = fineHost();
+    // The action-group adapter's recognizer: a long press with no minimum
+    // duration and no movement limit, which claims at the press's pointerdown.
+    const press = new LongPressGestureRecognizer({
+      minimumPressDuration: 0,
+      allowableMovement: Number.POSITIVE_INFINITY,
+    });
+    detachers.push(fine.attach(group, press, {actionGroup: true}));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      selection.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      selection.addRange(range);
+      time += 1000;
+      pointer('pointerdown', copy, {
+        pointerType,
+        x: 10,
+        y: 10,
+        buttons: 1,
+        time,
+      });
+      expect(press.state).toBe('began');
+      expect(selection.toString()).toBe('Text the page selected');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      copy.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', copy, {pointerType, x: 10, y: 10, time: time + 80});
+      await Promise.resolve();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(selection.toString()).toBe('Text the page selected');
+    }
+  });
+
   it('holds selection off document-wide while a mouse pan claims, as WebKit extends a drag selection past the pan: a selection begun elsewhere goes, until the press is over', async () => {
     const {box, outside} = mount(
       '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
