@@ -19,11 +19,7 @@ import {RotationGestureRecognizer} from '../RotationGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
 import {SwipeGestureRecognizer} from '../SwipeGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
-import {
-  deriveTouchAction,
-  gestureHostStyle,
-  holdSelectionStyle,
-} from '../touchAction';
+import {deriveTouchAction, gestureHostStyle} from '../touchAction';
 import {HoverGestureRecognizer} from '../HoverGestureRecognizer';
 
 describe('deriveTouchAction', () => {
@@ -108,20 +104,12 @@ describe('deriveTouchAction', () => {
     ).toBe('pan-y pinch-zoom');
   });
 
-  it('locks selection only for a held press, never on the element (spec:AST-094 FR41)', () => {
-    // The attached style is the touch-action alone: a mouse and a keyboard
-    // keep selecting (spec:AST-017 FR59).
+  it('attaches the touch-action alone, never a selection lock (spec:AST-094 FR41)', () => {
+    // A mouse and a keyboard keep selecting (spec:AST-017 FR59); the lock
+    // for one held press is the long press's own selectionLock.
     expect(gestureHostStyle([new LongPressGestureRecognizer()])).toEqual({
       touchAction: 'manipulation',
     });
-    // The host applies this for one press, from touch-down to the lift.
-    expect(holdSelectionStyle([new LongPressGestureRecognizer()])).toEqual({
-      WebkitTouchCallout: 'none',
-      WebkitUserSelect: 'none',
-      userSelect: 'none',
-    });
-    // A hold that does nothing selects natively.
-    expect(holdSelectionStyle([new TapGestureRecognizer()])).toBeNull();
   });
 });
 

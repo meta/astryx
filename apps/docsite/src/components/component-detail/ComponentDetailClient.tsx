@@ -2,6 +2,13 @@
 
 'use client';
 
+/**
+ * @file Composes a generated component's overview, examples, and detail tabs.
+ * @input Component metadata, package metadata, and its showcase block.
+ * @output The interactive component detail article with stable example targets.
+ * @position Client content for /components/[name].
+ */
+
 import * as stylex from '@stylexjs/stylex';
 import {Suspense} from 'react';
 import {useSearchParams, useRouter, usePathname} from 'next/navigation';
@@ -15,6 +22,7 @@ import {typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {CodeExampleBlock} from '../CodeExampleBlock';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {ShowcasePreview} from './ShowcasePreview';
+import {ExampleAnchor} from './ExampleAnchor';
 import {ComponentPreviewTheme} from './ComponentPreviewTheme';
 import {Anatomy} from './Anatomy';
 import {BestPractices} from './BestPractices';
@@ -41,6 +49,7 @@ import {
   shadcnRegistryOrigin,
 } from '../../generated/shadcnRegistry';
 import {trackNavigate} from '../../lib/analytics';
+import {exampleAnchorId} from '../../lib/exampleAnchor.mjs';
 import {
   shadcnComponentItemPath,
   shadcnInstallCommand,
@@ -96,7 +105,7 @@ function OverviewContent({
   comp,
   pkg,
   pkgVersion,
-  showcase: _showcase,
+  showcase,
   hasShowcase,
 }: ComponentDetailClientProps & {hasShowcase: boolean}) {
   const isHook = comp.params != null;
@@ -106,11 +115,14 @@ function OverviewContent({
   return (
     <VStack gap={8} xstyle={styles.overviewProse}>
       {hasShowcase && (
-        <ComponentPreviewTheme>
-          <Card variant="muted" padding={0}>
-            <ShowcasePreview name={comp.name} />
-          </Card>
-        </ComponentPreviewTheme>
+        <ExampleAnchor
+          id={showcase ? exampleAnchorId(showcase.dirName) : undefined}>
+          <ComponentPreviewTheme>
+            <Card variant="muted" padding={0}>
+              <ShowcasePreview name={comp.name} />
+            </Card>
+          </ComponentPreviewTheme>
+        </ExampleAnchor>
       )}
 
       {comp.usage && (

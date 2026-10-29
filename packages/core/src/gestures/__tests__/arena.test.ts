@@ -24,6 +24,7 @@ import {
 import type {GestureEventContext, GestureTouch} from '../types';
 import {GestureArena, type GestureClock} from '../GestureArena';
 import {createHarness, RecordingConsumer} from './harness';
+import {internals} from '../recognizerInternals';
 
 type Step = (recognizer: Scripted, event: GestureEventContext) => void;
 
@@ -73,6 +74,11 @@ class Scripted extends GestureRecognizer {
   fail(): void {
     this.isWaiting = false;
     this.setState('failed');
+  }
+
+  /** Cancel itself, as a recognizer that gives up mid-gesture does. */
+  cancelSelf(): void {
+    this.setState('cancelled');
   }
 
   /** Recognize at `deadline` on the event clock, unless the touch lifts. */
@@ -171,7 +177,7 @@ describe('arena: who wins', () => {
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
     expect(single.state).toBe('possible');
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
     h.advance(400);
     expect(h.log).toEqual([
       'double:failed@400',
@@ -210,7 +216,7 @@ describe('arena: who wins', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
   });
 
   it('honors shouldBegin and shouldReceiveTouch', () => {
@@ -516,6 +522,36 @@ describe('arena: claims', () => {
     expect(h.arena.isClaimed(1)).toBe(false);
     first.up(80);
     second.up(80);
+  });
+
+  it('keeps a moving finger claimed until it lifts when its gesture cancels itself on that move, so the drag never turns into the page scroll midway (FR14)', () => {
+    const h = createHarness();
+    // A long press's shape: it begins while the finger rests, then cancels
+    // itself on the first move past its tolerance.
+    const press = new Scripted('press', {
+      began: (self, event) => self.recognizeAt(event.time + 500),
+      moved: (self, event) => {
+        const touch = event.allTouches[0];
+        if (
+          touch != null &&
+          Math.abs(touch.y - touch.startY) > 10 &&
+          isActive(self.state)
+        ) {
+          self.cancelSelf();
+        }
+      },
+    });
+    const finger = h.finger(1).down(0, 0, 0, {recognizers: [press]});
+    h.advance(600);
+    expect(press.state).toBe('began');
+    expect(h.arena.isClaimed(1)).toBe(true);
+    finger.move(0, -11, 616);
+    expect(press.state).toBe('cancelled');
+    expect(h.arena.isClaimed(1)).toBe(true);
+    finger.move(0, -60, 632);
+    expect(h.arena.isClaimed(1)).toBe(true);
+    finger.up(700);
+    expect(h.arena.isClaimed(1)).toBe(false);
   });
 });
 

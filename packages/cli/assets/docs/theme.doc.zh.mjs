@@ -26,6 +26,17 @@ export const docsZh = {
       ],
     },
     {
+      section: 'Icon sizes',
+      title: '图标尺寸',
+      content: [
+        {
+          type: 'prose',
+          text: "主题在样式表中设置每个 Icon 尺寸的大小：在 `components.icon['size:sm']`（或 `xsm`、`md`、`lg`）上设置 `width` 和 `height`，即可调整该尺寸的图标，语义图标名称和直接传给 `Icon` 的 SVG 组件都适用。请使用 `px` 或 `rem` 设置尺寸：语义图标会据此设置自身的字号，因此 `em` 值也会放大它的外框。主题未设置的尺寸在 16px 根字号下保持 12、16、20 或 24px（`xsm`、`sm`、`md`、`lg`），并随根字号缩放；`rem` 可保留这种缩放。四个尺寸名称是固定的。",
+        },
+        null,
+      ],
+    },
+    {
       section: 'Dark mode',
       title: '深色模式',
       content: [
