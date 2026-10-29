@@ -3748,6 +3748,64 @@ describe("inputMode 'pointer-events'", () => {
   });
 });
 
+describe('an action group across attachments (family:action-groups)', () => {
+  /** The element's live `pointerdown` listeners, counted as they come and go. */
+  function countPointerDowns(element: Element): () => number {
+    let count = 0;
+    const add = element.addEventListener.bind(element);
+    const remove = element.removeEventListener.bind(element);
+    element.addEventListener = ((type: string, ...rest: [never, never?]) => {
+      if (type === 'pointerdown') {
+        count += 1;
+      }
+      add(type, ...rest);
+    }) as typeof element.addEventListener;
+    element.removeEventListener = ((type: string, ...rest: [never, never?]) => {
+      if (type === 'pointerdown') {
+        count -= 1;
+      }
+      remove(type, ...rest);
+    }) as typeof element.removeEventListener;
+    return () => count;
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('keeps an element a group while any of its attachments asks, whatever the order, and only while one does', () => {
+    const fine = new GestureHost(document, {
+      clock: new ManualClock(),
+      isPrimaryPointerCoarse: () => false,
+    });
+    for (const order of ['group first', 'group last'] as const) {
+      document.body.innerHTML = '<div id="group"></div>';
+      const element = document.getElementById('group') as HTMLElement;
+      const pointerDowns = countPointerDowns(element);
+      const attachGroup = () =>
+        fine.attach(element, new TapGestureRecognizer({name: 'group'}), {
+          actionGroup: true,
+        });
+      const attachPlain = () =>
+        fine.attach(element, new TapGestureRecognizer({name: 'plain'}), {
+          actionGroup: false,
+        });
+      const [first, second] =
+        order === 'group first'
+          ? [attachGroup(), attachPlain()]
+          : [attachPlain(), attachGroup()];
+      const detachGroup = order === 'group first' ? first : second;
+      const detachPlain = order === 'group first' ? second : first;
+      // The attachment that asked keeps the element a group.
+      expect(pointerDowns()).toBe(1);
+      // Once it goes, the attachment that never asked takes no presses here.
+      detachGroup();
+      expect(pointerDowns()).toBe(0);
+      detachPlain();
+    }
+  });
+});
+
 describe('Touch Events from a browser that exposes no ontouchstart', () => {
   it('takes a finger once, from its pointer events, so a one-finger long press recognizes (touch emulation turned on after load)', () => {
     // Chromium fixes `ontouchstart` when the page is created; turning touch
