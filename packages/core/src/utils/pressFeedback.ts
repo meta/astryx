@@ -68,7 +68,7 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
 import {TOUCH_QUERY} from './touchPresentation';
-import {timing} from '../motion/uikit/timing';
+import {reducedMotionCrossFade} from '../motion/uikit/timing';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -178,7 +178,9 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
  * reduced motion by the Reduce Motion cross-fade's duration, as the
  * stylesheet caps its fade (`design:reduced-motion` DR2: a touch transition
  * finishes within it; `spec:AST-094` FR4: the cap is a role, never a
- * literal).
+ * literal). The fade's own export, so the controller ships that one value,
+ * not the rest of the timing table (`architecture:component-style-authoring`
+ * INV6).
  */
 function timerMs(
   kind: NonNullable<PressStep['timer']>,
@@ -192,7 +194,7 @@ function timerMs(
       '(prefers-reduced-motion: reduce)',
     ).matches ?? false;
   return reduced
-    ? Math.min(TIMER_MS.fade, timing.reducedMotionCrossFadeMs)
+    ? Math.min(TIMER_MS.fade, reducedMotionCrossFade.durationMs)
     : TIMER_MS.fade;
 }
 

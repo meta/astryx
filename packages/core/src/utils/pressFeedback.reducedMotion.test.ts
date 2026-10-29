@@ -3,13 +3,18 @@
 /**
  * @file pressFeedback.reducedMotion.test.ts
  * @input pressFeedback.ts, with the Reduce Motion cross-fade's duration
- *   (`timing.reducedMotionCrossFadeMs`, motion/uikit/timing.ts) stubbed
+ *   (`reducedMotionCrossFade.durationMs`, motion/uikit/timing.ts) stubbed;
+ *   esbuild
  * @output Proof that under reduced motion the release's clock is capped by
- *   the shared Reduce Motion duration, read from the timing table rather than
- *   a literal of its own (`spec:AST-094` FR4)
+ *   the shared Reduce Motion duration rather than a literal of its own
+ *   (`spec:AST-094` FR4), and that the controller ships that one value, not
+ *   the rest of the timing table (`architecture:component-style-authoring`
+ *   INV6)
  * @position Testing; validates pressFeedback.ts in jsdom
  */
 
+import {execFileSync} from 'node:child_process';
+import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PRESSABLE_ATTRIBUTE,
@@ -26,7 +31,10 @@ vi.mock('../motion/uikit/timing', async importOriginal => {
   const actual = await importOriginal<typeof TimingModule>();
   return {
     ...actual,
-    timing: {...actual.timing, reducedMotionCrossFadeMs: STUBBED_MS},
+    reducedMotionCrossFade: {
+      ...actual.reducedMotionCrossFade,
+      durationMs: STUBBED_MS,
+    },
   };
 });
 
@@ -68,7 +76,35 @@ afterEach(() => {
 });
 
 describe('the release under reduced motion', () => {
-  it('ends on the shared Reduce Motion duration, read from the timing table (spec:AST-094 FR4)', () => {
+  it('ships the Reduce Motion fade, not the rest of the timing table (architecture:component-style-authoring INV6)', () => {
+    // Bundled for a page, the controller reads one timing value; the table's
+    // other rows stay out. esbuild runs in its own process: it needs a
+    // native TextEncoder.
+    const script = [
+      "import {build} from 'esbuild';",
+      'const result = await build({',
+      `  entryPoints: ${JSON.stringify([path.resolve(__dirname, 'pressFeedback.ts')])},`,
+      "  bundle: true, write: false, format: 'esm', logLevel: 'silent',",
+      "  external: ['react', 'react-dom', '@stylexjs/stylex'],",
+      '});',
+      'process.stdout.write(result.outputFiles.map(file => file.text).join("\\n"));',
+    ].join('\n');
+    const bundle = execFileSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {cwd: path.resolve(__dirname, '../../../..'), encoding: 'utf8'},
+    );
+    expect(bundle).toContain('durationMs');
+    for (const row of [
+      'stateChangeMs',
+      'buttonReleaseMs',
+      'navigationBarHideShowMs',
+    ]) {
+      expect(bundle).not.toContain(row);
+    }
+  });
+
+  it('ends on the shared Reduce Motion duration (spec:AST-094 FR4)', () => {
     expect(PRESS_FADE_MS).toBeGreaterThan(STUBBED_MS);
     press(row, 'pointerdown');
     vi.advanceTimersByTime(PRESS_ONSET_MS);
