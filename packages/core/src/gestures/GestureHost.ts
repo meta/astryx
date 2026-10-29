@@ -2939,7 +2939,9 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
 /**
  * iOS WebKit, by the one property only it implements (the engine check of
  * utils/touchPresentation.ts, which this module cannot import: it brings
- * React).
+ * React). It gates one behaviour, presented hit testing, an engine
+ * workaround (`spec:AST-013` FR6) with its review condition and regression
+ * fixture in motion/presentation.ts.
  */
 function isIosWebKit(
   view: (Window & {CSS?: Partial<typeof CSS>}) | null,

@@ -583,8 +583,8 @@ iOS WebKit hit-tests an element that a compositor animation moves where
 the animation started: it keeps the transform it resolved when the
 animation went to the compositor, so event targets, `elementFromPoint` and
 `getBoundingClientRect` stay there for the whole curve, though the inline
-style holds the end and the computed style is live (iOS 26.2, measured;
-Chromium and Linux WebKit hit what is drawn). A finger on a settling sheet
+style holds the value the curve starts from and the computed style is live
+(iOS 26.2, measured; Chromium and Linux WebKit hit what is drawn). A finger on a settling sheet
 lands on whatever sat under the sheet's start (an upward release can hit
 the scrim and close the sheet). UIKit keeps an interruptible animation
 hit-testable where it is drawn (UIViewPropertyAnimator).
@@ -606,6 +606,11 @@ moving, the document carries the blocking listener, and a scroll starting
 anywhere waits on the main thread only for that long. Not covered:
 scale and rotate (a zoom transition, a lifted preview is hit at its
 unscaled box) and CSS transitions or animations the animator did not start.
+
+This is an engine workaround (`spec:AST-013` FR6). Its review condition:
+re-measure on each iOS release, and remove the correction once iOS WebKit
+hit-tests a compositor-moved element where it is drawn. Its regression
+fixture is `__tests__/presentedHitTesting.test.ts`.
 
 ## Where the web differs from UIKit
 
