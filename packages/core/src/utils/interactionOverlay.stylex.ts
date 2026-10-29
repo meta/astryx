@@ -50,8 +50,9 @@
  *    first frame. Nothing transitions a custom property a composer never named.
  *  - `[data-astryx-press="fading"]` keeps the same paint and runs the release
  *    animation, strength 1 → 0 over {@link PRESS_RELEASE_DURATION} (UIKit's
- *    deselect crossfade; the controller removes the attribute when the same
- *    clock runs out, and by then the paint is gone). It fades to nothing, not
+ *    deselect crossfade; the controller removes the attribute when this
+ *    animation ends, however late a busy main thread let it start, so by then
+ *    the paint is gone). It fades to nothing, not
  *    to the hover strength: under a finger there is no hover to land on.
  *
  * WHY AN ANIMATION AND NOT A TRANSITION. Two reasons, both about composers.
@@ -108,8 +109,8 @@ export const pressVars = stylex.defineVars({
  *
  * `defineConsts`, so the one number is inlined here at build time and is the
  * controller's constant at run time (`PRESS_FADE_MS` in pressGesture.ts):
- * the release animation and the timer that removes the attribute after it
- * cannot drift apart.
+ * the release animation and the clock at which the controller checks for
+ * its end cannot drift apart.
  */
 export const pressConsts = stylex.defineConsts({
   /** How long the release takes, in ms. UIKit's deselect clock. */
@@ -118,6 +119,13 @@ export const pressConsts = stylex.defineConsts({
 
 /** The release's clock as CSS. */
 const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
+/**
+ * Under reduced motion the clock is capped at 200 ms
+ * (`design:reduced-motion` DR2: a touch transition is opacity only and
+ * finishes in 200 ms or less), so a longer table value never outlasts it;
+ * pressFeedback.ts caps its release clock the same way.
+ */
+const PRESS_RELEASE_DURATION_REDUCED = `min(${PRESS_RELEASE_DURATION}, 200ms)`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
@@ -205,7 +213,10 @@ const pressReleaseAnimation = {
   },
   animationDuration: {
     default: null,
-    '[data-astryx-press="fading"]': PRESS_RELEASE_DURATION,
+    '[data-astryx-press="fading"]': {
+      default: PRESS_RELEASE_DURATION,
+      '@media (prefers-reduced-motion: reduce)': PRESS_RELEASE_DURATION_REDUCED,
+    },
   },
   animationTimingFunction: {
     default: null,

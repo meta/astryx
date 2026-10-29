@@ -438,6 +438,153 @@ describe('the release', () => {
   });
 });
 
+/**
+ * A CSS animation as a browser reports it from `getAnimations()` (jsdom runs
+ * none): by default the release the stylesheet starts on the surface's
+ * `::before` at the `fading` write, still waiting for its first frame.
+ * `end()` finishes it; `cancel()` cancels it, as unmounting or restyling the
+ * surface does.
+ */
+function cssAnimation(
+  element: Element,
+  {
+    target = element,
+    playState = 'running',
+    endTime = PRESS_FADE_MS,
+  }: {target?: Element; playState?: string; endTime?: number} = {},
+) {
+  let end: () => void = () => undefined;
+  let cancel: () => void = () => undefined;
+  const finished = new Promise<void>((resolve, reject) => {
+    end = resolve;
+    cancel = () => reject(new DOMException('cancelled', 'AbortError'));
+  });
+  finished.catch(() => undefined);
+  return {
+    animation: {
+      animationName: 'release',
+      playState,
+      finished,
+      effect: {
+        target,
+        pseudoElement: '::before',
+        getComputedTiming: () => ({endTime}),
+      },
+    },
+    end: () => end(),
+    cancel: () => cancel(),
+  };
+}
+
+/** The animations a browser would report running on `element` and its pseudo-elements. */
+function animate(element: Element, animations: ReadonlyArray<object>): void {
+  Object.defineProperty(element, 'getAnimations', {
+    configurable: true,
+    value: () => animations,
+  });
+}
+
+/** Let the callbacks a finished or cancelled animation queued run. */
+async function settled(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+/** A finger's held press on the first row, lifted: the release is written. */
+function liftHeldPress(): void {
+  press(rows[0], 'pointerdown', 10, 10);
+  vi.advanceTimersByTime(PRESS_ONSET_MS);
+  press(rows[0], 'pointerup', 10, 10);
+  expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+}
+
+describe('the release ends with its animation, not its clock', () => {
+  it('keeps `fading` until the release animation ends, however late a busy main thread let its first frame come', async () => {
+    liftHeldPress();
+    // 150 ms of script held the main thread after the lift: the release
+    // started at the first frame after it, and is still running.
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for a release still waiting for its first frame when the clock ran out', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0], {playState: 'pending'});
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS * 3);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends when the release animation is cancelled: the surface was unmounted or restyled', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    release.cancel();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends on its clock where no release animation runs: an instant release, a surface without one, or an engine without Web Animations', async () => {
+    liftHeldPress();
+    animate(rows[0], []);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for no animation that is not a running release: a descendant’s, an endless one, or one already finished', async () => {
+    liftHeldPress();
+    const label = rows[0].firstElementChild as Element;
+    animate(rows[0], [
+      cssAnimation(rows[0], {target: label}).animation,
+      cssAnimation(rows[0], {endTime: Infinity}).animation,
+      cssAnimation(rows[0], {playState: 'finished'}).animation,
+    ]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a new press on the surface owns its paint: the old release ending later does not clear it', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    release.end();
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('another painter’s release also lasts until its animation ends', async () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    paintPress(control, 'fading', {releaseMs: 150});
+    const release = cssAnimation(control);
+    animate(control, [release.animation]);
+    vi.advanceTimersByTime(150);
+    await settled();
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+});
+
 describe('two touches in a row', () => {
   it('answers the second tap while the first is still fading', () => {
     press(rows[0], 'pointerdown', 10, 10);
