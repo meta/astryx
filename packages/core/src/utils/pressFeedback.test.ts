@@ -536,7 +536,7 @@ describe('the release ends with its animation, not its clock', () => {
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('ends on its clock where no release animation runs: reduced motion’s instant release, or no press layer', async () => {
+  it('ends on its clock where no release animation runs: an instant release, a surface without one, or an engine without Web Animations', async () => {
     liftHeldPress();
     animate(rows[0], []);
     vi.advanceTimersByTime(PRESS_FADE_MS);

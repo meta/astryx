@@ -190,12 +190,7 @@ export function durationToMs(value: string): number {
   if (capped != null) {
     return Math.min(durationToMs(capped[1]), durationToMs(capped[2]));
   }
-  // A theme motion role, `var(--motion-…, 200ms)`, reads as the table's
-  // value it falls back to.
-  const role = text.match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-  const match = (role == null ? text : role[1])
-    .trim()
-    .match(/^([\d.]+)(ms|s)$/);
+  const match = text.match(/^([\d.]+)(ms|s)$/);
   if (match == null) {
     return Number.NaN;
   }

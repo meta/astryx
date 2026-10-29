@@ -206,7 +206,11 @@ const TIMER_EVENT = {
 export type PressPaint = 'on' | 'held' | 'fading' | 'none';
 
 export interface PaintPressOptions {
-  /** How long `fading` stays before the attribute goes, ms. @default the press fade */
+  /**
+   * The release's clock, ms: when it runs out, the controller checks for the
+   * release animation, and `fading` stays until that animation ends (or goes
+   * then, where none runs). @default the press fade
+   */
   releaseMs?: number;
   /** The current values this write may replace. @default none, on, fading */
   onlyFrom?: ReadonlyArray<PressPaint>;
@@ -252,9 +256,9 @@ function releaseAnimationsOf(element: Element): Animation[] {
  * and cut the release short. The clock only looks: `clockMs` after the
  * write, a release animation still running, or still waiting for its first
  * frame, is waited for until it finishes or is cancelled (the surface was
- * unmounted or restyled); with none (reduced motion's instant release, a
- * surface without a press layer, an engine without Web Animations) the
- * release ends there. Returns a cancel.
+ * unmounted or restyled); with none (an instant release, a surface without
+ * a release animation, an engine without Web Animations) the release ends
+ * there. Returns a cancel.
  */
 function endAfterRelease(
   element: Element,

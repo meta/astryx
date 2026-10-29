@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A finger held on a DropdownMenu trigger may drift up to 13px on each axis and still open the menu where the primary pointer is coarse (phones and tablets), as AST-094 FR29 allows; it cancelled past 10px. Where the primary pointer is fine (a touchscreen laptop, a pen tablet), the trigger keeps its 10px. The trigger reads the pointer when its press starts, so no menu or row observes the pointer query.
+[fix] A finger held on a DropdownMenu trigger may drift up to 13px on each axis and still open the menu under every primary pointer, a phone's, a tablet's and a touchscreen laptop's alike, as AST-094 FR29 allows; it cancelled past 10px. No menu, row or trigger reads the pointer query.
 
 @vjeux
