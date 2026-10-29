@@ -16,7 +16,7 @@ verified_by:
     apps/storybook/stories/TabList.stories.tsx,
   ]
 modules: []
-families: [family:overlay-dismissal]
+families: [family:overlay-dismissal, family:action-groups]
 design_specs: [design:reduced-motion]
 architecture:
   [
@@ -117,6 +117,7 @@ No component-local concept beyond the consumer props.
 | FR4 | The menu is a `role="menu"` named by `label`, carrying `tab-menu-dropdown`, with a presentational heading repeating `label`, then one `role="menuitemradio"` per option with `aria-checked` for the selected value, an optional icon, and a check mark when selected.                                                                                                                                                                                                                                     | Current source and tests |
 | FR5 | Inside the menu one option is a tab stop, and ArrowUp, ArrowDown, Home, and End move it; ArrowLeft and ArrowRight are left to the strip; Enter, Space, or click on an option selects its value through the TabList and closes the menu; Escape and Tab close it. Closing returns focus to the trigger.                                                                                                                                                                                                    | Current source and tests |
 | FR6 | The trigger and options paint the shared focus outline.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Current source           |
+| FR7 | In the open menu, a press (finger, pen or mouse) that lands on an option and slides across the options picks the one it lifts on, once, through that option's own activation, with the highlight following the pointer; a lift outside acts on nothing, and a mouse released outside closes the menu. The menu adopts `module:DropdownMenu/useMenuPress` for this (`family:action-groups` FR1–FR5; `module:DropdownMenu/useMenuPress` DEC-7). Keyboard and assistive-technology behavior is unchanged.    | Current source and tests |
 
 ### Allowed variation
 
@@ -166,6 +167,7 @@ recorded.
 | FR1, FR3 | `TabList.test.tsx` TabMenu and host-attribute tests                | Closed, open                                      | Lost popup attributes fail.                  | `audit:TabMenu/accessibility` |
 | FR2, FR4 | `TabList.test.tsx` TabMenu label, heading, and menuitemradio tests | Selected and unselected                           | Wrong label or missing `aria-checked` fails. | `audit:TabMenu/behavior`      |
 | FR5      | `TabList.test.tsx` TabMenu keyboard navigation tests               | ArrowUp, ArrowDown, Home, End, Tab, Escape, Enter | Extra tab stops or a menu left open fails.   | `audit:TabMenu/accessibility` |
+| FR7      | `TabList.test.tsx` TabMenu suite (touch and mouse slides)          | Touch and mouse slides across options             | Removing the adoption fails the slide tests. | —                             |
 
 Read from source, with no focused test yet:
 

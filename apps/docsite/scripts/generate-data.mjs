@@ -17,6 +17,7 @@
  *   - templateRegistry.ts  — page templates including playground source
  *   - templateMetadataRegistry.ts — lightweight page-template metadata
  *   - docsRegistry.ts      — long-form documentation topics from CLI docs/
+ *   - searchLinks.json     — search destinations and document presentation metadata
  */
 
 import * as fs from 'node:fs';
@@ -62,6 +63,7 @@ import {
 import {expandWorkspaceDirs} from '../../../scripts/lib/workspace-globs.mjs';
 import {projectThemingDoc} from './lib/theming-doc.mjs';
 import {searchLinkTables} from '../src/lib/searchLinks.mjs';
+import {exampleAnchorId} from '../src/lib/exampleAnchor.mjs';
 import {collectBlogImages} from './lib/blog-images.mjs';
 import {
   buildTypeDefinitionIndex,
@@ -2390,6 +2392,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: block.exampleFor,
           basename: base,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || '',
@@ -2405,6 +2408,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: target,
           basename,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || `Example using ${target}.`,
@@ -2425,7 +2429,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
       const exampleLines = orderExamplesByDoc(component, examples)
         .map(
           entry =>
-            `    {name: ${JSON.stringify(entry.name)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
+            `    {name: ${JSON.stringify(entry.name)}, anchorId: ${JSON.stringify(entry.anchorId)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
         )
         .join('\n');
       return `  '${component}': [\n${exampleLines}\n  ],`;
@@ -2437,6 +2441,7 @@ import type {ComponentType} from 'react';
 
 export interface ExampleEntry {
   name: string;
+  anchorId: string;
   description: string;
   registryItemPath: string | null;
   source: string;

@@ -52,8 +52,9 @@
  *    first frame. Nothing transitions a custom property a composer never named.
  *  - `[data-astryx-press="fading"]` keeps the same paint and runs the release
  *    animation, strength 1 → 0 over {@link PRESS_RELEASE_DURATION} (UIKit's
- *    deselect crossfade; the controller removes the attribute when the same
- *    clock runs out, and by then the paint is gone). It fades to nothing, not
+ *    deselect crossfade; the controller removes the attribute when this
+ *    animation ends, however late a busy main thread let it start, so by then
+ *    the paint is gone). It fades to nothing, not
  *    to the hover strength: under a finger there is no hover to land on.
  *
  * WHY AN ANIMATION AND NOT A TRANSITION. Two reasons, both about composers.
@@ -113,18 +114,15 @@ export const pressVars = stylex.defineVars({
  *
  * `defineConsts`, so the one number is inlined here at build time and is the
  * controller's constant at run time (`PRESS_FADE_MS` in pressGesture.ts):
- * the release animation and the timer that removes the attribute after it
- * cannot drift apart.
+ * the release animation and the clock at which the controller checks for
+ * its end cannot drift apart.
  */
 export const pressConsts = stylex.defineConsts({
-  /**
-   * How long a cell's release takes, in ms: UIKit's deselect clock
-   * (`list.highlight.releaseMs`), for a surface marked as a `cell`.
-   */
+  /** How long the release takes, in ms. UIKit's deselect clock. */
   releaseMs: 200,
 });
 
-/** The cell release's clock as CSS: the table's value. */
+/** The release's clock as CSS: the table's value. */
 const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
 /** The control release's clock as CSS: the table's value. */
 const CONTROL_RELEASE_DURATION = `${controlPressConsts.controlReleaseMs}ms`;
@@ -234,24 +232,17 @@ const pressReleaseAnimation = {
         'none',
     },
   },
-  // Under a coarse primary pointer the marker's value is the press's
-  // profile: a `cell` releases on the deselect clock, every other surface on
-  // a control's. With any other pointer every release keeps the deselect
-  // clock and curve (the desktop rule, `spec:AST-017` FR59/DEC-25: touch work leaves
-  // a fine pointer's behavior as it is).
+  // Under a coarse primary pointer a finger's release runs on a control's
+  // clock (a list row drops this animation for its own layer's, in
+  // rowPressLayer.ts). With any other pointer every release keeps the
+  // deselect clock and curve (the desktop rule, `spec:AST-017` FR59/DEC-25:
+  // touch work leaves a fine pointer's behavior as it is).
   animationDuration: {
     default: null,
     '[data-astryx-press="fading"]': {
       default: PRESS_RELEASE_DURATION,
       '@media (pointer: coarse)': {
         default: CONTROL_RELEASE_DURATION,
-        // The Reduce Motion arm sits inside the cell arm as well, so it
-        // outranks the cell's clock too.
-        '[data-astryx-pressable="cell"]': {
-          default: PRESS_RELEASE_DURATION,
-          '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-            reducedMotionFadeConsts.duration,
-        },
         // A mouse or Space press the controller paints on a touch-first
         // device keeps the fine pointer's clock (PRESS_INPUT_ATTRIBUTE).
         '[data-astryx-press-input]': {
@@ -270,11 +261,6 @@ const pressReleaseAnimation = {
       default: RELEASE_EASE,
       '@media (pointer: coarse)': {
         default: CONTROL_RELEASE_EASE,
-        '[data-astryx-pressable="cell"]': {
-          default: RELEASE_EASE,
-          '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-            reducedMotionFadeConsts.easing,
-        },
         '[data-astryx-press-input]': {
           default: RELEASE_EASE,
           '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':

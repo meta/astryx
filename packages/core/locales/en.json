@@ -391,6 +391,10 @@
     "defaultMessage": "Expand",
     "description": "Button label on a chip in the chat composer representing a long pasted text block; clicking reveals full content. \"Expand\" here means reveal more, not grow physically."
   },
+  "@astryx.chat.pastedText.label": {
+    "defaultMessage": "{lines, plural, =1 {{chars, plural, other {{chars} chars}}} other {{lines} lines, {chars, plural, other {{chars} chars}}}}",
+    "description": "Count label on a pasted-text chip and its hover preview in the chat composer. {lines} is the number of text lines and {chars} is the character count. The single-line branch omits the line count. Translators may reorder the counts and localize the abbreviated units."
+  },
   "@astryx.checkboxList.item.checkbox": {
     "defaultMessage": "Checkbox",
     "description": "Localized hidden text used internally when a rich visible label names the checkbox through aria-labelledby. It does not become the computed name; callers must provide aria-label when rich content has no text."
@@ -1287,6 +1291,18 @@
     "defaultMessage": "1 file selected: {fileName}",
     "description": "Live-region announcement when a single file is successfully selected."
   },
+  "@astryx.fileInput.fileSize.bytes": {
+    "defaultMessage": "{size, number, ::group-off} B",
+    "description": "File-size limit below 1024 bytes in FileInput validation feedback. {size} is a number of bytes. Localize the unit abbreviation; do not add digit grouping."
+  },
+  "@astryx.fileInput.fileSize.kilobytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} KB",
+    "description": "File-size limit from 1024 bytes up to one megabyte in FileInput validation feedback. {size} is bytes divided by 1024, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
+  "@astryx.fileInput.fileSize.megabytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} MB",
+    "description": "File-size limit of at least one megabyte in FileInput validation feedback. {size} is bytes divided by 1048576, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
   "@astryx.fileInput.filesSelected": {
     "defaultMessage": "{count} files selected",
     "description": "Live-region announcement when multiple files are successfully selected."
@@ -1306,6 +1322,70 @@
   "@astryx.fileInput.triggerWithFiles": {
     "defaultMessage": "{label}, {fileNames}",
     "description": "Accessible name for a FileInput trigger that has files attached, composing the field label with the selected filenames. Example: `Attachments, report.pdf, notes.txt`."
+  },
+  "@astryx.kbd.key.alt": {
+    "defaultMessage": "Alt",
+    "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.backspace": {
+    "defaultMessage": "Backspace",
+    "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.command": {
+    "defaultMessage": "Command",
+    "description": "Spoken name of the Command modifier key on Apple platforms in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.control": {
+    "defaultMessage": "Control",
+    "description": "Spoken name of the Control modifier key in a keyboard shortcut's accessible name. Also resolves the mod key on non-Apple platforms."
+  },
+  "@astryx.kbd.key.controlShort": {
+    "defaultMessage": "Ctrl",
+    "description": "Abbreviated visible label of the Control keycap used for mod on non-Apple platforms. Localize to the keyboard's conventional short label."
+  },
+  "@astryx.kbd.key.down": {
+    "defaultMessage": "Down arrow",
+    "description": "Spoken name of the down arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.enter": {
+    "defaultMessage": "Enter",
+    "description": "Spoken name of the Enter or Return key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.escape": {
+    "defaultMessage": "Escape",
+    "description": "Spoken name of the Escape key in a keyboard shortcut's accessible name. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.escapeShort": {
+    "defaultMessage": "Esc",
+    "description": "Abbreviated visible label of the Escape keycap. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.left": {
+    "defaultMessage": "Left arrow",
+    "description": "Spoken name of the left arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.plus": {
+    "defaultMessage": "Plus",
+    "description": "Spoken name of the literal plus key in a keyboard shortcut's accessible name, distinct from the separator between keys."
+  },
+  "@astryx.kbd.key.right": {
+    "defaultMessage": "Right arrow",
+    "description": "Spoken name of the right arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.shift": {
+    "defaultMessage": "Shift",
+    "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.tab": {
+    "defaultMessage": "Tab",
+    "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.up": {
+    "defaultMessage": "Up arrow",
+    "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.shortcut": {
+    "defaultMessage": "{shortcut} + {key}",
+    "description": "Combines spoken key names into one keyboard shortcut's accessible name. {shortcut} is the preceding keys and {key} is the next key's localized spoken name. Applied once for each key after the first; translators may change the separator or order."
   },
   "@astryx.keyboardHint.toNavigate": {
     "defaultMessage": "to navigate",

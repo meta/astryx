@@ -5,9 +5,7 @@
 /**
  * @file index.ts
  * @input Imports from List.tsx and ListItem.tsx
- * @output Exports List, ListItem components and their props/types. The
- *   selection hold (selectionHold.ts) is internal: no public API records it
- *   (`architecture:public-component-api` INV12)
+ * @output Exports List, ListItem components and their props/types
  * @position Package entry point for List
  *
  * SYNC: When modified, update /packages/core/src/List/List.doc.mjs
