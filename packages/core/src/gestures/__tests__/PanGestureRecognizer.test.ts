@@ -10,8 +10,7 @@
 import {describe, expect, it} from 'vitest';
 import {UIKIT_PAN, UIKIT_VELOCITY} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
-import {createHarness, scrollProbe} from './harness';
-import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
+import {createHarness} from './harness';
 
 /**
  * Swipes on a UIPickerView column (iOS 26.2 simulator, HID touches): [ms

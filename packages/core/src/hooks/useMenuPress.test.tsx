@@ -484,7 +484,7 @@ describe('useMenuPress — the trigger', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
-  it("a finger held on the trigger may drift 12 pt and still opens where the primary pointer is coarse; past FR29's 13 pt drift allowance it is a scroll, and where the primary pointer is fine the shared 10 px tolerance stays (spec:AST-094 FR29; useMenuPress FR9)", () => {
+  it("a finger held on the trigger may drift 12 pt and still opens under every primary pointer; past FR29's 13 pt drift allowance it is a scroll (spec:AST-094 FR29, FR43; useMenuPress FR9)", () => {
     vi.useFakeTimers();
     const original = window.matchMedia;
     const pointerIs = (coarse: boolean) => {
@@ -519,12 +519,11 @@ describe('useMenuPress — the trigger', () => {
       return opened;
     };
     try {
-      pointerIs(true);
-      expect(hold(12)).toBe(true);
-      expect(hold(14)).toBe(false);
-      pointerIs(false);
-      expect(hold(9)).toBe(true);
-      expect(hold(12)).toBe(false);
+      for (const coarse of [true, false]) {
+        pointerIs(coarse);
+        expect(hold(12)).toBe(true);
+        expect(hold(14)).toBe(false);
+      }
     } finally {
       Object.defineProperty(window, 'matchMedia', {
         configurable: true,
@@ -534,7 +533,7 @@ describe('useMenuPress — the trigger', () => {
     }
   });
 
-  it("keeps the released tolerance where the primary pointer is fine, 10 px on each axis: a finger's (8, 8) settle on the trigger still opens, an 11 px drift does not (useMenuPress FR9)", () => {
+  it("measures FR29's drift allowance on each axis where the primary pointer is fine, as on a phone: a finger's (12, 12) settle on the trigger still opens, a 14 px drift does not (useMenuPress FR9)", () => {
     vi.useFakeTimers();
     const original = window.matchMedia;
     Object.defineProperty(window, 'matchMedia', {
@@ -567,8 +566,8 @@ describe('useMenuPress — the trigger', () => {
       return opened;
     };
     try {
-      expect(hold(8, 8)).toBe(true);
-      expect(hold(0, 11)).toBe(false);
+      expect(hold(12, 12)).toBe(true);
+      expect(hold(0, 14)).toBe(false);
     } finally {
       Object.defineProperty(window, 'matchMedia', {
         configurable: true,
@@ -578,13 +577,16 @@ describe('useMenuPress — the trigger', () => {
     }
   });
 
-  it('observes no pointer query from a menu or its rows: the trigger reads (pointer: coarse) when its press starts (spec:AST-094 FR24)', () => {
+  it('reads no pointer query from a menu, its rows or its trigger, a press on the trigger included: its drift allowance is the same under every primary pointer (spec:AST-094 FR24, FR43)', () => {
+    vi.useFakeTimers();
     const original = window.matchMedia;
     const listening: string[] = [];
+    const read: string[] = [];
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,
       value: (query: string) =>
+        read.push(query) &&
         ({
           matches: false,
           media: query,
@@ -594,11 +596,18 @@ describe('useMenuPress — the trigger', () => {
           addListener: () => listening.push(query),
           removeListener: () => {},
           dispatchEvent: () => false,
-        }) as MediaQueryList,
+        } as MediaQueryList),
     });
     try {
       const {unmount} = render(<Harness />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      fireEvent.pointerUp(trigger, touch());
       expect(listening.filter(query => query.includes('pointer'))).toEqual([]);
+      expect(read.filter(query => query.includes('pointer'))).toEqual([]);
       unmount();
     } finally {
       Object.defineProperty(window, 'matchMedia', {
