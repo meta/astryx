@@ -724,15 +724,27 @@ export class GestureHost {
     // drawn now; the hit test below flushes them. The engine then gets
     // z-order, pointer-events and clipping right, which no box math would.
     resolvePresented(movers);
-    const hit = this.doc.elementFromPoint(x, y);
+    let hit = this.doc.elementFromPoint(x, y);
+    // The document answers a shadow host for anything inside its open root:
+    // descend to what is drawn there.
+    while (hit?.shadowRoot != null) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (inner == null || inner === hit) {
+        break;
+      }
+      hit = inner;
+    }
     if (hit == null || hit === native) {
       return native;
     }
+    const found = hit;
     const node = native instanceof Node ? native : null;
     const isAboutMover = movers.some(
-      mover => mover.contains(hit) || (node != null && mover.contains(node)),
+      mover =>
+        containsAlongFlatTree(mover, found) ||
+        (node != null && containsAlongFlatTree(mover, node)),
     );
-    return isAboutMover ? hit : native;
+    return isAboutMover ? found : native;
   }
 
   /** The browser took these touches (a scroll): no click of ours for them. */
