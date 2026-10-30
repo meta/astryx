@@ -33,6 +33,7 @@ import {Accessibility} from './Accessibility';
 import {HookSignature} from './HookSignature';
 import {ExampleBlock} from './ExampleBlock';
 import {MarkdownText} from '../MarkdownText';
+import {DeprecatedBadge, DeprecationNotice} from '../Deprecation';
 import {
   InteractivePreviewStage,
   useInteractiveState,
@@ -428,9 +429,17 @@ export function ComponentDetailClient({
                 />
               </>
             )}
+            {comp.deprecated && (
+              <>
+                {' '}
+                <DeprecatedBadge />
+              </>
+            )}
             {!comp.isReady && pkg ? ` · npm install ${pkg}@canary` : ''}
           </Text>
         </VStack>
+
+        {comp.deprecated && <DeprecationNotice deprecation={comp.deprecated} />}
 
         {hasTabs ? (
           <Suspense
