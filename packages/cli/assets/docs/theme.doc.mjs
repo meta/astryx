@@ -54,6 +54,22 @@ export const docs = {
       ],
     },
     {
+      id: 'icon-sizes',
+      title: 'Icon sizes',
+      content: [
+        {
+          type: 'prose',
+          text: "A theme sets the dimension of each Icon size in its stylesheet: `width` and `height` on `components.icon['size:sm']` (or `xsm`, `md`, `lg`) resize that size's glyph, for semantic icon names and SVG components passed to `Icon` alike. Give the dimension in `px` or `rem`: a semantic icon takes its font size from it, so an `em` value would also grow its box. A size the theme leaves alone stays 12, 16, 20, or 24px at a 16px root (`xsm`, `sm`, `md`, `lg`) and scales with the root font size; `rem` keeps that scaling. The four size names are fixed.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Set Icon size dimensions',
+          code: "const brandTheme = defineTheme({\n  name: 'brand',\n  components: {\n    icon: {\n      'size:sm': {width: '1.125rem', height: '1.125rem'},\n      'size:lg': {width: '1.75rem', height: '1.75rem'},\n    },\n  },\n});",
+        },
+      ],
+    },
+    {
       id: 'light-dark-mode',
       title: 'Dark mode',
       content: [

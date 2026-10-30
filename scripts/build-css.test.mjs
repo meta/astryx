@@ -7,7 +7,9 @@
  * Validates that astryx.css contains expected @media wrappers and
  * prefers-reduced-motion rules, and that the touch press's release ships as a
  * real fade: the press strength is a registered `<number>` the fading arm
- * animates on the machine's own clock (utils/interactionOverlay.stylex.ts).
+ * animates on the machine's own clock (utils/interactionOverlay.stylex.ts),
+ * and a list row's compositor press layer (utils/rowPressLayer.ts) releases
+ * its opacity on the cell clock and curve.
  */
 
 import {describe, it, expect, beforeAll} from 'vitest';
@@ -59,14 +61,14 @@ async function readReleaseClocks() {
     ),
     'utf8',
   );
-  const cell = source.match(/\breleaseMs:\s*(\d+)/);
+  const deselect = source.match(/\breleaseMs:\s*(\d+)/);
   const control = controlSource.match(/\bcontrolReleaseMs:\s*(\d+)/);
-  if (cell == null || control == null) {
+  if (deselect == null || control == null) {
     throw new Error(
       'pressConsts.releaseMs / controlPressConsts.controlReleaseMs not found',
     );
   }
-  return {cell: Number(cell[1]), control: Number(control[1])};
+  return {deselect: Number(deselect[1]), control: Number(control[1])};
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -277,11 +279,7 @@ describe('build-css astryx.css', () => {
       if (capped != null) {
         return Math.min(toMs(capped[1]), toMs(capped[2]));
       }
-      // The release plays a theme motion role: `var(--motion-…, 200ms)`.
-      const role = value.trim().match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-      const match = (role == null ? value : role[1])
-        .trim()
-        .match(/^([\d.]+)(ms|s)$/);
+      const match = value.trim().match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
         : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
@@ -324,35 +322,24 @@ describe('build-css astryx.css', () => {
           .filter(Boolean)
           .map(match => toMs(match[1]));
       const coarse = line => line.trim().startsWith('@media (pointer: coarse)');
-      // Under a coarse primary pointer, one clock per profile, the ones the
-      // controller removes the attribute on: a control's by default, a
-      // cell's where the marker says `cell`.
+      // Under a coarse primary pointer a finger's release runs on a
+      // control's clock, the one the controller waits for (a list row drops
+      // this animation for its own layer's, rowPressLayer.ts).
       const clocks = await readReleaseClocks();
       // A mouse or Space press the controller paints on a touch-first device
       // keeps the deselect clock (`[data-astryx-press-input]`).
       const input = line => line.includes('[data-astryx-press-input]');
       expect(
-        [
-          ...durationsOf(fading.filter(line => coarse(line) && !input(line))),
-        ].sort((a, b) => a - b),
-      ).toEqual([clocks.cell, clocks.control].sort((a, b) => a - b));
+        durationsOf(fading.filter(line => coarse(line) && !input(line))),
+      ).toEqual([clocks.control]);
       expect(
         durationsOf(fading.filter(line => coarse(line) && input(line))),
-      ).toEqual([clocks.cell]);
+      ).toEqual([clocks.deselect]);
       // With any other pointer, the one clock it always had: the deselect's
       // (the desktop rule, `spec:AST-017` FR59/DEC-25).
       expect(durationsOf(fading.filter(line => !coarse(line)))).toEqual([
-        clocks.cell,
+        clocks.deselect,
       ]);
-      const cellArm = fading.filter(line =>
-        line.includes('[data-astryx-pressable="cell"]'),
-      );
-      expect(
-        cellArm
-          .map(line => line.match(/animation-duration:\s*([^;}]+)/))
-          .filter(Boolean)
-          .map(match => toMs(match[1])),
-      ).toEqual([clocks.cell]);
       // Under Reduce Motion the fading arm follows design:reduced-motion
       // instead (DR2's fade, utils/pressPaintReducedMotion.test.ts), in its
       // own media blocks: every such clock is the policy's fade.
@@ -379,12 +366,8 @@ describe('build-css astryx.css', () => {
       // press's strength, declared by the shared overlay styles on the element
       // the controller writes to. StyleX deduplicates the identical
       // declaration across the variants, so the shipped sheet carries it once.
-      // (The compositor press layer's rows turn this paint off with
-      // `--_press-paint: transparent`; that declaration is its own, below.)
-      const declarations = lines().filter(
-        line =>
-          /\{--_press-paint:/.test(line) &&
-          !/\{--_press-paint:transparent/.test(line),
+      const declarations = lines().filter(line =>
+        /\{--_press-paint:/.test(line),
       );
       expect(declarations).toHaveLength(1);
       expect(declarations[0]).toContain('var(--color-overlay-pressed)');
@@ -483,6 +466,11 @@ describe('build-css astryx.css', () => {
   });
   describe('the press releases under reduced motion (design:reduced-motion)', () => {
     const toMs = value => {
+      // A clock capped by the Reduce Motion constant: `min(<clock>, <cap>)`.
+      const capped = /^min\((.+),\s*([\d.]+m?s)\)$/.exec(value.trim());
+      if (capped != null) {
+        return Math.min(toMs(capped[1]), toMs(capped[2]));
+      }
       const match = value.trim().match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
@@ -646,11 +634,7 @@ describe('build-css astryx.css', () => {
       if (capped != null) {
         return Math.min(toMs(capped[1]), toMs(capped[2]));
       }
-      // The release plays a theme motion role: `var(--motion-…, 200ms)`.
-      const role = value.trim().match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-      const match = (role == null ? value : role[1])
-        .trim()
-        .match(/^([\d.]+)(ms|s)$/);
+      const match = value.trim().match(/^([\d.]+)(ms|s)$/);
       return match == null
         ? Number.NaN
         : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
@@ -683,12 +667,6 @@ describe('build-css astryx.css', () => {
         .filter(Boolean)
         .map(match => match[1].match(/-?\d*\.?\d+/g).map(Number));
       expect(curves).toContainEqual(points);
-    });
-
-    it('lets the motion animator promote the layer it animates', () => {
-      expect(astryxCss).toMatch(
-        /::before\{[^}]*will-change:var\(--astryx-motion-will-change-before,\s*auto\)/,
-      );
     });
 
     it('shows the layer at once on the on arm, and rests it at 0 on the fading arm under its release', () => {
@@ -750,41 +728,6 @@ describe('build-css astryx.css', () => {
         expect(curves).toContainEqual(points);
       },
     );
-  });
-
-  describe("the list rows' touch arms (List, TreeList)", () => {
-    /**
-     * A rule the build puts inside the touch gate (TOUCH_QUERY,
-     * utils/touchPresentation.ts): a coarse primary pointer, iOS and Android
-     * alike, never a mouse. No engine condition: one touch model.
-     */
-    const TOUCH_GATED = /^@media \(pointer: coarse\)\{(?!@supports)/;
-    const rules = () => astryxCss.split('\n').map(line => line.trim());
-    /** Rules that hide a divider or reach the press layer over one. */
-    const dividerArms = state =>
-      rules().filter(
-        rule =>
-          rule.includes(`[data-astryx-press="${state}"]`) &&
-          (rule.includes('{border-bottom-color:transparent}') ||
-            rule.includes('::before{bottom:')),
-      );
-
-    it('hides the dividers beside a pressed row, and reaches its layer over them, only under a finger', () => {
-      const arms = dividerArms('on');
-      // Its own divider, the one above, the layer's reach, the last row's.
-      expect(arms.length).toBeGreaterThanOrEqual(4);
-      for (const rule of arms) {
-        expect(rule).toMatch(TOUCH_GATED);
-      }
-    });
-
-    it('keeps them hidden around a row held through a navigation push the same way', () => {
-      const arms = dividerArms('held');
-      expect(arms.length).toBeGreaterThanOrEqual(4);
-      for (const rule of arms) {
-        expect(rule).toMatch(TOUCH_GATED);
-      }
-    });
   });
 
   describe('Layout header/footer padding collapse (Layout/layoutEdges.stylex.ts)', () => {

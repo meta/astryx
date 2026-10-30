@@ -115,39 +115,22 @@ describe('press paint under Reduce Motion', () => {
 
   it('cross-fades with the system duration and curve on a coarse pointer (DR2)', () => {
     const fade = reducedMotionKeys.fade;
-    const CELL = '[data-astryx-pressable="cell"]';
-    const control = (parts: string[]) =>
-      rules.find(
-        ([, {ltr}]) =>
-          !ltr.includes(CELL) && parts.every(part => ltr.includes(part)),
-      );
-    const duration = control([fade, FADING, 'animation-duration:']);
-    const curve = control([fade, FADING, 'animation-timing-function:']);
+    const duration = rule(rules, [fade, FADING, 'animation-duration:']);
+    const curve = rule(rules, [fade, FADING, 'animation-timing-function:']);
     expect(duration).toBeDefined();
     expect(curve).toBeDefined();
-    // A control's release runs on UIButton's clock; a cell's on the
-    // deselect's. The fade outranks both.
-    // UIButton's clock: the coarse-pointer clock that is neither the fade nor
-    // a cell's.
+    // A control's release runs on UIButton's clock (a list row drops this
+    // animation for its own layer's, utils/rowPressLayer.ts). The fade
+    // outranks it: UIButton's clock is the coarse-pointer clock that is not
+    // the fade's.
     const controlDuration = rules.find(
       ([, {ltr}]) =>
-        !ltr.includes(CELL) &&
         !ltr.includes(fade) &&
         [FADING, 'animation-duration:', '@media (pointer: coarse)'].every(
           part => ltr.includes(part),
         ),
     );
     expect(duration![2]).toBeGreaterThan(controlDuration![2]);
-    const cellFade = rule(rules, [fade, FADING, CELL, 'animation-duration:']);
-    const cellDuration = rules.find(
-      ([, {ltr}]) =>
-        !ltr.includes(fade) &&
-        // The deselect's clock: the table's 200 ms.
-        [FADING, CELL, 'animation-duration:.2s'].every(part =>
-          ltr.includes(part),
-        ),
-    );
-    expect(cellFade![2]).toBeGreaterThan(cellDuration![2]);
     // The fade keeps the animation (no `none` under the coarse key).
     expect(rule(rules, [fade, FADING, 'animation-name:none'])).toBeUndefined();
   });

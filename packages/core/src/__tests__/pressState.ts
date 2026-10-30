@@ -21,7 +21,8 @@
  * The touch arms are asserted the same way: the paint reads the press's
  * strength (`--astryx-press-alpha`, see utils/interactionOverlay.stylex.ts)
  * and the element the controller writes to runs the release animation on the
- * machine's own clock.
+ * machine's own clock; a list row's compositor layer (utils/rowPressLayer.ts)
+ * runs its own release on the row's `::before`, which these checks leave out.
  *
  * SYNC: When modified, update this header.
  */
@@ -35,10 +36,6 @@ const PRESS_STRENGTH = '--astryx-press-alpha';
 const PRESS_PAINT = '--_press-paint';
 const FADING_ARM = '[data-astryx-press="fading"]';
 const ON_ARM = '[data-astryx-press="on"]';
-/** A selection hold's arm: the row it keeps selected through a push. */
-const HELD_ARM = '[data-astryx-press="held"]';
-/** The marker's value for a surface whose press is a cell's. */
-const CELL_ARM = '[data-astryx-pressable="cell"]';
 /** A mouse or Space press on a touch-first device: the fine pointer's clock. */
 const INPUT_ARM = '[data-astryx-press-input]';
 const isInputArm = (rule: string) => selectorOf(rule).includes(INPUT_ARM);
@@ -223,7 +220,7 @@ export function showsLayerPress(el: Element): boolean {
 /**
  * Under a coarse primary pointer, does every declaration of the element's
  * press layer on `pseudo`, and its `isolation`, apply only while a press is
- * on, fading or held (a list row's selection hold)? At rest the element then
+ * on or fading? At rest the element then
  * has no layer and is no stacking context, and a caller's own `pseudo` keeps
  * its styles.
  */
@@ -238,7 +235,7 @@ export function layerOnlyWhilePressed(
       /(^|[{;\s])isolation:/.test(declarations(rule)),
   );
   const onPressArm = (rule: string) =>
-    [ON_ARM, FADING_ARM, HELD_ARM].some(arm => selectorOf(rule).includes(arm));
+    [ON_ARM, FADING_ARM].some(arm => selectorOf(rule).includes(arm));
   return layer.length > 0 && layer.every(onPressArm);
 }
 
@@ -370,12 +367,7 @@ export function durationToMs(value: string): number {
   if (capped != null) {
     return Math.min(durationToMs(capped[1]), durationToMs(capped[2]));
   }
-  // A theme motion role, `var(--motion-…, 200ms)`, reads as the table's
-  // value it falls back to.
-  const role = text.match(/^var\(\s*--[\w-]+\s*,\s*(.+)\)$/);
-  const match = (role == null ? text : role[1])
-    .trim()
-    .match(/^([\d.]+)(ms|s)$/);
+  const match = text.match(/^([\d.]+)(ms|s)$/);
   if (match == null) {
     return Number.NaN;
   }
@@ -383,10 +375,10 @@ export function durationToMs(value: string): number {
 }
 
 /**
- * Does the element run the release animation on the fading arm, on the clock
- * its press profile has under a coarse primary pointer (a control's,
- * UIButton's highlight release; a cell's deselect when the marker says
- * `cell`), and on the deselect clock it always had under any other pointer
+ * Does the element run the release animation on the fading arm, on a
+ * control's clock under a coarse primary pointer (UIButton's highlight
+ * release; a list row's layer runs the deselect clock and is checked with
+ * the row), and on the deselect clock it always had under any other pointer
  * (the desktop rule), with no animation on the on arm (the onset is
  * instant)? Asserted on the element the controller writes to — the one that
  * composes `pressedAlpha` or an overlay variant — not on a descendant that
@@ -404,16 +396,15 @@ export function hasReleaseFade(el: Element): boolean {
   if (onArmAnimates) {
     return false;
   }
-  const profileMs =
-    el.getAttribute('data-astryx-pressable') === 'cell'
-      ? list.highlight.releaseMs
-      : button.highlight.releaseMs;
+  // A control's release, on UIButton's clock: a list row's layer runs the
+  // deselect clock and is checked with the row (utils/rowPressLayer.ts).
+  const controlMs = button.highlight.releaseMs;
   const fine = own(rulesWithSelector(el, FADING_ARM, UNDER.fine));
   if (!fine.some(runsAnimation)) {
     // A surface whose layer runs every release (a list row).
     return (
-      releasesOnLayer(el, '::before', profileMs) ||
-      releasesOnLayer(el, '::after', profileMs)
+      releasesOnLayer(el, '::before', controlMs) ||
+      releasesOnLayer(el, '::after', controlMs)
     );
   }
   // Any other pointer than a coarse primary one: the deselect clock, one
@@ -426,22 +417,16 @@ export function hasReleaseFade(el: Element): boolean {
   if (coarse.some(stopsAnimation)) {
     // Under a coarse primary pointer the surface's own layer releases.
     return (
-      releasesOnLayer(el, '::before', profileMs) ||
-      releasesOnLayer(el, '::after', profileMs)
+      releasesOnLayer(el, '::before', controlMs) ||
+      releasesOnLayer(el, '::after', controlMs)
     );
   }
-  const isCell = (rule: string) => selectorOf(rule).includes(CELL_ARM);
-  const control = durationsOf(
-    coarse.filter(rule => !isCell(rule) && !isInputArm(rule)),
-  );
-  const cell = durationsOf(coarse.filter(isCell));
+  const control = durationsOf(coarse.filter(rule => !isInputArm(rule)));
   // A mouse or Space press keeps the deselect clock on any surface.
   const input = durationsOf(coarse.filter(isInputArm));
   return (
     control.length === 1 &&
     control[0] === button.highlight.releaseMs &&
-    cell.length === 1 &&
-    cell[0] === list.highlight.releaseMs &&
     input.length === 1 &&
     input[0] === list.highlight.releaseMs
   );

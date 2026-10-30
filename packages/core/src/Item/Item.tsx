@@ -54,10 +54,8 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {cellPressableProps} from '../utils/pressFeedback';
 import {rowPressLayerStyles} from '../utils/rowPressLayer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
 // The gesture and the panels, loaded only by a row that has swipe actions: a
@@ -589,16 +587,7 @@ export function Item({
   role,
   ...restProps
 }: ItemProps) {
-  // A row's press is a cell's: it waits UIScrollView's content-touch delay
-  // only inside a scroll view (FR11), yields to the pan, and releases on the
-  // deselect clock.
-  usePressFeedback();
-  // The cell profile (utils/pressFeedback.ts), internal to core.
-  const pressable = cellPressableProps;
-  // A selection hold (List/selectionHold.ts) returns focus to this row after
-  // a pop; its ring follows how the user last interacted, so a finger's pop
-  // shows none.
-  useInteractionModalityTracking();
+  const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent();
 
   // Delegation mode: the row is an enlarged click/tap target for a nested

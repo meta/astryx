@@ -28,7 +28,8 @@ import {
 } from '@testing-library/react';
 import {createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Tokenizer, type TokenizerChange} from './Tokenizer';
+import type {TokenizerChange} from './Tokenizer';
+import {TokenizerWithPresentation} from '../internal/tokenizer-presentation';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {__resetDevWarnings} from '../utils/devWarning';
 import {colorVars} from '../theme/tokens.stylex';
@@ -80,7 +81,7 @@ function Harness({
 }) {
   const [value, setValue] = useState<SearchableItem[]>(initial);
   return (
-    <Tokenizer
+    <TokenizerWithPresentation
       label="Tags"
       searchSource={source}
       value={value}
@@ -161,7 +162,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('Tokenizer experimental.presentation (FR16)', () => {
   it('keeps the inline combobox when experimental is omitted', () => {
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -176,7 +177,7 @@ describe('Tokenizer experimental.presentation (FR16)', () => {
 
   it('keeps the inline combobox for an empty experimental object and for popover', () => {
     const {unmount} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -367,7 +368,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('keeps the inline popover presentation on the shared live region', async () => {
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
@@ -483,7 +484,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         ),
     };
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Items"
         searchSource={longSource}
         value={[]}
@@ -586,7 +587,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
   it('searches within the same sheet and shows the no-results state (FR18, FR20)', async () => {
     const onChangeQuery = vi.fn();
     const {rerender} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -617,7 +618,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
     // A string emptySearchText becomes the empty state's title.
     rerender(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -651,7 +652,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       });
     try {
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={searchOnly}
           value={[]}
@@ -890,7 +891,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       bootstrap: () => many,
     };
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={manySource}
         value={[many[1], many[15]]}
@@ -935,7 +936,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       // "Enzo" is a created value the source never returns; the source has
       // three "en" matches (Eng, Engineer, Energizer), capped to two rows.
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[{id: 'Enzo', label: 'Enzo'}]}
@@ -1043,7 +1044,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     function InlineSourceHarness() {
       const [value, setValue] = useState<SearchableItem[]>([ITEMS[0]]);
       return (
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           // A new object every render, as a caller writing the source inline
           // produces; the selection change on each toggle re-renders.
@@ -1136,21 +1137,21 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       debounceMs: 0,
       experimental: {presentation: 'bottom-sheet' as const},
     };
-    const {rerender} = render(<Tokenizer {...props} />);
+    const {rerender} = render(<TokenizerWithPresentation {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     fireEvent.change(screen.getByLabelText('Search Tags'), {
       target: {value: 'En'},
     });
     onChangeQuery.mockClear();
-    rerender(<Tokenizer {...props} isDisabled />);
+    rerender(<TokenizerWithPresentation {...props} isDisabled />);
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
     // Nothing the person did changed the query, so nothing is reported, and
     // the caller's mirror and the sheet agree on the next open.
     expect(onChangeQuery).not.toHaveBeenCalled();
-    rerender(<Tokenizer {...props} />);
+    rerender(<TokenizerWithPresentation {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     expect(screen.getByLabelText('Search Tags')).toHaveValue('En');
@@ -1167,7 +1168,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       minQueryLength: 3,
       experimental: {presentation: 'bottom-sheet' as const},
     };
-    const {rerender} = render(<Tokenizer {...props} />);
+    const {rerender} = render(<TokenizerWithPresentation {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     // Two characters: below the threshold, so nothing is searched.
@@ -1175,7 +1176,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       target: {value: 'En'},
     });
     // The field becomes disabled: the sheet closes, keeping the query.
-    rerender(<Tokenizer {...props} isDisabled />);
+    rerender(<TokenizerWithPresentation {...props} isDisabled />);
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -1183,7 +1184,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
-    rerender(<Tokenizer {...props} />);
+    rerender(<TokenizerWithPresentation {...props} />);
     fireEvent.click(openTrigger());
     const dialog = await screen.findByRole('dialog', {name: 'Tags'});
     expect(screen.getByLabelText('Search Tags')).toHaveValue('En');
@@ -1215,7 +1216,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('closes the sheet and returns focus to the trigger when the field becomes disabled (FR17; AST-085 FR2)', async () => {
     const {rerender} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1232,7 +1233,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(search).toHaveFocus();
 
     rerender(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1252,7 +1253,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     // Re-enabling does not reopen it.
     rerender(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1269,7 +1270,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     render(
       <>
         <span id="hint">Up to five</span>
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[ITEMS[0], ITEMS[1]]}
@@ -1340,7 +1341,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onFocus = vi.fn();
     const onKeyDown = vi.fn();
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1377,7 +1378,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onBlur = vi.fn();
     render(
       <>
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
@@ -1428,7 +1429,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onBlur = vi.fn();
     render(
       <>
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
@@ -1473,7 +1474,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       event.preventDefault();
     });
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1501,7 +1502,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     __resetDevWarnings();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {rerender} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1516,7 +1517,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(warn.mock.calls[0][0]).toMatch(/`hasClear`, `menuWidth`/);
     expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet presentation/);
     rerender(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
@@ -1529,7 +1530,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockClear();
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Other"
         searchSource={source}
         value={[]}
@@ -1565,7 +1566,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       // Default debounceMs (150), so the debounce window is under test too.
       // hasCreate, so the create row's timing is under test as well.
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={slow}
           value={[]}
@@ -1737,7 +1738,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       ],
     };
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={withAction}
         value={[]}
@@ -1814,7 +1815,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
   it('types ref for the control it reaches: the input without experimental, input or trigger with it', () => {
     const inputRef = createRef<HTMLInputElement>();
     const {unmount} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -1826,7 +1827,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     unmount();
     const wideRef = createRef<HTMLInputElement | HTMLButtonElement>();
     const {rerender} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -1837,7 +1838,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     );
     expect(wideRef.current).toBe(screen.getByRole('combobox'));
     rerender(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -1853,7 +1854,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const search = vi.fn(source.search);
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={{...source, search}}
         value={[ITEMS[0]]}
@@ -1904,7 +1905,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       });
     try {
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[]}
@@ -2006,7 +2007,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         },
       };
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={flaky}
           value={[]}
@@ -2073,7 +2074,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ),
       };
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={slow}
           value={[]}
@@ -2138,7 +2139,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ),
       };
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={slow}
           value={[]}
@@ -2230,7 +2231,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onChangeQuery = vi.fn();
     const search = vi.fn(source.search);
     render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={{...source, search}}
         value={[]}
@@ -2286,7 +2287,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         const [query, setQuery] = useState('');
         return (
           <>
-            <Tokenizer
+            <TokenizerWithPresentation
               label="Tags"
               searchSource={source}
               value={[]}
@@ -2332,7 +2333,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     try {
       // Default debounceMs (150): the open must not wait for it.
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
@@ -2409,7 +2410,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       render(
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={thenable}
           value={[]}
@@ -2454,7 +2455,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // The default popover, with and without the experimental object: no
     // query is evaluated and no listener is registered.
     const {unmount} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -2552,7 +2553,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('carries hidden form inputs and the field chrome in the sheet presentation', () => {
     const {container} = render(
-      <Tokenizer
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
@@ -2578,7 +2579,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       isDisabled: boolean,
     ) => (
       <form>
-        <Tokenizer
+        <TokenizerWithPresentation
           label="Tags"
           searchSource={source}
           value={[ITEMS[0], ITEMS[1]]}
@@ -2633,7 +2634,7 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
           isOpen={isHostOpen}
           onOpenChange={setIsHostOpen}
           label="Value">
-          <Tokenizer
+          <TokenizerWithPresentation
             label="Tags"
             searchSource={source}
             value={value}

@@ -97,7 +97,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The painted outer chrome, variant, block padding, and selected divider edges —
   owned by Section and uncontracted here.
 - Content supplied through the three layout slots — owned by the caller or its
-  rendered components.
+  rendered components, except the press tracking `family:action-groups` FR5
+  gives Toolbar across its buttons.
 - A general arbitrary-child layout primitive contract.
 - Arrow-key handling inside composed menus or popovers — owned by those
   components.

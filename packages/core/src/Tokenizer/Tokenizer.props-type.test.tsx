@@ -4,8 +4,10 @@
  * @input Uses vitest, TokenizerProps and Tokenizer
  * @output Type-level proof that the exported `TokenizerProps` stays an
  *   interface callers can extend and `Omit` (its `ref` typed for the combobox
- *   input as released), and that only the experimental opt-in admits a `ref`
- *   that also accepts the sheet presentation's trigger button
+ *   input as released), that the public component names no `experimental`
+ *   presentation, and that only the internal `TokenizerWithPresentation`
+ *   admits the presentation options and a `ref` that also accepts the sheet
+ *   presentation's trigger button
  * @position Core type tests; checked by `tsc`, with `@ts-expect-error`
  *   marking the shapes that must keep failing
  */
@@ -13,6 +15,7 @@ import {createRef, type ComponentProps} from 'react';
 import {describe, it, expect} from 'vitest';
 import type {SearchableItem} from '../Typeahead/types';
 import {Tokenizer, type TokenizerProps} from './Tokenizer';
+import {TokenizerWithPresentation} from '../internal/tokenizer-presentation';
 
 type Item = SearchableItem;
 const source = {search: () => [], bootstrap: () => []};
@@ -62,12 +65,21 @@ export function compiles() {
         onChange={() => {}}
         ref={inputRef}
       />
+      {/* The public props name no presentation. */}
       <TagsField
         searchSource={source}
         value={[]}
         onChange={() => {}}
-        ref={inputRef}
+        // @ts-expect-error -- `experimental` is not on TokenizerProps
         experimental={{presentation: 'adaptive'}}
+      />
+      <Tokenizer
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        // @ts-expect-error -- nor on the public component
+        experimental={{presentation: 'bottom-sheet'}}
       />
       {/* The stable shape: ref is the combobox input's. */}
       <Tokenizer
@@ -77,8 +89,8 @@ export function compiles() {
         onChange={() => {}}
         ref={inputRef}
       />
-      {/* The experimental opt-in admits the wider ref. */}
-      <Tokenizer
+      {/* The internal signature admits the presentation and the wider ref. */}
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -86,8 +98,8 @@ export function compiles() {
         ref={wideRef}
         experimental={{presentation: 'adaptive'}}
       />
-      {/* An input-typed ref is still fine with the opt-in. */}
-      <Tokenizer
+      {/* An input-typed ref is still fine there. */}
+      <TokenizerWithPresentation
         label="Tags"
         searchSource={source}
         value={[]}
@@ -95,12 +107,12 @@ export function compiles() {
         ref={inputRef}
         experimental={{}}
       />
-      {/* @ts-expect-error -- without experimental, ref keeps the released input-only type */}
       <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
+        // @ts-expect-error -- the public ref keeps the released input-only type
         ref={wideRef}
       />
     </>
@@ -108,7 +120,7 @@ export function compiles() {
 }
 
 describe('Tokenizer props type', () => {
-  it('keeps TokenizerProps an interface that extends and Omit-wraps (type-checked above)', () => {
+  it('keeps TokenizerProps an interface that extends and Omit-wraps, with no presentation option on the public component (type-checked above)', () => {
     expect(typeof compiles).toBe('function');
   });
 });
