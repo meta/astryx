@@ -5,7 +5,7 @@
  * @input vitest, the slider domain of the UIKit constants table, the spring
  *   solver and the momentum projection, and samples of UIKit's own UISlider
  * @output Holds `slider` to UISlider's measured behavior (iOS 26.2
- *   simulator, capture b40): the value per `valueChanged` against the
+ *   simulator): the value per `valueChanged` against the
  *   tracking rule, the thumb's lift and drop against its per-frame width,
  *   and the release coast against the per-frame value after a lift
  * @position Testing; parity of the slider constants (law P4, unit layer).
@@ -24,8 +24,8 @@ const TRACK = 300;
 
 /**
  * `valueChanged` during a 200 pt/s drag from 0.2: the finger's travel since
- * touch-down (pt) and the value UIKit reported for it (UIKit lab capture
- * b40, case M4, Oct 23 2026). The pan began at 10.33 pt.
+ * touch-down (pt) and the value UIKit reported for it (UIKit lab, iOS 26.2
+ * simulator, Oct 23 2026). The pan began at 10.33 pt.
  */
 const TRACKING = {
   startValue: 0.2,
@@ -43,7 +43,7 @@ const TRACKING = {
 
 /**
  * The thumb lens's width (pt) per frame from touch-down during an 800 ms
- * hold, and from the lift after it (UIKit lab capture b40, case M3).
+ * hold, and from the lift after it (UIKit lab, iOS 26.2 simulator).
  */
 const LIFT = [
   [10.7, 37],
@@ -76,8 +76,8 @@ const DROP = [
 const REST_WIDTH = 37;
 
 /**
- * The value per frame after a lift at 126.9 pt/s (UIKit lab capture b40,
- * case M8a: grabbed 8 pt off the thumb's center, dragged 60 pt). The coast
+ * The value per frame after a lift at 126.9 pt/s (UIKit lab: grabbed 8 pt
+ * off the thumb's center, dragged 60 pt). The coast
  * shows on screen 38 ms after the lift.
  */
 const COAST = {

@@ -30,7 +30,7 @@
  *
  * Values measured with the UIKit lab (a UIKit host app with hooks injected)
  * on the iOS 26.2 simulator, iPhone 17 Pro, real HID touches: a default
- * `UISlider` 300 pt wide, value 0…1 (capture b40, per-frame log of the
+ * `UISlider` 300 pt wide, value 0…1 (a per-frame log of the
  * touches, the value, `valueChanged` and the lens's presentation frame).
  * The springs are fits of those frames (closed-form spring step, least
  * squares; rms residual per entry). Lengths are in pt (CSS px).
@@ -62,7 +62,7 @@ export const slider = {
    * first, so the frame clips it: in the lab's 40 pt frame the target was
    * 48 × 40. A touch further out lands on the track, which ignores it.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, `_thumbHitEdgeInsets` read as
+   *   iPhone 17 Pro, `_thumbHitEdgeInsets` read as
    *   {−12, −5.5, −12, −5.5}; touch-downs on a 4 pt grid around the thumb
    *   center track from −24 to +20 pt in x (−20 to +16 pt in y inside the
    *   40 pt frame); a tap on the track away from the thumb does not move the
@@ -76,7 +76,7 @@ export const slider = {
    * the 10 pt hysteresis along the track). 1 means one full range per track
    * length (UIKit's thumb travels 263 of the 300 pt for it).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, value per touch event during drags at
+   *   iPhone 17 Pro, value per touch event during drags at
    *   120 to 2000 pt/s (value = v0 + translation past the 10 pt pan
    *   hysteresis ÷ 300 for every event), and a drag past the max end and
    *   back (the value leaves 1 only when the finger returns past the point
@@ -88,7 +88,7 @@ export const slider = {
    * the finger left them, with the release velocity, to the projected
    * target. Critically damped, so it never overshoots a target ahead of it.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, the `UIViewSpringAnimationBehavior` read
+   *   iPhone 17 Pro, the `UIViewSpringAnimationBehavior` read
    *   at the lift (response 0.4, damping ratio 1); per-frame value after the
    *   lift of four releases (126.9, 95.6 outside, 151.2 and 609.9 pt/s) fits
    *   a critically damped spring of response 0.395–0.40 s started 22–38 ms
@@ -101,7 +101,7 @@ export const slider = {
    * (WWDC18's `project`). Not UIScrollView's normal rate (0.998): pass it
    * to the projection explicitly.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, the release behavior's
+   *   iPhone 17 Pro, the release behavior's
    *   inertial projection deceleration read as 0.996, Oct 23 2026
    */
   releaseProjectionRate: 0.996,
@@ -111,7 +111,7 @@ export const slider = {
    * velocity at `releaseProjectionRate`). A finger lifted outside the control's
    * tracking bounds coasts back to the lift value instead.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, the release behavior's inertial target
+   *   iPhone 17 Pro, the release behavior's inertial target
    *   smoothing read as 0.4; a release at 126.9 pt/s travels 12.56 pt after
    *   the lift (12.64 predicted), and one 100 pt above the slider ends at
    *   the lift value, Oct 23 2026
@@ -121,7 +121,7 @@ export const slider = {
    * The thumb's growth under a finger, uniform about its center (37 × 24 to
    * 57.35 × 37.2 pt).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, lens frame settled during an 800 ms hold,
+   *   iPhone 17 Pro, lens frame settled during an 800 ms hold,
    *   Oct 23 2026
    */
   liftScale: 1.55,
@@ -129,7 +129,7 @@ export const slider = {
    * The lift: the thumb growing to `liftScale` when the finger lands (after
    * the scroller's content delay inside one).
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, per-frame lens width during an 800 ms hold
+   *   iPhone 17 Pro, per-frame lens width during an 800 ms hold
    *   fitted with one spring (response 0.215 s, damping ratio 0.6, rms
    *   0.31 pt; peak 59.39 pt 134 ms after touch-down), Oct 23 2026
    */
@@ -138,7 +138,7 @@ export const slider = {
    * The drop: the thumb shrinking back to its rest size when the finger
    * lifts, while the coast runs.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, the lens's spring behavior read at the
+   *   iPhone 17 Pro, the lens's spring behavior read at the
    *   lift of an 800 ms hold (response 0.5 s, damping ratio 0.7: the stored
    *   value); the per-frame lens width after that lift fits one spring at
    *   response 0.49 s, damping ratio 0.70 (rms 0.10 pt; the read leaves
@@ -151,7 +151,7 @@ export const slider = {
    * UIKit plays its fluid slider generator's "Micro Tap Medium"; the web
    * stand-in is the closest kind.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-   *   iPhone 17 Pro, capture b40, haptics log of drags into and out of both
+   *   iPhone 17 Pro, haptics log of drags into and out of both
    *   ends: `_UIFluidSliderFeedbackGenerator` "Micro Tap Medium", three hits
    *   on three entries at the max, one at the min, Oct 23 2026
    */

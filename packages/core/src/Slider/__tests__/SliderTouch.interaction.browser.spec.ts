@@ -488,7 +488,8 @@ test('the lifted thumb grows around its own center, as UISlider’s lens does', 
   page,
 }) => {
   // UIKit's lens grows from 24 to 39 pt with its center fixed on the track
-  // (b40). The thumb's centering must not scale with the lift.
+  // (UIKit lab, iOS 26.2 simulator). The thumb's centering must not scale
+  // with the lift.
   for (const {storyId, name, args} of [
     {storyId: 'core-slider--touch-tracking', name: 'Brightness', args: {}},
     {
