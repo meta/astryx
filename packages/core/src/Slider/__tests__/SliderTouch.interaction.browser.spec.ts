@@ -997,16 +997,21 @@ test('a vertical swipe from a thumb scrolls the list; a horizontal one drags it'
   expect(await list.evaluate(element => element.scrollTop)).toBeGreaterThan(40);
   expect(await thumb.getAttribute('aria-valuenow')).toBe(before);
   // Let the list's own deceleration finish: a finger on a moving list
-  // brakes it and the control does not track that touch.
-  let top = -1;
-  for (let i = 0; i < 40; i++) {
-    const now = await list.evaluate(element => element.scrollTop);
-    if (now === top) {
-      break;
-    }
-    top = now;
-    await page.waitForTimeout(100);
-  }
+  // brakes it and the control does not track that touch. The list must come
+  // to rest (two reads 100 ms apart agree); if it never does, the test fails
+  // here instead of dragging on a moving list.
+  await expect
+    .poll(
+      async () => {
+        const first = await list.evaluate(element => element.scrollTop);
+        await page.waitForTimeout(100);
+        return (await list.evaluate(element => element.scrollTop)) === first;
+      },
+      {timeout: 4000, intervals: [0]},
+    )
+    .toBe(true);
+  // Where the list rests: the horizontal drag below must not move it.
+  const top = await list.evaluate(element => element.scrollTop);
   // A thumb in view after the scroll.
   const listBox = await list.boundingBox();
   const visible = page.getByRole('slider', {name: 'Channel 6'});
