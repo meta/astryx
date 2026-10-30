@@ -11,8 +11,8 @@
  * @position Motion foundation building block, internal to core: the geometry
  *   of "grow out of a source rect, shrink back into it" that touch
  *   presentations share (an anchored menu, a popover, a context menu's
- *   lifted preview, a photo's zoom, a sub-menu's parent card); the rect
- *   morph (rectMorph.ts) plays it
+ *   lifted preview, a photo's zoom, a sub-menu's parent card), which a rect
+ *   morph plays
  *
  * A path names the rect an element shows at each progress: 0 on its source,
  * 1 at rest, beyond either end on a spring's overshoot. The element stays
@@ -21,7 +21,7 @@
  * axis to the rect (`'axes'`) or both by the rect's width (`'uniform'`, which
  * keeps the element's aspect), and a companion opacity follows a progress of
  * its own or the same one. Only `translate`, `scale` and `opacity` move, on
- * the compositor (law M1).
+ * the compositor (`spec:AST-094` FR5).
  *
  * Two laws cover the presentations: `lerpPath`, a straight line from one rect
  * to another (position and size move together), and `edgeGrowPath`, UIKit's
@@ -218,7 +218,7 @@ export type TravelProperty = 'x' | 'y' | 'scaleX' | 'scaleY';
 /**
  * The transform that puts an element laid out in `path.box` on its rect.
  *
- * @internal Read by the rect morph's player (rectMorph.ts) for its start
+ * @internal Read by the rect morph's player for its start
  *   values and its velocity projection; not exported from the package.
  */
 export function travelAt(

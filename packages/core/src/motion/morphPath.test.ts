@@ -9,7 +9,7 @@
  *   every frame, and that each presentation's model (an anchored menu, a
  *   popover, a lifted preview, a zoom, a sub-menu's parent card) is the same
  *   rect at every progress, within 0.5 px
- * @position Testing; the player is checked in rectMorph.test.ts
+ * @position Testing; validates morphPath.ts
  */
 
 import {describe, expect, it} from 'vitest';
