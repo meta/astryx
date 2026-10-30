@@ -101,7 +101,7 @@ const styles = stylex.create({
   // the press's clock (a control's, UIButton's highlight release, when the
   // checkbox owns the press; a cell's, the row's deselect, when a row does).
   // Opacity runs on the compositor, so the release keeps moving while script
-  // runs, in step with a row's own press layer (interactionOverlayStyles.cell).
+  // runs, in step with a row's own press layer (rowPressLayerStyles.cell).
   // The owner declares the press's image and release on itself
   // (indicatorPressOwnerStyles) and the layer reads its nearest owner's, so a
   // checkbox inside another owner's content (a radio row, a list row) answers
