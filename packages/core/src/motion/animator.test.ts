@@ -2192,6 +2192,56 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     }
   });
 
+  it('a landing later than the whole fade back in shows the element at once and settles then', async () => {
+    // A hold released long after the dip was due: the landing\u2019s timer runs
+    // more than the whole fade back in late, so the element appears at once
+    // where it landed. No fade is left for the browser to start a frame
+    // later, so the call\u2019s finished never reports an element still at 0.
+    for (const sheet of ['own', 'stylesheet'] as const) {
+      const {animator, element} = reduced();
+      stylesheet = sheet === 'stylesheet' ? {opacity: '0.6'} : {};
+      const handle = animator.animate(
+        {x: 100},
+        {spring: springs.navigationPush},
+      );
+      for (const animation of recorded) {
+        animation.paused = true;
+      }
+      await commitFrame(clock);
+      clock += fade * 2;
+      for (const animation of recorded) {
+        animation.finish();
+      }
+      const before = recorded.length;
+      let settled: boolean | undefined;
+      void handle.finished.then(value => {
+        settled = value;
+      });
+      // The next frame finds the hold finished: the landing is long due.
+      await commitFrame(clock);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(animator.get('x')).toBe(100);
+      expect(
+        recorded
+          .slice(before)
+          .filter(
+            animation =>
+              !animation.cancelled &&
+              'opacity' in (animation.keyframes[0] ?? {}),
+          ),
+      ).toHaveLength(0);
+      expect(settled).toBe(true);
+      if (sheet === 'stylesheet') {
+        // Handed back to the stylesheet at once.
+        expect(element.style.opacity).toBe('');
+      } else {
+        expect(animator.get('opacity')).toBe(1);
+      }
+      animator.dispose();
+      recorded = [];
+    }
+  });
+
   it('a waiting call whose own opacity a later call retargets settles interrupted', async () => {
     const {animator} = reduced();
     const dismiss = animator.animate(

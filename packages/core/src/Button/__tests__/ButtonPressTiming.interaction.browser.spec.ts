@@ -10,9 +10,10 @@
  *   control is UIButton's 250 ms, and a mouse's or the Space key's press keeps
  *   the 200 ms release a fine pointer has; a list row's release keeps the
  *   deselect clock's 200 ms. Each release animation's own duration is read
- *   when `fading` is written; `fading` lasts at least that clock and goes
- *   within a few frames of the animation's end. Frames, not ms, bound the
- *   end, so a loaded machine running the page late cannot fail it
+ *   when `fading` is written; `fading` outlasts the animation (its progress
+ *   has reached its end when `fading` goes) and goes within a few frames of
+ *   that end. The animation's own progress and frames, not ms, bound it, so
+ *   a loaded machine running the page late cannot fail it
  * @position Interaction evidence beside
  *   ButtonPressRelease.interaction.browser.spec.ts (the release's curve and
  *   layer)
@@ -50,6 +51,10 @@ interface ReleaseRecord {
   fadingAt: number | null;
   goneAt: number | null;
   animationMs: number | null;
+  /** The release animation's start on the document timeline, ms. */
+  startedAt: number | null;
+  /** The document timeline's time when `fading` went, ms. */
+  removedAt: number | null;
   finishedAt: number | null;
   framesAfterFinish: number | null;
   cancelled: boolean;
@@ -74,6 +79,8 @@ async function openSurface(
       fadingAt: null,
       goneAt: null,
       animationMs: null,
+      startedAt: null,
+      removedAt: null,
       finishedAt: null,
       framesAfterFinish: null,
       cancelled: false,
@@ -105,6 +112,14 @@ async function openSurface(
           null,
         );
         record.animationMs = longest == null ? null : durationOf(longest);
+        // Its start is a frame's time, which can come before the write, so
+        // the page's clock is not what says whether it ran to its end.
+        longest?.ready.then(
+          () => {
+            record.startedAt = Number(longest.startTime);
+          },
+          () => undefined,
+        );
         longest?.finished.then(
           () => {
             record.finishedAt = performance.now();
@@ -131,6 +146,7 @@ async function openSurface(
         record.goneAt == null
       ) {
         record.goneAt = now;
+        record.removedAt = Number(document.timeline.currentTime);
       }
     }).observe(el, {attributes: true, attributeFilter: ['data-astryx-press']});
   });
@@ -161,6 +177,11 @@ interface Release {
   /** How long `fading` lasted on the page's clock. */
   fadingMs: number;
   /**
+   * How far the animation had run on the document timeline when `fading`
+   * went; null when it had not started.
+   */
+  ranMs: number | null;
+  /**
    * Frames from the animation's end until `fading` went, or 0 when `fading`
    * went first: the animation then stopped with it.
    */
@@ -190,6 +211,10 @@ async function releaseOf(page: Page): Promise<Release> {
   return {
     animationMs: record.animationMs,
     fadingMs: record.goneAt - record.fadingAt,
+    ranMs:
+      record.startedAt == null || record.removedAt == null
+        ? null
+        : record.removedAt - record.startedAt,
     framesAfterFinish: record.cancelled
       ? 0
       : (record.framesAfterFinish ?? Number.POSITIVE_INFINITY),
@@ -197,12 +222,13 @@ async function releaseOf(page: Page): Promise<Release> {
 }
 
 /**
- * A release of `ms`: its animation runs `ms`, and `fading` lasts at least
- * that clock and goes within a few frames of the animation's end.
+ * A release of `ms`: its animation runs `ms`, `fading` stays until the
+ * animation has run to its end, and goes within a few frames of that end.
  */
 function expectRelease(release: Release, ms: number): void {
   expect(release.animationMs).toBe(ms);
-  expect(release.fadingMs).toBeGreaterThanOrEqual(ms - 5);
+  expect(release.ranMs, JSON.stringify(release)).not.toBeNull();
+  expect(release.ranMs, JSON.stringify(release)).toBeGreaterThanOrEqual(ms - 1);
   expect(release.framesAfterFinish).toBeLessThanOrEqual(
     MAX_FRAMES_AFTER_FINISH,
   );

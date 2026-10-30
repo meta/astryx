@@ -8,7 +8,9 @@
  *   browser takes for a scroll drops the highlight at once (the press
  *   controller's cancel, unchanged by the compositor layer); Reduce
  *   Motion keeps the fade (a fade, not a movement); a mouse press and hover on
- *   a fine pointer leave the press layer out of it
+ *   a fine pointer leave the press layer out of it; a row held and released
+ *   between two divided rows keeps both dividers drawn (`component:List`
+ *   FR11), by pixels and by computed border
  * @position Interaction evidence for the row press layer
  *   (utils/rowPressLayer.ts `rowPressLayerStyles.cell`), beside
  *   ListRowPress.interaction.browser.spec.ts
@@ -25,6 +27,8 @@ import {
   touchDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+// @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
+import {PNG} from 'pngjs';
 import {list} from '../../motion/uikit/list';
 
 const storybook = withStorybook(test);
@@ -42,6 +46,45 @@ const layerOpacity = async (row: Locator) =>
 
 const pressState = async (row: Locator) =>
   row.evaluate(el => el.getAttribute('data-astryx-press'));
+
+/**
+ * A row's bottom divider: its computed border and the pixels of the strip it
+ * draws across the row (inset from the rounded ends), decoded.
+ */
+async function dividerOf(page: Page, row: Locator) {
+  const border = await row.evaluate(el => {
+    const style = getComputedStyle(el);
+    return {
+      width: Number.parseFloat(style.borderBottomWidth),
+      style: style.borderBottomStyle,
+      color: style.borderBottomColor,
+    };
+  });
+  const box = await row.boundingBox();
+  if (box == null) {
+    throw new Error('no row');
+  }
+  const strip = async (top: number) =>
+    page.screenshot({
+      clip: {x: box.x + 12, y: top, width: box.width - 24, height: 1},
+    });
+  const pixels = PNG.sync.read(
+    await strip(box.y + box.height - border.width),
+  ) as {width: number; height: number; data: Uint8Array};
+  const inside = PNG.sync.read(
+    await strip(box.y + box.height - border.width - 4),
+  ) as {data: Uint8Array};
+  return {border, pixels: pixels.data, inside: inside.data};
+}
+
+/** The largest channel difference between two decoded strips. */
+function largestDifference(a: Uint8Array, b: Uint8Array): number {
+  let largest = a.length === b.length ? 0 : 255;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    largest = Math.max(largest, Math.abs(a[i] - b[i]));
+  }
+  return largest;
+}
 
 async function touchOnly(page: Page) {
   const touch = await page.evaluate(
@@ -124,6 +167,75 @@ test('Reduce Motion keeps the release fade: a fade, not a movement', async ({
   expect(midway).toBeLessThan(0.95);
   await releaseAnimations(page, {finish: true});
   await expect.poll(async () => layerOpacity(row)).toBe(0);
+});
+
+test('under a finger, a row held and released between two divided rows keeps both dividers drawn, by pixels and computed border (component:List FR11)', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-list--interactive', {
+    hasDividers: '!true',
+  });
+  await touchOnly(page);
+  const driver = await touchDriver(page);
+  const row = (label: string) =>
+    page.locator('[data-astryx-pressable]').filter({hasText: label}).first();
+  const above = row('Inbox');
+  const pressed = row('Sent');
+  await expect(pressed).toBeVisible();
+  // At rest: both dividers drawn, and their strips differ from the row's
+  // own surface just inside them, so a strip that matches later is a drawn
+  // divider, not a blank.
+  const atRest = {
+    above: await dividerOf(page, above),
+    pressed: await dividerOf(page, pressed),
+  };
+  for (const divider of Object.values(atRest)) {
+    expect(divider.border.width).toBeGreaterThan(0);
+    expect(divider.border.style).toBe('solid');
+    expect(divider.border.color).not.toMatch(/^rgba\(.*,\s*0\)$/);
+    expect(largestDifference(divider.pixels, divider.inside)).toBeGreaterThan(
+      8,
+    );
+  }
+  /** Each divider as it is at rest, by computed border and by pixels. */
+  const expectDividersAsAtRest = async (phase: string) => {
+    for (const [name, target] of [
+      ['above', above],
+      ['pressed', pressed],
+    ] as const) {
+      const now = await dividerOf(page, target);
+      expect(now.border, `${phase}: ${name}`).toEqual(atRest[name].border);
+      expect(
+        largestDifference(now.pixels, atRest[name].pixels),
+        `${phase}: ${name}'s divider pixels`,
+      ).toBeLessThanOrEqual(8);
+    }
+  };
+  const box = await pressed.boundingBox();
+  if (box == null) {
+    throw new Error('no row');
+  }
+  // Held: checked while the finger is still down, after the first event.
+  await driver.play(
+    tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 600}),
+    {
+      onEvent: async (_step, index) => {
+        if (index !== 0) {
+          return;
+        }
+        await expect.poll(async () => pressState(pressed)).toBe('on');
+        await expectDividersAsAtRest('held');
+      },
+    },
+  );
+  // Released: halfway through the release fade.
+  await holdAnimations(page);
+  await seekAnimations(page, RELEASE_MS / 2);
+  expect(await pressState(pressed)).toBe('fading');
+  await expectDividersAsAtRest('releasing');
+  await releaseAnimations(page, {finish: true});
+  await expect.poll(async () => pressState(pressed)).toBeNull();
+  await expectDividersAsAtRest('after the release');
 });
 
 test('a mouse press and hover on a fine pointer leave the press layer out of it', async ({
