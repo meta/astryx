@@ -616,4 +616,85 @@ describe('InputGroup', () => {
     expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
     expect(textInput()).toHaveAttribute('data-size', 'sm');
   });
+  describe('an error status on the group', () => {
+    it('marks every member invalid, since the group cannot carry aria-invalid', () => {
+      render(
+        <InputGroup
+          label="Phone"
+          status={{type: 'error', message: 'Enter a valid phone number'}}>
+          <TextInput label="Area code" value="" onChange={() => {}} />
+          <NumberInput label="Number" value={12} onChange={() => {}} />
+          <Selector label="Type" options={['Mobile', 'Home']} />
+          <MultiSelector
+            label="Tags"
+            options={['A', 'B']}
+            value={[]}
+            onChange={() => {}}
+          />
+          <TimeInput label="Best time" onChange={() => {}} />
+          <DateInput label="Due" onChange={() => {}} />
+        </InputGroup>,
+      );
+
+      expect(screen.getByRole('group', {name: 'Phone'})).not.toHaveAttribute(
+        'aria-invalid',
+      );
+      expect(screen.getByRole('textbox', {name: /Area code/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByRole('spinbutton', {name: /Number/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByRole('combobox', {name: /Type/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByRole('combobox', {name: /Tags/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByRole('textbox', {name: /Best time/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+      expect(screen.getByRole('combobox', {name: /Due/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    });
+
+    it('leaves members valid when the group has no error', () => {
+      render(
+        <InputGroup label="Phone" status={{type: 'success', message: 'Ok'}}>
+          <TextInput label="Area code" value="" onChange={() => {}} />
+        </InputGroup>,
+      );
+      expect(
+        screen.getByRole('textbox', {name: /Area code/}),
+      ).not.toHaveAttribute('aria-invalid');
+    });
+
+    it("lets a member's own status override the group's", () => {
+      render(
+        <InputGroup label="Phone" status={{type: 'error', message: 'Bad'}}>
+          <TextInput
+            label="Area code"
+            value=""
+            onChange={() => {}}
+            status={{type: 'success'}}
+          />
+          <TextInput label="Number" value="" onChange={() => {}} />
+        </InputGroup>,
+      );
+      expect(
+        screen.getByRole('textbox', {name: /Area code/}),
+      ).not.toHaveAttribute('aria-invalid');
+      expect(screen.getByRole('textbox', {name: /Number/})).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    });
+  });
 });

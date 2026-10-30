@@ -73,7 +73,7 @@ import {useInputContainer} from '../hooks/useInputContainer';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
@@ -861,7 +861,9 @@ function TimeField({
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={
-              status?.type === 'error' || !isInputValid ? 'true' : undefined
+              isStatusInvalid(status, inputGroup) || !isInputValid
+                ? 'true'
+                : undefined
             }
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}
