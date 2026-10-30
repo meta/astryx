@@ -220,7 +220,7 @@ export function showsLayerPress(el: Element): boolean {
 /**
  * Under a coarse primary pointer, does every declaration of the element's
  * press layer on `pseudo`, and its `isolation`, apply only while a press is
- * on, fading or held (a list row's selection hold)? At rest the element then
+ * on or fading? At rest the element then
  * has no layer and is no stacking context, and a caller's own `pseudo` keeps
  * its styles.
  */
@@ -375,10 +375,10 @@ export function durationToMs(value: string): number {
 }
 
 /**
- * Does the element run the release animation on the fading arm, on the clock
- * its press profile has under a coarse primary pointer (a control's,
- * UIButton's highlight release; a cell's deselect when the marker says
- * `cell`), and on the deselect clock it always had under any other pointer
+ * Does the element run the release animation on the fading arm, on a
+ * control's clock under a coarse primary pointer (UIButton's highlight
+ * release; a list row's layer runs the deselect clock and is checked with
+ * the row), and on the deselect clock it always had under any other pointer
  * (the desktop rule), with no animation on the on arm (the onset is
  * instant)? Asserted on the element the controller writes to — the one that
  * composes `pressedAlpha` or an overlay variant — not on a descendant that
@@ -398,13 +398,13 @@ export function hasReleaseFade(el: Element): boolean {
   }
   // A control's release, on UIButton's clock: a list row's layer runs the
   // deselect clock and is checked with the row (utils/rowPressLayer.ts).
-  const profileMs = button.highlight.releaseMs;
+  const controlMs = button.highlight.releaseMs;
   const fine = own(rulesWithSelector(el, FADING_ARM, UNDER.fine));
   if (!fine.some(runsAnimation)) {
     // A surface whose layer runs every release (a list row).
     return (
-      releasesOnLayer(el, '::before', profileMs) ||
-      releasesOnLayer(el, '::after', profileMs)
+      releasesOnLayer(el, '::before', controlMs) ||
+      releasesOnLayer(el, '::after', controlMs)
     );
   }
   // Any other pointer than a coarse primary one: the deselect clock, one
@@ -417,8 +417,8 @@ export function hasReleaseFade(el: Element): boolean {
   if (coarse.some(stopsAnimation)) {
     // Under a coarse primary pointer the surface's own layer releases.
     return (
-      releasesOnLayer(el, '::before', profileMs) ||
-      releasesOnLayer(el, '::after', profileMs)
+      releasesOnLayer(el, '::before', controlMs) ||
+      releasesOnLayer(el, '::after', controlMs)
     );
   }
   const control = durationsOf(coarse.filter(rule => !isInputArm(rule)));

@@ -542,11 +542,11 @@ describe('Item', () => {
     }
   });
 
-  it('keeps its touch press layer to a press: on, fading or held', () => {
+  it('keeps its touch press layer to a press: on or fading', () => {
     render(<Item label="Row" onClick={() => {}} data-testid="row" />);
     // Under a coarse pointer the row's `::before` layer and its isolation
-    // apply only on a press arm, a selection hold's `held` included; at rest
-    // a caller's own `::before` keeps its styles.
+    // apply only on a press arm; at rest a caller's own `::before` keeps its
+    // styles.
     expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
       true,
     );
