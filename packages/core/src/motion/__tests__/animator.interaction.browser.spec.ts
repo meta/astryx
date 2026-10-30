@@ -57,6 +57,8 @@ const SLOW = {response: 2, dampingRatio: 1};
 /** Settles about 450 ms into the block. */
 const FAST = {response: 0.25, dampingRatio: 1};
 const TRAVEL = 300;
+/** One frame at 60 Hz, in ms. */
+const FRAME_MS = 1000 / 60;
 /** The marker chip sits this far inside the box\u2019s top-left corner. */
 const MARKER_INSET = 8;
 
@@ -447,7 +449,8 @@ test('a spring started right before a block plays in full after it', async ({
   // landing 400 ms into its curve.
   const busy = await page.evaluate(
     ({spring, travel}) => {
-      window.animator.animate({x: travel}, {spring});
+      (window as unknown as {blocked: MotionHandle}).blocked =
+        window.animator.animate({x: travel}, {spring});
       const from = performance.timeOrigin + performance.now();
       const end = performance.now() + 400;
       while (performance.now() < end) {
@@ -457,7 +460,24 @@ test('a spring started right before a block plays in full after it', async ({
     },
     {spring: SLOW, travel: TRAVEL},
   );
-  await page.waitForTimeout(300);
+  // Wait for the motion, not a wall clock: on a loaded machine the frames
+  // after the block reach the screencast later than any fixed wait. The page
+  // shows the box a quarter of the way along, then three more frames arrive.
+  await page.waitForFunction(
+    min =>
+      (document.getElementById('box')?.getBoundingClientRect().left ?? 0) > min,
+    TRAVEL / 4,
+    {polling: 'raf', timeout: 0},
+  );
+  const seen = cast.frameCount();
+  await expect
+    .poll(() => cast.frameCount(), {timeout: 0})
+    .toBeGreaterThan(seen + 2);
+  const startedAt = await page.evaluate(
+    async () =>
+      performance.timeOrigin +
+      (await (window as unknown as {blocked: MotionHandle}).blocked.started),
+  );
   const tracked = await trackMarker(page, await cast.stop());
   const xs = tracked
     .filter(f => f.box != null)
@@ -471,8 +491,23 @@ test('a spring started right before a block plays in full after it', async ({
     }),
   });
   expect(firstMoving).toBeDefined();
-  // 400 ms into this spring is 107 px; the start of the curve is a few px.
-  expect(firstMoving?.x ?? Infinity).toBeLessThan(30);
+  // The curve starts after the block, as Core Animation commits it.
+  expect(startedAt).toBeGreaterThan(busy.to - FRAME_MS);
+  // The first moving frame shows that curve: no further along than one that
+  // started a frame before the block ended, however sparse the frames a
+  // loaded machine sends. A curve dated at the call is 107 px in by then.
+  const atMost = await page.evaluate(
+    ({spring, travel, ms}) =>
+      Motion.solveSpring(Motion.toSpring(spring), {from: 0, to: travel}).value(
+        Math.max(0, ms) / 1000,
+      ),
+    {
+      spring: SLOW,
+      travel: TRAVEL,
+      ms: (firstMoving?.t ?? Infinity) - (busy.to - FRAME_MS),
+    },
+  );
+  expect(firstMoving?.x ?? Infinity).toBeLessThanOrEqual(atMost + 1);
 });
 
 test('no Layout or Paint runs while it animates', async ({
