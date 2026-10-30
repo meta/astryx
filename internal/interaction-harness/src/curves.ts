@@ -936,7 +936,7 @@ export interface CurveSample {
  * `pseudoElement` samples the element's `::before` or `::after` instead:
  * its presented values, labelled by its own animations (those whose effect
  * targets the element with that pseudo-element), as a component that animates
- * a pseudo-element (`animatorFor(element, {pseudoElement})`) draws it.
+ * a pseudo-element (`element.animate(keyframes, {pseudoElement})`) draws it.
  */
 export async function sampleCurve(
   locator: Locator,
