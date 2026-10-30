@@ -544,11 +544,36 @@ describe('the release ends with its animation, not its clock', () => {
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('waits for no animation that is not a running release: a descendant’s, an endless one, or one already finished', async () => {
+  it('waits for a release a component draws inside the surface, on a descendant whose nearest press owner is the surface (a checkbox’s box)', async () => {
     liftHeldPress();
-    const label = rows[0].firstElementChild as Element;
+    // The box wrapper's `::after` plays the release for the row's press,
+    // 50 ms longer than the row's clock.
+    const box = document.createElement('span');
+    rows[0].append(box);
+    const release = cssAnimation(rows[0], {
+      target: box,
+      endTime: PRESS_FADE_MS + 50,
+    });
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for no animation that is not this press’s running release: a nested press owner’s (on it or inside it), an endless one, or one already finished', async () => {
+    liftHeldPress();
+    // A press owner inside the row: its release is its own press's, never
+    // the row's.
+    const nested = pressable('span');
+    const inside = document.createElement('span');
+    nested.append(inside);
+    rows[0].append(nested);
     animate(rows[0], [
-      cssAnimation(rows[0], {target: label}).animation,
+      cssAnimation(rows[0], {target: nested}).animation,
+      cssAnimation(rows[0], {target: inside}).animation,
       cssAnimation(rows[0], {endTime: Infinity}).animation,
       cssAnimation(rows[0], {playState: 'finished'}).animation,
     ]);
