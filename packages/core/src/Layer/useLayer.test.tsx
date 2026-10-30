@@ -3406,12 +3406,16 @@ describe('show() anchor readiness (#5398)', () => {
   // the test can watch, and the Web Animations API whose presence marks a real
   // layout environment.
   const boxes = new WeakMap<Element, {width: number; height: number}>();
+  // Elements that render an empty box: one client rect of 0x0, as an empty
+  // inline `<span>` has, unlike `display: none`, which has none.
+  const emptyBoxes = new WeakSet<Element>();
   let frames: (FrameRequestCallback | null)[] = [];
   let observers: {disconnected: boolean}[] = [];
   let intersections: {disconnected: boolean; callback: () => void}[] = [];
   let animations: unknown[] = [];
 
   const originalRect = Element.prototype.getBoundingClientRect;
+  const originalClientRects = Element.prototype.getClientRects;
 
   class FakeKeyframeEffect {
     constructor(public target: Element) {}
@@ -3478,11 +3482,21 @@ describe('show() anchor readiness (#5398)', () => {
         toJSON: () => ({}),
       };
     };
+    Element.prototype.getClientRects = function () {
+      const box = boxes.get(this);
+      const hasBox =
+        emptyBoxes.has(this) ||
+        (box != null && (box.width > 0 || box.height > 0));
+      return (hasBox
+        ? [this.getBoundingClientRect()]
+        : []) as unknown as DOMRectList;
+    };
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     Element.prototype.getBoundingClientRect = originalRect;
+    Element.prototype.getClientRects = originalClientRects;
     delete (document as unknown as {getAnimations?: unknown}).getAnimations;
   });
 
@@ -3544,6 +3558,18 @@ describe('show() anchor readiness (#5398)', () => {
     expect(getByTestId('state')).toHaveTextContent('open');
     expect(observers).toHaveLength(0);
     expect(frames).toHaveLength(0);
+  });
+
+  it('opens at once for a trigger that renders an empty box (a ContextMenu cursor anchor)', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    emptyBoxes.add(getByTestId('a'));
+
+    fireEvent.click(getByTestId('a'));
+
+    // A 0x0 box is still a box: the wait is for `display: none` and closed
+    // dialogs only, so an empty anchor does not hold the layer closed.
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(observers).toHaveLength(0);
   });
 
   it('waits for a box on a boxless trigger, then settles, then opens', () => {

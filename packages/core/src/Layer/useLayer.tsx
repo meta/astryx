@@ -884,8 +884,11 @@ function isShownAsPopover(element: HTMLElement): boolean {
 }
 
 function isAnchorReady(anchor: HTMLElement): boolean {
-  const rect = anchor.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) {
+  // No layout box at all: `display: none`, or inside a closed `<dialog>`. An
+  // element that renders but is empty (an inline `<span>` with no content, such
+  // as a ContextMenu's cursor anchor in a shadow root without Astryx's styles)
+  // still has one 0x0 client rect and is a valid anchor.
+  if (anchor.getClientRects().length === 0) {
     return false;
   }
   const dialog = anchor.closest('dialog');
@@ -1678,9 +1681,9 @@ function useLayerImplementation(
       return;
     }
     if (isAnchorReady(anchor)) {
-      // A trigger that already has a box is a valid anchor: open now, in the
+      // A trigger that already has a layout box is a valid anchor: open now, in the
       // same task as the interaction that asked, so a menu still opens on
-      // press and not on the next frame. Only a boxless trigger has to wait.
+      // press and not on the next frame. Only a trigger with no layout box has to wait.
       openNow();
       return;
     }
