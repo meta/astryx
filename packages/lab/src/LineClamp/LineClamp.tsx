@@ -64,74 +64,47 @@ const styles = stylex.create({
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** Original tabIndex/aria-hidden state, captured before we touch an element. */
-const ORIGINAL_STATE = new WeakMap<
-  Element,
-  {tabIndex: string | null; ariaHidden: string | null}
->();
+const HIDDEN_ATTRIBUTE = 'data-line-clamp-hidden';
 
-/** Remove a clipped descendant from the tab order, capturing its prior state once. */
+/**
+ * Take a clipped descendant out of the tab order and the accessibility tree by
+ * marking it `inert`. The element's own `tabindex` and `aria-hidden` are never
+ * rewritten, so a caller's `tabIndex={-1}` or `aria-hidden="true"` survives
+ * whatever the clamp does, and there is nothing to restore but the one
+ * attribute this adds.
+ */
 function hideFromTabOrder(el: HTMLElement) {
-  if (el.hasAttribute('data-line-clamp-hidden')) {
-    const original = ORIGINAL_STATE.get(el);
-    const tabIndex = el.getAttribute('tabindex');
-    const ariaHidden = el.getAttribute('aria-hidden');
-    // Still inert: writing again would only emit mutation records that wake
-    // the observer below for no change.
-    if (tabIndex === '-1' && ariaHidden === 'true') {
-      return;
-    }
-    // The caller changed it while it was clipped. What it set is the state to
-    // restore later, not what was captured before.
-    if (original) {
-      if (tabIndex !== '-1') {
-        original.tabIndex = tabIndex;
-      }
-      if (ariaHidden !== 'true') {
-        original.ariaHidden = ariaHidden;
-      }
-    }
+  if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
+    return;
   }
-  if (!ORIGINAL_STATE.has(el)) {
-    ORIGINAL_STATE.set(el, {
-      tabIndex: el.getAttribute('tabindex'),
-      ariaHidden: el.getAttribute('aria-hidden'),
-    });
+  // Already inert because the caller made it so: not ours to manage.
+  if (el.hasAttribute('inert')) {
+    return;
   }
-  el.setAttribute('tabindex', '-1');
-  el.setAttribute('aria-hidden', 'true');
-  el.setAttribute('data-line-clamp-hidden', '');
+  el.setAttribute('inert', '');
+  el.setAttribute(HIDDEN_ATTRIBUTE, '');
 }
 
-/** Put a previously-clipped descendant's own state back, exactly as it was. */
-function restoreOriginalState(el: HTMLElement) {
-  const original = ORIGINAL_STATE.get(el);
-  if (original) {
-    if (original.tabIndex === null) {
-      el.removeAttribute('tabindex');
-    } else {
-      el.setAttribute('tabindex', original.tabIndex);
-    }
-    if (original.ariaHidden === null) {
-      el.removeAttribute('aria-hidden');
-    } else {
-      el.setAttribute('aria-hidden', original.ariaHidden);
-    }
-    ORIGINAL_STATE.delete(el);
-  }
-  el.removeAttribute('data-line-clamp-hidden');
+/** Make a descendant this clamp hid reachable again. */
+function restoreFromClip(el: HTMLElement) {
+  el.removeAttribute('inert');
+  el.removeAttribute(HIDDEN_ATTRIBUTE);
 }
 
 /**
  * Scan a clamp container for focusable descendants that fall on a visually
  * clipped line, and hide exactly those from the tab order (see the fuller
  * comment where this runs, in the component). Also includes elements this
- * already hid (`[data-line-clamp-hidden]`) even though a hidden one no
- * longer matches FOCUSABLE_SELECTOR (its own tabindex="-1" excludes it) —
- * otherwise a previously-clipped descendant that becomes visible again
- * (a resize, more space) would never be found and restored.
+ * already hid (`[data-line-clamp-hidden]`) so a previously-clipped descendant
+ * that becomes visible again (a resize, more space) is found and restored.
+ *
+ * `focusTarget` is where focus is going when this runs from a `focusout`,
+ * which fires before `document.activeElement` has moved.
  */
-function syncFocusableClipping(container: HTMLElement) {
+function syncFocusableClipping(
+  container: HTMLElement,
+  focusTarget?: Element | null,
+) {
   const containerBottom = container.getBoundingClientRect().bottom;
   const candidates = container.querySelectorAll<HTMLElement>(
     `${FOCUSABLE_SELECTOR}, [data-line-clamp-hidden]`,
@@ -139,24 +112,78 @@ function syncFocusableClipping(container: HTMLElement) {
   for (const el of candidates) {
     // Never take the element that holds focus out of the tab order: focus
     // would be lost from under the reader.
-    const isFocused = el.contains(document.activeElement);
+    const isFocused =
+      el.contains(document.activeElement) ||
+      (focusTarget != null && el.contains(focusTarget));
     const isClipped =
       !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
       hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
-      restoreOriginalState(el);
+      restoreFromClip(el);
     }
   }
+}
+
+const MUTATION_OPTIONS: MutationObserverInit = {
+  childList: true,
+  subtree: true,
+  attributes: true,
+  attributeFilter: ['tabindex', 'disabled', 'href'],
+};
+
+// One observer for every clamp on the page: a list of N clamps would
+// otherwise hold N observers. Each record is dispatched to the clamp roots
+// that contain its target.
+const mutationRoots = new Map<HTMLElement, () => void>();
+let sharedMutations: MutationObserver | null = null;
+
+function dispatchMutations(records: ReadonlyArray<MutationRecord>) {
+  const due = new Set<() => void>();
+  for (const record of records) {
+    for (const [root, sync] of mutationRoots) {
+      if (root.contains(record.target)) {
+        due.add(sync);
+      }
+    }
+  }
+  due.forEach(sync => sync());
+}
+
+function observeMutations(container: HTMLElement, sync: () => void) {
+  if (typeof MutationObserver === 'undefined') {
+    return () => {};
+  }
+  sharedMutations ??= new MutationObserver(dispatchMutations);
+  mutationRoots.set(container, sync);
+  sharedMutations.observe(container, MUTATION_OPTIONS);
+  return () => {
+    const observer = sharedMutations;
+    if (observer == null) {
+      return;
+    }
+    // An observer cannot unobserve one target, so drop it, hand over what it
+    // had already seen, and watch the roots that remain.
+    const pending = observer.takeRecords();
+    observer.disconnect();
+    mutationRoots.delete(container);
+    dispatchMutations(pending);
+    if (mutationRoots.size === 0) {
+      sharedMutations = null;
+      return;
+    }
+    for (const root of mutationRoots.keys()) {
+      observer.observe(root, MUTATION_OPTIONS);
+    }
+  };
 }
 
 export interface LineClampProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLElement>;
   /**
-   * Content to clamp. Unlike `Text`'s `maxLines` (which truncates a single
-   * text node), `LineClamp` wraps arbitrary children — mixed inline content,
-   * nested elements, anything that isn't a single `Text`.
+   * Content to clamp: mixed inline content, nested elements, anything you
+   * would rather not wrap in a single `Text`.
    */
   children: ReactNode;
   /**
@@ -183,9 +210,10 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
 /**
  * Clamps arbitrary content to a fixed number of lines with an ellipsis.
  *
- * `Text`'s `maxLines` truncates the text component's own string content;
- * `LineClamp` is the composable version — wrap it around any children (mixed
- * inline content, nested elements) to clamp the whole block to N lines.
+ * `Text`'s `maxLines` clamps a `Text` element. `LineClamp` clamps whatever it
+ * wraps and adds no typography of its own, so it fits content that is not a
+ * single `Text` (mixed inline content, nested elements) without changing its
+ * font, color or wrapping.
  *
  * Truncation detection reuses `useTruncation` (the same hook `Text` uses),
  * so overflow is measured correctly even while `-webkit-line-clamp` clips
@@ -259,26 +287,27 @@ export function LineClamp({
   // attached to a node that has been replaced. The mutation observer covers
   // what neither a render nor a resize does: a child component adding or
   // re-enabling a focusable element past the fold on its own state change.
+  // A `focusout` re-runs the sync once focus has moved: the focused element
+  // was skipped while it held focus, so a link clipped in the meantime would
+  // otherwise stay an invisible tab stop.
   useEffect(() => {
     const container = elementRef.current;
     if (!container) {
       return;
     }
     const sync = () => syncFocusableClipping(container);
+    const onFocusOut = (event: FocusEvent) =>
+      syncFocusableClipping(
+        container,
+        event.relatedTarget instanceof Element ? event.relatedTarget : null,
+      );
     const unobserve = observeResize(container, sync);
-    const mutations =
-      typeof MutationObserver === 'undefined'
-        ? null
-        : new MutationObserver(sync);
-    mutations?.observe(container, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['tabindex', 'disabled', 'href'],
-    });
+    const unobserveMutations = observeMutations(container, sync);
+    container.addEventListener('focusout', onFocusOut);
     return () => {
       unobserve();
-      mutations?.disconnect();
+      unobserveMutations();
+      container.removeEventListener('focusout', onFocusOut);
     };
   }, [Component]);
 

@@ -138,8 +138,7 @@ describe('LineClamp', () => {
         </LineClamp>,
       );
 
-      expect(link).toHaveAttribute('tabindex', '-1');
-      expect(link).toHaveAttribute('aria-hidden', 'true');
+      expect(link).toHaveAttribute('inert');
     });
 
     it('leaves a visible link in the tab order untouched', () => {
@@ -162,17 +161,13 @@ describe('LineClamp', () => {
         </LineClamp>,
       );
 
-      expect(link).not.toHaveAttribute('tabindex');
-      expect(link).not.toHaveAttribute('aria-hidden');
+      expect(link).not.toHaveAttribute('inert');
     });
 
-    it("restores a link's own original tabIndex once it's no longer clipped", () => {
+    it('makes a link reachable again once it is no longer clipped', () => {
       const {rerender} = render(
         <LineClamp maxLines={2} data-testid="clamp">
-          Some text{' '}
-          <a href="/more" tabIndex={3}>
-            Read more
-          </a>
+          Some text <a href="/more">Read more</a>
         </LineClamp>,
       );
       const container = screen.getByTestId('clamp');
@@ -184,27 +179,21 @@ describe('LineClamp', () => {
       mockRects(rectMap);
       rerender(
         <LineClamp maxLines={2} data-testid="clamp">
-          Some text{' '}
-          <a href="/more" tabIndex={3}>
-            Read more
-          </a>
+          Some text <a href="/more">Read more</a>
         </LineClamp>,
       );
-      expect(link).toHaveAttribute('tabindex', '-1');
+      expect(link).toHaveAttribute('inert');
 
       // Move the link above the fold and force another render.
       rectMap.set(link, {top: 10, bottom: 26});
       rerender(
         <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
-          Some text{' '}
-          <a href="/more" tabIndex={3}>
-            Read more
-          </a>
+          Some text <a href="/more">Read more</a>
         </LineClamp>,
       );
 
-      expect(link).toHaveAttribute('tabindex', '3');
-      expect(link).not.toHaveAttribute('aria-hidden');
+      expect(link).not.toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('data-line-clamp-hidden');
     });
 
     it('hides a descendant a child re-enables past the fold after mount', async () => {
@@ -246,50 +235,61 @@ describe('LineClamp', () => {
       fireEvent.click(screen.getByText('Reveal'));
       const late = screen.getByText('Late link');
       await waitFor(() => {
-        expect(late).toHaveAttribute('tabindex', '-1');
+        expect(late).toHaveAttribute('inert');
       });
     });
 
-    it("keeps a caller's new tabIndex as the one to restore while clipped", () => {
+    it("never rewrites a caller's tabIndex or aria-hidden, clipped or not", () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       const props = {maxLines: 2, 'data-testid': 'clamp', hasTooltip: false};
+      const link = (
+        <a href="/more" tabIndex={-1} aria-hidden="true">
+          Read more
+        </a>
+      );
+      const {rerender} = render(<LineClamp {...props}>{link}</LineClamp>);
+      const anchor = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(anchor, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(<LineClamp {...props}>{link}</LineClamp>);
+      expect(anchor).toHaveAttribute('inert');
+      expect(anchor).toHaveAttribute('tabindex', '-1');
+      expect(anchor).toHaveAttribute('aria-hidden', 'true');
+
+      rectMap.set(anchor, {top: 10, bottom: 26});
+      rerender(
+        <LineClamp {...props} maxLines={3}>
+          {link}
+        </LineClamp>,
+      );
+      expect(anchor).not.toHaveAttribute('inert');
+      expect(anchor).toHaveAttribute('tabindex', '-1');
+      expect(anchor).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('hides a link that was clipped while it held focus once focus leaves it', () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
       const {rerender} = render(
-        <LineClamp {...props}>
-          <a href="/more" tabIndex={3}>
-            Read more
-          </a>
+        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+          <a href="/more">Read more</a>
         </LineClamp>,
       );
       const link = screen.getByText('Read more');
+      link.focus();
       rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
       rectMap.set(link, {top: 40, bottom: 56});
       mockRects(rectMap);
       rerender(
-        <LineClamp {...props}>
-          <a href="/more" tabIndex={3}>
-            Read more
-          </a>
+        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+          <a href="/more">Read more</a>
         </LineClamp>,
       );
-      expect(link).toHaveAttribute('tabindex', '-1');
+      // Skipped while it holds focus.
+      expect(link).not.toHaveAttribute('inert');
 
-      // The caller changes its tabIndex while the link is clipped.
-      rerender(
-        <LineClamp {...props}>
-          <a href="/more" tabIndex={5}>
-            Read more
-          </a>
-        </LineClamp>,
-      );
-      rectMap.set(link, {top: 10, bottom: 26});
-      rerender(
-        <LineClamp {...props} maxLines={3}>
-          <a href="/more" tabIndex={5}>
-            Read more
-          </a>
-        </LineClamp>,
-      );
-      expect(link).toHaveAttribute('tabindex', '5');
+      link.blur();
+      expect(link).toHaveAttribute('inert');
     });
 
     it('never hides the element that holds focus', () => {
@@ -310,7 +310,43 @@ describe('LineClamp', () => {
         </LineClamp>,
       );
       expect(link).toHaveFocus();
-      expect(link).not.toHaveAttribute('tabindex');
+      expect(link).not.toHaveAttribute('inert');
+    });
+  });
+
+  describe('observers', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function countMutationObservers(clamps: number) {
+      const Native = MutationObserver;
+      let created = 0;
+      vi.stubGlobal(
+        'MutationObserver',
+        class extends Native {
+          constructor(callback: MutationCallback) {
+            super(callback);
+            created += 1;
+          }
+        },
+      );
+      const {unmount} = render(
+        <>
+          {Array.from({length: clamps}, (_, i) => (
+            <LineClamp key={i} maxLines={2}>
+              Row {i} <a href="/more">more</a>
+            </LineClamp>
+          ))}
+        </>,
+      );
+      unmount();
+      vi.unstubAllGlobals();
+      return created;
+    }
+
+    it('shares one MutationObserver across every clamp', () => {
+      expect(countMutationObservers(20)).toBe(countMutationObservers(1));
     });
   });
 

@@ -72,8 +72,8 @@ export const MixedContent: Story = {
     children: (
       <>
         This card description mixes <strong>bold</strong>, <em>italic</em>, and
-        plain text — content a single <code>{'<Text>'}</code> node can&apos;t
-        compose, which is exactly what LineClamp wraps around instead.
+        plain text. LineClamp clamps all of it as one block and adds no
+        typography of its own.
       </>
     ),
   },

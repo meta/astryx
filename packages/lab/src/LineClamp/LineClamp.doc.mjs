@@ -20,7 +20,7 @@ export const docs = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'Content to clamp. LineClamp wraps arbitrary children (mixed inline content, nested elements) and clamps the whole block, rather than one Text component.',
+        'Content to clamp: mixed inline content, nested elements, anything you would rather not wrap in a single Text.',
       required: true,
     },
     {
@@ -46,7 +46,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Clamps arbitrary content to a fixed number of lines with an ellipsis. Text's maxLines clamps the Text component's own content; LineClamp is the composable version — wrap it around any children (mixed inline content, nested elements) to clamp the whole block to N lines. Truncation detection reuses useTruncation (the same hook Text uses), so overflow is measured correctly even while -webkit-line-clamp clips scrollHeight.",
+      "Clamps arbitrary content to a fixed number of lines with an ellipsis. Text's maxLines clamps a Text element; LineClamp clamps whatever it wraps and adds no typography of its own, so it suits mixed inline content and nested elements without changing their font, color or wrapping. Truncation detection reuses useTruncation (the same hook Text uses), so overflow is measured correctly even while -webkit-line-clamp clips scrollHeight.",
     bestPractices: [
       {
         guidance: true,
@@ -66,7 +66,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically removed from the tab order and hidden from assistive tech while clipped, and restored the moment it is no longer clipped, including when a child adds or re-enables one later. The element that currently has focus is never hidden. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.',
+          'A link, button, form control or element with a tabindex that falls past the visible lines (e.g. a trailing link) is automatically made inert (out of the tab order and the accessibility tree) while clipped, and made reachable again the moment it is no longer clipped, including when a child adds or re-enables one later or focus moves away from it. LineClamp never rewrites your own tabIndex or aria-hidden. The element that currently has focus is never hidden. No consumer action needed, but avoid relying on Tab reaching a link that only sometimes clips.',
       },
     ],
   },
@@ -126,7 +126,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '落在可见行之外的链接、按钮、表单控件或带 tabindex 的元素（例如一个尾部链接）会在被截断时自动从 Tab 顺序中移除并对辅助技术隐藏，一旦不再被截断即恢复，子组件之后新增或重新启用的元素同样适用；当前持有焦点的元素不会被隐藏。无需消费者处理，但应避免依赖 Tab 到达一个只是有时被截断的链接。',
+          '落在可见行之外的链接、按钮、表单控件或带 tabindex 的元素（例如一个尾部链接）会在被截断时自动设为 inert（移出 Tab 顺序和无障碍树），一旦不再被截断即恢复，子组件之后新增或重新启用的元素以及焦点移开后的元素同样适用；不会改写你自己设置的 tabIndex 或 aria-hidden；当前持有焦点的元素不会被隐藏。无需消费者处理，但应避免依赖 Tab 到达一个只是有时被截断的链接。',
       },
     ],
   },
@@ -157,7 +157,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'A link, button, form control or tabindex element past the visible lines is auto-removed from the tab order while clipped (never the focused one), restored once not clipped, including late additions. No consumer action needed.',
+          'A link, button, form control or tabindex element past the visible lines is made inert while clipped (never the focused one, never your own tabIndex or aria-hidden), restored once not clipped, including late additions and after focus moves away. No consumer action needed.',
       },
     ],
   },
