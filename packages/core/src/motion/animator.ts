@@ -2549,8 +2549,9 @@ export function createAnimator(
    * never an animation (DR2: opacity only), so it is never shown in the wrong
    * place. In a dip the fade back in starts from here and takes what is left
    * of the cross-fade, so the dip ends when it was due even when a busy main
-   * thread runs this timer late; past the whole fade back in (over 100 ms
-   * late) the element appears at once where it landed.
+   * thread runs this timer late; past the whole fade back in (100 ms late or
+   * more) the element appears at once where it landed, with no animation,
+   * and the call settles then.
    */
   const land = (landing: Landing) => {
     landings.delete(landing);
@@ -2563,13 +2564,16 @@ export function createAnimator(
       changed.push(property);
     }
     let end = time;
-    if (landing.fadeIn != null) {
-      // The fade back in takes what is left of the cross-fade: a timer that
-      // a busy main thread runs late shortens it, so the dip still ends
-      // when it was due (design:reduced-motion DR2, 200 ms or less), and the
-      // element is never shown before it lands.
-      const late = landing.due == null ? 0 : Math.max(0, time - landing.due);
-      const ms = Math.max(1, landing.fadeIn.ms - late);
+    // The fade back in takes what is left of the cross-fade: a timer that a
+    // busy main thread runs late shortens it, so the dip still ends when it
+    // was due (design:reduced-motion DR2, 200 ms or less), and the element is
+    // never shown before it lands. Past the whole fade back in nothing is
+    // left: the element appears at once, a plain write with no fade for the
+    // browser to start a frame later, so the call settles showing it.
+    const late = landing.due == null ? 0 : Math.max(0, time - landing.due);
+    const appears = landing.fadeIn != null && late >= landing.fadeIn.ms;
+    if (landing.fadeIn != null && !appears) {
+      const ms = landing.fadeIn.ms - late;
       segments.set(
         'opacity',
         fadeSegment(landing.owner, time, [
@@ -2579,6 +2583,13 @@ export function createAnimator(
       );
       changed.push('opacity');
       end = time + ms;
+    } else if (landing.fadeIn != null) {
+      segments.delete('opacity');
+      resting.opacity =
+        landing.fadeIn.isBorrowed === true
+          ? IDENTITY.opacity
+          : landing.fadeIn.to;
+      changed.push('opacity');
     } else if (landing.restore != null) {
       segments.delete('opacity');
       resting.opacity =
@@ -2586,11 +2597,13 @@ export function createAnimator(
       changed.push('opacity');
     }
     commit(changed, time);
-    if (landing.restoreIsBorrowed === true) {
+    if (
+      landing.restoreIsBorrowed === true ||
+      (appears && landing.fadeIn?.isBorrowed === true)
+    ) {
       // The stylesheet owns its opacity again.
       releaseOwnOpacity();
-    }
-    if (landing.fadeIn?.isBorrowed === true) {
+    } else if (landing.fadeIn?.isBorrowed === true) {
       // The fade back in returns to the stylesheet's opacity: it owns it
       // again once the fade ends (releaseIdentity).
       borrowedOpacity = landing.fadeIn.to;
