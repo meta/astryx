@@ -157,6 +157,31 @@ describe('BottomSheetPanel', () => {
     expect(onMotionComplete).toHaveBeenLastCalledWith('exiting');
   });
 
+  it('keeps exiting when the engine replaces the exit transition mid-flight', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    // Chromium cancels a running transition whose end value changes (the
+    // exit's percentage transform, when the closing frame moves the sheet's
+    // height by a fraction of a pixel) and starts one from where it was.
+    panel.getAnimations = () =>
+      [{transitionProperty: 'transform', playState: 'running'}] as never;
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).not.toHaveBeenCalled();
+    panel.getAnimations = () => [];
+    fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
+  it('ends the exit when its transition is cancelled with nothing running on', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    panel.getAnimations = () => [];
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
   it('completes immediately when the rendered transition is disabled', () => {
     // The stylesheet decides reduced motion (its transform transition
     // collapses under the preference); the gesture hook no longer pins an
