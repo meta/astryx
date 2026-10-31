@@ -35,7 +35,6 @@ import {
   animationStoryboard,
   blockMainThread,
   busyWindowProof,
-  castStoryboard,
   compareCurve,
   countBetween,
   drag,
@@ -1080,16 +1079,6 @@ test('the settle keeps advancing every frame while the main thread is blocked', 
     },
     testInfo,
   );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'bottomsheet-settle-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: proof.judged.to + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({y: tracked.find(f => f.t === t)?.box?.y ?? -1}),
-  });
-  await film.write(testInfo, {block, judged: proof.judged});
   testInfo.annotations.push({
     type: 'busy-main-thread',
     description: proof.summary,
