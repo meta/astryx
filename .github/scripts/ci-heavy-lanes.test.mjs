@@ -189,6 +189,9 @@ describe("main's release-check every three hours and full unit run about hourly 
       rest: {
         repos: {getBranch: async () => ({data: {commit: {sha: tip}}})},
         actions: {
+          listJobsForWorkflowRun: async ({run_id}) => ({
+            data: {jobs: runs.find(item => item.id === run_id)?.jobs ?? []},
+          }),
           listWorkflowRuns: async args => {
             calls.listed.push(args);
             return {
@@ -388,9 +391,13 @@ describe("main's release-check every three hours and full unit run about hourly 
     const calls = await run({
       runs: [
         check(70, {
+          id: 3,
           head_sha: sha,
           conclusion: 'failure',
-          display_title: `Release check ${sha}`,
+          jobs: [
+            {name: 'release-authority', conclusion: 'success'},
+            {name: 'pr-rtl', conclusion: 'failure'},
+          ],
         }),
       ],
       units: [check(70, {head_sha: sha, conclusion: 'failure'})],
@@ -400,13 +407,13 @@ describe("main's release-check every three hours and full unit run about hourly 
 
   it('checks a tip again when its run was asked to check an older commit', async () => {
     // A merge landed between the tip read and the dispatch: the run checked
-    // out the tip and failed its exact-head check for the older commit.
-    const older = 'c'.repeat(40);
+    // out the tip, and its release-authority job refused the older commit.
     const mismatched = minutes =>
       check(minutes, {
+        id: 4,
         head_sha: sha,
         conclusion: 'failure',
-        display_title: `Release check ${older}`,
+        jobs: [{name: 'release-authority', conclusion: 'failure'}],
       });
     expect(
       (
@@ -423,10 +430,8 @@ describe("main's release-check every three hours and full unit run about hourly 
     ).toEqual([]);
   });
 
-  it('names each release-check run after the commit it was asked to check', () => {
-    expect(ci['run-name']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && format('Release check {0}', inputs['expected-head']) || github.event.pull_request.title || github.event.merge_group.head_commit.message || github.workflow }}",
-    );
+  it('leaves every run name as it was', () => {
+    expect(ci['run-name']).toBeUndefined();
   });
 
   it('does not check a tip twice', async () => {
