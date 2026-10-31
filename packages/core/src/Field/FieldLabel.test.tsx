@@ -152,7 +152,7 @@ describe('FieldLabel', () => {
         </>,
       );
       expect(screen.getByRole('textbox')).toHaveAccessibleName('Coverage (%)');
-      const trigger = screen.getByRole('button', {name: 'More information'});
+      const trigger = screen.getByRole('button', {name: 'About Coverage (%)'});
       expect(trigger).toHaveAttribute('type', 'button');
       // The help describes the trigger, not the field.
       expect(screen.getByRole('textbox')).not.toHaveAccessibleDescription(
@@ -173,7 +173,7 @@ describe('FieldLabel', () => {
         </>,
       );
       await user.tab();
-      const trigger = screen.getByRole('button', {name: 'More information'});
+      const trigger = screen.getByRole('button', {name: 'About Coverage (%)'});
       expect(trigger).toHaveFocus();
       await waitFor(() => {
         expect(trigger).toHaveAccessibleDescription(
@@ -200,7 +200,7 @@ describe('FieldLabel', () => {
       );
       await user.tab();
       expect(
-        screen.getByRole('button', {name: 'More information'}),
+        screen.getByRole('button', {name: 'About Coverage (%)'}),
       ).toHaveFocus();
       expect(screen.getByRole('textbox')).toHaveAccessibleName('Coverage (%)');
     });
@@ -223,7 +223,7 @@ describe('FieldLabel', () => {
       expect(ref.current).toHaveClass('caller-label');
       expect(
         ref.current?.contains(
-          screen.getByRole('button', {name: 'More information'}),
+          screen.getByRole('button', {name: 'About Coverage (%)'}),
         ),
       ).toBe(false);
     });
@@ -267,9 +267,9 @@ describe('FieldLabel', () => {
       fireEvent.click(element);
     };
 
-    /** The help's trigger: the one "More information" button. */
-    const infoIcon = (_labelText: string) =>
-      screen.getByRole('button', {name: 'More information'});
+    /** The help's trigger, named after its label. */
+    const infoIcon = (labelText: string) =>
+      screen.getByRole('button', {name: `About ${labelText}`});
 
     it('opens the help on a tap of its icon and leaves a checkbox alone', async () => {
       render(

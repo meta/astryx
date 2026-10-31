@@ -210,7 +210,7 @@ for (const item of cases) {
     const tooltipTriggerPass =
       observed.tooltipTrigger?.tagName === 'BUTTON' &&
       observed.tooltipTrigger.type === 'button' &&
-      observed.tooltipTrigger.ariaLabel === 'More information' &&
+      observed.tooltipTrigger.ariaLabel?.startsWith('About ') === true &&
       !observed.tooltipTrigger.insideLabel &&
       observed.tooltipTrigger.tabIndex === 0;
 
@@ -229,7 +229,7 @@ for (const item of cases) {
         groupLabelTag: 'SPAN',
         hiddenGeometry: {width: 1, height: 1},
         tooltipTrigger:
-          'a "More information" button outside the label, in the Tab order',
+          'an "About {label}" button outside the label, in the Tab order',
       },
       observed: {
         build: storybookSha,

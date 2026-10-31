@@ -36,7 +36,7 @@ test.afterAll(async () => {
 async function openInfoIcon(page: Page): Promise<Locator> {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
   const icon = page.locator(
-    `label[for="${FIELD_ID}"] ~ button[aria-label="More information"]`,
+    `label[for="${FIELD_ID}"] ~ button[aria-label^="About "]`,
   );
   await icon.waitFor();
   return icon;

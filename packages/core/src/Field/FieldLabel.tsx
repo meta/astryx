@@ -326,15 +326,15 @@ export function FieldLabel({
   );
 
   // The tooltip's trigger: a named button after the label element, reachable
-  // by keyboard (FR8, AR5). Its name is a fixed "More information", not the
-  // tooltip text, so the help describes only the trigger and stays out of the
-  // control's name (AR2). The trigger's one job is to reveal the help, so a
+  // by keyboard (FR8, AR5). Its name is "About {label}" — unique per field, and
+  // not the tooltip text — so the help describes only the trigger and stays
+  // out of the control's name (AR2). The trigger's one job is to reveal the help, so a
   // tap opens or closes it (`touchTrigger="tap"`, FR9).
   const infoTrigger = labelTooltip ? (
     <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
       <button
         type="button"
-        aria-label={t('@astryx.field.moreInformation')}
+        aria-label={t('@astryx.field.aboutLabel', {label})}
         {...stylex.props(
           focusOutlineStyles.focusVisible,
           styles.infoTrigger,
