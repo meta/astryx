@@ -13,6 +13,8 @@ review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/core/src/Banner/Banner.test.tsx,
+    packages/core/src/Banner/__tests__/Alert.a11y.test.tsx,
+    packages/core/src/Banner/__tests__/Alert.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
   ]
@@ -26,7 +28,7 @@ architecture:
     architecture:theme-compilation,
   ]
 contributing: []
-system_specs: [spec:AST-009]
+system_specs: [spec:AST-009, spec:AST-020, spec:AST-021]
 ---
 
 # Banner component contract
@@ -175,6 +177,16 @@ a Banner added inside a mounted live container.
 Dismissal focus handoff, disclosure controls, and accessible control names remain
 unchanged.
 
+The dedicated alert-state binding exercises only Banner renders that explicitly
+request `role="alert"` through the standard DOM surface. It checks the shared
+status-message contract's DOM, accessibility-tree, and focus-preservation
+outcomes without claiming what assistive technology announces. Announcement
+wording and timing remain under AST-009. The plain error state passes every
+applicable expectation. The dismissible, collapsible, caller-action, and
+description states carry a recorded `status-message.message.text-exposed`
+failure: the region's DOM text includes control text (a closed tooltip or the
+caller's action label) or joins the title and description without a separator.
+
 ## Design relationships
 
 | Anatomy or state        | Design requirement                                                                                                                                                                                  | Representation authority                      | Hierarchy role | Component contract |
@@ -228,15 +240,16 @@ context on the Button element, and it does not restyle a consumer-provided
 
 ## Verification map
 
-| Contract            | Verification                                                            | Representative states                                               | Mutation or failure expectation                                                                                                                  | Audit section           |
-| ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| FR1, FR7            | `Banner.test.tsx` and `themingTargets.test.ts`                          | Status surface, content surface, current target axes                | Moving, removing, or changing an existing target breaks current assertions.                                                                      | `audit:Banner/theming`  |
-| FR2, FR3, FR4       | `Banner.test.tsx` plus current source inspection                        | Flat/elevated card and elevated section                             | Frame, status surface, content surface, shadow, or radius ownership changes from the recorded state.                                             | `audit:Banner/surfaces` |
-| FR5                 | Compiler output plus browser/computed-style evidence                    | Card with and without content; elevated card                        | `banner.borderRadius` unexpectedly reaches the frame/content, or docs claim that the current route already does.                                 | `audit:Banner/radius`   |
-| FR6, FR7            | Implementation PR target, compiler, probe, and component tests          | Card/section across none, low, med, and high elevation              | `banner-frame` is absent, uses another name, misses an axis, or moves the existing `banner` target.                                              | `audit:Banner/theming`  |
-| FR8                 | `Banner.test.tsx`, consumer docs, Accessibility Checklist A6            | Default info/success/warning/error; explicit status and alert roles | A visual status creates a live region, an explicit role is dropped, or docs tell builders to announce by conditionally mounting Banner.          | `audit:Banner/a11y`     |
-| FR9                 | `Banner.test.tsx` plus Button tooltip and custom-end-content assertions | Four statuses; built-in collapse/dismiss; tooltip; consumer action  | Built-in content loses the matching on-muted role, a tooltip is repainted, Button interaction ownership changes, or consumer content is mutated. | `audit:Banner/theming`  |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                           | Eight anatomy entries and five current targets                      | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                                                                  | `audit:Banner/theming`  |
+| Contract            | Verification                                                            | Representative states                                                                    | Mutation or failure expectation                                                                                                                              | Audit section           |
+| ------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| FR1, FR7            | `Banner.test.tsx` and `themingTargets.test.ts`                          | Status surface, content surface, current target axes                                     | Moving, removing, or changing an existing target breaks current assertions.                                                                                  | `audit:Banner/theming`  |
+| FR2, FR3, FR4       | `Banner.test.tsx` plus current source inspection                        | Flat/elevated card and elevated section                                                  | Frame, status surface, content surface, shadow, or radius ownership changes from the recorded state.                                                         | `audit:Banner/surfaces` |
+| FR5                 | Compiler output plus browser/computed-style evidence                    | Card with and without content; elevated card                                             | `banner.borderRadius` unexpectedly reaches the frame/content, or docs claim that the current route already does.                                             | `audit:Banner/radius`   |
+| FR6, FR7            | Implementation PR target, compiler, probe, and component tests          | Card/section across none, low, med, and high elevation                                   | `banner-frame` is absent, uses another name, misses an axis, or moves the existing `banner` target.                                                          | `audit:Banner/theming`  |
+| FR8                 | `Banner.test.tsx`, consumer docs, Accessibility Checklist A6            | Default info/success/warning/error; explicit status and alert roles                      | A visual status creates a live region, an explicit role is dropped, or docs tell builders to announce by conditionally mounting Banner.                      | `audit:Banner/a11y`     |
+| FR8 alert state     | `Alert.a11y.test.tsx` and `Alert.a11y.chromium.spec.ts`                 | Explicit urgent error; dismissible, collapsible, caller-action, and description variants | Role, assertive channel, atomicity, or focus preservation regresses across a message update; a recorded text-exposed failure passes unexpectedly or changes. | `audit:Banner/a11y`     |
+| FR9                 | `Banner.test.tsx` plus Button tooltip and custom-end-content assertions | Four statuses; built-in collapse/dismiss; tooltip; consumer action                       | Built-in content loses the matching on-muted role, a tooltip is repainted, Button interaction ownership changes, or consumer content is mutated.             | `audit:Banner/theming`  |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                           | Eight anatomy entries and five current targets                                           | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                                                                              | `audit:Banner/theming`  |
 
 ## Decision log
 
