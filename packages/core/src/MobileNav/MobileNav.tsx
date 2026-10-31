@@ -136,8 +136,9 @@ const styles = stylex.create({
   // ::backdrop is provided by the browser's top layer
   backdrop: {
     '::backdrop': {
+      // The page behind is not blurred: a full-viewport backdrop-filter is
+      // costly to repaint. The dim is the theme's overlay colour.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],

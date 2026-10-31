@@ -187,8 +187,22 @@ const styles = stylex.create({
     position: 'fixed',
     margin: 'auto',
     padding: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
+    // The backdrop does not blur the page (see backdrop); in forced colors,
+    // where the backdrop's colour is overridden, a 1px border keeps the modal
+    // separate from the page. A border, not an outline: the focus ring
+    // (focusOutlineProps) owns the outline longhands on this element.
+    borderWidth: {
+      default: 0,
+      '@media (forced-colors: active)': 1,
+    },
+    borderStyle: {
+      default: 'none',
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
@@ -230,11 +244,12 @@ const styles = stylex.create({
         'none',
     },
   },
-  // Backdrop using ::backdrop pseudo-element
+  // Backdrop using ::backdrop pseudo-element. It does not blur the page: a
+  // full-viewport backdrop-filter is costly to repaint. The dim is the
+  // theme's overlay colour.
   backdrop: {
     '::backdrop': {
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
     },
   },
   fullscreen: {
@@ -243,6 +258,8 @@ const styles = stylex.create({
     maxWidth: '100dvw',
     maxHeight: '100dvh',
     borderRadius: 0,
+    // Nothing of the page shows around a full-screen dialog: no edge.
+    borderWidth: 0,
     margin: 0,
     inset: 0,
   },
