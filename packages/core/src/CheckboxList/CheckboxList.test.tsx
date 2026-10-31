@@ -22,6 +22,7 @@ import userEvent from '@testing-library/user-event';
 import {CheckboxList} from './CheckboxList';
 import {CheckboxListItem} from './CheckboxListItem';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {List} from '../List/List';
 
 // FieldStatus announces status messages through the persistent useAnnounce
@@ -1127,6 +1128,41 @@ describe('CheckboxListItem ARIA props', () => {
       expect(checkbox).toHaveAccessibleDescription(
         'Weekly digest Notifications are managed by your administrator',
       );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the checkbox that
+    // has focus.
+    it('describes the focused checkbox with the reason as Tab moves through the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const email = screen.getByRole('checkbox', {name: 'Email'});
+      expect(email).toHaveFocus();
+      expect(email).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+      await user.tab();
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      expect(sms).toHaveFocus();
+      expect(sms).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+    });
+
+    it('opens the reason on a tap and toggles nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(sms, {pointerType: 'touch'});
+      fireEvent.pointerDown(sms, {pointerType: 'touch'});
+      fireEvent.pointerUp(sms, {pointerType: 'touch'});
+      fireEvent.mouseEnter(sms);
+      fireEvent.click(sms);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('adds no reason to the checkboxes of a group that is not disabled', () => {
