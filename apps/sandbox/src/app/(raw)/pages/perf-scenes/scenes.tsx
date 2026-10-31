@@ -26,6 +26,7 @@ import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Markdown} from '@astryxdesign/core/Markdown';
+import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Popover} from '@astryxdesign/core/Popover';
 import {
   Table,
@@ -120,8 +121,9 @@ function CommentsPanelScene() {
               </HStack>
               <Text maxLines={2}>{comment.body}</Text>
             </VStack>
-            <DropdownMenu
-              button={{label: 'Comment actions', variant: 'ghost', size: 'sm'}}
+            <MoreMenu
+              label="Comment actions"
+              size="sm"
               items={COMMENT_ACTIONS}
             />
           </HStack>
