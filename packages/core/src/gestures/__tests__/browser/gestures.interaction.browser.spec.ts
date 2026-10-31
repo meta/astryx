@@ -410,6 +410,7 @@ test('only elements whose recognizers claim a moving touch carry a blocking touc
       'card',
       'onePan',
       'kept',
+      'publicPan',
       'authorNone',
       'authorPanY',
       'authorPinchZoom',
@@ -572,6 +573,123 @@ test('a one-way overlay pan keeps its direction from the page, and leaves the ot
   await driver.play(drag(start, {x: start.x, y: start.y + 60}, 30));
   expect(await page.evaluate(() => window.scrollY)).toBeLessThan(before - 20);
   expect(states(await log(page), 'card')).toEqual(['failed', 'possible']);
+});
+
+test('the public pan reports a finger\u2019s drag along its axis as values (spec:AST-107 FR1)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+  });
+  const start = await center(page, 'publicPan');
+  await driver.play(drag(start, {x: start.x + 120, y: start.y + 6}));
+  const entries = (await log(page)).filter(entry => entry.name === 'publicPan');
+  expect(entries[0]?.state).toBe('began');
+  expect(entries.at(-1)?.state).toBe('ended');
+  // Nothing across its axis.
+  expect(entries.every(entry => entry.y === 0)).toBe(true);
+  // As in UIKit, the travel the drag needed to begin is not part of it.
+  expect(
+    entries.filter(entry => entry.state === 'changed').at(-1)?.x,
+  ).toBeCloseTo(120 - 10, 0);
+});
+
+test('the public pan is driven by a mouse drag and a pen drag where the primary pointer is fine (spec:AST-107 FR1, AST-094 FR43)', async ({
+  browser,
+  browserName,
+}) => {
+  // A desktop context: a fine primary pointer and no touch.
+  const context = await browser.newContext({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 800, height: 900},
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bundle});
+    await page.evaluate(() => {
+      document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+    });
+    const start = await center(page, 'publicPan');
+    const publicPan = async () =>
+      (await log(page))
+        .filter(entry => entry.name === 'publicPan')
+        .map(entry => entry.state);
+    // A mouse drag.
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) {
+      await page.mouse.move(start.x + step * 15, start.y + 2);
+    }
+    await page.mouse.up();
+    const byMouse = await publicPan();
+    expect(byMouse[0]).toBe('began');
+    expect(byMouse.at(-1)).toBe('ended');
+    await clearLog(page);
+    // A pen drag, where the engine can make one (Chromium's input domain).
+    if (browserName === 'chromium') {
+      const cdp = await context.newCDPSession(page);
+      const pen = async (
+        type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
+        x: number,
+        buttons: number,
+      ): Promise<void> => {
+        await cdp.send('Input.dispatchMouseEvent', {
+          type,
+          x,
+          y: start.y,
+          button: 'left',
+          buttons,
+          clickCount: 1,
+          pointerType: 'pen',
+        });
+      };
+      await pen('mousePressed', start.x, 1);
+      for (let step = 1; step <= 8; step++) {
+        await pen('mouseMoved', start.x + step * 15, 1);
+      }
+      await pen('mouseReleased', start.x + 120, 0);
+      const byPen = await publicPan();
+      expect(byPen[0]).toBe('began');
+      expect(byPen.at(-1)).toBe('ended');
+    }
+  } finally {
+    await context.close();
+  }
+});
+
+test('a tap, a long press and a drag across its axis on the public pan report nothing (spec:AST-107 FR1)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    document.getElementById('publicPan')?.scrollIntoView({block: 'center'});
+  });
+  const at = await center(page, 'publicPan');
+  const finger = {...at, id: 1};
+  // A tap.
+  await driver.play([
+    {t: 0, down: [finger]},
+    {t: 60, down: []},
+  ]);
+  // A long press: still well past the long-press duration.
+  await driver.play([
+    {t: 0, down: [finger]},
+    {t: 800, down: [finger]},
+    {t: 816, down: []},
+  ]);
+  // A drag across its axis.
+  await driver.play(drag(at, {x: at.x, y: at.y + 60}, 20));
+  expect((await log(page)).filter(entry => entry.name === 'publicPan')).toEqual(
+    [],
+  );
 });
 
 test('a held finger turns text selection off only where the hold does something (a pan that asks), until it lifts; a press-tracked control, a mouse and other pans keep native selection (spec:AST-094 FR41)', async ({
@@ -2038,6 +2156,7 @@ test.describe('where the primary pointer is fine', () => {
         'edgeWide',
         'edgeZoneRtl',
         'edgeWideRtl',
+        'publicPan',
         'slider',
         'switchRow',
         'onePan',

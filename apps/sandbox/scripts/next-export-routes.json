@@ -466,6 +466,8 @@
     "/templates/PaginationPageSize/",
     "/templates/PaginationVariants/",
     "/templates/PaginationWithTable/",
+    "/templates/PanPlayingCard/",
+    "/templates/PanPlayingCardVanilla/",
     "/templates/PopoverBottomSheetAlternative/",
     "/templates/PopoverConfirmAction/",
     "/templates/PopoverFilterPanel/",
