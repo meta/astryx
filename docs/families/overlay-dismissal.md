@@ -22,6 +22,7 @@ verified_by:
     packages/core/src/CommandPalette/CommandPalette.test.tsx,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/Popover/__tests__/PopoverSecondDocument.a11y.chromium.spec.ts,
+    packages/core/src/Dialog/__tests__/DialogSecondDocument.a11y.browser.spec.ts,
   ]
 members:
   [
@@ -86,8 +87,10 @@ deciding_specs: []
 A person dismissing layered UI should affect only the topmost relevant surface.
 A nested surface must not close its host on the same Escape press or platform
 close request when logical depth or DOM containment establishes that ordering.
-A surface opened from a control inside a same-origin iframe or a Picture-in-Picture
-window dismisses and returns focus there, as it does in the page.
+A trigger-anchored member opened from a control inside a same-origin iframe or a
+Picture-in-Picture window dismisses and returns focus there, as it does in the
+page; BottomSheet, BottomSheetSwitcher and Lightbox do so in a
+Picture-in-Picture window only, and Drawer and MobileNav stay in the page.
 
 ## Membership rule
 
@@ -190,10 +193,10 @@ this record's current membership snapshot must be updated with it.
   is never a candidate. The stack listens once in each document that holds a
   member and stops when its last member leaves.
 - **FR9 — Focus returns in the trigger's document.** Closing a trigger-anchored
-  member returns focus, when it would otherwise be lost, to the element that
-  opened it in that element's own document, with the ring the last input in that
-  document calls for (`architecture:interaction-modality` INV1); a BottomSheet or
-  Lightbox does the same in a Picture-in-Picture window.
+  member returns focus, when it would otherwise be lost, to the member's return
+  target, in the opener's document, with the ring the last input in that
+  document calls for (`architecture:interaction-modality` INV1); a BottomSheet,
+  BottomSheetSwitcher, or Lightbox does the same in a Picture-in-Picture window.
 
 ## Allowed component variation
 
@@ -240,7 +243,7 @@ this record's current membership snapshot must be updated with it.
 | Focus traps with `onEscape`                                                                                                                                                                                                                                                                        | shared owner through `useFocusTrap`                           | They provide DOM containment, not descendant depth                                                                                                                                                                  |
 | BreadcrumbItem, ChatComposerInput, ComplexSelector, DateInput, DateRangeInput, DateTimeInput, Selector, MultiSelector, PowerSearch, BaseTypeahead, Typeahead, Tokenizer, SideNavHeading, SideNavItem, TabMenu, TopNavHeading, TopNavMenu, TopNavMegaMenu, Table, Lab TourStep, Lab ChatEmojiPicker | shared owner through `usePopover` or a composed Popover owner | Table filtering owns controlled Popover state and discards its draft on close; TourStep routes Popover close to the Tour; ChatEmojiPicker owns controlled Popover state                                             |
 | BottomSheet, BottomSheetSwitcher                                                                                                                                                                                                                                                                   | shared owner                                                  | none                                                                                                                                                                                                                |
-| ContextMenu; BottomSheet and Lightbox in a Picture-in-Picture window                                                                                                                                                                                                                               | shared owner                                                  | Implementation gap: each records its opener from the page's document, so focus returns to the frame element or the page instead of the opener (FR9)                                                                 |
+| ContextMenu; BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window                                                                                                                                                                                                         | shared owner                                                  | Implementation gap: each records its opener from the page's document, so focus returns to the frame element or the page instead of the opener (FR9)                                                                 |
 | DropdownMenuSubMenu, PowerSearchEditPopover                                                                                                                                                                                                                                                        | local only                                                    | Must migrate from component-specific listeners or registries to the shared owner                                                                                                                                    |
 
 The rows marked partial or local are current adoption gaps against FR1, and the
@@ -258,8 +261,9 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR1                | `useFocusTrap.test.tsx`                                                                                         | active, nested, and deactivated traps with `onEscape`                                                                                                                                                | A dismissible trap stays off the shared stack or nested traps respond together                            |
 | FR8                | `useLayerDismissal.test.tsx`; `Popover.test.tsx`                                                                | members in the page and a same-origin iframe; a Popover alone and inside a Dialog, in an iframe                                                                                                      | A press in one document dismisses a member of another, or a host closes over its nested layer             |
 | FR8                | `PopoverSecondDocument.a11y.chromium.spec.ts`                                                                   | a Popover in an iframe and in a Picture-in-Picture window, alone and with one open in the page                                                                                                       | A press in the second document misses its own layer or dismisses the page's                               |
-| FR8, FR9           | Real-browser second-document checks; implementation gap: only Popover has them                                  | Dialog, Popover, DropdownMenu, ContextMenu, Tooltip and HoverCard, each in a same-origin iframe and in a Picture-in-Picture window: opens, takes Escape, and returns focus in its trigger's document | The member opens or ranks in another document, or focus lands on the frame element, the page, or the body |
-| FR8, FR9           | Real-browser second-document checks; implementation gap: none yet                                               | BottomSheet and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its opener there                                                                                  | The surface ranks in the page, or focus lands on the page or the body                                     |
+| FR9                | `DialogSecondDocument.a11y.browser.spec.ts`                                                                     | a Dialog in an iframe and in a Picture-in-Picture window, closed by Escape or a control inside it, and a Dialog in an iframe opened from the page                                                    | Focus lands outside the opener's document, or its ring does not follow the closing input                  |
+| FR8, FR9           | Real-browser second-document checks; implementation gap: only Dialog and Popover have them                      | Dialog, Popover, DropdownMenu, ContextMenu, Tooltip and HoverCard, each in a same-origin iframe and in a Picture-in-Picture window: opens, takes Escape, and returns focus in its trigger's document | The member opens or ranks in another document, or focus lands on the frame element, the page, or the body |
+| FR8, FR9           | Real-browser second-document checks; implementation gap: neither has them                                       | BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its return target there                                                     | The surface ranks in the page, or focus lands on the page or the body                                     |
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                    | A page-level surface moves into the second document                                                       |
 
 ## Decision links
