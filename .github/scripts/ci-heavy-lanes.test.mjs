@@ -111,7 +111,7 @@ describe('visual, accessibility and RTL owners', () => {
   });
 });
 
-describe("main's release-check and full unit run, about once an hour (DEC-11, FR21)", () => {
+describe("main's release-check every three hours and full unit run about hourly (DEC-11, FR21, FR24)", () => {
   const job = heavy.jobs.dispatch;
   const script = job.steps[0].with.script;
 
@@ -150,8 +150,10 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
   });
 
   const sha = 'a'.repeat(40);
+  // A Saturday, so no pre-cut check is due.
   const NOW = Date.parse('2026-10-31T12:00:00Z');
-  const minutesAgo = minutes => new Date(NOW - minutes * 60000).toISOString();
+  const minutesAgo = (minutes, now = NOW) =>
+    new Date(now - minutes * 60000).toISOString();
   const check = (minutes, overrides = {}) => ({
     head_sha: 'c'.repeat(40),
     created_at: minutesAgo(minutes),
@@ -173,6 +175,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     units = [],
     issue,
     eventName = 'push',
+    now = NOW,
   } = {}) {
     const calls = {
       dispatch: [],
@@ -215,7 +218,11 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       'Date',
       `return (async () => {${script}})();`,
     );
-    const FakeDate = {now: () => NOW, parse: Date.parse};
+    class FakeDate extends Date {
+      static now() {
+        return now;
+      }
+    }
     await body(
       github,
       {repo: {owner: 'meta', repo: 'astryx'}, eventName},
@@ -247,9 +254,9 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ref: 'main',
   };
 
-  it("dispatches a release-check and a full unit run for main's tip when neither started in the last 55 minutes", async () => {
+  it("dispatches a release-check and a full unit run for main's tip when their windows have passed", async () => {
     const calls = await run({
-      runs: [check(56), check(200)],
+      runs: [check(176), check(400)],
       units: [check(56)],
     });
     expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
@@ -271,22 +278,81 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     expect((await run()).dispatch).toEqual([releaseCheck(sha), unitRun]);
   });
 
-  it('leaves a push within 55 minutes of the last checks to the next one', async () => {
-    const calls = await run({runs: [check(20)], units: [check(20)]});
+  it('leaves a push inside a window to the next check', async () => {
+    const calls = await run({runs: [check(170)], units: [check(20)]});
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices).toEqual([
-      'A release-check started 20 minutes ago; the next one, at most 50 minutes from now, covers aaaaaaa.',
+      'A release-check started 170 minutes ago; the next one, at most 20 minutes from now, covers aaaaaaa.',
       'A full unit run started 20 minutes ago; the next one, at most 50 minutes from now, covers aaaaaaa.',
     ]);
   });
 
+  it('runs the unit lane hourly on its own while the release-check waits out its three hours', async () => {
+    const calls = await run({runs: [check(120)], units: [check(60)]});
+    expect(calls.dispatch).toEqual([unitRun]);
+  });
+
+  describe('the pre-cut release-check (FR24)', () => {
+    // Monday 2026-11-02 06:37 PST (UTC-8) and Friday 2026-10-30 06:37 PDT.
+    const MONDAY_0637 = Date.parse('2026-11-02T14:37:00Z');
+    const FRIDAY_0637 = Date.parse('2026-10-30T13:37:00Z');
+    const at = (now, minutes, overrides = {}) =>
+      check(minutes, {created_at: minutesAgo(minutes, now), ...overrides});
+
+    it.each([
+      ['standard time', MONDAY_0637],
+      ['daylight time', FRIDAY_0637],
+    ])(
+      'starts at about 06:30 Pacific on a weekday, inside the window (%s)',
+      async (_, now) => {
+        const calls = await run({
+          now,
+          runs: [at(now, 90)],
+          units: [at(now, 20)],
+        });
+        expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+        expect(calls.notices).toContain(
+          'The pre-cut release-check runs now for aaaaaaa.',
+        );
+      },
+    );
+
+    it('starts once a day', async () => {
+      // Started at 06:32 today.
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 5)],
+        units: [at(MONDAY_0637, 5)],
+      });
+      expect(calls.dispatch).toEqual([]);
+    });
+
+    it('is not needed when the tip already has a check', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 90, {head_sha: sha})],
+        units: [at(MONDAY_0637, 20, {head_sha: sha})],
+      });
+      expect(calls.dispatch).toEqual([]);
+    });
+
+    it.each([
+      ['on a weekend morning', Date.parse('2026-11-01T14:37:00Z')],
+      ['before 06:30', Date.parse('2026-11-02T14:15:00Z')],
+      ['after 07:30', Date.parse('2026-11-02T15:45:00Z')],
+    ])('does not start %s', async (_, now) => {
+      const calls = await run({now, runs: [at(now, 90)], units: [at(now, 20)]});
+      expect(calls.dispatch).toEqual([]);
+    });
+  });
+
   it('always brings a unit run of the commit a release-check checks', async () => {
     // The unit lane is inside its window, but the tip has no unit run.
-    const calls = await run({runs: [check(60)], units: [check(30)]});
+    const calls = await run({runs: [check(180)], units: [check(30)]});
     expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
     // A unit run already at the tip is enough.
     const covered = await run({
-      runs: [check(60)],
+      runs: [check(180)],
       units: [check(30, {head_sha: sha})],
     });
     expect(covered.dispatch).toEqual([releaseCheck(sha)]);
@@ -343,8 +409,12 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         display_title: `Release check ${older}`,
       });
     expect(
-      (await run({runs: [mismatched(70)], units: [check(70, {head_sha: sha})]}))
-        .dispatch,
+      (
+        await run({
+          runs: [mismatched(180)],
+          units: [check(70, {head_sha: sha})],
+        })
+      ).dispatch,
     ).toEqual([releaseCheck(sha)]);
     // ...but it still holds the window.
     expect(
@@ -373,7 +443,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     const calls = await run({
       tip,
       eventName: 'schedule',
-      runs: [check(60)],
+      runs: [check(180)],
       units: [check(60)],
     });
     expect(calls.dispatch).toEqual([releaseCheck(tip), unitRun]);

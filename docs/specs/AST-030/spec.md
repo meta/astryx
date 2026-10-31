@@ -213,7 +213,7 @@ they are separately named.
   existing finding policies. Main's heavy-lane workflow MUST dispatch that
   release-check for `main`'s tip, bound to that commit, on a push to `main` and
   on a quarter-hourly schedule, unless the tip already has one or one was
-  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
+  dispatched in the last three hours (DEC-11, FR24). A check replaced while waiting,
   which never ran, does not count. A check covers every merge up to its commit,
   so every merge is covered by the next one. The dispatched checks share one
   concurrency group that never cancels a running check: at most one runs and
@@ -337,6 +337,12 @@ they are separately named.
   guardian's issue; a newer run that replaced it, such as a recheck, leaves
   nothing to report. A stable release publishes only from a cut commit with
   both a passing release-check and a passing full unit run (DEC-15).
+- **FR24 — Main's release-check runs every three hours, and once before each
+  weekday cut.** FR12's release-check of `main`'s tip is dispatched when none
+  started in the last three hours, and once each weekday at about 06:30
+  Pacific time whatever the window, unless the tip already has one, so a check
+  finishes about an hour before the 08:00 release cut. The release cut's own
+  exact-commit checks are unchanged (DEC-19).
 
 ### Platform support
 
@@ -389,6 +395,7 @@ read change (FR14).
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                                                        | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                   | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
 | FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs` | push run; dispatched unit run; tip with a release-check; unit run cancelled, skipped or timed out; newer recheck; cut commit with and without a passing unit run                                                                                                                                                                             | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run    |
+| FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                              | release-check 170 and 180 minutes old; weekday 06:37 Pacific inside the window; the pre-cut check already started; a weekend morning; standard and daylight time                                                                                                                                                                             | a release-check starts inside the three-hour window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                            |
 
 ## Decision log
 
@@ -565,6 +572,8 @@ across two workflows and two visible gates.
 
 **Reference:** `spec:AST-030/DEC-11`
 **Decider:** `cixzhang`
+**Superseded in part by:** `spec:AST-030/DEC-19` (every three hours, with a
+pre-cut check)
 
 Dispatched on every push, main's release-check ran back to back through busy
 hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
@@ -599,6 +608,23 @@ Rejected: running the unit suites on main's push cadence with a scope (a
 scoped run on main would miss the cross-change break it exists for);
 cancelling an older unit run for a newer push (a run that never finishes
 covers nothing).
+
+### DEC-19 — Main's release-check every three hours, with a pre-cut run
+
+**Reference:** `spec:AST-030/DEC-19`
+**Decider:** `cixzhang`
+
+Main's visual, accessibility and RTL check is its longest run. Checked about
+hourly, it still ran about twenty times a day, though a check covers every
+merge before it and the guardian repairs `main` forward. Every three hours
+keeps every merge covered with about a third of the runs. The weekday cut
+needs a fresh check, so one starts at about 06:30 Pacific and finishes about
+an hour before the 08:00 cut. A visual, accessibility or RTL break is then
+reported within about four hours of landing. The full unit run keeps its own
+hourly schedule (FR21).
+
+Rejected: a check only at the cut (main's result would lag a whole day);
+keeping it hourly (the run is the largest share of main's runner use).
 
 ## Open questions
 
