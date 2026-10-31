@@ -967,13 +967,21 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             setHighlightedIndex(-1);
             setHasSearched(false);
           }
-        } else if (shownRows != null) {
-          // A failed server answer keeps the last non-empty list the source
-          // showed for this query, which settles it.
-          announceCount(showList(shownRows, true).length);
         } else {
-          replaceResults([]);
-          setHighlightedIndex(-1);
+          // A failure settles this query: its outcome is announced now (the
+          // kept rows' count) or from the rendered empty row, so a busy start
+          // not yet announced is dropped, as on success (spec:AST-086 FR8).
+          if (searchQuery.length > 0) {
+            settleBusyAnnouncement();
+          }
+          if (shownRows != null) {
+            // A failed server answer keeps the last non-empty list the source
+            // showed for this query, which settles it.
+            announceCount(showList(shownRows, true).length);
+          } else {
+            replaceResults([]);
+            setHighlightedIndex(-1);
+          }
         }
       } finally {
         if (searchGenRef.current === gen) {

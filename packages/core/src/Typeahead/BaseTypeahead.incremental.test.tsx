@@ -279,6 +279,44 @@ describe('BaseTypeahead incremental results (spec:AST-092)', () => {
     });
   });
 
+  it('announces only the count when the answer fails before the busy start is written (FR9, AST-086 FR8)', async () => {
+    const {source, latest} = createPendingSource({
+      ben: [benOrtiz, benitaRuiz],
+    });
+    const input = renderTypeahead(source);
+    const announced: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text = liveRegion()?.textContent ?? '';
+      if (text !== '' && announced.at(-1) !== text) {
+        announced.push(text);
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    await type(input, 'ben');
+    // The busy start is queued on the polite channel a frame after the
+    // partial list; the failure lands before the channel writes it.
+    await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      latest().reject(new Error('offline'));
+    });
+    await waitFor(() => {
+      expect(announced).toContain('2 results');
+    });
+    for (let frame = 0; frame < 3; frame++) {
+      await act(async () => {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      });
+    }
+    observer.disconnect();
+    expect(announced.join(' | ')).not.toMatch(/Loading|Searching/);
+    expect(liveRegion()?.textContent).toBe('2 results');
+  });
+
   it('settles empty, not on the previous query rows, when only empty updates preceded a failure (FR9)', async () => {
     const {source, latest} = createPendingSource({b: [beaLin], bz: []});
     const input = renderTypeahead(source);
