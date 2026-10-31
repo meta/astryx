@@ -27,10 +27,11 @@ describe('createResizable on the server (spec:AST-107 FR6)', () => {
     ];
     const restore = trapped.map(([owner, name]) => {
       const descriptor = Object.getOwnPropertyDescriptor(owner, name);
-      const value: unknown = (owner as Record<string, unknown>)[name];
+      // A document, a storage, a function or a class: an object each.
+      const value = (owner as Record<string, object | undefined>)[name];
       Object.defineProperty(owner, name, {
         configurable: true,
-        get(): unknown {
+        get(): object | undefined {
           touched.push(name);
           return value;
         },
@@ -39,7 +40,7 @@ describe('createResizable on the server (spec:AST-107 FR6)', () => {
         if (descriptor) {
           Object.defineProperty(owner, name, descriptor);
         } else {
-          delete (owner as Record<string, unknown>)[name];
+          Reflect.deleteProperty(owner, name);
         }
       };
     });
