@@ -199,7 +199,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: write
+      # actions: the artifacts and the source run's job list; deployments:
+      # this head's Vercel preview state.
       actions: read
+      deployments: read
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
     outputs:
@@ -297,6 +300,18 @@ jobs:
         with:
           name: pr-size-base
           path: pr-size-base
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The touched-components check's per-component results (or its wide-
+      # change flag); absent when the check did not run.
+      - name: Download the touched-components report from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: touched-components
+          path: touched-components
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true

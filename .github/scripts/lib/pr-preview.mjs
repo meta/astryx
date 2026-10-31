@@ -2,6 +2,7 @@
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
@@ -47,6 +48,99 @@ export function branchPreviewOrigin({headRef, headRepository, baseRepository}) {
 
 function refuse(message) {
   throw new Error(`PR preview refused: ${message}`);
+}
+
+const VERCEL_DEPLOYMENT_URL = /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/;
+
+/**
+ * This head's Vercel preview, from the deployment Vercel reports to GitHub for
+ * the exact commit: `ready` (that deployment's own address, so every link
+ * shows this head), `failed`, or `building` until Vercel reports it (the
+ * branch alias then serves the previous ready deployment). Previews are not
+ * built for forks. Two reads in the comment job; no workflow runs on a
+ * deployment event.
+ */
+export async function headPreview({
+  github,
+  owner,
+  repo,
+  identity,
+  aliasOrigin,
+}) {
+  const sha = identity.headSha;
+  if (identity.headRepository !== identity.baseRepository)
+    return {state: 'fork', sha};
+  try {
+    const {data: deployments} = await github.rest.repos.listDeployments({
+      owner,
+      repo,
+      sha,
+      per_page: 20,
+    });
+    const deployment = deployments
+      .filter(
+        candidate =>
+          candidate.creator?.login === 'vercel[bot]' &&
+          String(candidate.environment).toLowerCase() === 'preview',
+      )
+      .sort((a, b) => b.id - a.id)[0];
+    if (deployment) {
+      const {data: statuses} = await github.rest.repos.listDeploymentStatuses({
+        owner,
+        repo,
+        deployment_id: deployment.id,
+        per_page: 1,
+      });
+      const latest = statuses[0];
+      if (
+        latest?.state === 'success' &&
+        VERCEL_DEPLOYMENT_URL.test(String(latest.environment_url ?? ''))
+      )
+        return {
+          state: 'ready',
+          sha,
+          url: latest.environment_url.replace(/\/$/, ''),
+        };
+      if (latest?.state === 'failure' || latest?.state === 'error')
+        return {state: 'failed', sha};
+    }
+  } catch {
+    // An unreadable deployment list leaves the preview as still building.
+  }
+  return aliasOrigin
+    ? {state: 'building', sha, aliasOrigin}
+    : {state: 'unknown', sha};
+}
+
+/**
+ * The source run's jobs (latest attempt) with each step's conclusion, so the
+ * report can say which jobs ran and which skipped their work by path. Null
+ * when the list cannot be read.
+ */
+export async function sourceRunJobs({github, owner, repo, runId}) {
+  try {
+    const jobs = await github.paginate(
+      github.rest.actions.listJobsForWorkflowRun,
+      {
+        owner,
+        repo,
+        run_id: runId,
+        filter: 'latest',
+        per_page: 100,
+      },
+    );
+    return jobs.map(job => ({
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      steps: (job.steps || []).map(step => ({
+        name: step.name,
+        conclusion: step.conclusion,
+      })),
+    }));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -415,13 +509,6 @@ export function validateAnalysisMetadata(metadata, identity) {
   return metadata;
 }
 
-function previewState(storybook, sandbox) {
-  if (storybook && sandbox) return 'both';
-  if (storybook) return 'storybook';
-  if (sandbox) return 'sandbox';
-  return 'none';
-}
-
 // The same preview wording as the generator's report: the branch alias
 // serves the branch's latest deployment, which can trail a new push. A draft
 // or an update-only reconcile (no alias attempted) says nothing about previews.
@@ -513,6 +600,7 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  touchedPath = 'touched-components/touched-components.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
@@ -545,8 +633,6 @@ export async function reconcilePrComment({
   // preview and says nothing about one.
   const aliasAttempted = createIfMissing && !identity.draft;
   const previewOrigin = aliasAttempted ? branchPreviewOrigin(identity) : null;
-  const storybook = previewOrigin !== null;
-  const sandbox = storybook;
   const comments = await allComments(github, owner, repo, identity.prNumber);
   const botComments = comments.filter(comment => comment.user?.type === 'Bot');
   const botComment =
@@ -561,6 +647,27 @@ export async function reconcilePrComment({
 
   let body;
   if (analysisReady) {
+    // The comment job's own reads, handed to the generator as files.
+    const inputs = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
+    const preview = aliasAttempted
+      ? await headPreview({
+          github,
+          owner,
+          repo,
+          identity,
+          aliasOrigin: previewOrigin,
+        })
+      : null;
+    const jobs = await sourceRunJobs({
+      github,
+      owner,
+      repo,
+      runId: identity.sourceRunId,
+    });
+    const previewPath = path.join(inputs, 'preview.json');
+    const jobsPath = path.join(inputs, 'jobs.json');
+    if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
+    if (jobs) fs.writeFileSync(jobsPath, JSON.stringify(jobs));
     const args = [
       generator,
       '--analysis',
@@ -585,11 +692,16 @@ export async function reconcilePrComment({
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
-      ...(storybook ? ['--storybook-url', `${previewOrigin}/storybook/`] : []),
-      ...(sandbox ? ['--sandbox-url', `${previewOrigin}/sandbox/`] : []),
-      ...(aliasAttempted
-        ? ['--preview-state', previewState(storybook, sandbox)]
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
         : []),
+      ...(preview ? ['--preview', previewPath] : []),
+      ...(jobs ? ['--jobs', jobsPath] : []),
       '--source-conclusion',
       identity.sourceConclusion,
       '--run-url',
