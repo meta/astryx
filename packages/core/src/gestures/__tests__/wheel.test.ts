@@ -864,39 +864,89 @@ describe("a mouse's wheel and a trackpad's lift (spec:AST-094 FR43)", () => {
     }
     expect(states[0]).toBe('began');
   });
+});
 
-  it('ends a trackpad pan where the fingers lift: the shrinking deltas before the lift and the momentum after it never move it', () => {
+describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-094 FR43)", () => {
+  /** A horizontal pan that takes only a trackpad's scroll, and what it did. */
+  function followed() {
     const {box} = mount('<div id="box"></div>');
-    const pan = trackpadPan(box);
-    const states = statesOf(pan);
-    const ended: number[] = [];
-    pan.addTransitionListener((recognizer, _from, to) => {
-      if (to === 'ended') {
-        ended.push(recognizer.translation().x);
-      }
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedPointerTypes: [],
+      allowedScrollTypes: ['continuous'],
     });
-    const finger = [10, 10, 10, 10];
-    const lifting = [9.5, 9, 8.5, 8];
-    const momentum = [7.5, 7, 6.5, 6, 5.5, 5];
+    const seen: {state: string; x: number; velocity: number}[] = [];
+    pan.addTransitionListener((recognizer, _from, to) => {
+      seen.push({
+        state: to,
+        x: recognizer.translation().x,
+        velocity: recognizer.velocity().x,
+      });
+    });
+    detachers.push(host.attach(box, pan));
+    return {box, seen};
+  }
+
+  /** Each wheel 16 ms apart from 0; returns the time after the last. */
+  function stream(box: HTMLElement, deltas: number[]): number {
     let time = 0;
-    let endedAt = -1;
-    for (const dx of [...finger, ...lifting, ...momentum]) {
+    for (const dx of deltas) {
       wheel(box, {trackpad: true, dx, time});
-      if (endedAt < 0 && states.includes('ended')) {
-        endedAt = time;
-      }
       time += 16;
     }
-    clock.runDue(time + 500);
-    // It ends at the lift, the fourth shrinking delta, at the fingers'
-    // travel: the four steady deltas against the content, counted from where
-    // the pan began past its 10 px hysteresis.
-    expect(endedAt).toBe((finger.length + lifting.length - 1) * 16);
-    expect(ended).toHaveLength(1);
-    expect(ended[0]).toBeCloseTo(-30, 6);
-    expect(states.slice(states.indexOf('ended'))).toEqual([
-      'ended',
-      'possible',
+    return time;
+  }
+
+  it("keeps a trackpad pan moving at the fingers' speed while the splitter is undecided, and lets go at the lift still moving at that speed: no stall", () => {
+    const {box, seen} = followed();
+    // Four steady deltas, then four shrinking ones (the lift is read at the
+    // fourth), then momentum.
+    const end = stream(box, [10, 10, 10, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6]);
+    clock.runDue(end + 500);
+    const changed = seen.filter(entry => entry.state === 'changed');
+    // The fingers' travel at their last move is -30 (40 px past the 10 px
+    // hysteresis); through the shrinking deltas the pan moves on 10 px a
+    // wheel at their speed.
+    expect(changed.map(entry => entry.x).slice(-4)).toEqual([
+      -40, -50, -60, -70,
     ]);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended).toHaveLength(1);
+    expect(ended[0].x).toBeCloseTo(-70, 6);
+    // Released at the fingers' speed, 10 px a 16 ms wheel.
+    expect(ended[0].velocity).toBeCloseTo(-625, -1);
+    // The momentum after the lift moves nothing.
+    expect(
+      seen.slice(seen.indexOf(ended[0]) + 1).map(entry => entry.state),
+    ).toEqual(['possible']);
+  });
+
+  it('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and no extra travel', () => {
+    const {box, seen} = followed();
+    const deltas = [10, 10, 10, 10, 9.5, 9, 10, 10, 10, 10, 10, 10];
+    const end = stream(box, deltas);
+    clock.runDue(end + 500);
+    const moves = seen.filter(
+      entry => entry.state === 'changed' || entry.state === 'ended',
+    );
+    for (const [i, entry] of moves.entries()) {
+      if (i > 0) {
+        expect(entry.x).toBeLessThanOrEqual(moves[i - 1].x);
+      }
+    }
+    // The fingers' whole travel, past the 10 px hysteresis.
+    const travel = deltas.reduce((sum, delta) => sum + delta, 0) - 10;
+    expect(moves.at(-1)?.x).toBeCloseTo(-travel, 6);
+  });
+
+  it("never moves the pan past what the fingers' last speed projects through a long undecided stretch", () => {
+    const {box, seen} = followed();
+    // Deltas that shrink too slowly to read a lift for a while.
+    const shrinking = [9.9, 9.8, 9.7, 9.6, 9.5, 9.4];
+    stream(box, [10, 10, 10, 10, ...shrinking]);
+    const changed = seen.filter(entry => entry.state === 'changed');
+    expect(changed.map(entry => entry.x).slice(-shrinking.length)).toEqual(
+      shrinking.map((_, i) => -30 - 10 * (i + 1)),
+    );
   });
 });
