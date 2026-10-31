@@ -309,11 +309,13 @@ function buildComponentTable({
 }
 
 /**
- * The changed shots, largest change first: up to VISUAL_FRAME_LIMIT rows
- * naming each shot and its change, inside one disclosure whose summary
- * carries the counts. The run's visual report holds the frames.
+ * The changed shots, largest change first: up to VISUAL_FRAME_LIMIT rows,
+ * inside one disclosure whose summary carries the counts. With `frames`
+ * (publish-frames.mjs's `imageBase` and the `<kind>/<key>.png` it published),
+ * each row shows its before/after/diff thumbnails, and only published frames;
+ * without it, each row names its change.
  */
-function buildVisualDeltas({verdict}) {
+function buildVisualDeltas({verdict, frames = null}) {
   if (!verdict || verdict.status === 'skipped' || verdict.status === 'failed')
     return '';
   const all = [
@@ -347,8 +349,24 @@ function buildVisualDeltas({verdict}) {
       .join(', ');
     return variant ? `${story} (${variant})` : story;
   };
-  const header = '| Component · story | Change |\n|---|---|\n';
-  const line = row => `| ${label(row)} | ${changeText(row)} |`;
+  const published = new Set(frames?.published || []);
+  const base =
+    frames?.imageBase && published.size > 0
+      ? `${String(frames.imageBase).replace(/\/+$/, '')}/`
+      : null;
+  const frame = (row, kind) => {
+    if (!row.kinds.includes(kind)) return '—';
+    const file = `${kind}/${row.key}.png`;
+    if (!published.has(file)) return 'not published';
+    return `<img src="${base}${kind}/${encodeURIComponent(String(row.key))}.png" height="120" alt="${kind} frame">`;
+  };
+  const header = base
+    ? '| Component · story | Before | After | Diff |\n|---|---|---|---|\n'
+    : '| Component · story | Change |\n|---|---|\n';
+  const line = row =>
+    base
+      ? `| ${label(row)} | ${frame(row, 'before')} | ${frame(row, 'after')} | ${frame(row, 'diff')} |`
+      : `| ${label(row)} | ${changeText(row)} |`;
   // A shot key is `<package>-<component>--<story>__<theme>-<mode>`.
   const componentOf = row =>
     String(
@@ -455,6 +473,7 @@ function buildCompactReport({
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
+  visualFrames = null,
 }) {
   const origin =
     preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
@@ -464,7 +483,7 @@ function buildCompactReport({
     touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
 }
 
 module.exports = {
