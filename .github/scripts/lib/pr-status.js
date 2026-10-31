@@ -17,7 +17,7 @@
  *   the CI checks and CodeBunny posts its own review, so neither is repeated.
  */
 
-const {inline, num} = require('./report-text');
+const {inline, num, sizeText} = require('./report-text');
 
 /**
  * The heavy suites a pull request runs only with its `ci:run-<suite>` label,
@@ -78,19 +78,17 @@ function isMeasured(value) {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function kb(bytes) {
-  return `${(bytes / 1024).toFixed(1)} kB`;
-}
-
 function signedSize(value) {
-  const sign = value > 0 ? '+' : '−';
-  const magnitude = Math.abs(value);
-  return magnitude < 1024 ? `${sign}${magnitude} B` : `${sign}${kb(magnitude)}`;
+  return `${value > 0 ? '+' : '−'}${sizeText(Math.abs(value))}`;
 }
 
-/** A change against main; growth in bold, so it stands out. */
-function delta(value, format) {
-  if (value === null) return 'new';
+/**
+ * A change against main; growth in bold, so it stands out. Without a number,
+ * the component is new when main was measured, and unmeasured when it was
+ * not (no record of the merge base).
+ */
+function delta(value, format, baseMeasured = true) {
+  if (value === null) return baseMeasured ? 'new' : 'not measured';
   if (value === 0) return '0';
   const text = format(value);
   return value > 0 ? `**${text}**` : text;
@@ -118,14 +116,14 @@ function sizeChange(head = {}, base = {}) {
  * JS and CSS import cost (gzip), each with its change against main, and a 🔴
  * when the growth passes the touch-only budget (advisory).
  */
-function sizeCell(head = {}, base = {}) {
+function sizeCell(head = {}, base = {}, baseMeasured = true) {
   const js = head.importGzipBytes;
   const css = head.cssGzipBytes;
   if (!isMeasured(js) && !isMeasured(css)) return '—';
   const growth = sizeChange(head, base);
   const part = (after, changed, label) =>
     isMeasured(after)
-      ? `${kb(after)}${label} (${delta(changed, signedSize)})`
+      ? `${sizeText(after)}${label} (${delta(changed, signedSize, baseMeasured)})`
       : null;
   return `${growth.overBudget ? '🔴 ' : ''}${[
     part(js, growth.js, ''),
@@ -136,12 +134,13 @@ function sizeCell(head = {}, base = {}) {
 }
 
 /** Source lines of code with their change against main. */
-function locCell(head, base) {
+function locCell(head, base, baseMeasured = true) {
   if (!isMeasured(head)) return '—';
   const count = value => Math.abs(value).toLocaleString('en-US');
   return `${count(num(head))} (${delta(
     change(head, base),
     value => `${value > 0 ? '+' : '−'}${count(value)}`,
+    baseMeasured,
   )})`;
 }
 
@@ -198,6 +197,11 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     if (component.key) keys.add(component.key);
   }
   const visualChanges = visualVerdict?.changes || [];
+  // Main's sizes of the merge base were read (a base record or build).
+  const baseMeasured =
+    Boolean(analysis.baseSha) ||
+    Object.keys(base).length > 0 ||
+    Object.keys(baseStats).length > 0;
   return [...keys].map(key => {
     const name = key.slice(key.indexOf('/') + 1);
     const reported = byName.get(name)?.results || {};
@@ -214,9 +218,12 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     const visual =
       reported.visual ??
       (visualVerdict && visualVerdict.status !== 'skipped'
-        ? visualChanges.some(entry => entry.component === name)
-          ? 'changed'
-          : 'pass'
+        ? // A run that failed compared nothing: never a pass.
+          visualVerdict.status === 'failed'
+          ? 'fail'
+          : visualChanges.some(entry => entry.component === name)
+            ? 'changed'
+            : 'pass'
         : null);
     return {
       key,
@@ -227,6 +234,7 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
       growth: sizeChange(head[key], base[key]),
       loc: [stats[name]?.linesOfCode, baseStats[name]?.linesOfCode],
       results: {visual, a11y, rtl: reported.rtl ?? null},
+      baseMeasured,
     };
   });
 }
@@ -286,8 +294,8 @@ function buildComponentTable({
     const stories = storybookLink(origin, row.storyTitle);
     const cells = [
       stories ? `${name} · [Storybook](${stories})` : name,
-      sizeCell(row.head, row.base),
-      locCell(...row.loc),
+      sizeCell(row.head, row.base, row.baseMeasured),
+      locCell(...row.loc, row.baseMeasured),
       ...(checks ? [checksCell(wide ? {} : row.results)] : []),
     ];
     return `| ${cells.join(' | ')} |`;
@@ -301,12 +309,11 @@ function buildComponentTable({
 }
 
 /**
- * The changed shots as before/after/diff thumbnails, largest change first:
- * three rows, then the rest collapsed. Frames come from `imageBase`
- * (`<base><before|after|diff>/<key>.png`); without it the rows still name
- * the changed shots.
+ * The changed shots, largest change first: up to VISUAL_FRAME_LIMIT rows
+ * naming each shot and its change, inside one disclosure whose summary
+ * carries the counts. The run's visual report holds the frames.
  */
-function buildVisualDeltas({verdict, imageBase}) {
+function buildVisualDeltas({verdict}) {
   if (!verdict || verdict.status === 'skipped' || verdict.status === 'failed')
     return '';
   const all = [
@@ -323,13 +330,12 @@ function buildVisualDeltas({verdict, imageBase}) {
   if (all.length === 0) return '';
   const rows = all.slice(0, VISUAL_FRAME_LIMIT);
   const unshown = all.length - rows.length;
-  const base = imageBase ? `${String(imageBase).replace(/\/+$/, '')}/` : null;
-  const frame = (row, kind) => {
-    if (!row.kinds.includes(kind)) return '—';
-    if (!base) return 'frame unavailable';
-    const key = encodeURIComponent(String(row.key ?? ''));
-    return `<img src="${base}${kind}/${key}.png" height="120" alt="${kind} frame">`;
-  };
+  const changeText = row =>
+    row.kinds.length === 3
+      ? `changed (${num(row.diffPixels ?? 0).toLocaleString('en-US')} px)`
+      : row.kinds[0] === 'after'
+        ? 'added'
+        : 'removed';
   const label = row => {
     const story = [row.component || row.title, row.name]
       .filter(Boolean)
@@ -341,10 +347,8 @@ function buildVisualDeltas({verdict, imageBase}) {
       .join(', ');
     return variant ? `${story} (${variant})` : story;
   };
-  const header =
-    '| Component · story | Before | After | Diff |\n|---|---|---|---|\n';
-  const line = row =>
-    `| ${label(row)} | ${frame(row, 'before')} | ${frame(row, 'after')} | ${frame(row, 'diff')} |`;
+  const header = '| Component · story | Change |\n|---|---|\n';
+  const line = row => `| ${label(row)} | ${changeText(row)} |`;
   // A shot key is `<package>-<component>--<story>__<theme>-<mode>`.
   const componentOf = row =>
     String(
@@ -397,10 +401,7 @@ function packagesLine(report) {
   );
   if (changed.length === 0)
     return '**Package size:** no published package changed; no new dependencies.\n\n';
-  const packed = bytes =>
-    bytes >= 1024 * 1024
-      ? `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-      : kb(bytes);
+  const packed = sizeText;
   const describe = entry => {
     const value = change(entry.head?.packedBytes, entry.base?.packedBytes);
     const deps = added.filter(dep => dep.package === entry.name);
@@ -442,7 +443,7 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     labels.length === 1
       ? labels[0]
       : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
-  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'a full suite'}.\n\n`;
+  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
 /** The compact report body, between the heading and the footer. */
@@ -454,7 +455,6 @@ function buildCompactReport({
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
-  visualImageUrl = null,
 }) {
   const origin =
     preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
@@ -464,7 +464,7 @@ function buildCompactReport({
     touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict, imageBase: visualImageUrl})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
 }
 
 module.exports = {

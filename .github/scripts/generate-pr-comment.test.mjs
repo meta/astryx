@@ -138,7 +138,7 @@ describe('generate-pr-comment compact report', () => {
       baseComponentSizes: {'core/Chat': size(6000, 1000)},
     });
     expect(out).toContain(
-      '| Chat | 🔴 8.8 kB (**+2.9 kB**) · 1.0 kB CSS (0) |',
+      '| Chat | 🔴 8.8 kB (**+2.9 kB**) · 1000 B CSS (0) |',
     );
   });
 
@@ -148,8 +148,8 @@ describe('generate-pr-comment compact report', () => {
       componentSizes: {'core/Card': size(null), 'core/New': size(3000)},
       baseComponentSizes: {'core/Card': size(2000)},
     });
-    expect(out).toContain('| Card | 1.0 kB CSS (0) |');
-    expect(out).toContain('| New | 2.9 kB (new) · 1.0 kB CSS (new) |');
+    expect(out).toContain('| Card | 1000 B CSS (0) |');
+    expect(out).toContain('| New | 2.9 kB (new) · 1000 B CSS (new) |');
   });
 
   it('fills the base from base stats', () => {
@@ -164,7 +164,7 @@ describe('generate-pr-comment compact report', () => {
         {...baseAnalysis, componentSizes: {'core/Card': size(1500)}},
         ['--base-stats', baseFile],
       );
-      expect(out).toContain('| Card | 1.5 kB (−500 B) · 1.0 kB CSS (0) |');
+      expect(out).toContain('| Card | 1.5 kB (−500 B) · 1000 B CSS (0) |');
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
@@ -179,7 +179,7 @@ describe('generate-pr-comment compact report', () => {
       ],
     });
     expect(out).toContain(
-      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run a full suite.',
+      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.',
     );
     expect(out).not.toContain('| Check |');
     expect(out).not.toMatch(/CodeBunny/i);
@@ -250,4 +250,3 @@ describe('generate-pr-comment compact report', () => {
     expect(out).not.toContain('<img src=x>');
   });
 });
-

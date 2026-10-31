@@ -200,11 +200,8 @@ jobs:
     permissions:
       pull-requests: write
       # actions: the artifacts and the source run's job list; deployments:
-      # this head's Vercel preview state; contents: the changed visual frames
-      # on the pull request's assets branch (publish-frames.mjs writes only
-      # that branch).
+      # this head's Vercel preview state.
       actions: read
-      contents: write
       deployments: read
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
@@ -215,7 +212,6 @@ jobs:
         steps.identity.outcome == 'failure' ||
         steps.cross-check.outcome == 'failure' ||
         steps.visual.outcome == 'failure' ||
-        steps.frames.outcome == 'failure' ||
         steps.ci-history.outcome == 'failure' ||
         steps.publish.outcome == 'failure' }}
     steps:
@@ -386,25 +382,6 @@ jobs:
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
 
-      # The report shows changed shots as before/after/diff thumbnails. Their
-      # re-encoded frames go to the pull request's assets branch, the path PR
-      # screenshots already use; nothing is written when no shot changed.
-      - name: Publish changed visual frames
-        id: frames
-        continue-on-error: true
-        if: steps.identity.outputs.valid == 'true' && steps.visual.outcome == 'success'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-        run: |
-          node .github/scripts/visual-gate/publish-frames.mjs \
-            --input trusted-visual \
-            --pr "$PR_NUMBER" \
-            --head-sha "$HEAD_SHA" \
-            --repository "$GITHUB_REPOSITORY" \
-            --limit 12
-
       # The CI-impact baseline (recent pull-request runs) is read once a day
       # and kept as an artifact, so later CI-changing PRs that day reuse it.
       - name: Find today's CI history
@@ -451,7 +428,6 @@ jobs:
           RUN_ID: ${{ steps.identity.outputs.run_id }}
           RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
           SOURCE_CONCLUSION: ${{ steps.identity.outputs.source_conclusion }}
-          VISUAL_IMAGE_URL: ${{ steps.frames.outputs.image_base }}
         with:
           retries: 3
           script: |
@@ -463,7 +439,6 @@ jobs:
               github,
               core,
               context,
-              visualImageUrl: process.env.VISUAL_IMAGE_URL || null,
               expectedIdentity: {
                 prNumber: Number(process.env.PR_NUMBER),
                 headSha: process.env.HEAD_SHA,

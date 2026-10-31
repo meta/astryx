@@ -203,7 +203,6 @@ async function reconcile({
   baseStats,
   packageSize,
   touched,
-  visualImageUrl,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -244,7 +243,6 @@ async function reconcile({
     baseStatsPath,
     packageSizePath,
     touchedPath,
-    visualImageUrl,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
     createIfMissing,
@@ -1139,31 +1137,6 @@ describe('PR comment preview reconciliation', () => {
         },
       });
       expect(seen[0].includes('--touched')).toBe(used);
-    },
-  );
-
-  it.each([
-    [
-      `https://raw.githubusercontent.com/meta/astryx/assets/pr-5697/visual/${HEAD}/`,
-      true,
-    ],
-    ['https://evil.example/visual/', false],
-    [
-      `https://raw.githubusercontent.com/meta/astryx/main/visual/${HEAD}/`,
-      false,
-    ],
-  ])(
-    'passes visual frames only from a PR assets branch: %s',
-    async (url, used) => {
-      const seen = [];
-      await reconcile({
-        visualImageUrl: url,
-        execute: (_node, args) => {
-          seen.push(args);
-          return '## PR Analysis Report\n';
-        },
-      });
-      expect(seen[0].includes('--visual-image-url')).toBe(used);
     },
   );
 

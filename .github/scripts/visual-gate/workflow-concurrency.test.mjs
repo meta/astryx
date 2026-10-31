@@ -67,6 +67,8 @@ describe('PR report and deployment workflow contracts', () => {
     // The comment job reads this head's preview state once; no job runs on a
     // deployment event, and none waits for one.
     expect(value.jobs.comment.permissions.deployments).toBe('read');
+    // It writes no repository contents.
+    expect(value.jobs.comment.permissions.contents).toBeUndefined();
     expect(workflow('pr-comment.yml')).toContain(
       'validateAnalysisMetadata(metadata, {',
     );
