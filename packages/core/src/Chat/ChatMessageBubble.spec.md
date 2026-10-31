@@ -211,16 +211,16 @@ authorize a redesign.
 
 ## Verification map
 
-| Contract | Verification                                                                                                    | Representative states                                 | Mutation or failure expectation                                             | Audit section                           |
-| -------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
-| FR1–FR3  | `ChatMessageBubble.test.tsx` children, sender, fallback, and compact density tests                              | standalone; user and assistant; compact               | A missing root, fallback, or reflected axis fails.                          | `audit:ChatMessageBubble/behavior`      |
-| FR4, FR9 | `ChatMessageBubble.test.tsx` variant and ghost tests; `themingTargets.test.ts`                                  | filled; ghost at each density                         | Dropping reflection, the ghost alignment, or the target fails.              | `audit:ChatMessageBubble/theming`       |
-| FR5      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state and RTL grouped-corner tests                            | user and assistant × first, middle, last; LTR and RTL | Physical corner logic or the wrong sender side fails the corner assertions. | `audit:ChatMessageBubble/rtl`           |
-| FR6      | `ChatMessageBubble.test.tsx` width tests                                                                        | omitted; string; number                               | Retaining the cap or changing numeric pixels fails.                         | `audit:ChatMessageBubble/behavior`      |
-| FR7      | `ChatMessageBubble.test.tsx` slot tests; the Chromium visible-state test's numeric alignment                    | zero; true; false; empty string; nullish              | A truthiness check loses zero's alignment or restores an empty wrapper.     | `audit:ChatMessageBubble/behavior`      |
-| FR8, AR2 | `ChatMessageBubble.test.tsx` "forwards the ref and neutral DOM props to the bubble root" and `data-testid` test | ref; DOM, data, and ARIA props                        | Dropped forwarding fails.                                                   | `audit:ChatMessageBubble/public-api`    |
-| AR3      | `ChatMessageBubble.a11y.chromium.spec.ts` "keeps long content inside a 320px fixture"                           | 320 CSS px                                            | Horizontal overflow fails.                                                  | `audit:ChatMessageBubble/accessibility` |
-| AR4      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state test's contrast assertion                               | light and dark                                        | Bubble text below 4.5:1 fails.                                              |
+| Contract | Verification                                                                                                    | Representative states                                 | Mutation or failure expectation                                                     | Audit section                           |
+| -------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------- |
+| FR1–FR3  | `ChatMessageBubble.test.tsx` children, sender, fallback, and compact density tests                              | standalone; user and assistant; compact               | A missing root, fallback, or reflected axis fails.                                  | `audit:ChatMessageBubble/behavior`      |
+| FR4, FR9 | `ChatMessageBubble.test.tsx` variant and ghost tests; `themingTargets.test.ts`                                  | filled; ghost                                         | Dropping reflection, removing the ghost inset entirely, or losing the target fails. | `audit:ChatMessageBubble/theming`       |
+| FR5      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state and RTL grouped-corner tests                            | user and assistant × first, middle, last; LTR and RTL | Physical corner logic or the wrong sender side fails the corner assertions.         | `audit:ChatMessageBubble/rtl`           |
+| FR6      | `ChatMessageBubble.test.tsx` width tests                                                                        | omitted; string; number                               | Retaining the cap or changing numeric pixels fails.                                 | `audit:ChatMessageBubble/behavior`      |
+| FR7      | `ChatMessageBubble.test.tsx` slot tests; the Chromium visible-state test's numeric alignment                    | zero; true; false; empty string; nullish              | A truthiness check loses zero's alignment or restores an empty wrapper.             | `audit:ChatMessageBubble/behavior`      |
+| FR8, AR2 | `ChatMessageBubble.test.tsx` "forwards the ref and neutral DOM props to the bubble root" and `data-testid` test | ref; DOM, data, and ARIA props                        | Dropped forwarding fails.                                                           | `audit:ChatMessageBubble/public-api`    |
+| AR3      | `ChatMessageBubble.a11y.chromium.spec.ts` "keeps long content inside a 320px fixture"                           | 320 CSS px                                            | Horizontal overflow fails.                                                          | `audit:ChatMessageBubble/accessibility` |
+| AR4      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state test's contrast assertion                               | light and dark                                        | Bubble text below 4.5:1 fails.                                                      | `audit:ChatMessageBubble/accessibility` |
 
 Read from source, with no focused test yet:
 
@@ -228,7 +228,8 @@ Read from source, with no focused test yet:
 - FR2: the `system` sender taking the non-user paint path.
 - FR3: the standalone `balanced` fallback, the compact radius, and the
   `spacious` inset.
-- FR4: `ghost` removing the fill and block-axis padding.
+- FR4: `ghost` removing the fill and block-axis padding, and its inline
+  alignment matching each density.
 - FR8: `className`, `style`, and `xstyle` composition.
 - AR1: no role, tab stop, or name of the component's own.
 - PR1–PR2: no state or Effect, and no inspection of caller content.
