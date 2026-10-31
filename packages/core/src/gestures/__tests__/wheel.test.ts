@@ -514,6 +514,33 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(released.map(Math.abs)).toEqual([0]);
   });
 
+  it("releases a trackpad fling at the fingers' last move, so the release keeps their speed: the momentum wheels before the lift is read never stop it (#8676 rescope preview)", () => {
+    const {smooth} = mount('<div id="smooth"></div>');
+    let released: {velocity: number; time: number} | null = null;
+    const pan = new PanGestureRecognizer({direction: 'vertical'});
+    pan.addTransitionListener((current, _from, to) => {
+      if (to === 'ended') {
+        released = {velocity: current.velocity().y, time: clock.time};
+      }
+    });
+    detachers.push(host.attach(smooth, pan));
+    // The fingers move steadily, then lift: momentum wheels shrink smoothly.
+    let time = 0;
+    for (let i = 0; i < 6; i++) {
+      wheel(smooth, {dy: 10, time});
+      time += 8;
+    }
+    let delta = 10;
+    for (let i = 0; i < 20; i++) {
+      delta *= 0.92;
+      wheel(smooth, {dy: delta, time});
+      time += 16;
+    }
+    clock.runDue(time + 300);
+    expect(released).not.toBeNull();
+    expect(Math.abs(released!.velocity)).toBeGreaterThan(500);
+  });
+
   it('starts a new wheel gesture after a quiet gap even when the end timer has not run yet (a blocked main thread)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({
