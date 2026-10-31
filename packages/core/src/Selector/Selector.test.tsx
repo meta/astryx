@@ -1077,6 +1077,28 @@ describe('Selector', () => {
       expect(screen.getByRole('combobox', h)).toBeInTheDocument();
     });
 
+    it('asks a touch keyboard for its Search key and no autocorrection in the search row', async () => {
+      const user = userEvent.setup();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          onChange={() => {}}
+          hasSearch
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Fruit'}));
+      expect(screen.getByRole('combobox', h)).toHaveAttribute(
+        'enterkeyhint',
+        'search',
+      );
+      expect(screen.getByRole('combobox', h)).toHaveAttribute(
+        'autocorrect',
+        'off',
+      );
+    });
+
     // The search input's expanded state, popup relationship, and active option
     // are bound to the shared Combobox contract (Selector.combobox.a11y.test.tsx,
     // search-active); this keeps only the Selector-specific wiring.

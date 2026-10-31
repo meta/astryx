@@ -87,6 +87,25 @@ const testStyles = stylex.create({
 });
 
 describe('BaseTypeahead', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection', () => {
+    render(
+      <BaseTypeahead
+        searchSource={emptySource}
+        value={null}
+        onChange={() => {}}
+        aria-label="Find a framework"
+      />,
+    );
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('enterkeyhint', 'search');
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('autocorrect', 'off');
+  });
+
   it('forwards supported DOM, styling, and event props to the combobox input', () => {
     const onBlur = vi.fn();
     const onFocus = vi.fn();

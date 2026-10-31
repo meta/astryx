@@ -166,6 +166,22 @@ describe('Tokenizer minQueryLength', () => {
 });
 
 describe('Tokenizer', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection', () => {
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[users[0]]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'enterkeyhint',
+      'search',
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute('autocorrect', 'off');
+  });
+
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();
     const onClick = vi.fn();
