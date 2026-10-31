@@ -73,6 +73,8 @@ function installRateLimitBackoff({
   if (github.__rateLimitBackoff) return github.__rateLimitBackoff;
   const deadline = now() + maxWaitMs;
   const counter = {requests: 0, waits: 0};
+  // A client without request hooks (a test double) is left as it is.
+  if (typeof github.hook?.wrap !== 'function') return counter;
   github.hook.wrap('request', async (request, options) => {
     for (;;) {
       counter.requests += 1;

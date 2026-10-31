@@ -349,6 +349,42 @@ function createDesignHarness(options = {}) {
 }
 
 describe('spec owner workflow reconciliation', () => {
+  it('skips the owner reads and the label call for a pull request that changes no records', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+    });
+    const reads = [];
+    for (const [group, name] of [
+      ['pulls', 'listReviews'],
+      ['issues', 'listComments'],
+      ['issues', 'listEventsForTimeline'],
+      ['issues', 'removeLabel'],
+    ]) {
+      harness.github.rest[group][name] = async () => {
+        reads.push(name);
+        return {data: []};
+      };
+    }
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(reads).toEqual([]);
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+    });
+  });
+
+  it('still removes a stale review label from a pull request that changes no records', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+      labels: [env.REVIEW_LABEL],
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(harness.state.calls).toContain(`remove-label:${env.REVIEW_LABEL}`);
+  });
+
   it('clears the gate on an exact-head ENGOWNER review', async () => {
     const harness = createApprovedHarness();
 

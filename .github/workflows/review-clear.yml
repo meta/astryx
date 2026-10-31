@@ -54,6 +54,19 @@ jobs:
           # be the last word on whether the gate clears.
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit, with the helper
+            // read from this workflow's own trusted commit (no checkout).
+            {
+              const {data: helper} = await github.rest.repos.getContent({
+                ...context.repo, ref: context.sha, path: '.github/scripts/lib/rate-limit-backoff.cjs',
+              });
+              const helperModule = {exports: {}};
+              new Function('module', 'exports', 'require', Buffer.from(helper.content, 'base64').toString('utf8'))(
+                helperModule, helperModule.exports,
+                () => { throw new Error('rate-limit-backoff.cjs must stay dependency-free'); },
+              );
+              helperModule.exports.installRateLimitBackoff({github, core});
+            }
             const { owner, repo } = context.repo;
             const run = context.payload.workflow_run;
             const CODE = 'needs:code-review';

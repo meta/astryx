@@ -110,6 +110,17 @@ function harness(
       },
       repos: {
         getContent: async ({ref, path: filePath}) => {
+          // The shared rate-limit wait, read before anything else.
+          if (filePath === '.github/scripts/lib/rate-limit-backoff.cjs') {
+            return {
+              data: {
+                type: 'file',
+                content: fs
+                  .readFileSync(path.join(root, filePath))
+                  .toString('base64'),
+              },
+            };
+          }
           calls.push(`read:${ref}:${filePath}`);
           if (!helperAt.includes(ref)) {
             throw Object.assign(new Error('Not Found'), {status: 404});

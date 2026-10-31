@@ -168,6 +168,12 @@ describe('installRateLimitBackoff', () => {
     expect(log.sleeps).toEqual([]);
   });
 
+  it('leaves a client without request hooks as it is', () => {
+    expect(
+      installRateLimitBackoff({github: {}, core: {}, logOnExit: false}),
+    ).toEqual({requests: 0, waits: 0});
+  });
+
   it('installs once per client', () => {
     const {github, counter} = client([]);
     expect(installRateLimitBackoff({github, core: {}, logOnExit: false})).toBe(

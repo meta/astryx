@@ -131,6 +131,19 @@ jobs:
           # "Expected — waiting for status" (#5149, #5152).
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit, with the helper
+            // read from this workflow's own trusted commit (no checkout).
+            {
+              const {data: helper} = await github.rest.repos.getContent({
+                ...context.repo, ref: context.sha, path: '.github/scripts/lib/rate-limit-backoff.cjs',
+              });
+              const helperModule = {exports: {}};
+              new Function('module', 'exports', 'require', Buffer.from(helper.content, 'base64').toString('utf8'))(
+                helperModule, helperModule.exports,
+                () => { throw new Error('rate-limit-backoff.cjs must stay dependency-free'); },
+              );
+              helperModule.exports.installRateLimitBackoff({github, core});
+            }
             const { owner, repo } = context.repo;
             const CODE = process.env.CODE_LABEL;
             const DESIGN = process.env.DESIGN_LABEL;
@@ -462,7 +475,11 @@ jobs:
                   }
                   return Buffer.from(data.content, 'base64').toString('utf8');
                 }
-                for (const file of coreRuntimeFiles) {
+                // The source bytes only prove the appearance-only exception
+                // a design owner may self-serve; an engineering owner
+                // self-serves every code change, so their pull requests skip
+                // these reads (two per changed Core file).
+                for (const file of authorIsEng ? [] : coreRuntimeFiles) {
                   const previousPath = file.previous_filename || file.filename;
                   if (file.status !== 'modified' || previousPath !== file.filename) {
                     continue;
@@ -763,6 +780,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const path = require('node:path');
             const {reconcileSpecOwnerGate} = require(path.join(
               process.env.GITHUB_WORKSPACE,
