@@ -120,8 +120,9 @@ describe('wheelSendGaps', () => {
     ).toEqual([400, 401, 399]);
   });
 
-  it('matches a coalesced step to the last sent step its deltas reach', () => {
-    // WebKit held three steps and delivered them as one 30 px step.
+  it('spaces a coalesced step from the first sent step it carries', () => {
+    // WebKit held three steps and delivered them as one 30 px step: the page
+    // could have held the first of them, sent 16 ms after the step before.
     expect(
       wheelSendGaps(
         Array.from({length: 4}, () => ({dy: 10})),
@@ -131,7 +132,7 @@ describe('wheelSendGaps', () => {
           [0, 30],
         ],
       ),
-    ).toEqual([48]);
+    ).toEqual([16]);
   });
 
   it('leaves a gap unknown when the received deltas match no sent step', () => {
@@ -156,6 +157,25 @@ describe('wheelGapCauses with the send spacing', () => {
     expect(wheelGapCauses('webkit', [0, 111], [96, 141], 100, [400])).toEqual({
       pageStalls: [],
       dispatchStalls: [111],
+    });
+  });
+
+  it('gives the page a stall behind a late first step, whose coalesced steps were sent at the burst pace', () => {
+    // 19 steps sent 16 ms apart; the first reached the page 290 ms late, the
+    // listener then held the page 150 ms, and steps 1 to 18 arrived coalesced
+    // as it finished.
+    const steps = Array.from({length: 19}, () => ({dy: 10}));
+    const sentAt = steps.map((_, i) => 16 * i);
+    const sendGaps = wheelSendGaps(steps, sentAt, [
+      [0, 10],
+      [0, 180],
+    ]);
+    expect(sendGaps).toEqual([16]);
+    expect(
+      wheelGapCauses('webkit', [290, 442], [440, 443], 100, sendGaps),
+    ).toEqual({
+      pageStalls: [{gapMs: 152, handlingMs: 150}],
+      dispatchStalls: [],
     });
   });
 

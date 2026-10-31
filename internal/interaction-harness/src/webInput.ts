@@ -80,9 +80,11 @@ export interface WheelBurst {
 /**
  * The page received a wheel burst's steps further apart than the proof's
  * `maxGapMs`, and its wheel listeners did not hold the step back: the step
- * reached the page later than one frame after they finished the one before.
- * The dispatch stalled before the page, so a loaded runner splits what the
- * driver sent as one gesture. Other work on the page's main
+ * reached the page later than one frame after they finished the one before,
+ * or the gap was no wider than the harness's own spacing of the sends (the
+ * page can only widen a gap, so a starved renderer that also held the step
+ * lands here). The dispatch stalled before the page, so a loaded runner
+ * splits what the driver sent as one gesture. Other work on the page's main
  * thread between steps (timers, frame callbacks) also lands here, so a
  * re-taken run is the runner's or that work's, never the wheel listeners'.
  */
@@ -150,8 +152,11 @@ export function wheelArrivals(
  * How far apart the harness sent the steps behind each received gap, ms
  * (`sendGapsMs[i - 1]` for the gap before received step `i`), or `null` where
  * the received steps cannot be matched to the sent ones. A received step is
- * matched to the last sent step its deltas reach: WebKit coalesces the steps
- * it holds into one that carries their summed deltas.
+ * matched to the sent steps its deltas reach: WebKit coalesces the steps it
+ * holds into one that carries their summed deltas. The gap is spaced from the
+ * last sent step the step before carried to the first sent step this one
+ * carries, the send the page could have held: spacing it by the last carried
+ * step would let a late first step lend the gap its delay.
  */
 export function wheelSendGaps(
   steps: readonly {readonly dx?: number; readonly dy?: number}[],
@@ -184,7 +189,9 @@ export function wheelSendGaps(
   });
   return lastSent.slice(1).map((j, i) => {
     const before = lastSent[i];
-    return j == null || before == null ? null : sentAt[j] - sentAt[before];
+    return j == null || before == null || j <= before
+      ? null
+      : sentAt[before + 1] - sentAt[before];
   });
 }
 
