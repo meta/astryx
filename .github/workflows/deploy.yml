@@ -11,8 +11,11 @@ on:
 
 permissions: {}
 
+# Push runs (the fast checks) share one group, and a waiting one is replaced by
+# a newer push. The full unit runs main-heavy-lanes.yml dispatches have their
+# own group and are never cancelled by a push (spec:AST-030 FR21).
 concurrency:
-  group: 'main-validation'
+  group: "${{ github.event_name == 'push' && 'main-validation' || 'main-unit-tests' }}"
   cancel-in-progress: false
 
 jobs:
@@ -32,12 +35,9 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            let sha = context.sha;
-            if (context.eventName !== 'push') {
-              const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
-              sha = data.commit.sha;
-            }
-            core.setOutput('sha', sha);
+            // The event's commit: the pushed one, or main's tip when the run
+            // was dispatched, so the run's pass or fail is that exact commit's.
+            core.setOutput('sha', context.sha);
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
@@ -67,8 +67,11 @@ jobs:
   # Both Vitest lanes split into four legs, as in ci.yml: one job each ran
   # test-ui in ~18 minutes and test-node in ~28, so main's gate took about half
   # an hour while the PR gate took under fifteen. `test` joins the legs.
+  # The unit lanes run the full suites in a dispatched run (main-heavy-lanes.yml,
+  # about hourly, spec:AST-030 FR21), never on a push.
   test-ui:
     needs: [main-commit]
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +97,7 @@ jobs:
 
   test-node:
     needs: [main-commit]
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -168,11 +172,21 @@ jobs:
     runs-on: ubuntu-slim
     permissions: {}
     steps:
+      # A push runs only the fast checks; a dispatched run is the full unit
+      # run, and passes only when every unit leg passed.
       - name: Assert every push gate succeeded
+        env:
+          EVENT: ${{ github.event_name }}
+          TEST_UI: ${{ needs.test-ui.result }}
+          TEST_NODE: ${{ needs.test-node.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
         run: |
-          echo "test-ui:    ${{ needs.test-ui.result }}"
-          echo "test-node:  ${{ needs.test-node.result }}"
-          echo "typecheck:  ${{ needs.typecheck.result }}"
-          [ "${{ needs.test-ui.result }}" = "success" ] || exit 1
-          [ "${{ needs.test-node.result }}" = "success" ] || exit 1
-          [ "${{ needs.typecheck.result }}" = "success" ] || exit 1
+          echo "test-ui:    $TEST_UI"
+          echo "test-node:  $TEST_NODE"
+          echo "typecheck:  $TYPECHECK"
+          [ "$TYPECHECK" = success ] || exit 1
+          if [ "$EVENT" = push ]; then
+            [ "$TEST_UI" = skipped ] && [ "$TEST_NODE" = skipped ] || exit 1
+          else
+            [ "$TEST_UI" = success ] && [ "$TEST_NODE" = success ] || exit 1
+          fi
