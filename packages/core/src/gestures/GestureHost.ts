@@ -385,6 +385,8 @@ interface WheelGesture {
   readonly takers: ReadonlyArray<GestureRecognizer>;
   /** Scratch (#8676 rescope): a discrete step instead of a followed pan. */
   step?: WheelStep;
+  /** Scratch: the step's deferred contact, begun at its commit. */
+  stepBegin?: Record<string, unknown> & {id: number; x: number; y: number};
   /** Scratch: a followed pan's lift detection (momentum onset). */
   follow?: {previous: number; run: number; count: number; lifted: boolean; sign: number};
 }
@@ -1971,7 +1973,7 @@ export class GestureHost {
     if (
       gesture != null &&
       gesture.ids.length > 0 &&
-      !gesture.step?.committed &&
+      gesture.step == null &&
       !this.wheelHasTaker(gesture)
     ) {
       // Every recognizer that took it has left (detached, disabled or
@@ -2120,9 +2122,10 @@ export class GestureHost {
         : {x: gesture.x, y: gesture.y - sign * px};
     this.pendingStep = null;
     this.lastStep = {axis: s.axis, sign, last: time};
-    this.arena.moved([{id, ...at(12), time}]);
-    this.arena.moved([{id, ...at(52), time: time + 16}]);
-    this.arena.ended([{id, ...at(52), time: time + 16}]);
+    this.arena.began([{...gesture.stepBegin, id, x: gesture.x, y: gesture.y, time} as never]);
+    this.arena.moved([{id, ...at(12), time: time + 8}]);
+    this.arena.moved([{id, ...at(52), time: time + 24}]);
+    this.arena.ended([{id, ...at(52), time: time + 24}]);
   }
 
   /** Start a wheel gesture: who takes it, decided once, or nobody. */
@@ -2251,6 +2254,12 @@ export class GestureHost {
         this.lastStep.last = time;
       }
     }
+    if (gesture.step) {
+      // Scratch: a step's contact begins only when it commits, so its
+      // flick's velocity never spans a slow swipe's whole duration.
+      gesture.stepBegin = {...base, id: ids[0], x: wheel.clientX, y: wheel.clientY};
+      return gesture;
+    }
     this.arena.began(
       kind === 'pan'
         ? [{...base, id: ids[0], x: wheel.clientX, y: wheel.clientY, time}]
@@ -2365,7 +2374,7 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    if (gesture.ids.length === 0 || gesture.step?.committed || gesture.follow?.lifted) {
+    if (gesture.ids.length === 0 || gesture.step != null || gesture.follow?.lifted) {
       return;
     }
     // A trackpad's scroll releases at its last wheel, with its speed: its
