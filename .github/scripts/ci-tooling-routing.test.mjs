@@ -288,9 +288,9 @@ describe('Node-tooling CI routing', () => {
     // the analysis waits for it, so every changed component keeps a before
     // size (AST-080 FR8).
     const start = step(job, 'Start building the merge base without a record');
-    expect(start.if).toContain(
-      "steps.size-records.outputs.component_run_id == ''",
-    );
+    // Main kept no record, or its download failed: either way the base builds.
+    expect(start.if).toContain("steps.component-download.outcome != 'success'");
+    expect(download.id).toBe('component-download');
     expect(start.run).toContain(
       'node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json',
     );

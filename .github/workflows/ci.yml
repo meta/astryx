@@ -1017,6 +1017,7 @@ jobs:
             }
 
       - name: Download main's component sizes for the merge base
+        id: component-download
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.component_run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
@@ -1026,14 +1027,14 @@ jobs:
           github-token: ${{ github.token }}
           path: .component-size-base
 
-      # Main kept no component record of this merge base (a later push to
-      # main replaced its run, or the record expired): build the base beside
+      # No component record of this merge base was read (Main kept none, or
+      # its download failed): build the base beside
       # the Storybook build and record its sizes with this head's analyzer, so
       # every changed component still has a before size (AST-080 FR8). It runs
       # in the background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.size-records.outputs.component_run_id == ''
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
