@@ -108,7 +108,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * `allowedScrollTypes: []` opts out.
    */
   protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
-    return [];
+    return ['continuous', 'discrete'];
   }
 
   minimumNumberOfTouches: number;

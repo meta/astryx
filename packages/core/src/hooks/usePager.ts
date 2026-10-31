@@ -610,7 +610,6 @@ export function createPager(
     // On the web a pan also takes a trackpad's scroll and a mouse wheel's
     // notches, along its axis (spec:AST-094 FR43).
     allowedScrollTypes: options.panOptions?.allowedScrollTypes ?? ['continuous'],
-    wheelStep: options.panOptions?.wheelStep ?? true,
     shouldBegin: recognizer => {
       if (options.panOptions?.shouldBegin?.(recognizer) === false) {
         return false;
@@ -925,7 +924,15 @@ export function createPager(
     if (state === 'changed') {
       const dx = recognizer.translation().x;
       // Finger right (dx > 0) moves content toward earlier pages in LTR.
-      const raw = dragStart + sign() * dx;
+      let raw = dragStart + sign() * dx;
+      if (!isLooping() && recognizer.trackedTouches[0]?.scrollType != null && pageWidth > 0) {
+        raw = rubberBandClamp(
+          raw,
+          offsetOf(Math.max(0, dragStartIndex - 1)),
+          offsetOf(Math.min(count() - 1, dragStartIndex + 1)),
+          pageWidth,
+        );
+      }
       dragPosition = isLooping()
         ? raw
         : rubberBandClamp(
@@ -947,8 +954,14 @@ export function createPager(
       // UIScrollView reads it. A finger still for more than 40 ms before the
       // lift releases at 0 (FR2), where UIScrollView keeps the speed. The
       // content moves against the finger in LTR (sign()).
-      const velocity =
+      let velocity =
         state === 'ended' ? sign() * recognizer.scrollVelocity().x : 0;
+      if (
+        pan.pointerType !== 'touch' &&
+        Math.abs(dragPosition - offsetOf(dragStartIndex)) < 0.1 * pageWidth
+      ) {
+        velocity = 0;
+      }
       const next = releasePage(dragPosition, velocity, dragStartIndex);
       setTarget(next, 'drag', true);
       settleFrom(
