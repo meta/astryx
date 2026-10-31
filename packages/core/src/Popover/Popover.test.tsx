@@ -1266,12 +1266,10 @@ describe('Popover', () => {
 
   describe('surface padding', () => {
     // StyleX's dev runtime names the style object a class came from
-    // ("padding__paddingStyles.3"), which is the padding rung the surface
-    // was handed.
+    // ("paddingStyles__paddingStyles.3", after its module), which is the
+    // padding rung the surface was handed.
     function paddingRungOf(surface: Element | null): string | null {
-      const match = surface?.className.match(
-        /padding__paddingStyles\.([\d.]+)/,
-      );
+      const match = surface?.className.match(/__paddingStyles\.([\d.]+)/);
       return match ? match[1] : null;
     }
 

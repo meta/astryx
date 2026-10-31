@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
-import {focusForLastInput, isFocusDetached} from './focusReturn';
+import {focusForLastInput} from './focusReturn';
+import {isFocusDetached} from './isFocusDetached';
 import {
   __resetInteractionModalityForTest,
   __startInteractionModalityTrackingForTest,
