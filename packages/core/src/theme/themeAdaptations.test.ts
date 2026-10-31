@@ -830,7 +830,12 @@ describe('adapted type-scale component defaults', () => {
     expect(rule.tokens['--font-size-5xl']).not.toBe(
       theme.tokens['--font-size-5xl'],
     );
-    expect(adaptiveCSS).toContain('--font-size-base: 0.875rem');
+    expect(adaptiveCSS).toContain(
+      '--_scaled-font-size-base: min(calc(0.875rem * var(--_dynamic-type-body, 1)), var(--_scaled-font-size-lg))',
+    );
+    expect(adaptiveCSS).toContain(
+      '--font-size-base: var(--_scaled-font-size-base)',
+    );
     // The root owns the var() wiring and its authored overrides. Re-emitting
     // either would turn an unrelated scale change into a component write.
     expect(rule.components).toBeUndefined();
