@@ -188,8 +188,9 @@ export function peekOffsetFor(
  * The scrim is full down to the shortest stop that is still a working surface,
  * and only thins past it — onto a peek, where it holds at
  * `MIN_PEEK_SCRIM_OPACITY` (a glance state, and the sheet is still modal), or
- * out through the dismiss overshoot toward `dismissOffset`, where it clears
- * completely because the sheet is leaving.
+ * out toward `dismissOffset`, linearly, clearing completely there. Pass the
+ * dismissed position (the sheet's top at the bottom of the screen): UIKit's
+ * dim is linear in the sheet's position from its shortest detent to there.
  *
  * So a sheet whose stops are all working heights keeps a full scrim at every
  * one of them; only the sliver of a peek, or a sheet on its way out, dims less.

@@ -53,7 +53,9 @@ import {
   releaseAnimations,
   releaseVelocity,
   retakeOnTouchPacing,
+  seekAnimations,
   springStep,
+  startCompositorTrace,
   startScreencast,
   thawTimers,
   timeline,
@@ -66,6 +68,7 @@ import {
   waitForAnimation,
   waitForRest,
   writeEvidence,
+  type CastFrame,
   type InputRecord,
   type PlayedEvent,
   type TimedValue,
@@ -475,6 +478,264 @@ test('on Android too, the drag tracks the finger 1:1 and stretches past the tall
   );
   expect(Math.min(...tops)).toBeGreaterThanOrEqual(tallTop - 48.5);
   expect(Math.min(...tops)).toBeLessThan(tallTop - 10);
+});
+
+test('the dim follows the sheet: at once under the finger, in lockstep with the release', async ({
+  page,
+}) => {
+  const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
+  const dialog = page.getByRole('dialog', {name: 'Nearby places'});
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  // UIKit's dim: full at the shortest detent and above, linear in the sheet's
+  // top below it, clear when the top reaches the bottom of the screen.
+  const dimAt = (top: number) =>
+    Math.min(
+      1,
+      Math.max(0, (viewportHeight - top) / (viewportHeight - halfTop)),
+    );
+  const backdropOpacity = async () =>
+    dialog.evaluate(el => Number(getComputedStyle(el, '::backdrop').opacity));
+  // Down to the half detent first.
+  await driver.play(slowDragTo(handle, Math.round((halfTop - tallTop) * 0.8)));
+  await waitForRest(sheet);
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+  expect(await backdropOpacity()).toBeCloseTo(1, 2);
+  // 100 px below it, slowly: the dim follows every move at once.
+  const fromHalf = {x: handle.x, y: halfTop + 12};
+  const tracked: {top: number; dim: number}[] = [];
+  await driver.play(
+    drag(
+      fromHalf,
+      {x: fromHalf.x, y: fromHalf.y + 100},
+      {durationMs: 400, hz: 60, restMs: 150},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          await frames(page, 1);
+          tracked.push({
+            top: await sheetTop(sheet),
+            dim: await backdropOpacity(),
+          });
+        }
+      },
+    },
+  );
+  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 90);
+  for (const {top, dim} of tracked) {
+    expect(dim).toBeCloseTo(dimAt(top), 2);
+  }
+  // Released at 250 px/s, short of halfway to gone: back to the half detent,
+  // the dim riding the same spring, each moment's dim the one for where the
+  // sheet is.
+  await holdAnimations(page, dialog);
+  for (const t of [0, 33, 83, 150, 250, 400]) {
+    await seekAnimations(page, t);
+    const top = await sheetTop(sheet);
+    expect(await backdropOpacity(), `t=${t} top=${top}`).toBeCloseTo(
+      dimAt(top),
+      2,
+    );
+  }
+});
+
+/**
+ * The luminance (0-255) around a viewport point in each screencast frame,
+ * decoded in a scratch page of the same browser (as trackMarker does), so the
+ * dim can be read while the page's main thread is blocked.
+ */
+async function luminanceAt(
+  page: Page,
+  frames: ReadonlyArray<CastFrame>,
+  point: {x: number; y: number},
+): Promise<{t: number; lum: number}[]> {
+  const scratch = await page.context().newPage();
+  try {
+    const out: {t: number; lum: number}[] = [];
+    for (let i = 0; i < frames.length; i += 12) {
+      const batch = frames.slice(i, i + 12);
+      const values = await scratch.evaluate(
+        async ({items, p}) => {
+          const results: number[] = [];
+          for (const item of items) {
+            const blob = await (
+              await fetch(`data:image/${item.format};base64,${item.data}`)
+            ).blob();
+            const bitmap = await createImageBitmap(blob);
+            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+            const context = canvas.getContext('2d');
+            if (context == null) {
+              throw new Error('no 2d context');
+            }
+            context.drawImage(bitmap, 0, 0);
+            const x = Math.round((p.x * bitmap.width) / item.viewportWidth);
+            const y = Math.round((p.y * bitmap.height) / item.viewportHeight);
+            const {data} = context.getImageData(x - 2, y - 2, 5, 5);
+            let sum = 0;
+            for (let k = 0; k < data.length; k += 4) {
+              sum +=
+                0.2126 * data[k] + 0.7152 * data[k + 1] + 0.0722 * data[k + 2];
+            }
+            results.push(sum / (data.length / 4));
+          }
+          return results;
+        },
+        {
+          items: batch.map(f => ({
+            data: f.data,
+            format: f.format,
+            viewportWidth: f.viewportWidth,
+            viewportHeight: f.viewportHeight,
+          })),
+          p: point,
+        },
+      );
+      values.forEach((lum, k) => out.push({t: batch[k].t, lum}));
+    }
+    return out;
+  } finally {
+    await scratch.close();
+  }
+}
+
+test('the dim keeps its lockstep with the release while the main thread is blocked', async ({
+  page,
+}, testInfo) => {
+  const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error('no viewport');
+  }
+  // Below the half detent the dim depends on where the sheet is: let go
+  // there slowly and the sheet settles back to half, the dim deepening with
+  // it. The drag is slow enough (~340 px/s at the lift, a frame after its
+  // last move) that the release projects back to half rather than to
+  // dismissal. The block starts once the release (sheet and dim) is running.
+  const dy = Math.round(halfTop - tallTop + (viewport.height - halfTop) * 0.3);
+  await markElement(sheet);
+  const cast = await startScreencast(page);
+  // What the compositor presented: frames the screencast skips under load
+  // while the compositor draws them are not stalls (WebKit: none, so the
+  // screencast alone is judged).
+  const compositor = await startCompositorTrace(page);
+  await driver.play(
+    drag(
+      handle,
+      {x: handle.x, y: handle.y + dy},
+      {durationMs: 1200, hz: 60, restMs: 16},
+    ),
+  );
+  const [settle] = await waitForAnimation(sheet, {minProgressMs: 16});
+  const block = await blockMainThread(page, 700);
+  await page.waitForTimeout(150);
+  const castFrames = await cast.stop();
+  const presented = await compositor.stop();
+  // A point of the backdrop above the sheet at every stop.
+  const lum = await luminanceAt(page, castFrames, {
+    x: viewport.width - 24,
+    y: Math.max(8, tallTop / 2),
+  });
+  const tracked = await trackMarker(page, castFrames);
+  const resting = (
+    lum.filter(s => s.t >= block.to).at(-1) ?? lum[lum.length - 1]
+  ).lum;
+  const blocked = lum.filter(
+    s => s.t >= block.from + 20 && s.t <= Math.min(block.to, settle.to),
+  );
+  // The backdrop's luminance is whole steps, and near the end of the spring
+  // the dim moves about one step a frame: two frames the screencast delivers
+  // close together read the same step though the dim never stopped. So it is
+  // judged by time, as the harness judges a moving element: no stall longer
+  // than three screencast intervals while it is more than 3 steps from rest
+  // (a main-thread dim would hold still for the whole block), over at least
+  // the harness's fewest judged frames.
+  const proof = busyWindowProof(
+    lum.map(s => ({
+      t: s.t,
+      box: {x: 0, y: s.lum, width: 0, height: 0},
+      pixels: 1,
+    })),
+    {from: block.from, to: Math.min(block.to, settle.to)},
+    {settledWithin: 3, settledAt: resting, minMovedFraction: 0, presented},
+  );
+  await writeEvidence(
+    'busy-main-thread/bottomsheet-dim',
+    {
+      [`${testInfo.project.name}.json`]: JSON.stringify(
+        {
+          block,
+          settle,
+          resting,
+          proof,
+          frames: castFrames.map(f => ({
+            t: +(f.t - block.from).toFixed(1),
+            lum: +(lum.find(s => s.t === f.t)?.lum ?? -1).toFixed(1),
+            y: tracked.find(s => s.t === f.t)?.box?.y ?? null,
+          })),
+        },
+        null,
+        1,
+      ),
+    },
+    testInfo,
+  );
+  // Through the block the backdrop keeps darkening (the dim keeps rising
+  // with the sheet) and never lightens.
+  testInfo.annotations.push({
+    type: 'busy-main-thread',
+    description: proof.summary,
+  });
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  for (let i = 1; i < blocked.length; i++) {
+    expect(
+      blocked[i].lum,
+      `t=${blocked[i].t - block.from}`,
+    ).toBeLessThanOrEqual(blocked[i - 1].lum + 1);
+  }
+});
+
+test('on Android the dim follows the sheet too, pinned (one touch model)', async ({
+  page,
+}) => {
+  const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page, {
+    idiom: 'android',
+  });
+  const dialog = page.getByRole('dialog', {name: 'Nearby places'});
+  const viewportHeight = page.viewportSize()?.height ?? 0;
+  // UIKit's dim: full at the shortest detent, clear at the bottom of the
+  // screen, linear between.
+  const uikitDimAt = (top: number) =>
+    Math.min(1, Math.max(0, 1 - (top - halfTop) / (viewportHeight - halfTop)));
+  const scrimVars = async () =>
+    dialog.evaluate(el => ({
+      opacity: Number(el.style.getPropertyValue('--_sheet-scrim-opacity')),
+      duration: el.style.getPropertyValue('--_sheet-scrim-duration'),
+    }));
+  await driver.play(slowDragTo(handle, Math.round((halfTop - tallTop) * 0.8)));
+  await waitForRest(sheet);
+  const fromHalf = {x: handle.x, y: halfTop + 12};
+  const tracked: {top: number; opacity: number; duration: string}[] = [];
+  await driver.play(
+    drag(
+      fromHalf,
+      {x: fromHalf.x, y: fromHalf.y + 100},
+      {durationMs: 400, hz: 60, restMs: 150},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          await frames(page, 1);
+          tracked.push({top: await sheetTop(sheet), ...(await scrimVars())});
+        }
+      },
+    },
+  );
+  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 90);
+  for (const {top, opacity, duration} of tracked) {
+    expect(opacity).toBeCloseTo(uikitDimAt(top), 1);
+    // Pinned to 0 s: the dim moves with the finger, not behind it.
+    expect(duration).toBe('0s');
+  }
 });
 
 test('a downward flick lands on the next detent, and from there dismisses', async ({
@@ -947,6 +1208,44 @@ test('a finger dragging the open sheet re-rasters none of it', async ({
   // the drag, as it did before the release rule. From the first move through
   // the settle and its layer's release, nothing may re-raster.
   expect(tiles.moving, JSON.stringify(tiles)).toBe(0);
+});
+
+test("the dim a release plays re-rasters nothing: the open sheet's backdrop keeps its layer", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'raster traces are Chromium-only');
+  const {driver, sheet, tallTop, handle} = await openSheet(page);
+  // The presentation's own layer goes this long after it settles.
+  await page.waitForTimeout(PROMOTION_LINGER_MS + 100);
+  // Measure the dim alone. The two pending causes above are taken out of the
+  // window: the animator's promotion adds to an inline will-change and keeps
+  // it, and the selection lock puts an inline user-select back as it found it.
+  await sheet.evaluate(el => {
+    el.style.setProperty('will-change', 'transform, opacity');
+    el.style.setProperty('user-select', 'none');
+    el.style.setProperty('-webkit-user-select', 'none');
+  });
+  await frames(page, 2);
+  let lifted = false;
+  const tiles = await traceRasterTiles(page, async mark => {
+    await mark('drag');
+    await driver.play(outAndBack(handle), {
+      onEvent: async step => {
+        if (step.type === 'touchEnd' && !lifted) {
+          lifted = true;
+          await mark('release');
+        }
+      },
+    });
+    await waitForRest(sheet);
+    await page.waitForTimeout(PROMOTION_LINGER_MS + 200);
+  });
+  expect(await sheetTop(sheet)).toBeCloseTo(tallTop, 0);
+  // The release plays the dim back to full on the backdrop's compositor
+  // layer. A backdrop given a layer only for that animation is re-rastered
+  // when it gets one and again when it loses it.
+  expect(tiles.release, JSON.stringify(tiles)).toBe(0);
 });
 
 test(

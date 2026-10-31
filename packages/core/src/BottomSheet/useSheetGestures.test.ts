@@ -3042,6 +3042,382 @@ describe('useSheetGestures: the release on the compositor', () => {
   });
 });
 
+describe('useSheetGestures: the dim follows the sheet', () => {
+  // A finger: the release runs on UIKit's springs and the dim follows the
+  // sheet (releaseMotion.ts); under a mouse, today's dim.
+  beforeEach(() => stubIosIdiom());
+
+  interface Played {
+    keyframes: Keyframe[];
+    options: KeyframeAnimationOptions & {pseudoElement?: string};
+    cancel: ReturnType<typeof vi.fn>;
+  }
+  function recordAnimations(el: HTMLElement): Played[] {
+    const played: Played[] = [];
+    el.animate = vi.fn((keyframes, options) => {
+      const cancel = vi.fn();
+      played.push({
+        keyframes: keyframes as Keyframe[],
+        options: options as Played['options'],
+        cancel,
+      });
+      return {cancel, startTime: 0} as unknown as Animation;
+    });
+    return played;
+  }
+  /** A played property's value `ms` after its start. */
+  function valueAt(
+    animation: Played,
+    ms: number,
+    read: (frame: Keyframe) => number,
+  ): number {
+    const duration = animation.options.duration as number;
+    const frames = animation.keyframes.map(frame => ({
+      t: (frame.offset as number) * duration,
+      v: read(frame),
+    }));
+    for (let i = 1; i < frames.length; i++) {
+      if (ms <= frames[i].t) {
+        const a = frames[i - 1];
+        const b = frames[i];
+        return a.v + ((b.v - a.v) * (ms - a.t)) / (b.t - a.t);
+      }
+    }
+    return frames[frames.length - 1].v;
+  }
+  const travelOf = (frame: Keyframe) =>
+    Number.parseFloat(String(frame.translate).split(' ')[1]);
+  const opacityOf = (frame: Keyframe) => Number(frame.opacity);
+  // A 400px sheet with a 200px stop: offsets [0, 200], gone at 400. UIKit's
+  // dim is full at the shortest detent and above, linear to clear at gone.
+  const dimAt = (offset: number) =>
+    Math.min(1, Math.max(0, (400 - offset) / (400 - 200)));
+
+  /** A sheet target inside a modal dialog, whose ::backdrop is the scrim. */
+  function inDialog() {
+    const dialog = document.createElement('dialog');
+    const target = makeTarget();
+    dialog.appendChild(target);
+    document.body.appendChild(dialog);
+    return {dialog, target};
+  }
+
+  it('clears the dim at the dismissed position, linear from the shortest detent', () => {
+    const onScrimOpacity = vi.fn();
+    const {hook} = setup({snapHeights: () => [200], onScrimOpacity});
+    const t = makeTarget();
+    down(hook, 0, 0, t);
+    for (const y of [150, 200, 250, 300, 380]) {
+      move(hook, y, y, t);
+      expect(Number(onScrimOpacity.mock.calls.at(-1)?.[0])).toBeCloseTo(
+        dimAt(y),
+        9,
+      );
+    }
+  });
+
+  it("pins the host's easing for the gesture and hands it back when the sheet lands", async () => {
+    const onScrimOpacity = vi.fn();
+    const onScrimTracking = vi.fn();
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity,
+      onScrimTracking,
+    });
+    const {target} = inDialog();
+    recordAnimations(target);
+    down(hook, 0, 0, target);
+    expect(onScrimTracking.mock.calls).toEqual([[true]]);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    // Still the release's: the sheet is on its way to the 200 detent.
+    expect(onScrimTracking.mock.calls).toEqual([[true]]);
+    land();
+    // The spring's end resolves on a microtask.
+    await Promise.resolve();
+    expect(onScrimTracking.mock.calls).toEqual([[true], [false]]);
+    expect(onScrimOpacity).toHaveBeenLastCalledWith(1);
+  });
+
+  it('plays the dim on the backdrop in lockstep with the release', () => {
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity: vi.fn(),
+      onScrimTracking: vi.fn(),
+    });
+    const {dialog, target} = inDialog();
+    const sheetAnimations = recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    expect(hook.result.current.settledOffset).toBe(200);
+    const sheetAnimation = sheetAnimations.at(-1) as Played;
+    const dim = backdrop.at(-1) as Played;
+    expect(dim.options.pseudoElement).toBe('::backdrop');
+    // Each moment's dim is the one for where the sheet is at that moment.
+    for (const ms of [0, 16, 50, 100, 200, 300]) {
+      const offset = valueAt(sheetAnimation, ms, travelOf);
+      expect(valueAt(dim, ms, opacityOf)).toBeCloseTo(dimAt(offset), 2);
+    }
+    expect(valueAt(dim, 0, opacityOf)).toBeCloseTo(dimAt(290), 2);
+  });
+
+  it("plays no dim on a backdrop that isn't the visible scrim, and still releases the sheet", () => {
+    // A sheet stacked above another: the stack's one visible backdrop is the
+    // other's, and this one's stays transparent.
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity: vi.fn(),
+      onScrimTracking: vi.fn(),
+      isScrimShown: () => false,
+    });
+    const {dialog, target} = inDialog();
+    const sheetAnimations = recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    expect(hook.result.current.settledOffset).toBe(200);
+    expect(sheetAnimations.length).toBeGreaterThan(0);
+    expect(backdrop).toEqual([]);
+  });
+
+  it('hands the dim back unpinned when the sheet closes during a release, writing nothing over the close', () => {
+    const onScrimOpacity = vi.fn();
+    const onScrimTracking = vi.fn();
+    const snapHeights = () => [200];
+    const hook = renderHook(
+      ({isOpen}: {isOpen: boolean}) =>
+        useSheetGestures({
+          isOpen,
+          snapHeights,
+          onDismiss: vi.fn(),
+          onScrimOpacity,
+          onScrimTracking,
+        }),
+      {initialProps: {isOpen: true}},
+    );
+    const {dialog, target} = inDialog();
+    recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    const dim = backdrop.at(-1) as Played;
+    expect(onScrimTracking).toHaveBeenLastCalledWith(true);
+    // Closed (Escape, back, isOpen false) before the spring lands.
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    const writes = onScrimOpacity.mock.calls.length;
+    hook.rerender({isOpen: false});
+    // At once: the release's dim stops and the host's easing is back.
+    expect(onScrimTracking).toHaveBeenLastCalledWith(false);
+    expect(dim.cancel).toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    // The landing writes nothing over the host's close.
+    expect(onScrimOpacity.mock.calls.length).toBe(writes);
+  });
+
+  it('lets a finger catch the dim where it is', () => {
+    const onScrimOpacity = vi.fn();
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity,
+      onScrimTracking: vi.fn(),
+    });
+    const {dialog, target} = inDialog();
+    recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    const dim = backdrop.at(-1) as Played;
+    // 60 ms into the settle a finger lands on the sheet.
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    const expected = valueAt(dim, 60, opacityOf);
+    down(hook, 250, 900, target);
+    expect(dim.cancel).toHaveBeenCalled();
+    const caught = Number(onScrimOpacity.mock.calls.at(-1)?.[0]);
+    expect(caught).toBeGreaterThan(dimAt(290));
+    expect(caught).toBeLessThan(1);
+    expect(caught).toBeCloseTo(expected, 1);
+  });
+
+  it("lands a release onto the peek on the peek's lighter scrim, in lockstep", () => {
+    // A 400px sheet with a 300px stop and an 80px peek: offsets [0, 100, 320].
+    // The dim is full down to the 100 stop, thins to the peek's floor (0.3)
+    // at 320, and stays there.
+    const {hook} = setup({
+      snapHeights: () => [300, 80],
+      onScrimOpacity: vi.fn(),
+      onScrimTracking: vi.fn(),
+    });
+    const {dialog, target} = inDialog();
+    const sheetAnimations = recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 300, t0: 0, t1: 600});
+    restAt(hook, 300, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(300, 800, target),
+      ),
+    );
+    expect(hook.result.current.settledOffset).toBe(320);
+    const peekDim = (offset: number) =>
+      offset <= 100
+        ? 1
+        : offset >= 320
+          ? 0.3
+          : 1 - (0.7 * (offset - 100)) / 220;
+    const sheetAnimation = sheetAnimations.at(-1) as Played;
+    const dim = backdrop.at(-1) as Played;
+    for (const ms of [0, 16, 50, 100, 200, 300]) {
+      const offset = valueAt(sheetAnimation, ms, travelOf);
+      expect(valueAt(dim, ms, opacityOf)).toBeCloseTo(peekDim(offset), 2);
+    }
+    expect(valueAt(dim, dim.options.duration as number, opacityOf)).toBeCloseTo(
+      0.3,
+      2,
+    );
+  });
+
+  it('fades the dim to its end with the release under reduced motion, 200 ms or less', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches:
+          query.includes('pointer: coarse') ||
+          query.includes('prefers-reduced-motion'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity: vi.fn(),
+      onScrimTracking: vi.fn(),
+    });
+    const {dialog, target} = inDialog();
+    recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    expect(hook.result.current.settledOffset).toBe(200);
+    const dim = backdrop.at(-1) as Played;
+    // From the dim where the finger left it to the detent's, within 200 ms.
+    expect(valueAt(dim, 0, opacityOf)).toBeCloseTo(dimAt(290), 2);
+    expect(settledMs(dim)).toBeLessThanOrEqual(200.5);
+    expect(valueAt(dim, 200, opacityOf)).toBeCloseTo(dimAt(200), 2);
+  });
+
+  it('follows the sheet under a finger on Android too (one touch model)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('pointer: coarse'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    vi.stubGlobal('CSS', {supports: () => false, escape: (v: string) => v});
+    const onScrimTracking = vi.fn();
+    const {hook} = setup({
+      snapHeights: () => [200],
+      onScrimOpacity: vi.fn(),
+      onScrimTracking,
+    });
+    const {dialog, target} = inDialog();
+    recordAnimations(target);
+    const backdrop = recordAnimations(dialog);
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    act(() =>
+      hook.result.current.handleProps.onPointerUp(
+        pointerEvent(290, 800, target),
+      ),
+    );
+    // Pinned, and the release's dim played on the backdrop, as on iOS.
+    expect(onScrimTracking).toHaveBeenCalledWith(true);
+    const dim = backdrop.at(-1) as Played;
+    expect(dim.options.pseudoElement).toBe('::backdrop');
+    expect(valueAt(dim, 0, opacityOf)).toBeCloseTo(dimAt(290), 2);
+  });
+
+  it.each([['a mouse', {coarse: false}]])(
+    "keeps today's dim under %s: the host eases it, clear 40 %% below the shortest detent",
+    (_, {coarse}) => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: coarse && query.includes('pointer: coarse'),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      );
+      vi.stubGlobal('CSS', {supports: () => false, escape: (v: string) => v});
+      const onScrimOpacity = vi.fn();
+      const onScrimTracking = vi.fn();
+      const {hook} = setup({
+        snapHeights: () => [200],
+        onScrimOpacity,
+        onScrimTracking,
+      });
+      const {dialog, target} = inDialog();
+      const played = recordAnimations(dialog);
+      down(hook, 0, 0, target);
+      // 40 px below the 200 px detent: today's dim clears 80 px below it.
+      move(hook, 240, 500, target);
+      expect(onScrimOpacity).toHaveBeenLastCalledWith(expect.closeTo(0.5, 9));
+      restAt(hook, 240, 600, target);
+      up(hook, 240, 1000, target);
+      // Never pinned, and no dim played on the backdrop: the host's own
+      // easing carries it, as today.
+      expect(onScrimTracking).not.toHaveBeenCalled();
+      expect(played).toHaveLength(0);
+      expect(onScrimOpacity).toHaveBeenLastCalledWith(1);
+    },
+  );
+});
+
 describe('useSheetGestures: a finger on the drawn sheet during a release', () => {
   // WebKit (iOS Safari 26.2) hit-tests an element a compositor animation is
   // moving at its un-animated position: a touch on the moving sheet arrives

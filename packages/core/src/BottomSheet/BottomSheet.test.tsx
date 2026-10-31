@@ -1159,6 +1159,133 @@ describe('BottomSheet', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
+    it('pins the scrim easing while a drag moves the dim, and hands it back when the sheet lands', async () => {
+      // A finger, on any touch device (useSheetGestures.ts).
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('pointer: coarse'),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        })),
+      );
+      vi.stubGlobal('CSS', {
+        supports: (condition: string) =>
+          condition.includes('-webkit-touch-callout'),
+        escape: (value: string) => value,
+      });
+      render(
+        <BottomSheet isOpen onOpenChange={vi.fn()} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      measureTallSheet();
+      const dialog = screen.getByRole('dialog');
+      const handle = getHandle();
+      fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+      // The dim follows the finger with no easing of its own.
+      expect(dialog.style.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        '0s',
+      );
+      fireTimedPointer(handle, 'pointermove', {time: 1000, y: 200});
+      // Gone is 736px below open (the sheet's visible height): the dim is
+      // linear in position to there.
+      expect(
+        Number(dialog.style.getPropertyValue('--_sheet-scrim-opacity')),
+      ).toBeCloseTo((736 - 200) / 736, 2);
+      fireTimedPointer(handle, 'pointerup', {time: 2000, y: 200});
+      await landSpring();
+      // Back at rest the host's own easing is restored, for its open and
+      // close fades, at the dim the sheet came to rest with.
+      expect(dialog.style.getPropertyValue('--_sheet-scrim-duration')).toBe('');
+      expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
+    });
+
+    it('under a finger, a release on a sheet stacked above another plays no dim on its transparent backdrop (one scrim per stack)', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('pointer: coarse'),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        })),
+      );
+      vi.stubGlobal('CSS', {
+        supports: (condition: string) =>
+          condition.includes('-webkit-touch-callout'),
+        escape: (value: string) => value,
+      });
+      // jsdom has no Web Animations: record what plays on each ::backdrop.
+      const backdrops: Element[] = [];
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: function (
+          this: Element,
+          _keyframes: Keyframe[],
+          options?: KeyframeAnimationOptions & {pseudoElement?: string},
+        ) {
+          if (options?.pseudoElement === '::backdrop') {
+            backdrops.push(this);
+          }
+          return {cancel: vi.fn(), startTime: 0} as unknown as Animation;
+        },
+      });
+      function Two({isOrderOpen}: {isOrderOpen: boolean}) {
+        return (
+          <>
+            <BottomSheet isOpen onOpenChange={vi.fn()} label="Orders">
+              List
+            </BottomSheet>
+            <BottomSheet
+              isOpen={isOrderOpen}
+              onOpenChange={vi.fn()}
+              label="Order">
+              Detail
+            </BottomSheet>
+          </>
+        );
+      }
+      const {rerender} = render(<Two isOrderOpen={false} />);
+      const panelOf = (label: string) =>
+        screen
+          .getByRole('dialog', {name: label, hidden: true})
+          .querySelector<HTMLElement>('.astryx-bottom-sheet') as HTMLElement;
+      const handleOf = (label: string) =>
+        panelOf(label).querySelector<HTMLElement>(
+          '[aria-hidden="true"]',
+        ) as HTMLElement;
+      const releaseOn = async (label: string) => {
+        vi.spyOn(panelOf(label), 'getBoundingClientRect').mockReturnValue(
+          rect({top: 16, bottom: 800}),
+        );
+        fireTimedPointer(handleOf(label), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(handleOf(label), 'pointermove', {time: 50, y: 120});
+        fireTimedPointer(handleOf(label), 'pointerup', {time: 66, y: 140});
+        await landSpring();
+      };
+      // On its own the sheet's backdrop is the scrim: the release plays the
+      // dim there.
+      await releaseOn('Orders');
+      const orders = screen.getByRole('dialog', {name: 'Orders', hidden: true});
+      expect(backdrops).toContain(orders);
+      backdrops.length = 0;
+      // A sheet opened over it stacks on top with a transparent backdrop: its
+      // release moves only the sheet, and the page keeps the one dim.
+      rerender(<Two isOrderOpen />);
+      await landSpring();
+      backdrops.length = 0;
+      await releaseOn('Order');
+      expect(backdrops).toEqual([]);
+      delete (Element.prototype as {animate?: unknown}).animate;
+    });
+
     it('restores the sheet when a context menu interrupts an active drag', () => {
       const onOpenChange = vi.fn();
       render(
