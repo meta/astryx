@@ -78,6 +78,11 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
    * at the start only (UIScrollView's directional lock).
    */
   lockAxis?: boolean;
+  /**
+   * Scratch (#8676 rescope demo): take a trackpad's scroll as one
+   * discrete step per swipe instead of following it.
+   */
+  wheelStep?: boolean;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
 }
@@ -103,7 +108,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
    * `allowedScrollTypes: []` opts out.
    */
   protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
-    return ['continuous', 'discrete'];
+    return [];
   }
 
   minimumNumberOfTouches: number;
@@ -112,6 +117,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
   direction: PanDirection;
   axisRatio: number;
   lockAxis: boolean;
+  wheelStep: boolean;
   scrollEdge: boolean;
   /** The axis a `lockAxis` pan locked to when it began. */
   lockedAxis: 'x' | 'y' | null = null;
@@ -138,6 +144,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
+    this.wheelStep = options.wheelStep ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
     this.tracker = new VelocityTracker();
   }

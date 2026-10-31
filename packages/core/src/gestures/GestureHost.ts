@@ -383,7 +383,32 @@ interface WheelGesture {
   timer: unknown;
   /** The recognizers that took it; none where the page keeps it. */
   readonly takers: ReadonlyArray<GestureRecognizer>;
+  /** Scratch (#8676 rescope): a discrete step instead of a followed pan. */
+  step?: WheelStep;
+  /** Scratch: a followed pan's lift detection (momentum onset). */
+  follow?: {previous: number; run: number; count: number; lifted: boolean; sign: number};
 }
+
+/** Scratch (#8676 rescope): one swipe, one step. */
+interface WheelStep {
+  axis: 'x' | 'y';
+  /** Travel so far along the axis, px (content direction). */
+  travel: number;
+  /** The swipe's direction once it has one. */
+  sign: number;
+  /** The previous delta's size, to tell a new swipe from momentum. */
+  previous: number;
+  /** Whether the deltas have started to decay (momentum). */
+  decayed: boolean;
+  /** Whether the step was played and the contact ended. */
+  committed: boolean;
+  t0: number;
+  /** Wheels seen; a step needs a stream (two or more). */
+  count: number;
+}
+
+/** Scratch (#8676 rescope): travel along the axis that commits one step, px. */
+const WHEEL_STEP_PX = 40;
 
 /**
  * A wheel's deltas in CSS px: a line is `WHEEL_LINE_PX`, a page the
@@ -413,6 +438,12 @@ function wheelPixels(
  */
 function scrollTypeOf(wheel: WheelEvent): ScrollType {
   if (wheel.deltaMode !== 0) {
+    return 'discrete';
+  }
+  // Scratch (#8676 rescope): Chromium and WebKit report a notched wheel's
+  // ticks as whole multiples of 120; uncertain input counts as a wheel.
+  const ticks = (wheel as WheelEvent & {wheelDeltaY?: number}).wheelDeltaY ?? 0;
+  if (wheel.deltaX === 0 && ticks !== 0 && ticks % 120 === 0) {
     return 'discrete';
   }
   const notch = (value: number) =>
@@ -1926,6 +1957,7 @@ export class GestureHost {
     if (
       gesture != null &&
       gesture.ids.length > 0 &&
+      !gesture.step?.committed &&
       !this.wheelHasTaker(gesture)
     ) {
       // Every recognizer that took it has left (detached, disabled or
@@ -1945,6 +1977,34 @@ export class GestureHost {
       this.wheel = gesture;
     }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
+    if (gesture?.follow?.lifted) {
+      const f = gesture.follow;
+      const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      const size = Math.abs(d);
+      const reversed = d !== 0 && f.sign !== 0 && Math.sign(d) !== f.sign;
+      if (reversed || (size >= 3 && size > f.previous * 1.5)) {
+        this.endWheel(time);
+        gesture = null;
+      } else {
+        f.previous = size;
+      }
+    }
+    if (gesture?.step?.committed) {
+      const s = gesture.step;
+      const d = s.axis === 'x' ? dx : dy;
+      const size = Math.abs(d);
+      const reversed = d !== 0 && Math.sign(d) !== s.sign;
+      const fresh = s.decayed && size >= 3 && size > s.previous * 1.5;
+      if (reversed || fresh) {
+        this.endWheel(time);
+        gesture = null;
+      } else {
+        if (size < s.previous) {
+          s.decayed = true;
+        }
+        s.previous = size;
+      }
+    }
     if (gesture == null) {
       gesture = this.beginWheel(wheel, kind, dx, dy, time);
       this.wheel = gesture;
@@ -1961,6 +2021,35 @@ export class GestureHost {
       return;
     }
     wheel.preventDefault();
+    if (gesture.step) {
+      this.stepWheel(gesture, gesture.step, dx, dy, time);
+      return;
+    }
+    if (gesture.kind === 'pan' && gesture.follow) {
+      const f = gesture.follow;
+      if (f.lifted) {
+        return;
+      }
+      const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+      const size = Math.abs(d);
+      f.count += 1;
+      if (d !== 0) {
+        f.sign = Math.sign(d);
+      }
+      const decaying = size > 0 && size < f.previous * 0.97 && size > f.previous * 0.6;
+      f.run = decaying ? f.run + 1 : 0;
+      f.previous = size;
+      if (f.run >= 4 && f.count >= 6) {
+        // Momentum began: the fingers lifted. Release here, at the
+        // fingers' speed; the rest of the momentum never moves the pan.
+        f.lifted = true;
+        gesture.x -= dx;
+        gesture.y -= dy;
+        this.arena.moved([{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]);
+        this.arena.ended([{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]);
+        return;
+      }
+    }
     if (gesture.kind === 'pan') {
       gesture.x -= dx;
       gesture.y -= dy;
@@ -1972,6 +2061,43 @@ export class GestureHost {
       this.arena.moved(this.pinchContacts(gesture, time));
     }
   };
+
+  /**
+   * Scratch (#8676 rescope): accumulate a step swipe; once it has
+   * travelled WHEEL_STEP_PX, play a short flick (two moves 16 ms apart)
+   * and end the contact, so the consumer's release settles one step.
+   */
+  private stepWheel(
+    gesture: WheelGesture,
+    s: WheelStep,
+    dx: number,
+    dy: number,
+    time: number,
+  ): void {
+    if (s.committed) {
+      return;
+    }
+    const d = s.axis === 'x' ? dx : dy;
+    s.travel += d;
+    if (d !== 0) {
+      s.sign = Math.sign(d);
+    }
+    s.previous = Math.abs(d);
+    s.count += 1;
+    if (Math.abs(s.travel) < WHEEL_STEP_PX || s.count < 2) {
+      return;
+    }
+    s.committed = true;
+    const sign = Math.sign(s.travel);
+    const id = gesture.ids[0];
+    const at = (px: number) =>
+      s.axis === 'x'
+        ? {x: gesture.x - sign * px, y: gesture.y}
+        : {x: gesture.x, y: gesture.y - sign * px};
+    this.arena.moved([{id, ...at(12), time}]);
+    this.arena.moved([{id, ...at(36), time: time + 16}]);
+    this.arena.ended([{id, ...at(36), time: time + 16}]);
+  }
 
   /** Start a wheel gesture: who takes it, decided once, or nobody. */
   private beginWheel(
@@ -2058,6 +2184,26 @@ export class GestureHost {
     const ids =
       kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
     const gesture: WheelGesture = {...kept, ids, takers};
+    if (kind === 'pan' && type === 'continuous') {
+      gesture.follow = {previous: 0, run: 0, count: 0, lifted: false, sign: 0};
+    }
+    if (
+      kind === 'pan' &&
+      takers.every(
+        recognizer => (recognizer as {wheelStep?: boolean}).wheelStep === true,
+      )
+    ) {
+      gesture.step = {
+        axis: isHorizontal ? 'x' : 'y',
+        travel: 0,
+        sign: 0,
+        previous: 0,
+        decayed: false,
+        committed: false,
+        t0: time,
+        count: 0,
+      };
+    }
     this.arena.began(
       kind === 'pan'
         ? [{...base, id: ids[0], x: wheel.clientX, y: wheel.clientY, time}]
@@ -2160,7 +2306,7 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    if (gesture.ids.length === 0) {
+    if (gesture.ids.length === 0 || gesture.step?.committed || gesture.follow?.lifted) {
       return;
     }
     // A trackpad's scroll releases at its last wheel, with its speed: its
@@ -2172,11 +2318,7 @@ export class GestureHost {
     // would move that input's times too (FR16).
     const end = gesture.last + WHEEL_END_MS;
     const time =
-      gesture.scrollType !== 'discrete'
-        ? gesture.last
-        : endTime == null
-          ? end
-          : Math.max(gesture.last, Math.min(end, endTime));
+      endTime == null ? end : Math.max(gesture.last, Math.min(end, endTime));
     this.arena.ended(
       gesture.kind === 'pan'
         ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]

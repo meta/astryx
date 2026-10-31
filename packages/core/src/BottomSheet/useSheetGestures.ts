@@ -2128,6 +2128,7 @@ export function useSheetGestures({
     handleElRef,
     () =>
       new PanGestureRecognizer({
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.handle',
         direction: 'vertical',
         maximumNumberOfTouches: 1,
@@ -2143,6 +2144,7 @@ export function useSheetGestures({
     bodyNodeRef,
     () =>
       new PanGestureRecognizer({
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.bodyDown',
         direction: 'down',
         maximumNumberOfTouches: 1,
@@ -2161,6 +2163,7 @@ export function useSheetGestures({
     bodyNodeRef,
     () =>
       new PanGestureRecognizer({
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.bodyUp',
         direction: 'up',
         maximumNumberOfTouches: 1,
