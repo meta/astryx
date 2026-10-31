@@ -1090,6 +1090,60 @@ describe('CheckboxListItem ARIA props', () => {
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
+    it('describes each checkbox with the reason', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Email', 'SMS']) {
+        const checkbox = screen.getByRole('checkbox', {name});
+        expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(checkbox).toHaveAccessibleDescription(
+          'Notifications are managed by your administrator',
+        );
+      }
+    });
+
+    it("keeps a row's own description ahead of the reason", () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem
+            label="Email"
+            value="email"
+            description="Weekly digest"
+          />
+        </CheckboxList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const checkbox = screen.getByRole('checkbox', {name: 'Email'});
+      const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Weekly digest Notifications are managed by your administrator',
+      );
+    });
+
+    it('adds no reason to the checkboxes of a group that is not disabled', () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem label="Email" value="email" />
+        </CheckboxList>,
+      );
+      expect(screen.getByRole('checkbox', {name: 'Email'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
     it('does not render a tooltip when not disabled', () => {
       render(
         <CheckboxList
