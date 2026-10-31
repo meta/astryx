@@ -2270,10 +2270,6 @@ export class GestureHost {
       this.arena.cancelled(ids, time);
       return kept;
     }
-    if (gesture.step?.committed) {
-      // An absorbed tail: the contact never moves the pan.
-      this.arena.cancelled(ids, time);
-    }
     return gesture;
   }
 
