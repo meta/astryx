@@ -23,7 +23,7 @@ export type PerfSceneId = (typeof PERF_SCENES)[number];
 
 export const PERF_SCENE_LABELS: Readonly<Record<PerfSceneId, string>> = {
   'comments-panel':
-    'Comments panel: 40 rows of Avatar, truncated Text, Tooltip and a menu',
+    'Comments panel: 40 rows of Avatar, truncated Text, Tooltip and a MoreMenu',
   table: 'Table: 1,000 rows, sort and filter',
   'tree-list': 'TreeList: 500 items with animated layout, expand all',
   markdown: 'Markdown: a long document with tables and code blocks',

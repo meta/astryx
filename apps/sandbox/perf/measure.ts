@@ -15,6 +15,7 @@
 import type {CDPSession, Page} from '@playwright/test';
 import {
   frames,
+  releaseAnimationLog,
   traceRendering,
 } from '../../../internal/interaction-harness/src/index';
 
@@ -62,8 +63,12 @@ async function takeInteractions(page: Page): Promise<number[]> {
 }
 
 async function collectedCounts(
+  page: Page,
   cdp: CDPSession,
 ): Promise<{heapBytes: number; listeners: number}> {
+  // The harness's own animation log (filled by waitForRest) keeps the
+  // animations and elements it saw; a count must not include them.
+  await releaseAnimationLog(page);
   // Two passes: the first can leave objects a finalizer only just released.
   await cdp.send('HeapProfiler.collectGarbage');
   await cdp.send('HeapProfiler.collectGarbage');
@@ -109,7 +114,7 @@ export async function measureScene(
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   try {
-    const before = await collectedCounts(cdp);
+    const before = await collectedCounts(page, cdp);
 
     const mounted = await traceRendering(page, () => mount(page));
     // The warm-up's and the mount click's entries are not the interaction's.
@@ -119,7 +124,7 @@ export async function measureScene(
     const durations = await takeInteractions(page);
 
     await unmount(page);
-    const after = await collectedCounts(cdp);
+    const after = await collectedCounts(page, cdp);
 
     return {
       mountLongTaskMs: round(

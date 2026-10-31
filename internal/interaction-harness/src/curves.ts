@@ -201,6 +201,12 @@ function animationRecorder(): void {
       return armedAt;
     },
     armedAt: () => armedAt,
+    // Drops every animation the log holds, with the elements and ancestors
+    // they keep alive; later waits record afresh.
+    release: () => {
+      log.length = 0;
+      unstarted = [];
+    },
   };
 }
 
@@ -1133,6 +1139,20 @@ export async function waitForAnimation(
     }
     await new Promise(resolve => setTimeout(resolve, 4));
   }
+}
+
+/**
+ * Empties the page's animation log, so a count taken next (heap size, event
+ * listeners, DOM nodes) reads the page's own objects and not the animations,
+ * elements and ancestors the recorder kept. Waits after it record afresh; a
+ * page the recorder never ran on is left alone.
+ */
+export async function releaseAnimationLog(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    (
+      window as unknown as {__harnessAnimations?: {release: () => void}}
+    ).__harnessAnimations?.release(),
+  );
 }
 
 /** Marks now as the point later waits count animations from. */
