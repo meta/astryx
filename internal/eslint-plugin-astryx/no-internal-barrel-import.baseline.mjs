@@ -14,74 +14,23 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {ESLint} from 'eslint';
 import {scope} from './no-internal-barrel-import.js';
+import {runRuleBaseline} from './rule-baseline.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
-const baselineFile = path.join(
-  import.meta.dirname,
-  'no-internal-barrel-import.baseline.json',
-);
-const ruleId = '@astryx/no-internal-barrel-import';
 
-// Lint with the repo config, but with an empty baseline, so every barrel
-// import in scope is reported once.
-const eslint = new ESLint({
-  cwd: root,
-  // Some packages' sources are ignored by the repo config entirely.
-  errorOnUnmatchedPattern: false,
-  ruleFilter: ({ruleId: id}) => id === ruleId,
-  overrideConfig: [
-    {
-      files: scope.files,
-      ignores: scope.ignores,
-      rules: {[ruleId]: ['error', {baseline: {}, root}]},
-    },
-  ],
+await runRuleBaseline({
+  ruleId: '@astryx/no-internal-barrel-import',
+  scope,
+  targets: fs
+    .readdirSync(path.join(root, 'packages'))
+    .filter(name => fs.existsSync(path.join(root, 'packages', name, 'src')))
+    .map(name => `packages/${name}/src`),
+  baselineFile: path.join(
+    import.meta.dirname,
+    'no-internal-barrel-import.baseline.json',
+  ),
+  entryFromMessage: message => /'([^']+)'/.exec(message)?.[1] ?? null,
+  unique: true,
+  noun: 'barrel imports',
 });
-const packages = fs
-  .readdirSync(path.join(root, 'packages'))
-  .filter(name => fs.existsSync(path.join(root, 'packages', name, 'src')))
-  .map(name => `packages/${name}/src`);
-const results = await eslint.lintFiles(packages);
-
-const found = new Map();
-for (const result of results) {
-  for (const message of result.messages) {
-    if (message.ruleId !== ruleId) {
-      continue;
-    }
-    const source = /'([^']+)'/.exec(message.message)?.[1];
-    const file = path.relative(root, result.filePath).split(path.sep).join('/');
-    if (source != null) {
-      if (!found.has(file)) {
-        found.set(file, new Set());
-      }
-      found.get(file).add(source);
-    }
-  }
-}
-const baseline = Object.fromEntries(
-  [...found.keys()].sort().map(file => [file, [...found.get(file)].sort()]),
-);
-const text = `${JSON.stringify(baseline, null, 2)}\n`;
-
-if (process.argv.includes('--check')) {
-  const current = fs.readFileSync(baselineFile, 'utf8');
-  if (JSON.stringify(JSON.parse(current)) !== JSON.stringify(baseline)) {
-    console.error(
-      'no-internal-barrel-import baseline is out of date; run this script without --check.',
-    );
-    process.exit(1);
-  }
-  console.log('no-internal-barrel-import baseline is up to date.');
-} else {
-  fs.writeFileSync(baselineFile, text);
-  const imports = Object.values(baseline).reduce(
-    (n, list) => n + list.length,
-    0,
-  );
-  console.log(
-    `Wrote ${imports} barrel imports in ${found.size} files to ${path.relative(root, baselineFile)}.`,
-  );
-}
