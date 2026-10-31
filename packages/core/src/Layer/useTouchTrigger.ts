@@ -58,7 +58,7 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  * does, on a device where `(hover: hover)` matches — and only becomes a tap
  * once it lands. See `handlePointerEnter`.
  */
-const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
 
 /**
  * ARIA roles that make an element do something when activated. An explicit
