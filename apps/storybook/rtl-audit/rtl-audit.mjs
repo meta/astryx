@@ -48,11 +48,11 @@
  */
 
 import {chromium} from 'playwright';
-import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import componentPackages from '../../../scripts/component-packages.cjs';
+import {serve} from './rtl-audit-server.mjs';
 import {
   AUDITED_PACKAGE_NAMES,
   AUDITED_STORY_PREFIXES,
@@ -154,38 +154,6 @@ if ((SHARD === null) !== (SHARD_OUTPUT === null)) {
 }
 if (SHARD !== null && MERGE_SHARDS !== null) {
   throw new Error('--shard and --merge-shards cannot be combined');
-}
-
-// ---------------------------------------------------------------------------
-// static file server (same shape as accessibility-audit.js)
-// ---------------------------------------------------------------------------
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
-  '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff',
-  '.ttf': 'font/ttf', '.map': 'application/json', '.ico': 'image/x-icon',
-};
-function serve(root) {
-  return new Promise(resolve => {
-    const server = http.createServer((req, res) => {
-      let u = decodeURIComponent(req.url.split('?')[0]);
-      if (u === '/') u = '/index.html';
-      const fp = path.resolve(path.join(root, u));
-      if (!fp.startsWith(path.resolve(root))) {
-        res.writeHead(403);
-        return res.end('Forbidden');
-      }
-      fs.readFile(fp, (err, data) => {
-        if (err) {
-          res.writeHead(404);
-          return res.end('Not found');
-        }
-        res.writeHead(200, {'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream'});
-        res.end(data);
-      });
-    });
-    server.listen(0, '127.0.0.1', () => resolve({server, port: server.address().port}));
-  });
 }
 
 const storyUrl = (port, id, rtl, args = {}) => {
@@ -1383,7 +1351,8 @@ async function cleanupRuntime() {
           return withD1CompletionIdentity(card, id);
         },
         onError: ({comp, id}, e) => {
-          console.error(`AUTO ERROR ${comp}: ${String(e).slice(0, 120)}`);
+          // The whole error, as for D5 and D6 below.
+          console.error(`AUTO ERROR ${comp}: ${e?.message ?? e}`);
           return {component: comp, storyId: id, dim: 'D1', verdict: 'ERROR', notes: [String(e).slice(0, 160)], icons: 0};
         },
         describe: ({id}) => ({phase: 'D1', storyId: id}),
@@ -1405,7 +1374,9 @@ async function cleanupRuntime() {
           return cards;
         },
         onError: ({id, comp}, e) => {
-          console.error(`PM+DEC ERROR ${comp} ${id}: ${String(e).slice(0, 120)}`);
+          // The whole error, Playwright's call log included, so a stall shows
+          // where it hung; the report keeps its first line.
+          console.error(`PM+DEC ERROR ${comp} ${id}: ${e?.message ?? e}`);
           const notes = [String(e).slice(0, 160)];
           return {
             positional: {component: comp, storyId: id, dim: 'D5-positional', verdict: 'ERROR', notes, candidates: 0, fails: []},
