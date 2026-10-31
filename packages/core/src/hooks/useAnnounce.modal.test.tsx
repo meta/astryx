@@ -266,6 +266,42 @@ describe('useAnnounce inside Astryx modals (spec:AST-086 FR14)', () => {
     }
   });
 
+  it('watches every open modal through one shared observer', async () => {
+    const isPresentationWatch = (options?: MutationObserverInit) =>
+      options?.attributeFilter?.join() === 'open,inert,aria-hidden';
+    const watchers = new Set<MutationObserver>();
+    const watched: Node[] = [];
+    const Original = globalThis.MutationObserver;
+    class Counting extends Original {
+      observe(target: Node, options?: MutationObserverInit) {
+        if (isPresentationWatch(options)) {
+          watchers.add(this);
+          watched.push(target);
+        }
+        super.observe(target, options);
+      }
+    }
+    vi.stubGlobal('MutationObserver', Counting);
+    try {
+      render(
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Lower">
+          <Owner label="Lower say" message="Lower words" />
+          <Dialog isOpen onOpenChange={() => {}} aria-label="Upper">
+            <Owner label="Upper say" message="Upper words" />
+          </Dialog>
+        </Dialog>,
+      );
+      await nextFrame();
+      expect(watched).toEqual([
+        screen.getByRole('dialog', {name: 'Upper'}),
+        screen.getByRole('dialog', {name: 'Lower'}),
+      ]);
+      expect(watchers.size).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('routes a caller inside an open Lightbox into its dialog', async () => {
     // Lightbox renders no children; a caption is content inside its dialog.
     render(
