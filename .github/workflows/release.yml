@@ -126,19 +126,21 @@ jobs:
             | tee release-publish-receipt.json
 
       # A release is built from a main commit whose canonical release-check
-      # passed (spec:AST-030 FR12, DEC-11): main is checked about hourly, so
-      # the cut commit's own check is required here, before anything builds.
+      # and full unit run passed (spec:AST-030 FR12, FR21, DEC-11, DEC-15):
+      # main is checked about hourly, so the cut commit's own checks are
+      # required here, before anything builds.
       - name: Require a passing release-check at the exact cut commit
         uses: actions/github-script@v9
         with:
           retries: 3
           script: |
             const {pathToFileURL} = require('node:url');
-            const {requireReleaseCheck} = await import(
+            const {requireReleaseCheck, requireUnitRun} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/release/release-check-receipt.mjs`).href
             );
             const {cutSha} = require(`${process.env.GITHUB_WORKSPACE}/.release/active.json`);
-            await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            const check = await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            if (check) await requireUnitRun({github, core, ...context.repo, sha: cutSha});
 
       - name: Upload exact release authority receipt
         uses: actions/upload-artifact@v7

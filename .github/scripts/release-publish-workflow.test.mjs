@@ -353,6 +353,8 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
     expect(script).toContain('scripts/release/release-check-receipt.mjs');
     expect(script).toContain('.release/active.json');
     expect(script).toContain('requireReleaseCheck(');
+    // The cut commit also needs a passing full unit run (FR21).
+    expect(script).toContain('requireUnitRun(');
     expect(stable.steps[guard]['continue-on-error']).toBeUndefined();
     expect(stable.permissions.actions).toBe('read');
   });

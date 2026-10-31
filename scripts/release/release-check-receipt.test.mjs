@@ -15,6 +15,7 @@ import {describe, expect, it} from 'vitest';
 import {
   findReleaseCheck,
   requireReleaseCheck,
+  requireUnitRun,
 } from './release-check-receipt.mjs';
 
 const CUT = 'c'.repeat(40);
@@ -139,5 +140,74 @@ describe('the release-check receipt for a cut commit', () => {
     expect(messages.failed).toEqual([
       "The release marker's cut commit is not a full SHA: main",
     ]);
+  });
+});
+
+describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () => {
+  const legs = conclusion => [
+    ...[1, 2, 3, 4].map(n => ({name: `test-ui (${n})`, conclusion})),
+    ...[1, 2, 3, 4].map(n => ({name: `test-node (${n})`, conclusion})),
+    {name: 'typecheck', conclusion: 'success'},
+  ];
+  async function unit(options, sha = CUT) {
+    const {github, listed} = fake(options);
+    const messages = {info: [], failed: []};
+    const core = {
+      info: message => messages.info.push(message),
+      setFailed: message => messages.failed.push(message),
+    };
+    const result = await requireUnitRun({
+      github,
+      core,
+      owner: 'o',
+      repo: 'r',
+      sha,
+    });
+    return {result, messages, listed};
+  }
+
+  it("accepts the cut commit's run where every unit leg passed", async () => {
+    const {result, messages, listed} = await unit({
+      runs: [run(5, CUT)],
+      jobs: {5: legs('success')},
+    });
+    expect(result.id).toBe(5);
+    expect(messages.failed).toEqual([]);
+    expect(listed[0]).toEqual({
+      owner: 'o',
+      repo: 'r',
+      workflow_id: 'deploy.yml',
+      branch: 'main',
+      status: 'success',
+      head_sha: CUT,
+      per_page: 30,
+    });
+  });
+
+  it('does not take a push run, whose unit legs skipped, for a unit run', async () => {
+    const {result, messages} = await unit({
+      runs: [run(6, CUT)],
+      jobs: {6: legs('skipped')},
+    });
+    expect(result).toBeNull();
+    expect(messages.failed).toEqual([
+      `No passing full unit run for the cut commit ${CUT}. Re-cut the release from a main commit with both a passing release-check and a passing full unit run, or wait for main's next scheduled checks and cut from them.`,
+    ]);
+  });
+
+  it('refuses a run with no unit legs at all', async () => {
+    const {result} = await unit({
+      runs: [run(7, CUT)],
+      jobs: {7: [{name: 'typecheck', conclusion: 'success'}]},
+    });
+    expect(result).toBeNull();
+  });
+
+  it("ignores another commit's passing run", async () => {
+    const {result} = await unit({
+      runs: [run(8, OTHER)],
+      jobs: {8: legs('success')},
+    });
+    expect(result).toBeNull();
   });
 });

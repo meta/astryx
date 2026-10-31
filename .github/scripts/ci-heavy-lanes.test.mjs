@@ -111,7 +111,7 @@ describe('visual, accessibility and RTL owners', () => {
   });
 });
 
-describe("main's release-check, about once an hour (DEC-11)", () => {
+describe("main's release-check and full unit run, about once an hour (DEC-11, FR21)", () => {
   const job = heavy.jobs.dispatch;
   const script = job.steps[0].with.script;
 
@@ -120,7 +120,11 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
       push: {branches: ['main']},
       schedule: [{cron: '7,22,37,52 * * * *'}],
     });
-    expect(job.permissions).toEqual({actions: 'write', contents: 'read'});
+    expect(job.permissions).toEqual({
+      actions: 'write',
+      contents: 'read',
+      issues: 'write',
+    });
     expect(job.steps[0].env.SHA).toBe('${{ github.sha }}');
   });
 
@@ -154,24 +158,52 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     conclusion: 'success',
     actor: {login: 'github-actions[bot]'},
     status: 'completed',
+    html_url: `https://github.com/meta/astryx/actions/runs/${minutes}`,
     ...overrides,
   });
 
   /**
-   * Runs the step's script against a fake GitHub API with main at `tip` and
-   * `runs` as ci.yml's dispatched runs on main, newest first.
+   * Runs the step's script against a fake GitHub API with main at `tip`,
+   * `runs` as ci.yml's dispatched runs on main and `units` as deploy.yml's,
+   * newest first. `issue` is an open guardian issue, if any.
    */
-  async function run({tip = sha, runs = [], eventName = 'push'} = {}) {
-    const calls = {dispatch: [], notices: [], listed: []};
+  async function run({
+    tip = sha,
+    runs = [],
+    units = [],
+    issue,
+    eventName = 'push',
+  } = {}) {
+    const calls = {
+      dispatch: [],
+      notices: [],
+      warnings: [],
+      listed: [],
+      issues: [],
+      comments: [],
+    };
     const github = {
       rest: {
         repos: {getBranch: async () => ({data: {commit: {sha: tip}}})},
         actions: {
           listWorkflowRuns: async args => {
             calls.listed.push(args);
-            return {data: {workflow_runs: runs}};
+            return {
+              data: {
+                workflow_runs: args.workflow_id === 'deploy.yml' ? units : runs,
+              },
+            };
           },
           createWorkflowDispatch: async args => calls.dispatch.push(args),
+        },
+        search: {
+          issuesAndPullRequests: async () => ({
+            data: {items: issue ? [issue] : []},
+          }),
+        },
+        issues: {
+          create: async args => calls.issues.push(args),
+          createComment: async args => calls.comments.push(args),
         },
       },
     };
@@ -187,62 +219,84 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     await body(
       github,
       {repo: {owner: 'meta', repo: 'astryx'}, eventName},
-      {notice: m => calls.notices.push(m)},
+      {
+        notice: m => calls.notices.push(m),
+        warning: m => calls.warnings.push(m),
+      },
       {env: {SHA: sha}},
       FakeDate,
     );
     return calls;
   }
 
-  const dispatched = tip => [
-    {
+  const releaseCheck = tip => ({
+    owner: 'meta',
+    repo: 'astryx',
+    workflow_id: 'ci.yml',
+    ref: 'main',
+    inputs: {
+      operation: 'release-check',
+      'release-branch': 'main',
+      'expected-head': tip,
+    },
+  });
+  const unitRun = {
+    owner: 'meta',
+    repo: 'astryx',
+    workflow_id: 'deploy.yml',
+    ref: 'main',
+  };
+
+  it("dispatches a release-check and a full unit run for main's tip when neither started in the last 55 minutes", async () => {
+    const calls = await run({
+      runs: [check(56), check(200)],
+      units: [check(56)],
+    });
+    expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+    expect(calls.listed.map(args => args.workflow_id)).toEqual([
+      'ci.yml',
+      'deploy.yml',
+    ]);
+    expect(calls.listed[0]).toEqual({
       owner: 'meta',
       repo: 'astryx',
       workflow_id: 'ci.yml',
-      ref: 'main',
-      inputs: {
-        operation: 'release-check',
-        'release-branch': 'main',
-        'expected-head': tip,
-      },
-    },
-  ];
-
-  it("dispatches release-check for main's tip when no check started in the last 55 minutes", async () => {
-    const calls = await run({runs: [check(56), check(200)]});
-    expect(calls.dispatch).toEqual(dispatched(sha));
-    expect(calls.listed).toEqual([
-      {
-        owner: 'meta',
-        repo: 'astryx',
-        workflow_id: 'ci.yml',
-        event: 'workflow_dispatch',
-        branch: 'main',
-        per_page: 30,
-      },
-    ]);
+      event: 'workflow_dispatch',
+      branch: 'main',
+      per_page: 30,
+    });
   });
 
-  it('dispatches for the first check there is', async () => {
-    expect((await run()).dispatch).toEqual(dispatched(sha));
+  it('dispatches both for the first checks there are', async () => {
+    expect((await run()).dispatch).toEqual([releaseCheck(sha), unitRun]);
   });
 
-  it('leaves a push within 55 minutes of the last check to the next one', async () => {
-    const calls = await run({runs: [check(20)]});
+  it('leaves a push within 55 minutes of the last checks to the next one', async () => {
+    const calls = await run({runs: [check(20)], units: [check(20)]});
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices).toEqual([
       'A release-check started 20 minutes ago; the next one, at most 50 minutes from now, covers aaaaaaa.',
+      'A full unit run started 20 minutes ago; the next one, at most 50 minutes from now, covers aaaaaaa.',
     ]);
   });
 
+  it('always brings a unit run of the commit a release-check checks', async () => {
+    // The unit lane is inside its window, but the tip has no unit run.
+    const calls = await run({runs: [check(60)], units: [check(30)]});
+    expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+    // A unit run already at the tip is enough.
+    const covered = await run({
+      runs: [check(60)],
+      units: [check(30, {head_sha: sha})],
+    });
+    expect(covered.dispatch).toEqual([releaseCheck(sha)]);
+  });
+
   it('counts a waiting or running check, but not one replaced while waiting or started by a person', async () => {
-    expect(
-      (
-        await run({
-          runs: [check(10, {status: 'in_progress', conclusion: null})],
-        })
-      ).dispatch,
-    ).toEqual([]);
+    const running = check(10, {status: 'in_progress', conclusion: null});
+    expect((await run({runs: [running], units: [running]})).dispatch).toEqual(
+      [],
+    );
     expect(
       (
         await run({
@@ -250,14 +304,16 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
             check(5, {conclusion: 'cancelled'}),
             check(10, {actor: {login: 'someone'}}),
           ],
+          units: [check(10)],
         })
       ).dispatch,
-    ).toEqual(dispatched(sha));
+    ).toEqual([releaseCheck(sha), unitRun]);
   });
 
   it('keeps counting a check a person re-runs', async () => {
     const calls = await run({
       runs: [check(90, {head_sha: sha, triggering_actor: {login: 'someone'}})],
+      units: [check(90, {head_sha: sha})],
     });
     expect(calls.dispatch).toEqual([]);
   });
@@ -265,30 +321,94 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
   it('checks a tip again when its run failed, since that run may have checked a newer commit', async () => {
     const calls = await run({
       runs: [check(70, {head_sha: sha, conclusion: 'failure'})],
+      units: [check(70, {head_sha: sha})],
     });
-    expect(calls.dispatch).toEqual(dispatched(sha));
+    expect(calls.dispatch).toEqual([releaseCheck(sha)]);
     // ...but a failed run still holds the window.
     const recent = await run({
       runs: [check(20, {head_sha: sha, conclusion: 'failure'})],
+      units: [check(20, {head_sha: sha})],
     });
     expect(recent.dispatch).toEqual([]);
   });
 
   it('does not check a tip twice', async () => {
-    const calls = await run({runs: [check(90, {head_sha: sha})]});
+    const calls = await run({
+      runs: [check(90, {head_sha: sha})],
+      units: [check(90, {head_sha: sha})],
+    });
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices[0]).toMatch(/already has a release-check/);
   });
 
   it("picks up the tip a burst left unchecked on the schedule's tick", async () => {
     const tip = 'b'.repeat(40);
-    const calls = await run({tip, eventName: 'schedule', runs: [check(60)]});
-    expect(calls.dispatch).toEqual(dispatched(tip));
+    const calls = await run({
+      tip,
+      eventName: 'schedule',
+      runs: [check(60)],
+      units: [check(60)],
+    });
+    expect(calls.dispatch).toEqual([releaseCheck(tip), unitRun]);
   });
 
   it('leaves a commit main has moved past to the newer push', async () => {
     const calls = await run({tip: 'b'.repeat(40)});
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices[0]).toMatch(/newer push/);
+  });
+
+  describe('a full unit run that did not complete (FR21)', () => {
+    const title = 'Main unit tests: an hourly run did not complete';
+
+    it.each(['cancelled', 'skipped', 'timed_out', 'startup_failure'])(
+      'runs the next one at once after a %s run and opens the guardian issue',
+      async conclusion => {
+        const calls = await run({
+          runs: [check(20, {head_sha: sha})],
+          units: [check(20, {conclusion})],
+        });
+        // Inside the window, but dispatched at once.
+        expect(calls.dispatch).toEqual([unitRun]);
+        expect(calls.issues).toEqual([
+          expect.objectContaining({owner: 'meta', repo: 'astryx', title}),
+        ]);
+        expect(calls.issues[0].body).toContain(`ended ${conclusion}`);
+        expect(calls.issues[0].body).toContain('spec:AST-030 FR21');
+      },
+    );
+
+    it('comments on the open guardian issue instead of opening another', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20, {conclusion: 'cancelled'})],
+        issue: {number: 42, title},
+      });
+      expect(calls.issues).toEqual([]);
+      expect(calls.comments).toEqual([
+        expect.objectContaining({issue_number: 42}),
+      ]);
+    });
+
+    it('leaves a run a newer one replaced, such as a recheck', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {status: 'in_progress', conclusion: null}),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('does not count a failed run as incomplete', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20, {conclusion: 'failure'})],
+      });
+      expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
   });
 });

@@ -87,3 +87,60 @@ export async function requireReleaseCheck({github, core, owner, repo, sha}) {
   );
   return null;
 }
+
+/**
+ * Whether a run of the Main workflow (deploy.yml) is a passing full unit run:
+ * the run succeeded and every unit leg ran and passed. A push run, whose unit
+ * legs skip, is not one (spec:AST-030 FR21).
+ */
+async function passedUnitRun({github, owner, repo, run}) {
+  if (run.conclusion !== 'success') return false;
+  const {
+    data: {jobs},
+  } = await github.rest.actions.listJobsForWorkflowRun({
+    owner,
+    repo,
+    run_id: run.id,
+    per_page: 100,
+  });
+  const legs = prefix => jobs.filter(job => job.name.startsWith(prefix));
+  return ['test-ui (', 'test-node ('].every(
+    prefix =>
+      legs(prefix).length > 0 &&
+      legs(prefix).every(job => job.conclusion === 'success'),
+  );
+}
+
+/** The passing full unit run for exactly `sha`, or null. */
+export async function findUnitRun({github, owner, repo, sha}) {
+  const {data} = await github.rest.actions.listWorkflowRuns({
+    owner,
+    repo,
+    workflow_id: 'deploy.yml',
+    branch: 'main',
+    status: 'success',
+    head_sha: sha,
+    per_page: 30,
+  });
+  for (const run of data.workflow_runs.filter(item => item.head_sha === sha)) {
+    if (await passedUnitRun({github, owner, repo, run})) return run;
+  }
+  return null;
+}
+
+/**
+ * Fails the step unless the cut commit has a passing full unit run. Main's
+ * scheduler dispatches one with every release-check, so a commit with a
+ * passing release-check normally has one too.
+ */
+export async function requireUnitRun({github, core, owner, repo, sha}) {
+  const run = await findUnitRun({github, owner, repo, sha});
+  if (run) {
+    core.info(`Cut commit ${sha} passed the full unit run in ${run.html_url}.`);
+    return run;
+  }
+  core.setFailed(
+    `No passing full unit run for the cut commit ${sha}. Re-cut the release from a main commit with both a passing release-check and a passing full unit run, or wait for main's next scheduled checks and cut from them.`,
+  );
+  return null;
+}
