@@ -27,6 +27,7 @@ import {
 import {
   themeBuild,
   validateComponentOverridesAgainstRegistry,
+  validateThemePrivateInputs,
 } from './build.mjs';
 
 // `themeBuild` captures core's generator once at module load. Wrap the two
@@ -209,6 +210,55 @@ describe('themeBuild() — receipt', () => {
       errSpy.mockRestore();
       outSpy.mockRestore();
     }
+  });
+});
+
+describe.each(['mjs', 'ts'])('a .%s theme module with no theme export', ext => {
+  beforeEach(() => {
+    fs.writeFileSync(
+      path.join(tmpDir, `none.${ext}`),
+      'export const notATheme = 42;\n',
+    );
+  });
+
+  it('fails the build as a module that does not load a theme', async () => {
+    const build = themeBuild(`none.${ext}`, {}, {cwd: tmpDir});
+    await expect(build).rejects.toThrow(
+      /Could not find a defineTheme\(\) result/,
+    );
+    await expect(build).rejects.toMatchObject({code: 'ERR_THEME_LOAD'});
+  });
+
+  it("fails doctor's private-input check the same way, rather than read its exports as a theme", async () => {
+    await expect(
+      validateThemePrivateInputs(`none.${ext}`, {cwd: tmpDir}),
+    ).rejects.toThrow(/Could not find a defineTheme\(\) result/);
+  });
+});
+
+describe('themeBuild() — a theme module that does not load', () => {
+  it('fails with the import error, rather than build the theme from the file text', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'unresolved.mjs'),
+      "import './missing-helper.mjs';\nexport default {name: 'unresolved', tokens: {'--color-bg': '#000'}};\n",
+    );
+    await expect(
+      themeBuild('unresolved.mjs', {}, {cwd: tmpDir}),
+    ).rejects.toThrow(
+      /Failed to load theme from .*unresolved\.mjs: .*missing-helper\.mjs/s,
+    );
+    expect(fs.existsSync(path.join(tmpDir, 'unresolved.css'))).toBe(false);
+  });
+
+  it('fails with the error the module throws, rather than build the theme from the file text', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'throws.mjs'),
+      "throw new Error('the theme module failed');\nexport default {name: 'throws', tokens: {'--color-bg': '#000'}};\n",
+    );
+    await expect(themeBuild('throws.mjs', {}, {cwd: tmpDir})).rejects.toThrow(
+      /the theme module failed/,
+    );
+    expect(fs.existsSync(path.join(tmpDir, 'throws.css'))).toBe(false);
   });
 });
 
@@ -596,6 +646,33 @@ describe('themeBuild() — component override validation', () => {
     expect(
       fs.readFileSync(path.join(tmpDir, 'removed-target.css'), 'utf8'),
     ).toContain('.astryx-progressbar');
+  });
+});
+
+describe('themeBuild() — Icon size dimensions', () => {
+  it('writes width and height on an icon size into the vars the glyph reads, with no warnings', async () => {
+    // spec:AST-087 FR10: a built theme sets an Icon size's glyph dimension the
+    // way the runtime provider does, through the shared compiler's derived
+    // vars. Raw width/height would lose to a consumer's unlayered StyleX.
+    const themeFile = path.join(tmpDir, 'iconsizes.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default {
+        name: 'iconsizes',
+        tokens: {'--color-bg': '#0a0a0a'},
+        components: {icon: {'size:sm': {width: '18px', height: '22px'}}},
+      };\n`,
+    );
+
+    const result = await themeBuild('iconsizes.mjs', {}, {cwd: tmpDir});
+
+    expect(result?.data.warnings).toEqual([]);
+    const css = fs.readFileSync(path.join(tmpDir, 'iconsizes.css'), 'utf8');
+    const rule =
+      css.match(/\.astryx-icon\[data-size="sm"\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/--_icon-width:\s*18px/);
+    expect(rule).toMatch(/--_icon-height:\s*22px/);
+    expect(rule).not.toMatch(/(^|[\s;])(width|height)\s*:/);
   });
 });
 

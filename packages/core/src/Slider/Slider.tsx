@@ -44,6 +44,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {joinAriaIDs} from '../utils/inputAria';
 import {
   getInteractionModality,
   useInteractionModalityTracking,
@@ -57,6 +58,8 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useTranslator} from '../i18n';
 // =============================================================================
 // Types
 // =============================================================================
@@ -507,9 +510,11 @@ export function Slider({ref, ...props}: SliderProps) {
     onFocus,
     onBlur,
     id: idProp,
+    'aria-labelledby': ariaLabelledByProp,
     'aria-describedby': ariaDescribedByProp,
     ...restWithRange
   } = props;
+  const t = useTranslator();
   const {minStepsBetweenThumbs: _minSteps, ...restProps} =
     restWithRange as typeof restWithRange & {minStepsBetweenThumbs?: number};
   const {rest, container} = useFieldInputStyling('Slider', restProps, {
@@ -589,7 +594,9 @@ export function Slider({ref, ...props}: SliderProps) {
   // role="slider" in WAI-ARIA 1.2, so the thumb instead points its
   // aria-describedby at a visually hidden "Required" span — mirroring the
   // Field label's visible indicator (where isOptional takes precedence).
-  const conveysRequired = isRequired && !isOptional;
+  // A surrounding FormLayout's defaultOptionality="required" makes an unmarked
+  // field required too (FormLayout FR5).
+  const conveysRequired = useResolvedRequired({isRequired, isOptional});
 
   // Build aria-describedby
   const describedByParts: string[] = [];
@@ -978,8 +985,8 @@ export function Slider({ref, ...props}: SliderProps) {
     // name from the visible label element via aria-labelledby.
     const thumbLabel = isRange
       ? thumbIndex === 0
-        ? 'Minimum value'
-        : 'Maximum value'
+        ? t('@astryx.slider.minimumThumb')
+        : t('@astryx.slider.maximumThumb')
       : undefined;
 
     // ARIA bounds must agree with the movement clamping in updateValue: in
@@ -1015,7 +1022,10 @@ export function Slider({ref, ...props}: SliderProps) {
         aria-disabled={isDisabled || undefined}
         aria-invalid={status?.type === 'error' ? true : undefined}
         aria-label={thumbLabel}
-        aria-labelledby={!isRange ? labelID : undefined}
+        // A caller aria-labelledby names the control together with its label.
+        aria-labelledby={
+          !isRange ? joinAriaIDs(labelID, ariaLabelledByProp) : undefined
+        }
         aria-describedby={
           [!isRange ? ariaDescribedByProp : undefined, ariaDescribedBy]
             .filter(Boolean)
@@ -1167,7 +1177,10 @@ export function Slider({ref, ...props}: SliderProps) {
             disabledMessageTooltip.ref,
           )}
           {...(isRange
-            ? {role: 'group', 'aria-labelledby': labelID}
+            ? {
+                role: 'group',
+                'aria-labelledby': joinAriaIDs(labelID, ariaLabelledByProp),
+              }
             : undefined)}
           onPointerDown={after(handlePointerDown, onPointerDown)}
           onPointerMove={after(handlePointerMove, onPointerMove)}

@@ -4,8 +4,12 @@
  * @file no-physical-properties.test.mjs
  */
 
+import assert from 'node:assert/strict';
 import {RuleTester} from 'eslint';
 import rule from './no-physical-properties.js';
+
+// Relationship checks have no configuration escape hatch.
+assert.deepEqual(rule.meta.schema, []);
 
 const ruleTester = new RuleTester({
   languageOptions: {
@@ -59,15 +63,6 @@ ruleTester.run('no-physical-properties', rule, {
       code: inStylex(
         `insetInlineStart: '50%', transform: 'translate(0, -50%)'`,
       ),
-    },
-    {
-      // A narrow config exception may defer this relationship diagnostic while
-      // retaining every key/value check in this rule.
-      code: inStylex(`
-        insetInlineStart: { default: null, '@media (pointer: coarse)': '50%' },
-        transform: { default: null, '@media (pointer: coarse)': 'translate(-50%, -50%)' }
-      `),
-      options: [{allowLogicalCentering: true}],
     },
     // Logical border longhands are fine
     {code: inStylex(`borderInlineStartWidth: 1, borderInlineEndColor: 'red'`)},
@@ -141,14 +136,6 @@ ruleTester.run('no-physical-properties', rule, {
           ':is([dir="rtl"] *)': 'translate(-50%, 50%)',
         }
       `),
-    },
-    // The config exception still defers every relationship diagnostic,
-    // including the unverifiable ones.
-    {
-      code: inStylex(
-        `insetInlineStart: '50%', transform: 'matrix(1, 0, 0, 1, -50, 0)'`,
-      ),
-      options: [{allowLogicalCentering: true}],
     },
   ],
   invalid: [
@@ -288,18 +275,6 @@ ruleTester.run('no-physical-properties', rule, {
     // --- KEY-BASED: inset left/right ---
     {
       code: inStylex(`left: 0`),
-      output: inStylex(`insetInlineStart: 0`),
-      errors: [
-        {
-          messageId: 'physicalKey',
-          data: {physical: 'left', logical: 'insetInlineStart'},
-        },
-      ],
-    },
-    {
-      // The temporary relationship exemption does not weaken physical-key checks.
-      code: inStylex(`left: 0`),
-      options: [{allowLogicalCentering: true}],
       output: inStylex(`insetInlineStart: 0`),
       errors: [
         {

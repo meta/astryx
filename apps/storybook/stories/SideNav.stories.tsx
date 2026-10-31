@@ -14,6 +14,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {ListItem} from '@astryxdesign/core/List';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
+import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
 import {Text} from '@astryxdesign/core/Text';
 import {
   HomeIcon,
@@ -125,6 +126,35 @@ export const TitleWithoutIcon: Story = {
 // =============================================================================
 // With Header Menu
 // =============================================================================
+
+/**
+ * A header whose menu holds NavHeadingMenu items. A press that slides across
+ * them acts on the item it lifts on, as every menu does.
+ */
+export const WithHeaderMenuItems: Story = {
+  name: 'Header with Menu Items',
+  render: () => (
+    <SideNav
+      header={
+        <SideNavHeading
+          icon={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+          heading="Product Name"
+          subheading="Business Account"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Personal Account" onClick={() => {}} />
+              <NavHeadingMenuItem label="Acme Corp" onClick={() => {}} />
+              <NavHeadingMenuItem label="Sign out" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />
+      }>
+      <SideNavSection title="Navigation">
+        <SideNavItem label="Dashboard" icon={HomeIcon} isSelected />
+      </SideNavSection>
+    </SideNav>
+  ),
+};
 
 export const WithHeaderMenu: Story = {
   name: 'Header with Menu',

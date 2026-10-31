@@ -2,16 +2,36 @@
 
 /**
  * @file BaseTypeahead.test.tsx
- * @input BaseTypeahead public props and a synchronous SearchSource
- * @output Combobox contract tests, including stale source refresh on focus and reopen
+ * @input BaseTypeahead and composed public props with synchronous and deferred SearchSources
+ * @output Combobox contracts, including source refresh and empty-to-pending red/green coverage
  * @position Colocated verification for BaseTypeahead
  */
 
-import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTypeahead} from './BaseTypeahead';
+import {Typeahead} from './Typeahead';
+import {Tokenizer} from '../Tokenizer';
+import {InternationalizationProvider} from '../i18n';
+import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from './types';
 
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
@@ -351,6 +371,183 @@ describe('BaseTypeahead', () => {
           name: 'No matching frameworks',
         }),
       ).toHaveAttribute('aria-disabled', 'true');
+    });
+  });
+
+  describe('empty search followed by a newer query (#8903)', () => {
+    beforeEach(() => {
+      __resetLiveRegionsForTest();
+      vi.useFakeTimers({
+        toFake: [
+          'setTimeout',
+          'clearTimeout',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+        ],
+      });
+    });
+    afterEach(() => {
+      __resetLiveRegionsForTest();
+      vi.useRealTimers();
+    });
+
+    it('keeps an empty focus bootstrap quiet when an empty search is cleared', async () => {
+      render(
+        <BaseTypeahead
+          searchSource={emptySource}
+          value={null}
+          onChange={() => {}}
+          hasEntriesOnFocus
+          debounceMs={0}
+          aria-label="Framework"
+        />,
+      );
+      const input = screen.getByRole('combobox', {name: 'Framework'});
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: 'none'}});
+      await act(async () => vi.advanceTimersByTimeAsync(32));
+      const options = within(screen.getByRole('listbox', {hidden: true}));
+      expect(options.getByRole('option', {hidden: true})).toHaveTextContent(
+        'No results found',
+      );
+
+      fireEvent.change(input, {target: {value: ''}});
+      await act(async () => vi.advanceTimersByTimeAsync(32));
+      expect(input).toHaveValue('');
+      expect(input).not.toHaveAttribute('aria-busy');
+      expect(screen.queryByRole('img', {name: 'Loading'})).toBeNull();
+      expect(options.queryAllByRole('option', {hidden: true})).toHaveLength(0);
+    });
+
+    // Bare and composed fields have different busy-indicator owners. Zero
+    // debounce independently exercises the pending-request regression.
+    describe.each([
+      ['BaseTypeahead', 0],
+      ['BaseTypeahead', 150],
+      ['Typeahead', 150],
+      ['Tokenizer', 150],
+    ] as const)('%s with %i ms debounce', (field, debounceMs) => {
+      it.each(['populated', 'empty'] as const)(
+        'withholds the old empty result until a %s final response settles',
+        async outcome => {
+          let resolveNext!: (items: SearchableItem[]) => void;
+          const pending = new Promise<SearchableItem[]>(resolve => {
+            resolveNext = resolve;
+          });
+          const search = vi
+            .fn<SearchSource<SearchableItem>['search']>()
+            .mockResolvedValueOnce([])
+            .mockReturnValueOnce(pending);
+          const searchSource: SearchSource<SearchableItem> = {
+            search,
+            bootstrap: () => [],
+          };
+          const onChange = vi.fn();
+          const props = {
+            searchSource,
+            onChange,
+            debounceMs,
+            emptySearchText: <span>No matching frameworks</span>,
+          };
+          render(
+            <InternationalizationProvider
+              locale="fr"
+              overrides={{
+                fr: {
+                  '@astryx.typeahead.loading': 'Recherche en cours',
+                  '@astryx.typeahead.resultCount': '{count, number} résultat',
+                },
+              }}>
+              {field === 'Tokenizer' ? (
+                <Tokenizer {...props} label="Framework" value={[]} />
+              ) : field === 'Typeahead' ? (
+                <Typeahead {...props} label="Framework" value={null} />
+              ) : (
+                <BaseTypeahead {...props} aria-label="Framework" value={null} />
+              )}
+            </InternationalizationProvider>,
+          );
+          const input = screen.getByRole('combobox', {name: 'Framework'});
+          const liveRegion = () =>
+            document.querySelector('[data-astryx-live-region="polite"]');
+          fireEvent.focus(input);
+          fireEvent.change(input, {target: {value: 'none'}});
+          await act(async () => vi.advanceTimersByTimeAsync(debounceMs));
+          await act(async () => vi.advanceTimersByTimeAsync(32));
+          const options = within(screen.getByRole('listbox', {hidden: true}));
+          expect(options.getByRole('option', {hidden: true})).toHaveTextContent(
+            'No matching frameworks',
+          );
+          expect(liveRegion()).toHaveTextContent('No matching frameworks');
+          expect(input).not.toHaveAttribute('aria-busy');
+          // Let the first announcement clear normally: a premature new
+          // empty-result announcement cannot hide behind the previous one.
+          await act(async () => vi.advanceTimersByTimeAsync(2000));
+          expect(liveRegion()?.textContent).toBe('');
+
+          fireEvent.change(input, {target: {value: 'next'}});
+          if (debounceMs > 0) {
+            await act(async () => vi.advanceTimersByTimeAsync(debounceMs - 1));
+            expect(search).toHaveBeenCalledTimes(1);
+            expect(options.queryByText('No matching frameworks')).toBeNull();
+            expect(
+              options.queryAllByRole('option', {hidden: true}),
+            ).toHaveLength(0);
+            expect(liveRegion()?.textContent).toBe('');
+            // Keep the existing spinner's request-start timing.
+            expect(input).not.toHaveAttribute('aria-busy');
+            await act(async () => vi.advanceTimersByTimeAsync(1));
+          }
+          expect(search).toHaveBeenLastCalledWith('next');
+          expect(input).toHaveAttribute('aria-busy', 'true');
+          expect(options.queryByText('No matching frameworks')).toBeNull();
+          expect(options.queryAllByRole('option', {hidden: true})).toHaveLength(
+            0,
+          );
+          expect(
+            screen.getByRole('img', {name: 'Recherche en cours'}),
+          ).toBeInTheDocument();
+          expect(input).not.toHaveAttribute('aria-activedescendant');
+          await act(async () => vi.advanceTimersByTimeAsync(32));
+          expect(liveRegion()).toHaveTextContent('Recherche en cours');
+          expect(liveRegion()).not.toHaveTextContent('No matching frameworks');
+
+          await act(async () =>
+            resolveNext(outcome === 'empty' ? [] : [resultItem]),
+          );
+          await act(async () => vi.advanceTimersByTimeAsync(32));
+          expect(input).not.toHaveAttribute('aria-busy');
+          expect(
+            screen.queryByRole('img', {name: 'Recherche en cours'}),
+          ).toBeNull();
+          if (outcome === 'empty') {
+            expect(options.getByRole('option', {hidden: true})).toHaveAttribute(
+              'aria-disabled',
+              'true',
+            );
+            expect(
+              options.getByRole('option', {hidden: true}),
+            ).toHaveTextContent('No matching frameworks');
+            expect(liveRegion()).toHaveTextContent('No matching frameworks');
+            expect(input).not.toHaveAttribute('aria-activedescendant');
+          } else {
+            expect(
+              options.getByRole('option', {name: 'Result', hidden: true}),
+            ).toBeInTheDocument();
+            expect(options.queryByText('No matching frameworks')).toBeNull();
+            expect(liveRegion()).toHaveTextContent('1 résultat');
+            fireEvent.keyDown(input, {key: 'Enter'});
+            if (field === 'Tokenizer') {
+              expect(onChange).toHaveBeenCalledWith([resultItem], {
+                type: 'add',
+                item: resultItem,
+              });
+            } else {
+              expect(onChange).toHaveBeenCalledWith(resultItem);
+            }
+          }
+        },
+      );
     });
   });
 });

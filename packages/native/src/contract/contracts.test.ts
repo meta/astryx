@@ -117,7 +117,15 @@ describe('native contracts', () => {
     expect(icon!.core.icon).toMatchObject({type: {kind: 'icon'}});
     expect(icon!.core.icon.optional).toBe(false);
     expect(Object.keys(icon!.core)).toEqual(['icon', 'color', 'size', 'label']);
-    expect(icon!.webOnly.map(prop => prop.name)).toEqual(['xstyle']);
+    // `variant` names come from core's augmentable `IconVariantMap`, which has
+    // no portable definition yet, so the prop stays on the web.
+    expect(icon!.webOnly).toEqual([
+      {
+        name: 'variant',
+        reason: 'type "IconVariant" has no portable definition yet',
+      },
+      {name: 'xstyle', reason: 'web styling input'},
+    ]);
 
     const swift = generateSwift(contracts);
     expect(swift['Icon.swift']).toContain('public var icon: IconName');

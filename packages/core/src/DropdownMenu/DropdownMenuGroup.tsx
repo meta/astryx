@@ -4,7 +4,8 @@
 
 /**
  * @file DropdownMenuGroup.tsx
- * @input Uses spacing/typography/color tokens, themeProps (heading target)
+ * @input Uses spacing/typography/color tokens, themeProps (heading target);
+ *   forwards host props to the group element
  * @output Exports DropdownMenuGroup component and DropdownMenuGroupProps
  * @position Sub-component; used inside DropdownMenu
  *
@@ -47,9 +48,9 @@ const styles = stylex.create({
   },
 });
 
-export interface DropdownMenuGroupProps extends Pick<
-  BaseProps,
-  'xstyle' | 'className' | 'style'
+export interface DropdownMenuGroupProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'role'
 > {
   /**
    * Heading shown above the group's rows and used as the group's accessible
@@ -70,7 +71,9 @@ export interface DropdownMenuGroupProps extends Pick<
  * `menuitem`, so arrow-key navigation and typeahead skip it. Keep heading
  * content non-interactive; place controls in DropdownMenu's `header` or
  * `footer`. The compound peer of
- * `{type: 'section', title, items}` in the `items` data API.
+ * `{type: 'section', title, items}` in the `items` data API. Host attributes
+ * (`id`, `data-*`, `aria-*`) and DOM handlers reach the group element; its
+ * role, and its name while it has a title, stay component-owned.
  *
  * @example
  * ```
@@ -91,15 +94,18 @@ export function DropdownMenuGroup({
   className,
   style,
   ref,
+  'aria-labelledby': ariaLabelledBy,
+  ...rest
 }: DropdownMenuGroupProps) {
   const headingId = useId();
   const hasTitle = title != null && title !== '' && title !== false;
 
   return (
     <div
+      {...rest}
       ref={ref}
       role="group"
-      aria-labelledby={hasTitle ? headingId : undefined}
+      aria-labelledby={hasTitle ? headingId : ariaLabelledBy}
       {...mergeProps(stylex.props(xstyle), className, style)}>
       {hasTitle && (
         <div

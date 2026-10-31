@@ -76,6 +76,14 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // A truncating label needs a box that stops at its container: an
+  // inline-flex root otherwise grows to its whole text, so its Text never
+  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
+  // FR4).
+  truncating: {
+    maxWidth: '100%',
+    minWidth: 0,
+  },
   /**
    * Reset styles for rendering as a <button> when href is undefined.
    * Strips all native button chrome so it looks identical to a link.
@@ -370,6 +378,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
@@ -403,6 +412,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
@@ -434,6 +444,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,

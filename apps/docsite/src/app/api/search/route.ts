@@ -3,7 +3,8 @@
 /**
  * @file GET /api/search?q=<query>: `astryx search <query>`, run by the site.
  * @input The query, as `astryx search` takes it.
- * @output The CLI's search response, each result with the site path it opens.
+ * @output The CLI's search response, each result with the site destination and
+ *   its destination page's title and registry category when available.
  * @position Called by the search panel (lib/cliSearchSource.ts).
  *
  * The site's search is the CLI's: this calls `search()` from
@@ -14,6 +15,7 @@
 
 import {search} from '@astryxdesign/cli/api';
 import {
+  searchResultCategory,
   searchResultHref,
   searchResultTitle,
 } from '../../../lib/searchLinks.mjs';
@@ -69,7 +71,17 @@ export async function GET(request: Request): Promise<Response> {
       href,
       links as SearchLinkTables,
     );
-    return {...result, href, ...(siteTitle ? {siteTitle} : {})};
+    const siteCategory = searchResultCategory(
+      result,
+      href,
+      links as SearchLinkTables,
+    );
+    return {
+      ...result,
+      href,
+      ...(siteTitle ? {siteTitle} : {}),
+      ...(siteCategory ? {siteCategory} : {}),
+    };
   });
   return Response.json(
     {...response, data: {...response.data, matchCount, results}},

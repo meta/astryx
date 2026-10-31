@@ -196,7 +196,7 @@ export const docs = {
       {name: 'Upload icon', required: false, description: 'An upload-to-tray icon in the drop zone hinting at the upload action.'},
       {name: 'Placeholder', required: false, description: 'Hint text shown when no files are selected.'},
       {name: 'File name display', required: false, description: 'Shows the name(s) of selected files.'},
-      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the input.'},
+      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the file-selection trigger.'},
       {name: 'Spinner', required: false, description: 'Loading indicator that appears during async upload actions.'},
       {name: 'Status message', required: false, description: 'Validation feedback showing error, warning, or success with a message.'},
     ],

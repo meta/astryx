@@ -87,23 +87,30 @@ async function runState(
   });
 }
 
-test('every window-splitter expectation is exercised by a ResizeHandle state', async ({
-  page,
-}) => {
-  // One test mounts and checks every binding state in turn: about 20s on an
-  // idle machine, three times that when the contract run shares a runner's
-  // cores, so the default 60s ran out mid-loop on whichever state it reached.
-  // Budget it like the other whole-inventory sweeps (Button, Checkbox).
-  test.setTimeout(3 * 60 * 1000);
-  const cdp = await page.context().newCDPSession(page);
+// Checking coverage runs every state again, which on a loaded runner nears
+// the per-test timeout as one test. It runs as one serial part per state,
+// sharing their results, then one check over all of them.
+test.describe('every window-splitter expectation is exercised by a ResizeHandle state', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of RESIZE_HANDLE_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(neverExercised(results)).toEqual([]);
-  expect(unmatchedKnownFailures(RESIZE_HANDLE_KNOWN_FAILURES, results)).toEqual(
-    [],
-  );
+
+  test('no expectation is left unexercised', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      RESIZE_HANDLE_BINDING_STATES.map(state => state.id).sort(),
+    );
+    expect(neverExercised(results)).toEqual([]);
+    expect(
+      unmatchedKnownFailures(RESIZE_HANDLE_KNOWN_FAILURES, results),
+    ).toEqual([]);
+  });
 });
 
 for (const state of RESIZE_HANDLE_BINDING_STATES) {

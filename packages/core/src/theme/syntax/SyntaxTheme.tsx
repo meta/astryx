@@ -8,7 +8,7 @@
  * @output SyntaxTheme provider, useSyntaxTheme hook
  * @position Provider component; wraps code surfaces to apply syntax coloring
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 import React, {createContext, use, useMemo} from 'react';

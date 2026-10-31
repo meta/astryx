@@ -182,10 +182,13 @@ and `aria-controls` for the listbox, the listbox carries `aria-label` from
 focused element that owns arrow, Enter, Escape, and typeahead keys while open,
 so an anchor that cannot take focus still leaves a keyboard path.
 
-The create row is a `role="option"` with `aria-selected="false"` and no
-checkbox indicator. When it is the only result, the polite live region
-announces its label rather than the empty-search message, so what is announced
-matches what is on screen; picking it announces the creation.
+The create row is a `role="option"` with `aria-selected="false"` and no checkbox
+indicator. When it is the only result, the polite live region announces its
+label rather than the empty-search message, so what is announced matches what is
+on screen; picking it announces the creation. The result count and the create
+row's label come from the search's own `useAnnounce({hasReplace: true})`
+instance, so a newer one replaces one not yet spoken (`spec:AST-086` FR9), and
+selection messages keep their own instance.
 
 ## Design relationships
 

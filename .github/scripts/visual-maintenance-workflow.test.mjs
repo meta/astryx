@@ -13,6 +13,7 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {ungated} from './ci-pr-gate.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = yaml.parse(
@@ -31,11 +32,18 @@ function runs(
     operation = 'capture',
     needs = {},
     cancelled = false,
+    labels = [],
   } = {},
 ) {
-  const expression = (job.if ?? 'true')
+  // The pull-request gate in front is ci-pr-gate.test.mjs's to prove.
+  const expression = ungated(job.if ?? 'true')
     .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
-    .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]');
+    .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]')
+    // GitHub's object filter: `labels.*.name` lists the labels' names.
+    .replace(
+      /contains\(github\.event\.pull_request\.labels\.\*\.name, '([^']+)'\)/g,
+      "(github.event.pull_request?.labels ?? []).some(label => label.name === '$1')",
+    );
   if (!/\b(always|cancelled|success|failure)\(/.test(expression)) {
     if (
       cancelled ||
@@ -51,7 +59,10 @@ function runs(
     'cancelled',
     `return Boolean(${expression});`,
   )(
-    {event_name: event},
+    {
+      event_name: event,
+      event: {pull_request: {labels: labels.map(name => ({name}))}},
+    },
     {operation},
     needs,
     () => true,
@@ -83,7 +94,9 @@ describe('CI baseline maintenance routing', () => {
       'release-check',
     ]);
     expect(visual.name).toBe('Stable visual regression');
-    expect(visual['runs-on']).toBe('2-core-ubuntu-arm');
+    expect(visual['runs-on']).toContain(
+      "'2-core-ubuntu-arm' || 'ubuntu-24.04-arm'",
+    );
     expect(workflow.jobs).not.toHaveProperty('baseline-publication');
     expect(workflow.on).not.toHaveProperty('schedule');
   });
@@ -106,15 +119,16 @@ describe('CI baseline maintenance routing', () => {
     expect(runs(visual, {needs})).toBe(false);
   });
 
-  it('preserves focused PR routing when the maintenance guard is skipped', () => {
+  it('runs on an opted-in pull request when the maintenance guard is skipped', () => {
     const needs = dependencies(visual);
     needs['maintenance-request'].result = 'skipped';
-    expect(runs(visual, {event: 'pull_request', needs})).toBe(true);
-    needs['check-components'].outputs.has_stable_visual = 'false';
+    const optedIn = {event: 'pull_request', needs, labels: ['ci:heavy-lanes']};
+    // The job decides its stable visual scope in its own steps.
+    expect(runs(visual, optedIn)).toBe(true);
+    // Without the opt-in label a pull request update runs no visual owner.
     expect(runs(visual, {event: 'pull_request', needs})).toBe(false);
-    needs['check-components'].outputs.has_stable_visual = 'true';
     needs['build-storybook'].result = 'failure';
-    expect(runs(visual, {event: 'pull_request', needs})).toBe(false);
+    expect(runs(visual, optedIn)).toBe(false);
     expect(runs(visual, {event: 'merge_group', needs})).toBe(false);
   });
 
@@ -157,7 +171,10 @@ describe('canonical capture and checked-in baseline separation', () => {
     expect(capture.run).not.toMatch(
       /--(?:sample|only|components|themes|max-shots|tiers)\b/,
     );
-    expect(visual.permissions).toEqual({contents: 'read'});
+    expect(visual.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
   });
 
   it('keeps browser-refresh capture reachable, but only uploads validated full captures', () => {

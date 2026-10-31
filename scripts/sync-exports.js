@@ -43,7 +43,7 @@ const UTILITY_DIRS = new Set(['hooks', 'theme', 'utils']);
  * publicly exported. These are shared implementation details
  * consumed by other components via relative imports.
  */
-const INTERNAL_DIRS = new Set(['NavItem']);
+const INTERNAL_DIRS = new Set(['NavItem', 'gestures']);
 
 /**
  * Additional exports that can't be auto-discovered from directory structure.
@@ -234,6 +234,11 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'CodeBlock/languages/thrift',
   'CodeBlock/languages/toml',
   'Markdown/remark',
+  // Internal entries for Astryx's own packages: undocumented, outside the
+  // public API, and allowed by lint only in Core and Lab
+  // (architecture:react-component-runtime INV13).
+  'internal/touch',
+  'internal/tokenizer-presentation',
 ];
 
 /**

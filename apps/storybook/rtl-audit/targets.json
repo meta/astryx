@@ -59,6 +59,7 @@
     "component": "CheckboxInput",
     "storyId": "core-checkboxinput--size-comparison",
     "dims": ["D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "inputSelectorBySize": {
@@ -104,6 +105,7 @@
     "component": "RadioList",
     "storyId": "core-radiolist--rich-content",
     "dims": ["D2", "D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "prev": "input[aria-label=\"Pro\"]",
@@ -124,6 +126,7 @@
     "component": "Switch",
     "storyId": "core-switch--default",
     "dims": ["D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "inputSelector": "input[type=\"checkbox\"]"

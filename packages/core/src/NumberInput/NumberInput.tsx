@@ -5,7 +5,7 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps
+ * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -24,6 +24,7 @@ import {
   useState,
   useMemo,
   useCallback,
+  useLayoutEffect,
   useRef,
   type FocusEvent,
   type KeyboardEvent,
@@ -52,6 +53,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
@@ -99,7 +101,10 @@ const styles = stylex.create({
     paddingInlineEnd: padInlineEnd,
   },
   wrapperWithNumberSteppers: {
-    paddingInlineEnd: 0,
+    paddingInlineEnd: {
+      default: 0,
+      '@media (pointer: coarse)': padInlineEnd,
+    },
   },
   input: {
     display: 'block',
@@ -141,7 +146,12 @@ const styles = stylex.create({
   },
   numberSteppers: {
     alignSelf: 'stretch',
-    display: 'flex',
+    // These compact buttons are a fine-pointer affordance. Touch users can
+    // enter a value directly; keyboard stepping remains available.
+    display: {
+      default: 'flex',
+      '@media (pointer: coarse)': 'none',
+    },
     flexDirection: 'column',
     flexShrink: 0,
     width: spacingVars['--spacing-4'],
@@ -384,6 +394,8 @@ interface NumberInputPropsBase extends Omit<
   isWheelEnabled?: boolean;
   /**
    * Whether to show increment and decrement buttons at the end of the input.
+   * The buttons are hidden on coarse pointers (such as touch screens).
+   * Direct text entry and keyboard stepping remain available.
    * @default false
    */
   hasNumberSteppers?: boolean;
@@ -577,6 +589,7 @@ export function NumberInput({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: NumberInputProps) {
   const {rest, container} = useFieldInputStyling('NumberInput', restProps, {
@@ -591,6 +604,7 @@ export function NumberInput({
   const size = useSize(sizeProp, 'md');
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -651,6 +665,12 @@ export function NumberInput({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   const parseInput = useCallback(
     (text: string) => parseNumberInput(text, {min, max, isIntegerOnly, locale}),
@@ -699,13 +719,42 @@ export function NumberInput({
   );
 
   // Handle focus
+  // Tab into the field selects its text so typing replaces it. With
+  // `formatValue` the text at rest differs from the editable text, and putting
+  // the editable text in the input after focus collapses that selection to the
+  // end, so typing would append. When focus arrives with the text selected,
+  // select the swapped-in text too.
+  const reselectOnFocusRef = useRef(false);
+
   const handleFocus = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      // Only when focusing swaps the text: otherwise no render follows to
+      // consume the flag, and the first keystroke would.
+      const editableText =
+        pendingInput ??
+        (value == null ? '' : formatEditableNumber(value, locale));
+      reselectOnFocusRef.current =
+        input.value.length > 0 &&
+        input.value !== editableText &&
+        input.selectionStart === 0 &&
+        input.selectionEnd === input.value.length;
       setIsFocused(true);
       onFocus?.(e);
     },
-    [onFocus],
+    [onFocus, pendingInput, value, locale],
   );
+
+  useLayoutEffect(() => {
+    if (!reselectOnFocusRef.current) {
+      return;
+    }
+    reselectOnFocusRef.current = false;
+    const input = inputRef.current;
+    if (input != null && input === document.activeElement) {
+      input.setSelectionRange(0, input.value.length);
+    }
+  }, [displayValue]);
 
   const commitPendingInput = useCallback(
     (trigger: 'blur' | 'Enter') => {
@@ -990,7 +1039,7 @@ export function NumberInput({
         aria-invalid={
           status?.type === 'error' || !isInputValid ? 'true' : undefined
         }
-        aria-labelledby={ariaLabelledBy}
+        aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,
           isDisabled && styles.inputDisabled,
@@ -1106,6 +1155,7 @@ export function NumberInput({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

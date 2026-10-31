@@ -1,20 +1,23 @@
 ---
 schema_version: 3
-template_version: 4
+template_version: 7
 kind: component
 id: component:Center
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-28
 owners: [cixzhang]
 review_triggers: [public-api, layout, theming, accessibility]
 verified_by:
   [
+    packages/core/src/serverSafeComponents.test.ts,
+    .github/visual-baseline/manifest.json,
     packages/core/src/Center/Center.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     apps/storybook/rtl-audit/targets.json,
+    apps/storybook/stories/Center.stories.tsx,
     scripts/check-knowledge.mjs,
   ]
 modules: []
@@ -22,145 +25,134 @@ families: [family:layout-primitives]
 design_specs: []
 architecture:
   [
-    architecture:knowledge-contracts,
     architecture:public-component-api,
     architecture:component-theming-surface,
     architecture:container-padding,
   ]
 contributing: []
-system_specs: [spec:AST-002, spec:AST-029]
+system_specs: [spec:AST-002]
 ---
 
 # Center component contract
 
+## Contract at a glance
+
+| Area                    | Contract                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | A flex container that centers its children on `axis` (`both`, `horizontal`, `vertical`), with `isInline`, box sizing, and per-edge logical `padding`.            |
+| Behavior                | `both` centers on both axes; the single-axis values are physical-axis names that the source maps to flex main and cross axes; padding resolves per logical edge. |
+| End-user impact         | Readers see content centered in its box, with padding that follows the writing direction.                                                                        |
+| Builder impact          | None; the record describes shipped behavior.                                                                                                                     |
+| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                          |
+| Review checks           | Reject physical left/right padding, padding that publishes container inset, a caller `data-axis` that replaces the reflected axis, or added semantics.           |
+| Governing rules         | `family:layout-primitives/FR1–FR5,FR7,FR8`; `architecture:container-padding/INV8`; `architecture:public-component-api/INV5,INV6,INV8`.                           |
+
+This table is a review projection; the body below is authoritative.
+
 ## Intent
 
-Center arranges caller-supplied content at the horizontal center, vertical center,
-or both within its own box. This draft records verified released behavior, the
-objective owned-attribute repair in the accompanying audit, and the existing
-vertical-writing mismatch against current family authority. It does not add public
-API, defaults, responsive behavior, container-bleed participation, or product
-meaning.
+Center places caller content at the horizontal center, vertical center, or both
+within its own box. It owns the centering axis, its display mode, box sizing,
+and local padding.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: defect repair plus additive observational documentation;
-  public types, defaults, supported values, DOM element, and theme target remain
-  unchanged
+- Compatibility class: records shipped behavior; no public type, default,
+  supported value, DOM element, or theme target changes
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none; the inherited vertical-writing mismatch remains
-  unchanged and requires a separate runtime correction with DOM, flow, RSC, and
-  caller-content compatibility evidence
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **Single-axis values in vertical writing (FR2).** `family:layout-primitives`
+  lists `horizontal` and `vertical` as physical-axis alignment aliases. Center
+  maps `horizontal` to flex main-axis centering and `vertical` to cross-axis
+  centering, which matches the physical axes in horizontal writing but swaps
+  them in vertical writing modes.
 
 ## Ownership boundary
 
 **Owns**
 
-- The fixed `div` container and its flex or inline-flex display mode.
-- Centering along the selected public axis or axes.
-- The current box-size inputs and logical padding precedence.
-- The current `center` theme target and its reflected `axis` value.
+- The `div` container, its flex or inline-flex display, and its `center` target
+  with the reflected `axis`.
+- Centering on the selected axis or axes.
+- Box sizing and logical padding precedence.
 
 **Does not own / non-goals**
 
-- The semantics, paint, interaction, intrinsic size, or reading order of caller
-  content.
-- Page or structural-region layout; those remain with Layout, AppShell, and the
-  product callsite.
-- Gap between multiple children, responsive breakpoints, overflow, or automatic
-  sizing on an axis.
-- Container inset publication or descendant bleed behavior. Center padding remains
-  local under `architecture:container-padding`.
-- New visual treatment, public values, or element polymorphism.
+- The semantics, paint, interaction, size, or order of caller content.
+- Page and region layout — owned by Layout and the product callsite.
+- Gap between children, breakpoints, and overflow.
+- Container inset publication and descendant bleed — Center padding is local
+  under `architecture:container-padding`.
 
 ## Public concepts
 
-Consumer syntax remains in `Center.doc.mjs`. This table records observable concepts
-rather than duplicating its prop table.
-
-| Concept        | Closed values or states                                         | Meaning                                                                                                               | Availability by variant/orientation/state                                     | Default                                          | Owner                               | Stability                 | Invalid-value behavior                                                                          |
-| -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------- |
-| Centering axis | `both`, `horizontal`, `vertical`                                | Selects which physical axis or axes align caller content to the center of Center's box.                               | Every render.                                                                 | `both`                                           | `component:Center`                  | Observed released surface | Values rejected by the public type are outside this draft.                                      |
-| Display mode   | flex or inline-flex                                             | Selects a block-level or inline-level flex container without changing centering semantics.                            | Every axis value.                                                             | flex                                             | `component:Center`                  | Observed released surface | The public boolean type admits only enabled or omitted.                                         |
-| Box size       | number or CSS value string for current width/height constraints | Applies the shared `SizeValue` contract to Center's own box.                                                          | Every axis and display mode.                                                  | Intrinsic/containing-layout result when omitted. | `family:layout-primitives`          | Observed released surface | Runtime-invalid CSS follows browser CSS handling; this draft adds no validation.                |
-| Local padding  | Shared spacing step on uniform, axis, or logical edge inputs    | Insets caller content inside Center without publishing container-bleed geometry.                                      | Every axis and display mode; logical edges follow writing mode and direction. | No component padding when omitted.               | `family:layout-primitives`          | Observed released surface | Values rejected by `SpacingStep` are outside this draft.                                        |
-| DOM extension  | Supported BaseProps inputs and ref                              | Supported DOM, ARIA, data, event, class, style, and StyleX inputs reach the current root; the ref reaches that `div`. | Every render.                                                                 | No additional inputs.                            | `architecture:public-component-api` | Observed released surface | Component-owned target reflection remains authoritative when a generic data attribute collides. |
+| Concept  | Closed values or states                                                      | Meaning                                | Availability by variant/orientation/state | Default | Owner                      | Stability | Invalid-value behavior           |
+| -------- | ---------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- | ------- | -------------------------- | --------- | -------------------------------- |
+| Axis     | `both`, `horizontal`, `vertical`                                             | Which axis or axes are centered (FR2). | Always                                    | `both`  | `component:Center`         | Stable    | TypeScript rejects other values. |
+| Display  | flex; inline-flex                                                            | Block-level or inline-level container. | Every axis                                | flex    | `component:Center`         | Stable    | —                                |
+| Box size | `width`, `height`, `maxWidth`, `minHeight`: numbers in pixels or CSS strings | Center's own box size.                 | Always                                    | unset   | `family:layout-primitives` | Stable    | Strings pass through as CSS.     |
+| Padding  | Spacing steps per edge, per axis, or uniform                                 | Local inner padding.                   | Always                                    | unset   | `family:layout-primitives` | Stable    | TypeScript rejects other values. |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                   | Basis                                                                                                   | Draft review state                                                                                                                                                                                            |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1 | The current root is one `div`. It renders as flex by default and inline-flex when the current inline flag is enabled.                                                                                                                                                                                                                                                 | Released declarations, source, docs, tests, and browser evidence                                        | Verified released behavior; no element or display change decided                                                                                                                                              |
-| FR2 | `both` centers the physical horizontal and vertical axes. `horizontal` and `vertical` are physical-axis aliases under `family:layout-primitives`, independent of writing mode. The current flex implementation satisfies this in horizontal writing but swaps the one-axis results under vertical writing because it maps the names directly to flex main/cross axes. | Current family contract, source, docs, tests, and Chromium vertical-writing evidence                    | Pre-existing current-authority conformance gap; this audit records the BLOCK and leaves runtime remediation out because a safe fix must preserve DOM, flow, server rendering, and caller content writing mode |
-| FR3 | Current width, height, maximum-width, and minimum-height inputs use `SizeValue`: numbers resolve as CSS pixels and strings pass through as CSS values.                                                                                                                                                                                                                | Current family contract, public declarations, docs, source, and browser evidence                        | Verified released behavior; no sizing API change                                                                                                                                                              |
-| FR4 | Padding resolves independently per logical edge: explicit logical edge, then matching axis, then uniform padding. Inline and block edges resolve from writing mode and direction.                                                                                                                                                                                     | `family:layout-primitives/FR1–FR3`, source, tests, RTL audit, and browser evidence                      | Settled shared behavior; audit coverage completed                                                                                                                                                             |
-| FR5 | Center padding remains local. It does not publish the internal container-padding variables that descendants use for bleed compensation.                                                                                                                                                                                                                               | `family:layout-primitives/FR8` and `architecture:container-padding/INV8`                                | Verified released boundary; no protocol participation added                                                                                                                                                   |
-| FR6 | The root carries the current `center` target and reflects the resolved axis. Supported consumer styling composes on that same element, while a colliding generic `data-axis` value does not replace component-owned target state.                                                                                                                                     | `architecture:public-component-api/INV5–INV6`, current source, docs, target tests, and audit regression | Objective contract restoration in this audit; no target or API addition                                                                                                                                       |
-| FR7 | Center creates no breakpoint, automatic overflow behavior, gap between children, structural region, or content-specific semantic wrapper.                                                                                                                                                                                                                             | `family:layout-primitives/FR4, FR7, AV3–AV5`, source, and docs                                          | Verified released boundary; no new capability inferred                                                                                                                                                        |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| FR1 | Center renders one `div`, `display: flex` by default and `inline-flex` with `isInline`, holding its children in caller order.                                                                                                                                                                                                                                                                                                                  | Current source and tests                 |
+| FR2 | `both` centers on both axes. `horizontal` and `vertical` center the physical horizontal and vertical axes in every writing mode (`family:layout-primitives` physical-axis aliases). Center sets main- and cross-axis centering for `both`, main-axis only for `horizontal`, and cross-axis only for `vertical`. Implementation gap: in vertical writing modes the single-axis values center the opposite physical axis (Current-state impact). | Current source, tests, and family record |
+| FR3 | `width`, `height`, `maxWidth`, and `minHeight` apply numbers as pixels and strings as given.                                                                                                                                                                                                                                                                                                                                                   | Current source and tests                 |
+| FR4 | Padding resolves per logical edge: the edge prop, then its axis prop (`paddingInline` or `paddingBlock`), then `padding`; zero is an explicit step. Inline edges follow the writing direction.                                                                                                                                                                                                                                                 | Current source, tests, and family record |
+| FR5 | Center padding publishes no container-padding variables.                                                                                                                                                                                                                                                                                                                                                                                       | Current source and family record         |
+| FR6 | The root carries the `center` target and reflects `axis`; a caller `data-axis` does not replace it. `ref` reaches the `div`; supported DOM, ARIA, data, and event props reach it before the component's target and styles; `xstyle`, `className`, and `style` merge in that order.                                                                                                                                                             | Current source and tests                 |
+| FR7 | Center adds no breakpoint, overflow behavior, gap, or structural region. It renders on the server without a client boundary.                                                                                                                                                                                                                                                                                                                   | Current source and tests                 |
 
 ### Allowed variation
 
-- **AV1 — Caller content.** Any renderable caller content may appear inside the
-  current root and retains its own semantics, paint, interaction, and theme ownership.
-- **AV2 — Available space.** Parent layout and current size inputs may change the
-  box available for centering without changing the axis contract.
-- **AV3 — Consumer styling.** Supported class, style, and StyleX inputs may alter
-  the root through the documented escape hatches while the component-owned target
-  name and resolved axis reflection remain present.
+- **AV1 — Caller content.** Any content may appear inside Center and keeps its
+  own semantics and theming.
+- **AV2 — Available space.** Parent layout and size inputs change the box
+  without changing the axis contract.
 
 ### Representative states
 
-| State                            | Required invariant                                                                                         | Allowed variation                                                 |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Both axes                        | Physical horizontal and vertical alignment are centered in every writing mode.                             | Caller content and available width/height may vary.               |
-| Horizontal only                  | The physical horizontal axis is centered; Center does not add physical vertical centering.                 | Height and caller-owned vertical placement may vary.              |
-| Vertical only                    | The physical vertical axis is centered; Center does not add physical horizontal centering.                 | Width and caller-owned horizontal placement may vary.             |
-| Vertical writing                 | The physical-axis requirements above remain unchanged. Current source reverses the one-axis outcomes.      | Writing mode and caller content may vary; the violation does not. |
-| Inline                           | The root is inline-flex and retains the selected axis behavior.                                            | Surrounding inline content and caller children may vary.          |
-| Asymmetric logical padding       | Logical start/end values keep their meaning while resolved physical inline-axis edges swap with direction. | Spacing steps, writing mode, and block-edge padding may vary.     |
-| Narrow or coarse-pointer context | The passive container preserves its layout contract without adding a breakpoint or interaction mode.       | Parent width and caller content may wrap or size themselves.      |
+| State                      | Required invariant                                                                             | Allowed variation |
+| -------------------------- | ---------------------------------------------------------------------------------------------- | ----------------- |
+| Both axes                  | Main- and cross-axis centering.                                                                | Box size.         |
+| Horizontal only            | The physical horizontal axis is centered; no physical vertical centering is added.             | Height.           |
+| Vertical only              | The physical vertical axis is centered; no physical horizontal centering is added.             | Width.            |
+| Vertical writing           | Single-axis values still name physical axes (today they center the opposite one, the FR2 gap). | —                 |
+| Inline                     | `inline-flex` with the selected axis.                                                          | —                 |
+| Asymmetric logical padding | Start and end keep their meaning; physical edges swap with direction.                          | —                 |
 
 ### Transformation and precedence order
 
-- **ORD1 — Layout resolution.** Resolve display mode and preserve the public
-  physical-axis meaning across writing modes before applying current box-size inputs.
-  Current source instead maps `horizontal` to flex main-axis alignment and `vertical`
-  to flex cross-axis alignment, producing the FR2 conformance gap in vertical writing.
-- **ORD2 — Padding resolution.** Resolve each edge from edge input to axis input to
-  uniform input, preserving zero as an explicit spacing step.
-- **ORD3 — Root composition.** Combine the `center` target, resolved axis reflection,
-  component styles, and supported consumer styling on one root. Forward remaining
-  supported DOM inputs without allowing them to replace component-owned target state.
+- **ORD1 — Padding per edge.** Edge prop → axis prop → `padding`.
+- **ORD2 — Root attributes.** Caller props → component target, reflected axis,
+  and styles → `xstyle` → `className` → `style`.
 
 ### Performance and resources
 
-- Center owns no state, Effect, listener, observer, timer, portal, measurement, or
-  asynchronous resource. Its current render performs only synchronous prop
-  resolution and one DOM render.
+- **PR1 — Static render.** Center holds no state and uses no hooks.
 
 ## Accessibility contract
 
-- **AR1 — Passive semantics.** Center adds no interactive role, accessible name,
-  state, focus behavior, keyboard handling, or live region. Caller content keeps its
-  own semantic and interaction ownership.
-- **AR2 — Supported DOM semantics.** Supported caller ARIA, role, data, event, and
-  ref inputs reach the current root unless the attribute is component-owned target
-  reflection under FR6.
-- **AR3 — Reading order.** Center renders caller children in caller order and does
-  not visually reorder them.
+- **AR1 — Passive container.** Center adds no role, name, state, focus
+  behavior, or live region of its own; caller ARIA and role props reach the
+  root.
+- **AR2 — Reading order.** Children render in caller order and are not visually
+  reordered.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                                                                       | Representation authority                             | Hierarchy role    | Component contract |
-| ---------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
-| Container        | Supplies one- or two-axis alignment and optional local inset without adding a visual surface by default. | Current source, docs, and `family:layout-primitives` | Supporting layout | FR1–FR7            |
-| Content          | Retains caller-owned semantics, paint, interaction, and hierarchy inside the container.                  | Caller-owned content                                 | Context-dependent | AV1, AR1, AR3      |
-
-This observational draft records current layout relationships. It does not decide a
-new density, breakpoint, visual treatment, or content hierarchy.
+| Anatomy or state | Design requirement                                                | Representation authority                             | Hierarchy role    | Component contract |
+| ---------------- | ----------------------------------------------------------------- | ---------------------------------------------------- | ----------------- | ------------------ |
+| Container        | One- or two-axis centering with optional local inset, no surface. | Current source, docs, and `family:layout-primitives` | Supporting layout | FR1–FR7            |
+| Content          | Caller content inside the container.                              | Caller-owned content                                 | Context-dependent | AV1, AR1, AR2      |
 
 ### Theming anatomy
 
@@ -179,40 +171,29 @@ new density, breakpoint, visual treatment, or content hierarchy.
 
 ## Family and system relationships
 
-- `family:layout-primitives` owns the shared `SizeValue`, `SpacingStep`, logical
-  padding, padding precedence, and Center arrangement vocabulary.
-- `architecture:container-padding` records that Center's current padding is local
-  and does not publish descendant bleed geometry.
-- `architecture:component-theming-surface` owns anatomy qualification, target
-  placement, and axis reflection on the current target.
-- `architecture:public-component-api` owns the released subpath, BaseProps
-  passthrough, styling composition, ref reachability, and owned-attribute boundary.
-- `architecture:knowledge-contracts` and `spec:AST-029` keep this observational
-  draft from settling new behavior and require exact-head owner approval.
-- `spec:AST-002` owns admission for any future public or behavioral delta.
+- `family:layout-primitives` owns the shared size and padding vocabulary,
+  padding precedence, and the physical-axis meaning of `horizontal` and
+  `vertical`; FR2 records Center's gap against it.
+- `architecture:container-padding` records Center padding as local (FR5).
+- `architecture:public-component-api` owns passthrough, styling composition, ref
+  reachability, and the owned-attribute boundary (FR6).
+- `spec:AST-002` owns admission of any change to this public surface.
 
 ## Verification map
 
-| Contract                  | Verification                                                                             | Representative states                                                   | Mutation or failure expectation                                                                                          | Audit section                |
-| ------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| FR1                       | `Center.test.tsx`, `Center.stories.tsx`, and receipted Chromium evidence                 | Block and inline display                                                | Removing a display style changes the public DOM/computed layout and fails focused or browser evidence.                   | `audit:Center/behavior`      |
-| FR2                       | Receipted Chromium geometry in horizontal and `vertical-rl` writing modes                | Both, horizontal, and vertical axes across writing modes                | A one-axis value that centers the opposite physical dimension remains an open BLOCK until runtime behavior conforms.     | `audit:Center/behavior`      |
-| FR3                       | Public declarations, source, focused tests, and browser evidence                         | Numeric and string width/height constraints                             | Changing SizeValue lowering or dropping a size input changes the current root's computed box.                            | `audit:Center/api`           |
-| FR4                       | `Center.test.tsx`, writing-mode-aware `targets.json` D8, and LTR/RTL browser receipts    | Uniform, axis, per-edge, zero, horizontal writing, and vertical writing | Wrong precedence changes functional StyleX output; fixed left/right assumptions fail the vertical-writing D8 self-check. | `audit:Center/layout`        |
-| FR5, FR7                  | Source review against family and container-padding authority                             | Padded and narrow containers                                            | Publishing bleed geometry or adding implicit responsive/overflow behavior contradicts the current boundary.              | `audit:Center/architecture`  |
-| FR6                       | `Center.test.tsx` and `themingTargets.test.ts`                                           | Every axis plus a colliding consumer data attribute                     | Missing target/axis metadata or consumer replacement of component-owned reflection fails focused tests.                  | `audit:Center/theming`       |
-| AR1–AR3                   | Source, passthrough tests, component-scoped axe, and browser inspection                  | Passive content, caller ARIA/role, and multiple children                | Added component semantics, dropped supported semantics, or visual reordering becomes observable.                         | `audit:Center/accessibility` |
-| Documentation and surface | `Center.doc.mjs`, block/docsite checks, export checks, and `scripts/check-knowledge.mjs` | Consumer docs, examples, package entry points, and this draft           | Missing or stale docs, exports, required structure, relationships, or anatomy mapping fails repository checks.           | `audit:Center/docs`          |
-
-Current audit scores, screenshots, eligibility, and per-run receipts remain in their
-existing wiki, pull-request, and trusted-check owners rather than this contract.
+| Contract            | Verification                                                                                                                                      | Representative states                                  | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                         | Audit section           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| FR1, FR2            | `Center.test.tsx` axis and inline tests; stable visual baselines `core-center--default` (neutral and probe themes)                                | Both, horizontal, vertical; inline; default            | A wrong computed display, `align-items`, or `justify-content` fails; a changed default centering comes back changed for review. Gap: no automated check runs a vertical writing mode or asserts child order.                                                                                                                                                                                            | `audit:Center/behavior` |
+| FR3                 | `Center.test.tsx` sizing tests                                                                                                                    | Width, height, both                                    | Gap: the sizing tests assert only that the element renders, so the pixel conversion and string pass-through have no automated check.                                                                                                                                                                                                                                                                    | `audit:Center/layout`   |
+| FR4                 | `Center.test.tsx` padding-precedence suite; `@astryx/no-physical-properties` lint rule; RTL audit dimension D8 on `core-center--padding-per-edge` | Uniform, axis, edge, zero, all four edges; LTR and RTL | Edge over axis on the end edges, and edge over uniform on inline-start, inline-end, and block-start, fails; a physical left/right padding property fails lint; the RTL audit fails unless logical start and end padding swap physical sides. Gap: edge over axis on the start edges, edge over uniform on block-end, and axis over uniform have no check, and CI keeps RTL audit findings non-blocking. | `audit:Center/layout`   |
+| FR5, FR7            | `serverSafeComponents.test.ts`; `Center.test.tsx` server-render test; source review                                                               | Padded container                                       | A client boundary fails `serverSafeComponents.test.ts`; a server-render error fails the Center test. Gap: a hook added together with a client directive passes every check; publishing container-padding variables, or adding a breakpoint, overflow rule, gap, or region, has no automated check.                                                                                                      | `audit:Center/layout`   |
+| FR6                 | `Center.test.tsx` ref, passthrough, xstyle, and owned-attribute tests; `themingTargets.test.ts`                                                   | Every axis; colliding `data-axis`                      | A lost target or a caller `data-axis` winning fails. Gap: the ref test accepts any `div`, so a ref on a wrapper passes, and the styling-input merge order has no check.                                                                                                                                                                                                                                 | `audit:Center/theming`  |
+| AR1, AR2, PR1       | `serverSafeComponents.test.ts`; source review                                                                                                     | Multiple children                                      | A hook added without a client directive fails `serverSafeComponents.test.ts`. Gap: a hook added together with a client directive passes, and no automated check fails if Center adds semantics or reorders children.                                                                                                                                                                                    | `audit:Center/a11y`     |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                     | Consumer anatomy and current target                    | Missing, extra, or stale mappings fail repository validation.                                                                                                                                                                                                                                                                                                                                           | `audit:Center/theming`  |
 
 ## Decision log
 
-None. Current family authority already settles the physical-axis meaning. The
-vertical-writing mismatch is an implementation conformance gap, not an unresolved API
-or design decision; this observational draft neither waives it nor prescribes a risky
-fix.
+None recorded. The record describes shipped behavior.
 
 ## Open questions
 
@@ -220,6 +201,5 @@ None.
 
 ## Content boundary
 
-This file does not duplicate consumer prop tables or examples, current audit scores or
-screenshots, implementation steps, shared layout vocabulary, container-padding
-mechanics, or system API/theming rules. It links to their owners.
+This file does not duplicate consumer prop tables/examples, current audit
+results, implementation steps, or family/system rules. It links to their owners.

@@ -150,6 +150,18 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // Prebuilt and plain-data modules load as Node loads them for the
+          // CLI, not through Vite's transform, which would otherwise inline
+          // every file: Core's built bundle (the workspace link resolves it
+          // outside node_modules; the theme build imports its root entry, all
+          // of Core and React: 0.9 s natively, 4.5 s inlined) and the
+          // `.doc.mjs` documentation modules the docs catalog imports by the
+          // hundred (doctor's first case: 0.7 s natively, 4.7 s inlined).
+          // Both grow several times over on a loaded box. Mocks keep working
+          // from inlined callers.
+          server: {
+            deps: {external: [/\/packages\/core\/dist\//, /\.doc\.mjs$/]},
+          },
           // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
           // (real process boundary). Under the forks pool these cold-starts can
           // run long on a busy box; the 5s default testTimeout then flakes

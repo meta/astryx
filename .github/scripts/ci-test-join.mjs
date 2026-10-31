@@ -4,16 +4,19 @@
 /**
  * @file Fail-closed contract for the pull-request `test` join.
  *
- * The Build test owner is intentionally skipped for the admitted lightweight
- * scopes. Every other scope must execute it successfully. Keeping this decision
- * in an executable program lets tests prove every status/scope combination
- * instead of matching shell fragments in the workflow.
+ * Every test owner the join waits on decides its own scope and reports
+ * success whether it ran its work or skipped it, so each must have succeeded.
+ * The join's own scope outputs must be decided (true or false), never missing,
+ * and a release-branch pull request must pass its release-bump validation.
+ * Keeping this decision in an executable program lets tests prove every
+ * status/scope combination instead of matching shell fragments in the
+ * workflow.
  */
 
 const requiredSuccess = [
   ['test-ui', process.env.TEST_UI_RESULT],
   ['test-node', process.env.TEST_NODE_RESULT],
-  ['registry-contract', process.env.REGISTRY_CONTRACT_RESULT],
+  ['test-build', process.env.TEST_BUILD_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
   ['pr-interaction', process.env.PR_INTERACTION_RESULT],
 ];
@@ -23,12 +26,19 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-if (process.env.CHECK_SCOPE_RESULT !== 'success') {
-  fail(`check-scope: ${process.env.CHECK_SCOPE_RESULT ?? 'missing'}`);
-}
-
 for (const [name, result] of requiredSuccess) {
   if (result !== 'success') fail(`${name}: ${result ?? 'missing'}`);
+}
+
+// A release-branch pull request must pass its bump validation; any other
+// pull request must not have run it.
+const expectedBump =
+  process.env.RELEASE_BUMP === 'true' ? 'success' : 'skipped';
+if (process.env.RELEASE_BUMP_RESULT !== expectedBump) {
+  fail(
+    `release-bump: ${process.env.RELEASE_BUMP_RESULT ?? 'missing'} ` +
+      `(expected ${expectedBump})`,
+  );
 }
 
 const scopes = [
@@ -40,15 +50,6 @@ for (const [name, value] of scopes) {
   if (value !== 'true' && value !== 'false') {
     fail(`${name}: ${value ?? 'missing'}`);
   }
-}
-
-const isSpecialized = scopes.some(([, value]) => value === 'true');
-const expectedBuild = isSpecialized ? 'skipped' : 'success';
-if (process.env.TEST_BUILD_RESULT !== expectedBuild) {
-  fail(
-    `test-build: ${process.env.TEST_BUILD_RESULT ?? 'missing'} ` +
-      `(expected ${expectedBuild} for this scope)`,
-  );
 }
 
 if (process.exitCode !== 1) {

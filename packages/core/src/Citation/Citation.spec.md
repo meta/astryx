@@ -1,13 +1,13 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:Citation
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming, accessibility, visual]
 verified_by:
@@ -16,6 +16,9 @@ verified_by:
     packages/core/src/utils/safeUrl.test.ts,
     apps/storybook/stories/Citation.stories.tsx,
     apps/storybook/rtl-audit/verified-not-applicable.json,
+    packages/core/src/theme/themingTargets.test.ts,
+    .github/visual-baseline/manifest.json,
+    scripts/check-knowledge.mjs,
   ]
 modules: []
 families: [family:navigation-destinations]
@@ -35,17 +38,17 @@ system_specs: [spec:AST-005]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | `Citation` is exported from `@astryxdesign/core/Citation`; `source` and `number` are required, and `variant` defaults to `label`.                                                                                                                                                                                        |
-| Behavior                | An accepted source URL renders a native anchor in a new tab. A missing or rejected URL renders the same citation content in an inert span. Label and number variants preserve that navigation decision.                                                                                                                  |
-| End-user impact         | Readers receive a consistent citation label or numbered reference without a blocked destination becoming navigation or a decorative source icon being announced twice.                                                                                                                                                   |
-| Builder impact          | Builders may supply source text, a destination, an image or node icon, neutral DOM props, a root ref, and composed styling without replacing Citation’s navigation or accessibility ownership.                                                                                                                           |
-| Compatibility/readiness | The released defaults, export, theme target, URL behavior, and visual presentation remain unchanged. The inert span now uses a noninteractive naming role so its existing translated label reaches assistive technology.                                                                                                 |
-| Review checks           | Reject a blocked URL that becomes navigation, an accepted URL that loses native anchor affordances, an interactive or reference role on an inert citation, a missing inert accessible name, an announced decorative icon, dropped supported passthrough or ref behavior, or a new public theme target without authority. |
-| Governing rules         | `family:navigation-destinations/FR1,FR3–FR5,FR7–FR8`; `architecture:public-component-api/INV1,INV5,INV6,INV8,INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:component-test-sufficiency/INV1–INV7,INV10–INV11`.                                                                                 |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `Citation` is exported from `@astryxdesign/core/Citation`; `source` and `number` are required, and `variant` defaults to `label`.                                                                                                                                                                                                                               |
+| Behavior                | An accepted source URL renders a native anchor in a new tab. A missing or rejected URL renders the same citation content in an inert span. Label and number variants preserve that navigation decision.                                                                                                                                                         |
+| End-user impact         | Readers receive a consistent citation label or numbered reference without a blocked destination becoming navigation or a decorative source icon being announced twice.                                                                                                                                                                                          |
+| Builder impact          | A builder's explicit `role` or `aria-label` is meant to reach the root; today the component's role and translated name replace them (FR5 gap).                                                                                                                                                                                                                  |
+| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                                                                                                                                                                                                                         |
+| Review checks           | Reject a blocked URL that becomes navigation, an accepted URL that loses native anchor affordances, an interactive or reference role that Citation adds to an inert citation, a missing inert accessible name when the caller supplies none, an announced decorative icon, dropped passthrough or ref behavior, or a new public theme target without authority. |
+| Governing rules         | `family:navigation-destinations/FR1,FR3–FR5,FR7–FR8`; `architecture:public-component-api/INV1,INV5,INV6,INV8,INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:component-test-sufficiency/INV1–INV7,INV10–INV11`.                                                                                                                        |
 
-This table is a review projection; the body below is authoritative only after owner approval.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -53,12 +56,21 @@ Present an inline reference to a source as a readable label or compact number wh
 
 ## Compatibility and migration
 
-- Released default preserved: yes
-- Compatibility class: restorative accessibility semantics plus observational documentation; no public-type, visual, layout, styling, or theme-target change
-- Controlled/uncontrolled behavior: not applicable; Citation owns no state
-- Migration decision: none; the existing package export and source shape remain unchanged
+- Released default preserved: `yes` — `variant="label"`.
+- Compatibility class: records shipped behavior; no public prop, default, DOM,
+  target, or styling output changes.
+- Controlled/uncontrolled behavior: not applicable; Citation owns no state.
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **Caller `role` and `aria-label` replaced (FR5).** Caller props spread
+  before the component's `role` and `aria-label`, so a caller's explicit
+  values never reach the root, where `architecture:public-component-api` INV5
+  lets a caller's explicit input reach the element. The root-contract test
+  pins the replacement today.
 
 ## Ownership boundary
 
@@ -85,15 +97,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                 | Basis                                                                                     | Draft review state |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------ |
-| FR1 | An accepted `source.url` MUST render a native anchor with the unchanged destination, `target="_blank"`, `rel="noopener noreferrer"`, `role="doc-noteref"`, and the current title and translated accessible name.                                                                                                                                                    | shipped source and tests; `family:navigation-destinations/FR1,FR3–FR5`                    | verify             |
-| FR2 | A missing or rejected destination MUST render the selected citation presentation in a noninteractive span with no navigation or reference role. The span MUST use a supported naming role so its translated label reaches assistive technology. Rejection MUST NOT derive navigation attributes from `source.url`, invent disabled semantics, or hide the citation. | shipped source and tests; `family:navigation-destinations/FR4,FR7`; WAI-ARIA naming rules | verify             |
-| FR3 | The label variant MUST present the source title, optional decorative source icon, and truncation behavior; the number variant MUST present the supplied number as the compact visible reference.                                                                                                                                                                    | shipped source, docs, tests, and stories                                                  | verify             |
-| FR4 | Node icons MUST take precedence over `src`; otherwise `src` MUST take precedence over a legacy string `icon`. Every icon path remains decorative inside an `aria-hidden` wrapper.                                                                                                                                                                                   | shipped compatibility behavior and tests                                                  | verify             |
-| FR5 | Both root branches MUST preserve supported DOM props, `className`, `style`, `xstyle`, `data-*` attributes, and the declared `HTMLElement` ref while keeping the component-owned role and accessible name authoritative.                                                                                                                                             | `architecture:public-component-api/INV5,INV6,INV8`; regression tests                      | verify             |
-| FR6 | Citation MUST keep one public `citation` target on the painted root and MUST NOT expose an internal icon or text target without an approved theming-contract change.                                                                                                                                                                                                | shipped docs/source; `architecture:component-theming-surface/INV3–INV6`                   | verify             |
-| FR7 | Component-owned accessible text MUST remain routed through `useTranslator`; visible source text and numeric content remain caller-supplied data.                                                                                                                                                                                                                    | shipped source and i18n infrastructure                                                    | verify             |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Basis                                                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| FR1 | An accepted `source.url` renders a native anchor with the unchanged destination, `target="_blank"`, `rel="noopener noreferrer"`, `role="doc-noteref"` unless a caller supplies an explicit `role`, and the translated accessible name unless a caller supplies an explicit `aria-label` (FR5); its `title` is the source title, or the number when there is none.                                                                                                     | shipped source and tests; `family:navigation-destinations/FR1,FR3–FR5`                    |
+| FR2 | A missing or rejected destination renders the selected citation presentation in a noninteractive span; Citation adds no navigation or reference role to it. Unless a caller supplies an explicit `role`, the span uses a supported naming role, so its translated label, or a caller's `aria-label`, reaches assistive technology (FR5). Rejection derives no navigation attributes from `source.url`, invents no disabled semantics, and does not hide the citation. | shipped source and tests; `family:navigation-destinations/FR4,FR7`; WAI-ARIA naming rules |
+| FR3 | The label variant presents the source title, an optional decorative source icon, and truncation; the number variant presents the supplied number as the compact visible reference.                                                                                                                                                                                                                                                                                    | shipped source, docs, tests, and stories                                                  |
+| FR4 | A node icon takes precedence over `src`, and `src` over a legacy string `icon`. Every icon path remains decorative inside an `aria-hidden` wrapper.                                                                                                                                                                                                                                                                                                                   | shipped compatibility behavior and tests                                                  |
+| FR5 | Both root branches preserve supported DOM props, `className`, `style`, `xstyle`, `data-*` attributes, and the declared `HTMLElement` ref, and a caller's explicit `role` or `aria-label` reaches the root (`architecture:public-component-api` INV5). Implementation gap: the component's role and translated name replace a caller's values (Current-state impact).                                                                                                  | `architecture:public-component-api/INV5,INV6,INV8`; regression tests                      |
+| FR6 | Citation keeps one public `citation` target on the painted root, reflecting `variant`, and exposes no internal icon or text target without an approved theming-contract change.                                                                                                                                                                                                                                                                                       | shipped docs/source; `architecture:component-theming-surface/INV3–INV6`                   |
+| FR7 | Component-owned accessible text comes from the translation catalog; visible source text and numeric content remain caller-supplied data.                                                                                                                                                                                                                                                                                                                              | shipped source and i18n infrastructure                                                    |
 
 ### Allowed variation
 
@@ -103,18 +115,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                   | Required invariant                                                                                                       | Allowed variation                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| linked label            | Native anchor, source title, optional decorative icon, translated accessible name.                                       | Source content and root theme paint.  |
-| linked number           | Native anchor, numeric visible reference, translated accessible name.                                                    | Number and root theme paint.          |
-| missing or rejected URL | Inert span with the same selected presentation, a supported naming role, and no navigation/reference role or attributes. | Source content and root theme paint.  |
-| node or image icon      | Icon remains decorative and appears only in the label variant.                                                           | Caller-owned artwork or source image. |
+| State                   | Required invariant                                                                                                                                            | Allowed variation                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| linked label            | Native anchor, source title, optional decorative icon, translated accessible name absent a caller `aria-label`.                                               | Source content and root theme paint.  |
+| linked number           | Native anchor, numeric visible reference, translated accessible name absent a caller `aria-label`.                                                            | Number and root theme paint.          |
+| missing or rejected URL | Inert span with the same selected presentation; absent a caller `role`, a supported naming role; Citation adds no navigation or reference role or attributes. | Source content and root theme paint.  |
+| node or image icon      | Icon remains decorative and appears only in the label variant.                                                                                                | Caller-owned artwork or source image. |
 
 ### Transformation and precedence order
 
 - **ORD1 — Destination.** `source.url` → shared safe-URL decision → native anchor or inert span.
 - **ORD2 — Icon.** Non-string `source.icon` → `source.src` → legacy string `source.icon` → no icon.
-- **ORD3 — Root props.** Caller passthrough → component-owned role, name, test id, and navigation attributes → theme and style composition.
+- **ORD3 — Root props.** Caller passthrough → component-owned test id and navigation attributes, and the component's role and name unless the caller supplies its own (FR5; today the component's replace the caller's, the FR5 gap) → theme and style composition.
 
 ### Performance and resources
 
@@ -123,8 +135,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Accessibility contract
 
-- **AR1 — Linked reference.** An accepted destination exposes one native link with `doc-noteref` and the translated `Citation {number}: {title}` accessible name.
-- **AR2 — Inert reference.** Missing or rejected destinations expose no interactive or navigation role or attributes. The inert span uses `role="group"` so its translated citation label remains an accessible name, including when the visible number has no source text.
+- **AR1 — Linked reference.** An accepted destination exposes one native link with `doc-noteref` absent a caller `role`, and the translated `Citation {number}: {title}` accessible name absent a caller `aria-label` (FR5).
+- **AR2 — Inert reference.** For a missing or rejected destination, Citation adds no interactive or navigation role or attributes; a caller's explicit `role` reaches the span (FR5). Absent a caller `role` (FR5), the inert span uses `role="group"` so its translated citation label remains an accessible name, including when the visible number has no source text.
 - **AR3 — Decorative source mark.** Source image and node icon paint remains hidden from the accessibility tree so it does not duplicate the citation name.
 - **AR4 — Focus ownership.** The native anchor remains the semantic focus owner. Citation adds no focus owner to the inert span.
 
@@ -136,7 +148,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Source icon      | Presents optional caller-supplied source identity without accessibility semantics. | observed shipped representation                 | decorative               | FR3–FR4, AR3       |
 | Label or number  | Presents the source title or compact index.                                        | observed shipped representation                 | primary citation content | FR3, FR7           |
 
-Citation exposes only the documented `citation` root target. Internal icon and text parts currently have no public target; this observational draft neither adds nor promises one.
+Citation exposes only the documented `citation` root target. Internal icon and text parts have no public target.
 
 ## Family and system relationships
 
@@ -149,15 +161,16 @@ Citation exposes only the documented `citation` root target. Internal icon and t
 
 ## Verification map
 
-| Contract         | Verification                                                                | Representative states                                                        | Mutation or failure expectation                                                                                                                       | Audit section               |
-| ---------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| FR1–FR2, AR1–AR2 | `Citation.test.tsx` destination suites and `safeUrl.test.ts` matrix         | accepted, missing, blocked schemes, normalized blocked text                  | A blocked URL creates navigation, an accepted URL loses its destination or native affordances, or an inert reference loses its supported naming role. | `audit:Citation/navigation` |
-| FR3–FR4, AR3     | `Citation.test.tsx` variant and icon suites                                 | label, number, no icon, node icon, `src`, legacy string icon                 | The wrong visible variant renders, icon precedence changes, or decorative source paint reaches the accessibility tree.                                | `audit:Citation/behavior`   |
-| FR5              | `Citation.test.tsx` root-contract suite and strict type/lint validation     | anchor and span roots with ref, DOM props, class, inline style, and `xstyle` | Either root drops supported passthrough or ref behavior, or caller-supplied role/name overrides component ownership.                                  | `audit:Citation/api`        |
-| FR6              | Public docs, source review, and theming-target inventories                  | linked and inert roots; both variants                                        | The root target disappears, moves off the painter, or an undocumented internal target becomes public.                                                 | `audit:Citation/theming`    |
-| FR7              | Existing i18n build and Citation accessible-name assertions                 | linked label and number                                                      | Component-authored accessible text bypasses translation or loses source/number context.                                                               | `audit:Citation/i18n`       |
-| RTL N/A          | `verified-not-applicable.json` source-hashed record                         | label and number stories; linked/inert source paths; icon/no-icon            | A direction-sensitive glyph, physical inline placement, ordering, scrolling, overlay, or horizontal keyboard behavior appears without RTL evidence.   | `audit:Citation/rtl`        |
-| All              | `Citation.stories.tsx`, component tests, typecheck, lint, and exact-head CI | all documented variants and representative source states                     | A required state becomes unreachable or gains a build, accessibility, visual, or test regression.                                                     | `audit:Citation/testing`    |
+| Contract         | Verification                                                            | Representative states                                                        | Mutation or failure expectation                                                                                                                                                                                                   | Audit section               |
+| ---------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| FR1–FR2, AR1–AR2 | `Citation.test.tsx` destination suites and `safeUrl.test.ts` matrix     | accepted, missing, blocked schemes, normalized blocked text                  | A blocked URL creates navigation, an accepted URL loses its destination or native affordances, or an inert reference loses its supported naming role when the caller supplies no `role`.                                          | `audit:Citation/navigation` |
+| FR3–FR4, AR3     | `Citation.test.tsx` variant and icon suites                             | label, number, no icon, node icon, `src`, legacy string icon                 | The wrong visible variant renders, icon precedence changes, or decorative source paint reaches the accessibility tree. Gap: no test covers the label's truncation. Gap: no test covers `src` winning over a legacy string `icon`. | `audit:Citation/behavior`   |
+| FR5              | `Citation.test.tsx` root-contract suite and strict type/lint validation | anchor and span roots with ref, DOM props, class, inline style, and `xstyle` | Either root drops supported passthrough or ref behavior. Gap: the root-contract test asserts that the component's role and name replace a caller's `role` and `aria-label`, which pins the FR5 gap.                               | `audit:Citation/api`        |
+| FR6              | `Citation.test.tsx` class-name tests; `themingTargets.test.ts`          | linked and inert roots; both variants                                        | The root target disappearing from the class-name tests fails. `themingTargets.test.ts` catches only a renamed or undocumented target. Gap: no test asserts the `variant` reflection on the target.                                | `audit:Citation/theming`    |
+| FR7              | `Citation.test.tsx` accessible-name assertions                          | linked label and number                                                      | A name that loses the source or number context fails. Gap: no test runs a non-English catalog, so text that bypasses translation passes.                                                                                          | `audit:Citation/i18n`       |
+| RTL N/A          | `verified-not-applicable.json` source-hashed record                     | label and number stories; linked/inert source paths; icon/no-icon            | A direction-sensitive glyph, physical inline placement, ordering, scrolling, overlay, or horizontal keyboard behavior appears without RTL evidence.                                                                               | `audit:Citation/rtl`        |
+| All              | `Citation.stories.tsx`; stable visual baseline `core-citation--label`   | Documented variants and source states                                        | A changed label citation comes back changed for review.                                                                                                                                                                           | `audit:Citation/testing`    |
+| AR4, PR1, PR2    | Source review                                                           | Linked and inert roots; image icon                                           | Gap: no automated check fails if Citation adds a focus owner to the inert span, state, an effect, or a listener, or emits more than one source image.                                                                             | `audit:Citation/behavior`   |
 
 ## Decision log
 
@@ -172,7 +185,7 @@ Reconsider this mechanism if a supported platform primitive can name inert inlin
 
 ## Open questions
 
-None. This observational draft does not decide a general resource URL policy or add a component-local theming surface.
+None.
 
 ## Content boundary
 

@@ -19,7 +19,7 @@
 import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 
 import {
   colorVars,
@@ -28,11 +28,12 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
-import {Tooltip} from '../Tooltip';
-import {useTranslator} from '../i18n';
+import {Icon, renderIconSlot} from '../Icon/Icon';
+import type {IconType} from '../Icon';
+import {Tooltip} from '../Tooltip/Tooltip';
+import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
-import {useInputContainer} from '../hooks';
+import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 
 const styles = stylex.create({

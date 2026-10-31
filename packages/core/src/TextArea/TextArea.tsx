@@ -47,6 +47,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
@@ -417,6 +418,7 @@ export function TextArea({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextAreaProps) {
   const {rest, container} = useFieldInputStyling('TextArea', restProps, {
@@ -430,6 +432,7 @@ export function TextArea({
   const announce = useAnnounce();
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
   const counterID = useId();
@@ -572,6 +575,7 @@ export function TextArea({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -644,6 +648,13 @@ export function TextArea({
           spellCheck={hasSpellCheck}
           autoFocus={hasAutoFocus}
           data-autofocus={hasAutoFocus || undefined}
+          // A caller aria-labelledby names the textarea together with the
+          // field's own label, which it would otherwise replace.
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(fieldLabelID, ariaLabelledByProp)
+              : undefined
+          }
           aria-describedby={
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
@@ -696,7 +707,10 @@ export function TextArea({
               // live-region announcement carry the meaning.
               <Icon icon="warning" size="sm" />
             )}
-            {valueLength}/{maxLength}
+            {t('@astryx.textArea.counter', {
+              count: valueLength,
+              limit: maxLength,
+            })}
           </div>
         )}
       </div>

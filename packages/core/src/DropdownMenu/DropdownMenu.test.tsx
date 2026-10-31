@@ -30,6 +30,7 @@ import {DropdownMenuGroup} from './DropdownMenuGroup';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -125,6 +126,47 @@ describe('DropdownMenu', () => {
     expect(
       document.querySelector('[aria-modal="true"]'),
     ).not.toBeInTheDocument();
+  });
+
+  it("forwards the button's ref object to the popover trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's ref object to the bottom-sheet trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's callback ref to the bottom-sheet trigger", () => {
+    const ref = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref).toHaveBeenCalledWith(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
   });
 
   it('renders data-driven actions in a bottom sheet when requested', async () => {
@@ -1777,6 +1819,49 @@ describe('DropdownMenuGroup (compound mode)', () => {
     );
     expect(ref).toHaveBeenCalledWith(
       screen.getByRole('group', {name: 'T', hidden: true}),
+    );
+  });
+
+  it('forwards host attributes to the group while keeping its role and heading name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuGroup
+          title="Version history"
+          id="history-group"
+          data-testid="history"
+          data-analytics-id="menu-history"
+          aria-describedby="history-hint"
+          aria-labelledby="elsewhere"
+          // @ts-expect-error role is component-owned
+          role="presentation">
+          <DropdownMenuItem label="Restore" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('history');
+    expect(group).toHaveAttribute('data-analytics-id', 'menu-history');
+    expect(group).toHaveAttribute('id', 'history-group');
+    expect(group).toHaveAttribute('aria-describedby', 'history-hint');
+    expect(group).toHaveAttribute('role', 'group');
+    // The visible title keeps naming the group.
+    expect(
+      screen.getByRole('group', {name: 'Version history', hidden: true}),
+    ).toBe(group);
+  });
+
+  it('an untitled group takes a caller-supplied accessible name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <span id="recent-label">Recent</span>
+        <DropdownMenuGroup aria-labelledby="recent-label" data-testid="recent">
+          <DropdownMenuItem label="Only" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('recent');
+    expect(group).toHaveAttribute('aria-labelledby', 'recent-label');
+    expect(screen.getByRole('group', {name: 'Recent', hidden: true})).toBe(
+      group,
     );
   });
 });
@@ -4293,5 +4378,121 @@ describe('DropdownMenu header and footer', () => {
     expect(
       bug.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe('DropdownMenu trigger refs across renders', () => {
+  // A ref that is a new function on every render makes React call it again on
+  // every commit (with null, then the element). Each call moved the menu's
+  // anchor off the trigger and back, rewriting the trigger's style and
+  // reordering its anchor names whenever a tooltip anchors there too.
+  function watchStyleWrites(element: HTMLElement) {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(element, {attributes: true, attributeFilter: ['style']});
+    return () => {
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+      return records.length;
+    };
+  }
+
+  const anchorNames = (element: HTMLElement) =>
+    element.style.getPropertyValue('anchor-name');
+
+  it('hands renderTrigger the same ref on every render, so a render leaves the trigger and its tooltip anchor alone', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <Tooltip content="More actions">
+                <button type="button" {...props}>
+                  Menu {count}
+                </button>
+              </Tooltip>
+            );
+          }}>
+          <DropdownMenuItem label="Profile" onClick={() => {}} />
+        </DropdownMenu>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Menu/});
+    const before = anchorNames(trigger);
+    // The menu's anchor and the tooltip's, on one element.
+    expect(before.split(',')).toHaveLength(2);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
+  });
+
+  it('leaves the default trigger and its tooltip anchor alone on a render', () => {
+    function Menu({count}: {count: number}) {
+      return (
+        <>
+          <output>{count}</output>
+          <DropdownMenu
+            button={{label: 'Actions', tooltip: 'More actions'}}
+            onOpenChange={() => {}}>
+            <DropdownMenuItem label="Profile" onClick={() => {}} />
+          </DropdownMenu>
+        </>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    const before = anchorNames(trigger);
+    expect(before.split(',')).toHaveLength(2);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+  });
+
+  it('still hands the default trigger to a ref the caller passes', () => {
+    const buttonRef = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu button={{label: 'Actions', ref: buttonRef}}>
+        <DropdownMenuItem label="Profile" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    expect(buttonRef.current).toBe(
+      screen.getByRole('button', {name: 'Actions'}),
+    );
+  });
+
+  it('hands the bottom-sheet trigger the same ref on every render', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          presentation="bottom-sheet"
+          items={[{label: 'Profile'}]}
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <button type="button" {...props}>
+                Menu {count}
+              </button>
+            );
+          }}
+        />
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    rerender(<Menu count={1} />);
+
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
   });
 });

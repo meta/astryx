@@ -35,6 +35,17 @@ export function useNavHeadingCloseContext(): NavHeadingCloseContextValue | null 
 }
 
 /**
+ * Internal (not exported from the NavMenu entry): the dismissal a nav heading
+ * popover gives its menu when its items do not close it on selection (an
+ * expanded SideNavHeading, FR7). NavHeadingMenu calls it for a mouse released
+ * outside, never on an item's selection.
+ */
+export const NavHeadingDismissContext = createContext<{
+  dismiss: () => void;
+} | null>(null);
+NavHeadingDismissContext.displayName = 'NavHeadingDismissContext';
+
+/**
  * Size and close context provided by NavHeadingMenu to its children.
  * Items read this for consistent padding and dismiss-on-click.
  */

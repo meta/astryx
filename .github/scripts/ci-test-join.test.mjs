@@ -9,14 +9,14 @@ import {describe, expect, it} from 'vitest';
 
 const script = path.join(import.meta.dirname, 'ci-test-join.mjs');
 const broad = {
-  CHECK_SCOPE_RESULT: 'success',
   DOCSITE_ONLY: 'false',
   SPEC_ONLY: 'false',
   TOOLING_ONLY: 'false',
+  RELEASE_BUMP: 'false',
+  RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
   TEST_NODE_RESULT: 'success',
   TEST_BUILD_RESULT: 'success',
-  REGISTRY_CONTRACT_RESULT: 'success',
   TEST_NATIVE_SWIFT_RESULT: 'success',
   PR_INTERACTION_RESULT: 'success',
 };
@@ -49,7 +49,6 @@ describe('pull-request test join', () => {
       ['TEST_UI_RESULT', 'failure'],
       ['TEST_NODE_RESULT', 'cancelled'],
       ['TEST_BUILD_RESULT', 'skipped'],
-      ['REGISTRY_CONTRACT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'skipped'],
       ['PR_INTERACTION_RESULT', 'failure'],
@@ -62,24 +61,31 @@ describe('pull-request test join', () => {
   });
 
   it.each(['DOCSITE_ONLY', 'SPEC_ONLY', 'TOOLING_ONLY'])(
-    'accepts a skipped Build owner only for %s',
+    'still requires every owner to report success for %s, since each skips its own work',
     scope => {
+      expect(run({[scope]: 'true'})).toMatchObject({status: 0});
       expect(
         run({[scope]: 'true', TEST_BUILD_RESULT: 'skipped'}),
-      ).toMatchObject({status: 0});
-      expect(
-        run({[scope]: 'true', TEST_BUILD_RESULT: 'success'}),
       ).toMatchObject({status: 1});
     },
   );
 
-  it('fails closed when classification failed or omitted', () => {
-    expect(
-      run({CHECK_SCOPE_RESULT: 'failure', TEST_BUILD_RESULT: 'skipped'}),
-    ).toMatchObject({status: 1});
-    expect(
-      run({CHECK_SCOPE_RESULT: '', TEST_BUILD_RESULT: 'skipped'}),
-    ).toMatchObject({status: 1});
+  it('requires the release bump only on a release-branch pull request', () => {
+    const release = {
+      RELEASE_BUMP: 'true',
+      SPEC_ONLY: 'true',
+      TOOLING_ONLY: 'true',
+    };
+    expect(run({...release, RELEASE_BUMP_RESULT: 'success'})).toMatchObject({
+      status: 0,
+    });
+    for (const result of ['failure', 'skipped', 'cancelled', null]) {
+      expect(
+        run({...release, RELEASE_BUMP_RESULT: result}),
+        String(result),
+      ).toMatchObject({status: 1});
+    }
+    expect(run({RELEASE_BUMP_RESULT: 'success'})).toMatchObject({status: 1});
   });
 
   it('rejects missing or invalid scope decisions', () => {

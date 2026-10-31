@@ -3,20 +3,20 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:DropdownMenuSubMenu
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility, theming, layout, testing]
 verified_by:
   [
     packages/core/src/DropdownMenu/DropdownMenuSubMenu.test.tsx,
+    packages/core/src/__tests__/BusyOwnerAnnouncement.test.tsx,
     packages/core/src/DropdownMenu/__tests__/SubMenuHeaderFooter.a11y.chromium.spec.ts,
     packages/core/src/DropdownMenu/__tests__/DropdownMenuDrillIn.a11y.chromium.spec.ts,
     packages/core/src/DropdownMenu/__tests__/DropdownMenuSubMenuAudit.a11y.chromium.spec.ts,
-    apps/storybook/stories/DropdownMenuSubMenu.stories.tsx,
     apps/storybook/rtl-audit/targets.json,
     scripts/check-knowledge.mjs,
   ]
@@ -33,7 +33,7 @@ architecture:
     architecture:react-component-runtime,
   ]
 contributing: []
-system_specs: [spec:AST-020, spec:AST-029, spec:AST-086]
+system_specs: [spec:AST-020, spec:AST-086]
 ---
 
 # DropdownMenuSubMenu component contract
@@ -46,9 +46,9 @@ system_specs: [spec:AST-020, spec:AST-029, spec:AST-086]
 | Behavior                | The row reveals its children as a flyout beside it or as a drilled-in view led by a Back row; with a header or footer that surface is a modal dialog named by the row.                                         |
 | End-user impact         | Pointer, keyboard, and touch users reach nested commands from one row; assistive technology hears the row's popup kind and expanded state, and Escape or the close arrow returns to the row.                   |
 | Builder impact          | Place the row inside a DropdownMenu or ContextMenu and give it a label and rows; data-driven menus get it from a nested `items` array.                                                                         |
-| Compatibility/readiness | Released subcomponent; observational draft of current behavior. Authority stays `draft` until owner approval.                                                                                                  |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                                                                      |
 | Review checks           | Reject a second keyboard owner, a lost popup state, a flyout that does not flip under RTL, a disabled row that opens, dropped caller inputs, or an open callback that misses a transition.                     |
-| Governing rules         | WAI-ARIA menu pattern; `architecture:public-component-api/INV5–INV8`; `architecture:react-component-runtime/INV2`; `architecture:layer-runtime`; `spec:AST-020/FR1,FR2`; `spec:AST-086/FR8`.                   |
+| Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api/INV5–INV8`; `architecture:react-component-runtime/INV2`; `architecture:layer-runtime`; `spec:AST-020/FR1,FR2`; `spec:AST-086/FR8`.                     |
 
 This table is a review projection; the body below is authoritative.
 
@@ -66,7 +66,8 @@ host that a sub-menu with a header or footer renders into.
 
 - Released default preserved: yes (`isDisabled=false`, `hasSpinner=false`,
   `presentation='adaptive'`).
-- Compatibility class: no public API change.
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change.
 - Controlled behavior: the open state is internal; `onOpenChange` reports it.
 - Migration decision: none.
 
@@ -107,20 +108,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                                                          | Basis                                                             | Draft review state                                                                                       |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| FR1 | The row MUST expose `role="menuitem"`, `aria-haspopup="menu"` (`"dialog"` with a header or footer), `aria-expanded` matching its surface, and `aria-controls` naming the surface while open. The surface MUST be labelled by the row.                                        | WAI-ARIA menu pattern; current source and focused tests           | verify                                                                                                   |
-| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) MUST open the surface; a keyboard open MUST focus its first row. Escape or the close arrow MUST close only this level and return focus to the row. A hover MUST open a flyout after an intent delay. | WAI-ARIA menu pattern; `architecture:interaction-modality`; tests | verify                                                                                                   |
-| FR3 | A flyout MUST sit beside the row on the inline-end side, flip with direction, and stay within the viewport; its block size MUST cap at the smaller of its own cap and the viewport.                                                                                          | `architecture:layer-runtime`; current source and browser evidence | verify                                                                                                   |
-| FR4 | A drilled-in view MUST replace the root's rows with a Back row named after the parent menu and then this row's children; Back, Escape, and the close arrow MUST return to the row.                                                                                           | Current source and focused tests                                  | verify                                                                                                   |
-| FR5 | Selecting a leaf row inside the surface MUST close every level and the root menu.                                                                                                                                                                                            | Current source, focused tests, and browser evidence               | verify                                                                                                   |
-| FR6 | `onOpenChange` MUST report `true` once when the surface opens and `false` once when it closes, from the action that caused the change.                                                                                                                                       | Documented promise; `architecture:react-component-runtime/INV2`   | objective gap: a drilled-in view reset by the root menu closing reports no `false` (owner: DropdownMenu) |
-| FR7 | A disabled row MUST expose `aria-disabled="true"`, render no `tabindex`, take no hover focus, open on no input, and run no caller `onClick`.                                                                                                                                 | Current source, focused tests, and browser evidence               | verify                                                                                                   |
-| FR8 | With `hasSpinner` the row MUST show a decorative spinner in place of the caret and announce the busy start once the root menu shows.                                                                                                                                         | `spec:AST-086/FR8`; current source                                | verify                                                                                                   |
-| FR9 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` MUST reach or compose on the row root after the row's own behavior; the open keys and a disabled click stop before the caller's handler.                                                     | `architecture:public-component-api/INV5–INV8`; focused tests      | verify                                                                                                   |
+| ID  | Invariant                                                                                                                                                                                                                                                      | Basis                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| FR1 | The row exposes `role="menuitem"`, `aria-haspopup="menu"` (`"dialog"` with a header or footer), `aria-expanded` matching its surface, and `aria-controls` naming the surface while open. The surface is labelled by the row.                                   | `spec:AST-020`; current source and tests                           |
+| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) opens the surface; a keyboard open focuses its first row. Escape or the close arrow closes only this level and returns focus to the row. A hover opens a flyout after an intent delay. | `spec:AST-020`; `architecture:interaction-modality`; current tests |
+| FR3 | A flyout sits beside the row on the inline-end side, flips with direction, and stays within the viewport; its block size caps at the smaller of its own cap and the viewport.                                                                                  | `architecture:layer-runtime`; current source                       |
+| FR4 | A drilled-in view replaces the root's rows with a Back row named after the parent menu and then this row's children; Back, Escape, and the close arrow return to the row.                                                                                      | Current source and focused tests                                   |
+| FR5 | Selecting a leaf row inside the surface closes every level and the root menu.                                                                                                                                                                                  | Current source and tests                                           |
+| FR6 | `onOpenChange` MUST report `true` once when the surface opens and `false` once when it closes, from the action that caused the change. Implementation gap: a drilled-in view reset by the root menu closing reports no `false` (OQ1).                          | Documented promise; `architecture:react-component-runtime` INV2    |
+| FR7 | A disabled row exposes `aria-disabled="true"`, renders no `tabindex`, takes no hover focus, opens on no input, and runs no caller `onClick`.                                                                                                                   | Current source and tests                                           |
+| FR8 | With `hasSpinner` the row shows a decorative spinner in place of the caret and announces the busy start once the root menu shows.                                                                                                                              | `spec:AST-086` FR8; current source and tests                       |
+| FR9 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root after the row's own behavior; the open keys and a disabled click stop before the caller's handler.                                            | `architecture:public-component-api` INV5–INV8; current tests       |
 
 ### Allowed variation
 
@@ -164,12 +162,10 @@ intentional decision.
   Escape; a deeper level's keys never act on its parent.
 - **AR3 — Disabled discoverability.** Whether disabled rows stay
   keyboard-discoverable is owned by `component:DropdownMenu` (its OQ1).
-- **AR4 — Focus visibility (objective gap).** Keyboard focus MUST be
-  perceivable (WCAG 2.2 SC 2.4.7 and 1.4.11). The row currently paints focus
-  only as the menu overlay tint with no outline, and paints nothing under
-  forced colors. The remediation is a shared row-visual decision with
-  `component:DropdownMenuItem` (its OQ2); this draft records the gap and does
-  not settle it.
+- **AR4 — Focus visibility.** Keyboard focus paints only the menu overlay
+  tint, about 1.1:1 against the menu surface in the default themes, with no
+  outline, and nothing under forced colors. The shared row
+  treatment is `component:DropdownMenuItem` OQ2.
 
 ## Design relationships
 
@@ -181,7 +177,7 @@ intentional decision.
 | Drilled view     | Rows inside the root's box, led by a mirrored Back row.       | Current source                   | structural     | FR4                |
 | Disabled         | Half-opacity row with a default cursor.                       | Current source                   | supporting     | FR7                |
 
-No new component-local visual decision is settled by this draft.
+No component-local visual decision is recorded.
 
 ## Family and system relationships
 
@@ -193,22 +189,33 @@ No new component-local visual decision is settled by this draft.
 - `architecture:public-component-api` owns root input and handler composition.
 - `architecture:react-component-runtime` owns callback timing.
 - `spec:AST-086` owns the loading announcement.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
 
 ## Verification map
 
-| Contract      | Verification                                                                  | Representative states               | Mutation or failure expectation                                                       | Audit section                         |
-| ------------- | ----------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------- |
-| FR1, FR2, AR2 | `DropdownMenuSubMenu.test.tsx` keyboard, hover, typeahead, and nesting suites | open, close, nested, loading        | A lost popup state, wrong focus target, or double-stepped level fails                 | `audit:DropdownMenuSubMenu/§1,§4,§6`  |
-| FR3           | RTL D4 flyout target; exact-head LTR/RTL/narrow open frames                   | LTR, RTL, 320px                     | A flyout on the wrong side or outside the viewport fails                              | `audit:DropdownMenuSubMenu/§5,§9,§10` |
-| FR4, FR5      | Drill-in and selection tests; exact-head drill-in and select frames           | drilled, nested selection           | A missing Back row or a stack that stays open fails                                   | `audit:DropdownMenuSubMenu/§4`        |
-| FR6           | onOpenChange test (mutation-sensitive); browser select-frame counters         | flyout open and close               | Dropping the close report fails; the drill-in reset gap is recorded, not asserted     | `audit:DropdownMenuSubMenu/§3,§4`     |
-| FR7, FR9      | Host-attribute, handler, and disabled tests; disabled-hover frames            | disabled, caller handlers, test ids | A disabled open or dropped caller input fails                                         | `audit:DropdownMenuSubMenu/§1,§3`     |
-| AR4           | Exact-head keyboard-focus and forced-colors frames with rendered contrast     | Neutral/Butter focus, forced colors | Current frames record the gap; a remediation passes only with a perceivable indicator | `audit:DropdownMenuSubMenu/§1,§5`     |
+| Contract | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Representative states                      | Mutation or failure expectation                                                                                                                                               | Audit section                             |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| FR1, AR1 | `DropdownMenuSubMenu.test.tsx` "renders the trigger with aria-haspopup and collapsed aria-expanded", "names the flyout from its trigger via aria-labelledby", "the row keeps its own popup state and tab stop"; header-and-footer case "holds the header, the rows and the footer in a dialog named by the row, outside every menu"                                                                                                                                                                                          | Closed and open; with regions              | A missing `aria-haspopup`, `aria-expanded`, or row label on the surface fails. Evidence gap: no test asserts `aria-controls` while open.                                      | `audit:DropdownMenuSubMenu/semantics`     |
+| FR2, AR2 | `DropdownMenuSubMenu.test.tsx` "opens the flyout on trigger click and exposes its items", "opens on ArrowRight and returns focus to the trigger on ArrowLeft", "mirrors its indicator and keyboard directions under RTL", "closes only the submenu on Escape and restores focus to the trigger", "supports first-character type-ahead within the flyout", "navigates a two-level nested submenu without double-stepping", "moves focus to the submenu trigger on hover, keeping a single highlight"; hover/click-guard cases | Click, arrows, RTL, Escape, hover, nesting | A key that does not open or close, a wrong focus target, a double-stepped level, or a reversed RTL arrow fails. Evidence gap: no test asserts Enter or Space opening the row. | `audit:DropdownMenuSubMenu/accessibility` |
+| FR3      | `DropdownMenuSubMenu.test.tsx` "caps the flyout width and height to the available viewport"; `apps/storybook/rtl-audit/targets.json` DropdownMenuSubMenu entry                                                                                                                                                                                                                                                                                                                                                               | Viewport cap; RTL                          | A flyout that escapes the viewport fails. Evidence gap: no test asserts the inline-end placement or its flip.                                                                 | `audit:DropdownMenuSubMenu/layout`        |
+| FR4      | `DropdownMenuSubMenu.test.tsx` drill-in cases; `DropdownMenuDrillIn.a11y.chromium.spec.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                   | Drilled view; Back                         | A missing Back row or a Back that does not return fails.                                                                                                                      | `audit:DropdownMenuSubMenu/behavior`      |
+| FR5      | `DropdownMenuSubMenu.test.tsx` "closes the whole menu after selecting a nested item" and "activates a nested item with the Enter key and closes the menu"                                                                                                                                                                                                                                                                                                                                                                    | Pointer and Enter                          | A level left open after a leaf pick fails.                                                                                                                                    | `audit:DropdownMenuSubMenu/behavior`      |
+| FR6      | `DropdownMenuSubMenu.test.tsx` "reports each flyout open and close to onOpenChange once"                                                                                                                                                                                                                                                                                                                                                                                                                                     | Flyout open and close                      | A missing or repeated report fails. Evidence gap: the drill-in reset gap is not asserted.                                                                                     | `audit:DropdownMenuSubMenu/behavior`      |
+| FR7, FR9 | `DropdownMenuSubMenu.test.tsx` "does not open a disabled submenu", "a disabled row does not pass a click on to the caller's onClick", host-attribute and ref cases ("aria-\*, data-\* and id reach the trigger row, and the flyout stays labelled by it", "a ref reaches the trigger row", "a caller's handlers run after the row's own, and the row still opens and takes the hover focus")                                                                                                                                 | Disabled; caller handlers and attributes   | A disabled open or caller click, or a dropped attribute, ref, or handler, fails. Evidence gap: no test asserts `className`, `style`, or `xstyle` on the row.                  | `audit:DropdownMenuSubMenu/api`           |
+| FR8      | `BusyOwnerAnnouncement.test.tsx` "DropdownMenuSubMenu loading state" cases; `DropdownMenuSubMenu.test.tsx` loading-flyout cases                                                                                                                                                                                                                                                                                                                                                                                              | Loading closed and open                    | A busy start announced while closed, twice, or not at all, or an announced Spinner, fails.                                                                                    | `audit:DropdownMenuSubMenu/accessibility` |
+| AR4, PR1 | Evidence gap: no test asserts the focus paint, forced-colors focus, or the timer bounds                                                                                                                                                                                                                                                                                                                                                                                                                                      | —                                          | —                                                                                                                                                                             | `audit:DropdownMenuSubMenu/visual`        |
+
+## Current-state impact
+
+- **Drill-in close report (FR6).** When the root menu closes a drilled-in view,
+  `onOpenChange(false)` does not run (OQ1).
+- **Focus visibility (AR4).** Keyboard focus on the row shows only an
+  overlay tint about 1.1:1 against the menu surface, and no indicator in
+  forced-colors mode; the shared row treatment is
+  `component:DropdownMenuItem` OQ2.
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision.
 
 ## Open questions
 
@@ -221,5 +228,4 @@ None. This draft records current facts and introduces no product decision.
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or root/leaf contracts. The audit
-pull request owns the closed run evidence required by `spec:AST-029/FR5`.
+screenshot matrices, implementation steps, or root/leaf contracts. It links to their owners.

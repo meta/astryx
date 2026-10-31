@@ -93,15 +93,15 @@ Membership follows public responsibility, not an import of Button or a rendered
 
 ## Canonical concepts
 
-| Concept          | Values or states                                                        | Default semantics                                                                                                                     | Stability                                           |
-| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| activation model | momentary action, navigation, persistent press                          | Button and IconButton activate once; ToggleButton represents retained pressed state                                                   | shipped distinction                                 |
-| content mode     | visible label, custom visible content, icon-only                        | every control has a required accessible `label`; icon-only hides it visually                                                          | shipped family rule                                 |
-| size             | `sm`, `md`, `lg`                                                        | `md`; explicit member size wins over an inherited group size                                                                          | shipped family axis                                 |
-| visual state     | rest, hover, focus, active, disabled, loading; pressed where applicable | states preserve control geometry and accessible purpose; under a finger, press feedback follows `spec:AST-094` FR11's control profile | shipped family rule                                 |
-| async action     | absent, fire-once, interruptible persistent action                      | ordinary actions deduplicate while pending; persistent toggles remain reversible                                                      | shipped family distinction                          |
-| elevation        | `none`, `low`, `med`, `high`                                            | `none`; the element painting the visible surface owns the shadow                                                                      | shipped family axis; ToggleButton adoption approved |
-| grouping         | standalone, spaced set, connected surface                               | semantics and painted containment decide ownership; grouping alone does not                                                           | family rule                                         |
+| Concept          | Values or states                                                        | Default semantics                                                                                                                                                                                                                                | Stability                                           |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| activation model | momentary action, navigation, persistent press                          | Button and IconButton activate once; ToggleButton represents retained pressed state                                                                                                                                                              | shipped distinction                                 |
+| content mode     | visible label, custom visible content, icon-only                        | every control has a required accessible `label`; icon-only hides it visually                                                                                                                                                                     | shipped family rule                                 |
+| size             | `sm`, `md`, `lg`                                                        | `md`; explicit member size wins over an inherited group size                                                                                                                                                                                     | shipped family axis                                 |
+| visual state     | rest, hover, focus, active, disabled, loading; pressed where applicable | states preserve control geometry and accessible purpose; press feedback follows `spec:AST-094` FR11's control profile under a finger and its fine-pointer profile under a mouse or a pen (not implemented: a mouse press still paints `:active`) | shipped family rule                                 |
+| async action     | absent, fire-once, interruptible persistent action                      | ordinary actions deduplicate while pending; persistent toggles remain reversible                                                                                                                                                                 | shipped family distinction                          |
+| elevation        | `none`, `low`, `med`, `high`                                            | `none`; the element painting the visible surface owns the shadow                                                                                                                                                                                 | shipped family axis; ToggleButton adoption approved |
+| grouping         | standalone, spaced set, connected surface                               | semantics and painted containment decide ownership; grouping alone does not                                                                                                                                                                      | family rule                                         |
 
 ## Cross-component invariants
 
@@ -161,7 +161,9 @@ Membership follows public responsibility, not an import of Button or a rendered
 - **FR11 — A button-specific group has one accessible owner.** ButtonGroup and
   ToggleButtonGroup MUST expose an accessible group label and propagate their
   documented size and disabled defaults without removing a member's accessible
-  name. The group owns only the behavior and surface declared by its group mode.
+  name. The group owns only the behavior and surface declared by its group
+  mode, and the press tracking across members that `family:action-groups`
+  gives it.
   A ToggleButtonGroup member identified by `value` MUST derive pressed state and
   selection requests from the group, not its standalone `isPressed`,
   `onPressedChange`, or `pressedChangeAction`. Member `onPressedChange` and

@@ -31,8 +31,14 @@ import {
   generateTypeScaleComponents,
   type TypeScaleConfig,
 } from './expandTypeScale';
-import {expandMotionScale, type MotionScaleConfig} from './expandMotionScale';
+import {
+  expandThemeMotion,
+  preTempoName,
+  type MotionCharacter,
+  type ThemeMotionConfig,
+} from './themeMotion';
 import {expandRadiusScale, type RadiusScaleConfig} from './expandRadiusScale';
+import {easeDefaults} from './tokens.stylex';
 import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
 import {deepMergeComponents} from './mergeComponents';
 
@@ -54,8 +60,8 @@ export interface ThemeValuesInput {
   color?: ColorScaleConfig;
   /** Radius scale configuration. */
   radius?: RadiusScaleConfig;
-  /** Motion scale configuration. */
-  motion?: MotionScaleConfig;
+  /** Motion: the three knobs, a motion scale configuration, or both. */
+  motion?: ThemeMotionConfig;
   /** Syntax highlighting theme. */
   syntax?: SyntaxThemeDefinition;
   /** Explicit token overrides — highest precedence. */
@@ -271,7 +277,20 @@ export function buildFontFamilyTokens(
 export function resolveThemeValues(
   input: ThemeValuesInput,
   seed?: ThemeValuesSeed,
-  {strictTokens = false}: {strictTokens?: boolean} = {},
+  {
+    strictTokens = false,
+    inheritedCharacter,
+    standardBeneath,
+  }: {
+    strictTokens?: boolean;
+    /**
+     * The motion character in effect beneath this layer, from a base theme or
+     * the theme an adaptation rule belongs to, for a layer that sets none.
+     */
+    inheritedCharacter?: MotionCharacter;
+    /** The --ease-standard beneath a layer resolved without a seed: a rule's theme's. */
+    standardBeneath?: string;
+  } = {},
 ): ResolvedThemeValues {
   const tokens: Record<string, string> = {...seed?.tokens};
 
@@ -293,9 +312,19 @@ export function resolveThemeValues(
     Object.assign(tokens, expandRadiusScale(input.radius));
   }
 
-  // 4. Motion-generated tokens
+  // 4. Motion-generated tokens (spec:AST-108 FR2, FR5). A layer that writes
+  // durations also writes the copies busy loops read (FR4), so an enclosing
+  // theme's tempo copies never stand in for its own: without a tempo of its
+  // own, they are its durations.
   if (input.motion) {
-    Object.assign(tokens, expandMotionScale(input.motion));
+    const motion = expandThemeMotion(input.motion);
+    Object.assign(tokens, motion);
+    for (const [name, value] of Object.entries(motion)) {
+      const preTempo = preTempoName(name);
+      if (preTempo !== name && !(preTempo in motion)) {
+        tokens[preTempo] = value;
+      }
+    }
   }
 
   // 5. Font family tokens
@@ -314,9 +343,42 @@ export function resolveThemeValues(
   // 7. Explicit token overrides — highest precedence within this input layer.
   // A generated axis in the same root or adaptation value cannot beat them.
   if (input.tokens) {
+    const own = input.tokens as Partial<Record<string, TokenValue>>;
     for (const [key, value] of Object.entries(input.tokens)) {
       if (value !== undefined) {
         tokens[key] = resolveTokenValue(value, {strict: strictTokens});
+        // An explicit duration beats tempo, so a busy loop reading the
+        // pre-tempo value reads it too (spec:AST-108 FR4).
+        const preTempo = preTempoName(key);
+        if (preTempo !== key && own[preTempo] === undefined) {
+          tokens[preTempo] = tokens[key];
+        }
+      }
+    }
+  }
+
+  // At 'standard', --ease-entrance and --ease-move equal the resolved
+  // --ease-standard (spec:AST-108 FR2): the layer's own, else the one beneath
+  // it. A layer that sets them itself, or whose character, its own or the one
+  // it inherits, picks its own curve, keeps them.
+  const own: Partial<Record<string, TokenValue>> = input.tokens ?? {};
+  const ownCharacter =
+    input.motion != null && 'character' in input.motion
+      ? input.motion.character
+      : undefined;
+  const character = ownCharacter ?? inheritedCharacter;
+  if (
+    ownCharacter === 'standard' ||
+    (own['--ease-standard'] !== undefined &&
+      (character === undefined || character === 'standard'))
+  ) {
+    const standard =
+      tokens['--ease-standard'] ??
+      standardBeneath ??
+      easeDefaults['--ease-standard'];
+    for (const name of ['--ease-entrance', '--ease-move']) {
+      if (own[name] === undefined) {
+        tokens[name] = standard;
       }
     }
   }

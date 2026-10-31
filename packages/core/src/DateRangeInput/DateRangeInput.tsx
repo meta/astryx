@@ -851,18 +851,22 @@ export function DateRangeInput({
               })}
             </div>
           )}
-          <Calendar
-            mode="range"
-            value={optimisticValue}
-            onChange={handleRangeSelect}
-            min={min}
-            max={max}
-            dateConstraints={dateConstraints}
-            maxRangeSpan={maxRangeSpan}
-            minRangeSpan={minRangeSpan}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />
+          {/* The layer renders its children open or closed, so mount the
+              calendar only while it is open. */}
+          {popover.isOpen && (
+            <Calendar
+              mode="range"
+              value={optimisticValue}
+              onChange={handleRangeSelect}
+              min={min}
+              max={max}
+              dateConstraints={dateConstraints}
+              maxRangeSpan={maxRangeSpan}
+              minRangeSpan={minRangeSpan}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          )}
         </div>,
         {placement: 'below', alignment: 'start'},
       )}

@@ -440,10 +440,19 @@ describe('a standalone BottomSheet is one more layer', () => {
   }
 
   beforeEach(() => {
+    // A non-modal sheet is a manual popover in the top layer (show() below
+    // the Popover API floor); jsdom's stand-ins keep the `open` marker the
+    // census reads.
     HTMLDialogElement.prototype.show = vi.fn(function (
       this: HTMLDialogElement,
     ) {
       this.setAttribute('open', '');
+    });
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      this.setAttribute('open', '');
+    });
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      this.removeAttribute('open');
     });
   });
 

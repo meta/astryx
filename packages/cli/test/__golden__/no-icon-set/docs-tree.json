@@ -904,6 +904,7 @@
       "available-names",
       "custom-icons",
       "theme-overrides",
+      "icon-variants",
       "component-and-library-icons"
     ],
     "mentions": [
@@ -1079,6 +1080,7 @@
       "movement-principles",
       "respecting-user-preferences",
       "usage",
+      "theme-motion",
       "best-practices"
     ],
     "mentions": []
@@ -1217,6 +1219,7 @@
     "sections": [
       "quick-start",
       "creating-a-custom-theme",
+      "icon-sizes",
       "light-dark-mode",
       "integration-themes"
     ],

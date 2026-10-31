@@ -28,6 +28,7 @@ import {
   act,
   within,
   cleanup,
+  renderHook,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
@@ -1221,6 +1222,46 @@ describe('Popover', () => {
       fireEvent.keyDown(secondDocument, {key: 'Escape'});
       expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
     });
+
+    it('re-measures its overflow when its own window resizes', () => {
+      const {trigger, surface} = renderInSecondDocument();
+      const secondWindow = secondDocument.defaultView!;
+      const frames: FrameRequestCallback[] = [];
+      const requestFrame = vi
+        .spyOn(secondWindow, 'requestAnimationFrame')
+        .mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+      const runFrames = () =>
+        act(() => frames.splice(0).forEach(callback => callback(0)));
+      fireEvent.click(trigger, {detail: 1});
+      runFrames();
+      expect(surface.className).not.toContain(
+        'Popover__styles.surfaceScrollable',
+      );
+
+      // The window the Popover renders in gets too short for its content.
+      const {prototype} = secondWindow.HTMLElement;
+      const sizes = [
+        vi.spyOn(prototype, 'clientHeight', 'get').mockReturnValue(100),
+        vi.spyOn(prototype, 'scrollHeight', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'clientWidth', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'scrollWidth', 'get').mockReturnValue(200),
+      ];
+      try {
+        act(() => {
+          secondWindow.dispatchEvent(new secondWindow.Event('resize'));
+        });
+        runFrames();
+        expect(surface.className).toContain(
+          'Popover__styles.surfaceScrollable',
+        );
+      } finally {
+        sizes.forEach(size => size.mockRestore());
+        requestFrame.mockRestore();
+      }
+    });
   });
 
   describe('surface padding', () => {
@@ -1325,5 +1366,143 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover focus region (DEC-9)', () => {
+  function Page({isModal}: {isModal: boolean}) {
+    return (
+      <div>
+        <Popover
+          isModal={isModal}
+          hasCloseButton={false}
+          label="Details"
+          content={
+            <>
+              <button type="button">First inside</button>
+              <button type="button">Last inside</button>
+            </>
+          }>
+          <button type="button">Open details</button>
+        </Popover>
+        <button type="button">Elsewhere 1</button>
+        <button type="button">Elsewhere 2</button>
+      </div>
+    );
+  }
+
+  async function openDetails() {
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+    // A pointer press focuses the trigger before its click opens the popover.
+    trigger.focus();
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'First inside', hidden: true}),
+      ).toHaveFocus(),
+    );
+  }
+
+  describe.each([
+    ['non-modal', false],
+    ['modal', true],
+  ])('%s', (_name, isModal) => {
+    it('leaves a Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 1'}).focus();
+      await user.tab();
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 2'})).toHaveFocus();
+    });
+
+    it('leaves a Shift+Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 2'}).focus();
+      await user.tab({shift: true});
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
+    });
+
+    it('cycles Tab and Shift+Tab inside the open popover', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+      const first = screen.getByRole('button', {
+        name: 'First inside',
+        hidden: true,
+      });
+      const last = screen.getByRole('button', {
+        name: 'Last inside',
+        hidden: true,
+      });
+
+      await user.tab();
+      expect(last).toHaveFocus();
+      await user.tab();
+      expect(first).toHaveFocus();
+      await user.tab({shift: true});
+      expect(last).toHaveFocus();
+    });
+
+    it('closes on Escape from inside and returns focus to the trigger', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      await user.keyboard('{Escape}');
+
+      const trigger = screen.getByRole('button', {name: 'Open details'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+  });
+});
+
+describe('usePopover trigger ref', () => {
+  // The layer object changes whenever onShow or onHide does. A trigger ref
+  // that changed with it made React detach and reattach the trigger on every
+  // render of a caller that passes inline callbacks.
+  it('stays the same function when onShow and onHide change across renders', () => {
+    const {result, rerender} = renderHook(
+      ({onShow, onHide}: {onShow: () => void; onHide: () => void}) =>
+        usePopover({onShow, onHide}),
+      {initialProps: {onShow: () => {}, onHide: () => {}}},
+    );
+    const first = result.current.triggerRef;
+
+    rerender({onShow: () => {}, onHide: () => {}});
+
+    expect(result.current.triggerRef).toBe(first);
+  });
+
+  it('leaves the trigger style alone on a render with new callbacks', () => {
+    function Trigger({count}: {count: number}) {
+      const popover = usePopover({onShow: () => {}, onHide: () => {}});
+      return (
+        <button type="button" ref={popover.triggerRef}>
+          Open {count}
+        </button>
+      );
+    }
+    const {rerender} = render(<Trigger count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Open/});
+    const anchorName = trigger.style.getPropertyValue('anchor-name');
+    expect(anchorName).toMatch(/^--astryx-layer-/);
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(trigger, {attributes: true, attributeFilter: ['style']});
+
+    rerender(<Trigger count={1} />);
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+
+    expect(records).toHaveLength(0);
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe(anchorName);
   });
 });

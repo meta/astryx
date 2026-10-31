@@ -51,6 +51,10 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {Icon} from '../Icon';
 import {usePopover} from '../Popover/usePopover';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -552,6 +556,15 @@ function BreadcrumbMenuTrigger({
     onEscape: closeMenu,
   });
 
+  // A press that slides across the menu's items acts on the item it lifts on,
+  // the highlight following the pointer, as DropdownMenu's does
+  // (`family:action-groups` FR1-FR3, FR5); a mouse released outside closes it.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+  });
+
   const typeahead = useTypeahead({
     getItemLabels: () => getMenuItems().map(el => el.textContent),
     onMatch: focusItem,
@@ -625,6 +638,7 @@ function BreadcrumbMenuTrigger({
   );
 
   const menuContent = Array.isArray(menu) ? renderDropdownItems(menu) : menu;
+  const hasOverflow = useMenuOverflow(listRef, menuContent, popover.isOpen);
 
   return (
     <>
@@ -673,10 +687,20 @@ function BreadcrumbMenuTrigger({
           id={menuId}
           role="menu"
           aria-labelledby={triggerId}
+          {...menuPress.menuProps}
+          onPointerDown={pressOnItemsOnly(
+            menuPress.menuProps.onPointerDown,
+            MENU_ITEM_SELECTOR,
+          )}
           onKeyDown={listKeyDown}
           {...mergeProps(
             themeProps('breadcrumb-menu'),
-            stylex.props(menuStyles.menu),
+            stylex.props(
+              menuStyles.menu,
+              hasOverflow
+                ? menuTouchActionStyles.scrolls
+                : menuTouchActionStyles.fits,
+            ),
           )}>
           <DropdownMenuContext value={contextValue}>
             <DropdownMenuRootOpenContext value={popover.isOpen}>

@@ -57,3 +57,37 @@ describe('Slider range mode prop targets', () => {
     expect(onPointerDown).toHaveBeenCalledOnce();
   });
 });
+
+describe("Slider keeps a caller's aria-labelledby", () => {
+  it('names the thumb by its label and then the caller ids', () => {
+    render(
+      <>
+        <span id="caller-name">Speaker</span>
+        <Slider
+          label="Volume"
+          value={50}
+          onChange={() => {}}
+          aria-labelledby="caller-name"
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('slider', {name: 'Volume Speaker'}),
+    ).toBeInTheDocument();
+  });
+
+  it('names the range group by its label and then the caller ids', () => {
+    render(
+      <>
+        <span id="caller-name">USD</span>
+        <Slider
+          label="Price"
+          value={[20, 80]}
+          onChange={() => {}}
+          aria-labelledby="caller-name"
+        />
+      </>,
+    );
+    expect(screen.getByRole('group', {name: 'Price USD'})).toBeInTheDocument();
+  });
+});

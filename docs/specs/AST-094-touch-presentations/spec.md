@@ -42,10 +42,11 @@ a measured, sourced difference exists.
 
 ## Non-goals
 
-- Pointer (desktop) presentations. Their timing and easing stay with the
-  theme's duration and easing tokens (`architecture:theme-tokens`).
+- Pointer (desktop) presentations' timing and easing, which stay with the
+  theme's duration and easing tokens (`architecture:theme-tokens`). Gestures
+  and press tracking themselves apply to every pointer (FR43).
 - Platform-matched look and feel: glass versus material surfaces, glyphs and
-  chrome. This record governs behavior only.
+  chrome. This record governs behavior, and touch sizing only as FR42 states.
 - WebKit embedded in a native app and the native Swift package. This record
   governs the web components themselves.
 - Scroll physics. Scrolling stays native on every platform: on iOS an overflow
@@ -64,8 +65,8 @@ a measured, sourced difference exists.
   deceleration rate, rubber-band coefficient, gesture threshold and haptic
   moment a touch presentation uses MUST default to the measured native value
   for that use (FR2), and every component that plays the same motion or
-  gesture MUST use the same value; once the roles are public, a theme MAY
-  override a motion role (FR4).
+  gesture MUST use the same value; a theme reaches the roles only
+  through its motion knobs (FR4, DEC-15).
   No component uses a value of its own where a measured value exists. The same
   values apply on every touch platform; a platform gets a value of its own only
   where a measured, sourced difference exists (FR2).
@@ -106,18 +107,26 @@ a measured, sourced difference exists.
   touch presentation plays MUST be a motion role named for its use
   (`architecture:theme-tokens` INV3). The roles this record names are listed below with their defaults and
   sources; further roles a component's own record measures join through the
-  generated motion role table (DEC-5). The role's value is its
-  measured value (FR1, FR2). The roles are internal until the public
-  motion-token set is decided, so a theme cannot override them yet (DEC-11). A component MUST read touch motion through these roles
-  and MUST NOT play a literal. Once a role is public, a theme value MUST reach the motion at its
+  generated motion role table (DEC-5). With tempo 1 and character
+  standard, every role plays its measured value exactly (FR1, FR2); a theme's
+  tempo scales durations and its character offsets bounce through fixed
+  per-role weights (`spec:AST-108` FR3), and roles on the fixed list ignore
+  both: the on-screen keyboard (`spec:AST-099` FR8); gesture thresholds, the
+  content-touch delay, and momentum (`spec:AST-002` FR3); finger tracking, the
+  rubber band, the press model's onset delay, cancel distance, and tap flash
+  (`spec:AST-108` FR4), and busy loops; and the 200 ms Reduce Motion cap.
+  The per-role tables stay internal (DEC-15). A component MUST read touch motion through these roles
+  and MUST NOT play a literal. A theme's knob values MUST reach the motion at its
   start, without changing how the motion runs (FR5, FR6). Motion that
   must stay in step with the on-screen keyboard is not a theme role: it rides
   the keyboard's own motion (`spec:AST-099` FR8,
   `architecture:react-component-runtime` INV11). Gesture thresholds, the timings that decide who gets a touch (the
   content-touch delay, the scroll brake, momentum memory) and haptics are not
-  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3). When the public set is decided, its roles join the motion configuration of
-  `architecture:theme-authoring-contract` and `architecture:theme-tokens`,
-  whose rules are unchanged until then. It departs from the draft `design:motion` DR3
+  motion: they stay internal measured values and are not public concepts (`spec:AST-002` FR3),
+  except the `flickThreshold` a product passes to `spec:AST-107`'s snap-point
+  drag. The three knobs join the motion configuration of
+  `architecture:theme-authoring-contract` and `architecture:theme-tokens`
+  (`spec:AST-108`). It departs from the draft `design:motion` DR3
   wherever the native motion settles with an overshoot or stretches with a
   rubber band.
 
@@ -181,11 +190,18 @@ a measured, sourced difference exists.
   `module:DropdownMenu/useMenuPress` FR4: a second pointer or `pointercancel`
   ends its gesture with nothing acting, which keeps the page zoomable over an
   open menu.
-- **FR11 — Two press profiles.** Press feedback MUST follow one of two native
+- **FR11 — Three press profiles.** Press feedback MUST follow one of three
   profiles. A control (UIControl) highlights on touch-down outside scroll
   views and activates by the browser's click on a lift inside. On the web a
   control's press ends when the browser takes the touch (FR20), and its
-  activation stays the browser's click.
+  activation stays the browser's click, except that an action a
+  `family:action-groups` member tracks activates at the lift (FR26), and a toggle
+  under `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
+  CheckboxListItem) may also complete on a lift after the finger slid off.
+  Under a fine pointer a control uses a third profile with no delay: its
+  press paint starts at once on `pointerdown`, through the same press
+  controller and release fade as a finger's, in place of CSS `:active`; the
+  scroll brake stays touch-only (DEC-21).
   A cell (a table or collection cell) highlights 150 ms after touch-down inside
   a scroll view, drops the highlight when the scroll wins (FR20), and activates on a
   lift inside it with no scroll taking the touch (FR20). A control is inside a scroll view when it sits in a scrollable container,
@@ -197,9 +213,13 @@ a measured, sourced difference exists.
   DR4). On every touch platform this amends
   `design:user-states` DR1 (the pressed overlay during a hold) and DR3 (a held, selected SegmentedControl item keeps its raised selected
   surface; only its press timing follows the control profile) for touch
-  presentations, the press treatment of `family:buttons`, and the last sentence of
-  `module:DropdownMenu/useMenuPress` FR6 (menu rows paint `:active` only under
-  `(hover: hover)`): under a finger, menu rows take the cell profile. FR6's
+  presentations, the press treatment of `family:buttons`, and
+  `module:DropdownMenu/useMenuPress` FR6: under a finger, menu rows take the
+  cell profile. A menu whose
+  rows fit (`module:DropdownMenu/useMenuPress` FR4), so it cannot scroll,
+  gives its rows no 150 ms delay: they highlight on touch-down. A list that can
+  scroll keeps the delay. A press in a list that no scroll can claim stays
+  unclaimed, which FR19 allows (DEC-14). FR6's
   rule that at most one row of a menu is lit still holds, so a finger that
   slides from one row to another lights only the row under it.
 - **FR12 — Long press and rubber band are per use.** A long press MUST use the
@@ -235,7 +255,8 @@ a measured, sourced difference exists.
   taps) MUST be deadlines on that clock, so a blocked main thread delays the
   report and never the moment reported.
 - **FR17 — Native readings.** A recognizer's thresholds MUST follow UIKit's
-  measured values (FR1, FR2). A pan begins at 10 pt of travel on either axis,
+  measured values (FR1, FR2). A pan begins at 10 pt of travel on either axis (a
+  screen-edge pan attached to an element within the band at 15 px, FR18),
   and its translation excludes that travel. Release velocity is governed by `spec:AST-100`.
 - **FR18 — `touch-action` leaves the browser the rest.** An element with touch
   recognizers MUST get a `touch-action` that leaves the browser exactly what
@@ -245,24 +266,49 @@ a measured, sourced difference exists.
   unless a pinch or rotation recognizer is attached. The derived value is
   intersected with the element's own author `touch-action` and is never wider
   than it (DEC-8); when the author's value leaves out `pinch-zoom`, the
-  author's value wins.
-- **FR19 — Claims are made in time and only by an owner.** Recognizers attach only where the primary pointer
-  is coarse (FR13, DEC-6). Where the primary pointer is fine, no recognizer
-  attaches and no touch listener is registered (FR24), so a finger on a
-  touchscreen whose primary pointer is fine gets the browser's defaults for
-  this record's behaviors (`spec:AST-017` FR59, DEC-25). This rule governs
+  author's value wins. A screen-edge pan claims `pan-x` only for a touch that
+  lands in the edge band, 40.2 px wide at that edge (UIKit's measured edge
+  region on a 402 px wide screen; that it scales with the screen's width is a
+  guess until a second screen width measures it), and inside the band it
+  decides at 15 px of travel (UIKit's screen-edge hysteresis); outside the
+  band the author's scrolling is untouched, and FR19's 10 px governs every
+  other claim (DEC-13). The band's `pan-x` claim and 15 px start apply where the
+  screen-edge pan is attached to an element that lies within the band; on an
+  element that reaches beyond it, whose `touch-action` cannot claim per touch, a touch in the band
+  decides at FR19's 10 px like every other claim.
+- **FR19 — Claims are made in time and only by an owner.** Recognizers attach for every pointer, with FR43's
+  exceptions. This rule governs
   this record's behaviors only; `spec:AST-057` keeps its per-event pointer
-  read for the row swipe, as its record states. A recognizer that begins MUST claim its touches by cancelling
+  read for the row swipe, as its record states. A `family:action-groups` member
+  tracks its own group as FR24 allows: under a fine pointer it keeps one
+  `pointerdown` listener on the group element, cancelable where the member
+  needs it, adds document listeners only during a press, removed at the
+  release, and may arm one per-document click swallower from the release until
+  that gesture's click (DEC-17). A recognizer that begins MUST claim its touches by cancelling
   `touchmove` through a non-passive listener on its element; a watcher,
   which never claims, is exempt (DEC-7). A `touchmove` of a touch no recognizer owns MUST NOT be cancelled, with
-  two exceptions. While a scroll lock under a modal presentation holds the
+  four exceptions. While a scroll lock under a modal presentation holds the
   page, it MAY cancel the moves of a one-finger touch that no recognizer owns
   when that pan would scroll the page; a second finger is never cancelled
   (FR10), and the page keeps pinch-zoom. Once its press is delivered, a
   control that keeps its press through a drag (FR11) owns its touch and MAY
-  cancel that finger's moves. A
+  cancel that finger's moves. A scroll-edge pan, such as a sheet's pull
+  from a scroll area at its edge (FR14), MAY cancel its touch's moves from the
+  first move, only while every scroller under the finger sits at its edge and
+  the drag moves toward that edge (FR14), and only the moves the browser would
+  rubber-band, never a real scroll; the pan itself still begins at FR17's
+  10 pt, as UIKit's sheet pull does (DEC-18).
+  A recognizer that is cancelled while its touch is moving, other than by the
+  browser taking that touch (FR20), such as a long press dragged past its
+  tolerance after it began, keeps owning that touch until it lifts and MAY
+  cancel its moves, so the drag never becomes a page scroll midway (FR14); a
+  touch that is resting when its recognizer is cancelled, and every touch of a
+  recognizer that requires another to fail when that one recognizes, is given
+  back (FR10). A
   recognizer that competes with native scrolling MUST decide within 10 px of
-  travel, before the browser commits to the scroll. Only an element with a
+  travel, before the browser commits to the scroll; a screen-edge pan on an
+  element within its band, which leaves the browser no horizontal scroll,
+  decides within 15 px, and one on a wider element within 10 px (FR18). Only an element with a
   recognizer that must claim mid-gesture registers that blocking listener; an
   element whose recognizers decide only at the lift keeps its `touchmove`
   listener passive, and its `touchend` listener stays cancelable so the
@@ -271,12 +317,18 @@ a measured, sourced difference exists.
   That is never worse than UIKit, whose scrolling stops on a busy main thread,
   and a passive listener, or one added at `touchstart`, would hand diagonal
   drags to the scroll.
-- **FR20 — The browser can take a touch.** `pointercancel`, an uncancelable
-  `touchmove`, or a native scroll under the touch MUST count as the browser
-  taking the touch, a native scroll only once that finger has moved the scroll
-  take distance (FR2), so sub-pixel movement under a still finger does not
-  cancel a tap (DEC-8): possible recognizers that share it fail, active ones are
-  cancelled, and the view's press is cancelled without a release. A recognizer that never claims (a watcher) registers only passive
+- **FR20 — The browser can take a touch.** `pointercancel`, a finger's first
+  uncancelable `touchmove`, or a native scroll under the touch MUST count as
+  the browser taking the touch, the `touchmove` only when the browser could
+  scroll along the finger's main axis, and a native scroll only once that
+  finger has moved the scroll take distance (FR2), so sub-pixel movement under
+  a still finger does not cancel a tap (DEC-8): possible recognizers that share
+  it fail, active ones are cancelled, and the view's press is cancelled without
+  a release. The main axis is the one the finger has moved farther along since
+  touch-down, horizontal on a tie; the browser could scroll along it when a
+  scroller under the touch has room that way and every `touch-action` between
+  them allows that pan (FR18). Later uncancelable moves of that finger never
+  count. A recognizer that never claims (a watcher) registers only passive
   listeners (`architecture:react-component-runtime` INV3, INV5), and a
   watcher is not cancelled when the browser takes the touch: it follows the
   scroll to the lift (DEC-7).
@@ -295,13 +347,19 @@ a measured, sourced difference exists.
 
 FR26–FR28 and FR30 apply to every surface that carries the press model of
 `module:DropdownMenu/useMenuPress` (DropdownMenu, ContextMenu, their sub-menus,
-and Selector's listbox, whose options count as rows) when a finger or pen
-drives it and the primary pointer is coarse (FR19); where the primary pointer
-is fine, a finger in a menu keeps today's behavior (`spec:AST-017` FR59,
-DEC-25), and menus make no per-gesture pointer read; FR29 applies to DropdownMenu's trigger under the same
+and Selector's listbox, whose options count as rows) under every pointer
+(FR43); FR29 applies to DropdownMenu's trigger under the same
 condition; FR34 applies to menus;
-FR31 and FR35 apply to anchored menus and to Popover under a finger; FR32 and
-FR33 apply to menus only. A mouse keeps today's behavior.
+FR31 applies to anchored menus and to Popover under a finger, and FR35 to
+the entrances it lists; FR32 and FR33 apply to menus only. A mouse keeps
+`module:DropdownMenu/useMenuPress` FR1–FR3 and DEC-3, so a mouse released
+outside a menu closes it.
+
+FR26–FR28 are the shared rule of `family:action-groups`: every member, not
+only menus, follows them under the family's scope (DEC-17). Whether a menu
+stays open after a release outside it stays with the menu: FR28 keeps it open
+under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
+`component:Selector` FR7.
 
 - **FR26 — The lift decides.** A menu row MUST act when the finger lifts over
   it, never because the press began on it; a press that never left its row is
@@ -372,11 +430,18 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   opened it (`component:DropdownMenu` FR11 and FR20). The change between
   levels plays on the motion roles `springs.subMenuOpen` and
   `springs.subMenuBack` (FR4); under reduced motion FR8 applies.
-- **FR35 — A presentation takes no input while it grows.** Under a finger, a
-  tap or a drag that lands while a Popover or an anchored menu is still
-  growing out of its trigger MUST NOT close it, scroll the page, move focus,
-  or reach anything beneath it; the presentation finishes and stays open. A
-  pinch still zooms the page (FR10). A mouse keeps today's behavior.
+- **FR35 — A presentation takes no input while it enters.** Under a finger, a
+  tap or a drag that lands while a touch presentation is still entering, a
+  Popover or an anchored menu growing out of its trigger, an alert
+  (`component:AlertDialog`), a sheet, a dialog, a Drawer, MobileNav, or
+  Lightbox, MUST NOT close it, scroll the page, move focus, or reach anything
+  beneath it; the presentation finishes entering and stays open. Around a non-modal sheet
+  only a tap or a drag on the sheet is held; the page stays live
+  (`component:BottomSheet` FR11, `component:BottomSheetSwitcher` FR5). Only pointer
+  input is held: keys and assistive technology stay live, and the content stays
+  in the accessibility tree. A pinch still zooms the page (FR10). During an entrance this
+  rule applies instead of FR6's catch: the entrance finishes first. A mouse
+  keeps today's behavior (DEC-16).
 
 ### Release decisions
 
@@ -413,8 +478,10 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   element's existing always-on suppression stays as it is. On a label or plain
   text whose hold does nothing, such as a checkbox row's label, a long press
   selects natively, with the browser's handles; any other element follows its
-  own record. Keyboard and assistive-technology selection are unchanged, and a
-  mouse keeps its released behavior (`spec:AST-017` FR59; DEC-9).
+  own record. Keyboard and assistive-technology selection are unchanged. A pen's hold
+  acts as a finger's; a mouse makes the context request by a right click, not
+  a long press (FR43), and otherwise keeps its released behavior
+  (`spec:AST-017` FR59; DEC-9).
 
   Guidance: a caller whose menu element carries text a person may want offers
   a Copy action in its menu.
@@ -430,11 +497,16 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 
 ### Resources and compatibility
 
-- **FR24 — Touch work costs nothing where it is not used.** Where the
-  primary pointer is fine (FR19), and while a touch presentation is
-  disabled, no touch-only listener, observer or timer is active, except the
-  released `module:DropdownMenu/useMenuPress` behavior a finger keeps there
-  (its FR9). The number of `document`- or `window`-level
+- **FR24 — Gesture work costs nothing where it is not used.** A component
+  that uses no gesture registers no gesture listener, observer or timer, and
+  while a touch presentation is disabled none is active. Under a fine pointer
+  a component that uses a gesture listens only on its own element and adds
+  document listeners only during a press, removing them at the release (FR43);
+  the shared press controller and the menu press model's stray-click
+  swallower (`module:DropdownMenu/useMenuPress` PR2), each installed once per
+  page, count once and not per component, an action group's release-armed click
+  swallower (FR19) counts as press work, and a claiming recognizer's `touchmove` listener for a finger
+  (FR19) counts outside this budget. The number of `document`- or `window`-level
   touch listeners MUST NOT grow with the number of component instances, a
   repeated row or cell adds no touch observer of its own, and nothing
   touch-related remains after the last instance unmounts
@@ -452,10 +524,45 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   This replaces `component:Selector` DEC-1's width-and-pointer query with the
   FR13 rule for `adaptive`.
 
+- **FR42 — The default look grows no box for touch.** The default Astryx
+  look makes no box size increase for phones or touch: row heights, control
+  sizes and target sizes stay as they are; a box may shrink to fit a compact
+  screen, such as an alert's phone width. Type sizing is outside this rule, including a box
+  that grows only with its text, such as a Button whose label follows the
+  16 px reading base:
+  the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
+  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  hit-area expansion never overlaps a neighboring interactive element's own
+  target: where neighbors are closer than 44 px, the expansion is clamped to
+  half the gap, or skipped, so each element stays reachable; an expansion a
+  component or module record sets on purpose, such as `component:Thumbnail` AR4's, is
+  unaffected. Mobile size increases belong to theme adaptations (DEC-20).
+- **FR43 — Gestures work on the web.** Gestures attach for every pointer, a
+  mouse, a pen, and a finger, not only a coarse primary pointer. These stay
+  off: row swipe actions under a mouse drag, which would take the browser's text
+  selection and native drag, while a trackpad's horizontal scroll swipes a
+  row (`spec:AST-057` AR2, DEC-7); a
+  pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
+  and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
+  neighbor's target. On the web, a pan also
+  takes wheel and trackpad scrolling; a pinch takes a ctrl-wheel; one shared
+  context request answers a finger's or a pen's long press, a right click, and
+  Shift+F10; the
+  press model has a fine-pointer profile with no delay (FR11); and with a
+  mouse, a trackpad, or a pen where the primary pointer is fine a reorder
+  starts on a drag from its handle without a hold, while a pen where the
+  primary pointer is coarse keeps the finger's hold (`spec:AST-103` FR3). Under a fine pointer only a
+  component that uses a gesture listens (FR24), and under reduced motion a
+  release from a mouse, a trackpad, or a pen follows `design:reduced-motion`
+  DR2 on a coarse primary pointer and DR3 otherwise; and gestures add no
+  stylesheet bytes (DEC-21).
+
 ### Platform support
 
 - Supported engines: Astryx's supported browsers (`spec:AST-013`) with touch
-  input, on iOS and Android. UIKit on the reference release is the parity
+  input, on iOS and Android, and, for FR43, desktop browsers with a mouse, a
+  trackpad, or a pen. UIKit on the reference release is the parity
   reference, not a support floor; an older iOS Safari gets the same behavior
   wherever its engine supports it, and Android Chrome gets the same behavior.
   This amends `spec:AST-013` FR3 with an explicit Android Chrome support row
@@ -473,10 +580,11 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 ## Current-state impact
 
 - `architecture:theme-tokens` and `architecture:theme-authoring-contract`:
-  unchanged until the public motion-token set is decided; then its roles join
-  the motion configuration (FR4, DEC-11).
+  the three motion knobs join the motion configuration (FR4, DEC-15,
+  `spec:AST-108`).
 - `architecture:interaction-modality`: the touch-presentation conditions
-  (FR13) sit beside the shared modality state; its invariants are unchanged.
+  (FR13) sit beside the shared modality state, and INV13 gives every action
+  group one press tracking (DEC-17).
 - `architecture:react-component-runtime`: FR24 states the caller-visible
   outcome of INV5 and INV7 for touch work; both are unchanged.
 - Under FR41: ContextMenu's trigger, DropdownMenu's built-in trigger and its menu, and
@@ -497,12 +605,35 @@ FR33 apply to menus only. A mouse keeps today's behavior.
   finger; `presentation="popover"` keeps the released behavior (FR25).
 - `module:DropdownMenu/useMenuPress`: the released 500 ms `longPressDelayMs`
   default gives way to FR29's timing; a caller that passes it keeps it (FR25).
-- `module:DropdownMenu/useMenuPress`: its finger rules (FR1–FR3, FR6, FR7
-  and FR9 under a finger) are stated here (FR26–FR30); FR6's last sentence
-  gives way to the cell press profile (FR11); its mouse rules (FR8 and the
-  mouse halves of FR1–FR3) and its non-gesture rules stay in the module.
+- `module:DropdownMenu/useMenuPress`: its finger and pen rules (FR1–FR3, FR6,
+  FR7, FR9, FR11) follow FR26–FR30, FR33, and FR11's profiles under every
+  primary pointer; its mouse rules (the mouse halves of FR1–FR3) and its
+  non-gesture rules stay in the module.
+- `spec:AST-057`: a trackpad's horizontal scroll swipes a row (DEC-7); a
+  mouse drag never does.
+- `architecture:react-component-runtime` INV13: gestures attach for every
+  pointer, within FR24's listener budget.
+- `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
+  FR11's profiles under every pointer, the fine-pointer profile included.
+- Every `family:action-groups` member, as its membership rule lists them:
+  a press that slides across sibling actions acts on the action it lifts on
+  (FR26–FR28), under every pointer.
+- Every component under a coarse pointer: no box grows for touch, and a
+  touch target reaches 44 px only through an invisible hit area clamped by
+  its neighbors, unless a component or module record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
   under a finger they follow FR26–FR35 as each applies.
+- `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
+  `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
+  and `component:Lightbox`: under a finger, a tap or a drag during the
+  entrance is held (FR35), an exception during the entrance to
+  `component:BottomSheet` FR7, `component:BottomSheetSwitcher` FR6,
+  `component:Popover` DEC-8 (a Popover presented as a sheet),
+  `component:MobileNav` FR4 and `family:overlay-dismissal` AV4, which otherwise
+  let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
+  `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
+  Non-modal state) do not hold the page: the page behind them stays live, and
+  only the sheet itself holds a tap or a drag while it enters.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
@@ -516,30 +647,33 @@ FR33 apply to menus only. A mouse keeps today's behavior.
 
 ## Verification
 
-| Contract        | Verification                                                                                                                   | Representative states                                                                                                                                                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                                                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2        | Value check over every measured value and its uses                                                                             | every value; a guess and its measurement task; a platform-specific value; two components playing the same motion                                                                                                                                                                                                                                                                                                           | an unsourced value, an unknown source kind, a guess without a listed measurement, an unsourced platform split, or two values for one use fails                                                                                                                                                                                  |
-| FR3             | Unit tests of the spring, decay, rubber band and projection math against an independent integration and values read from UIKit | under-, critically and overdamped springs; release velocities; both rates; overscroll depths                                                                                                                                                                                                                                                                                                                               | changing a formula or a constant breaks the agreement with UIKit's values                                                                                                                                                                                                                                                       |
-| FR4             | Role unit tests over every touch motion                                                                                        | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                 | a literal played in place of a role, a value that differs from the table, or a theme that changes a role before the public set is decided fails                                                                                                                                                                                 |
-| FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame  | Chromium phone emulation; WebKit                                                                                                                                                                                                                                                                                                                                                                                           | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                                                                                          |
-| FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                     | catch at peak velocity; retarget with a new spring                                                                                                                                                                                                                                                                                                                                                                         | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                                                                                 |
-| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                                                                                                                                                                                                                              | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                                                                                  |
-| FR9, FR10       | Recognizer unit tests on synthetic streams and browser tests with real touch input                                             | drag, second finger, pinch, page zoom, main-thread block                                                                                                                                                                                                                                                                                                                                                                   | a second finger that breaks a drag, or a page pinch blocked other than by the author's `touch-action`, fails                                                                                                                                                                                                                    |
-| FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                       | inside and outside a scroll view; a drag the browser takes; a lift inside; a menu row under a finger                                                                                                                                                                                                                                                                                                                       | the wrong profile's timing, a press that survives the browser taking the touch, or a control activated other than by the browser's click fails                                                                                                                                                                                  |
-| FR13            | Resolver unit tests and a server-render test                                                                                   | coarse and fine pointer; narrow, wide and short; server render; hydrating render                                                                                                                                                                                                                                                                                                                                           | a component that answers the conditions differently, or a touch presentation in the server or hydrating render, fails                                                                                                                                                                                                           |
-| FR14            | Browser tests of a sheet over a scrolled list                                                                                  | scrolled and at its top                                                                                                                                                                                                                                                                                                                                                                                                    | a midway handoff fails                                                                                                                                                                                                                                                                                                          |
-| FR15–FR17       | Recognizer unit tests on synthetic streams with explicit timestamps                                                            | exclusive, simultaneous, require-to-fail, nested; a watcher beside a claiming winner; a blocked main thread; a pan at 10 pt per axis                                                                                                                                                                                                                                                                                       | a wrong winner, a late deadline, or a translation that keeps the hysteresis, or a watcher failed or cancelled by a claiming winner fails                                                                                                                                                                                        |
-| FR18–FR22       | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation, a modal scroll lock, a control that keeps its press through a drag; a still finger with sub-pixel jitter over a scroll view; a finger moved 9 px and 10 px straight, and (7, 7) and (8, 8) diagonally; a recognizer on an element whose author `touch-action` is narrower, including one without `pinch-zoom` | a ghost click, a scroll or zoom blocked other than by the author's `touch-action`, or a cancelled unowned touchmove outside FR19's two exceptions, a tap cancelled by sub-pixel movement or by under 10 px of travel, a scroll that does not take the touch at 10 px, or a derived `touch-action` wider than the author's fails |
-| FR23            | Haptics tests on the recorded moments                                                                                          | tap, drag, lift                                                                                                                                                                                                                                                                                                                                                                                                            | a haptic outside a native moment fails                                                                                                                                                                                                                                                                                          |
-| FR24            | Resource tests counting listeners, observers and timers                                                                        | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                                                                                                                                                                                                         | a touch listener on a fine pointer, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                                                                             |
-| FR25            | Component tests of each moved default and its `presentation` value                                                             | default; `presentation` set to the released surface                                                                                                                                                                                                                                                                                                                                                                        | a moved default that `presentation` does not restore, or a public threshold, fails                                                                                                                                                                                                                                              |
-| FR26–FR28, FR30 | Menu press tests on synthetic touch streams and a real-Chromium touch test                                                     | a slide from one row to another; a lift outside; a cancel; a second finger; edge autoscroll                                                                                                                                                                                                                                                                                                                                | an act on the press-start row, two acts for one gesture, a lift outside that closes, or a lit row after a cancel fails                                                                                                                                                                                                          |
-| FR29            | Trigger tests with explicit timestamps                                                                                         | a press in a fixed bar; a press in scrolling content held 149 and 150 ms; a quick tap in scrolling content; a scroll taking the touch before 150 ms; a drift of 12 and 14 pt; moves before and after the handoff; `presentation="popover"`                                                                                                                                                                                 | a fixed-bar press that waits, a held finger's scroll-view open before 150 ms or after a scroll, a quick tap that does not open at its lift, an open past the drift allowance, a lift that acts before the handoff, or a `popover` trigger that opens on press fails                                                             |
-| FR31–FR33       | Browser tests and storyboards under a finger                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                                                                                                                                                                                                                     | a surface that does not grow from and shrink into its trigger, a pan outside that leaves a menu open, a Popover whose dismissal changed, a pinch blocked other than by the author's `touch-action`, a tap outside that reaches the page, or a changed mouse path fails                                                          |
-| FR34, FR35      | Browser tests and storyboards under a finger                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse                                                                                                                                                                                                                                                                                 | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a pinch blocked other than by the author's `touch-action`, or a changed mouse path fails                                                                   |
-| FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                     | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                                                                                                                                                                                                                       | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity, or an action with no keyboard or mouse path fails                                                                                                                                                 |
-| FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                      | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection                                                                                                                                                                          | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, or a change to native selection elsewhere or to mouse, keyboard, or assistive-technology selection fails                                  |
-| all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari and Android Chrome devices          | per component                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                 |
+| Contract        | Verification                                                                                                                                   | Representative states                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2        | Value check over every measured value and its uses                                                                                             | every value; a guess and its measurement task; a platform-specific value; two components playing the same motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | an unsourced value, an unknown source kind, a guess without a listed measurement, an unsourced platform split, or two values for one use fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR3             | Unit tests of the spring, decay, rubber band and projection math against an independent integration and values read from UIKit                 | under-, critically and overdamped springs; release velocities; both rates; overscroll depths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | changing a formula or a constant breaks the agreement with UIKit's values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR4             | Role unit tests over every touch motion                                                                                                        | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a literal played in place of a role, a value that differs from the table at `tempo` 1 and `'standard'`, or a theme that changes a role other than through its motion knobs fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame                  | Chromium phone emulation; WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                                     | catch at peak velocity; retarget with a new spring                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                                         | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR9, FR10       | Recognizer unit tests on synthetic streams and browser tests with real touch input                                                             | drag, second finger, pinch, page zoom, main-thread block                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a second finger that breaks a drag, or a page pinch blocked other than by the author's `touch-action`, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                                       | inside and outside a scroll view; a drag the browser takes; a lift inside; a menu row under a finger; a press on a row of a menu whose rows fit and of one that scrolls; a slide-off lift on a Switch and on a Radio                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | the wrong profile's timing, a press that survives the browser taking the touch, or a control outside an action group activated other than by the browser's click, outside `spec:AST-020` FR9's slide-off exception, a row of a menu whose rows fit that waits 150 ms, or one of a scrolling menu that does not, or a slide-off lift that completes a control outside `spec:AST-020` FR9's exception, fails                                                                                                                                                                                                                                                                                               |
+| FR13            | Resolver unit tests and a server-render test                                                                                                   | coarse and fine pointer; narrow, wide and short; server render; hydrating render                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a component that answers the conditions differently, or a touch presentation in the server or hydrating render, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR14            | Browser tests of a sheet over a scrolled list                                                                                                  | scrolled and at its top                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a midway handoff fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR15–FR17       | Recognizer unit tests on synthetic streams with explicit timestamps                                                                            | exclusive, simultaneous, require-to-fail, nested; a watcher beside a claiming winner; a blocked main thread; a pan at 10 pt per axis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a wrong winner, a late deadline, or a translation that keeps the hysteresis, or a watcher failed or cancelled by a claiming winner fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR18–FR22       | Browser tests with real touch input (`spec:AST-013` FR10)                                                                                      | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation, a modal scroll lock, a control that keeps its press through a drag; a still finger with sub-pixel jitter over a scroll view; a finger moved 9 px and 10 px straight, and (7, 7) and (8, 8) diagonally; a recognizer on an element whose author `touch-action` is narrower, including one without `pinch-zoom`; a screen-edge pan landing at 40 px and at 41 px from the edge, at 14 px and 15 px of travel, and a horizontal scroll that starts outside the band; a screen-edge pan on an element within the band, and on one that reaches beyond it; a sheet's pull from a list at its top, and from a list scrolled away from its top; a long press dragged past its tolerance after it began, which never scrolls the page | a ghost click, a scroll or zoom blocked other than by the author's `touch-action`, or a cancelled unowned touchmove outside FR19's four exceptions, a tap cancelled by sub-pixel movement or by under 10 px of travel, a scroll that does not take the touch at 10 px, or a derived `touch-action` wider than the author's, a screen-edge pan that claims outside its band or before 15 px on an element within the band, or has not claimed at 15 px, or an author scroll outside the band that is blocked, a band claim of `pan-x` on an element that reaches beyond the band, or a 15 px start there, or a scroll-edge pan that cancels a move a scroller could scroll, or begins before 10 pt, fails |
+| FR20            | Browser tests with real touch input in Chromium phone emulation (`spec:AST-013` FR10)                                                          | a horizontal drag under `pan-y`; a vertical drag under `pan-y` over a scroller with room; a vertical drag where no scroller has room                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a horizontal drag under `pan-y` counted as the browser taking the touch, a vertical one over a scroller with room not counted, or a later uncancelable move counted, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| FR23            | Haptics tests on the recorded moments                                                                                                          | tap, drag, lift                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | a haptic outside a native moment fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR24            | Resource tests counting listeners, observers and timers                                                                                        | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a gesture listener in a component that uses no gesture, an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, a second press controller, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| FR25            | Component tests of each moved default and its `presentation` value                                                                             | default; `presentation` set to the released surface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a moved default that `presentation` does not restore, or a public threshold, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR26–FR28, FR30 | Menu press tests and each member's pointer-stream tests, as `family:action-groups`' verification map lists them and a real-Chromium touch test | a slide from one row to another; a lift outside; a cancel; a second finger; edge autoscroll                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | an act on the press-start row, two acts for one gesture, a lift outside that closes, or a lit row after a cancel fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR29            | Trigger tests with explicit timestamps                                                                                                         | a press in a fixed bar; a press in scrolling content held 149 and 150 ms; a quick tap in scrolling content; a scroll taking the touch before 150 ms; a drift of 12 and 14 pt; moves before and after the handoff; `presentation="popover"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a fixed-bar press that waits, a held finger's scroll-view open before 150 ms or after a scroll, a quick tap that does not open at its lift, an open past the drift allowance, a lift that acts before the handoff, or a `popover` trigger that opens on press fails                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| FR31–FR33       | Browser tests and storyboards under a finger                                                                                                   | a menu, a Popover and a ContextMenu lift: open, close, a pan outside, a tap outside, a pinch over the surface; a mouse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | a surface that does not grow from and shrink into its trigger, a pan outside that leaves a menu open, a Popover whose dismissal changed, a pinch blocked other than by the author's `touch-action`, a tap outside that reaches the page, or a changed mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR34, FR35      | Browser tests and storyboards under a finger                                                                                                   | a sub-menu drilling in and its Back row returning; a tap and a drag during a popover's and a menu's growth; a pinch during growth; a mouse; a tap and a drag during an alert's, a sheet's, and a dialog's entrance; a key and a screen reader during an entrance; a pinch during an alert's and a sheet's entrance; a tap and a scroll on the page beside an entering non-modal sheet, which pass                                                                                                                                                                                                                                                                                                                                                                                                                                          | a drill-in that leaves the parent's rows in place, a change between levels that does not play on its roles, a tap during growth that closes, scrolls or moves focus, a pinch blocked other than by the author's `touch-action`, or a changed mouse path, a held key or assistive-technology activation, a hidden content tree, or a tap or drag during an entrance that closes the presentation, scrolls a held page, moves focus or reaches anything beneath, fails                                                                                                                                                                                                                                     |
+| FR36–FR40       | Release tests on synthetic touch streams with explicit timestamps, per use                                                                     | below and past each commit point; a flick that projects past it; a slow drag past it; a release moving back; Reduce Motion; keyboard and mouse paths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a decision that changes mid-settle, a release moving back that commits, a settle that does not start at the release velocity, or an action with no keyboard or mouse path fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| FR41            | Browser tests with real touch input (`spec:AST-013` FR10)                                                                                      | a tap; a long press on a ContextMenu trigger, a DropdownMenu trigger the caller renders, a row with a context menu, and a slider thumb; a long press on a checkbox row's label and on plain text; a cancelled press; mouse and keyboard selection; a pen long press; a mouse long press, which makes no context request                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a tap that selects, a hold with an action that starts a selection or callout, a label or plain text whose long press does not select natively, a suppression that outlives the press, or a change to native selection elsewhere or to mouse, keyboard, or assistive-technology selection fails                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR42            | Default-theme geometry tests under a coarse and a fine pointer, and hit-testing between adjacent targets                                       | every component at phone width with a finger and with a mouse; a dense toolbar; a chip and its remove button; a Switch beside a label link                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a default-theme box that grows under touch or at phone width other than with its text, or, where no component or module record sets the hit area, a touch target under 44 px where neighbors allow it or a hit area that overlaps a neighbor's target, fails                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR43            | Browser tests with a mouse, a trackpad, a pen, a finger, and the keyboard, and resource counts                                                 | a pan by drag and by wheel; a ctrl-wheel pinch; a long press, a right click, and Shift+F10; a mouse press; a handle drag; a row swipe with a mouse and a trackpad; a component with no gesture                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | a gesture missing under a mouse or pen, a mouse-drag swipe action, a pen pinch, an edge pan under a mouse, a trackpad, or a pen, a press delay under a fine pointer, an idle listener in a component with no gesture, or added stylesheet bytes, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari and Android Chrome devices                          | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ## Decision log
 
@@ -555,8 +689,8 @@ remembered: a number enters the table only with a citable source, and Android
 touch devices get the same values until a measured, sourced difference is
 recorded.
 
-The table supplies the defaults and a theme may retune any motion role (FR4):
-a product can soften a spring without forking a component, and the measured
+The table supplies the defaults and a theme tunes them through its motion
+knobs (FR4, DEC-15): a product can soften motion without forking a component, and the measured
 values stay the ones it starts from. Platform-matched look and feel is not part
 of this decision.
 
@@ -578,8 +712,8 @@ release runs as a compositor animation of the measured curve (FR5, FR9).
 **Decider:** `cixzhang`, `2026-10-24`
 
 A product tunes motion as it tunes color and type, so every touch spring,
-duration and curve is a theme motion role whose default is the measured value
-(FR4). Thresholds decide who gets a touch, not how anything looks, so they stay
+duration and curve is a motion role whose default is the measured value and
+which a theme reaches through its motion knobs (FR4, DEC-15). Thresholds decide who gets a touch, not how anything looks, so they stay
 internal (`spec:AST-002` FR3).
 
 ### DEC-4 — A finger opens a menu on press
@@ -665,6 +799,140 @@ This defers DEC-1's and DEC-3's theme retuning until that set exists.
 
 Rejected: publishing the per-component roles as theme tokens.
 
+### DEC-13 — A screen-edge pan claims only a thin band at the edge
+
+**Reference:** `spec:AST-094/DEC-13`
+**Decider:** `cixzhang`, `2026-10-26`
+
+An edge swipe, such as going back, starts at the very edge of the screen, and
+a page's own horizontal scrolling lives everywhere else. So a screen-edge pan
+claims the horizontal axis only in UIKit's edge band and decides there at
+UIKit's 15 px, leaving the author's scrolling untouched outside it. On an
+element that reaches beyond the band, `touch-action` cannot claim per touch,
+so there an in-band touch decides at 10 px (DEC-22).
+
+Rejected: claiming `pan-x` across the whole element.
+
+### DEC-14 — A menu that cannot scroll highlights its rows at once
+
+**Reference:** `spec:AST-094/DEC-14`
+**Decider:** `cixzhang`, `2026-10-26`
+
+The cell delay exists so a scroll can win before a row lights. A menu whose
+rows fit cannot scroll, so it has no scroll to wait for and its rows highlight
+on touch-down; a list that can scroll keeps the delay. That a UIKit menu's
+rows likewise highlight on touch-down is a guess until a short UIMenu on the
+iOS 26.2 simulator measures it.
+
+Rejected: the 150 ms delay on every menu row.
+
+### DEC-17 — Every group of sibling actions tracks a held pointer the same way
+
+**Reference:** `spec:AST-094/DEC-17`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A person who presses one action and slides to another expects the same result
+in a menu, an alert's buttons, a button group, or a toolbar. Every member
+group of sibling actions behaves the same way, decided once and built in
+two owners: the menu press model and the action-group tracker
+(`family:action-groups`; `architecture:interaction-modality` INV13). The behavior works with a mouse
+as well, so it stays on for every pointer, while the 44 px target stays
+touch-only.
+
+Rejected: a tracking rule for menus only.
+
+### DEC-15 — The public motion set is three theme knobs; per-role tables stay internal
+
+**Reference:** `spec:AST-094/DEC-15`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A theme reaches touch motion only through `spec:AST-108`'s three knobs, tempo,
+character, and reduced motion, which transform the measured roles; the
+per-role tables and weights stay internal. This supersedes DEC-11's "all
+internal" for exactly these three knobs, and DEC-1's and DEC-3's per-role
+retuning, which a theme does through the knobs; DEC-11's rejected alternative, public
+per-component roles, stays rejected.
+
+### DEC-21 — Gestures work on the web, not only under a finger
+
+**Reference:** `spec:AST-094/DEC-21`
+**Decider:** `cixzhang`, `2026-10-26`
+
+Most of these gestures work as well with a mouse, a trackpad, or a pen, so
+they stay on for every pointer, with web inputs mapped in: wheel and trackpad
+scrolling for a pan, a ctrl-wheel for a pinch, and right click or Shift+F10
+for a long press. What would fight the browser is off: a mouse drag's swipe
+actions, a pen's pinch, and the screen-edge pan under a mouse, a trackpad, or a pen. The 44 px target is
+touch-only, and none of this adds stylesheet bytes. A mouse press uses the press model with no delay instead of the
+browser's `:active`. The press controller tracks every pointer.
+
+Rejected: keeping gestures and press tracking touch-only.
+
+### DEC-20 — The default look grows nothing for touch
+
+**Reference:** `spec:AST-094/DEC-20`
+**Decider:** `cixzhang`, `2026-10-26`
+
+Sizes do not grow on phones or under touch in the default look, so a product
+looks the same everywhere unless its theme chooses otherwise; shrinking to fit
+a compact screen is fine. Touch reach comes from invisible hit areas, clamped
+so two close neighbors both stay reachable. Themes own mobile size increases
+through their adaptations.
+
+Rejected: touch-only row heights and control sizes in the default look.
+
+### DEC-16 — Every touch presentation holds pointer input while it enters
+
+**Reference:** `spec:AST-094/DEC-16`
+**Decider:** `cixzhang`, `2026-10-26`
+
+A tap or a drag that lands while an alert, a sheet, or a dialog is still
+entering is almost never aimed at it, so it is absorbed, as it already is for
+a popover or a menu growing out of its trigger. Only pointer input is held, so
+keyboard and assistive-technology users are never blocked.
+
+Rejected: holding input only for presentations that grow from a trigger.
+
+### DEC-19 — A phone menu stays beside its trigger
+
+**Reference:** `spec:AST-094/DEC-19`
+**Decider:** `cixzhang`, `2026-10-26`
+
+On a compact touch screen an anchored menu keeps the layer runtime's normal
+placement beside its trigger, inside the viewport gutter, so the trigger stays
+visible while the menu is open wherever the menu fits beside it; a menu taller
+than the room on either side follows the layer runtime's own fallback.
+
+Rejected: covering the trigger, centered on it and aligned with its top or
+bottom, as UIKit's menu does.
+
+### DEC-22 — An edge band claims only on an element within the band
+
+**Reference:** `spec:AST-094/DEC-22`
+**Decider:** `cixzhang`, `2026-10-26`
+
+`touch-action` is set per element, not per touch, so the band's `pan-x` claim
+and 15 px start can only hold on an element that lies within the band. On a
+wider element an in-band touch decides at 10 px like every other claim, since
+claiming `pan-x` across it would take the author's scrolling (DEC-13).
+
+Rejected: a whole-element claim on a wider element.
+
+### DEC-18 — A scroll-edge pan may hold the page's rubber band from the first move
+
+**Reference:** `spec:AST-094/DEC-18`
+**Decider:** `cixzhang`, `2026-10-26`
+
+When every scroller under the finger is at its edge and the drag moves toward
+that edge, the browser would otherwise rubber-band the page before the pan
+reaches its 10 pt start (a reading of Mobile Safari's overscroll, not a
+measurement), so a sheet's pull would visibly fight the page. Cancelling only
+those moves, from the first, matches UIKit's sheet pull, and a real scroll is
+never cancelled. The trade-off: a list inside a sheet cannot pull to refresh
+from its top.
+
+Rejected: cancelling moves only after the pan begins.
+
 ## Open questions
 
 - **OQ1 — Scroll view bounce-back curve.** What curve brings a scroll view
@@ -686,12 +954,6 @@ Rejected: publishing the per-component roles as theme tokens.
 - **OQ8 — Withdrawing a tentative open.** Resolved by
   `module:DropdownMenu/useMenuPress` DEC-8: nothing withdraws an open, so a
   screen reader hears one open and one close (its AR5).
-- **OQ9 — Where a menu sits on a compact touch screen.** Should an anchored
-  menu on a compact touch screen (`spec:AST-012` FR9) cover its trigger,
-  centered on it and top-aligned with it, or bottom-aligned with it when the
-  trigger's center is below the middle of the viewport, inside a fixed margin
-  from the sides, as UIKit's menu does? `component:DropdownMenu` places the
-  menu beside its trigger today. (`owner decision`)
 - **OQ10 — A sub-menu with its parent visible.** Should a drilled-in sub-menu
   open in place, the menu's box growing to it with the parent menu visible
   behind it, as UIKit's menu does? This is look and feel; today the sub-menu's

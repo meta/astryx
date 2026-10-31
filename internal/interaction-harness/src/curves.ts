@@ -17,6 +17,8 @@
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
  *   is applied at its current time and `getComputedStyle` reads it.
+ *
+ * SYNC: Keep ./storyboard.ts using these for its animation filmstrips.
  */
 
 import type {Locator, Page} from '@playwright/test';
@@ -39,14 +41,24 @@ function animationRecorder(): void {
   if (w.__harnessAnimations) {
     return;
   }
-  const frame = window.requestAnimationFrame.bind(window);
-  const seen = new WeakSet<Animation>();
+  // The page's real frames, even when a timer gate already holds its callbacks.
+  const frame = (
+    (
+      window as unknown as {
+        __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+      }
+    ).__harnessTimerGate?.frame ?? window.requestAnimationFrame
+  ).bind(window);
   const log: {
     animation: Animation;
     seenAt: number;
     finishedAt: number | null;
     startedAt: number | null;
+    // Where the run began, as the engine had it when it finished.
+    finishStart: number | null;
   }[] = [];
+  // Each recorded animation's entry.
+  const entries = new WeakMap<Animation, (typeof log)[number]>();
   // Entries whose start time has not resolved yet (still pending when seen).
   let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
@@ -68,12 +80,22 @@ function animationRecorder(): void {
     return Number(animation.startTime) - end / Math.abs(rate);
   };
   const remember = (animation: Animation) => {
-    // A running animation is recorded while still pending: on a cold page the
-    // next frame can come only after a short animation has finished.
-    if (seen.has(animation) || animation.playState !== 'running') {
+    const recorded = entries.get(animation);
+    if (recorded != null) {
+      // A run paused and resumed (by the page, or by a hold and its release),
+      // seeked, or given another rate runs on a new start time: the start
+      // kept is the one it runs on, which its finish falls back to once the
+      // page has cancelled it.
+      if (animation.playState === 'running' && animation.startTime != null) {
+        recorded.startedAt = playStart(animation);
+      }
       return;
     }
-    seen.add(animation);
+    // A running animation is recorded while still pending: on a cold page the
+    // next frame can come only after a short animation has finished.
+    if (animation.playState !== 'running') {
+      return;
+    }
     // The target's ancestors as recorded: an exit whose element the page
     // removes at its end is still reported for the container it left.
     const ancestors: Element[] = [];
@@ -89,24 +111,42 @@ function animationRecorder(): void {
       seenAt: performance.now(),
       finishedAt: null as number | null,
       startedAt: playStart(animation),
+      finishStart: null as number | null,
       ancestors,
     };
+    entries.set(animation, entry);
     if (entry.startedAt == null) {
       unstarted.push(entry);
     }
     animation.addEventListener('finish', event => {
-      entry.finishedAt = performance.now();
+      const end = Number(
+        (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+          .endTime ?? 0,
+      );
+      const speed = Math.abs(animation.playbackRate || 1);
+      // The run as the engine has it at its finish: this listener, added as
+      // the animation was made, runs before the page's own, so its start time
+      // is usually still set, and the run ended where that start puts its
+      // end, through the rate. Without one, the start the recorder holds
+      // stands in, kept as the run ran (after a pause, a seek or a rate
+      // change): in Chromium a CSS animation or transition whose element the
+      // page removes on its end event is cancelled before this runs. A run that ends as it starts (one reversed from rest) can finish
+      // before any start resolves: it then began where the event's timeline
+      // time puts its start. Read later, the start time can say otherwise
+      // (WebKit resolves or moves it a frame later), and the event itself
+      // arrives late (a frame or more after a finish() call).
+      const at = (event as AnimationPlaybackEvent).timelineTime;
+      entry.finishStart =
+        playStart(animation) ??
+        entry.startedAt ??
+        (at == null ? null : Number(at) - end / speed);
+      entry.finishedAt =
+        entry.finishStart == null
+          ? performance.now()
+          : entry.finishStart + end / speed;
       if (entry.startedAt == null) {
         // Cancelled before a frame read its start: back from where it ended.
-        const end = Number(
-          (animation.effect as KeyframeEffect | null)?.getComputedTiming()
-            .endTime ?? 0,
-        );
-        const at = (event as AnimationPlaybackEvent).timelineTime;
-        entry.startedAt =
-          playStart(animation) ??
-          (at == null ? entry.finishedAt : Number(at)) -
-            end / Math.abs(animation.playbackRate || 1);
+        entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
       }
     });
     log.push(entry);
@@ -376,11 +416,14 @@ export async function holdAnimations(
       );
     }
     // Each animation's start on the document timeline, read before the pause
-    // clears it (a pending play has no start time yet: it starts now).
+    // clears it. A pending play has no start time yet: it starts now, as far
+    // back as its current time reaches through its playback rate (at rate 2,
+    // a run covers its curve in half the timeline), as seeking reads it.
     const starts = all.map(animation =>
       animation.startTime != null
         ? Number(animation.startTime)
-        : now - Number(animation.currentTime ?? 0),
+        : now -
+          Number(animation.currentTime ?? 0) / (animation.playbackRate || 1),
     );
     const held = all.map(animation => {
       animation.pause();
@@ -803,7 +846,8 @@ export interface ActiveAnimation {
   /**
    * Epoch ms (page clock) when the animation's curve starts and ends. A held
    * end value (see `HeldAnimation.curveEndMs`, which says when one is read)
-   * is not part of the curve.
+   * is not part of the curve. A finished run is dated from its start as the
+   * engine had it when it finished.
    */
   readonly from: number;
   readonly to: number;
@@ -812,7 +856,8 @@ export interface ActiveAnimation {
   readonly keyframes: readonly Record<string, unknown>[];
   /**
    * Epoch ms (page clock) when it finished, if it had already finished when
-   * it was reported; null while it runs.
+   * it was reported (where its start put its end, by the engine's clock, not
+   * when the finish event arrived); null while it runs.
    */
   readonly finishedAt: number | null;
 }
@@ -891,6 +936,8 @@ export async function waitForAnimation(
       evaluateTimeout =>
         locator.evaluate(
           (element, {minProgress, since: watchedFrom}) => {
+            // The harness's own read: a trace sets it apart (trace.ts HARNESS_READ).
+            console.timeStamp('harness-read');
             const w = window as unknown as {
               __harnessCurveEnd: (a: Animation) => number;
               __harnessAnimations: {
@@ -899,6 +946,7 @@ export async function waitForAnimation(
                   seenAt: number;
                   finishedAt: number | null;
                   startedAt: number | null;
+                  finishStart: number | null;
                   ancestors: Element[];
                 }[];
                 record: () => void;
@@ -912,22 +960,27 @@ export async function waitForAnimation(
               a: Animation,
               finishedAt: number | null,
               recordedStart: number | null,
+              finishStart: number | null = null,
             ) => {
               const effect = a.effect as KeyframeEffect | null;
               const timing = effect?.getComputedTiming();
-              // The recorded start stands in once the page has cancelled it. A
-              // run going backward began at its end: its startTime is where its
-              // current time would reach 0, a whole run later.
+              // A finished run is dated from its start as its finish recorded
+              // it: a later startTime read can say otherwise. The recorded
+              // start stands in once the page has cancelled it. A run going
+              // backward began at its end: its startTime is where its current
+              // time would reach 0, a whole run later.
               const rate = a.playbackRate;
               const speed = Math.abs(rate || 1);
               const endTime = Number(timing?.endTime ?? 0);
               const delay = Number(timing?.delay ?? 0);
               const start =
-                a.startTime == null
-                  ? recordedStart
-                  : rate < 0
-                    ? Number(a.startTime) - endTime / speed
-                    : Number(a.startTime);
+                finishStart != null
+                  ? finishStart
+                  : a.startTime == null
+                    ? recordedStart
+                    : rate < 0
+                      ? Number(a.startTime) - endTime / speed
+                      : Number(a.startTime);
               const startedAt =
                 performance.timeOrigin + Number(start ?? Number.NaN);
               const name =
@@ -970,12 +1023,23 @@ export async function waitForAnimation(
                 (target === element || element.contains(target))
               );
             };
+            // The busy-window control (busy.ts) animates on its own, inside a
+            // dialog with `within`: it never answers for the component.
+            const isControl = (a: Animation) => {
+              const target =
+                (a.effect as KeyframeEffect | null)?.target ?? null;
+              return (
+                target instanceof Element &&
+                target.closest('[data-harness-control]') != null
+              );
+            };
             const after = watchedFrom ?? recorder.armedAt();
             // Document-timeline animations only, as for holdAnimations: a scroll-
             // or view-timeline one that reached its end is not a finished curve.
             const recorded = recorder.log.filter(
               e =>
                 e.seenAt >= after &&
+                !isControl(e.animation) &&
                 (inside(e.animation) || e.ancestors.includes(element)) &&
                 e.animation.timeline instanceof DocumentTimeline,
             );
@@ -993,6 +1057,7 @@ export async function waitForAnimation(
                     .map(e => e.animation)
             ).filter(
               a =>
+                !isControl(a) &&
                 a.playState === 'running' &&
                 a.timeline instanceof DocumentTimeline,
             );
@@ -1018,10 +1083,10 @@ export async function waitForAnimation(
             if (live.length > 0) {
               return [];
             }
-            // Finished: by its finish event, or by its state when the event has not
-            // been delivered yet (then at its scheduled end, through the rate's
-            // speed; a run going backward ends at its startTime, where its current
-            // time reaches 0).
+            // Finished: as its finish event recorded it (where its start then put
+            // its end), or by its state when the event has not been delivered yet
+            // (then at its scheduled end, through the rate's speed; a run going
+            // backward ends at its startTime, where its current time reaches 0).
             const finishedAt = (e: (typeof recorded)[number]) => {
               if (e.finishedAt != null) {
                 return e.finishedAt;
@@ -1040,7 +1105,14 @@ export async function waitForAnimation(
             };
             return recorded
               .filter(e => finishedAt(e) != null)
-              .map(e => describe(e.animation, finishedAt(e), e.startedAt));
+              .map(e =>
+                describe(
+                  e.animation,
+                  finishedAt(e),
+                  e.startedAt,
+                  e.finishStart,
+                ),
+              );
           },
           {minProgress: minProgressMs, since: since ?? null},
           {timeout: evaluateTimeout},
@@ -1148,7 +1220,13 @@ export async function waitForRest(
                 backdrop,
               ].join(' | ');
             };
-            const frame = requestAnimationFrame;
+            // The page's real frames, even while a timer gate holds its callbacks.
+            const frame =
+              (
+                window as unknown as {
+                  __harnessTimerGate?: {frame: typeof requestAnimationFrame};
+                }
+              ).__harnessTimerGate?.frame ?? requestAnimationFrame;
             let last = read();
             let still = 0;
             const tick = () => {

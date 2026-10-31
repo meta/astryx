@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -818,6 +818,16 @@
       "source": "./src/Markdown/remark.ts",
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
+    },
+    "./internal/touch": {
+      "source": "./src/internal/touch.ts",
+      "types": "./dist/internal/touch.d.ts",
+      "default": "./dist/internal/touch.js"
+    },
+    "./internal/tokenizer-presentation": {
+      "source": "./src/internal/tokenizer-presentation.ts",
+      "types": "./dist/internal/tokenizer-presentation.d.ts",
+      "default": "./dist/internal/tokenizer-presentation.js"
     }
   },
   "files": [
@@ -854,6 +864,7 @@
   "devDependencies": {
     "@astryxdesign/a11y-spec": "workspace:*",
     "@astryxdesign/cli": "workspace:*",
+    "@astryxdesign/interaction-harness": "workspace:*",
     "@babel/cli": "catalog:",
     "@babel/core": "catalog:",
     "@babel/preset-react": "catalog:",

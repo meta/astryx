@@ -80,6 +80,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
@@ -990,6 +991,7 @@ export function Selector<T extends SelectorOptionType>(
     onFocus,
     onKeyDown: onKeyDownProp,
     'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
     hasClear: hasClearProp,
     id,
     ...restProps
@@ -1028,6 +1030,7 @@ export function Selector<T extends SelectorOptionType>(
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const descriptionId = useId();
   const statusMessageId = useId();
+  const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -1090,6 +1093,12 @@ export function Selector<T extends SelectorOptionType>(
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the trigger together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const triggerLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
   const selectableItems = useMemo(
@@ -1131,6 +1140,14 @@ export function Selector<T extends SelectorOptionType>(
 
   // Ref for listbox to measure selected item position
   const listboxRef = useRef<HTMLDivElement>(null);
+  // The trigger may name the active option only once the listbox holding it
+  // is in the document. The bottom sheet loads its surface on first open, so
+  // the trigger expands a moment before its options exist.
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback((node: HTMLDivElement | null) => {
+    listboxRef.current = node;
+    setIsListboxMounted(node != null);
+  }, []);
 
   // Typeahead is defined below (it needs the popover), but closing and clearing
   // must drop its pending buffer — otherwise a stale prefix survives the reset
@@ -1807,7 +1824,7 @@ export function Selector<T extends SelectorOptionType>(
       {renderSearch()}
       <Divider />
       <div
-        ref={listboxRef}
+        ref={attachListbox}
         id={listboxId}
         role="listbox"
         aria-labelledby={triggerId}
@@ -1826,7 +1843,7 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   ) : (
     <div
-      ref={listboxRef}
+      ref={attachListbox}
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
@@ -1918,7 +1935,7 @@ export function Selector<T extends SelectorOptionType>(
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': ariaLabelledBy,
+    'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -2033,6 +2050,7 @@ export function Selector<T extends SelectorOptionType>(
             !isEffectivelyReadOnly &&
             !hasSearch &&
             surface.isOpen &&
+            isListboxMounted &&
             highlightedIndex >= 0
               ? getItemId(highlightedIndex)
               : undefined
@@ -2133,6 +2151,7 @@ export function Selector<T extends SelectorOptionType>(
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
+      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

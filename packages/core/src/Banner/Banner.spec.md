@@ -92,7 +92,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Does not own / non-goals**
 
 - Button geometry, interaction layers, tooltip painting, or consumer-supplied
-  `endContent` — delegated to `component:Button`.
+  `endContent` — delegated to `component:Button`. An action row of two or more
+  actions follows `family:action-groups`.
 - A new theme property, prop, variant, or DOM element.
 
 ## Public concepts
@@ -153,7 +154,8 @@ frame target contract.
 ### Performance and resources
 
 This contract introduces no new measurement, observer, listener, render pass, or
-runtime work.
+runtime work beyond the press tracking `family:action-groups` FR5 gives an
+action row of two or more actions.
 
 ## Accessibility contract
 

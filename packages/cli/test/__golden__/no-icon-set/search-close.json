@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 44,
+    "matchCount": 45,
     "results": [
       {
         "domain": "component",
@@ -14,6 +14,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheet",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheet",
         "mentions": []
       },
       {
@@ -229,17 +240,6 @@
         "title": "<text>",
         "command": "astryx docs styling/styling-advanced compound-components",
         "parent": "astryx docs styling/styling-advanced --index",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "ComplexSelector",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/ComplexSelector",
-        "command": "astryx component ComplexSelector",
         "mentions": []
       }
     ]

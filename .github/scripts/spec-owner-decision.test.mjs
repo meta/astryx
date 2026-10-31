@@ -7,20 +7,24 @@ const require = createRequire(import.meta.url);
 const {
   OWNER_COMMAND_PREFIXES,
   canonicalRunUrl,
-  decisionStatusDescription,
   describeOwnerCommandProblem,
   isDispatchableOwnerCommand,
   newestGateRun,
   parseCanonicalRunId,
-  parseDecisionStatuses,
   parseOwnerCommand,
   parseOwnerCommandIntent,
-  parseOwnerDecisionDispatch,
   parseOwnerFile,
-  parseReadyAttestations,
   requiredApprovalGroups,
   resolveOwnerDecision,
 } = require('./spec-owner-decision.cjs');
+const {
+  fingerprintSpecContent,
+  parseOwnerCommandTarget,
+} = require('./spec-owner-decision.cjs');
+const {
+  composeReviewGate,
+  readSpecGate,
+} = require('./review-signal-decision.cjs');
 
 const head = 'abcdef1234567890abcdef1234567890abcdef12';
 const owner = {login: 'cixzhang'};
@@ -377,7 +381,38 @@ describe('spec owner decision', () => {
       ],
     });
     expect(decision.approved).toBe(false);
-    expect(decision.source).toBe('command');
+  });
+
+  it('withdraws only the revoking owner, and holds on a current request for changes', () => {
+    const earlier = '1111111111111111111111111111111111111111';
+    const at = '2026-08-30T10:01:00Z';
+    const decide = ({reviews = [], comments = []}) =>
+      resolveOwnerDecision({
+        owners: ['cixzhang', 'imdreamrunner'],
+        headSha: head,
+        reviews: [
+          {
+            user: {login: 'imdreamrunner'},
+            state: 'APPROVED',
+            commit_id: head,
+            submitted_at: at,
+          },
+          ...reviews,
+        ],
+        comments,
+        approvesCurrentContent: sha => sha === head,
+      }).approved;
+    const say = body => ({comments: [{user: owner, body, created_at: at}]});
+    const changes = commit_id => ({
+      reviews: [
+        {user: owner, state: 'CHANGES_REQUESTED', commit_id, submitted_at: at},
+      ],
+    });
+
+    expect(decide(say('/revoke-spec'))).toBe(true);
+    expect(decide(say(`/revoke-spec ${earlier}`))).toBe(true);
+    expect(decide(changes(earlier))).toBe(true);
+    expect(decide(changes(head))).toBe(false);
   });
 
   it('ignores commands from other users', () => {
@@ -396,101 +431,15 @@ describe('spec owner decision', () => {
     expect(decision.approved).toBe(false);
   });
 
-  it('accepts only trusted workflow ready attestations', () => {
-    const repository = 'facebook/astryx';
-    const trusted = {
-      context: 'spec-owner-ready/cixzhang',
-      state: 'success',
-      description: 'Owner ready at 2026-08-30T10:00:00.000Z.',
-      target_url: canonicalRunUrl(repository, '9007199254740993', '2'),
-      creator: {login: 'github-actions[bot]'},
-    };
-    const attestations = parseReadyAttestations(
-      [
-        trusted,
-        {...trusted, creator: {login: 'cixzhang'}},
-        {...trusted, target_url: 'https://example.com/forged'},
-        {...trusted, description: 'owner says ready'},
-      ],
-      {repository, headSha: head, owners: ['cixzhang']},
-    );
-
-    expect(attestations).toEqual([
-      {
-        approved: true,
-        at: '2026-08-30T10:00:00.000Z',
-        headSha: head,
-        owner: 'cixzhang',
-        source: 'ready',
-      },
-    ]);
-    expect(
-      resolveOwnerDecision({
-        owners: ['cixzhang'],
-        headSha: head,
-        reviews: [],
-        comments: [],
-        readyAttestations: attestations,
-      }),
-    ).toMatchObject({approved: true, owner: 'cixzhang', source: 'ready'});
-  });
-
-  it('invalidates a ready attestation on a new head', () => {
-    const decision = resolveOwnerDecision({
-      owners: ['cixzhang'],
-      headSha: '1111111111111111111111111111111111111111',
-      reviews: [],
-      comments: [],
-      readyAttestations: [
-        {
-          owner: 'cixzhang',
-          headSha: head,
-          at: '2026-08-30T10:00:00Z',
-        },
-      ],
-    });
-
-    expect(decision.approved).toBe(false);
-  });
-
-  it('lets a newer exact-head revoke override owner-ready', () => {
-    const decision = resolveOwnerDecision({
-      owners: ['cixzhang'],
-      headSha: head,
-      reviews: [],
-      readyAttestations: [
-        {
-          owner: 'cixzhang',
-          headSha: head,
-          at: '2026-08-30T10:00:00Z',
-        },
-      ],
-      comments: [
-        {
-          user: owner,
-          body: `/revoke-spec ${head}`,
-          created_at: '2026-08-30T10:01:00Z',
-        },
-      ],
-    });
-
-    expect(decision).toMatchObject({
-      approved: false,
-      owner: 'cixzhang',
-      source: 'command',
-    });
-  });
-
   it('orders dismissal by updated_at instead of the original submission', () => {
     const decision = resolveOwnerDecision({
       owners: ['cixzhang'],
       headSha: head,
-      comments: [],
-      readyAttestations: [
+      comments: [
         {
-          owner: 'cixzhang',
-          headSha: head,
-          at: '2026-08-30T10:01:00Z',
+          user: owner,
+          body: `/approve-spec ${head}`,
+          created_at: '2026-08-30T10:01:00Z',
         },
       ],
       reviews: [
@@ -505,6 +454,7 @@ describe('spec owner decision', () => {
       ],
     });
 
+    // The dismissal is dated by its update, so it follows the command.
     expect(decision.approved).toBe(false);
     expect(decision.source).toBe(null);
   });
@@ -513,12 +463,11 @@ describe('spec owner decision', () => {
     const decision = resolveOwnerDecision({
       owners: ['cixzhang'],
       headSha: head,
-      comments: [],
-      readyAttestations: [
+      comments: [
         {
-          owner: 'cixzhang',
-          headSha: head,
-          at: '2026-08-30T10:01:00Z',
+          user: owner,
+          body: `/approve-spec ${head}`,
+          created_at: '2026-08-30T10:01:00Z',
         },
       ],
       reviews: [
@@ -543,8 +492,33 @@ describe('spec owner decision', () => {
     expect(decision.approved).toBe(false);
   });
 
+  it('lets a command after the dismissal approve again', () => {
+    const decision = resolveOwnerDecision({
+      owners: ['cixzhang'],
+      headSha: head,
+      comments: [
+        {
+          user: owner,
+          body: `/approve-spec ${head}`,
+          created_at: '2026-08-30T10:03:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 17,
+          user: owner,
+          state: 'DISMISSED',
+          commit_id: head,
+          submitted_at: '2026-08-30T09:00:00Z',
+          updated_at: '2026-08-30T10:02:00Z',
+        },
+      ],
+    });
+
+    expect(decision.approved).toBe(true);
+  });
   it('compares workflow run ids without losing integer precision', () => {
-    const repository = 'facebook/astryx';
+    const repository = 'meta/astryx';
     const statuses = ['9007199254740992', '9007199254740993'].map(runId => ({
       context: 'spec-owner-approval',
       state: 'pending',
@@ -557,69 +531,6 @@ describe('spec owner decision', () => {
       9007199254740993n,
     );
     expect(newestGateRun(statuses, repository)?.runId).toBe(9007199254740993n);
-  });
-
-  it('accepts a ready marker only from a current design owner', () => {
-    const repository = 'facebook/astryx';
-    const marker = login => ({
-      context: `spec-owner-ready/${login}`,
-      state: 'success',
-      description: 'Owner ready at 2026-08-30T10:00:00.000Z.',
-      target_url: canonicalRunUrl(repository, '42', '1'),
-      creator: {login: 'github-actions[bot]'},
-    });
-    const statuses = [marker('ernestt'), marker('imdreamrunner')];
-
-    // imdreamrunner is an engineering owner and a design *approver*, but not a
-    // design owner. A marker they published — including one predating the rule that
-    // only design owners self-attest — is not evidence for any group.
-    expect(
-      parseReadyAttestations(statuses, {
-        repository,
-        headSha: head,
-        owners: ['ernestt', 'rubyycheung'],
-      }).map(attestation => attestation.owner),
-    ).toEqual(['ernestt']);
-
-    // A handle removed from DESIGNOWNERS stops counting immediately.
-    expect(
-      parseReadyAttestations(statuses, {
-        repository,
-        headSha: head,
-        owners: ['rubyycheung'],
-      }),
-    ).toEqual([]);
-    expect(
-      parseReadyAttestations(statuses, {repository, headSha: head}),
-    ).toEqual([]);
-  });
-
-  it('does not let a stale ready marker approve the design group', () => {
-    const repository = 'facebook/astryx';
-    const designApprovers = ['cixzhang', 'imdreamrunner', 'ernestt'];
-    const stale = [
-      {
-        context: 'spec-owner-ready/imdreamrunner',
-        state: 'success',
-        description: 'Owner ready at 2026-09-04T05:54:18.000Z.',
-        target_url: canonicalRunUrl(repository, '42', '1'),
-        creator: {login: 'github-actions[bot]'},
-      },
-    ];
-
-    expect(
-      resolveOwnerDecision({
-        owners: designApprovers,
-        headSha: head,
-        reviews: [],
-        comments: [],
-        readyAttestations: parseReadyAttestations(stale, {
-          repository,
-          headSha: head,
-          owners: ['ernestt', 'rubyycheung'],
-        }),
-      }).approved,
-    ).toBe(false);
   });
 
   describe('recognizing a command that does not decide the gate', () => {
@@ -699,26 +610,24 @@ describe('spec owner decision', () => {
       }
     });
 
-    it('explains each way a recognized command misses the head', () => {
+    it('explains each way a recognized command decides nothing', () => {
       const stale = '1111111111111111111111111111111111111111';
       expect(
-        describeOwnerCommandProblem(
-          parseOwnerCommandIntent('/approve-spec'),
-          head,
-        ),
+        describeOwnerCommandProblem(parseOwnerCommandIntent('/approve-spec')),
       ).toContain('did not name a commit');
       expect(
         describeOwnerCommandProblem(
           parseOwnerCommandIntent('/approve-spec abc1234'),
-          head,
         ),
       ).toContain('full 40-character commit SHA');
-      expect(
-        describeOwnerCommandProblem(
-          parseOwnerCommandIntent(`/approve-spec ${stale}`),
-          head,
-        ),
-      ).toContain('1111111');
+      // A well-formed SHA is decided by comparing its spec content (DEC-14),
+      // and a bare /revoke-spec withdraws.
+      for (const body of [`/approve-spec ${stale}`, '/revoke-spec']) {
+        expect(
+          describeOwnerCommandProblem(parseOwnerCommandIntent(body)),
+          body,
+        ).toBe(null);
+      }
     });
 
     it('accepts a commit SHA in either casing', () => {
@@ -732,13 +641,12 @@ describe('spec owner decision', () => {
       expect(
         describeOwnerCommandProblem(
           parseOwnerCommandIntent(`/approve-spec ${upper}`),
-          head,
         ),
       ).toBe(null);
       expect(parseOwnerCommand(`/approve-spec ${head}`, upper)).toBe(true);
     });
 
-    it('agrees with the help validator on every recognized command', () => {
+    it('agrees with the validator on every recognized command', () => {
       const stale = '1111111111111111111111111111111111111111';
 
       for (const body of [
@@ -746,172 +654,70 @@ describe('spec owner decision', () => {
         `/approve-spec ${head.toUpperCase()}`,
         `/revoke-spec ${head}`,
         '/approve-spec',
+        '/revoke-spec',
         '/approve-spec abc1234',
         `/approve-spec ${stale}`,
-        `/approve-spec ${stale.toUpperCase()}`,
         `/approve-spec ${head} please`,
       ]) {
-        const intent = parseOwnerCommandIntent(body);
-        const decided = parseOwnerCommand(body, head) !== null;
-        const problem = describeOwnerCommandProblem(intent, head);
-        // Exactly one of the two is true: the command decides the gate, or
-        // the gate can say why it did not.
-        expect(decided, body).toBe(problem === null);
+        const parsed = parseOwnerCommandTarget(body) !== null;
+        const problem = describeOwnerCommandProblem(
+          parseOwnerCommandIntent(body),
+        );
+        // Exactly one holds: the command reads as a decision, or the gate
+        // can say why it does not.
+        expect(parsed, body).toBe(problem === null);
       }
-    });
-
-    it('reports no problem for the exact form the gate accepts', () => {
-      const intent = parseOwnerCommandIntent(`/approve-spec ${head}`);
-
-      expect(describeOwnerCommandProblem(intent, head)).toBe(null);
-      expect(parseOwnerCommand(`/approve-spec ${head}`, head)).toBe(true);
-      expect(describeOwnerCommandProblem(null, head)).toBe(null);
     });
   });
 });
 
-describe('relayed owner decisions', () => {
-  const appLogin = 'review-app[bot]';
-  function dispatch(overrides = {}, sender = {login: appLogin, type: 'Bot'}) {
-    return {
-      action: 'spec-owner-decision',
-      sender,
-      client_payload: {
-        pr: 17,
-        headSha: head,
-        ownerLogin: 'CixZhang',
-        decision: 'approve',
-        requestKey: 'req-1',
-        ...overrides,
-      },
-    };
-  }
+const record = [
+  '---',
+  'kind: architecture',
+  'authority: draft',
+  'approved_by: null',
+  'approved_at: null',
+  'owners: [cixzhang]',
+  '---',
+  '',
+  '# Example',
+  '',
+  'The contract.',
+  '',
+].join('\n');
+const fingerprint = content =>
+  fingerprintSpecContent([{path: 'docs/a.md', content}]).fingerprint;
 
-  it('reads a well-formed decision from the configured app', () => {
-    expect(parseOwnerDecisionDispatch(dispatch(), {appLogin})).toEqual({
-      decision: {
-        pr: 17,
-        headSha: head,
-        owner: 'cixzhang',
-        approved: true,
-        requestKey: 'req-1',
-      },
-    });
+describe('spec content fingerprint (DEC-14)', () => {
+  it('ignores only the values approval bookkeeping writes', () => {
+    const flipped = record
+      .replace('authority: draft', 'authority: current')
+      .replace('approved_by: null', 'approved_by: cixzhang')
+      .replace('approved_at: null', 'approved_at: 2026-10-28');
+    expect(fingerprint(flipped)).toBe(fingerprint(record));
+    for (const edited of [
+      record.replace('The contract.', 'Another contract.'),
+      record.replace('owners: [cixzhang]', 'owners: [someone]'),
+      `${record}authority: current\n`,
+    ]) {
+      expect(fingerprint(edited)).not.toBe(fingerprint(record));
+    }
   });
+});
 
-  it('reads a revoke as a rejection', () => {
+describe('one review gate', () => {
+  const noCode = 'No code review required.';
+
+  it('fails closed before a spec decision, and links a wait to its run', () => {
+    const compose = spec =>
+      composeReviewGate({codeGated: false, codeDescription: noCode, spec});
+    expect(compose(readSpecGate([]))).toMatchObject({
+      state: 'pending',
+      description: '⏳ Checking for spec changes…',
+    });
+    const url = 'https://github.com/meta/astryx/actions/runs/7/attempts/1';
     expect(
-      parseOwnerDecisionDispatch(dispatch({decision: 'revoke'}), {appLogin})
-        .decision.approved,
-    ).toBe(false);
-  });
-
-  it.each([
-    ['no app is configured', dispatch(), ''],
-    [
-      'another sender relays it',
-      dispatch({}, {login: 'someone', type: 'User'}),
-      appLogin,
-    ],
-    [
-      'a user borrows the app login',
-      dispatch({}, {login: appLogin, type: 'User'}),
-      appLogin,
-    ],
-    ['the pull request is not a number', dispatch({pr: '17'}), appLogin],
-    ['the head is abbreviated', dispatch({headSha: 'abcdef1'}), appLogin],
-    ['the owner is not a login', dispatch({ownerLogin: 'a b'}), appLogin],
-    ['the decision is unknown', dispatch({decision: 'lgtm'}), appLogin],
-    ['the request key is missing', dispatch({requestKey: ''}), appLogin],
-  ])('refuses a dispatch when %s', (_reason, payload, configured) => {
-    expect(
-      parseOwnerDecisionDispatch(payload, {appLogin: configured}).problem,
-    ).toEqual(expect.any(String));
-  });
-
-  function decisionStatus({
-    owner: login = 'cixzhang',
-    approved = true,
-    at = '2026-08-30T10:00:00.000Z',
-    state = approved ? 'success' : 'failure',
-    creator = 'github-actions[bot]',
-  } = {}) {
-    return {
-      context: `spec-owner-decision/${login}`,
-      state,
-      description: decisionStatusDescription({
-        approved,
-        at,
-        requestKey: 'req-1',
-      }),
-      target_url: canonicalRunUrl('facebook/astryx', '9', '1'),
-      creator: {login: creator},
-    };
-  }
-  const readBack = (statuses, owners = ['cixzhang']) =>
-    parseDecisionStatuses(statuses, {
-      repository: 'facebook/astryx',
-      headSha: head,
-      owners,
-    });
-
-  it('reads a published decision back for a current owner', () => {
-    expect(readBack([decisionStatus({approved: false})])).toEqual([
-      {
-        approved: false,
-        at: '2026-08-30T10:00:00.000Z',
-        headSha: head,
-        owner: 'cixzhang',
-        source: 'command',
-      },
-    ]);
-  });
-
-  it('ignores a decision whose owner has left the owner files', () => {
-    expect(readBack([decisionStatus()], ['ernestt'])).toEqual([]);
-  });
-
-  it('ignores a decision status this workflow did not publish', () => {
-    expect(readBack([decisionStatus({creator: 'someone'})])).toEqual([]);
-  });
-
-  it('ignores a decision whose state contradicts its description', () => {
-    expect(readBack([decisionStatus({state: 'failure'})])).toEqual([]);
-  });
-
-  it('lets a later relayed revoke override an earlier command', () => {
-    const decision = resolveOwnerDecision({
-      reviews: [],
-      comments: [
-        {
-          user: owner,
-          body: `/approve-spec ${head}`,
-          created_at: '2026-08-30T09:00:00Z',
-        },
-      ],
-      relayedDecisions: readBack([decisionStatus({approved: false})]),
-      owners: ['cixzhang'],
-      headSha: head,
-    });
-    expect(decision).toMatchObject({approved: false, source: 'command'});
-  });
-
-  it('ignores a relayed decision for another head', () => {
-    const decision = resolveOwnerDecision({
-      reviews: [],
-      comments: [],
-      relayedDecisions: [
-        {
-          approved: true,
-          at: '2026-08-30T10:00:00Z',
-          headSha: '1'.repeat(40),
-          owner: 'cixzhang',
-          source: 'command',
-        },
-      ],
-      owners: ['cixzhang'],
-      headSha: head,
-    });
-    expect(decision.approved).toBe(false);
+      compose({known: true, satisfied: false, text: '⏳ wait', url}),
+    ).toEqual({state: 'pending', description: '⏳ wait', target_url: url});
   });
 });

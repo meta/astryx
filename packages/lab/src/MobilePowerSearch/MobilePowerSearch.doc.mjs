@@ -70,7 +70,7 @@ export const docs = {
       name: 'hasClear',
       type: 'boolean',
       description:
-        'Shows Clear all in the Filters sheet footer. Read-only filters are never cleared.',
+        'Shows Clear all in the Filters sheet footer. Clear all removes every filter, read-only ones included, as the Core PowerSearch clear control does, and reports one `remove` change at the last index.',
       default: 'true',
     },
     {
@@ -107,7 +107,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'Lab prototype for trying the touch PowerSearch flow. Choose it explicitly on touch layouts (for example `const Search = isTouch ? MobilePowerSearch : PowerSearch`); it never switches on pointer type by itself. The whole field is one Manage filters trigger showing display-only tokens. Tapping it opens a tall Filters sheet listing each filter as a chevron row with its value in bold, Add filter at the top right, and sticky Clear all and Done actions. Opening a row edits that filter in a sheet with Cancel, Apply, and Remove. Add filter opens directly when no filter exists; when the config names a content-search field it carries that search with inline suggestions. Creating a filter drills field → operator (radios, only when a field has more than one) → value. Single and multi-value choices are full-width rows with trailing checks; other value types use the matching Astryx input. Fields whose only operators are nested are left out with a development warning.',
+      'Lab prototype for trying the touch PowerSearch flow. Choose it explicitly on touch layouts (for example `const Search = isTouch ? MobilePowerSearch : PowerSearch`); it never switches on pointer type by itself. The whole field is one Manage filters trigger showing display-only tokens. Tapping it opens a tall Filters sheet listing each filter with its value in bold and a direct trailing remove action, an Add filter icon button at the top right, and sticky Clear all and Done actions. One-tap boolean filters use the same trailing remove action as every other removable filter. When there are no filters, the centered Add filter action stands alone; the duplicate header add and footer Done controls are hidden. Clear all asks for confirmation, removes editable filters without closing the sheet, and preserves read-only filters. Opening the rest of a row edits that filter with Cancel and Apply. Add filter opens directly when no filter exists and leaves search unfocused until the user chooses it; when the config names a content-search field it carries that search with inline suggestions. Creating a filter drills field → operator (radios, only when a field has more than one) → value. A value editor that is the sheet’s only section sits directly on the sheet surface; multiple sections use separate muted containers. The previous step remains open beneath the current standalone BottomSheet, so Escape, a scrim press, or a downward swipe dismisses the current sheet and reveals that retained step; the Add filter header stays action-free. the stack keeps one scrim and blocks covered sheets. Single-value choices use persistent radio indicators and multi-value choices use persistent checkbox indicators. Searchable string and entity lists and date calendars remain inline in the value sheet; date-only and date-range selections honor timezoneID, while date-time operators keep their date-and-time input. Announcements made while a sheet is open are delivered inside that dialog. Filters remain keyed by identity across controlled reorder, stale filters stay visible and removable, and controlled removals re-home focus. The scroll viewport reaches the sheet edge while padded inner content aligns with the fixed header. Fields whose only operators are nested are left out with a development warning.',
     bestPractices: [
       {
         guidance: true,
@@ -141,19 +141,19 @@ export const docs = {
         name: 'Filters sheet',
         required: true,
         description:
-          'Tall sheet with a heading, Add filter, a divided list of chevron rows, and sticky Clear all plus Done.',
+          'Tall sheet with a heading, an Add filter icon button, editable rows with direct trailing remove actions, and sticky Clear all plus Done.',
       },
       {
         name: 'Add filter sheet',
         required: true,
         description:
-          'Back, a field list grouped by field group (searchable past eight fields), or the content search with inline suggestions.',
+          'A full-width Done footer when entered directly; otherwise the action-free header is followed by a field list grouped under General or each configured field group (searchable past eight fields), or the content search with inline suggestions.',
       },
       {
         name: 'Value sheet',
         required: true,
         description:
-          'Field or field-and-operator title, operator radios when needed, the value editor, and Cancel plus Add filter or Apply and Remove. A list value (string_list, entity_list) edits through the Lab MobileTokenizer: its trigger shows the staged tokens in the step, and tapping it opens a second, searchable sheet titled with the field name.',
+          'Field or field-and-operator title, operator radios when needed, the value editor, and Cancel plus Add filter or Apply. String and entity lists search and select inline in the current sheet; date-only and date-range values use an inline Calendar.',
       },
     ],
   },

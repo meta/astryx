@@ -673,6 +673,7 @@ export function detectStylingSystem(targetDir) {
       '@stylexjs/rollup-plugin',
       '@stylexjs/webpack-plugin',
       '@stylexjs/nextjs-plugin',
+      '@stylexjs/unplugin',
       'vite-plugin-stylex',
       'unplugin-stylex',
       '@stylexswc/unplugin',

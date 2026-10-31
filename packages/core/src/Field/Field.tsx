@@ -29,7 +29,7 @@ import type {IconType} from '../Icon';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
-import {Text} from '../Text';
+import {Text} from '../Text/Text';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 

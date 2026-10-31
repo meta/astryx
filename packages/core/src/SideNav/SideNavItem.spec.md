@@ -39,7 +39,7 @@ system_specs: [spec:AST-085]
 | Behavior                | One SideNav row: a link or button with optional icon and passive end content, optional row-level actions beside it, and optional nested children that can expand and collapse. In a collapsed rail it is icon-only with a tooltip or a flyout.                |
 | End-user impact         | Users see and hear the current page, reach row actions before nested items, expand or collapse groups without navigating, and return to the page after choosing a destination in the mobile drawer.                                                           |
 | Builder impact          | None.                                                                                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no public change. Four implementation gaps (see Current-state impact).                                                                                                                                                              |
+| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps (see Current-state impact).                                                                                                                                                             |
 | Review checks           | Reject an interactive control rendered inside the primary element, a link that also toggles collapse, a toggle or action that activates the row, collapsed children that stay reachable, or a drawer activation that leaves the drawer open after navigating. |
 | Governing rules         | `component:SideNav` FR1–FR5, DD1 (nesting and row geometry); `family:navigation-destinations`; `architecture:interaction-modality`; `architecture:public-component-api`.                                                                                      |
 
@@ -68,10 +68,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **A disabled item leaves the tab order.** A disabled item renders a
-  `<button>` with the native `disabled` attribute, so it is skipped by Tab and
-  exposes no focusable disabled state. `spec:AST-085` FR1 has a disabled control
-  expose `aria-disabled="true"` and keep its tab stop.
 - **A disabled parent stays operable in a collapsed rail.** In a collapsed rail,
   a disabled item with children renders its flyout trigger with neither
   `disabled` nor `aria-disabled`, so it keeps its tab stop and announces no
@@ -125,7 +121,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 | ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Basis                    |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1  | The primary element is the `as` component, else the `LinkProvider` link, else `<a>`, when `href` is set and the item is enabled; otherwise a `<button type="button">`. A disabled item MUST stay focusable with `aria-disabled="true"` and keep its tab stop (`spec:AST-085` FR1). Implementation gap: a disabled item renders native `disabled` instead, which removes it from the tab order. It shows the icon (`selectedIcon` when selected and given), the label, `endContent`, and, for a whole-row collapsible item, a chevron. `endContent` is passive and renders inside the primary element.                                                                       | Current source and tests |
+| FR1  | The primary element is the `as` component, else the `LinkProvider` link, else `<a>`, when `href` is set and the item is enabled; otherwise a `<button type="button">`. A disabled item stays focusable with `aria-disabled="true"`, keeps its tab stop, and keeps focus when it becomes disabled (`spec:AST-085` FR1, FR4). It shows the icon (`selectedIcon` when selected and given), the label, `endContent`, and, for a whole-row collapsible item, a chevron. `endContent` is passive and renders inside the primary element.                                                                                                                                          | Current source and tests |
 | FR2  | In an expanded rail and on a collapsed leaf, `isSelected` sets `aria-current="page"` on the primary element, never on a row wrapper. A collapsed parent's flyout trigger carries no `aria-current`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests |
 | FR3  | A disabled item does not fire `onClick` or navigate. Its row actions stay operable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests |
 | FR4  | `actions` render as siblings of the primary element at the row's trailing edge, after the toggle and before nested children in DOM and focus order, at the row's control size (`sm`) unless a control sets its own (`architecture:component-size-cascade`). Clicking an action neither activates nor toggles the row. A row wrapper exists only when there are actions or an independent toggle; a falsy `actions` adds none.                                                                                                                                                                                                                                               | Current source and tests |
@@ -146,16 +142,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                      | Required invariant                                                                     | Allowed variation |
-| -------------------------- | -------------------------------------------------------------------------------------- | ----------------- |
-| Link, selected             | `aria-current="page"` on the link; selected icon if given.                             | Fill.             |
-| Disabled button            | `aria-disabled`; focusable; no `onClick`. Implementation gap: native `disabled` (FR1). | Muted styling.    |
-| Collapsible without action | Whole row toggles; chevron turns.                                                      | —                 |
-| Collapsible with `href`    | Link navigates; separate toggle button collapses.                                      | —                 |
-| Actions                    | Actions after toggle, before children; never activate the row.                         | Action content.   |
-| Collapsed rail leaf        | Icon-only; tooltip with label.                                                         | —                 |
-| Collapsed rail parent      | Icon-only trigger; flyout with header and children.                                    | Delay.            |
-| Mobile drawer              | Activation closes the drawer.                                                          | —                 |
+| State                      | Required invariant                                             | Allowed variation |
+| -------------------------- | -------------------------------------------------------------- | ----------------- |
+| Link, selected             | `aria-current="page"` on the link; selected icon if given.     | Fill.             |
+| Disabled button            | `aria-disabled`; focusable; no `onClick`.                      | Muted styling.    |
+| Collapsible without action | Whole row toggles; chevron turns.                              | —                 |
+| Collapsible with `href`    | Link navigates; separate toggle button collapses.              | —                 |
+| Actions                    | Actions after toggle, before children; never activate the row. | Action content.   |
+| Collapsed rail leaf        | Icon-only; tooltip with label.                                 | —                 |
+| Collapsed rail parent      | Icon-only trigger; flyout with header and children.            | Delay.            |
+| Mobile drawer              | Activation closes the drawer.                                  | —                 |
 
 ### Transformation and precedence order
 
@@ -211,16 +207,10 @@ is recorded. Row geometry visual intent is `component:SideNav` DD1.
 | FR11          | `SideNav.test.tsx` focus ring suite                                 | Plain, split, actions rows                                                                                                | Missing shared ring classes fail.                                                 | `audit:SideNavItem/accessibility` |
 | FR3, FR7, FR9 | `SideNav.test.tsx` keyboard operation and focus management suites   | Tab order, Enter/Space toggle, flyout Escape                                                                              | Lost order, a stranded focus, or no focus return fails.                           | `audit:SideNavItem/accessibility` |
 
-Pending conformance: the SideNavItem suite's native-`disabled` assertion and
-the keyboard suite's disabled Tab-skip assertion pin FR1's implementation gap;
-they change when disabled items follow `spec:AST-085`.
-
 Read from source, with no focused test yet:
 
-- FR1 and ORD1–ORD2: a disabled item with `href` rendering a button, the
-  required focusable `aria-disabled` shape (no item renders it yet), the
-  button's `type="button"`, the icon, the selected-icon swap, and the whole-row
-  chevron.
+- FR1 and ORD1–ORD2: the button's `type="button"`, the icon, the
+  selected-icon swap, and the whole-row chevron.
 - FR4: the actions' trailing-edge placement and the wrapper for an independent
   toggle without actions.
 - FR5: the forwarded `ref` and `xstyle` on the outer box.

@@ -38,7 +38,7 @@ let analysis = {
   componentStats: {},
   totalBundle: {},
 };
-let a11yReport = {components: {}};
+let a11yReport = null; // stays null when the audit did not run
 try {
   analysis = JSON.parse(fs.readFileSync(analysisFile, 'utf8'));
 } catch (e) {
@@ -321,12 +321,17 @@ if (sandboxUrl) {
 `;
 }
 
-// Both previews share the exact-head Vercel deployment, never a Pages, canary,
-// production, or earlier-head fallback.
+// Both previews come from the branch's Vercel alias, which serves the
+// branch's latest deployment; until a push's deployment is ready it still
+// shows the previous head. Vercel shortens a long alias with a hash, and then there are
+// no links.
 let previewAvailabilitySection = '';
 if (previewState) {
   if (!storybookUrl || !sandboxUrl)
-    previewAvailabilitySection = `> **Preview availability:** Storybook and Sandbox are not both ready on the exact-head Vercel preview.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
+    previewAvailabilitySection = `> **Preview availability:** this branch's preview address cannot be known in advance; open the preview from Vercel's comment on this pull request.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
+  else
+    previewAvailabilitySection =
+      "> **Preview:** the links below open this branch's latest Vercel deployment, which can trail a new push until that push's deployment is ready.\n\n";
 }
 
 // Build footer with links

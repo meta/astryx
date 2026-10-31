@@ -18,7 +18,9 @@ auto-discovery layer runs with **zero curated selectors**. There are three
 independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 **D6 (directional-decoration)**.
 
-> **Scope in CI.** `pr-rtl` passes `--filter` with the components the PR
+> **Scope in CI.** `pr-rtl` runs after merges to `main` and in release checks at
+> full scope, and on a PR only with the `ci:heavy-lanes` label (spec:AST-030
+> FR12). On a labelled PR it passes `--filter` with the components the PR
 > touched (from `analysis.json`), matching `pr-a11y`. Eligibility is classified
 > by the component policy and package registry loaded from the trusted base ref;
 > a missing policy, empty or unmatched path set, unresolved component list, or
@@ -34,9 +36,11 @@ independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 > policy requires full scope, every manifest must be runnable with an empty
 > filter and all five package reports must arrive. A planned scan ending in ERROR
 > is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
-> an all-skipped required matrix all fail closed. An ordinary RTL-harness-only PR runs the fixed `Chart,ChartLegend` routing smoke
-> scope so package discovery and curated aliases cannot skip their own check. The
-> full unfiltered sweep also runs weekly in `.github/workflows/rtl-weekly.yml`.
+> an all-skipped required matrix all fail closed. An RTL-harness-only PR labelled `ci:heavy-lanes` runs the fixed
+> `Chart,ChartLegend` routing smoke scope so package discovery and curated aliases
+> cannot skip their own check; without the label, `main`'s `release-check` covers
+> the harness after merge (spec:AST-030 FR12). The
+> full unfiltered sweep runs in that release-check.
 > Omit `--filter` to run it locally. The blocking accessibility audit consumes the
 > same package-qualified owner-to-story routes and fails if any selected owner
 > resolves to zero stories.
@@ -69,6 +73,33 @@ Directional-icon mirroring. For each audited story it:
 
 This is the broad safety net: a component that lands a directional chevron
 without RTL support shows up as a not-RTL finding automatically.
+
+D1 selects one representative per component by stable story source-file and
+export order, rather than depending on generated `index.json` object order. A
+reference fixture that intentionally preserves caller-supplied directional
+glyph geometry may opt out of D1 only, with a colocated rationale:
+
+```ts
+import {rtlAuditParameters} from '../rtl-audit/story-parameters';
+
+export const ReferenceFixture: StoryObj = {
+  parameters: rtlAuditParameters({
+    D1: {
+      applicable: false,
+      reason: 'The samples are caller-supplied data, not directional controls.',
+    },
+  }),
+};
+```
+
+The audit validates the rendered, resolved Storybook parameters for every
+in-scope story before choosing the D1 representative. Story-level parameters
+therefore override meta-level defaults through normal Storybook precedence.
+`applicable: false` without a nonempty reason is an error, and D5 and D6
+continue scanning the same story. The JSON report and Markdown scorecard list
+every declared D1 exclusion with its component, story ID, dimension, and
+rationale—even when an earlier applicable story is selected—so a human reviewer
+can confirm the fixture is data rather than a directional control or cue.
 
 #### Interaction-revealed icons (popovers, dialogs, menus)
 
@@ -220,8 +251,13 @@ hand-written selectors, run **in addition** to auto-discovery:
 - **D3 behavior-flip** — directional behavior inverts, e.g. Carousel's scroll
   axis: "next" makes `scrollLeft` go positive in LTR and negative in RTL.
 - **D4 overlay-side** — a positioned affordance flips side (`boundingBox`).
-- **D7 coarse hit alignment** — each configured native input remains centered
-  under its visible coarse-pointer wrapper and receives a center-point hit.
+- **D7 coarse native size/alignment** — each configured native input remains
+  centered under its visible coarse-pointer wrapper, receives a center-point
+  hit, and meets both dimensions of the target's `minimumTargetSize` in LTR/RTL
+  at every configured size. The minimum belongs to the component/composition,
+  not a universal audit default; missing or invalid dimensions are errors.
+  Reports retain native and wrapper boxes separately so a large wrapper cannot
+  conceal an undersized input.
 - **D8 logical inline-edge mirror** — one configured, visible, non-zero subject
   carries an intentionally asymmetric logical start/end padding pair whose
   logical values stay stable while the resolved physical inline-axis sides swap
@@ -258,7 +294,8 @@ without inventing a curated measurement.
 - **coverage gap**: every dimension returned N-A and no reason is recorded.
 
 Coverage gaps are findings. This rule applies to the existing full-library
-weekly sweep and to every new or changed component in PR CI. A component with no
+release-check sweep on main and before each release, and to every new or changed
+component in a labelled PR's CI. A component with no
 story is also a gap when it is named by `--filter`; it cannot disappear from the
 report merely because there was nothing to render.
 
@@ -320,6 +357,13 @@ pnpm rtl:audit -- --concurrency 4
 # Just the broad auto-discovery net, or just the curated dims:
 pnpm rtl:audit -- --auto-only
 pnpm rtl:audit -- --curated-only
+```
+
+For the D7 gate's native-width, native-height, alignment, hit-testing, and
+minimum-contract mutations (Chromium required):
+
+```bash
+ASTRYX_RTL_BROWSER=1 pnpm exec vitest run --project node .github/scripts/rtl-audit-coarse-hit.browser.test.mjs --maxWorkers=1
 ```
 
 Exit code is non-zero if auto-discovery finds a not-RTL component, a curated

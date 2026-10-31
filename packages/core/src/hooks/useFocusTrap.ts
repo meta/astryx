@@ -425,18 +425,25 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       }
 
       if (event.key === 'Tab') {
-        // Mark that keyboard navigation is happening
+        const active = doc.activeElement;
+        // Any focused node counts, not only HTML elements: an SVG control
+        // inside the container is still inside.
+        if (active == null || !container.contains(active)) {
+          // The trap contains focus that is inside it; it does not pull in a
+          // Tab pressed elsewhere on the page. A layer can be open while focus
+          // legitimately sits outside it — a listbox popup anchored to its own
+          // input, a non-modal popover beside the content it annotates — and
+          // capturing that Tab would take the rest of the page away from
+          // keyboard users.
+          return;
+        }
+
+        // Mark that keyboard navigation is leaving from inside the trap, so a
+        // focus that lands outside is redirected back in.
         isKeyboardNavigationRef.current = true;
 
         const focusable = getFocusableElements(container);
         if (focusable.length === 0) {
-          const active = doc.activeElement;
-          if (!isHTMLElement(active) || !container.contains(active)) {
-            // A layer can be open while focus legitimately sits outside it —
-            // a listbox popup anchored to its own input. Cancelling there
-            // would take Tab away from the whole page.
-            return;
-          }
           // There is nowhere to advance to. Keep focus on the current
           // programmatic target (for example a dialog panel with tabIndex=-1)
           // rather than allowing the browser to move into background content.

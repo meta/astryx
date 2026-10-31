@@ -21,8 +21,8 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, durationVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Text} from '../Text/Text';
-import {mergeProps} from '../utils';
-import {useTranslator} from '../i18n';
+import {mergeProps} from '../utils/mergeProps';
+import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -334,7 +334,9 @@ const styles = stylex.create({
     // it (a frozen spinner reads as broken), matching ProgressBar's approach.
     // The role="status" + "Loading" label still convey busy state (obs-6).
     animationDuration: {
-      default: durationVars['--duration-slow-min'],
+      // The loop reads the duration before a theme's tempo scales it
+      // (spec:AST-108 FR4).
+      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
       '@media (prefers-reduced-motion: reduce)': '3s',
     },
     animationIterationCount: 'infinite',

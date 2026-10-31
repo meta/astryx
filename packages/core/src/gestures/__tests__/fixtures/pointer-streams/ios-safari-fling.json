@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "platform": "iOS 26.2 simulator, iPhone 17 Pro",
+  "browser": "Safari 26.2",
+  "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.2 Mobile/15E148 Safari/604.1",
+  "dpr": 3,
+  "pointerType": "touch",
+  "coarse": true,
+  "gesture": "fling",
+  "caveat": "Rig input is synthetic, not a finger: Android injects at 120 Hz through a uinput touchscreen and desktop through CDP, each through the browser's real input pipeline; iOS input is HID through idb on a leased simulator, which delivers a move every ~30 ms (not 120 Hz), so iOS speeds are the distance Safari delivered between the first and last moving pointermove, over that time. A physical finger's 120–240 Hz jittered sampling is not reproduced.",
+  "injected": {
+    "source": "idb ui swipe (companion-side steps of 60 pt), iOS 26.2 simulator, iPhone 17 Pro; the companion delivers a step about every 30 ms (measured), not at a set rate",
+    "hz": null,
+    "commanded": {
+      "fromPx": [0, 0],
+      "toPx": [0, 300],
+      "deltaPt": 60,
+      "durationMs": 42
+    },
+    "speed": 2400,
+    "restMs": 0,
+    "speedFrom": "Safari's delivery: the first to the last moving pointermove"
+  },
+  "release": {
+    "at": "lastMove",
+    "check": "shape",
+    "note": "idb lifts 58 ms after the last move, longer than the 40 ms stillness interval, which a finger lifting mid-motion does not do: the replay releases at the last move. The simulator delivers each step 29-44 ms apart (six samples here): against the speed Safari delivered, from its first to its last moving pointermove, the pan release reads 7.2% under and the scroll release 12.2% under. One misses 10%, so this fling is not velocity evidence, and only its direction and axis are checked"
+  },
+  "liftAfterLastMoveMs": 58,
+  "events": [
+    ["pointerdown", 0, 0, 0],
+    ["touchstart", 0, 0, 0],
+    ["pointermove", 24, 0, 60, [[24, 0, 60]], 0],
+    ["touchmove", 24, 0, 60],
+    ["pointermove", 24, 0, 60, [[24, 0, 60]], 0],
+    ["pointermove", 53, 0, 120, [[53, 0, 120]], 0],
+    ["touchmove", 53, 0, 120],
+    ["pointermove", 82, 0, 180, [[82, 0, 180]], 0],
+    ["touchmove", 82, 0, 180],
+    ["pointermove", 124, 0, 300, [[124, 0, 300]], 0],
+    ["touchmove", 124, 0, 300],
+    ["pointerup", 182, 0, 300],
+    ["touchend", 182, 0, 300]
+  ]
+}

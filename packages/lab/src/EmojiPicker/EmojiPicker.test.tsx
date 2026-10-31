@@ -273,4 +273,25 @@ describe('EmojiPicker', () => {
     fireEvent.change(search(), {target: {value: 'finish'}});
     expect(emojiNames()).toEqual(['Chequered flag']);
   });
+
+  it('renders the bundled emoji load error inside a status region', async () => {
+    const loadFailedMessage = "More emoji couldn't be loaded.";
+
+    vi.resetModules();
+    vi.doMock('./emojiData', () => {
+      throw new Error('forced emoji data load failure');
+    });
+
+    const {EmojiPicker: FailingEmojiPicker} = await import('./EmojiPicker');
+
+    render(<FailingEmojiPicker frequentEmojis={[]} onSelect={() => {}} />);
+
+    const errorMessage = await screen.findByText(loadFailedMessage);
+
+    const isInsideStatusRegion = screen
+      .getAllByRole('status')
+      .some(status => status.contains(errorMessage));
+
+    expect(isInsideStatusRegion).toBe(true);
+  });
 });

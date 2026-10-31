@@ -391,6 +391,10 @@
     "defaultMessage": "Expand",
     "description": "Button label on a chip in the chat composer representing a long pasted text block; clicking reveals full content. \"Expand\" here means reveal more, not grow physically."
   },
+  "@astryx.chat.pastedText.label": {
+    "defaultMessage": "{lines, plural, =1 {{chars, plural, other {{chars} chars}}} other {{lines} lines, {chars, plural, other {{chars} chars}}}}",
+    "description": "Count label on a pasted-text chip and its hover preview in the chat composer. {lines} is the number of text lines and {chars} is the character count. The single-line branch omits the line count. Translators may reorder the counts and localize the abbreviated units."
+  },
   "@astryx.checkboxList.item.checkbox": {
     "defaultMessage": "Checkbox",
     "description": "Localized hidden text used internally when a rich visible label names the checkbox through aria-labelledby. It does not become the computed name; callers must provide aria-label when rich content has no text."
@@ -787,6 +791,14 @@
     "defaultMessage": "Open menu",
     "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
   },
+  "@astryx.slider.minimumThumb": {
+    "defaultMessage": "Minimum value",
+    "description": "Accessible name of the lower thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Minimum value, 20\". Never shown on screen."
+  },
+  "@astryx.slider.maximumThumb": {
+    "defaultMessage": "Maximum value",
+    "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
@@ -798,6 +810,10 @@
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."
+  },
+  "@astryx.table.columnResize.resizeColumn": {
+    "defaultMessage": "Resize column {label}",
+    "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
@@ -851,25 +867,9 @@
     "defaultMessage": "Clear sort",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "ascending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "descending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Sort by {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Sort by {label}, sorted {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Sort by {label}, sorted {direction}, priority {rank, number} of {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
+  "@astryx.table.sort.priority": {
+    "defaultMessage": "Priority {rank, number} of {total, number}",
+    "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
   },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
@@ -1005,11 +1005,11 @@
   },
   "@astryx.dateTimeInput.timeHint12h": {
     "defaultMessage": "e.g., 2:30 PM",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 12-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 12-hour format. Gives an example of expected input format; write the example time as your locale writes 12-hour time."
   },
   "@astryx.dateTimeInput.timeHint24h": {
     "defaultMessage": "e.g., 14:30",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 24-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 24-hour format. Gives an example of expected input format; write the example time as your locale writes 24-hour time."
   },
   "@astryx.dateTimeInput.timeSuffix": {
     "defaultMessage": "{label} time",
@@ -1106,6 +1106,10 @@
   "@astryx.powersearch.placeholder": {
     "defaultMessage": "Search…",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.powersearch.allFiltersRemoved": {
+    "defaultMessage": "All filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
   },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
@@ -1287,6 +1291,18 @@
     "defaultMessage": "1 file selected: {fileName}",
     "description": "Live-region announcement when a single file is successfully selected."
   },
+  "@astryx.fileInput.fileSize.bytes": {
+    "defaultMessage": "{size, number, ::group-off} B",
+    "description": "File-size limit below 1024 bytes in FileInput validation feedback. {size} is a number of bytes. Localize the unit abbreviation; do not add digit grouping."
+  },
+  "@astryx.fileInput.fileSize.kilobytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} KB",
+    "description": "File-size limit from 1024 bytes up to one megabyte in FileInput validation feedback. {size} is bytes divided by 1024, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
+  "@astryx.fileInput.fileSize.megabytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} MB",
+    "description": "File-size limit of at least one megabyte in FileInput validation feedback. {size} is bytes divided by 1048576, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
   "@astryx.fileInput.filesSelected": {
     "defaultMessage": "{count} files selected",
     "description": "Live-region announcement when multiple files are successfully selected."
@@ -1306,6 +1322,70 @@
   "@astryx.fileInput.triggerWithFiles": {
     "defaultMessage": "{label}, {fileNames}",
     "description": "Accessible name for a FileInput trigger that has files attached, composing the field label with the selected filenames. Example: `Attachments, report.pdf, notes.txt`."
+  },
+  "@astryx.kbd.key.alt": {
+    "defaultMessage": "Alt",
+    "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.backspace": {
+    "defaultMessage": "Backspace",
+    "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.command": {
+    "defaultMessage": "Command",
+    "description": "Spoken name of the Command modifier key on Apple platforms in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.control": {
+    "defaultMessage": "Control",
+    "description": "Spoken name of the Control modifier key in a keyboard shortcut's accessible name. Also resolves the mod key on non-Apple platforms."
+  },
+  "@astryx.kbd.key.controlShort": {
+    "defaultMessage": "Ctrl",
+    "description": "Abbreviated visible label of the Control keycap used for mod on non-Apple platforms. Localize to the keyboard's conventional short label."
+  },
+  "@astryx.kbd.key.down": {
+    "defaultMessage": "Down arrow",
+    "description": "Spoken name of the down arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.enter": {
+    "defaultMessage": "Enter",
+    "description": "Spoken name of the Enter or Return key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.escape": {
+    "defaultMessage": "Escape",
+    "description": "Spoken name of the Escape key in a keyboard shortcut's accessible name. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.escapeShort": {
+    "defaultMessage": "Esc",
+    "description": "Abbreviated visible label of the Escape keycap. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.left": {
+    "defaultMessage": "Left arrow",
+    "description": "Spoken name of the left arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.plus": {
+    "defaultMessage": "Plus",
+    "description": "Spoken name of the literal plus key in a keyboard shortcut's accessible name, distinct from the separator between keys."
+  },
+  "@astryx.kbd.key.right": {
+    "defaultMessage": "Right arrow",
+    "description": "Spoken name of the right arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.shift": {
+    "defaultMessage": "Shift",
+    "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.tab": {
+    "defaultMessage": "Tab",
+    "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.up": {
+    "defaultMessage": "Up arrow",
+    "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.shortcut": {
+    "defaultMessage": "{shortcut} + {key}",
+    "description": "Combines spoken key names into one keyboard shortcut's accessible name. {shortcut} is the preceding keys and {key} is the next key's localized spoken name. Applied once for each key after the first; translators may change the separator or order."
   },
   "@astryx.keyboardHint.toNavigate": {
     "defaultMessage": "to navigate",
@@ -1487,6 +1567,10 @@
     "defaultMessage": "Expand all rows",
     "description": "Aria label for the Table tree-data header toggle when rows are collapsed and clicking it expands them."
   },
+  "@astryx.textArea.counter": {
+    "defaultMessage": "{count, number}/{limit, number}",
+    "description": "Visible character counter at the bottom of a TextArea that has a character limit, for example `62/2,000`. `{count}` is the characters typed so far and `{limit}` the limit; keep both numbers and reorder or change the separator if your language needs to."
+  },
   "@astryx.textArea.charactersRemaining": {
     "defaultMessage": "{count, number} {count, plural, one {character} other {characters}} remaining",
     "description": "Screen-reader-only announcement of how many characters the user can still type before hitting a TextArea's maxLength. Announced politely as the count nears the limit. `{count}` is the number remaining — example: `12 characters remaining`."
@@ -1563,6 +1647,10 @@
     "defaultMessage": "{count, number} of {total, number} selected",
     "description": "Polite screen-reader announcement of how many MultiSelector options are selected out of the total, spoken after each toggle. Live-region text, never shown on screen; example: `3 of 12 selected`."
   },
+  "@astryx.multiSelector.selectedCount": {
+    "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
+    "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
+  },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",
     "description": "Label of the first row in a MultiSelector's search panel when `hasCreate` is set and the typed text matches no option. Picking it reports a creation to the caller. `{query}` is the trimmed text the person typed, shown in quotes."
@@ -1598,6 +1686,58 @@
   "@astryx.tokenizer.tokenRemoved": {
     "defaultMessage": "Removed {label}",
     "description": "Polite screen-reader announcement after a token is removed from a Tokenizer, by its × button or by Backspace. Live-region text, never shown on screen; `{label}` is the token's visible text."
+  },
+  "@astryx.tokenizer.search": {
+    "defaultMessage": "Search {label}",
+    "description": "Accessible name of the search field at the top of a Tokenizer's bottom sheet (the touch presentation). `{label}` is the field's own label, e.g. `Search Tags`. Not shown on screen."
+  },
+  "@astryx.tokenizer.searchPlaceholder": {
+    "defaultMessage": "Search…",
+    "description": "Placeholder inside the search field at the top of a Tokenizer's bottom sheet, shown while the query is empty. Single word plus ellipsis."
+  },
+  "@astryx.tokenizer.noResultsDescription": {
+    "defaultMessage": "Try a different search.",
+    "description": "Supporting sentence under the no-results empty-state title inside a Tokenizer's bottom sheet, suggesting the person change the query."
+  },
+  "@astryx.tokenizer.create": {
+    "defaultMessage": "Create \"{value}\"",
+    "description": "Label of a Tokenizer's create row, in the inline menu and the bottom sheet, when `hasCreate` is set and the typed text matches no existing item. `{value}` is the typed text, e.g. `Create \"Marketing\"`."
+  },
+  "@astryx.tokenizer.add": {
+    "defaultMessage": "Add",
+    "description": "Visible label of the button at the end of the create row inside a Tokenizer's bottom sheet; pressing it adds the typed text as a new token. Imperative verb; short."
+  },
+  "@astryx.tokenizer.addValue": {
+    "defaultMessage": "Add {value}",
+    "description": "Screen-reader-only name of the create row's Add button inside a Tokenizer's bottom sheet. `{value}` is the typed text, e.g. `Add Marketing`."
+  },
+  "@astryx.tokenizer.done": {
+    "defaultMessage": "Done",
+    "description": "Label of the primary footer button inside a Tokenizer's bottom sheet; pressing it closes the sheet. Selections are already applied, so this is not a confirm."
+  },
+  "@astryx.tokenizer.clearAllTitle": {
+    "defaultMessage": "Clear all selected items?",
+    "description": "Title of the confirmation dialog shown when the person presses Clear all inside a Tokenizer's bottom sheet. A question."
+  },
+  "@astryx.tokenizer.clearAllDescription": {
+    "defaultMessage": "This removes all selected items from {label}.",
+    "description": "Body of the Clear all confirmation dialog inside a Tokenizer's bottom sheet. `{label}` is the field's own label, e.g. `This removes all selected items from Tags.`"
+  },
+  "@astryx.tokenizer.nothingToClear": {
+    "defaultMessage": "Nothing selected",
+    "description": "Tooltip on the disabled Clear all action in a Tokenizer's bottom sheet while no item is selected; keeps the action focusable and says why it does nothing."
+  },
+  "@astryx.tokenizer.allRemoved": {
+    "defaultMessage": "All items removed",
+    "description": "Polite screen-reader announcement after a Tokenizer's Clear all has removed every selected item: the inline Clear all button, or a confirmed Clear all in the bottom sheet. Live-region text, never shown on screen."
+  },
+  "@astryx.tokenizer.selectedCount": {
+    "defaultMessage": "{count, number} selected",
+    "description": "Screen-reader-only lead-in of the description on a Tokenizer's bottom-sheet trigger (the touch presentation), followed by the selected token labels. `{count}` is how many tokens are selected, e.g. `2 selected`. Not shown on screen."
+  },
+  "@astryx.tokenizer.clearSelection": {
+    "defaultMessage": "Clear selection",
+    "description": "Label of the destructive action button in the Clear all confirmation dialog inside a Tokenizer's bottom sheet. Imperative verb phrase; confirms removing every token."
   },
   "@astryx.lightbox.imagePosition": {
     "defaultMessage": "Image {index, number} of {total, number}",
@@ -2018,6 +2158,10 @@
   "@astryx.comments.resolvedBy": {
     "defaultMessage": "Resolved by {name}",
     "description": "Tooltip of the Resolved text on a comment thread in a lab Comments panel. `name` is the person who resolved it."
+  },
+  "@astryx.comments.errorAnnouncement": {
+    "defaultMessage": "{title} {description}",
+    "description": "Screen-reader announcement for an error Banner in a lab Comments panel that has a title and a description, read once when the Banner appears. `title` is the Banner's title (for example `Couldn't send this comment.`) and `description` its description (for example `Retrying didn't work.`). Reorder or punctuate as the language needs."
   },
   "@astryx.comments.retryFailed": {
     "defaultMessage": "Retrying didn't work.",

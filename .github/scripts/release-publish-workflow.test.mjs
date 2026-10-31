@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
@@ -19,6 +21,84 @@ const stable = workflow.jobs.publish;
 const canary = workflow.jobs.canary;
 const step = (job, name) =>
   job.steps.find(candidate => candidate.name === name);
+
+function writeJson(root, relative, value) {
+  const file = path.join(root, relative);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
+}
+
+function writeExecutable(root, name, contents) {
+  const file = path.join(root, 'bin', name);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, contents);
+  fs.chmodSync(file, 0o755);
+}
+
+function runCanaryPublish({
+  httpStatus,
+  curlExitCode = '0',
+  failingPackage = '',
+}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-canary-publish-'));
+  const publishLog = path.join(root, 'publish.log');
+  try {
+    writeJson(root, 'packages/core/package.json', {
+      name: '@astryxdesign/core',
+      version: '0.7.4',
+    });
+    writeJson(root, 'packages/native/package.json', {
+      name: '@astryxdesign/native',
+      version: '0.1.0',
+      private: true,
+      astryx: {canaryOnly: true},
+    });
+    writeJson(root, 'packages/themes/neutral/package.json', {
+      name: '@astryxdesign/theme-neutral',
+      version: '0.7.4',
+    });
+    writeExecutable(
+      root,
+      'curl',
+      '#!/bin/sh\nprintf %s "$NATIVE_HTTP_STATUS"\nexit "$CURL_EXIT_CODE"\n',
+    );
+    writeExecutable(
+      root,
+      'pnpm',
+      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n' +
+        '[ -z "$FAIL_PACKAGE" ] || case "$*" in *"$FAIL_PACKAGE"*) exit 1;; esac\n',
+    );
+
+    const runnerTemp = path.join(root, 'runner-temp');
+    fs.mkdirSync(runnerTemp, {recursive: true});
+    const result = spawnSync(
+      'bash',
+      ['-c', step(canary, 'Publish canary versions').run],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          CURL_EXIT_CODE: curlExitCode,
+          FAIL_PACKAGE: failingPackage,
+          GITHUB_SHA: 'abcdef1234567890',
+          NATIVE_HTTP_STATUS: httpStatus,
+          PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
+          PUBLISH_LOG: publishLog,
+          RUNNER_TEMP: runnerTemp,
+        },
+      },
+    );
+    return {
+      ...result,
+      published: fs.existsSync(publishLog)
+        ? fs.readFileSync(publishLog, 'utf8')
+        : '',
+    };
+  } finally {
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+}
 
 describe('stable and canary publication authority', () => {
   it('keeps stable explicit and canary limited to main pushes', () => {
@@ -41,7 +121,7 @@ describe('stable and canary publication authority', () => {
     expect(gateInputs['release-version']).toBeDefined();
     expect(gateInputs['plan-digest']).toBeDefined();
     const gate = step(
-      ci.jobs['check-scope'],
+      ci.jobs['release-authority'],
       'Validate active release authority',
     ).run;
     expect(gate).toContain('--release-version "$RELEASE_VERSION"');
@@ -84,6 +164,33 @@ describe('stable and canary publication authority', () => {
     expect(publish).not.toContain('--tag canary');
   });
 
+  it('reports stable success only after registry propagation is verified', () => {
+    const publishStep = step(stable, 'Publish changed packages');
+    expect(publishStep.env.RELEASE_VERSION).toBe(
+      "${{ inputs['release-version'] }}",
+    );
+    const publish = publishStep.run;
+    const verify = publish.indexOf('node scripts/npm/verify-published.mjs');
+    const success = publish.indexOf(
+      'Published $published package(s); registry verification passed.',
+    );
+    expect(verify).toBeGreaterThan(0);
+    expect(publish).toContain('--version "$RELEASE_VERSION"');
+    expect(publish).toContain('--tag latest');
+    expect(success).toBeGreaterThan(verify);
+    expect(publish.indexOf('if [ "$DRY_RUN" = "true" ]')).toBeLessThan(verify);
+  });
+
+  it('never cancels a canary that has started publishing', () => {
+    // A cancelled canary can leave a partial package set on npm; pending runs
+    // still coalesce under a non-cancelling group.
+    expect(canary.concurrency).toEqual({
+      group: 'npm-release-canary',
+      'cancel-in-progress': false,
+    });
+    expect(canary.concurrency.group).not.toBe(stable.concurrency.group);
+  });
+
   it('publishes canaries only while main is strictly ahead of stable', () => {
     const eligibility = step(
       canary,
@@ -111,6 +218,59 @@ describe('stable and canary publication authority', () => {
     const canaryText = JSON.stringify(canary);
     expect(canaryText).not.toContain('.release/active.json');
     expect(canaryText).not.toContain('release-publish-receipt');
+  });
+
+  it('skips only an absent package that was private and canary-only', () => {
+    const result = runCanaryPublish({httpStatus: '404'});
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Skipping absent private canary-only package @astryxdesign/native',
+    );
+    expect(result.published).toContain('publish ./packages/core');
+    expect(result.published).toContain('publish ./packages/themes/neutral');
+    expect(result.published).not.toContain('publish ./packages/native');
+  });
+
+  it('publishes a bootstrapped private canary-only package normally', () => {
+    const result = runCanaryPublish({httpStatus: '200'});
+
+    expect(result.status).toBe(0);
+    expect(result.published).toContain('publish ./packages/native');
+  });
+
+  it('fails on registry errors instead of treating them as package absence', () => {
+    const result = runCanaryPublish({httpStatus: '503'});
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Registry lookup for @astryxdesign/native returned HTTP 503',
+    );
+    expect(result.published).not.toContain('publish ./packages/native');
+  });
+
+  it('records a failed registry request and continues later packages', () => {
+    const result = runCanaryPublish({httpStatus: '000', curlExitCode: '28'});
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Registry lookup for @astryxdesign/native returned HTTP 000',
+    );
+    expect(result.published).not.toContain('publish ./packages/native');
+    expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('still fails when a present package cannot publish', () => {
+    const result = runCanaryPublish({
+      failingPackage: 'packages/native',
+      httpStatus: '200',
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Canary publish failed for @astryxdesign/native',
+    );
+    expect(result.published).toContain('publish ./packages/native');
   });
 
   it('validates every main merge-back against trusted policy and the immutable tag', () => {

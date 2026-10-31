@@ -65,12 +65,11 @@ const RUNNERS = {
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'eval ×2',
       'import(<computed>) ×3',
     ],
   },
@@ -218,10 +217,7 @@ const RUNNERS = {
   },
   'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../api/hook/hook.doc.mjs',
-      'import ./hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,

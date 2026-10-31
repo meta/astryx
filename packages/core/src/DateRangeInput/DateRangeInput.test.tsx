@@ -18,9 +18,9 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
-// getButton/queryButton instead of getByRole('button', {name}): the closed
-// popover keeps a two-month Calendar (~85 role=button nodes) mounted, which
-// made every role+name query compute ~85 accessible names through jsdom's
+// getButton/queryButton instead of getByRole('button', {name}): the open
+// popover holds a two-month Calendar (~85 role=button nodes), which makes
+// every role+name query compute ~85 accessible names through jsdom's
 // slow getComputedStyle (~450ms per query). See fastRoleQueries.ts.
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import * as stylex from '@stylexjs/stylex';
@@ -764,6 +764,49 @@ describe('DateRangeInput', () => {
       fireEvent.click(getButton('Open calendar'));
       expect(getButton(/Range:/)).toHaveAttribute('aria-expanded', 'false');
     });
+  });
+});
+
+describe('DateRangeInput calendar while the popover is closed', () => {
+  const calendarGrid = () => document.querySelector('[role="grid"]');
+
+  it('renders no calendar until the popover opens, and none after it closes', () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+    expect(calendarGrid()).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).not.toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).toBeNull();
+  });
+
+  it('moves focus into the popover on each open from the toggle', async () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(toggle);
+      // The first calendar control takes focus, not the dialog surface.
+      await waitFor(() => {
+        expect(getButton('Previous month')).toHaveFocus();
+      });
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    }
   });
 });
 

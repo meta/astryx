@@ -5,8 +5,9 @@
  * @input Uses vitest, @testing-library/react, ToastViewport, useToast, Dialog,
  *   BottomSheet
  * @output Tests that a top-layer ToastViewport moves into the latest open
- *   native modal (a Dialog or a scrim BottomSheet) and back without remounting
- *   its toasts
+ *   native modal (a Dialog or a scrim BottomSheet, the top sheet of a stack)
+ *   and back without remounting its toasts, and re-enters the top layer above
+ *   a non-modal sheet shown after it
  * @position Testing; validates ToastViewport.tsx with Layer/modalOutlet.ts
  *
  * SYNC: When ToastViewport hosting or Layer/modalOutlet.ts changes, update
@@ -20,8 +21,9 @@ import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
-import {BottomSheet} from '../BottomSheet';
+import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
 import {Dialog} from '../Dialog';
+import {getActiveModalOutlet} from '../Layer/modalOutlet';
 import type {ToastDismissReason} from './types';
 
 // jsdom does not implement the native dialog methods.
@@ -75,6 +77,24 @@ function DialogFixture({
   );
 }
 
+function NonModalSheetFixture({label}: {label: string}) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setIsOpen(open => !open)}>
+        {`Toggle ${label}`}
+      </button>
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hasScrim={false}
+        label={label}>
+        <ToastButton label={`Show toast in ${label}`} />
+      </BottomSheet>
+    </>
+  );
+}
+
 function getDialog(label: string): HTMLDialogElement {
   return document.querySelector<HTMLDialogElement>(
     `dialog[aria-label="${label}"]`,
@@ -82,7 +102,9 @@ function getDialog(label: string): HTMLDialogElement {
 }
 
 function getViewport(): HTMLElement {
-  return document.querySelector<HTMLElement>('[popover="manual"]')!;
+  // A non-modal BottomSheet is a manual popover too; the viewport is the one
+  // that is not a dialog.
+  return document.querySelector<HTMLElement>('[popover="manual"]:not(dialog)')!;
 }
 
 /** Call order of `fn`'s latest call on `context`, or -1 if it has none. */
@@ -149,6 +171,35 @@ function SheetFixture({label, hasScrim}: {label: string; hasScrim?: boolean}) {
   );
 }
 
+/**
+ * jsdom's popover stand-ins are stateless: track which elements are shown so
+ * `:popover-open` answers as a browser would.
+ */
+function trackPopoverState() {
+  const showing = new WeakSet<Element>();
+  const showPopover = vi
+    .spyOn(HTMLElement.prototype, 'showPopover')
+    .mockImplementation(function (this: HTMLElement) {
+      showing.add(this);
+    });
+  const hidePopover = vi
+    .spyOn(HTMLElement.prototype, 'hidePopover')
+    .mockImplementation(function (this: HTMLElement) {
+      showing.delete(this);
+    });
+  const matches = Element.prototype.matches;
+  vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    if (selector === ':popover-open') {
+      return showing.has(this);
+    }
+    return matches.call(this, selector);
+  });
+  return {showPopover, hidePopover};
+}
+
 describe('ToastViewport modal hosting', () => {
   it('moves into an open Dialog and back when it closes, keeping the toast', () => {
     const {container} = render(
@@ -191,6 +242,71 @@ describe('ToastViewport modal hosting', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
     expect(showsOnViewport()).toBe(3);
+  });
+
+  /**
+   * jsdom's Popover stand-ins keep no state and `:popover-open` never
+   * matches; these keep a showing set so the viewport can tell it is already
+   * in the top layer, as a browser does.
+   */
+  it('re-enters the top layer in place when a non-modal sheet is shown after it', () => {
+    // A `hasScrim={false}` sheet is a manual popover: it enters the top
+    // layer above the viewport and blocks nothing, so the viewport stays
+    // where it is and leaves and re-enters to paint above the sheet again.
+    const {showPopover, hidePopover} = trackPopoverState();
+    render(
+      <ToastViewport>
+        <ToastButton />
+        <NonModalSheetFixture label="Filters" />
+      </ToastViewport>,
+    );
+    const viewport = getViewport();
+    const onViewport = (spy: typeof showPopover) =>
+      spy.mock.contexts.filter(context => context === viewport).length;
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(onViewport(showPopover)).toBe(1);
+    const root = viewport.parentNode;
+
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Filters'}));
+    expect(getDialog('Filters')).toHaveAttribute('popover', 'manual');
+    // Re-entered (hide, then show) after the sheet's own showPopover, and
+    // not moved: the sheet is not an outlet.
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
+    const sheetShow = showPopover.mock.contexts.indexOf(getDialog('Filters'));
+    const viewportReshow = showPopover.mock.contexts.lastIndexOf(viewport);
+    expect(sheetShow).toBeGreaterThan(-1);
+    expect(viewportReshow).toBeGreaterThan(sheetShow);
+    expect(viewport.parentNode).toBe(root);
+    expect(screen.getByText('Saved')).toBeInTheDocument();
+
+    // A toast raised while the sheet is open lands in the same viewport.
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Show toast in Filters'}),
+    );
+    expect(screen.getAllByText('Saved')).toHaveLength(2);
+
+    // Closing the sheet moves nothing and re-enters nothing.
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Filters'}));
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
+  });
+
+  it('keeps focus inside the viewport across a re-entry', () => {
+    trackPopoverState();
+    render(
+      <ToastViewport>
+        <ToastButton />
+        <NonModalSheetFixture label="Filters" />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    const viewport = getViewport();
+    const dismiss = viewport.querySelector('button');
+    expect(dismiss).not.toBeNull();
+    dismiss!.focus();
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Filters'}));
+    expect(document.activeElement).toBe(dismiss);
   });
 
   it("keeps each toast's auto-hide timer running across a move", () => {
@@ -387,14 +503,388 @@ describe('ToastViewport above a BottomSheet', () => {
   });
 
   it('stays in place when a sheet without a scrim opens', () => {
+    trackPopoverState();
     const {container} = render(
       <ToastViewport>
         <SheetFixture label="Filters" hasScrim={false} />
       </ToastViewport>,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Open Filters'}));
-    // A non-modal sheet leaves the page operable, so the viewport stays put.
-    expect(getDialog('Filters')).toHaveAttribute('open');
+    // A non-modal sheet (a manual popover) leaves the page operable, so the
+    // viewport stays put; it only re-enters the top layer in place.
+    expect(getDialog('Filters').matches(':popover-open')).toBe(true);
+    expect(getViewport().closest('dialog')).toBeNull();
+    expect(container.contains(getViewport())).toBe(true);
+  });
+
+  it('is hosted by the top sheet of a stack, and by the sheet beneath once that one closes', () => {
+    function Stack() {
+      const [isAOpen, setIsAOpen] = useState(false);
+      const [isBOpen, setIsBOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsAOpen(true)}>
+            Open A
+          </button>
+          <BottomSheet isOpen={isAOpen} onOpenChange={setIsAOpen} label="A">
+            <button type="button" onClick={() => setIsBOpen(true)}>
+              Open B
+            </button>
+          </BottomSheet>
+          <BottomSheet isOpen={isBOpen} onOpenChange={setIsBOpen} label="B">
+            <button type="button" onClick={() => setIsBOpen(false)}>
+              Close B
+            </button>
+          </BottomSheet>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Stack />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open A'}));
+    expect(getViewport().closest('dialog')).toBe(getDialog('A'));
+    expect(getActiveModalOutlet()).toBe(getDialog('A'));
+    fireEvent.click(screen.getByRole('button', {name: 'Open B'}));
+    // A is covered (inert) but still an active native modal, so it still
+    // supplies an outlet; the latest outlet follows the stack, so the
+    // viewport moves into B, the top sheet.
+    expect(getDialog('A')).toHaveAttribute('inert');
+    expect(getActiveModalOutlet()).toBe(getDialog('B'));
+    expect(getViewport().closest('dialog')).toBe(getDialog('B'));
+    expect(getViewport().closest('[inert]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Close B'}));
+    // B starts closing and stops supplying; A, revealed, is the latest
+    // outlet again and takes the viewport back at once.
+    expect(getActiveModalOutlet()).toBe(getDialog('A'));
+    expect(getViewport().closest('dialog')).toBe(getDialog('A'));
+    expect(getViewport().closest('[inert]')).toBeNull();
+  });
+
+  it('a sheet revealed beneath an open Dialog does not take the outlet from the Dialog', () => {
+    // Sheet A → Dialog from A → sheet B from the Dialog → close B. A is
+    // revealed as the top sheet, but the Dialog above it is still open and
+    // was supplied later: it keeps the outlet, so a toast raised from the
+    // Dialog stays in the Dialog and pressable.
+    function Nested() {
+      const [isAOpen, setIsAOpen] = useState(false);
+      const [isBOpen, setIsBOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsAOpen(true)}>
+            Open A
+          </button>
+          <BottomSheet isOpen={isAOpen} onOpenChange={setIsAOpen} label="A">
+            <DialogFixture label="Edit">
+              <button type="button" onClick={() => setIsBOpen(true)}>
+                Open B
+              </button>
+              <ToastButton label="Toast from Edit" />
+            </DialogFixture>
+          </BottomSheet>
+          <BottomSheet isOpen={isBOpen} onOpenChange={setIsBOpen} label="B">
+            <button type="button" onClick={() => setIsBOpen(false)}>
+              Close B
+            </button>
+          </BottomSheet>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Nested />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open A'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('Edit'));
+    fireEvent.click(screen.getByRole('button', {name: 'Open B'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('B'));
+    fireEvent.click(screen.getByRole('button', {name: 'Close B'}));
+    // A is the top sheet again, but the Dialog was supplied after A and is
+    // still open: it is the latest outlet, not A.
+    expect(getActiveModalOutlet()).toBe(getDialog('Edit'));
+    fireEvent.click(screen.getByRole('button', {name: 'Toast from Edit'}));
+    const toast = screen.getByText('Saved');
+    expect(toast.closest('dialog')).toBe(getDialog('Edit'));
+    expect(toast.closest('[inert]')).toBeNull();
+    // Closing the Dialog hands the outlet back to A.
+    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('A'));
+  });
+
+  it('keeps a reopened sheet as the outlet when the stale native close event of its re-show arrives', () => {
+    // A stack re-shows a dialog (close(), then showModal()) to keep open
+    // order; a sheet reopened during its exit is re-shown too. The native
+    // `close` event that close() queued fires while the dialog is open again
+    // and must not take the outlet away.
+    function Pair() {
+      const [isAOpen, setIsAOpen] = useState(false);
+      const [isBOpen, setIsBOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsAOpen(true)}>
+            Open A
+          </button>
+          <BottomSheet isOpen={isAOpen} onOpenChange={setIsAOpen} label="A">
+            <button type="button" onClick={() => setIsBOpen(true)}>
+              Open B
+            </button>
+          </BottomSheet>
+          <BottomSheet isOpen={isBOpen} onOpenChange={setIsBOpen} label="B">
+            <button type="button" onClick={() => setIsBOpen(false)}>
+              Close B
+            </button>
+            <ToastButton label="Toast from B" />
+          </BottomSheet>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Pair />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open A'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open B'}));
+    // Close B and reopen it during its exit: the registry re-shows B's
+    // dialog, and the close() of that re-show queues a `close` event.
+    fireEvent.click(screen.getByRole('button', {name: 'Close B'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open B'}));
+    expect(getDialog('B')).toHaveAttribute('open');
+    expect(getActiveModalOutlet()).toBe(getDialog('B'));
+    act(() => {
+      getDialog('B').dispatchEvent(new Event('close'));
+    });
+    // The stale close changes nothing: B is open and still the latest outlet.
+    expect(getActiveModalOutlet()).toBe(getDialog('B'));
+    fireEvent.click(screen.getByRole('button', {name: 'Toast from B'}));
+    const toast = screen.getByText('Saved');
+    expect(toast.closest('dialog')).toBe(getDialog('B'));
+    expect(toast.closest('[inert]')).toBeNull();
+  });
+});
+
+describe('ToastViewport above a BottomSheetSwitcher flow', () => {
+  function finishHandoff(entering: HTMLElement, retained: HTMLElement) {
+    for (const panel of Array.from(
+      entering.querySelectorAll<HTMLElement>('.astryx-bottom-sheet'),
+    )) {
+      fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    }
+    for (const panel of Array.from(
+      retained.querySelectorAll<HTMLElement>('.astryx-bottom-sheet'),
+    )) {
+      fireEvent.transitionEnd(panel, {propertyName: 'opacity'});
+    }
+  }
+
+  function Flow({hasScrim = true}: {hasScrim?: boolean}) {
+    const [step, setStep] = useState<string | null>(null);
+    return (
+      <>
+        <button type="button" onClick={() => setStep('one')}>
+          Open flow
+        </button>
+        <BottomSheetSwitcher
+          activeSheet={step}
+          onActiveSheetChange={setStep}
+          hasScrim={hasScrim}>
+          <BottomSheet sheetId="one" label="One">
+            <button type="button" onClick={() => setStep('two')}>
+              Next
+            </button>
+            <ToastButton label="Toast from one" />
+          </BottomSheet>
+          <BottomSheet sheetId="two" label="Two">
+            <button type="button" onClick={() => setStep(null)}>
+              Done
+            </button>
+            <ToastButton label="Toast from two" />
+          </BottomSheet>
+        </BottomSheetSwitcher>
+      </>
+    );
+  }
+
+  it('is hosted by the active step of a modal flow, follows a handoff, and returns when the flow closes', () => {
+    const {container} = render(
+      <ToastViewport>
+        <Flow />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open flow'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('One'));
+    expect(getViewport().closest('dialog')).toBe(getDialog('One'));
+    fireEvent.click(screen.getByRole('button', {name: 'Toast from one'}));
+    const toast = screen.getByText('Saved');
+    expect(toast.closest('dialog')).toBe(getDialog('One'));
+    // The handoff moves the host to the entering step; the retained step,
+    // inert and fading, never hosts.
+    fireEvent.click(screen.getByRole('button', {name: 'Next'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('Two'));
+    expect(getViewport().closest('dialog')).toBe(getDialog('Two'));
+    expect(getViewport().closest('[inert]')).toBeNull();
+    expect(screen.getByText('Saved')).toBe(toast);
+    finishHandoff(getDialog('Two'), getDialog('One'));
+    expect(getActiveModalOutlet()).toBe(getDialog('Two'));
+    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    // A closing flow stops supplying at once.
+    expect(getActiveModalOutlet()).toBeNull();
+    expect(getViewport().closest('dialog')).toBeNull();
+    expect(container.contains(getViewport())).toBe(true);
+  });
+
+  it('a modal flow stacked over a standalone sheet is the latest outlet; the sheet takes it back when the flow closes', () => {
+    function Mixed() {
+      const [isAOpen, setIsAOpen] = useState(false);
+      const [step, setStep] = useState<string | null>(null);
+      return (
+        <>
+          <button type="button" onClick={() => setIsAOpen(true)}>
+            Open A
+          </button>
+          <BottomSheet isOpen={isAOpen} onOpenChange={setIsAOpen} label="A">
+            <button type="button" onClick={() => setStep('one')}>
+              Open flow
+            </button>
+          </BottomSheet>
+          <BottomSheetSwitcher activeSheet={step} onActiveSheetChange={setStep}>
+            <BottomSheet sheetId="one" label="One">
+              <button type="button" onClick={() => setStep(null)}>
+                Done
+              </button>
+            </BottomSheet>
+          </BottomSheetSwitcher>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Mixed />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open A'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('A'));
+    fireEvent.click(screen.getByRole('button', {name: 'Open flow'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('One'));
+    expect(getViewport().closest('[inert]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('A'));
+  });
+
+  it('a standalone sheet opened from a step is the latest outlet while the covered flow keeps supplying', () => {
+    function Mixed() {
+      const [step, setStep] = useState<string | null>(null);
+      const [isCOpen, setIsCOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setStep('one')}>
+            Open flow
+          </button>
+          <BottomSheetSwitcher activeSheet={step} onActiveSheetChange={setStep}>
+            <BottomSheet sheetId="one" label="One">
+              <button type="button" onClick={() => setIsCOpen(true)}>
+                Open C
+              </button>
+            </BottomSheet>
+          </BottomSheetSwitcher>
+          <BottomSheet isOpen={isCOpen} onOpenChange={setIsCOpen} label="C">
+            <button type="button" onClick={() => setIsCOpen(false)}>
+              Close C
+            </button>
+          </BottomSheet>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Mixed />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open flow'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open C'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('C'));
+    expect(getDialog('One')).toHaveAttribute('inert');
+    fireEvent.click(screen.getByRole('button', {name: 'Close C'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('One'));
+  });
+
+  it('the top sheet stays the latest outlet when the covered flow beneath it changes step from code: a toast raised from the sheet lands in it, not in the inert step', () => {
+    function Mixed() {
+      const [step, setStep] = useState<string | null>(null);
+      const [isCOpen, setIsCOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setStep('one')}>
+            Open flow
+          </button>
+          <button type="button" onClick={() => setStep('two')}>
+            Step two
+          </button>
+          <BottomSheetSwitcher activeSheet={step} onActiveSheetChange={setStep}>
+            <BottomSheet sheetId="one" label="One">
+              <button type="button" onClick={() => setIsCOpen(true)}>
+                Open C
+              </button>
+            </BottomSheet>
+            <BottomSheet sheetId="two" label="Two">
+              two
+            </BottomSheet>
+          </BottomSheetSwitcher>
+          <BottomSheet isOpen={isCOpen} onOpenChange={setIsCOpen} label="C">
+            <ToastButton label="Toast from C" />
+            <button type="button" onClick={() => setIsCOpen(false)}>
+              Close C
+            </button>
+          </BottomSheet>
+        </>
+      );
+    }
+    render(
+      <ToastViewport>
+        <Mixed />
+      </ToastViewport>,
+    );
+    const {showPopover, hidePopover} = trackPopoverState();
+    fireEvent.click(screen.getByRole('button', {name: 'Open flow'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open C'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('C'));
+    const viewport = getViewport();
+    const onViewport = (spy: typeof showPopover) =>
+      spy.mock.contexts.filter(context => context === viewport).length;
+    const hidesBefore = onViewport(hidePopover);
+    const showsBefore = onViewport(showPopover);
+    // The flow's level becomes step two's dialog, re-supplied while C stays
+    // on top: the re-supply goes beneath C, which keeps the outlet.
+    fireEvent.click(screen.getByRole('button', {name: 'Step two'}));
+    expect(getDialog('Two')).toHaveAttribute('inert');
+    expect(getDialog('C')).not.toHaveAttribute('inert');
+    expect(getActiveModalOutlet()).toBe(getDialog('C'));
+    // C was closed and shown again to stay on top, carrying the viewport's
+    // popover back beneath it in the top layer: the viewport re-entered
+    // (hide, then show) so toasts paint above the re-shown C.
+    expect(onViewport(hidePopover)).toBe(hidesBefore + 1);
+    expect(onViewport(showPopover)).toBe(showsBefore + 1);
+    fireEvent.click(screen.getByRole('button', {name: 'Toast from C'}));
+    const toast = screen.getByText('Saved');
+    expect(toast.closest('dialog')).toBe(getDialog('C'));
+    // Closing C hands the outlet to the flow's current step.
+    fireEvent.click(screen.getByRole('button', {name: 'Close C'}));
+    expect(getActiveModalOutlet()).toBe(getDialog('Two'));
+  });
+
+  it('a non-modal flow supplies no outlet', () => {
+    trackPopoverState();
+    const {container} = render(
+      <ToastViewport>
+        <Flow hasScrim={false} />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open flow'}));
+    expect(getActiveModalOutlet()).toBeNull();
     expect(getViewport().closest('dialog')).toBeNull();
     expect(container.contains(getViewport())).toBe(true);
   });

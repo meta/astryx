@@ -9,6 +9,7 @@
  * SYNC: When Slider.tsx changes, update tests to match new behavior
  */
 
+import {InternationalizationProvider} from '../i18n';
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, act, fireEvent, waitFor} from '@testing-library/react';
@@ -73,6 +74,24 @@ describe('Slider', () => {
     const sliders = screen.getAllByRole('slider');
     expect(sliders[0]).toHaveAccessibleName('Minimum value');
     expect(sliders[1]).toHaveAccessibleName('Maximum value');
+  });
+
+  it('translates the range thumb names under another locale', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.slider.minimumThumb': 'Valeur minimale',
+            '@astryx.slider.maximumThumb': 'Valeur maximale',
+          },
+        }}>
+        <Slider label="Prix" value={[20, 80] as [number, number]} />
+      </InternationalizationProvider>,
+    );
+    const sliders = screen.getAllByRole('slider');
+    expect(sliders[0]).toHaveAccessibleName('Valeur minimale');
+    expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
   });
 
   it('sets aria-valuetext with formatValue', () => {
@@ -335,6 +354,18 @@ describe('Slider', () => {
     // aria-required is not a supported property of role="slider" in
     // WAI-ARIA 1.2, so it must never appear on the thumb.
     expect(slider).not.toHaveAttribute('aria-required');
+  });
+
+  it('conveys required state under FormLayout defaultOptionality="required" unless isOptional (FormLayout FR5)', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <Slider label="Volume" value={50} />
+        <Slider label="Balance" value={50} isOptional />
+      </FormLayout>,
+    );
+    const [volume, balance] = screen.getAllByRole('slider');
+    expect(volume).toHaveAccessibleDescription(/Required/);
+    expect(balance).not.toHaveAccessibleDescription(/Required/);
   });
 
   it('conveys required state on both thumbs of a range slider', () => {

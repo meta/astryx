@@ -14,6 +14,10 @@ describe('buildA11ySection', () => {
     expect(buildA11ySection({components: {}})).toContain('No accessibility violations detected');
   });
 
+  it('says the audit did not run when there is no report', () => {
+    expect(buildA11ySection(null)).toContain('did not run on this pull request');
+  });
+
   it('lists a violation with its rule, story count, and help link', () => {
     const section = buildA11ySection(
       report([

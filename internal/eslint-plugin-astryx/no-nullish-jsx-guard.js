@@ -26,7 +26,7 @@
  * so this rule does NOT try to flag `0`.)
  *
  * @see packages/core/src/utils/isRenderable.ts
- * @see https://github.com/facebook/astryx/issues/2538
+ * @see https://github.com/meta/astryx/issues/2538
  *
  * Scope (deliberately conservative to avoid false positives):
  *   Only flags a nullish comparison when BOTH hold —
@@ -210,7 +210,7 @@ const rule = {
         'Disallow bare nullish checks (!= null) as JSX render guards for a rendered value — use isRenderable() so false/true/empty-string slots do not leak an empty element',
       category: 'Best Practices',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/issues/2538',
+      url: 'https://github.com/meta/astryx/issues/2538',
     },
     hasSuggestions: true,
     messages: {

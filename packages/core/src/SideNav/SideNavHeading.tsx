@@ -47,13 +47,24 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
+import {
+  NavHeadingCloseContext,
+  NavHeadingDismissContext,
+} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 // =============================================================================
 // Styles
 // =============================================================================
+
+/** The rows a press can act on in the heading's menu. */
+const HEADING_MENU_ITEM_SELECTOR =
+  '[role="menuitem"]:not([aria-disabled="true"])';
 
 const styles = stylex.create({
   root: {
@@ -417,6 +428,28 @@ export function SideNavHeading({
     popoverId: isCollapsed ? popover.id : undefined,
   });
 
+  // A press that slides across the menu's items acts on the item it lifts on,
+  // the highlight following the pointer (`family:action-groups` FR1-FR3,
+  // FR5); a mouse released outside closes it. Only the role="menu" region is
+  // tracked, not the heading button above it.
+  const headingMenuRef = useRef<HTMLDivElement>(null);
+  const headingMenuPress = useMenuPress({
+    menuRef: headingMenuRef,
+    itemSelector: HEADING_MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+    isEnabled: !!menu,
+  });
+  const headingMenuPointerDown = pressOnItemsOnly(
+    headingMenuPress.menuProps.onPointerDown,
+    HEADING_MENU_ITEM_SELECTOR,
+  );
+  const dismissCtx = useMemo(() => ({dismiss: closeMenu}), [closeMenu]);
+  const headingMenuTouch = stylex.props(
+    useMenuOverflow(headingMenuRef, menu, popover.isOpen)
+      ? menuTouchActionStyles.scrolls
+      : menuTouchActionStyles.fits,
+  );
+
   const closeMenuCtx = useMemo(() => ({closeMenu}), [closeMenu]);
 
   // setTriggerEl belongs on the chevron button, not this root: it is the
@@ -533,7 +566,13 @@ export function SideNavHeading({
               {/* The menu role is scoped to the actual menu items so the
                   heading button above stays a valid sibling, not an invalid
                   child of a role="menu" element. */}
-              <div role="menu" aria-label={heading}>
+              <div
+                ref={headingMenuRef}
+                role="menu"
+                aria-label={heading}
+                {...headingMenuPress.menuProps}
+                onPointerDown={headingMenuPointerDown}
+                {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
                   {menu}
                 </NavHeadingCloseContext>
@@ -755,8 +794,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {
@@ -831,8 +878,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {

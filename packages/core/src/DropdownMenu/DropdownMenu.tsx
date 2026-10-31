@@ -67,6 +67,7 @@ import {
   type DropdownMenuSurfaceValue,
 } from './DropdownMenuContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
@@ -79,6 +80,7 @@ import {moveRegionsTab} from './menuRegionStops';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useMenuDrillIn} from './useMenuDrillIn';
 import {resolveMenuWidth} from './menuWidth';
+import {menuTouchActionStyles} from './menuTouchAction.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   useAdaptivePresentation,
@@ -213,18 +215,6 @@ const styles = stylex.create({
   region: {
     flexShrink: 0,
     padding: spacingVars['--spacing-1'],
-  },
-  // Scroll ownership by the browser's own signal. A menu whose rows fit keeps
-  // every one-finger move: a slide over its rows stays a slide. One that
-  // scrolls lets the browser pan it vertically and cancel the press when it
-  // does. Both leave a two-finger pinch to the browser, so the page stays
-  // zoomable over an open menu; `pinch-zoom` admits no one-finger pan.
-  touchPinchZoom: {
-    touchAction: 'pinch-zoom',
-  },
-  touchPanYPinchZoom: {
-    touchAction: 'pan-y pinch-zoom',
-    overscrollBehavior: 'contain',
   },
   // The menu's lower block cap rides on the layer box too, so the layer's
   // flip decision sees the same height the menu paints.
@@ -632,6 +622,11 @@ function DropdownMenuBottomSheet({
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
+  // The caller's `button.ref` rides along with the sheet's own trigger ref.
+  const triggerRef = useMergedRefs<HTMLButtonElement>(
+    buttonRef as React.Ref<HTMLButtonElement>,
+    button.ref,
+  );
   const triggerId = useId();
   const sheetId = useId();
   const actionListRef = useRef<HTMLDivElement>(null);
@@ -656,9 +651,10 @@ function DropdownMenuBottomSheet({
     }
   }
   // The closed sheet renders nothing, so load its rows at rest: the first
-  // open shows the actions at once.
+  // open shows the actions at once. The preload's result says whether they
+  // loaded; after a failure the first open loads them.
   useEffect(() => {
-    preloadMenuBottomSheetActionList();
+    void preloadMenuBottomSheetActionList();
   }, []);
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
@@ -796,13 +792,15 @@ function DropdownMenuBottomSheet({
       {currentTitle}
     </Heading>
   );
+  // A stable ref: an inline one re-runs on every render (null, then the element).
+  const sheetTriggerRef = useCallback((el: HTMLElement | null) => {
+    buttonRef.current = el;
+  }, []);
   return (
     <>
       {renderTrigger != null ? (
         renderTrigger({
-          ref: el => {
-            buttonRef.current = el;
-          },
+          ref: sheetTriggerRef,
           id: triggerId,
           onClick: handleSheetTriggerClick,
           onClickCapture: () => {},
@@ -817,7 +815,7 @@ function DropdownMenuBottomSheet({
       ) : (
         <Button
           {...button}
-          ref={buttonRef as React.Ref<HTMLButtonElement>}
+          ref={triggerRef}
           xstyle={[
             isOpen && styles.triggerOpen,
             button.xstyle,
@@ -1595,11 +1593,35 @@ function DropdownMenuPopover({
       </>
     );
 
-  const triggerProps: DropdownMenuTriggerProps = {
-    ref: el => {
+  // Stable trigger refs. An inline ref is a new function every render, so React
+  // re-runs it on every commit (null, then the element), and each run moved the
+  // popover's anchor off the trigger and back: two inline-style writes on the
+  // trigger per render of the menu.
+  const popoverTriggerRef = popover.triggerRef;
+  const triggerRef = useCallback(
+    (el: HTMLElement | null) => {
       buttonRef.current = el;
-      popover.triggerRef(el);
+      popoverTriggerRef(el);
     },
+    [popoverTriggerRef],
+  );
+  const consumerButtonRef = button.ref;
+  const buttonTriggerRef = useCallback(
+    (el: HTMLButtonElement | null) => {
+      triggerRef(el);
+      if (typeof consumerButtonRef === 'function') {
+        consumerButtonRef(el);
+      } else if (consumerButtonRef) {
+        /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
+        consumerButtonRef.current = el;
+        /* eslint-enable react-compiler/react-compiler */
+      }
+    },
+    [triggerRef, consumerButtonRef],
+  );
+
+  const triggerProps: DropdownMenuTriggerProps = {
+    ref: triggerRef,
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
@@ -1622,18 +1644,7 @@ function DropdownMenuPopover({
       ) : (
         <Button
           {...button}
-          ref={el => {
-            buttonRef.current = el;
-            popover.triggerRef(el);
-            const consumerRef = button.ref;
-            if (typeof consumerRef === 'function') {
-              consumerRef(el);
-            } else if (consumerRef) {
-              /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
-              consumerRef.current = el;
-              /* eslint-enable react-compiler/react-compiler */
-            }
-          }}
+          ref={buttonTriggerRef}
           xstyle={[
             styles.triggerPressable,
             isOpen && styles.triggerOpen,
@@ -1715,7 +1726,9 @@ function DropdownMenuPopover({
                 styles.dropdown,
                 resolvedMaxHeight != null &&
                   dynamicStyles.menuMaxHeight(resolvedMaxHeight),
-                hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom,
+                hasOverflow
+                  ? menuTouchActionStyles.scrolls
+                  : menuTouchActionStyles.fits,
                 hasOverflow && styles.scrollable,
                 hasRegions && styles.menuInFrame,
                 // Between a header and a footer the menu is a Tab stop, so

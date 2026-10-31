@@ -12,6 +12,7 @@
  * - Banner frame (themeProps 'banner-frame'): owns the resting elevation and,
  *   for elevated card banners, the outer radius that shapes that shadow
  * - Header area (themeProps 'banner'): colored status background with icon, title, description, actions, dismiss
+ * - End area restores the ordinary text context for consumer `endContent`; built-in controls opt back into the status foreground
  * - Content area (themeProps 'banner-content'): card background for additional content (children)
  * - Status icon (themeProps 'banner-icon'): the target rides on the default
  *   <Icon> itself — the element that paints — so 'status:X' overrides reach
@@ -313,6 +314,10 @@ const styles = stylex.create({
     justifyContent: 'flex-end',
     gap: spacingVars['--spacing-2'],
     flexShrink: 0,
+    // The status surface owns an inherited on-muted foreground, but consumer
+    // endContent does not. Reset the end area's ordinary text context, then let
+    // the built-in controls below opt back into the status foreground.
+    color: colorVars['--color-text-primary'],
     // Bounded so a group of actions wider than the row wraps within itself
     // rather than pushing the banner past the viewport (WCAG 1.4.10).
     maxWidth: '100%',

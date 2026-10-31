@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/theme-matcha",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "private": false,
   "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/themes/matcha"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -60,11 +60,11 @@
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }
