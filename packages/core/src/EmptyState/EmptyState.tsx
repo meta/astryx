@@ -94,7 +94,7 @@ export interface EmptyStateProps extends BaseProps<HTMLDivElement> {
   /**
    * Optional secondary text providing additional context.
    */
-  description?: string;
+  description?: string | ReactNode;
   /**
    * Optional icon or illustration displayed above the title.
    * Rendered as decorative (aria-hidden="true").
