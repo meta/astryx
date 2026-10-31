@@ -13,7 +13,7 @@ applies_to:
   [
     packages/core/src/utils/interactionModality.ts,
     packages/core/src/utils/focusOutline.stylex.ts,
-    packages/core/src/utils/focusOwner.stylex.ts,
+    packages/core/src/privateAttributes/focusOwner.stylex.ts,
     packages/core/src/hooks/useFocusReturnVisibility.ts,
     packages/core/src/hooks/useIndicatorFocusRing.tsx,
     packages/core/src/Layer/useTouchTrigger.ts,
@@ -118,7 +118,7 @@ work.
   and replacement content cannot silently remove the owner's indicator. A Core
   wrapper that paints the ring for one primary control among other tab stops
   takes the one shared focus-owner style and owner attribute from
-  `utils/focusOwner.stylex.ts`, so the wrapper rings only while that control
+  `privateAttributes/focusOwner.stylex.ts`, so the wrapper rings only while that control
   has keyboard focus, and a nested owner or a sibling control rings itself;
   no component writes the attribute or its selector itself.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
@@ -257,7 +257,7 @@ is asked to carry a new decision.
   modality.
 - `utils/focusOutline.stylex.ts` and focus tokens — provide the shared focus
   indicator mechanics and theme seam without choosing component ownership.
-- `utils/focusOwner.stylex.ts` — owns the private focus-owner attribute, its
+- `privateAttributes/focusOwner.stylex.ts` — owns the private focus-owner attribute, its
   selector, and the one shared wrapper ring for INV3's primary-control owners;
   it is not exported from the package.
 - `hooks/useFocusReturnVisibility.ts` — applies last-input visibility when focus
@@ -296,7 +296,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | Invariant  | Evidence                                                                                                                                                                                                                                       | Failure signal                                                                                                                                                                                                                                                                                              |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                    | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
-| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card, with the wrapper ring from `utils/focusOwner.stylex.ts`                                             | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
+| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card, with the wrapper ring from `privateAttributes/focusOwner.stylex.ts`                                 | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
 | INV4       | Keyboard, mouse, touch, and pen browser paths where applicable                                                                                                                                                                                 | Hover-only behavior, sticky touch hover, or unreachable action                                                                                                                                                                                                                                              |
 | INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                                                                                                    | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                                                                                                                       |
 | INV6       | Public API review and representative source inspection                                                                                                                                                                                         | A component adds caller-controlled modality without a separate API decision                                                                                                                                                                                                                                 |
