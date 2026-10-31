@@ -8,16 +8,31 @@ on:
   push:
     branches: ['main']
   workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full SHA of a commit in main history to validate; empty validates main tip'
+        type: string
+        required: false
+      recheck:
+        description: 'Release re-check, sent by the release re-check workflow: takes the validation group at once'
+        type: boolean
+        default: false
 
 permissions: {}
 
+# One validation at a time; a newer one waits and replaces any older waiting
+# one. Only a release re-check, which the release re-check workflow sends with
+# the workflow token, cancels the running validation: it is itself a full
+# validation of main's tip, so the cancelled run's commits stay covered
+# (spec:AST-030).
 concurrency:
   group: 'main-validation'
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
   # The one commit every lane and leg of this run tests. A push validates the
-  # pushed commit; a dispatch, main's tip when it starts. Each leg resolving
+  # pushed commit; a dispatch, its `sha` input when given (it must be in main's
+  # history), else main's tip when it starts. Each leg resolving
   # `main` itself could straddle a merge, shard different file lists, and skip
   # a file in every leg.
   main-commit:
@@ -36,6 +51,20 @@ jobs:
             if (context.eventName !== 'push') {
               const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
               sha = data.commit.sha;
+              const requested = (context.payload.inputs?.sha ?? '').trim();
+              if (requested !== '') {
+                if (!/^[0-9a-f]{40}$/.test(requested)) {
+                  throw new Error(`sha must be a full 40-character commit SHA, got "${requested}".`);
+                }
+                const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${requested}...${sha}`,
+                });
+                if (!['identical', 'ahead'].includes(comparison.status)) {
+                  throw new Error(`${requested} is not in main's history.`);
+                }
+                sha = requested;
+              }
             }
             core.setOutput('sha', sha);
 
@@ -64,15 +93,21 @@ jobs:
   # typecheck needs the `pnpm build` it follows, so they stay together in
   # their own lane and take the build with them.
   #
-  # Both Vitest lanes split into four legs, as in ci.yml: one job each ran
-  # test-ui in ~18 minutes and test-node in ~28, so main's gate took about half
-  # an hour while the PR gate took under fifteen. `test` joins the legs.
+  # Both Vitest lanes split into legs that all run at once, with no
+  # max-parallel hold: main is validated about once an hour and by the release
+  # re-check, so a run may cost more runner-minutes to finish sooner
+  # (spec:AST-030). At four legs each, test-node's slowest leg took ~8 minutes
+  # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
+  # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
+  # its own) sets the floor, and more legs would not move it. `test` joins the
+  # legs.
   test-ui:
     needs: [main-commit]
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -94,10 +129,11 @@ jobs:
 
   test-node:
     needs: [main-commit]
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
