@@ -402,6 +402,14 @@ describe('createResizable: a percentage basis', () => {
     width = 1000;
     StubResizeObserver.instances = [];
     vi.stubGlobal('ResizeObserver', StubResizeObserver);
+    // The first measurement reads the content box from the element.
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      paddingTop: '0px',
+      paddingBottom: '0px',
+      paddingLeft: '0px',
+      paddingRight: '0px',
+      direction: 'ltr',
+    } as CSSStyleDeclaration);
   });
 
   function makeContainer(): {current: HTMLElement} {
