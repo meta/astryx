@@ -118,21 +118,50 @@ async function wheelDown(page: Page) {
   await page.waitForTimeout(250);
 }
 
-/** A finger drag over the backdrop; Chromium only (CDP), WebKit has no API. */
+/**
+ * A finger drag up the backdrop, 300 px in 12 moves, as dispatched touch events
+ * (CDP `Input.dispatchTouchEvent`); Chromium only, WebKit has no API here.
+ * `Input.synthesizeScrollGesture` delivered the touchstart and touchend but no
+ * touchmove, so the page never saw the finger move; the check below fails
+ * unless the moves reach the page.
+ */
 async function touchScrollDown(page: Page, browserName: string) {
   if (browserName !== 'chromium') {
     return;
   }
+  await page.evaluate(() => {
+    const w = window as {__touchMoves?: number};
+    w.__touchMoves = 0;
+    document.addEventListener(
+      'touchmove',
+      () => {
+        w.__touchMoves = (w.__touchMoves ?? 0) + 1;
+      },
+      {capture: true, passive: true},
+    );
+  });
   const session = await page.context().newCDPSession(page);
-  await session.send('Input.synthesizeScrollGesture', {
-    x: 195,
-    y: 120,
-    yDistance: -300,
-    gestureSourceType: 'touch',
-    speed: 800,
+  const finger = (y: number) => [{x: 195, y, id: 1}];
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: finger(420),
+  });
+  for (let i = 1; i <= 12; i++) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: finger(420 - i * 25),
+    });
+  }
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
   });
   await session.detach();
   await page.waitForTimeout(250);
+  expect(
+    await page.evaluate(() => (window as {__touchMoves?: number}).__touchMoves),
+    'the finger moved over the backdrop: touchmove reached the page',
+  ).toBeGreaterThan(0);
 }
 
 /**
