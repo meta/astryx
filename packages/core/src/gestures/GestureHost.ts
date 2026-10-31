@@ -406,7 +406,13 @@ interface WheelStep {
 }
 
 /** Scratch (#8676 rescope): travel along the axis that commits one step, px. */
-const WHEEL_STEP_PX = 40;
+const WHEEL_STEP_PX = 24;
+/**
+ * Scratch: a slow swipe's stream has gaps longer than WHEEL_END_MS; travel
+ * in the same direction carries across a gap this short, so a slow
+ * continuous movement still commits.
+ */
+const WHEEL_STEP_CARRY_MS = 450;
 
 /**
  * A wheel's deltas in CSS px: a line is `WHEEL_LINE_PX`, a page the
@@ -669,6 +675,8 @@ export class GestureHost {
   private wheel: WheelGesture | null = null;
   /** Whether the document routes every wheel to the live wheel gesture. */
   private isWheelLatched = false;
+  /** Scratch: an uncommitted step's travel, carried across a short gap. */
+  private pendingStep: {axis: 'x' | 'y'; travel: number; count: number; last: number} | null = null;
   /** Wheels already taken: each element on the path with a listener hears one. */
   private readonly wheelsSeen = new WeakSet<Event>();
   private readonly clock: GestureClock;
@@ -2089,9 +2097,10 @@ export class GestureHost {
       s.axis === 'x'
         ? {x: gesture.x - sign * px, y: gesture.y}
         : {x: gesture.x, y: gesture.y - sign * px};
+    this.pendingStep = null;
     this.arena.moved([{id, ...at(12), time}]);
-    this.arena.moved([{id, ...at(36), time: time + 16}]);
-    this.arena.ended([{id, ...at(36), time: time + 16}]);
+    this.arena.moved([{id, ...at(52), time: time + 16}]);
+    this.arena.ended([{id, ...at(52), time: time + 16}]);
   }
 
   /** Start a wheel gesture: who takes it, decided once, or nobody. */
@@ -2188,15 +2197,23 @@ export class GestureHost {
         recognizer => (recognizer as {wheelStep?: boolean}).wheelStep === true,
       )
     ) {
+      const carry =
+        this.pendingStep != null &&
+        this.pendingStep.axis === (isHorizontal ? 'x' : 'y') &&
+        time - this.pendingStep.last <= WHEEL_STEP_CARRY_MS &&
+        Math.sign(isHorizontal ? dx : dy) === Math.sign(this.pendingStep.travel)
+          ? this.pendingStep
+          : null;
+      this.pendingStep = null;
       gesture.step = {
         axis: isHorizontal ? 'x' : 'y',
-        travel: 0,
+        travel: carry?.travel ?? 0,
         sign: 0,
         previous: 0,
         decayed: false,
         committed: false,
         t0: time,
-        count: 0,
+        count: carry?.count ?? 0,
       };
     }
     this.arena.began(
@@ -2282,8 +2299,16 @@ export class GestureHost {
   }
 
   /** End the wheel gesture in progress, at its last wheel's time. */
-  private endWheel(endTime: number = this.clock.now()): void {
+  private endWheel(endTime?: number): void {
     const gesture = this.wheel;
+    if (gesture?.step && !gesture.step.committed && gesture.step.travel !== 0) {
+      this.pendingStep = {
+        axis: gesture.step.axis,
+        travel: gesture.step.travel,
+        count: gesture.step.count,
+        last: gesture.last,
+      };
+    }
     if (this.isWheelLatched) {
       this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
       this.isWheelLatched = false;
