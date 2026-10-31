@@ -498,3 +498,23 @@ export const Collapsible: Story = {
     isCollapsible: true,
   },
 };
+
+/**
+ * A code excerpt: N lines around a point of interest, with the gutter
+ * showing the lines' real file numbers. highlightLines uses the same file
+ * coordinates, so the point of interest stays emphasized.
+ */
+export const Excerpt: Story = {
+  args: {
+    code: `  const response = await fetch(\`/api/users/\${id}\`);
+  if (!response.ok) {
+    throw new Error(\`HTTP \${response.status}\`);
+  }
+  return response.json();`,
+    language: 'typescript',
+    title: 'useUser.ts — lines 40–44',
+    hasLineNumbers: true,
+    startLineNumber: 40,
+    highlightLines: [42],
+  },
+};
