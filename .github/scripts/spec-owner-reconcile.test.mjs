@@ -319,7 +319,7 @@ const designRecord = {
 };
 const currentDesign = 'kind: design\nauthority: current\n';
 const componentRecord = {
-  filename: 'packages/core/src/Button/Button.spec.md',
+  filename: 'docs/specs/components/Button/Button.spec.md',
   status: 'modified',
 };
 function currentComponentSpec(decision, body = 'Body.') {

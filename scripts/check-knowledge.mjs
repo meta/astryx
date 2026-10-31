@@ -30,9 +30,12 @@ const {
   validateDesignDecisionsBlock,
 } = require('../.github/scripts/component-design-decisions.cjs');
 const {
-  classifyComponentKnowledgePath,
+  COMPONENT_SPEC_ROOT,
+  componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isPlatformComponentSpecPath,
+  locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -732,46 +735,94 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
 
   records.push(...discoverThemeRecordCandidates(root).records);
 
-  for (const packageName of COMPONENT_PACKAGE_NAMES) {
-    const sourceRoot = path.join(root, `packages/${packageName}/src`);
-    records.push(
-      ...matchingFilesRecursively(
-        sourceRoot,
-        (_name, candidate) =>
-          isComponentSpecRecordPath(
-            path.relative(root, candidate).split(path.sep).join('/'),
-          ),
-        {skipDirectory: isIgnoredComponentKnowledgeSegment},
-      ),
-    );
-  }
+  records.push(
+    ...matchingFilesRecursively(
+      path.join(root, COMPONENT_SPEC_ROOT),
+      (_name, candidate) =>
+        isComponentSpecRecordPath(
+          path.relative(root, candidate).split(path.sep).join('/'),
+        ),
+      {skipDirectory: isIgnoredComponentKnowledgeSegment},
+    ),
+  );
 
   return records.sort();
 }
 
+/**
+ * Spec files outside the component record layout: a `*.spec.md` left in a
+ * registered component package's source tree, and a `*.spec.md` under
+ * `docs/specs/components/` that is neither a component or module record nor a
+ * platform implementation's `<PublicName>.<language>.spec.md`.
+ */
+export function discoverMisplacedComponentSpecs(root = DEFAULT_ROOT) {
+  const problems = [];
+  const toPosix = candidate =>
+    path.relative(root, candidate).split(path.sep).join('/');
+  const isSpecFile = name =>
+    name.endsWith('.spec.md') && !name.endsWith('.generated.spec.md');
+
+  for (const packageName of COMPONENT_PACKAGE_NAMES) {
+    const sourceRoot = path.join(root, `packages/${packageName}/src`);
+    for (const candidate of matchingFilesRecursively(
+      sourceRoot,
+      name => isSpecFile(name) && !name.startsWith('.'),
+      {skipDirectory: isIgnoredComponentKnowledgeSegment},
+    )) {
+      const relativeToSource = path
+        .relative(sourceRoot, candidate)
+        .split(path.sep)
+        .join('/');
+      problems.push(
+        `${toPosix(candidate)}: component records live under ${COMPONENT_SPEC_ROOT}/; move this record to ${componentSpecPathForSource(packageName, relativeToSource)}.`,
+      );
+    }
+  }
+
+  const nativeSources = path.join(root, 'packages/native/apple/Sources');
+  for (const candidate of matchingFilesRecursively(
+    nativeSources,
+    name => isSpecFile(name) && !name.startsWith('.'),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  )) {
+    const relative = path
+      .relative(nativeSources, candidate)
+      .split(path.sep)
+      .join('/')
+      .split('/');
+    // Sources/<Module>/<ComponentRoot>/.../<Name>.spec.md
+    const componentRoot =
+      relative.length >= 3 ? relative[1] : '<ComponentRoot>';
+    const name = relative.at(-1).slice(0, -'.spec.md'.length);
+    problems.push(
+      `${toPosix(candidate)}: Swift component records live beside the core record; move this record to ${COMPONENT_SPEC_ROOT}/${componentRoot}/${name}.swift.spec.md.`,
+    );
+  }
+
+  for (const candidate of matchingFilesRecursively(
+    path.join(root, COMPONENT_SPEC_ROOT),
+    name => isSpecFile(name) && !name.startsWith('.'),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  )) {
+    const filePath = toPosix(candidate);
+    if (isComponentSpecRecordPath(filePath)) continue;
+    if (isPlatformComponentSpecPath(filePath)) continue;
+    problems.push(
+      `${filePath}: a file under ${COMPONENT_SPEC_ROOT}/ must be <ComponentRoot>/<PublicName>.spec.md, a module record nested below it, or a platform record <ComponentRoot>/<PublicName>.<language>.spec.md.`,
+    );
+  }
+
+  return problems;
+}
+
 function componentRecordLocation(root, absolutePath) {
   const filePath = path.relative(root, absolutePath).split(path.sep).join('/');
-  const classified = classifyComponentKnowledgePath(filePath);
-  if (!classified) return null;
+  const location = locateComponentKnowledgePath(root, filePath);
+  if (!location) return null;
   return {
-    ...classified,
-    componentRootPath: path.join(
-      root,
-      'packages',
-      classified.packageName,
-      'src',
-      classified.componentRoot,
-    ),
-    componentSourcePath:
-      classified.layout === 'flat'
-        ? path.join(root, 'packages', classified.packageName, 'src')
-        : path.join(
-            root,
-            'packages',
-            classified.packageName,
-            'src',
-            classified.componentRoot,
-          ),
+    ...location,
+    componentRootPath: path.join(root, location.componentRootDirectory),
+    componentSourcePath: path.join(root, location.componentSourceDirectory),
   };
 }
 
@@ -874,7 +925,7 @@ export function validateComponentModuleRelationships(
     const location = componentRecordLocation(root, record.absolutePath);
     if (!location) {
       problems.push(
-        `${record.filePath}: ${kind} records must live under a registered component package source root.`,
+        `${record.filePath}: ${kind} records must live at ${COMPONENT_SPEC_ROOT}/<ComponentRoot>/, where exactly one registered component package owns <ComponentRoot>.`,
       );
       continue;
     }
@@ -925,7 +976,7 @@ export function validateComponentModuleRelationships(
     const expectedParent = `component:${idMatch[1]}`;
     if (location.layout === 'flat' && location.componentRoot !== idMatch[1]) {
       problems.push(
-        `${record.filePath}: flat-package module ${id} must live under packages/${location.packageName}/src/${idMatch[1]}/ to match its parent component.`,
+        `${record.filePath}: flat-package module ${id} must live under ${COMPONENT_SPEC_ROOT}/${idMatch[1]}/ to match its parent component.`,
       );
     }
     if (frontmatter.get('parent_component') !== expectedParent) {
@@ -1359,7 +1410,13 @@ export function validateDelegations(
 }
 
 function loadComponentContract(root, specPath, componentName) {
-  const directory = path.dirname(specPath);
+  const location = componentRecordLocation(root, specPath);
+  if (!location) {
+    return {
+      problem: `${path.relative(root, specPath)}: component record is outside a component root.`,
+    };
+  }
+  const directory = path.join(root, location.codeDirectory);
   for (const docPath of matchingFiles(directory, name =>
     name.endsWith('.doc.mjs'),
   )) {
@@ -1769,7 +1826,10 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   const engineeringApprovalOwners = fs.existsSync(engineeringOwnersPath)
     ? parseOwnerFile(fs.readFileSync(engineeringOwnersPath, 'utf8'))
     : [];
-  const problems = [...discoverThemeRecordCandidates(root).problems];
+  const problems = [
+    ...discoverThemeRecordCandidates(root).problems,
+    ...discoverMisplacedComponentSpecs(root),
+  ];
   const ids = new Map();
   const records = [];
   const delegations = [];
