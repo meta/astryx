@@ -2123,19 +2123,9 @@ export class GestureHost {
     this.pendingStep = null;
     this.lastStep = {axis: s.axis, sign, last: time};
     this.arena.began([{...gesture.stepBegin, id, x: gesture.x, y: gesture.y, time} as never]);
-    // Scratch: play the step as a quick finger flick over four frames
-    // (24 px every 8 ms, about 3000 px/s), so the surface travels most of
-    // the way under the 'finger' and the release spring only finishes it,
-    // as after a touch swipe.
-    const FLICK = [24, 48, 72, 96];
-    FLICK.forEach((px, i) => {
-      this.clock.setTimeout(() => {
-        this.arena.moved([{id, ...at(px), time: time + 8 * (i + 1)}]);
-        if (i === FLICK.length - 1) {
-          this.arena.ended([{id, ...at(px), time: time + 8 * (i + 1)}]);
-        }
-      }, 8 * i);
-    });
+    this.arena.moved([{id, ...at(12), time: time + 8}]);
+    this.arena.moved([{id, ...at(52), time: time + 24}]);
+    this.arena.ended([{id, ...at(52), time: time + 24}]);
   }
 
   /** Start a wheel gesture: who takes it, decided once, or nobody. */
