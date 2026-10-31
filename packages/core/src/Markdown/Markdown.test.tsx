@@ -1381,3 +1381,51 @@ describe('inlinePlugins', () => {
     });
   });
 });
+
+describe('Markdown contentWidth', () => {
+  function maxWidthStyles(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll('*'))
+      .map(el => el.getAttribute('style') ?? '')
+      .filter(style => style.includes('--x-maxWidth'));
+  }
+
+  it('defaults prose width to the published --markdown-content-width variable', () => {
+    const {container} = render(
+      <Markdown>{'Hello world paragraph.\n\n```\ncode\n```'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    // Prose carriers (headings, paragraphs, lists, blockquotes) resolve the
+    // variable; the old hardcoded 680px default is gone.
+    expect(
+      proseStyles.some(style =>
+        style.includes('--x-maxWidth: var(--markdown-content-width, 680px)'),
+      ),
+    ).toBe(true);
+    expect(
+      proseStyles.some(style => style.includes('--x-maxWidth: 680px')),
+    ).toBe(false);
+    // Code blocks are unconstrained but keep the published width as their
+    // floor, so a short block still spans the same width as the prose above.
+    expect(container.querySelector('pre')?.getAttribute('style')).toContain(
+      '--x-minWidth: min(var(--markdown-content-width, 680px), 100%)',
+    );
+  });
+
+  it('keeps an explicit numeric contentWidth in pixels', () => {
+    const {container} = render(
+      <Markdown contentWidth={640}>{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 640px');
+    }
+  });
+
+  it('still drops the prose cap entirely for contentWidth={0}', () => {
+    const {container} = render(
+      <Markdown contentWidth={0}>{'Hello world paragraph.'}</Markdown>,
+    );
+    expect(maxWidthStyles(container)).toEqual([]);
+  });
+});

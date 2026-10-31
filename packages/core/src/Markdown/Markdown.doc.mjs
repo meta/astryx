@@ -132,7 +132,7 @@ export const docs = {
       type: 'number | string',
       description:
         'Max width for prose content (paragraphs, headings, lists, blockquotes). Tables and code blocks are unconstrained and can expand to the full container width. Use for readable line lengths in wide layouts.',
-      default: '680',
+      default: 'var(--markdown-content-width, 680px)',
     },
     {
       name: 'contentAlign',
@@ -665,7 +665,7 @@ export const docsZh = {
       type: 'number | string',
       description:
         '正文内容的最大宽度（段落、标题、列表、引用块）。表格和代码块不受限制，可扩展到完整容器宽度。用于在宽布局中保持可读行长。',
-      default: '680',
+      default: 'var(--markdown-content-width, 680px)',
     },
     {
       name: 'contentAlign',

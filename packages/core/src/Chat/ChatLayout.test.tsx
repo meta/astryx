@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {readFileSync} from 'node:fs';
 import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ChatLayout} from './ChatLayout';
@@ -307,5 +308,18 @@ describe('ChatLayout — first-fill scroll positioning', () => {
     fireContentResize();
     expect(root.scrollTop).toBe(1000);
     expect(rafQueue.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ChatLayout content width publication', () => {
+  // jsdom resolves no stylesheet custom properties, so the publication is
+  // pinned at the source: the message area must publish the variable
+  // Markdown's contentWidth default reads back.
+  it('message area publishes --markdown-content-width for Markdown prose', () => {
+    const source = readFileSync(
+      'packages/core/src/Chat/ChatLayout.tsx',
+      'utf8',
+    );
+    expect(source).toContain("'--markdown-content-width': '100%'");
   });
 });
