@@ -3,9 +3,8 @@
 /**
  * @file coarsePointer.ts
  * @input A window
- * @output Exports COARSE_POINTER_QUERY, isCoarsePointer and
- *   watchCoarsePointer: whether the primary pointer is coarse, and when it
- *   changes
+ * @output Exports isCoarsePointer and watchCoarsePointer: whether the
+ *   primary pointer is coarse (TOUCH_QUERY), and when it changes
  * @position The coarse-pointer gate of packages/core/src/gestures and of
  *   the press controller (pressFeedback.ts): touch-only work registers only
  *   while it holds
@@ -14,23 +13,20 @@
  * registered: the gesture host's page listeners, the page hold and the
  * finger scroll. Where it is fine, recognizers still attach for every
  * pointer, and the host listens on the page only during a press
- * (`spec:AST-094` FR19, FR24, FR43). The query is TOUCH_QUERY
- * (touchPresentation.ts), spelled here because that module brings
- * React; a test keeps the two equal. The answer can change while the page is
- * open (a tablet docking a mouse), so a holder watches it.
+ * (`spec:AST-094` FR19, FR24, FR43). The query is TOUCH_QUERY, from
+ * touchQueries.ts, which loads without React. The answer can change while
+ * the page is open (a tablet docking a mouse), so a holder watches it.
  *
- * SYNC: When modified, update touchPresentation.ts (TOUCH_QUERY) and
- * coarsePointer.test.ts.
+ * SYNC: When modified, update coarsePointer.test.ts.
  */
 
-/** TOUCH_QUERY: the primary pointer is coarse. */
-export const COARSE_POINTER_QUERY = '(pointer: coarse)';
+import {TOUCH_QUERY} from './touchQueries';
 
 /** Whether the primary pointer of `view` is coarse now. */
 export function isCoarsePointer(view: Window | null | undefined): boolean {
   return (
     typeof view?.matchMedia === 'function' &&
-    view.matchMedia(COARSE_POINTER_QUERY).matches
+    view.matchMedia(TOUCH_QUERY).matches
   );
 }
 
@@ -45,7 +41,7 @@ export function watchCoarsePointer(
   if (typeof view?.matchMedia !== 'function') {
     return () => {};
   }
-  const query = view.matchMedia(COARSE_POINTER_QUERY);
+  const query = view.matchMedia(TOUCH_QUERY);
   const onChange = (): void => listener(query.matches);
   if (typeof query.addEventListener === 'function') {
     query.addEventListener('change', onChange);
