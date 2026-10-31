@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import {parse} from '@babel/parser';
 import {PAGE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
+import {matchPath, readPathsIn} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 
 /**
@@ -131,41 +132,17 @@ function scanModule(source, file) {
 }
 
 /**
- * Path aliases (`compilerOptions.paths`) of the project that holds `dir`, as
- * absolute prefixes: `"@/*": ["./src/*"]` becomes `["@/", "<root>/src/"]`.
+ * The path aliases (`compilerOptions.paths`) of the project that holds
+ * `dir`, by TypeScript's rules (see ts-paths.mjs).
  * @param {string} dir
- * @returns {[string, string][]}
+ * @returns {import('./ts-paths.mjs').PathPattern[]}
  */
 export function receivingAliases(dir) {
   let d = dir;
   while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
   for (;;) {
-    for (const name of ['tsconfig.json', 'jsconfig.json']) {
-      const file = path.join(d, name);
-      if (!fs.existsSync(file)) continue;
-      try {
-        const text = fs
-          .readFileSync(file, 'utf8')
-          .replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, str) => str ?? '')
-          .replace(/,(\s*[}\]])/g, '$1');
-        const options = JSON.parse(text)?.compilerOptions ?? {};
-        const base = path.resolve(d, typeof options.baseUrl === 'string' ? options.baseUrl : '.');
-        /** @type {[string, string][]} */
-        const out = [];
-        for (const [key, targets] of Object.entries(options.paths ?? {})) {
-          const target = Array.isArray(targets) ? targets[0] : undefined;
-          if (typeof target !== 'string') continue;
-          if (key.endsWith('/*') && target.endsWith('/*')) {
-            out.push([key.slice(0, -1), `${path.resolve(base, target.slice(0, -2))}${path.sep}`]);
-          } else if (!key.includes('*') && !target.includes('*')) {
-            out.push([key, path.resolve(base, target)]);
-          }
-        }
-        return out;
-      } catch {
-        return [];
-      }
-    }
+    const found = readPathsIn(d);
+    if (found) return found;
     if (fs.existsSync(path.join(d, 'package.json'))) return [];
     const up = path.dirname(d);
     if (up === d) return [];
@@ -185,8 +162,8 @@ export function receivingAliases(dir) {
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: [string, string][]}} [options] the receiving project's
- *   path aliases, absolute (see receivingAliases)
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[]}} [options] the
+ *   receiving project's path aliases (see receivingAliases)
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
@@ -285,29 +262,34 @@ export function reachableFiles(files, {aliases = []} = {}) {
         if (fresh) queue.push(target);
         continue;
       }
-      for (const [key, aliasTarget] of aliases) {
-        const named = key.endsWith('/') ? bare.startsWith(key) : bare === key;
-        if (!named) continue;
-        // A wildcard alias names a path under its target; an exact alias
-        // (`"@theme": ["./src/theme.ts"]`) names its target file itself.
-        const exactExt = key.endsWith('/') ? '' : path.extname(aliasTarget);
-        const rest = key.endsWith('/')
-          ? bare.slice(key.length)
-          : path.basename(aliasTarget, exactExt);
-        const hit = rest ? bySuffix(rest) : null;
-        if (!hit) break;
-        const target = hit.path;
-        // The alias names the module without its extension or index file;
-        // the file keeps both: `@/c/Header` -> `<alias target>/c/Header.tsx`.
-        const abs = key.endsWith('/')
-          ? aliasTarget + hit.tail
-          : exactExt
-            ? aliasTarget
-            : aliasTarget + hit.tail.slice(rest.length);
-        const {r, fresh} = reach(target);
-        r.aliased.add(abs);
-        if (fresh) queue.push(target);
-        break;
+      const match = matchPath(aliases, bare);
+      if (match) {
+        // Each target in order: the file the alias names, matched in the
+        // tree by the path's tail, and placed where this project's target
+        // puts it (`@/c/Header` -> `<target>/c/Header.tsx`).
+        for (const target of match.pattern.targets) {
+          const named = target.replace('*', match.capture);
+          const ext = path.extname(named);
+          const star = target.indexOf('*');
+          const rest = (star === -1 ? path.basename(named, ext) : target.slice(star).replace('*', match.capture))
+            .split(path.sep)
+            .join('/')
+            .replace(/^\/+/, '');
+          const hit = rest ? bySuffix(rest) : null;
+          if (!hit) continue;
+          // The file keeps its own extension or index: `<target>/c/Header` ->
+          // `<target>/c/Header.tsx`.
+          const abs =
+            star !== -1
+              ? target.slice(0, star) + hit.tail
+              : ext
+                ? named
+                : named + hit.tail.slice(rest.length);
+          const {r, fresh} = reach(hit.path);
+          r.aliased.add(abs);
+          if (fresh) queue.push(hit.path);
+          break;
+        }
       }
     }
   }
