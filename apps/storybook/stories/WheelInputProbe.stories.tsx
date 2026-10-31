@@ -9,8 +9,9 @@
 
 import {useEffect, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {WheelSegmenter} from '../../../packages/core/src/gestures/wheelSegmenter';
 
-type Row = {gap: number; mode: number; dx: number; dy: number; wdx: number | null; wdy: number | null; kind: string};
+type Row = {g: number; start: string; phase: string; gap: number; mode: number; dx: number; dy: number; wdx: number | null; wdy: number | null; kind: string};
 
 function classify(e: WheelEvent): string {
   if (e.deltaMode !== 0) return 'discrete (lines/pages)';
@@ -38,11 +39,14 @@ function Probe() {
     const el = ref.current;
     if (!el) return;
     let last = 0;
+    const segmenter = new WheelSegmenter();
     const on = (e: WheelEvent) => {
       e.preventDefault();
       const now = e.timeStamp;
       const legacy = e as WheelEvent & {wheelDeltaX?: number; wheelDeltaY?: number};
-      const row: Row = {gap: last ? Math.round(now - last) : 0, mode: e.deltaMode, dx: e.deltaX, dy: e.deltaY, wdx: legacy.wheelDeltaX ?? null, wdy: legacy.wheelDeltaY ?? null, kind: classify(e)};
+      const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      const seg = segmenter.push(now, horizontal ? e.deltaX : e.deltaY, horizontal ? 220 : 180);
+      const row: Row = {g: seg.gesture, start: seg.boundary ?? (seg.liftNow ? 'lift' : ''), phase: seg.phase, gap: last ? Math.round(now - last) : 0, mode: e.deltaMode, dx: e.deltaX, dy: e.deltaY, wdx: legacy.wheelDeltaX ?? null, wdy: legacy.wheelDeltaY ?? null, kind: classify(e)};
       last = now;
       setRows(r => [row, ...r].slice(0, 40));
     };
@@ -56,8 +60,8 @@ function Probe() {
       </div>
       <button type="button" onClick={() => setRows([])} style={{margin: '8px 0'}}>Clear</button>
       <table>
-        <thead><tr><th>gap ms</th><th>mode</th><th>deltaX</th><th>deltaY</th><th>wheelDeltaX</th><th>wheelDeltaY</th><th>read as</th></tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i}><td>{r.gap}</td><td>{r.mode}</td><td>{r.dx}</td><td>{r.dy}</td><td>{r.wdx}</td><td>{r.wdy}</td><td>{r.kind}</td></tr>)}</tbody>
+        <thead><tr><th>gesture</th><th>start</th><th>phase</th><th>gap ms</th><th>mode</th><th>deltaX</th><th>deltaY</th><th>wheelDeltaX</th><th>wheelDeltaY</th><th>read as</th></tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i}><td>{r.g}</td><td>{r.start}</td><td>{r.phase}</td><td>{r.gap}</td><td>{r.mode}</td><td>{r.dx}</td><td>{r.dy}</td><td>{r.wdx}</td><td>{r.wdy}</td><td>{r.kind}</td></tr>)}</tbody>
       </table>
     </div>
   );
