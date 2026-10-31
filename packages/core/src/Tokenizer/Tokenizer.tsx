@@ -88,6 +88,7 @@ import {
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -849,8 +850,7 @@ export function Tokenizer<T extends SearchableItem>({
     }
     const takesFocus = isFocusPendingHandOffRef.current;
     isFocusPendingHandOffRef.current = false;
-    const active = node.ownerDocument.activeElement;
-    if (takesFocus && (active == null || active === node.ownerDocument.body)) {
+    if (takesFocus && isFocusDetached(node.ownerDocument)) {
       isHandingOffFocusRef.current = true;
       node.focus();
       isHandingOffFocusRef.current = false;
@@ -935,6 +935,29 @@ export function Tokenizer<T extends SearchableItem>({
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
+  // The inline field's wrapper holds every control a swap removes with the
+  // input — a token's Remove button, the inline Clear all — so it notes focus
+  // anywhere inside it for the hand-off above. It also anchors the
+  // disabled-message tooltip, whose handlers are gated internally by
+  // isEnabled, so attaching unconditionally is safe.
+  const tooltipAnchorRef = disabledMessageTooltip.ref;
+  const wrapperCallbackRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      tooltipAnchorRef(el);
+      if (el == null) {
+        return;
+      }
+      return () => {
+        if (el.contains(el.ownerDocument.activeElement)) {
+          isFocusPendingHandOffRef.current = true;
+        }
+        wrapperRef.current = null;
+        tooltipAnchorRef(null);
+      };
+    },
+    [tooltipAnchorRef],
+  );
 
   // The sheet presentation has no input; the public ref reaches the trigger,
   // the control it stands for (`family:input-fields` FR10).
@@ -1314,13 +1337,7 @@ export function Tokenizer<T extends SearchableItem>({
 
   const wrapperContent = (
     <div
-      ref={el => {
-        wrapperRef.current = el;
-        // Anchor + hover/focus listeners for the disabled-message tooltip.
-        // Handlers are gated internally by isEnabled, so attaching
-        // unconditionally is safe.
-        disabledMessageTooltip.ref(el);
-      }}
+      ref={wrapperCallbackRef}
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}

@@ -72,6 +72,7 @@ function Harness({
   presentation?: Presentation;
   initial?: SearchableItem[];
   hasCreate?: boolean;
+  hasClear?: boolean;
   maxEntries?: number;
   isDisabled?: boolean;
   disabledMessage?: string;
@@ -2576,6 +2577,46 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       }
     });
     expect(document.body).toHaveFocus();
+  });
+
+  it('hands focus to the trigger when a swap removes a focused Remove button or Clear all (FR16)', () => {
+    let compact = false;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        get matches() {
+          return query === COMPACT_TOUCH_QUERY ? compact : false;
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+        removeEventListener: (_: string, cb: () => void) =>
+          listeners.delete(cb),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const turn = (next: boolean) => {
+      compact = next;
+      act(() => {
+        for (const cb of listeners) {
+          cb();
+        }
+      });
+    };
+    render(<Harness presentation="adaptive" hasClear />);
+    // Inline: a token's Remove button holds focus, then the screen turns
+    // compact-touch.
+    screen.getByRole('button', {name: 'Remove Design'}).focus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
+    // Back to inline, then the inline Clear all holds focus.
+    turn(false);
+    screen.getByRole('button', {name: 'Clear all'}).focus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
   });
 
   it('moves no focus when a control re-attaches without a swap, such as a new ref callback (FR16; react-component-runtime INV6)', () => {
