@@ -230,6 +230,17 @@ async function playReading<T>(
   return readings;
 }
 
+/**
+ * The fill's mover. Only a coast animates it (a drag writes its styles and
+ * the lift scales the thumb alone), so an animation inside it is the coast.
+ */
+function fillOf(thumb: Locator): Locator {
+  return thumb
+    .locator('xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]')
+    .locator('[style*="--_slider-fill-end"]')
+    .first();
+}
+
 /** WWDC18's projection, px of finger travel. */
 function project(velocity: number): number {
   return (
@@ -1110,43 +1121,18 @@ test(
     await markElement(thumb);
     const cast = await startScreencast(page);
     const at = await center();
-    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
     // Block mid-flight, once the coast itself runs (the harness's contract:
-    // an animation that has not started cannot be judged). The lift's scale
-    // animation, which starts at touch-down, also satisfies `during`. The page
-    // waits, frame by frame, for the coast's translate animation to have
-    // started (not pending) and run three frames, so the block starts within a
-    // frame or two of that rather than after a test-side poll.
-    await thumb.evaluate(async element => {
-      await new Promise<void>((resolve, reject) => {
-        const deadline = performance.now() + 2_000;
-        const tick = () => {
-          const coasting = element
-            .getAnimations()
-            .some(
-              animation =>
-                animation.playState === 'running' &&
-                !animation.pending &&
-                Number(animation.currentTime ?? 0) >= 48 &&
-                (animation.effect as KeyframeEffect)
-                  .getKeyframes()
-                  .some(frame => 'translate' in frame),
-            );
-          if (coasting) {
-            resolve();
-          } else if (performance.now() > deadline) {
-            reject(new Error('no coast started'));
-          } else {
-            requestAnimationFrame(tick);
-          }
-        };
-        tick();
-      });
+    // an animation that has not started cannot be judged). The page waits
+    // from before the release, frame by frame, until the coast inside the
+    // fill (nothing else animates there: the lift scales the thumb alone) has
+    // run three frames, and blocks from that frame: no round trip to the test
+    // sits between the coast's start and the block.
+    const blocking = blockMainThread(page, 400, {
+      during: fillOf(thumb),
+      minProgressMs: 48,
     });
-    const block = await blockMainThread(page, 400, {
-      during: thumb,
-      minProgressMs: 16,
-    });
+    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
+    const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
