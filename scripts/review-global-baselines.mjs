@@ -2,8 +2,14 @@
 
 /* global console, process */
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {routeGlobalReviewBaselinesAtRevision} from './check-knowledge.mjs';
+import {
+  collectConcernMatches,
+  collectGlobalReviewMatches,
+  readKnowledgeRecordsAtAuthority,
+} from './check-knowledge.mjs';
+import {readDiff} from './lib/review-diff.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, '..');
@@ -51,12 +57,27 @@ if (requestedTriggers.length === 0) {
   throw new Error('--triggers requires at least one trigger.');
 }
 
-const matches = routeGlobalReviewBaselinesAtRevision(
+const {records, authority} = readKnowledgeRecordsAtAuthority(
   root,
   authorityCommit,
   reviewHead,
-  requestedTriggers,
 );
+const matches = collectGlobalReviewMatches(
+  records,
+  requestedTriggers,
+  authority,
+);
+// The reviewed change's own added lines route the claims of every concern
+// they re-implement (architecture:knowledge-contracts/INV20), whatever the
+// caller's triggers or the component record's review_triggers.
+const {addedLines} = readDiff(
+  execFileSync(
+    'git',
+    ['-C', root, 'diff', '--no-color', '--no-ext-diff', authority, reviewHead],
+    {encoding: 'utf8', maxBuffer: 256 * 1024 * 1024},
+  ),
+);
+const concernMatches = collectConcernMatches(records, addedLines, authority);
 console.log(
   JSON.stringify(
     {
@@ -65,6 +86,7 @@ console.log(
       reviewHead,
       requestedTriggers: [...new Set(requestedTriggers)].sort(),
       matches,
+      concernMatches,
     },
     null,
     2,

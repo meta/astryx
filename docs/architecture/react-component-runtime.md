@@ -47,6 +47,26 @@ deciding_specs:
       "INV15",
       "INV16"
     ]
+  },
+  "concerns": {
+    "effects-listeners-observers": {
+      "patterns": [
+        "\\buse(?:Layout|Insertion)?Effect\\b",
+        "\\b(?:add|remove)EventListener\\b",
+        "\\b(?:Mutation|Resize|Intersection)Observer\\b"
+      ],
+      "claims": ["INV2", "INV3", "INV5", "INV6"]
+    },
+    "slot-presence": {
+      "names": ["isRenderable"],
+      "patterns": ["!= null && typeof [\\w.?]+ !==? ['\"]boolean['\"]"],
+      "claims": ["INV16"]
+    },
+    "modality-tracking": {
+      "names": ["useInteractionModalityTracking", "trackInteractionModalityIn"],
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV16"]
+    }
   }
 }
 ```
