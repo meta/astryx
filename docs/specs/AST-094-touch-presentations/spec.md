@@ -561,7 +561,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   of a shrinking run, once the run has lost a fifth of its size; momentum after
   the lift never moves a surface or continues a gesture; and during momentum a
   reversal, a delta that rises against the decay, or a 50 ms gap starts a new
-  gesture without a pointer move. A pan released at the lift is stamped at the
+  gesture without a pointer move. While the splitter has not yet decided
+  between a lift and fingers still moving, the surface keeps moving at the
+  fingers' last speed, never farther than that speed carries it over the held
+  deltas; a lift then continues without a stop, and fingers that keep moving
+  take up the difference. A pan released at the lift is stamped at the
   fingers' last move, so the release keeps their velocity (FR36); a pan whose
   stream stops releases still. A pinch takes a ctrl-wheel, and a pinch and a
   mouse-wheel pan end 100 ms after their last event. A BottomSheet's pull
@@ -651,9 +655,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   following the fingers and settling to the nearest detent (FR43); a mouse
   drag and a mouse wheel never do.
 - `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
-  resting place under a finger as under a trackpad (FR3, FR43), where today a
-  finger drags it one for one below rest; a mouse wheel scrolls its content
-  and never moves it.
+  resting place under a finger as under a trackpad (FR3, FR43), with the same
+  stretch for the same travel; a mouse wheel scrolls its content and never
+  moves it. Implementation gap: a finger drags it one for one below rest.
 - The shared pager (Carousel's paging presentation, Lightbox's viewer): a
   trackpad swipe follows FR43's pager rule.
 - `architecture:react-component-runtime` INV13: gestures attach for every
