@@ -16,6 +16,11 @@
  * with origin/main, reproducing the CI failure; running analyze-pr.js against
  * it must exit 0 and report the Core, Rich Text, and Vega components the branch
  * touched.
+ *
+ * The reach test keeps its fixture under the checkout's `node_modules/.cache`,
+ * not the system temporary directory: esbuild reads the listing of every
+ * directory above a file it bundles, and a shared machine's temporary
+ * directory can hold hundreds of thousands of entries.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -303,9 +308,28 @@ describe('analyze-pr component ownership', () => {
   });
 });
 
+// Where a reach fixture and analyze-pr's own scratch files live. Not
+// os.tmpdir(): every analyze-pr run here bundles with esbuild, which reads the
+// listing of each directory above the files it bundles, and a shared
+// machine's temporary directory (hundreds of thousands of entries) made each
+// build read it, several times per test, which a loaded machine stretched
+// past the test's time.
+const FIXTURE_ROOT = path.join(SCRIPTS_DIR, '../../node_modules/.cache/analyze-pr-test');
+
 describe('analyze-pr base and head sizes', () => {
   it('sizes a component whose bundle reaches a changed shared module', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-reach-'));
+    fs.mkdirSync(FIXTURE_ROOT, {recursive: true});
+    const box = fs.mkdtempSync(path.join(FIXTURE_ROOT, 'reach-'));
+    const repo = path.join(box, 'repo');
+    const scratch = path.join(box, 'tmp');
+    fs.mkdirSync(repo);
+    fs.mkdirSync(scratch);
+    const analyze = (...flags) =>
+      execFileSync(
+        process.execPath,
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', ...flags],
+        {cwd: repo, encoding: 'utf8', env: {...process.env, TMPDIR: scratch}},
+      );
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
       fs.writeFileSync(path.join(repo, file), content);
@@ -335,11 +359,7 @@ describe('analyze-pr base and head sizes', () => {
       write('packages/core/dist/hooks/useHold.js', 'export function useHold() { return 2; }\n');
       write('packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
 
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const analysis = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(Object.keys(analysis.componentSizes)).toEqual(['core/Card']);
       // The shared hook's reverse dependent is audited, not the whole roster.
@@ -354,11 +374,7 @@ describe('analyze-pr base and head sizes', () => {
 
       // A change to shared infrastructure asks for full audits whatever it
       // reaches.
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', '--force-full'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze('--force-full');
       const forced = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(forced.forceFullComponentAudits).toBe(true);
 
@@ -368,11 +384,7 @@ describe('analyze-pr base and head sizes', () => {
       git(repo, ['add', '-A']);
       git(repo, ['commit', '-qm', 'add a module nothing imports']);
       write('packages/core/dist/hooks/useOrphan.js', 'export function useOrphan() { return 1; }\n');
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const orphan = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(orphan.dependentComponentOwners).toEqual(['core/Card']);
       expect(orphan.forceFullComponentAudits).toBe(false);
@@ -380,16 +392,12 @@ describe('analyze-pr base and head sizes', () => {
       // Without a build to read reach from, a shared module stays unresolved:
       // full audits.
       fs.rmSync(path.join(repo, 'packages/core/dist'), {recursive: true});
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const unbuilt = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(unbuilt.unresolvedComponentSources).toEqual(['core/hooks']);
       expect(unbuilt.forceFullComponentAudits).toBe(true);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
