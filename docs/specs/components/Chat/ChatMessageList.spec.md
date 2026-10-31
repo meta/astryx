@@ -14,6 +14,10 @@ review_triggers:
 verified_by:
   [
     packages/core/src/Chat/ChatMessageList.test.tsx,
+    packages/core/src/Chat/ChatMessage.test.tsx,
+    packages/core/src/Chat/ChatMessageBubble.test.tsx,
+    packages/core/src/Chat/ChatLayout.test.tsx,
+    packages/core/src/Chat/useChatNewMessages.test.tsx,
     packages/core/src/Chat/__tests__/ChatMessageList.a11y.chromium.spec.ts,
     apps/storybook/stories/ChatMessageList.stories.tsx,
     packages/core/src/theme/themingTargets.test.ts,
@@ -188,21 +192,22 @@ migration, so the map is deferred.
 
 ## Verification map
 
-| Contract | Verification                                                                                          | Representative states      | Mutation or failure expectation                              | Audit section              |
-| -------- | ----------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | -------------------------- |
-| FR1, AR1 | `ChatMessageList.test.tsx` role and `aria-busy` tests                                                 | rest, streaming            | A dropped log role or busy state fails.                      | `audit:ChatMessageList/§1` |
-| FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests; `themingTargets.test.ts`                            | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
-| FR4      | `ChatMessageList.test.tsx` empty-state tests                                                          | empty; numeric empty state | A missing or hidden empty state fails.                       | `audit:ChatMessageList/§4` |
-| FR5      | `ChatMessageList.test.tsx` spacer tests                                                               | default, bottom, top       | A spacer that appears or vanishes wrongly fails.             | `audit:ChatMessageList/§4` |
-| FR6      | `ChatMessageList.test.tsx` "loads older messages through the top sentinel and exposes pending status" | pending, settled           | A lost action or stuck spinner fails.                        | `audit:ChatMessageList/§6` |
-| FR8      | `ChatMessageList.test.tsx` `data-testid` test                                                         | data prop                  | A dropped prop fails.                                        | `audit:ChatMessageList/§3` |
+| Contract | Verification                                                                                                                                              | Representative states      | Mutation or failure expectation                              | Audit section              |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | -------------------------- |
+| FR1, AR1 | `ChatMessageList.test.tsx` role and `aria-busy` tests                                                                                                     | rest, streaming            | A dropped log role or busy state fails.                      | `audit:ChatMessageList/§1` |
+| FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests; `themingTargets.test.ts`                                                                                | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
+| FR2      | `ChatMessage.test.tsx` "inherits list density and lets an explicit prop override it"; `ChatMessageBubble.test.tsx` list-density case                      | child message in a list    | Density that stops reaching child messages fails.            | `audit:ChatMessageList/§2` |
+| FR7      | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` "works end-to-end with ChatLayout conditional ChatMessageList" | list inside ChatLayout     | A list that stops registering its content element fails.     | `audit:ChatMessageList/§7` |
+| FR4      | `ChatMessageList.test.tsx` empty-state tests                                                                                                              | empty; numeric empty state | A missing or hidden empty state fails.                       | `audit:ChatMessageList/§4` |
+| FR5      | `ChatMessageList.test.tsx` spacer tests                                                                                                                   | default, bottom, top       | A spacer that appears or vanishes wrongly fails.             | `audit:ChatMessageList/§4` |
+| FR6      | `ChatMessageList.test.tsx` "loads older messages through the top sentinel and exposes pending status"                                                     | pending, settled           | A lost action or stuck spinner fails.                        | `audit:ChatMessageList/§6` |
+| FR8      | `ChatMessageList.test.tsx` `data-testid` test                                                                                                             | data prop                  | A dropped prop fails.                                        | `audit:ChatMessageList/§3` |
 
 Read from source, with no focused test yet:
 
 - FR1: `tabIndex=0` on the log.
-- FR2: density reaching child messages through context.
 - FR4: `null` and `false` children selecting the empty state.
-- FR7: content registration with ChatLayout and its cleanup.
+- FR7: removing the registration on cleanup.
 - FR8: `ref`, `className`, `style`, and `xstyle` on the root, and owned log
   semantics winning over forwarded props.
 - PR1–PR2: observer and registration cleanup.
