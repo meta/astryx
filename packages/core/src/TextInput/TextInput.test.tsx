@@ -823,6 +823,27 @@ describe('TextInput', () => {
     });
   });
 
+  it('keeps the clear button where it is when the field turns busy', () => {
+    // What follows the button in the lane (a `<template>` is not rendered).
+    const after = (button: HTMLElement) =>
+      Array.from(button.parentElement?.children ?? [])
+        .slice(Array.from(button.parentElement?.children ?? []).indexOf(button))
+        .filter(el => el !== button && el.tagName !== 'TEMPLATE');
+    const props = {label: 'Name', value: 'hello', onChange: () => {}};
+    const {rerender} = render(<TextInput {...props} hasClear />);
+    const idle = screen.getByRole('button', {name: 'Clear Name'});
+    const idleAfter = after(idle).length;
+
+    rerender(<TextInput {...props} hasClear isLoading />);
+    const busy = screen.getByRole('button', {name: 'Clear Name'});
+    // The Spinner joins on the inward side, before the button, so nothing new
+    // follows it and its distance from the end does not change.
+    expect(after(busy)).toHaveLength(idleAfter);
+    expect(busy.previousElementSibling?.getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+  });
+
   describe('click-to-focus', () => {
     it('focuses input when clicking the start icon', () => {
       render(

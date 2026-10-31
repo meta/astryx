@@ -613,7 +613,7 @@ export function DateRangeInput({
 
   const fireChange = useCallback(
     (newValue: DateRange | null) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange(newValue);
@@ -624,7 +624,13 @@ export function DateRangeInput({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const handleToggle = useCallback(() => {
@@ -639,10 +645,13 @@ export function DateRangeInput({
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
+      if (isDisabled) {
+        return;
+      }
       fireChange(range);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -813,6 +822,7 @@ export function DateRangeInput({
                 const presetRange = preset.getRange();
                 const isActive = isRangeEqual(value, presetRange);
                 const isPresetDisabled =
+                  isDisabled ||
                   !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
                   isDateDisabled(plainDateFromISO(presetRange.start)) ||
                   isDateDisabled(plainDateFromISO(presetRange.end));
@@ -828,6 +838,11 @@ export function DateRangeInput({
                     aria-current={isActive ? 'true' : undefined}
                     // Focusable while disabled (AR3, spec:AST-085 FR1).
                     aria-disabled={isPresetDisabled || undefined}
+                    aria-describedby={
+                      showsDisabledMessage
+                        ? disabledMessageTooltip.describedBy
+                        : undefined
+                    }
                     onClick={() => {
                       if (!isPresetDisabled) {
                         handleRangeSelect(presetRange);
@@ -851,18 +866,22 @@ export function DateRangeInput({
               })}
             </div>
           )}
-          <Calendar
-            mode="range"
-            value={optimisticValue}
-            onChange={handleRangeSelect}
-            min={min}
-            max={max}
-            dateConstraints={dateConstraints}
-            maxRangeSpan={maxRangeSpan}
-            minRangeSpan={minRangeSpan}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />
+          {/* The layer renders its children open or closed, so mount the
+              calendar only while it is open. */}
+          {popover.isOpen && (
+            <Calendar
+              mode="range"
+              value={optimisticValue}
+              onChange={handleRangeSelect}
+              min={min}
+              max={max}
+              dateConstraints={dateConstraints}
+              maxRangeSpan={maxRangeSpan}
+              minRangeSpan={minRangeSpan}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          )}
         </div>,
         {placement: 'below', alignment: 'start'},
       )}

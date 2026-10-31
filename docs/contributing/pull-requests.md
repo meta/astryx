@@ -90,7 +90,7 @@ code and evidence, and shared or cross-component rules stay in `docs/design/`.
 External contributors keep the normal contribution flow and are never asked to
 author specifications. If authority is missing, a maintainer records the owner
 ruling. A human request supplies intent, but it becomes current committed
-authority only after exact-head owner approval.
+authority only after an owner approves its content.
 
 A new visual representation, subjective direction, or interaction model remains a design decision. Put a shared decision in its own design specification; keep a durable component-local decision in the owning component/module table.
 

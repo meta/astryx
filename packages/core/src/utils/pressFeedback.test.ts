@@ -12,6 +12,10 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
+import {TEMPO_RANGE, expandThemeMotion} from '../theme/themeMotion';
+import {readFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   durationToMs,
@@ -317,6 +321,122 @@ describe('the release', () => {
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
+  it('scales the fade by the tempo its stylesheet reads, a theme\u2019s or an adaptation rule\u2019s (spec:AST-108 FR4, component:Button FR15)', () => {
+    // A rule writes the tempo (a media-query adaptation, say); browsers
+    // inherit it from the theme, jsdom only reads it where it is declared.
+    const style = document.createElement('style');
+    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
+    document.head.appendChild(style);
+    rows[0].classList.add('slow-row');
+    try {
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('under Reduce Motion a tempo may shorten the fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string): MediaQueryList =>
+        ({
+          matches: /prefers-reduced-motion:\s*reduce/.test(query),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const style = document.createElement('style');
+    style.textContent =
+      '.slow-row { --_astryx-motion-tempo: 1.5; } .quick-row { --_astryx-motion-tempo: 0.75; }';
+    document.head.appendChild(style);
+    try {
+      rows[0].classList.add('slow-row');
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      rows[0].classList.replace('slow-row', 'quick-row');
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(PRESS_FADE_MS * 0.75);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      rows[0].classList.remove('slow-row', 'quick-row');
+      style.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('bounds the release’s tempo at its own maximum, so the bound changes nothing', () => {
+    // The clock's 1.5 is TEMPO_RANGE.max, and every tempo a theme writes is
+    // clamped to it: a theme asking for 3 writes 1.5.
+    const source = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'interactionOverlay.stylex.ts',
+      ),
+      'utf8',
+    );
+    expect(source).toContain(
+      `min(var(--_astryx-motion-tempo, 1), ${TEMPO_RANGE.max})`,
+    );
+    expect(expandThemeMotion({tempo: 3})['--_astryx-motion-tempo']).toBe(
+      String(TEMPO_RANGE.max),
+    );
+  });
+
+  it('caps the stylesheet’s release fade under Reduce Motion', () => {
+    const source = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'interactionOverlay.stylex.ts',
+      ),
+      'utf8',
+    );
+    expect(source).toMatch(
+      /min\(\$\{pressConsts\.releaseMs\}ms, calc\(\$\{pressConsts\.releaseMs\}ms \* var\(--_astryx-motion-tempo, 1\)\)\)/,
+    );
+    expect(source).toMatch(
+      /'@media \(prefers-reduced-motion: reduce\)': PRESS_RELEASE_DURATION_REDUCED/,
+    );
+  });
+
+  it('keeps the 200 ms fade without a tempo', () => {
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(rows[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('times the stylesheet’s release fade by the same tempo', () => {
+    // The animation the attribute drives, scaled by the custom property a
+    // theme with a tempo writes beside its duration tokens.
+    const source = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        'interactionOverlay.stylex.ts',
+      ),
+      'utf8',
+    );
+    expect(source).toMatch(
+      /calc\(\$\{pressConsts\.releaseMs\}ms \* min\(var\(--_astryx-motion-tempo, 1\),/,
+    );
+  });
+
   it('answers a tap too quick for the delay, at the release', () => {
     press(rows[0], 'pointerdown', 10, 10);
     vi.advanceTimersByTime(20);
@@ -416,6 +536,24 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
     vi.advanceTimersByTime(PRESS_FADE_MS);
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('fades a mouse press by the theme\u2019s tempo too (spec:AST-108 FR4, component:Button FR15)', () => {
+    const style = document.createElement('style');
+    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
+    document.head.appendChild(style);
+    rows[1].classList.add('slow-row');
+    try {
+      press(rows[1], 'pointerdown', 10, 100, 'mouse');
+      press(rows[1], 'pointerup', 10, 100, 'mouse');
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      rows[1].classList.remove('slow-row');
+      style.remove();
+    }
   });
 
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {

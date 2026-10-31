@@ -9,6 +9,7 @@
  * SYNC: When TopNavMenu changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -320,6 +321,22 @@ describe('TopNavMenu pass-through props', () => {
     const trigger = screen.getByRole('button', {name: /Products/});
     expect(trigger).toHaveAttribute('id', 'products-drawer');
     expect(trigger).toHaveAttribute('data-source', 'nav');
+  });
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMenu ref={ref} label="Products" items={mockItems} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu ref={ref} label="Products" items={mockItems} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
   });
 
   it('keeps its own popup wiring when a caller passes the same attributes', () => {

@@ -73,7 +73,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4]
-    runs-on: 4-core-ubuntu
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -100,7 +100,7 @@ jobs:
         shard: [1, 2, 3, 4]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
-    runs-on: 4-core-ubuntu
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -119,7 +119,7 @@ jobs:
   # Running them here closes that gap and blocks a broken deploy.
   typecheck:
     needs: [main-commit]
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -130,6 +130,29 @@ jobs:
       - uses: ./.github/actions/setup
 
       - run: pnpm build
+
+      # A pull request measures its merge base's component sizes from this
+      # build instead of building the base again (ci.yml size-base).
+      - name: Keep this commit's package builds for PR size reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: dists-main-${{ needs.main-commit.outputs.sha }}
+          path: |
+            packages/*/dist/
+            packages/themes/*/dist/
+          retention-days: 14
+
+      # A pull request compares its published package sizes with its merge
+      # base's from this measurement (ci.yml build-storybook).
+      - name: Measure published package size
+        run: node .github/scripts/package-size.mjs measure --output package-size.json
+
+      - name: Keep this commit's package size for PR size reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-size-main-${{ needs.main-commit.outputs.sha }}
+          path: package-size.json
+          retention-days: 14
 
       - name: Verify package exports
         run: node scripts/verify-exports.mjs

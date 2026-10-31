@@ -248,7 +248,7 @@ still determine whether the implementation satisfies it.
   or other behavior its mechanism cannot perform. Solve the component behavior
   first; consider API only when a clear, enforceable caller-owned distinction
   remains.
-- [PR #5373](https://github.com/facebook/astryx/pull/5373) is evidence that
+- [PR #5373](https://github.com/meta/astryx/pull/5373) is evidence that
   parallel public and package-internal operations for one semantic action create
   avoidable surface area. Its particular operation names and options are not
   policy.

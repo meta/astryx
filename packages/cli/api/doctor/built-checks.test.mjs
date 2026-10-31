@@ -290,15 +290,21 @@ describe('--built edge cases', () => {
   });
 
   it('warns, not fails, when the file limit ends the read before any Astryx', () => {
-    for (let i = 0; i < 20_001; i++) {
-      const file = path.join(dir, 'a', String(i % 50), `${i}.txt`);
-      fs.mkdirSync(path.dirname(file), {recursive: true});
-      fs.writeFileSync(file, '');
+    // One more file than the read takes, spread over 50 folders. Each folder
+    // is made once, and each file is a link to one empty file: a file is
+    // one directory entry, not a recursive mkdir and a write each.
+    const empty = path.join(dir, 'empty.txt');
+    fs.writeFileSync(empty, '');
+    for (let folder = 0; folder < 50; folder++) {
+      fs.mkdirSync(path.join(dir, 'a', String(folder)), {recursive: true});
+    }
+    for (let i = 0; i < 20_000; i++) {
+      fs.linkSync(empty, path.join(dir, 'a', String(i % 50), `${i}.txt`));
     }
     const {usage} = check('.');
     expect(usage.status).toBe('warn');
     expect(usage.message).toContain('went unread');
-  }, 60_000);
+  });
 
   it('finds a root-relative asset from the build root for a page in a subfolder', () => {
     write({

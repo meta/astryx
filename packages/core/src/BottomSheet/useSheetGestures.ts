@@ -236,6 +236,33 @@ function isBlockScroller(element: HTMLElement): boolean {
 }
 
 /**
+ * Whether a gesture that lands on `target` began inside another layer
+ * rendered in this sheet's content — a `<dialog>` between the target and the
+ * body. A sheet opened from inside a sheet's content, a Dialog opened there,
+ * renders its dialog as a descendant of the host's body, so its pointer and
+ * touch events bubble through the host's gesture listeners. That gesture is
+ * the layer's own: the host must neither arm a drag on it nor take pointer
+ * capture for it, which would cancel the drag the layer's own handle began
+ * (`component:BottomSheet` FR7: a swipe reaches only the top sheet of a
+ * stack; FR6: a covered sheet is blocked).
+ */
+export function isInsideNestedLayer(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  for (
+    let element = target instanceof Element ? target : null;
+    element != null && element !== body;
+    element = element.parentElement
+  ) {
+    if (element.localName === 'dialog') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * The scrollers a gesture that lands on `target` can scroll, innermost first
  * and the body last: every scrollable box between the target and the body,
  * then the body itself.
@@ -1328,10 +1355,13 @@ export function useSheetGestures({
     if (event.button !== 0 || !event.isPrimary) {
       return;
     }
-    const scrollers = scrollChainUnder(
-      event.target,
-      event.currentTarget as HTMLElement,
-    );
+    const body = event.currentTarget as HTMLElement;
+    // A gesture inside a layer this sheet hosts belongs to that layer.
+    if (isInsideNestedLayer(event.target, body)) {
+      armedBodyRef.current = null;
+      return;
+    }
+    const scrollers = scrollChainUnder(event.target, body);
     if (!chainAtTop(scrollers)) {
       armedBodyRef.current = null;
       return;
@@ -1465,8 +1495,9 @@ export function useSheetGestures({
       // At the top, a pull DOWN hands off (collapse); at the bottom, a pull UP
       // hands off (expand). A gesture that starts mid-content is an ordinary
       // scroll, but it is tracked all the same: the scroller can run out of
-      // content while the finger is still down (see onTouchMove).
-      if (!touch) {
+      // content while the finger is still down (see onTouchMove). A touch
+      // inside a layer this sheet hosts is that layer's, never tracked here.
+      if (!touch || isInsideNestedLayer(event.target, body)) {
         touchDragRef.current = null;
         return;
       }

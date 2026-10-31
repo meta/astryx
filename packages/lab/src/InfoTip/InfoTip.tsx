@@ -6,7 +6,7 @@
  * @file InfoTip.tsx
  * @input Uses React, stylex, Tooltip + Icon from @astryxdesign/core, color/spacing/radius/duration/ease tokens
  * @output Exports InfoTip component, InfoTipProps, InfoTipSize types
- * @position Lab experiment (RFC facebook/astryx#3349); core implementation consumed by index.ts
+ * @position Lab experiment (RFC meta/astryx#3349); core implementation consumed by index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/InfoTip/InfoTip.doc.mjs (props table, features)

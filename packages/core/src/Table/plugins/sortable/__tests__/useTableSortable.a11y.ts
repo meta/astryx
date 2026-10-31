@@ -22,7 +22,7 @@ const TABLE_ACCESSIBILITY = {
   standard: 'astryx',
   id: 'component:Table',
   clause: 'Accessibility contract',
-  url: 'https://github.com/facebook/astryx/blob/6d4f178a24a8fee1f201911a55f595db9e5ae117/packages/core/src/Table/Table.spec.md#L216-L218',
+  url: 'https://github.com/meta/astryx/blob/6d4f178a24a8fee1f201911a55f595db9e5ae117/packages/core/src/Table/Table.spec.md#L216-L218',
   requirement:
     'Native table semantics, column-header scope, sort `aria-sort`, selection `aria-selected`, CheckboxInput labels, and expansion `aria-expanded` remain unchanged.',
 } as const;

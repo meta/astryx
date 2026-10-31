@@ -156,6 +156,24 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
   onset: PRESS_ONSET_MS,
 };
 
+/**
+ * The release fade's clock on `element`, read once, at the release, from the
+ * property its stylesheet reads: the theme's `--_astryx-motion-tempo`
+ * (`spec:AST-108` FR4, `component:Button` FR15). Under Reduce Motion a tempo
+ * may shorten the fade, never lengthen it past 200 ms.
+ */
+function fadeMs(element: Element): number {
+  const style = getComputedStyle(element);
+  const value = style.getPropertyValue('--_astryx-motion-tempo').trim();
+  const read = value === '' ? Number.NaN : Number(value);
+  const tempo = Number.isFinite(read) && read > 0 ? read : 1;
+  const scaled = PRESS_FADE_MS * tempo;
+  const reduced =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return reduced ? Math.min(scaled, PRESS_FADE_MS) : scaled;
+}
+
 const TIMER_EVENT = {
   fade: 'fadeEnd',
   flash: 'flashEnd',
@@ -217,17 +235,22 @@ function apply(slot: Slot, step: PressStep): void {
     // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
     // while a scroll runs, so a frame-based delay would fire late, after the
     // scroll, and paint a control nobody is pressing any more.
-    live.timer = setTimeout(() => {
-      if (slot.live != null) {
-        slot.live.timer = null;
-      }
-      apply(
-        slot,
-        pressGestureStep(slot.live?.gesture ?? idlePressGesture(), {
-          kind: TIMER_EVENT[kind],
-        }),
-      );
-    }, TIMER_MS[kind]);
+    live.timer = setTimeout(
+      () => {
+        if (slot.live != null) {
+          slot.live.timer = null;
+        }
+        apply(
+          slot,
+          pressGestureStep(slot.live?.gesture ?? idlePressGesture(), {
+            kind: TIMER_EVENT[kind],
+          }),
+        );
+      },
+      // The release fade follows the theme's tempo (`spec:AST-108` FR4,
+      // `component:Button` FR15); the onset delay and the tap flash do not.
+      kind === 'fade' ? fadeMs(live.element) : TIMER_MS[kind],
+    );
   }
 }
 

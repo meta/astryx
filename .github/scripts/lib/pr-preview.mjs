@@ -2,15 +2,13 @@
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 
-import {
-  probeVercelPreview,
-  resolveVercelPreview,
-  waitForPreviewRoutes,
-} from './vercel-preview.mjs';
+const {previewLine} = createRequire(import.meta.url)('./pr-status.js');
 
 export const PR_ANALYSIS_MARKER = '<!-- astryx-pr-analysis -->';
 
@@ -26,8 +24,124 @@ const GENERATOR = path.resolve(
   'generate-pr-comment.js',
 );
 
+// Vercel keeps a branch alias, `<project>-git-<branch>-<team>.vercel.app`
+// (`git-fork-<owner>-<branch>` for a fork), that serves the branch's latest
+// deployment. It is known before any deployment finishes, so the report links
+// it at once. A label past DNS's 63 characters is shortened by Vercel with a
+// hash no one can compute, and then the report links nothing.
+const VERCEL_PROJECT = 'astryx';
+const VERCEL_TEAM = 'fbopensource';
+
+function vercelSlug(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export function branchPreviewOrigin({headRef, headRepository, baseRepository}) {
+  const owner = headRepository.split('/')[0];
+  const branch =
+    headRepository === baseRepository
+      ? vercelSlug(headRef)
+      : `fork-${vercelSlug(owner)}-${vercelSlug(headRef)}`;
+  const label = `${VERCEL_PROJECT}-git-${branch}-${VERCEL_TEAM}`;
+  return label.length <= 63 ? `https://${label}.vercel.app` : null;
+}
+
 function refuse(message) {
   throw new Error(`PR preview refused: ${message}`);
+}
+
+const VERCEL_DEPLOYMENT_URL = /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/;
+
+/**
+ * This head's Vercel preview, from the deployment Vercel reports to GitHub for
+ * the exact commit: `ready` (that deployment's own address, so every link
+ * shows this head), `failed`, or `building` until Vercel reports it (the
+ * branch alias then serves the previous ready deployment). A fork's head is
+ * looked up the same way. Two reads in the comment job; no workflow runs on a
+ * deployment event.
+ */
+export async function headPreview({
+  github,
+  owner,
+  repo,
+  identity,
+  aliasOrigin,
+}) {
+  const sha = identity.headSha;
+  try {
+    const {data: deployments} = await github.rest.repos.listDeployments({
+      owner,
+      repo,
+      sha,
+      per_page: 20,
+    });
+    const deployment = deployments
+      .filter(
+        candidate =>
+          candidate.creator?.login === 'vercel[bot]' &&
+          String(candidate.environment).toLowerCase() === 'preview',
+      )
+      .sort((a, b) => b.id - a.id)[0];
+    if (deployment) {
+      const {data: statuses} = await github.rest.repos.listDeploymentStatuses({
+        owner,
+        repo,
+        deployment_id: deployment.id,
+        per_page: 1,
+      });
+      const latest = statuses[0];
+      if (
+        latest?.state === 'success' &&
+        VERCEL_DEPLOYMENT_URL.test(String(latest.environment_url ?? ''))
+      )
+        return {
+          state: 'ready',
+          sha,
+          url: latest.environment_url.replace(/\/$/, ''),
+        };
+      if (latest?.state === 'failure' || latest?.state === 'error')
+        return {state: 'failed', sha};
+    }
+  } catch {
+    // An unreadable deployment list leaves the preview as still building.
+  }
+  return aliasOrigin
+    ? {state: 'building', sha, aliasOrigin}
+    : {state: 'unknown', sha};
+}
+
+/**
+ * The source run's jobs (latest attempt) with each step's conclusion, so the
+ * report can say which jobs ran and which skipped their work by path. Null
+ * when the list cannot be read.
+ */
+export async function sourceRunJobs({github, owner, repo, runId}) {
+  try {
+    const jobs = await github.paginate(
+      github.rest.actions.listJobsForWorkflowRun,
+      {
+        owner,
+        repo,
+        run_id: runId,
+        filter: 'latest',
+        per_page: 100,
+      },
+    );
+    return jobs.map(job => ({
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      steps: (job.steps || []).map(step => ({
+        name: step.name,
+        conclusion: step.conclusion,
+      })),
+    }));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -396,20 +510,13 @@ export function validateAnalysisMetadata(metadata, identity) {
   return metadata;
 }
 
-function previewState(storybook, sandbox) {
-  if (storybook && sandbox) return 'both';
-  if (storybook) return 'storybook';
-  if (sandbox) return 'sandbox';
-  return 'none';
-}
-
-// Both preview links come from one verified exact-head Vercel deployment.
-// No branch-backed preview is considered a link source.
+// Without a trusted analysis, the report keeps the same preview line as the
+// full report (pr-status.js), then says why the analysis is missing.
 function safeCurrentBody({
   identity,
   runUrl,
   message: overrideMessage,
-  previewOrigin,
+  preview,
 }) {
   const conclusion = identity.sourceConclusion;
   const message =
@@ -417,16 +524,7 @@ function safeCurrentBody({
     (conclusion === 'success'
       ? 'The current CI run completed, but its trusted analysis is unavailable.'
       : `The current CI run concluded ${conclusion || 'without a result'}. Current analysis is unavailable.`);
-  const links = previewOrigin
-    ? [
-        `[View Storybook for this PR](${previewOrigin}/storybook/)`,
-        `[View Sandbox for this PR](${previewOrigin}/sandbox/)`,
-      ]
-    : [];
-  const previewMessage = links.length
-    ? `\n\n${links.join(' · ')}`
-    : '\n\nThe exact-head preview is not available yet.';
-  return `## PR Analysis Report\n${PR_ANALYSIS_MARKER}\n${headMarker(identity.headSha)}\n\n> **Current run:** ${message}${previewMessage}\n\n---\n\n<sub>Generated by PR Enrichment workflow | <a href="${runUrl}" target="_blank" rel="noopener noreferrer">View current CI run</a></sub>\n`;
+  return `## PR Analysis Report\n${PR_ANALYSIS_MARKER}\n${headMarker(identity.headSha)}\n\n${previewLine(preview)}> **Current run:** ${message}\n\n---\n\n<sub>Generated by PR Enrichment workflow | <a href="${runUrl}" target="_blank" rel="noopener noreferrer">View current CI run</a></sub>\n`;
 }
 
 function readJSON(file) {
@@ -450,18 +548,20 @@ function trustedAnalysis({analysisPath, metadataPath, identity, core}) {
  * Base measurements come from the same CI run's merge-base build. They are
  * used only when they name the exact head this comment reports.
  */
-function trustedBaseStats({baseStatsPath, identity, core}) {
+// A size report the generator may read: present and written for the exact
+// head being reported.
+function trustedHeadReport({reportPath, label, identity, core}) {
   try {
-    if (!fs.existsSync(baseStatsPath)) return false;
-    const stats = readJSON(baseStatsPath);
+    if (!fs.existsSync(reportPath)) return false;
+    const report = readJSON(reportPath);
     if (
-      !FULL_SHA.test(String(stats.headSha)) ||
-      stats.headSha !== identity.headSha
+      !FULL_SHA.test(String(report.headSha)) ||
+      report.headSha !== identity.headSha
     )
-      refuse('base stats head does not match');
+      refuse(`${label} head does not match`);
     return true;
   } catch (error) {
-    core.warning(`Ignoring untrusted or stale base stats: ${error.message}`);
+    core.warning(`Ignoring untrusted or stale ${label}: ${error.message}`);
     return false;
   }
 }
@@ -483,13 +583,11 @@ export async function reconcilePrComment({
   analysisPath = 'pr-analysis/analysis.json',
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
+  packageSizePath = 'pr-analysis/package-size.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
   fallbackMessage,
-  lookupPreview = resolveVercelPreview,
-  probePreview = probeVercelPreview,
-  probeWaitMs = 90_000,
   generator = GENERATOR,
   execute = execFileSync,
 }) {
@@ -514,36 +612,10 @@ export async function reconcilePrComment({
     identity,
     core,
   });
-  const candidateOrigin =
-    createIfMissing && !identity.draft
-      ? await lookupPreview({
-          github,
-          owner,
-          repo,
-          prNumber: identity.prNumber,
-          headSha: identity.headSha,
-        })
-      : null;
-  const routesReady =
-    candidateOrigin &&
-    (await waitForPreviewRoutes(candidateOrigin, {
-      probe: probePreview,
-      waitMs: probeWaitMs,
-    }));
-  const previewOrigin =
-    routesReady &&
-    (await lookupPreview({
-      github,
-      owner,
-      repo,
-      prNumber: identity.prNumber,
-      headSha: identity.headSha,
-      waitMs: 0,
-    })) === candidateOrigin
-      ? candidateOrigin
-      : null;
-  const storybook = previewOrigin !== null;
-  const sandbox = storybook;
+  // A draft, or a reconcile that only updates an existing report, links no
+  // preview and says nothing about one.
+  const aliasAttempted = createIfMissing && !identity.draft;
+  const previewOrigin = aliasAttempted ? branchPreviewOrigin(identity) : null;
   const comments = await allComments(github, owner, repo, identity.prNumber);
   const botComments = comments.filter(comment => comment.user?.type === 'Bot');
   const botComment =
@@ -556,30 +628,56 @@ export async function reconcilePrComment({
     return {action: 'none', body: null, identity};
   }
 
+  // This head's preview, for the full report and the fallback alike.
+  const preview = aliasAttempted
+    ? await headPreview({
+        github,
+        owner,
+        repo,
+        identity,
+        aliasOrigin: previewOrigin,
+      })
+    : null;
   let body;
   if (analysisReady) {
-    let resolvedA11yPath = a11yPath;
-    if (!fs.existsSync(resolvedA11yPath)) {
-      resolvedA11yPath = path.resolve('a11y-empty.json');
-      fs.writeFileSync(
-        resolvedA11yPath,
-        '{"components":{},"summary":{"componentsAudited":0,"totalViolations":0}}',
-      );
-    }
+    // The comment job's own reads, handed to the generator as files.
+    const inputs = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
+    const jobs = await sourceRunJobs({
+      github,
+      owner,
+      repo,
+      runId: identity.sourceRunId,
+    });
+    const previewPath = path.join(inputs, 'preview.json');
+    const jobsPath = path.join(inputs, 'jobs.json');
+    if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
+    if (jobs) fs.writeFileSync(jobsPath, JSON.stringify(jobs));
     const args = [
       generator,
       '--analysis',
       analysisPath,
-      ...(trustedBaseStats({baseStatsPath, identity, core})
+      ...(trustedHeadReport({
+        reportPath: baseStatsPath,
+        label: 'base stats',
+        identity,
+        core,
+      })
         ? ['--base-stats', baseStatsPath]
         : []),
-      '--a11y',
-      resolvedA11yPath,
+      ...(trustedHeadReport({
+        reportPath: packageSizePath,
+        label: 'package size report',
+        identity,
+        core,
+      })
+        ? ['--package-size', packageSizePath]
+        : []),
+      // No report means the audit did not run (it runs on main and release
+      // checks, or with the ci:run-a11y label); the comment says so.
+      ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
-      ...(storybook ? ['--storybook-url', `${previewOrigin}/storybook/`] : []),
-      ...(sandbox ? ['--sandbox-url', `${previewOrigin}/sandbox/`] : []),
-      '--preview-state',
-      previewState(storybook, sandbox),
+      ...(preview ? ['--preview', previewPath] : []),
+      ...(jobs ? ['--jobs', jobsPath] : []),
       '--source-conclusion',
       identity.sourceConclusion,
       '--run-url',
@@ -598,7 +696,7 @@ export async function reconcilePrComment({
         identity,
         runUrl,
         message: fallbackMessage,
-        previewOrigin,
+        preview,
       });
     }
   } else {
@@ -606,14 +704,13 @@ export async function reconcilePrComment({
       identity,
       runUrl,
       message: fallbackMessage,
-      previewOrigin,
+      preview,
     });
   }
 
-  // Vercel readiness can take minutes after the source run finishes. Confirm
-  // the reported attempt's identity again, and stand down if a newer attempt
-  // of the run has started since: an earlier attempt's report must not replace
-  // the latest attempt's.
+  // Rendering takes a moment. Confirm the reported attempt's identity again,
+  // and stand down if a newer attempt of the run has started since: an
+  // earlier attempt's report must not replace the latest attempt's.
   if (
     (await confirmOrStandDown({
       github,
@@ -626,20 +723,6 @@ export async function reconcilePrComment({
     return {action: 'none', body: null, identity};
   }
   if (await supersededByNewerAttempt({github, owner, repo, identity, core})) {
-    return {action: 'none', body: null, identity};
-  }
-  if (
-    previewOrigin &&
-    (await lookupPreview({
-      github,
-      owner,
-      repo,
-      prNumber: identity.prNumber,
-      headSha: identity.headSha,
-      waitMs: 0,
-    })) !== previewOrigin
-  ) {
-    core.info('A newer exact-head deployment superseded this preview.');
     return {action: 'none', body: null, identity};
   }
   if (botComment) {
@@ -661,126 +744,4 @@ export async function reconcilePrComment({
   });
   core.info(`Posted PR Analysis Report on #${identity.prNumber}.`);
   return {action: 'created', body, identity};
-}
-
-export async function reconcileEarlyPreviewComment({
-  github,
-  owner,
-  repo,
-  prNumber,
-  headSha,
-  origin,
-  lookupPreview = resolveVercelPreview,
-  probePreview = probeVercelPreview,
-  probeWaitMs = 90_000,
-}) {
-  const currentOrigin = await lookupPreview({
-    github,
-    owner,
-    repo,
-    prNumber,
-    headSha,
-    waitMs: 0,
-  });
-  if (
-    currentOrigin !== origin ||
-    !(await waitForPreviewRoutes(origin, {
-      probe: probePreview,
-      waitMs: probeWaitMs,
-    }))
-  )
-    return {action: 'none'};
-
-  const comments = await allComments(github, owner, repo, prNumber);
-  const existing = comments.find(
-    comment =>
-      comment.user?.type === 'Bot' &&
-      comment.body?.includes(PR_ANALYSIS_MARKER),
-  );
-  const links = `[View Storybook for this PR](${origin}/storybook/) · [View Sandbox for this PR](${origin}/sandbox/)`;
-  const marker = headMarker(headSha);
-  const legacySandboxURL = `https://${owner}.github.io/${repo}/pr/${prNumber}/sandbox/`;
-  let body = `## PR Analysis Report\n${PR_ANALYSIS_MARKER}\n${marker}\n\n> **Previews ready:** Storybook and Sandbox were built with this PR's docsite. CI evidence will be added when available.\n\n${links}\n`;
-  if (existing?.body.includes(marker)) {
-    if (
-      existing.body.includes(`${origin}/storybook/`) &&
-      existing.body.includes(`${origin}/sandbox/`)
-    ) {
-      return {action: 'unchanged'};
-    }
-    const oldOrigins = new Set(
-      existing.body.match(
-        /https:\/\/astryx-[a-z0-9]{9}-fbopensource\.vercel\.app/g,
-      ) ?? [],
-    );
-    if (
-      oldOrigins.size === 1 &&
-      existing.body.includes('View Storybook for this PR')
-    ) {
-      // Same-head redeploy: preserve existing CI/a11y/visual content and
-      // change only the exact-head preview URLs.
-      body = existing.body
-        .replaceAll([...oldOrigins][0], origin)
-        .replaceAll(legacySandboxURL, `${origin}/sandbox/`);
-      if (!body.includes(`${origin}/sandbox/`)) {
-        body = body.replace(
-          marker,
-          `${marker}\n\n[View Sandbox for this PR](${origin}/sandbox/)`,
-        );
-      }
-    } else if (!existing.body.includes('View Storybook for this PR')) {
-      // CI may finish before Vercel; add links to the current-head report.
-      body = existing.body
-        .replace(/^> \*\*Preview availability:\*\*[^\n]*\n\n/m, '')
-        .replace('The exact-head preview is not available yet.', '')
-        .replace(marker, `${marker}\n\n${links}`);
-    }
-  }
-
-  // Replace older same-head preview URLs without dropping CI, a11y, or visual
-  // evidence in the surrounding report.
-  body = body
-    .replaceAll(legacySandboxURL, `${origin}/sandbox/`)
-    .replace(/^> \*\*Preview availability:\*\*[^\n]*\n\n/m, '');
-
-  const {data: current} = await github.rest.pulls.get({
-    owner,
-    repo,
-    pull_number: prNumber,
-  });
-  if (
-    current.state !== 'open' ||
-    current.draft ||
-    current.head?.sha !== headSha
-  ) {
-    return {action: 'none'};
-  }
-  if (
-    (await lookupPreview({
-      github,
-      owner,
-      repo,
-      prNumber,
-      headSha,
-      waitMs: 0,
-    })) !== origin
-  ) {
-    return {action: 'none'};
-  }
-  if (existing) {
-    await github.rest.issues.updateComment({
-      owner,
-      repo,
-      comment_id: existing.id,
-      body,
-    });
-    return {action: 'updated', body};
-  }
-  await github.rest.issues.createComment({
-    owner,
-    repo,
-    issue_number: prNumber,
-    body,
-  });
-  return {action: 'created', body};
 }

@@ -42,9 +42,9 @@
 import {useCallback, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import {InputClearButton} from './InputClearButton';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {
   getInteractionModality,
   useInteractionModalityTracking,

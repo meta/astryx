@@ -239,6 +239,8 @@ Wraps `@stylexjs/unplugin` and intercepts the dev CSS endpoint (`/virtual:stylex
 
 Unsupported declarations fail the build by default with StyleX's replacement guidance. Set `propertyValidationMode` explicitly in `stylexOverrides` (modern API) or `stylexOptions` (legacy API) only when a migration needs the upstream `warn` or `silent` behavior.
 
+A production build also checks the StyleX stylesheet for generated custom properties (`--<prefix><hash>`) that it reads but no stylesheet in the build declares, which browsers drop: a `.stylex.ts` export read in a style that is not a `defineVars`/`defineConsts` value, or one whose module never reached the build. It warns, naming the variable and the rule that reads it. Only stylesheets count as declarations, so a property the app sets at runtime (an inline style) is reported too: give it a name outside the StyleX class-name prefixes.
+
 ---
 
 ## Advanced Options

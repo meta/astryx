@@ -11,13 +11,14 @@
 
 import React, {useRef, type ReactElement} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Divider} from '../Divider';
-import {Heading} from '../Heading';
-import {Icon, renderIconSlot} from '../Icon';
-import {List, ListItem} from '../List';
+import {Divider} from '../Divider/Divider';
+import {Heading} from '../Heading/Heading';
+import {Icon, renderIconSlot} from '../Icon/Icon';
+import {List} from '../List/List';
+import {ListItem} from '../List/ListItem';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {rtlStyles} from '../utils';
+import {rtlStyles} from '../utils/rtlStyles';
 import {getInteractionModality} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';

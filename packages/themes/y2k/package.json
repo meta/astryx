@@ -1,19 +1,19 @@
 {
   "name": "@astryxdesign/theme-y2k",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "displayName": "Y2K Theme",
   "private": false,
   "description": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/themes/y2k"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -52,7 +52,20 @@
     "src",
     "palette.config.json",
     "fonts.css",
-    "fonts.css.d.ts"
+    "fonts.css.d.ts",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-y2k-palette-refs.mjs --check && astryx theme build src/y2kTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
@@ -61,11 +74,11 @@
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

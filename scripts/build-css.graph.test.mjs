@@ -296,10 +296,11 @@ export const styles = stylex.create({
   });
 
   it("counts the provider stylesheet's declarations", () => {
-    const satellite = '.xabc{color:var(--x1provided)}';
-    expect(undefinedStyleXVariables(satellite)).toEqual(['--x1provided']);
-    expect(
-      undefinedStyleXVariables(satellite, ':root{--x1provided:red}'),
-    ).toEqual([]);
+    // A hash-shaped name: StyleX's hash is four to seven base-36 characters.
+    const satellite = '.xabc{color:var(--x1prov7)}';
+    expect(undefinedStyleXVariables(satellite)).toEqual(['--x1prov7']);
+    expect(undefinedStyleXVariables(satellite, ':root{--x1prov7:red}')).toEqual(
+      [],
+    );
   });
 });

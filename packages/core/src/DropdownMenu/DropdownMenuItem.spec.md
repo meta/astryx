@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:DropdownMenuItem
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility, theming, testing]
 verified_by:
@@ -15,7 +15,6 @@ verified_by:
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/DropdownMenu/__tests__/Menu.a11y.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
-    apps/storybook/stories/DropdownMenuItem.stories.tsx,
     apps/storybook/rtl-audit/verified-not-applicable.json,
     scripts/check-knowledge.mjs,
   ]
@@ -30,7 +29,7 @@ architecture:
     architecture:interaction-modality,
   ]
 contributing: []
-system_specs: [spec:AST-020, spec:AST-029]
+system_specs: [spec:AST-020]
 ---
 
 # DropdownMenuItem component contract
@@ -43,7 +42,7 @@ system_specs: [spec:AST-020, spec:AST-029]
 | Behavior                | The parent menu owns roving focus and keyboard activation; the row owns click order, disabled suppression, close-on-select, destination handoff, hover focus, and its visible content composition. |
 | End-user impact         | Actions and destinations preserve keyboard, pointer, and browser link behavior while unavailable rows remain inert and destructive actions remain identifiable.                                    |
 | Builder impact          | Destinations use `href`; supporting content stays non-interactive; `hasCloseOnSelect=false` is reserved for in-place result feedback.                                                              |
-| Compatibility/readiness | Patch-compatible observational contract. Runtime, exports, defaults, and theme targets remain unchanged; authority stays `draft` until exact-head owner approval.                                  |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                                                          |
 | Review checks           | Reject nested controls, disabled activation, lost destination safety, broken modified-click behavior, dropped root inputs, a second keyboard owner, or state/target reflection moved off the row.  |
 | Governing rules         | `family:navigation-destinations/FR1–FR5`; `architecture:public-component-api/INV5–INV9`; `architecture:component-theming-surface/INV3–INV6`; `spec:AST-020/FR1,FR2,FR6,FR15`.                      |
 
@@ -61,7 +60,8 @@ lifecycle.
 ## Compatibility and migration
 
 - Released default preserved: yes.
-- Compatibility class: observational patch; no behavior or public surface changes.
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change.
 - Controlled/uncontrolled behavior: not applicable.
 - Migration decision: none.
 
@@ -101,19 +101,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                                  | Basis                                                            | Draft review state                                           |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
-| FR1 | The pointer row MUST expose one `role="menuitem"` root. Label, description, icon, and end content remain presentational content of that row rather than nested controls.                                                                             | WAI-ARIA menu pattern; released source/docs                      | verify                                                       |
-| FR2 | Enabled activation MUST run the row callback before optional close. Disabled rows MUST expose `aria-disabled=true`, remove link destinations, and run neither callback nor close.                                                                    | Released behavior; focused tests                                 | verify                                                       |
-| FR3 | A destination row MUST render as the link root through LinkProvider. Plain activation runs the callback then closes and navigates; modified and middle clicks preserve browser behavior without running the callback; blocked schemes are inert.     | `family:navigation-destinations/FR1–FR5`; released tests         | verify                                                       |
-| FR4 | The parent menu MUST remain the only keyboard owner. It synthesizes click activation with modifiers, moves focus, and runs typeahead; the row MAY focus itself on pointer hover but MUST NOT create a second roving-focus model.                     | `architecture:interaction-modality`; current parent tests        | verify                                                       |
-| FR5 | The visible root MUST carry `dropdown-menu-item`; size and destructive state MUST reflect through `themeProps`; semantic tokens own layout and paint before caller styling inputs compose.                                                           | `architecture:component-theming-surface/INV3–INV6`; source/tests | verify                                                       |
-| FR6 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` MUST reach or compose on the row root without replacing owned role, tab stop, disabled behavior, destination handling, or activation order.                          | `architecture:public-component-api/INV5–INV9`; focused tests     | verify                                                       |
-| FR7 | Disabled menu rows remain inert. Whether the menu keyboard model should visit them is unresolved at the shared owner and MUST NOT be changed by a component-local audit.                                                                             | WAI-ARIA menu pattern; parent `component:DropdownMenu/OQ1`       | human API decision                                           |
-| FR8 | Keyboard focus MUST remain perceivable, including in forced-colors mode. The current background-only treatment is an objective gap; a remediation must preserve modality and row-content visibility without inventing new ordinary-theme appearance. | WCAG 2.2 SC 1.4.11 and 2.4.7; current rendered behavior          | objective gap; owner must confirm the shared visual boundary |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                    | Basis                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| FR1 | The pointer row exposes one `role="menuitem"` root. Label, description, icon, and end content are presentational content of that row rather than nested controls.                                                                                                                                                                            | `spec:AST-020` FR15; current source and docs                       |
+| FR2 | Enabled activation runs the row callback before optional close. Disabled rows expose `aria-disabled=true`, remove link destinations, and run neither callback nor close.                                                                                                                                                                     | Current behavior and tests                                         |
+| FR3 | A destination row renders as the link root through LinkProvider. Plain activation runs the callback then closes and navigates; a modified click does not run the callback, closes the menu, and is left to the browser; a middle click closes the menu (`hasCloseOnSelect`), then runs the caller's `onAuxClick`; blocked schemes are inert. | `family:navigation-destinations` FR1–FR5; current tests            |
+| FR4 | The parent menu is the only keyboard owner. It synthesizes click activation with modifiers, moves focus, and runs typeahead; the row focuses itself on mouse hover and creates no second roving-focus model.                                                                                                                                 | `architecture:interaction-modality`; current parent tests          |
+| FR5 | The visible root carries `dropdown-menu-item`; size and destructive state reflect on it (`data-size`, `data-variant`); semantic tokens own layout and paint before caller styling inputs compose.                                                                                                                                            | `architecture:component-theming-surface`; current source and tests |
+| FR6 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root without replacing owned role, tab stop, disabled behavior, destination handling, or activation order.                                                                                                                       | `architecture:public-component-api` INV5–INV9; current tests       |
+| FR7 | Disabled menu rows are inert, and the parent menu's arrow keys and typeahead skip them. Shipped behavior, not a requirement until OQ1 is ruled.                                                                                                                                                                                              | `component:DropdownMenu` FR17, OQ1                                 |
+| FR8 | Keyboard focus paints the row's hover background with no outline, about 1.1:1 against the menu surface in the default themes; in forced-colors mode that background is not drawn, so focus has no visible indicator. Shipped behavior; the focus treatment is OQ2.                                                                           | Current source                                                     |
 
 ### Allowed variation
 
@@ -145,10 +142,9 @@ intentional decision.
 
 ### Performance and resources
 
-- **PR1 — Shared press lifecycle.** DropdownMenuItem uses the shared counted press
-  controller through `usePressFeedback`; the first mounted pressable installs the
-  window listeners and the last removes them. The item adds no per-row listener,
-  observer, timer, request, or local resource owner.
+- **PR1 — Shared press listeners.** The row shares the press controller's
+  window and document listeners; it adds no per-row listener, observer, timer,
+  or request.
 
 ## Accessibility contract
 
@@ -157,18 +153,18 @@ intentional decision.
 - **AR2 — Disabled state.** Disabled rows expose state and cannot activate or navigate.
 - **AR3 — Keyboard ownership.** DropdownMenu owns focus collection and activation;
   the item remains a single row in that model.
-- **AR4 — Focus perception.** Focus remains visually perceivable in supported themes
-  and platform accessibility modes; the open forced-colors gap remains explicit.
+- **AR4 — Focus perception.** Focus paints a low-contrast row background in
+  ordinary themes and no indicator in forced-colors mode (FR8, OQ2).
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                                                  | Representation authority                                           | Hierarchy role | Component contract |
-| ---------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ | -------------- | ------------------ |
-| Row              | One full-width action/destination target with tokenized insets and start alignment. | Current source and parent menu composition                         | prominent      | FR1–FR6            |
-| Supporting text  | Description and end content remain subordinate to the row label.                    | Delegated Item layout and current consumer docs                    | supporting     | FR1                |
-| Interaction      | Hover, focus, press, disabled, and destructive states remain distinguishable.       | Current source; forced-colors focus is an unresolved objective gap | prominent      | FR5, FR8, AR4      |
+| Anatomy or state | Design requirement                                                                  | Representation authority                        | Hierarchy role | Component contract |
+| ---------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------- | -------------- | ------------------ |
+| Row              | One full-width action/destination target with tokenized insets and start alignment. | Current source and parent menu composition      | prominent      | FR1–FR6            |
+| Supporting text  | Description and end content remain subordinate to the row label.                    | Delegated Item layout and current consumer docs | supporting     | FR1                |
+| Interaction      | Hover, focus, press, disabled, and destructive states remain distinguishable.       | Current source; forced-colors focus is OQ2      | prominent      | FR5, FR8, AR4      |
 
-No new component-local visual decision is settled by this draft.
+No component-local visual decision is recorded.
 
 ## Family and system relationships
 
@@ -180,20 +176,30 @@ No new component-local visual decision is settled by this draft.
 - `architecture:component-test-sufficiency` owns proportionate observable evidence.
 - `architecture:interaction-modality` and DropdownMenu own parent keyboard behavior.
 - `spec:AST-020` supplies WCAG/APG adoption and evidence-layer boundaries.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
 
 ## Verification map
 
-| Contract         | Verification                                                                  | Representative states                                      | Mutation or failure expectation                                                                                       | Audit section                     |
-| ---------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| FR1–FR4, AR1–AR3 | `DropdownMenu.test.tsx`; reusable Menu accessibility tests; scoped axe        | action, destination, disabled, keyboard, modified clicks   | A nested control, activation while disabled, lost browser affordance, or second keyboard owner fails observable tests | `audit:DropdownMenuItem/§1,§4,§6` |
-| FR5, FR8, AR4    | theming-target tests; exact-head Neutral/Butter/RTL/narrow/focus/hover frames | default, destructive, disabled, focus, hover               | Target/state reflection disappears, paint is absent, or focus becomes unobservable                                    | `audit:DropdownMenuItem/§2,§5`    |
-| FR6              | root/ref/handler tests; lint and typecheck                                    | ref, host attributes, class/style/xstyle, pointer handlers | An accepted input is dropped or overrides component-owned semantics                                                   | `audit:DropdownMenuItem/§3`       |
-| RTL / responsive | source-hashed verified-N/A receipt plus exact-head browser frames             | LTR, RTL, 320px                                            | Physical direction leaks into the row or narrow layout overflows                                                      | `audit:DropdownMenuItem/§9,§10`   |
+| Contract       | Verification                                                                                                                                                                                                                                                                                                               | Representative states                                     | Mutation or failure expectation                                                                                                                                                                | Audit section                          |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1, AR1       | `DropdownMenu.test.tsx` compound-mode cases ("renders JSX children as menu items", "renders endContent after the item label"); `Menu.a11y.test.tsx` menu binding cases                                                                                                                                                     | Action row with content                                   | A row that is not a `menuitem` or loses its content fails. Evidence gap: no test asserts that supporting content holds no nested control.                                                      | `audit:DropdownMenuItem/semantics`     |
+| FR2, AR2, ORD1 | `DropdownMenu.test.tsx` item cases ("calls onClick when item is clicked", "closes the menu after an item is activated", "keeps the menu open when the item opts out of closing", "does not call onClick when disabled"), "has aria-disabled on disabled compound items", and "a disabled href row renders no address"      | Enabled, disabled, close and stay-open                    | A callback while disabled, a missing `aria-disabled`, a close that ignores the policy, or a disabled row with an address fails. Evidence gap: no test asserts the callback-before-close order. | `audit:DropdownMenuItem/behavior`      |
+| FR3            | `DropdownMenu.test.tsx` "DropdownMenuItem href" and "link rows — the browser's own clicks" cases; "a middle click on a link row runs the caller's onAuxClick and still closes the menu"                                                                                                                                    | Plain, modified, middle, right click; blocked destination | A non-anchor row, a modified click that runs the callback, a middle click that does not close, or a live blocked destination fails.                                                            | `audit:DropdownMenuItem/behavior`      |
+| FR4, AR3       | `DropdownMenu.test.tsx` keyboard-access cases ("moves focus to the item the mouse hovers, keeping a single highlight", "does not move focus on hover for a disabled item", "does not move focus for a non-mouse (touch) pointer") and "keeps the row's own role, tab stop and hover focus beside a caller's onPointerMove" | Mouse hover, touch, disabled                              | A second highlight, hover focus on a disabled row or under touch, or a lost tab stop fails.                                                                                                    | `audit:DropdownMenuItem/accessibility` |
+| FR5            | `DropdownMenu.test.tsx` destructive-variant cases; `themingTargets.test.ts`                                                                                                                                                                                                                                                | Default and destructive; data and compound mode           | A missing `data-variant` fails; a rendered class absent from the documented targets fails. Evidence gap: no test asserts the `dropdown-menu-item` class or `data-size`.                        | `audit:DropdownMenuItem/theming`       |
+| FR6            | `DropdownMenu.test.tsx` ref and host-attribute cases ("a ref reaches the menuitem element", "puts aria-\*, data-\* and id on the row root, a link row included", "runs the DOM handlers the caller attaches, such as a drop target")                                                                                       | Ref; host attributes; caller handlers                     | A dropped ref, attribute, or handler fails. Evidence gap: no test asserts `className`, `style`, or `xstyle` on the row.                                                                        | `audit:DropdownMenuItem/api`           |
+| FR7            | `DropdownMenu.test.tsx` "skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation" (the shipped behavior OQ1 leaves open)                                                                                                                                                                      | Disabled rows                                             | A disabled row that activates fails.                                                                                                                                                           | `audit:DropdownMenuItem/accessibility` |
+| FR8, AR4, PR1  | Evidence gap: no test asserts the focus paint, forced-colors focus, or the listener bound                                                                                                                                                                                                                                  | —                                                         | —                                                                                                                                                                                              | `audit:DropdownMenuItem/visual`        |
+| RTL            | `apps/storybook/rtl-audit/verified-not-applicable.json` DropdownMenuItem entry                                                                                                                                                                                                                                             | LTR and RTL                                               | A changed source hash fails the receipt.                                                                                                                                                       | `audit:DropdownMenuItem/rtl`           |
+
+## Current-state impact
+
+- **Focus visibility (FR8).** Keyboard focus on a row shows only a background
+  tint about 1.1:1 against the menu surface, and no indicator in forced-colors
+  mode; the treatment is OQ2.
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision.
 
 ## Open questions
 
@@ -205,5 +211,5 @@ None. This draft records current facts and introduces no product decision.
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or family/system rules. The audit pull
-request owns the closed run evidence required by `spec:AST-029/FR5`.
+screenshot matrices, implementation steps, or family/system rules. It links to
+their owners.

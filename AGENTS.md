@@ -141,7 +141,7 @@ Runners may also write an optional `<promptId>.provenance.json` sidecar beside t
 
 ## AI Context
 
-For architectural context, decisions, and research, see the **[GitHub Wiki](https://github.com/facebook/astryx/wiki)**:
+For architectural context, decisions, and research, see the **[GitHub Wiki](https://github.com/meta/astryx/wiki)**:
 
 - **Decisions** — API Conventions, Why StyleX, StyleX Distribution
 - **Architecture** — System Architecture, Component Authoring Guide
@@ -169,6 +169,7 @@ Documentation lives in two places:
 - **Testing**: Vitest (colocated tests)
 - **Components**: `packages/core/`
 - **Storybook**: `apps/storybook/`
+- **Imports inside a package**: import the defining module (`'../List/List'`), never a folder's index barrel (`'../List'`); public consumers import `@astryxdesign/core`. `@astryx/no-internal-barrel-import` enforces it.
 
 ## JSDoc Conventions
 

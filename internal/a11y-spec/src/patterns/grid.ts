@@ -93,7 +93,7 @@ const CALENDAR_AR1_ACTIVATE: AstryxRecord = {
   standard: 'astryx',
   id: 'component:Calendar',
   clause: 'AR1',
-  url: 'https://github.com/facebook/astryx/blob/66d7146e5aeb8e983b6803c3571a8e871135a35c/packages/core/src/Calendar/Calendar.spec.md#L141-L143',
+  url: 'https://github.com/meta/astryx/blob/66d7146e5aeb8e983b6803c3571a8e871135a35c/packages/core/src/Calendar/Calendar.spec.md#L141-L143',
   requirement: 'Enter or Space picks the focused day.',
 };
 
