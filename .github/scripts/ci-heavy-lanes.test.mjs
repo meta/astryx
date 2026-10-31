@@ -152,7 +152,8 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     head_sha: 'c'.repeat(40),
     created_at: minutesAgo(minutes),
     conclusion: 'success',
-    triggering_actor: {login: 'github-actions[bot]'},
+    actor: {login: 'github-actions[bot]'},
+    status: 'completed',
     ...overrides,
   });
 
@@ -236,18 +237,41 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
 
   it('counts a waiting or running check, but not one replaced while waiting or started by a person', async () => {
     expect(
-      (await run({runs: [check(10, {conclusion: null})]})).dispatch,
+      (
+        await run({
+          runs: [check(10, {status: 'in_progress', conclusion: null})],
+        })
+      ).dispatch,
     ).toEqual([]);
     expect(
       (
         await run({
           runs: [
             check(5, {conclusion: 'cancelled'}),
-            check(10, {triggering_actor: {login: 'someone'}}),
+            check(10, {actor: {login: 'someone'}}),
           ],
         })
       ).dispatch,
     ).toEqual(dispatched(sha));
+  });
+
+  it('keeps counting a check a person re-runs', async () => {
+    const calls = await run({
+      runs: [check(90, {head_sha: sha, triggering_actor: {login: 'someone'}})],
+    });
+    expect(calls.dispatch).toEqual([]);
+  });
+
+  it('checks a tip again when its run failed, since that run may have checked a newer commit', async () => {
+    const calls = await run({
+      runs: [check(70, {head_sha: sha, conclusion: 'failure'})],
+    });
+    expect(calls.dispatch).toEqual(dispatched(sha));
+    // ...but a failed run still holds the window.
+    const recent = await run({
+      runs: [check(20, {head_sha: sha, conclusion: 'failure'})],
+    });
+    expect(recent.dispatch).toEqual([]);
   });
 
   it('does not check a tip twice', async () => {

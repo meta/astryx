@@ -114,7 +114,7 @@ describe('the release-check receipt for a cut commit', () => {
     });
     expect(result).toBeNull();
     expect(messages.failed).toEqual([
-      `No passing release-check for the cut commit ${CUT}. Dispatch ci.yml's release-check on main for it before publishing; main's last commit with a passing release-check is ${OTHER}.`,
+      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with a passing release-check, ${OTHER}, or wait for main's next check and cut from it.`,
     ]);
   });
 
@@ -128,7 +128,7 @@ describe('the release-check receipt for a cut commit', () => {
       /^No passing release-check for the cut commit/,
     );
     expect(messages.failed[0]).toMatch(
-      /no main commit has a passing release-check/,
+      /No main commit has a passing release-check/,
     );
   });
 

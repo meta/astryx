@@ -63,8 +63,8 @@ export async function lastCheckedMain({github, owner, repo}) {
 
 /**
  * Fails the step unless the cut commit has a passing release-check. The
- * failure names main's last commit with one, so the release can be cut there
- * or the check dispatched for this commit.
+ * failure names main's last commit with one, so the release can be re-cut
+ * there.
  */
 export async function requireReleaseCheck({github, core, owner, repo, sha}) {
   if (!/^[0-9a-f]{40}$/.test(sha ?? '')) {
@@ -77,11 +77,13 @@ export async function requireReleaseCheck({github, core, owner, repo, sha}) {
     return run;
   }
   const last = await lastCheckedMain({github, owner, repo});
+  // A check can only be dispatched for main's tip, so the way forward is a
+  // cut from a commit that has one.
   core.setFailed(
-    `No passing release-check for the cut commit ${sha}. Dispatch ci.yml's release-check on main for it before publishing` +
+    `No passing release-check for the cut commit ${sha}. ` +
       (last
-        ? `; main's last commit with a passing release-check is ${last}.`
-        : '; no main commit has a passing release-check in the recent runs.'),
+        ? `Re-cut the release from main's last commit with a passing release-check, ${last}, or wait for main's next check and cut from it.`
+        : "No main commit has a passing release-check in the recent runs; wait for main's next check and cut from it."),
   );
   return null;
 }

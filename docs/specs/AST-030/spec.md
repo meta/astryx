@@ -476,6 +476,8 @@ retroactive status as release evidence.
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
+**Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
+not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;

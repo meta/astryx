@@ -48,14 +48,17 @@ jobs:
               return;
             }
             // This workflow's checks: ci.yml runs dispatched on main by the
-            // workflow token. A cancelled one was replaced while waiting and
-            // never ran.
+            // workflow token, which stays a run's actor when a person re-runs
+            // it. A cancelled one was replaced while waiting and never ran.
             const {data} = await github.rest.actions.listWorkflowRuns({
               ...context.repo, workflow_id: 'ci.yml', event: 'workflow_dispatch', branch: 'main', per_page: 30,
             });
             const checks = data.workflow_runs.filter(run =>
-              run.triggering_actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
-            if (checks.some(run => run.head_sha === tip)) {
+              run.actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
+            // A failed run may have checked out a newer commit than it was
+            // asked to check and failed on that, so only a passing or running
+            // check covers the tip; a failed one still counts toward the window.
+            if (checks.some(run => run.head_sha === tip && (run.status !== 'completed' || run.conclusion === 'success'))) {
               core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
               return;
             }
