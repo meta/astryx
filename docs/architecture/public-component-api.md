@@ -395,13 +395,9 @@ Known verification gaps:
 - INV18: shipped props that configure a subcomponent's label or target, such
   as TopNavMegaMenuFeaturedCard's `linkLabel` and `linkHref` and
   TopNavHeading's `logoLabel`, conform only through replacement under INV9.
-- INV23: no owner module exists yet. The `@astryx/no-raw-private-attribute`
-  baseline lists every private attribute written by hand in shipped package
-  source, once per site, and is the full inventory of sites to move.
-  Public-API review covers what the rule does not read: `.doc.mjs` text and
-  Changesets, a name assembled with `+` or read through `element.dataset`, and
-  a caller that sets a property an owner style it spreads also sets. The
-  `data-astryx-press` selector is copied in 14 Core files.
+- INV23: the `@astryx/no-raw-private-attribute` rule and its baseline do not
+  exist yet, and no owner module exists yet; public-API review is the check
+  until they do. The `data-astryx-press` selector is copied in 14 Core files.
   Other private attributes still written at their sites include
   `data-astryx-popover-fallback-close` and DropdownMenu's
   `data-astryx-submenu-regions`, which Popover and DropdownMenuSubMenu also read
@@ -409,9 +405,9 @@ Known verification gaps:
   named in two files; `data-astryx-scrolling`, read but never written;
   DropdownMenu's `data-astryx-submenu-host`; the Chat composer's
   `data-astryx-dictation-interim`; and RichText's
-  `data-astryx-richtext-code-syntax`. Each conforms by moving into an owner
-  module in its own package, with a runtime reader from that module where its
-  package reads the attribute in code. Lab's
+  `data-astryx-richtext-code-syntax`. No full inventory exists yet. Each
+  conforms by moving into an owner module in its own package, with a runtime
+  reader from that module where its package reads the attribute in code. Lab's
   Schedule reads Core's `data-astryx-popover-fallback-close`, and conforms
   through Core's public API or an attribute Lab owns.
 
