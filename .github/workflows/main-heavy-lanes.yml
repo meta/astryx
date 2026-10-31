@@ -1,19 +1,28 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # Visual, accessibility and RTL run on main, not on every pull request update
-# (spec:AST-030 FR12, DEC-7): a push to main dispatches ci.yml's canonical
-# release-check on its exact commit; that run is main's visual/a11y/RTL result,
-# and a failure is fixed forward. ci.yml runs one such check at a time and keeps
-# only the newest waiting, so a burst of merges is checked once, at its newest
-# commit. Main's own fast checks (deploy.yml) still run for every push. The
-# release gate's exact-commit release-check before a cut is unchanged.
+# (spec:AST-030 FR12, DEC-7): this workflow dispatches ci.yml's canonical
+# release-check on main's tip; that run is main's visual/a11y/RTL result, and a
+# failure is fixed forward. A check covers every merge up to its commit, so
+# main is checked about once an hour (DEC-11): a push dispatches at once when
+# no check has started in the last 55 minutes, and a quarter-hourly schedule
+# picks up the tip a burst of merges left unchecked. Main's own fast checks
+# (deploy.yml) still run for every push. The release gate's exact-commit
+# release-check before a cut is dispatched separately and is unchanged.
 name: Main heavy lanes
 
 on:
   push:
     branches: ['main']
+  schedule:
+    - cron: '7,22,37,52 * * * *'
 
 permissions: {}
+
+# One decision at a time, so two pushes cannot both see no recent check.
+concurrency:
+  group: main-heavy-lanes-dispatch
+  cancel-in-progress: false
 
 jobs:
   dispatch:
@@ -23,26 +32,47 @@ jobs:
       actions: write
       contents: read
     steps:
-      - name: Dispatch the visual, accessibility and RTL release-check for this commit
+      - name: Dispatch the visual, accessibility and RTL release-check for main's tip
         uses: actions/github-script@v9
         env:
           SHA: ${{ github.sha }}
         with:
           script: |
-            const sha = process.env.SHA;
-            const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
-            if (data.commit.sha !== sha) {
-              core.notice(`main moved past ${sha.slice(0, 7)}; the newer push's check covers it.`);
+            // A check starts at most once in this window; the schedule's
+            // quarter-hour cadence adds up to 15 minutes to it.
+            const WINDOW_MINUTES = 55;
+            const {data: branch} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+            const tip = branch.commit.sha;
+            if (context.eventName === 'push' && tip !== process.env.SHA) {
+              core.notice(`main moved past ${process.env.SHA.slice(0, 7)}; the newer push's check covers it.`);
+              return;
+            }
+            // This workflow's checks: ci.yml runs dispatched on main by the
+            // workflow token. A cancelled one was replaced while waiting and
+            // never ran.
+            const {data} = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'ci.yml', event: 'workflow_dispatch', branch: 'main', per_page: 30,
+            });
+            const checks = data.workflow_runs.filter(run =>
+              run.triggering_actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
+            if (checks.some(run => run.head_sha === tip)) {
+              core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
+              return;
+            }
+            const latest = checks.map(run => Date.parse(run.created_at)).sort((a, b) => b - a)[0];
+            const minutes = latest == null ? Infinity : (Date.now() - latest) / 60000;
+            if (minutes < WINDOW_MINUTES) {
+              core.notice(`A release-check started ${Math.floor(minutes)} minutes ago; the next one, at most ${WINDOW_MINUTES - Math.floor(minutes) + 15} minutes from now, covers ${tip.slice(0, 7)}.`);
               return;
             }
             // ci.yml queues these dispatches in one group (one running, one
             // waiting; a newer one replaces the waiting one). A merge landing
-            // between the tip check above and this call makes the run check out
-            // the newer commit and fail its exact-head check; the newer push's
-            // own dispatch then checks that commit.
+            // between the tip read above and this call makes the run check out
+            // the newer commit and fail its exact-head check; the next
+            // dispatch checks that commit.
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo,
               workflow_id: 'ci.yml',
               ref: 'main',
-              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha},
+              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
             });
