@@ -83,13 +83,14 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   /** Pointer kinds this recognizer listens to (UIKit's `allowedTouchTypes`). @default all */
   allowedPointerTypes?: ReadonlyArray<PointerKind>;
   /**
-   * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`:
-   * a trackpad's two-finger scroll (`continuous`) or a mouse wheel's notches
-   * (`discrete`) drive it as a contact moving with the content, along its
-   * own axis and after the scrollers under the pointer (`spec:AST-094`
-   * FR43). A pinch takes a ctrl-wheel, as a trackpad pinches.
-   * @default none; a pan and a pinch take both (FR43), the screen-edge pan
-   *   none, whatever a caller passes
+   * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`.
+   * A pan follows a trackpad's two-finger scroll (`continuous`), never a
+   * mouse wheel's notches, as a contact moving with the content, along its
+   * own axis and after the scrollers under the pointer; a pinch takes a
+   * ctrl-wheel of either, as a trackpad pinches (`spec:AST-094` FR43,
+   * DEC-24).
+   * @default none; a pinch takes both, the screen-edge pan none whatever a
+   *   caller passes
    */
   allowedScrollTypes?: ReadonlyArray<ScrollType>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */
