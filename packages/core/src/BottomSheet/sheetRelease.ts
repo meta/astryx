@@ -5,11 +5,13 @@
  * @input The UIKit constants table (`sheet.release`, the sheet springs) and
  *   the motion foundation's snap-point projection
  * @output Exports resolveSheetRelease, which says where a released sheet goes
- *   and on which spring, and the SheetRelease type
- * @position Internal to BottomSheet; pure (no DOM, no React). The rule a
- *   drag's release follows; no gesture calls it yet.
+ *   and on which spring under a finger; resolveDefaultRelease, today's rule
+ *   everywhere else; and the SheetRelease type
+ * @position Internal to BottomSheet; pure (no DOM, no React). Called by
+ *   useSheetGestures when a drag ends.
  *
- * A released sheet goes where UISheetPresentationController sends it. The
+ * Under a finger (a coarse primary pointer, `readTouchPresentation`), a
+ * released sheet goes where UISheetPresentationController sends it. The
  * dismissed position (the sheet fully below the screen) counts as one of the
  * positions.
  * - Below `sheet.release.fastSpeed`, to the position nearest its release
@@ -35,9 +37,11 @@
  * finger's velocity.
  *
  * Offsets are px down from the tallest detent (0 = fully open), velocities
- * px/s with positive meaning downward.
+ * px/s with positive meaning downward, as useSheetGestures measures them.
  *
- * SYNC: When modified, update /packages/core/src/BottomSheet/sheetRelease.test.ts
+ * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/BottomSheet/sheetRelease.test.ts
+ * - /packages/core/src/BottomSheet/useSheetGestures.ts
  */
 
 import {selectSnapPoint} from '../motion/projection';
@@ -48,6 +52,7 @@ import {
   SHEET_DISMISS_SWIPE_SPRING,
   SHEET_RELEASE_FAST_SPRING,
 } from '../motion/uikit/springs';
+import {resolveSettleOffset} from './snapOffsets';
 
 export interface SheetRelease {
   /** A detent to settle on, or a dismissal. */
@@ -182,5 +187,113 @@ export function resolveSheetRelease({
     offset: positions[index],
     projected: choice.projected,
     spring: isFast ? SHEET_RELEASE_FAST_SPRING : SHEET_DETENT_SPRING,
+  };
+}
+
+// Today's rule, which a Material variant may replace. The release is judged
+// where the sheet would come to rest: its position plus the distance a
+// surface moving at the finger's speed travels while it decelerates at 0.998
+// per ms. A gesture shorter than the travel floor projects nothing.
+const DEFAULT_DECELERATION_RATE = 0.998;
+const DEFAULT_PROJECTION_MS =
+  DEFAULT_DECELERATION_RATE / (1 - DEFAULT_DECELERATION_RATE);
+const DEFAULT_PROJECTION_MIN_TRAVEL = 48; // px traveled during the gesture
+/** Past this fraction of the shortest detent's height below it, a release dismisses. */
+export const DEFAULT_DISMISS_OVERSHOOT_RATIO = 0.4;
+
+/**
+ * Where a sheet released under a mouse
+ * settles: today's rule. A downward release projected past the dismiss line
+ * (`DEFAULT_DISMISS_OVERSHOOT_RATIO` of the shortest detent's height below
+ * it) dismisses; any other settles on the detent nearest its projection in
+ * the drag's direction, never back past the detent it started from. The
+ * spring is unused there: these releases run on the theme's timing.
+ *
+ * @example
+ * ```
+ * // Detents at 0 and 300 px, the shortest showing 340 px; a 120 px drag
+ * // down from 300 px released at 600 px/s: projected 719 px, past the
+ * // dismiss line at 436 px.
+ * resolveDefaultRelease({
+ *   detents: [0, 300],
+ *   shortestDetentHeight: 340,
+ *   dismissible: true,
+ *   position: 420,
+ *   velocity: 600,
+ *   travel: 120,
+ *   direction: 1,
+ *   startOffset: 300,
+ * }); // {kind: 'dismiss', offset: 640, …}
+ * ```
+ */
+export function resolveDefaultRelease({
+  detents,
+  shortestDetentHeight,
+  dismissible,
+  position,
+  velocity,
+  travel,
+  direction,
+  startOffset,
+}: {
+  /** Detent offsets, ascending (the tallest first). */
+  detents: ReadonlyArray<number>;
+  /** How much of the sheet the shortest detent shows, px. */
+  shortestDetentHeight: number;
+  /** Whether a drag may dismiss the sheet. */
+  dismissible: boolean;
+  position: number;
+  /**
+   * The release velocity, px/s: the velocity tracker's at the lift, the one
+   * estimate every pointer reads (`spec:AST-100` FR2, FR4); 0 after a still
+   * pointer.
+   */
+  velocity: number;
+  /** How far the gesture traveled, px. */
+  travel: number;
+  /** The drag's direction: 1 down, -1 up, 0 none. */
+  direction: number;
+  /** The detent offset the drag started from. */
+  startOffset: number;
+}): SheetRelease {
+  if (detents.length === 0) {
+    throw new RangeError('resolveDefaultRelease needs at least one detent');
+  }
+  const maxOffset = detents[detents.length - 1];
+  const dismissLine =
+    maxOffset + shortestDetentHeight * DEFAULT_DISMISS_OVERSHOOT_RATIO;
+  const projected =
+    travel > DEFAULT_PROJECTION_MIN_TRAVEL
+      ? position + (velocity / 1000) * DEFAULT_PROJECTION_MS
+      : position;
+  if (direction > 0 && projected > dismissLine) {
+    return dismissible
+      ? {
+          kind: 'dismiss',
+          index: -1,
+          offset: maxOffset + shortestDetentHeight,
+          projected,
+          spring: SHEET_DETENT_SPRING,
+        }
+      : {
+          kind: 'detent',
+          index: detents.length - 1,
+          offset: maxOffset,
+          projected,
+          spring: SHEET_DETENT_SPRING,
+        };
+  }
+  const offset = resolveSettleOffset(
+    Math.min(Math.max(projected, 0), maxOffset),
+    [...detents],
+    direction,
+    startOffset,
+  );
+  return {
+    kind: 'detent',
+    index: detents.indexOf(offset),
+    offset,
+    projected,
+    spring: SHEET_DETENT_SPRING,
   };
 }

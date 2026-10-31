@@ -1076,10 +1076,15 @@ describe('BottomSheetSwitcher', () => {
       isPrimary: true,
     });
     fireEvent.pointerMove(handle, {pointerId: 1, clientY: 300});
-    expect(panel.style.transform).toBe('translateY(300px)');
+    // The drag moves the sheet on its travel channel (`translate`).
+    expect(panel.style.translate).toBe('0px 300px');
 
     expect(fireEvent.contextMenu(handle)).toBe(false);
 
+    // Back to the detent on the detent spring (jsdom: its end at once). At
+    // rest an identity leaves the element (the animator writes no inline
+    // `translate: 0px 0px`, which would make the panel a containing block).
+    expect(panel.style.translate).toBe('');
     expect(panel.style.transform).toBe('');
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
     expect(onActiveSheetChange).not.toHaveBeenCalled();

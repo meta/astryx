@@ -66,6 +66,9 @@ const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {TokenizerWithPresentation} =
   await import('../internal/tokenizer-presentation');
+// The Tokenizer's sheet loads lazily. Load it here, untimed, so the sheet
+// case's findByLabelText waits only for the render, never for a cold import.
+await import('../Tokenizer/TokenizerBottomSheet');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);

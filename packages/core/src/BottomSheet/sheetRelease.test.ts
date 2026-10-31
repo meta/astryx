@@ -14,7 +14,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {sheet, springs} from '../motion/uikit';
-import {resolveSheetRelease} from './sheetRelease';
+import {resolveDefaultRelease, resolveSheetRelease} from './sheetRelease';
 
 /**
  * Measured on the iOS 26.2 simulator (iPhone 17 Pro, 402 × 874 pt), in
@@ -545,5 +545,92 @@ describe('resolveSheetRelease', () => {
         start: 0,
       }),
     ).toThrow(RangeError);
+  });
+});
+
+describe("resolveDefaultRelease (under a mouse: today's rule)", () => {
+  const base = {
+    detents: [0, 300],
+    shortestDetentHeight: 340,
+    dismissible: true,
+    startOffset: 300,
+  };
+
+  it('dismisses a downward release projected past 40 % of the shortest detent', () => {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    // 420 + 0.6 × 499 = 719 > 300 + 0.4 × 340 = 436.
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        position: 420,
+        velocity: 600,
+        travel: 120,
+        direction: 1,
+      }),
+    ).toMatchObject({kind: 'dismiss', offset: 640});
+    // At rest it dismisses only past the line.
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        position: 430,
+        velocity: 0,
+        travel: 130,
+        direction: 1,
+      }),
+    ).toMatchObject({kind: 'detent', offset: 300});
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        position: 440,
+        velocity: 0,
+        travel: 140,
+        direction: 1,
+      }),
+    ).toMatchObject({kind: 'dismiss'});
+  });
+
+  it('holds the shortest detent instead when a drag may not dismiss', () => {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        dismissible: false,
+        position: 420,
+        velocity: 600,
+        travel: 120,
+        direction: 1,
+      }),
+    ).toMatchObject({kind: 'detent', index: 1, offset: 300});
+  });
+
+  it('projects nothing for a gesture under 48 px', () => {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    // A fast 20 px nudge up from 300: no projection, back to 300.
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        position: 280,
+        velocity: -2000,
+        travel: 20,
+        direction: -1,
+      }),
+    ).toMatchObject({kind: 'detent', offset: 300});
+  });
+
+  it('never settles past the detent a drag started from, against its direction', () => {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    // Up 50 px net from 300, then thrown down at the lift: projected
+    // 250 + 0.6 × 499 = 549 would land on 500, but an upward drag stops at
+    // its start.
+    expect(
+      resolveDefaultRelease({
+        ...base,
+        detents: [0, 300, 500],
+        position: 250,
+        velocity: 600,
+        travel: 50,
+        direction: -1,
+      }),
+    ).toMatchObject({kind: 'detent', offset: 300});
   });
 });
