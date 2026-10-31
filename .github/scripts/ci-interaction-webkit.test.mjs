@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import {build} from 'esbuild';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
@@ -115,24 +116,54 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('--project chromium');
   });
 
-  it('runs only the specs of the code it is scoped to', () => {
+  it('runs only the specs whose code its scope covers', () => {
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     const targets = [
       'packages/core/src/gestures/',
-      'packages/core/src/motion/',
+      'packages/core/src/motion/__tests__/animatedLayout.interaction',
+      'packages/core/src/motion/__tests__/animator.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
       expect(run).toContain(target);
-      // Each spec directory it runs is one its scope covers.
-      expect(inScope(`${target}x.interaction.browser.spec.ts`), target).toBe(
-        true,
-      );
+      expect(inScope(target), target).toBe(true);
     }
-    // Component specs (DateInput, TabList, TreeList, SideNav) stay with the
-    // Chromium proofs.
+    // The adopters spec renders Storybook components (Collapsible, TreeList,
+    // ScrollableArea), and component specs (DateInput, TabList, TreeList,
+    // SideNav) stay with the Chromium proofs.
+    expect(run).not.toContain('animatedLayoutAdopters');
+    expect(run).not.toMatch(/motion\/ /);
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
+    }
+  });
+
+  // Every source file the WebKit specs bundle into their pages is in scope,
+  // so a change that reaches the run always runs it.
+  it.each([
+    'packages/core/src/gestures/__tests__/browser/fixture.ts',
+    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
+    'packages/core/src/motion/__tests__/motionBundle.ts',
+  ])('keeps everything %s bundles in scope', async entry => {
+    const {metafile} = await build({
+      absWorkingDir: root,
+      entryPoints: [entry],
+      bundle: true,
+      write: false,
+      metafile: true,
+      format: 'iife',
+      platform: 'browser',
+      logLevel: 'silent',
+    });
+    const sources = Object.keys(metafile.inputs).filter(
+      input =>
+        !input.includes('node_modules') &&
+        !input.includes('/__tests__/') &&
+        (input.startsWith('packages/') || input.startsWith('internal/')),
+    );
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(inScope(source), source).toBe(true);
     }
   });
 
@@ -147,6 +178,8 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/pressFeedbackImports.test.ts',
       'packages/core/src/utils/pressGesture.ts',
       'packages/core/src/utils/touchPresentation.ts',
+      'packages/core/src/utils/primaryClick.ts',
+      'packages/core/src/utils/isApplePlatform.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
