@@ -68,15 +68,25 @@ jobs:
             };
             // Whether a lane is due for the tip. A cancelled run was replaced
             // and never ran. A release-check that checked out a newer commit
-            // than its name says it was asked to check (a merge landed between
-            // the tip read and the dispatch) failed on that and is no check of
-            // it; it still holds the window. A unit run tests its own event's
-            // commit, so its result is always that commit's.
-            const askedFor = run => /^Release check ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1];
-            const covers = run => run.head_sha === tip && (askedFor(run) ?? tip) === tip;
-            const due = (runs, label) => {
+            // than it was asked to check (a merge landed between the tip read
+            // and the dispatch) fails its release-authority job and is no check
+            // of that commit; it still holds the window. A unit run tests its
+            // own event's commit, so its result is always that commit's.
+            const authorityRefused = async run => {
+              const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
+            };
+            const covered = async (runs, checkAuthority) => {
+              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && item.head_sha === tip)) {
+                if (!checkAuthority || run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
+              }
+              return false;
+            };
+            const due = async (runs, label, checkAuthority) => {
               const counted = runs.filter(run => run.conclusion !== 'cancelled');
-              if (counted.some(covers)) {
+              if (await covered(runs, checkAuthority)) {
                 core.notice(`main's tip ${short} already has a ${label}.`);
                 return false;
               }
@@ -90,8 +100,8 @@ jobs:
             };
             const checks = await dispatched('ci.yml');
             const units = await dispatched('deploy.yml');
-            const heavy = due(checks, 'release-check');
-            let unit = due(units, 'full unit run');
+            const heavy = await due(checks, 'release-check', true);
+            let unit = await due(units, 'full unit run', false);
 
             // A full unit run that did not complete (FR21): run the next one at
             // once and tell the guardian. A newer run, such as a recheck that
@@ -129,7 +139,7 @@ jobs:
             }
             // A release-check always brings a full unit run of the same commit,
             // so a release cut from it has both.
-            const unitAtTip = units.some(run => run.conclusion !== 'cancelled' && covers(run));
+            const unitAtTip = await covered(units, false);
             if (unit || (heavy && !unitAtTip)) {
               await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main'});
             }
