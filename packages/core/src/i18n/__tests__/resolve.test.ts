@@ -10,19 +10,27 @@
 
 import {describe, expect, test, beforeEach, vi} from 'vitest';
 import {__resetForTests, getResolve, resolveLocaleChain} from '../resolve';
+import enCatalog from '../generated-locales/en.generated';
+import paginationMessages from '../generated-locales/en/pagination.generated';
 import type {
   Catalog,
   MessagesByLocale,
   Overrides,
   ProviderMessagesByLocale,
+  RuntimeCatalog,
 } from '../types';
 
+// The English fallback is the caller's (a component's slice, or the whole
+// catalog through useTranslator); these cases resolve against the whole
+// catalog, as useTranslator does, unless a case passes its own.
 const resolve = (
-  ...[key, values, locale, messages, overrides]: [
-    ...Parameters<ReturnType<typeof getResolve>>,
-    ...Parameters<typeof getResolve>,
-  ]
-) => getResolve(locale, messages, overrides)(key, values);
+  key: string,
+  values: Record<string, unknown> | undefined,
+  locale: Parameters<typeof getResolve>[0],
+  messages: Parameters<typeof getResolve>[1],
+  overrides: Parameters<typeof getResolve>[2],
+  fallback: RuntimeCatalog | undefined = enCatalog,
+) => getResolve(locale, messages, overrides)(key, values, fallback);
 
 // Reset caches between tests so warn-once and formatter cache don't bleed.
 beforeEach(() => {
@@ -61,9 +69,7 @@ describe('resolveLocaleChain', () => {
 });
 
 describe('resolve — basic lookup', () => {
-  test('falls back to shipped en catalog when locale is en and no messages passed', () => {
-    // The compact shipped English catalog is loaded at module initialization;
-    // Pagination keys should resolve. This asserts the module wiring end-to-end.
+  test('falls back to the shipped en catalog when locale is en and no messages passed', () => {
     const out = resolve(
       '@astryx.pagination.next',
       undefined,
@@ -72,6 +78,43 @@ describe('resolve — basic lookup', () => {
       undefined,
     );
     expect(out).toBe('Go to next page');
+  });
+
+  test("resolves from a component's own namespace slice, and no further", () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(
+      resolve(
+        '@astryx.pagination.next',
+        undefined,
+        'en',
+        {},
+        undefined,
+        paginationMessages,
+      ),
+    ).toBe('Go to next page');
+    // A key of another namespace is not in the slice: the key comes back and
+    // the one-time warning fires, which is what check:i18n-catalog's
+    // slice-coverage rule (landing with the component sweep) prevents.
+    expect(
+      resolve(
+        '@astryx.button.loading',
+        undefined,
+        'en',
+        {},
+        undefined,
+        paginationMessages,
+      ),
+    ).toBe('@astryx.button.loading');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing key'));
+    warn.mockRestore();
+  });
+
+  test('carries no English catalog of its own: with no fallback the key comes back', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(getResolve('en', {})('@astryx.pagination.next', undefined)).toBe(
+      '@astryx.pagination.next',
+    );
+    warn.mockRestore();
   });
 
   test('returns the key itself and warns for unknown key', () => {

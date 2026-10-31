@@ -4,7 +4,7 @@
 
 /**
  * @file InternationalizationProvider.tsx
- * @input React, InternationalizationContext, i18n types
+ * @input React, InternationalizationContext, TranslationRuntimeContext, i18n types
  * @output Exports InternationalizationProvider component and props type
  * @position Provider component for astryx i18n locale + messages
  *
@@ -20,7 +20,11 @@
  */
 
 import {useMemo, type ReactNode} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {
+  InternationalizationContext,
+  translateWithCatalog,
+} from './InternationalizationContext';
+import {TranslationRuntimeContext} from './TranslationRuntimeContext';
 import {getLocaleDirection} from './getLocaleDirection';
 import type {
   Locale,
@@ -115,20 +119,34 @@ export function InternationalizationProvider({
   children,
 }: InternationalizationProviderProps) {
   const direction = dir ?? getLocaleDirection(locale);
-  const value = useMemo(() => {
+  // One resolver, two readers: the components inside this package pass their
+  // own English slice to it; the public context binds the whole catalog.
+  const runtime = useMemo(() => {
     const providedMessages = messages ?? {};
     return {
       locale,
       direction,
       messages: normalizeMessages(providedMessages),
       overrides,
-      translate: getResolve(locale, providedMessages, overrides),
+      resolve: getResolve(locale, providedMessages, overrides),
     };
   }, [locale, direction, messages, overrides]);
+  const value = useMemo(
+    () => ({
+      locale: runtime.locale,
+      direction: runtime.direction,
+      messages: runtime.messages,
+      overrides: runtime.overrides,
+      translate: translateWithCatalog(runtime.resolve),
+    }),
+    [runtime],
+  );
   return (
-    <InternationalizationContext value={value}>
-      {children}
-    </InternationalizationContext>
+    <TranslationRuntimeContext value={runtime}>
+      <InternationalizationContext value={value}>
+        {children}
+      </InternationalizationContext>
+    </TranslationRuntimeContext>
   );
 }
 

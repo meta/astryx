@@ -292,23 +292,38 @@ export * from './MyComponent';
 
 ### User-facing strings and text direction
 
-Components read user-facing strings with `useTranslator()` rather than
-hardcoding them:
+Components read user-facing strings with `useComponentTranslator(<slice>)`
+rather than hardcoding them. The slice is the component's own namespace of the
+English catalog, generated under `src/i18n/generated-locales/en/`, so an app
+that neither mounts `InternationalizationProvider`, calls `useTranslator()` nor
+imports `InternationalizationContext` (each carries the whole catalog) bundles
+only the strings of the components it renders:
 
 ```tsx
-import {useTranslator} from '@astryxdesign/core/i18n';
+import {useComponentTranslator} from '../i18n/useComponentTranslator';
+import saveButtonMessages from '../i18n/generated-locales/en/saveButton.generated';
 
 function SaveButton() {
-  const t = useTranslator();
-  return <button>{t('@astryx.actions.save')}</button>;
+  const t = useComponentTranslator(saveButtonMessages);
+  return <button>{t('@astryx.saveButton.save')}</button>;
 }
 ```
 
-Astryx's own strings live in `packages/core/locales/en.json`. The
-`@astryx/no-hardcoded-i18n-string` ESLint rule rejects a hardcoded one. For a
-prop whose default is a translated string, alias the prop and resolve it in the
-body: destructure `label: labelFromProps`, then
+A file that reads several namespaces merges their slices once at module level
+(`const messages = {...aMessages, ...bMessages}`) and passes that. Astryx's own
+strings live in `packages/core/locales/en.json`, keyed
+`@astryx.<namespace>.<name>`; `pnpm generate:i18n-runtime` emits the slices, and
+`pnpm check:i18n-catalog` gains a slice-coverage rule with the component
+sweep, failing a key read outside the file's slice. The
+`@astryx/no-hardcoded-i18n-string` ESLint rule rejects a hardcoded string. For
+a prop whose default is a translated string, alias the prop and resolve it in
+the body: destructure `label: labelFromProps`, then
 `const label = labelFromProps ?? t('@astryx.<component>.<key>')`.
+
+`useTranslator()` from `@astryxdesign/core/i18n` is the consumer-facing hook:
+it carries the whole English catalog, so a component inside `packages/core`
+renders with its slice instead; packages that depend on core (`lab`,
+`richtext`) use `useTranslator()`.
 
 A component that responds to text direction resolves it from the DOM, not from
 a render-time JavaScript read. Reach for the lightest tool that works, in this
@@ -347,8 +362,8 @@ order:
    flip for free; don't pass them a direction flag.
 4. **`useDirection()` context, as a last resort.** Use it only when you need
    the direction value during render and nothing above fits. It is SSR-safe
-   and returns `'ltr'` outside a provider (like `useTranslator`'s silent
-   fallback), but it is the one path that can mismatch on hydration when the
+   and returns `'ltr'` outside a provider (like a translator's silent
+   English fallback), but it is the one path that can mismatch on hydration when the
    provider's direction disagrees with `<html dir>`. No Astryx component reads
    direction from context at render time.
 

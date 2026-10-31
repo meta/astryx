@@ -11,17 +11,25 @@
  *   2. Per-locale override for a parent locale (pt-BR → pt)
  *   3. Shipped catalog entry for the exact locale
  *   4. Shipped catalog entry for a parent locale (pt-BR → pt)
- *   5. Shipped en catalog (the source of truth, always present)
+ *   5. The caller's English fallback (the source of truth): a component's own
+ *      namespace slice through useComponentTranslator, or the whole shipped en
+ *      catalog through useTranslator. This module imports no catalog itself,
+ *      so a bundle carries only the slices of the components it renders.
  *   6. The key itself (dev-visible fallback, warns once)
  *
  * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/i18n/useComponentTranslator.ts
  * - /packages/core/src/i18n/useTranslator.ts
  * - /packages/core/src/i18n/__tests__/resolve.test.ts
  */
 
 import IntlMessageFormat from 'intl-messageformat';
-import type {Locale, Overrides, ProviderMessagesByLocale} from './types';
-import enCatalog from './generated-locales/en.generated';
+import type {
+  Locale,
+  Overrides,
+  ProviderMessagesByLocale,
+  RuntimeCatalog,
+} from './types';
 import {warnOnce, __resetDevWarnings} from '../utils/devWarning';
 
 /**
@@ -112,11 +120,18 @@ export function getResolve(
 ) {
   const lookup = getLookup(locale, messages, overrides);
 
-  return (key: string, values: Record<string, unknown> | undefined) => {
-    const result = lookup[key] ?? enCatalog[key];
+  return (
+    key: string,
+    values: Record<string, unknown> | undefined,
+    fallback?: RuntimeCatalog,
+  ) => {
+    const result = lookup[key] ?? fallback?.[key];
     if (result === undefined) {
       // Fires ONLY when a key is missing from every source including the
-      // shipped `en` catalog — a real bug (typo, stale catalog, deleted key).
+      // caller's English fallback — a real bug (typo, stale catalog, deleted
+      // key, or a component reading a key outside its own namespace slice;
+      // `check:i18n-catalog`'s slice-coverage rule, which lands with the
+      // component sweep, catches the last one before it ships).
       // Fallback to `en` from a non-en locale is expected and stays silent,
       // matching the FormatJS / i18next default.
       warnOnce(
