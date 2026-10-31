@@ -22,6 +22,7 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
+import {Token} from '@astryxdesign/core/Token';
 
 const storyStyles = stylex.create({
   markerAnatomy: {
@@ -357,6 +358,32 @@ export const WithEndActions: Story = {
           />
         }
       />
+    </div>
+  ),
+};
+
+/** A row with its own action and a clickable Token in its end slot. */
+export const WithTokenAction: Story = {
+  render: () => (
+    <div style={{maxWidth: 420}}>
+      <Item
+        label="Launch plan"
+        description="Opens the plan"
+        onClick={() => {}}
+        endContent={<Token label="Design" onClick={() => {}} />}
+      />
+    </div>
+  ),
+};
+
+/** Numbered rows with their own action: the marker sits beside the row. */
+export const NumberedWithActions: Story = {
+  render: () => (
+    <div style={{maxWidth: 420}}>
+      <List listStyle="decimal">
+        <ListItem label="Open the report" onClick={() => {}} />
+        <ListItem label="Read the summary" href="#summary" />
+      </List>
     </div>
   ),
 };

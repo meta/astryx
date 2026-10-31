@@ -100,9 +100,9 @@ import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
-  FOCUS_OWNER_ATTRIBUTE,
-  focusOwnerStyles,
-} from '../internal/focusOutline.stylex';
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -2594,7 +2594,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             // Rings for the trigger button only; the clear and status
             // buttons ring themselves (`architecture:interaction-modality`
             // INV3).
-            variant !== 'input' && focusOwnerStyles.focusWithinOwner,
+            variant !== 'input' && focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
@@ -2636,7 +2636,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
-          {...{[FOCUS_OWNER_ATTRIBUTE]: ''}}
+          {...focusOwnerProps}
           type="button"
           // The read-only trigger stays a combobox even when hasSearch is set:
           // no search input is rendered in that state, and preserving the role

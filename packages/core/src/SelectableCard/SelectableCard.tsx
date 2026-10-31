@@ -47,9 +47,9 @@ import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {
-  FOCUS_OWNER_ATTRIBUTE,
-  focusWithinOwnerProps,
-} from '../internal/focusOutline.stylex';
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -442,7 +442,7 @@ export function SelectableCard({
         }),
         // Rings for the card's own checkbox only; a control in its children
         // rings itself (`architecture:interaction-modality` INV3).
-        focusWithinOwnerProps(),
+        stylex.props(focusWithinOwner),
         classNameProp,
         style,
       )}
@@ -465,7 +465,7 @@ export function SelectableCard({
         ref={interactiveRef}
         type="checkbox"
         checked={isSelected}
-        {...{[FOCUS_OWNER_ATTRIBUTE]: ''}}
+        {...focusOwnerProps}
         aria-label={label}
         aria-disabled={isDisabled ? 'true' : undefined}
         onChange={() => {
