@@ -26,6 +26,15 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
+
+/**
+ * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
+ * whatever its delta, which the host reads as a mouse wheel's (FR43);
+ * WebKit's sends a trackpad's precise deltas (`wheelDeltaY` three times the
+ * delta), so it carries the trackpad-only cases.
+ */
+const TRACKPAD_SKIP =
+  "Chromium's driver sends each wheel as a mouse wheel's notch (wheelDeltaY -120 whatever its delta); WebKit's driver sends a trackpad's precise deltas";
 import {expect, test, type Page} from '@playwright/test';
 
 interface Entry {
@@ -1713,7 +1722,9 @@ test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
   test('a scroll-edge pan takes a trackpad scroll only at the top of the page that scrolls it, pulling the content down; mid-page the page scrolls (spec:AST-094 FR43, FR19)', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
     await page.goto('about:blank');
     await page.setContent(
       '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="margin: 0"></body>',
@@ -1768,7 +1779,9 @@ test.describe('where the primary pointer is fine', () => {
 
   test('a wheel gesture stays with the pan that took it when the pan moves its element from under a still cursor, as a browser latches a scroller (spec:AST-094 FR43)', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
     await page.goto('about:blank');
     await page.setContent(
       '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
