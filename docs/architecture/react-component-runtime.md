@@ -198,7 +198,9 @@ those contracts.
   caller-supplied frames on elements the page already renders, on the one
   shared motion, with no copy, releasing them when the motion ends; AppShell's
   content surface uses this to cover an expand's gap when its old wrap is not
-  copied. Neither is public
+  copied. The module also produces `spec:AST-105` FR9's edge reveal; the
+  SideNav rail uses its inline-edge two-state form and keeps only its labels'
+  and icons' fades of its own. None of these is public
   (`architecture:component-style-authoring` INV7). The module follows INV3
   and INV5.
 - **INV13 — One shared set of internal touch modules.** Core's touch
