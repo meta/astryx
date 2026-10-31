@@ -18,12 +18,23 @@ const {inline, num} = require('./report-text');
 
 const runLabels = require('../run-labels.cjs');
 
-/** The heavy suites a pull request runs only with its `ci:run-<suite>` label. */
+/**
+ * The heavy suites a pull request runs only with its `ci:run-<suite>` label,
+ * and the job display names (matrix suffix removed) that belong to each.
+ */
 const SUITES = [
-  {id: 'visual', label: 'Visual', jobs: ['visual-scout', 'pr-visual']},
-  {id: 'a11y', label: 'Accessibility', jobs: ['pr-a11y']},
-  {id: 'rtl', label: 'RTL', jobs: ['pr-rtl', 'pr-rtl-shard', 'pr-rtl-merge']},
-  {id: 'perf', label: 'Perf', jobs: ['perf']},
+  {
+    id: 'visual',
+    label: 'Visual',
+    jobs: /^(Stable visual|visual-scout|pr-visual)/i,
+  },
+  {
+    id: 'a11y',
+    label: 'Accessibility',
+    jobs: /^(pr-a11y|Accessibility spec-test)/i,
+  },
+  {id: 'rtl', label: 'RTL', jobs: /^pr-rtl/i},
+  {id: 'perf', label: 'Perf', jobs: /^(perf|pr-perf)/i},
 ];
 
 /** The sentence a heavy suite shows when it did not run (run-labels.cjs owns it). */
@@ -53,7 +64,7 @@ function classifyJob(job) {
   if (skipStep && job.conclusion === 'success')
     return {
       state: 'scoped-out',
-      reason: 'specialized change (spec, docsite or tooling only)',
+      reason: skipStep.name,
     };
   const scopeIndex = steps.findIndex(step => step.name === SCOPE_STEP);
   if (scopeIndex !== -1 && job.conclusion === 'success') {
@@ -98,7 +109,7 @@ function summarizeJobs(jobs) {
 }
 
 function suiteOf(jobName) {
-  return SUITES.find(suite => suite.jobs.includes(jobName)) ?? null;
+  return SUITES.find(suite => suite.jobs.test(jobName)) ?? null;
 }
 
 const CONCLUSION_TEXT = {
@@ -114,7 +125,7 @@ function conclusionText(conclusion) {
 
 /** One suite's state from its jobs: ran (and how), scoped out, or not run. */
 function suiteJobState(suite, jobSummary) {
-  const jobs = jobSummary.filter(job => suite.jobs.includes(job.name));
+  const jobs = jobSummary.filter(job => suite.jobs.test(job.name));
   if (jobs.length === 0) return null;
   const ran = jobs.filter(job => job.state === 'ran');
   if (ran.length > 0) {

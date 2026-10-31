@@ -73,7 +73,31 @@ describe('classifyJob', () => {
       ['Skip heavy work for a specialized lane', 'success'],
       ['Checkout', 'skipped'],
     ]);
-    expect(classifyJob(skipped).state).toBe('scoped-out');
+    expect(classifyJob(skipped)).toEqual({
+      state: 'scoped-out',
+      reason: 'Skip heavy work for a specialized lane',
+    });
+  });
+});
+
+describe('suite jobs by display name', () => {
+  it.each([
+    ['Stable visual regression', 'Visual'],
+    [
+      'Stable visual scout (${{ matrix.shard }}/${{ strategy.job-total }})',
+      'Visual',
+    ],
+    ['pr-a11y (browser specs)', 'Accessibility'],
+    ['Accessibility spec-test contracts', 'Accessibility'],
+    ['pr-rtl (core)', 'RTL'],
+  ])('reads a skipped %s as the %s suite not running', (name, label) => {
+    const table = buildStatusTable({
+      analysis: {newComponents: [], modifiedComponents: []},
+      jobs: [job(name, 'skipped')],
+    });
+    expect(table).toContain(
+      `| ${label} | ⏭ ${label} did not run on this pull request;`,
+    );
   });
 });
 
