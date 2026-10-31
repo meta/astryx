@@ -63,7 +63,8 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV11",
       "INV12",
       "INV14",
-      "INV15"
+      "INV15",
+      "INV16"
     ],
     "layout": ["INV3", "INV11", "INV12"]
   }
@@ -504,6 +505,15 @@ layers use Layer rendering without joining Escape/platform dismissal.
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
   (`spec:AST-017` FR21).
+- **INV16 — The runtime owns the one input hold.** The layer runtime owns the
+  shared input hold, `holdInput` and `useInputHold`, that keeps input away
+  from a layer while its presentation runs under a finger. While a layer
+  presents (`spec:AST-094` FR35), it holds pointer input only: a shield inside
+  the layer catches taps and presses, a pinch still zooms the page, and keys
+  and assistive technology stay live. While a layer dismisses, it also makes
+  the layer's content inert until the dismissal ends. A component that holds
+  input uses this hold rather than building its own. It is separate from
+  INV14's presentation hold, which keeps a layer's chosen presentation.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -589,6 +599,7 @@ above are the stack's, the mounting under them is this gap's.
   transitions of a layer and its content across the re-placement's display
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
+- `Layer/inputHold.ts` owns the input hold (INV16).
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -643,6 +654,7 @@ this current architecture record.
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                         | A current local channel silently changes ownership or policy                                                                                                                                                  |
 | INV10        | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                             | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                            |
 | INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                      |
+| INV16        | `inputHold` unit tests and the interaction proofs of each adopter in Chromium and WebKit                                                                    | A component that holds input on its own, a held key or assistive-technology action during a presentation, a pinch that no longer zooms, or a dismissal that leaves the content live fails                     |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
