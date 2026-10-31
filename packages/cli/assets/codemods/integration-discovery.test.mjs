@@ -150,17 +150,28 @@ describe('integration codemod discovery', () => {
     ).toContain('consumer-new');
   });
 
-  it('fails discovery when a codemod has no default export', async () => {
+  it('skips a co-located module with no default export (treats it as a helper)', async () => {
+    // CONTRACT CHANGE (issue #4975): a module with no codemod default export is
+    // now treated as a co-located helper and skipped, rather than failing the
+    // whole integration's discovery. Previously this threw ("no default
+    // export = hard error"); that made any integration keeping a named-export
+    // helper next to its codemods silently lose ALL of its codemods.
     scaffold({
-      '0.2.0/broken.mjs': `export const notDefault = 1;\n`,
+      '0.2.0/migrate.mjs': `
+        export default {
+          type: 'code',
+          title: 'Migrate',
+          transform: (file) => file.source,
+        };
+      `,
+      // Shared transform helper: NAMED exports only, no default export.
+      '0.2.0/migrate.transform.mjs': `export const notDefault = 1;\n`,
     });
     const project = await Project.load(tmpDir);
-    // Validation now happens at the LOAD boundary (loadModuleWithParser +
-    // parseCodemod); a missing default export is a schema-invalid failure
-    // rather than the old bespoke "must default-export" message.
-    await expect(
-      discoverIntegrationCodemods(project.loadedIntegrations),
-    ).rejects.toThrow(/is invalid/i);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+    expect(byVersion.get('0.2.0').map(e => e.id)).toEqual(['migrate']);
   });
 
   it('names a broken codemod by its path inside the package', async () => {
@@ -234,6 +245,28 @@ describe('integration codemod discovery', () => {
     await expect(
       discoverIntegrationCodemods(project.loadedIntegrations),
     ).rejects.toThrow(/across versions/i);
+  });
+
+  it('skips co-located test and spec files without loading them', async () => {
+    scaffold({
+      '0.2.0/drop-foo.mjs': `
+        export default {
+          type: 'code',
+          title: 'Drop foo',
+          transform: (file) => file.source,
+        };
+      `,
+      // A test under __tests__/ and a spec file beside the codemod. Both import
+      // a module that does not exist, so if discovery ever loaded them it would
+      // throw — the walk must skip them by path, not just by shape.
+      '0.2.0/__tests__/drop-foo.test.mjs': `import 'astryx-no-such-dep-xyz';\n`,
+      '0.2.0/drop-foo.spec.mjs': `import 'astryx-no-such-dep-xyz';\n`,
+    });
+    const project = await Project.load(tmpDir);
+    const byVersion = await discoverIntegrationCodemods(
+      project.loadedIntegrations,
+    );
+    expect(byVersion.get('0.2.0').map(e => e.id)).toEqual(['drop-foo']);
   });
 });
 
