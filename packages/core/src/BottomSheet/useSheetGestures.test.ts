@@ -68,6 +68,7 @@ function settledMs(animation: {
 import {solveSpring, toSpring} from '../motion/spring';
 import {sheet, springs} from '../motion/uikit';
 import {
+  isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
 } from './useSheetGestures';
@@ -611,6 +612,27 @@ function up(hook: Hook, y: number, t: number, target: HTMLElement) {
   land();
 }
 
+describe('isInsideNestedLayer', () => {
+  it("is true for a target inside a <dialog> rendered within the body, and false for the body's own content", () => {
+    const body = document.createElement('div');
+    const own = document.createElement('button');
+    body.append(own);
+    const nested = document.createElement('dialog');
+    const nestedHandle = document.createElement('div');
+    nested.append(nestedHandle);
+    body.append(nested);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(body, body)).toBe(false);
+    expect(isInsideNestedLayer(nestedHandle, body)).toBe(true);
+    expect(isInsideNestedLayer(nested, body)).toBe(true);
+    // A dialog above the body (the sheet's own) does not count.
+    const ownDialog = document.createElement('dialog');
+    ownDialog.append(body);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(null, body)).toBe(false);
+  });
+});
+
 describe('useSheetGestures', () => {
   it('dismisses on a fast downward flick (swipe-to-close)', () => {
     const {hook, onDismiss} = setup({snapHeights: () => [200]});
@@ -722,13 +744,16 @@ describe('useSheetGestures', () => {
 
     it('reads the velocity from the timestamps the events carry, not from when they are handled', () => {
       // The same throw, handled late and all at once: the release still
-      // projects at the speed the finger moved.
+      // projects at the speed the finger moved. 160 px in 100 ms (1600 px/s)
+      // projects 160 px further, to 320, past halfway (300) from the 200 px
+      // detent to gone (400); 1500 px/s would land exactly on that midpoint,
+      // where float rounding of the event times would decide.
       const {hook, onDismiss} = setup({snapHeights: () => [200]});
       const t = makeTarget();
       down(hook, 0, 0, t);
       vi.advanceTimersByTime(500); // a busy main thread, then the batch
-      stream(hook, t, {from: 0, to: 150, t0: 0, t1: 100});
-      up(hook, 150, 102, t);
+      stream(hook, t, {from: 0, to: 160, t0: 0, t1: 100});
+      up(hook, 160, 102, t);
       expect(onDismiss).toHaveBeenCalledTimes(1);
     });
 
@@ -2100,6 +2125,46 @@ describe('useSheetGestures', () => {
         touch(tile, 'touchmove', 160);
       });
       expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('leaves a touch that starts inside a nested <dialog> to that layer, and still pulls from its own content', () => {
+      // A Dialog or a sheet opened from this sheet's content renders its
+      // <dialog> inside the body, so its touches reach the body's pans. The
+      // same pull-down from the body's own content pulls the sheet; from the
+      // nested layer it must not (component:BottomSheet FR6, FR7).
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, sheet, tile} = makeNested({
+        bodyScrollTop: 0,
+        innerScrollTop: 0,
+        innerScrollHeight: 200,
+      });
+      const nested = document.createElement('dialog');
+      const nestedContent = document.createElement('div');
+      nested.appendChild(nestedContent);
+      body.appendChild(nested);
+      attach(hook, sheet);
+      const touch = fingers();
+      let pull: Event | undefined;
+      act(() => {
+        touch(nestedContent, 'touchstart', 100);
+        pull = touch(nestedContent, 'touchmove', 160);
+        touch(nestedContent, 'touchmove', 220);
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      act(() => {
+        touch(nestedContent, 'touchend', 220);
+      });
+      // The sheet's own content still pulls it: the pans are live.
+      const second = fingers();
+      act(() => {
+        second(tile, 'touchstart', 100);
+        second(tile, 'touchmove', 160);
+        second(tile, 'touchmove', 220);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
     });
 
     it('leaves a pull-up to a nested scroller with content below', async () => {

@@ -1260,7 +1260,7 @@ describe('BottomSheet', () => {
   });
 
   describe('swipe to dismiss', () => {
-    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
+    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the touch (FR6, FR7)", () => {
       const onInnerOpenChange = vi.fn();
       const onOuterOpenChange = vi.fn();
       render(
@@ -1286,23 +1286,24 @@ describe('BottomSheet', () => {
       const innerHandle = innerDialog.querySelector<HTMLElement>(
         '.astryx-bottom-sheet > [aria-hidden="true"]',
       )!;
-      // `setPointerCapture` is a prototype stub here, so record who captures.
-      const captured: Element[] = [];
-      const capture = vi
-        .spyOn(Element.prototype, 'setPointerCapture')
-        .mockImplementation(function (this: Element) {
-          captured.push(this);
-        });
+      const innerPanel = innerDialog.querySelector<HTMLElement>(
+        '.astryx-bottom-sheet',
+      )!;
+      // jsdom lays nothing out: each sheet gets a phone-sized box, which its
+      // drag reads.
+      for (const panel of [outerPanel, innerPanel]) {
+        vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 16, bottom: 800}),
+        );
+      }
       drag(innerHandle, [{y: 0}, {y: 40}, {y: 120}], 'touch');
-      capture.mockRestore();
       // The inner sheet's own drag ran to its dismissal.
       expect(onInnerOpenChange).toHaveBeenCalledWith(false);
-      // The covered host saw the same pointer bubble up and did nothing with
-      // it: no drag of its own (its panel keeps its resting transform) and no
-      // pointer capture, which would have cancelled the inner handle's drag.
+      // The covered host's body pans saw the same touch and left it to the
+      // inner sheet: no drag of its own (its panel keeps its resting
+      // transform), which would have cancelled the inner handle's drag.
       expect(onOuterOpenChange).not.toHaveBeenCalled();
-      expect(captured).toContain(innerHandle);
-      expect(captured).not.toContain(outerBody);
+      expect(outerBody.contains(innerHandle)).toBe(true);
       expect(outerPanel.style.transform).toBe('');
     });
 

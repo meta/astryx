@@ -520,6 +520,32 @@ export interface UseSheetGesturesResult {
 }
 
 /**
+ * Whether a gesture that lands on `target` began inside another layer
+ * rendered in this sheet's content — a `<dialog>` between the target and the
+ * body. A sheet opened from inside a sheet's content, a Dialog opened there,
+ * renders its dialog as a descendant of the host's body, so its touches reach
+ * the host's pans too. That gesture is the layer's own: the host's pans must
+ * not take it, which would cancel the drag the layer's own handle began
+ * (`component:BottomSheet` FR7: a swipe reaches only the top sheet of a
+ * stack; FR6: a covered sheet is blocked).
+ */
+export function isInsideNestedLayer(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  for (
+    let element = target instanceof Element ? target : null;
+    element != null && element !== body;
+    element = element.parentElement
+  ) {
+    if (element.localName === 'dialog') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Drag + snap machinery for the bottom sheet. Returns props to spread on the
  * grab handle and the sliding surface, plus live drag state. A slow drag
  * settles to the nearest detent; a fast downward flick dismisses; a fast
@@ -1764,6 +1790,18 @@ export function useSheetGestures({
   );
   const notePointer = useCallback(
     (recognizer: GestureRecognizer, touch: GestureTouch): boolean => {
+      // A touch inside a layer this sheet hosts in its content (a sheet or a
+      // Dialog opened from it) is that layer's (see `isInsideNestedLayer`).
+      const body = bodyNodeRef.current;
+      const target = touch.target instanceof Node ? touch.target : null;
+      if (
+        body != null &&
+        target != null &&
+        body.contains(target) &&
+        isInsideNestedLayer(target, body)
+      ) {
+        return false;
+      }
       // The recognizers serve every pointer: a mouse, a pen and a finger
       // (spec:AST-094 FR19, FR43).
       pointerKinds.set(recognizer, touch.pointerType);
