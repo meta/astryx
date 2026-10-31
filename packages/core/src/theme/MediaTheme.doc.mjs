@@ -81,6 +81,11 @@ export const docs = {
           'Themes can customize components on media surfaces via onDark.components and onLight.components in defineTheme(). For example, add a border to ghost buttons on dark surfaces.',
       },
       {
+        guidance: true,
+        description:
+          "onDark/onLight follow the surface, not the app: a dark surface under a light app and one under a dark app resolve the same side, and light-dark() inside it does too. To branch on the app mode inside a toast, key on its themeMode state (toast: {'themeMode:dark': {...}}); other inverted surfaces do not yet reflect the app mode.",
+      },
+      {
         guidance: false,
         description:
           'Use MediaTheme for app-level dark mode: use Theme with mode="dark" or mode="system" instead. MediaTheme is for local surface inversions, not page-wide color scheme.',
@@ -137,6 +142,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Themes can customize components on media surfaces via onDark.components + onLight.components in defineTheme(). E.g. add border to ghost buttons on dark surfaces.',
+      },
+      {
+        guidance: true,
+        description:
+          "onDark/onLight + light-dark() follow the surface, not the app: dark surface under light app and under dark app resolve the same side. To branch on app mode inside a toast, key on its themeMode state (toast: {'themeMode:dark': {...}}); other inverted surfaces do not yet reflect app mode.",
       },
       {
         guidance: false,

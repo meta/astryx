@@ -6,12 +6,15 @@
  * @file Toast.tsx
  * @input Uses React timers, touch/pen gesture events, Toast options, Button/Icon,
  *   MediaTheme, tokens, and placement motion inherited from ToastViewport
- * @output Exports the rendered Toast surface and its pause/swipe/dismiss behavior
+ * @output Exports the rendered Toast surface and its pause/swipe/dismiss behavior;
+ *   the card reflects `type` and the resolved Theme mode (`themeMode`) as
+ *   theming targets
  * @position Core implementation; rendered by ToastViewport and documented by Toast.doc.mjs
  *
- * SYNC: When Toast layout, timer pause, media theme, or dismissal behavior changes,
- *   update these files to stay in sync:
+ * SYNC: When Toast layout, timer pause, media theme, theming reflection, or
+ *   dismissal behavior changes, update these files to stay in sync:
  * - /packages/core/src/Toast/ToastViewport.test.tsx
+ * - /packages/core/src/Toast/Toast.test.tsx (themeMode reflection)
  * - /packages/core/src/Toast/Toast.doc.mjs
  * - /apps/storybook/stories/Toast.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Toast/ (showcase blocks)
@@ -364,7 +367,15 @@ export function ToastSurface({
       onBlurCapture={resumeForFocus}
       {...gestureBindings}
       {...mergeProps(
-        themeProps('toast', {type}),
+        // `themeMode` reflects the resolved Theme mode: the MediaTheme below
+        // makes every light-dark() token follow the painted surface, so
+        // nothing else in the card can say which app mode it is in. Both
+        // values are closed vocabularies: the card already renders anything
+        // but "error" as info, so the reflection says so too. (#5503)
+        themeProps('toast', {
+          type: isError ? 'error' : 'info',
+          themeMode: mode,
+        }),
         stylex.props(
           styles.root,
           isError ? styles.variantError : styles.variantDefault,
