@@ -492,11 +492,14 @@ the gesture sooner, never later (FR16).
 
 The web reports no trackpad contact either, so the host reads the lift from
 the stream (`wheelSegmenter.ts`): once a run of shrinking deltas has lost a
-fifth of its size, the fingers lifted and momentum began. A pan it follows
-ends there, at the fingers' travel, released at their last move with their
-speed; the shrinking deltas before the lift wait until they are known, and
-the momentum after it never moves the pan. Fingers that stop release still,
-once the end time passes. In momentum, a reversal, a delta that grows
+fifth of its size, the fingers lifted and momentum began. Until it decides,
+the shrinking deltas wait, and a pan it follows moves on at the fingers' last
+speed, never past what that speed projects. At the lift the pan keeps that
+travel and lets go there, still moving at that speed, and the momentum after
+it never moves it; when the fingers carry on instead, their moves absorb
+what the pan showed past their travel, or short of it, so it never steps
+back and ends on their travel. Fingers that stop release still, once the end
+time passes. In momentum, a reversal, a delta that grows
 against the decay, or a 50 ms pause starts a new gesture. A pan created with
 `wheelStep` takes a trackpad swipe as one step instead: once the swipe
 travels 24 px over two wheels or more, the host plays a short flick and ends

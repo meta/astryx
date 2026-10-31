@@ -451,17 +451,22 @@ interface WheelFollow {
   /** The fingers lifted: the momentum after them never moves the pan. */
   lifted: boolean;
   /**
-   * Shrinking deltas held until they are known: the fingers' when larger
-   * ones follow, the start of momentum when the lift is read.
+   * Shrinking deltas held until the splitter decides: the fingers' when
+   * larger ones follow, the start of momentum when it reads the lift.
    */
   heldX: number;
   heldY: number;
-  /**
-   * The time of the last move the pan was given: the lift ends there, so the
-   * release keeps the fingers' speed rather than reading the held deltas'
-   * time as a stop.
-   */
+  /** The time of the fingers' last move the pan took. */
   lastMove: number;
+  /** The fingers' travel as of that move: the contact without any held delta. */
+  trueX: number;
+  trueY: number;
+  /** Where the pan was shown at that move, which the undecided stretch moves on from. */
+  baseX: number;
+  baseY: number;
+  /** The fingers' speed at that move, content px per ms. */
+  speedX: number;
+  speedY: number;
   /** How long after its last event it ends, ms. */
   readonly endMs: number;
 }
@@ -491,6 +496,25 @@ const WHEEL_STEP_PX = 24;
  * continuous movement still commits.
  */
 const WHEEL_STEP_CARRY_MS = 450;
+
+/**
+ * A provisional lead `debt` (what a followed pan shows past the fingers'
+ * travel, or short of it) after a move of `moved`: half the move is
+ * absorbed, so the pan keeps moving the way the fingers do.
+ */
+function absorbedDebt(debt: number, moved: number): number {
+  return Math.sign(debt) * Math.max(0, Math.abs(debt) - Math.abs(moved) / 2);
+}
+
+/**
+ * `target` where it is ahead of `shown` in the direction of `speed`, else
+ * `shown`: a reconcile that never steps back.
+ */
+function ahead(shown: number, target: number, speed: number): number {
+  return speed === 0 || (target - shown) * Math.sign(speed) > 0
+    ? target
+    : shown;
+}
 
 /**
  * A wheel's deltas in CSS px: a line is `WHEEL_LINE_PX`, a page the
@@ -2249,33 +2273,57 @@ export class GestureHost {
         return;
       }
       if (this.wheelSegment?.liftNow === true) {
-        // Momentum began: the fingers lifted before the held deltas. Drop
-        // them and release at the fingers' travel and speed; the rest of
-        // the momentum never moves the pan.
+        // Momentum began: the fingers lifted before the held deltas. The pan
+        // keeps the travel it showed through the undecided stretch and lets
+        // go here, still moving at the fingers' speed, so its release carries
+        // on from it; the rest of the momentum never moves the pan.
+        this.followProvisionally(gesture, f, time);
         f.lifted = true;
-        f.heldX = 0;
-        f.heldY = 0;
         this.arena.ended([
-          {id: gesture.ids[0], x: gesture.x, y: gesture.y, time: f.lastMove},
+          {id: gesture.ids[0], x: gesture.x, y: gesture.y, time},
         ]);
         return;
       }
       if (this.wheelSegment?.decaying === true) {
+        // Undecided: the real deltas wait for the splitter while the
+        // fingers' last speed carries the pan on.
         f.heldX += dx;
         f.heldY += dy;
+        this.followProvisionally(gesture, f, time);
         return;
       }
-      gesture.x -= f.heldX;
-      gesture.y -= f.heldY;
+      // The fingers' own delta; the held ones were theirs too. What the pan
+      // shows ahead of their travel, or behind it, is absorbed by their moves
+      // half a move at a time, so it never steps back and ends on their
+      // travel.
+      const beforeX = f.trueX - f.heldX;
+      const beforeY = f.trueY - f.heldY;
+      const debtX = absorbedDebt(gesture.x - beforeX, dx);
+      const debtY = absorbedDebt(gesture.y - beforeY, dy);
+      const trueX = beforeX - dx;
+      const trueY = beforeY - dy;
+      const elapsed = time - f.lastMove;
+      if (elapsed > 0) {
+        f.speedX = (trueX - f.trueX) / elapsed;
+        f.speedY = (trueY - f.trueY) / elapsed;
+      }
+      f.trueX = trueX;
+      f.trueY = trueY;
       f.heldX = 0;
       f.heldY = 0;
+      f.lastMove = time;
+      gesture.x = trueX + debtX;
+      gesture.y = trueY + debtY;
+      f.baseX = gesture.x;
+      f.baseY = gesture.y;
+      this.arena.moved([
+        {id: gesture.ids[0], x: gesture.x, y: gesture.y, time},
+      ]);
+      return;
     }
     if (gesture.kind === 'pan') {
       gesture.x -= dx;
       gesture.y -= dy;
-      if (gesture.follow != null) {
-        gesture.follow.lastMove = time;
-      }
       this.arena.moved([
         {id: gesture.ids[0], x: gesture.x, y: gesture.y, time},
       ]);
@@ -2284,6 +2332,27 @@ export class GestureHost {
       this.arena.moved(this.pinchContacts(gesture, time));
     }
   };
+
+  /**
+   * Through the splitter's undecided stretch, a followed pan moves on from
+   * where it was shown at the fingers' last move at their last speed, never
+   * past what that speed projects for the time since.
+   */
+  private followProvisionally(
+    gesture: WheelGesture,
+    f: WheelFollow,
+    time: number,
+  ): void {
+    const elapsed = Math.max(0, time - f.lastMove);
+    const x = f.baseX + f.speedX * elapsed;
+    const y = f.baseY + f.speedY * elapsed;
+    if (x === gesture.x && y === gesture.y) {
+      return;
+    }
+    gesture.x = x;
+    gesture.y = y;
+    this.arena.moved([{id: gesture.ids[0], x, y, time}]);
+  }
 
   /**
    * A swipe its pans take as one step (`wheelStep`): its travel adds up, and
@@ -2446,6 +2515,12 @@ export class GestureHost {
         heldX: 0,
         heldY: 0,
         lastMove: time,
+        trueX: kept.x,
+        trueY: kept.y,
+        baseX: kept.x,
+        baseY: kept.y,
+        speedX: 0,
+        speedY: 0,
         endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
       };
     }
@@ -2613,15 +2688,18 @@ export class GestureHost {
     ) {
       return;
     }
-    if (
-      gesture.follow != null &&
-      (gesture.follow.heldX !== 0 || gesture.follow.heldY !== 0)
-    ) {
-      gesture.x -= gesture.follow.heldX;
-      gesture.y -= gesture.follow.heldY;
-      this.arena.moved([
-        {id: gesture.ids[0], x: gesture.x, y: gesture.y, time: gesture.last},
-      ]);
+    // Fingers that stop without a lift end on their travel where it runs
+    // ahead of what the pan shows; what the undecided stretch showed past it
+    // stays, as a step back would show.
+    if (gesture.follow != null) {
+      const f = gesture.follow;
+      const x = ahead(gesture.x, f.trueX - f.heldX, f.speedX);
+      const y = ahead(gesture.y, f.trueY - f.heldY, f.speedY);
+      if (x !== gesture.x || y !== gesture.y) {
+        gesture.x = x;
+        gesture.y = y;
+        this.arena.moved([{id: gesture.ids[0], x, y, time: gesture.last}]);
+      }
     }
     // A trackpad's scroll releases at its last wheel, with its speed: its
     // momentum arrives as more wheel. A mouse wheel's notches release still,
