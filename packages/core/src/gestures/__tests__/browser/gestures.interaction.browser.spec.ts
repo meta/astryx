@@ -1824,6 +1824,96 @@ test.describe('where the primary pointer is fine', () => {
     expect(await page.evaluate(() => window.scrollX)).toBe(0);
   });
 
+  /** A page with a horizontal pan that takes only a trackpad's scroll; its moves land on `window.__wheelLog`. */
+  async function trackpadPanPage(page: Page) {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="card" style="height: 120px; width: 300px; background: #ccc">card</div>';
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedPointerTypes: [],
+        allowedScrollTypes: ['continuous'],
+      });
+      pan.addTransitionListener((_recognizer, _from, to) => {
+        window.__wheelLog.push(
+          `pan:${to}:${pan.translation().x.toFixed(2)}:${Math.round(pan.velocity().x)}`,
+        );
+      });
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+  }
+
+  /** The pan's log entries after `deltas`, one wheel each, and a quiet 300 ms. */
+  async function trackpadRun(page: Page, deltas: number[]) {
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const at = await center(page, 'card');
+    for (const dx of deltas) {
+      await driver.wheel({...at, dx});
+    }
+    await page.waitForTimeout(300);
+    const log = await page.evaluate(() =>
+      window.__wheelLog.filter(entry => entry.startsWith('pan:')),
+    );
+    const moves = log
+      .filter(entry => /^pan:(changed|ended):/.test(entry))
+      .map(entry => Number(entry.split(':')[2]));
+    return {log, moves};
+  }
+
+  test("keeps a trackpad pan moving at the fingers' speed through the splitter's undecided stretch and lets it go at the lift still moving: no stall (spec:AST-094 FR43)", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
+    await trackpadPanPage(page);
+    // Four steady wheels, four shrinking ones (the lift is read at the
+    // fourth), then momentum.
+    const {log, moves} = await trackpadRun(
+      page,
+      [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4],
+    );
+    const ended = log.filter(entry => entry.startsWith('pan:ended:'));
+    expect(ended).toHaveLength(1);
+    // The fingers' travel at their last steady wheel is -38 (48 px past the
+    // 10 px hysteresis); the pan moved on past it through the shrinking
+    // wheels, at least a wheel and a half's worth, never stepping back.
+    for (const [i, x] of moves.entries()) {
+      if (i > 0) {
+        expect(x).toBeLessThanOrEqual(moves[i - 1]);
+      }
+    }
+    expect(moves.at(-1)).toBeLessThan(-38 - 18);
+    // Let go still moving, and the momentum after it moved nothing.
+    expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(100);
+    expect(
+      log.slice(log.indexOf(ended[0]) + 1).map(entry => entry.split(':')[1]),
+    ).toEqual(['possible']);
+  });
+
+  test('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and the pan ends on their travel (spec:AST-094 FR43)', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
+    await trackpadPanPage(page);
+    const deltas = [12, 12, 12, 12, 11, 10, 12, 12, 12, 12, 12, 12];
+    const {moves} = await trackpadRun(page, deltas);
+    for (const [i, x] of moves.entries()) {
+      if (i > 0) {
+        expect(x).toBeLessThanOrEqual(moves[i - 1]);
+      }
+    }
+    const travel = deltas.reduce((sum, delta) => sum + delta, 0) - 10;
+    expect(moves.at(-1)).toBeCloseTo(-travel, 1);
+  });
+
   test('a pan that allows scroll input follows a real wheel along its axis and keeps the page still, a wheel across it scrolls the page, and a pinch follows a ctrl-wheel (spec:AST-094 FR43)', async ({
     page,
   }) => {
