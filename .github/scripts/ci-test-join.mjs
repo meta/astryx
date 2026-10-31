@@ -19,6 +19,7 @@ const requiredSuccess = [
   ['test-build', process.env.TEST_BUILD_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
   ['pr-interaction', process.env.PR_INTERACTION_RESULT],
+  ['pr-interaction-webkit', process.env.PR_INTERACTION_WEBKIT_RESULT],
 ];
 
 function fail(message) {
