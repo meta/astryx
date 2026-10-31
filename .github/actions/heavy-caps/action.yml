@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Holds a heavy suite back when its pull request's author is over a limit
-# (spec:AST-030 FR16). A heavy job runs this right after its checkout and a
+# Holds a heavy suite back when its pull request's author is over a limit, or
+# when CI as a whole is at its ceiling (spec:AST-030 FR16, DEC-16). A heavy job runs this right after its checkout and a
 # "Heavy suite runs" step right after it; a held job fails here with the
 # reason, so it never passes a required join untested.
 #
@@ -9,14 +9,20 @@
 #   requests, and for at most a hundred heavy runs a UTC day.
 # - The shared agent login counts each branch prefix as an author, with that
 #   login also held to its five oldest pull requests and forty runs a day.
-# - An engineering owner (.github/ENGOWNERS, read from the base commit), a
-#   re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
-#   runs the suite.
+# - An engineering owner (.github/ENGOWNERS, read from the base commit) is
+#   exempt from these per-author limits.
+# - Across all of CI, a heavy suite starts only while fewer than CI_CEILING
+#   jobs of any run are in progress or queued, not counting its own; otherwise
+#   it waits up to five minutes for room. `main`'s full checks and release
+#   re-checks never run this, so they take what they need and pull requests
+#   get whatever is left.
+# - A re-run (the pre-merge restart) and a bot are exempt from every limit; a
+#   lookup that fails runs the suite.
 #
-# Each limit is one entry in `limits`, checked in order.
+# Each limit is one entry in `limits`, checked in order, the ceiling last.
 
 name: Heavy-suite caps
-description: Fails a heavy job whose pull request's author is over a limit.
+description: Fails a heavy job whose pull request's author is over a limit, or when CI is at its ceiling.
 
 runs:
   using: composite
@@ -48,6 +54,11 @@ runs:
           const OLDEST = 15;
           // An author's heavy runs a UTC day.
           const DAILY = 100;
+          // Jobs in progress or queued across all of CI, every run included,
+          // before a heavy suite waits (spec:AST-030 FR16, DEC-16).
+          const CI_CEILING = 90;
+          const CEILING_WAIT_MS = 5 * 60_000;
+          const CEILING_POLL_MS = 60_000;
           const limits = [
             // Pull request numbers rise with creation, and the search returns
             // the oldest, so it holds every older one that could queue this.
@@ -98,6 +109,33 @@ runs:
             },
           ];
 
+          // Jobs of every run in progress or queued, whatever started it
+          // (pull requests, `main`'s full checks, release re-checks), except
+          // this job itself.
+          async function ciCeiling() {
+            const deadline = Date.now() + CEILING_WAIT_MS;
+            for (;;) {
+              let active = 0;
+              for (const status of ['in_progress', 'queued']) {
+                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                  ...context.repo, status, per_page: 100,
+                });
+                for (const run of runs) {
+                  const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                    ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+                  });
+                  active += jobs.filter(job => job.status === 'in_progress' || job.status === 'queued').length;
+                  if (run.id === context.runId) active -= 1;
+                }
+              }
+              if (active < CI_CEILING) return;
+              if (Date.now() >= deadline) {
+                return `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
+              }
+              await new Promise(resolve => setTimeout(resolve, CEILING_POLL_MS));
+            }
+          }
+
           try {
             // Engineering owners are exempt. The roster is read from the base
             // commit, so a pull request cannot add its own author, and parsed
@@ -109,9 +147,9 @@ runs:
               .split('\n').map(line => line.replace(/#.*/, ''))
               .flatMap(line => line.match(/@[\w-]+/g) ?? [])
               .map(handle => handle.slice(1).toLowerCase());
-            if (owners.includes(login.toLowerCase())) return;
+            const owner = owners.includes(login.toLowerCase());
 
-            for (const limit of limits) {
+            for (const limit of owner ? [ciCeiling] : [...limits, ciCeiling]) {
               const held = await limit();
               if (held) {
                 core.setFailed(held);
@@ -119,5 +157,5 @@ runs:
               }
             }
           } catch (error) {
-            core.warning(`Per-author caps could not be checked (${error.message}); running the heavy suite.`);
+            core.warning(`Heavy-suite caps could not be checked (${error.message}); running the heavy suite.`);
           }
