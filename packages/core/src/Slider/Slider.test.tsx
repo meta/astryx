@@ -1832,6 +1832,22 @@ describe('coincident range thumbs', () => {
     fireEvent.pointerUp(label, {clientX: 46, clientY: 10, pointerId: 1});
   });
 
+  it('keeps a drag that began with a track press beside coincident thumbs on the thumb it moved', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const track = screen.getByRole('group');
+    // A track press below the shared value takes the lower thumb there; the
+    // drag on to the maximum stops it against the upper thumb, as the same
+    // drag from separate thumbs does. Only a drag that began on the shared
+    // thumbs hands itself over.
+    fireEvent.pointerDown(track, {clientX: 46, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith([20, 50]);
+    fireEvent.pointerMove(track, {clientX: 154, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith([50, 50]);
+    fireEvent.pointerUp(track, {clientX: 154, clientY: 10, pointerId: 1});
+  });
+
   it('closes the value tooltip of the thumb a drag was handed away from', () => {
     render(<ControlledRange initial={[50, 50]} onChange={vi.fn()} />);
     mockGroupRect();
