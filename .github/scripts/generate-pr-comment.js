@@ -3,11 +3,11 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --preview <file> --jobs <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
- *   collapsed), visual changes as thumbnails, one line for package size and
+ *   collapsed), the changed shots collapsed, one line for package size and
  *   one for suites that did not run. Accessibility violations add one
  *   collapsed section. GitHub shows
  *   the CI checks and CodeBunny posts its own review; neither is repeated.
@@ -60,12 +60,11 @@ if (baseStats) {
 }
 
 // This head's preview ({state, url, sha, aliasOrigin}), the source run's
-// jobs, the touched-components report, the package-size report, and the
+// jobs, the package-size report, and the
 // browser suites' results. The accessibility report is absent when the
 // audit did not run; the visual verdict when the visual job did not.
 const preview = readOptionalJson('preview');
 const jobs = readOptionalJson('jobs');
-const touched = readOptionalJson('touched');
 const packageSize = readOptionalJson('package-size');
 const visualVerdict = readOptionalJson('visual');
 let a11yReport = null;
@@ -97,8 +96,8 @@ const a11yDetails =
       )
     : '';
 
-// Shots the visual job could not capture: one line; changed shots get their
-// own thumbnail table in the report.
+// Shots the visual job could not capture: one line; changed shots are listed
+// in the report's visual section.
 const visualFailed =
   visualVerdict?.status === 'failed'
     ? `> **Visual:** ${num(visualVerdict.counts?.failed)} shot(s) could not be captured.\n\n`
@@ -123,7 +122,6 @@ const report = buildCompactReport({
   analysis,
   preview,
   jobs,
-  touched,
   a11yReport,
   visualVerdict,
   packageSize,

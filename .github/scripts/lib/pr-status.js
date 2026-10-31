@@ -5,13 +5,13 @@
  * @input The analysis (changed components, their import sizes and source
  *   stats at head and at the merge base), this head's Vercel preview state,
  *   the package-size report, the accessibility report, the visual verdict,
- *   the source CI run's jobs and, when present, the touched-components report
+ *   and the source CI run's jobs
  * @output The PR report's compact body: this head's preview first; one table
  *   of modified components (preview links, JS and CSS size and lines of code
  *   against main, and a fixed-position mark per browser suite when any ran),
- *   three rows visible and the rest collapsed; the visual deltas as
- *   before/after/diff thumbnails when shots changed; one line for package
- *   size; one line for suites that did not run
+ *   three rows visible and the rest collapsed; the changed shots, collapsed,
+ *   when any changed; one line for package size; one line for suites that
+ *   did not run
  * @position Used by generate-pr-comment.js. Everything here reads data the CI
  *   run and the comment job already have; nothing starts a job. GitHub shows
  *   the CI checks and CodeBunny posts its own review, so neither is repeated.
@@ -42,10 +42,7 @@ const SUITES = [
 
 /** Rows shown before the rest of a table is collapsed. */
 const VISIBLE_ROWS = 3;
-/**
- * Changed shots shown with frames, largest change first; publish-frames.mjs
- * publishes the same shots in the same order.
- */
+/** Changed shots listed in the visual section, largest change first. */
 const VISUAL_FRAME_LIMIT = 12;
 
 /** Touch-only budget per component (architecture:component-style-authoring INV6). */
@@ -170,18 +167,14 @@ function storybookLink(origin, storyTitle) {
 /**
  * One row per modified component: every component this change sized (its
  * folder changed or its bundle reaches a changed module) and every new or
- * modified component folder. Results come from the touched-components report
- * when the run wrote one, otherwise from the accessibility report and the
- * visual verdict.
+ * modified component folder. Results come from the accessibility report and
+ * the visual verdict.
  */
-function componentRows({analysis, touched, a11yReport, visualVerdict}) {
+function componentRows({analysis, a11yReport, visualVerdict}) {
   const head = analysis.componentSizes || {};
   const base = analysis.baseComponentSizes || {};
   const stats = analysis.componentStats || {};
   const baseStats = analysis.baseComponentStats || {};
-  const byName = new Map(
-    (touched?.components || []).map(component => [component.name, component]),
-  );
   const keys = new Set(Object.keys(head));
   for (const name of [
     ...(analysis.newComponents || []),
@@ -193,9 +186,6 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     );
     keys.add(`${pkg}/${name}`);
   }
-  for (const component of touched?.components || []) {
-    if (component.key) keys.add(component.key);
-  }
   const visualChanges = visualVerdict?.changes || [];
   // Main's sizes of the merge base were read (a base record or build).
   const baseMeasured =
@@ -204,27 +194,22 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     Object.keys(baseStats).length > 0;
   return [...keys].map(key => {
     const name = key.slice(key.indexOf('/') + 1);
-    const reported = byName.get(name)?.results || {};
-    // The audit covers the touched components only; a component it did not
-    // audit has no accessibility result.
+    // A component the audit did not cover has no accessibility result.
     const audited = a11yReport?.components?.[name];
-    const a11y =
-      reported.a11y ??
-      (audited
-        ? (audited.violations?.length ?? 0) > 0
-          ? 'fail'
-          : 'pass'
-        : null);
+    const a11y = audited
+      ? (audited.violations?.length ?? 0) > 0
+        ? 'fail'
+        : 'pass'
+      : null;
     const visual =
-      reported.visual ??
-      (visualVerdict && visualVerdict.status !== 'skipped'
+      visualVerdict && visualVerdict.status !== 'skipped'
         ? // A run that failed compared nothing: never a pass.
           visualVerdict.status === 'failed'
           ? 'fail'
           : visualChanges.some(entry => entry.component === name)
             ? 'changed'
             : 'pass'
-        : null);
+        : null;
     return {
       key,
       name,
@@ -233,7 +218,7 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
       base: base[key],
       growth: sizeChange(head[key], base[key]),
       loc: [stats[name]?.linesOfCode, baseStats[name]?.linesOfCode],
-      results: {visual, a11y, rtl: reported.rtl ?? null},
+      results: {visual, a11y, rtl: null},
       baseMeasured,
     };
   });
@@ -257,26 +242,15 @@ function compareRows(a, b) {
   return a.key.localeCompare(b.key);
 }
 
-function buildComponentTable({
-  analysis,
-  origin,
-  touched,
-  a11yReport,
-  visualVerdict,
-}) {
-  const rows = componentRows({
-    analysis,
-    touched,
-    a11yReport,
-    visualVerdict,
-  }).sort(compareRows);
+function buildComponentTable({analysis, origin, a11yReport, visualVerdict}) {
+  const rows = componentRows({analysis, a11yReport, visualVerdict}).sort(
+    compareRows,
+  );
   if (rows.length === 0) return '';
-  // The checks column appears only when a browser suite has a result here,
-  // or when the change is too wide for the touched-components check, which
-  // then ran none of them (every mark —).
-  const wide = touched?.wideChange === true;
-  const checks =
-    wide || rows.some(row => CHECK_SUITES.some(id => row.results[id] != null));
+  // The checks column appears only when a browser suite has a result here.
+  const checks = rows.some(row =>
+    CHECK_SUITES.some(id => row.results[id] != null),
+  );
   const columns = [
     'Component',
     'Size',
@@ -296,7 +270,7 @@ function buildComponentTable({
       stories ? `${name} · [Storybook](${stories})` : name,
       sizeCell(row.head, row.base, row.baseMeasured),
       locCell(...row.loc, row.baseMeasured),
-      ...(checks ? [checksCell(wide ? {} : row.results)] : []),
+      ...(checks ? [checksCell(row.results)] : []),
     ];
     return `| ${cells.join(' | ')} |`;
   };
@@ -369,9 +343,7 @@ function previewLine(preview) {
   const links = origin =>
     `**[Storybook](${origin}/storybook/) · [Sandbox](${origin}/sandbox/)**`;
   let text;
-  if (preview.state === 'fork')
-    text = 'No preview for pull requests from forks.';
-  else if (preview.state === 'unknown')
+  if (preview.state === 'unknown')
     text =
       "This branch's preview address cannot be known in advance; open it from Vercel's comment.";
   else if (preview.state === 'ready')
@@ -425,10 +397,16 @@ function packagesLine(report) {
   }`;
 }
 
-/** One line for the browser suites that did not run, with the labels that run them. */
-function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
-  if (touched?.wideChange === true)
-    return `Wide change (${num(touched.componentCount)} components): add \`ci:run-visual\` / \`ci:run-a11y\` / \`ci:run-rtl\` to run the full suite.\n\n`;
+/**
+ * One line for the browser suites that did not run, with the labels that run
+ * them. A failed or cancelled Storybook build skips them for another reason
+ * (GitHub shows that check), so the line is left out.
+ */
+function notRunLine({jobs, a11yReport, visualVerdict}) {
+  const build = (jobs || []).find(
+    job => baseJobName(job.name) === 'build-storybook',
+  );
+  if (build && ['failure', 'cancelled'].includes(build.conclusion)) return '';
   const notRun = SUITES.filter(suite => {
     const state = suiteRunState(suite, jobs);
     if (state !== null) return state === 'not-run';
@@ -451,7 +429,6 @@ function buildCompactReport({
   analysis,
   preview = null,
   jobs = null,
-  touched = null,
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
@@ -461,10 +438,9 @@ function buildCompactReport({
   return `${previewLine(preview)}${buildComponentTable({
     analysis,
     origin,
-    touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict})}`;
 }
 
 module.exports = {

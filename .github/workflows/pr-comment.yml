@@ -304,18 +304,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      # The touched-components check's per-component results (or its wide-
-      # change flag); absent when the check did not run.
-      - name: Download the touched-components report from the CI run
-        if: steps.identity.outputs.valid == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: touched-components
-          path: touched-components
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
       - name: Download a11y artifact from the CI run
         if: steps.identity.outputs.valid == 'true'
         uses: actions/download-artifact@v8
