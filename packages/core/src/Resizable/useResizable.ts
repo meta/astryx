@@ -306,6 +306,34 @@ const SERVER_BASIS = 1200;
 
 /** A store that never changes on its own; the snapshot is re-read on render. */
 const noopSubscribe = () => () => {};
+
+// The window snapshots are module functions, so their identity is stable:
+// React re-reads a snapshot after the commit whenever getSnapshot is a new
+// function, and a window size read after the DOM changed forces a layout of
+// the whole page. With these, the window is read during render only.
+
+/** The viewport width, the basis without a container. */
+function readViewportBasis(): number {
+  return typeof window === 'undefined' ? SERVER_BASIS : window.innerWidth;
+}
+
+function readServerBasis(): number {
+  return SERVER_BASIS;
+}
+
+/** The window's extent along a horizontal hook's axis. */
+function readWindowWidth(): number | null {
+  return typeof window === 'undefined' ? null : window.innerWidth;
+}
+
+/** The window's extent along a vertical hook's axis. */
+function readWindowHeight(): number | null {
+  return typeof window === 'undefined' ? null : window.innerHeight;
+}
+
+function readNoWindowExtent(): null {
+  return null;
+}
 const DEFAULT_SIZE_FALLBACK = 250;
 const RESIZABLE_SIZE_GUIDANCE =
   'Use a non-negative number of pixels, an exact "Npx" string, an exact ' +
@@ -698,8 +726,8 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
   );
   const viewportBasis = useSyncExternalStore(
     subscribeToViewport,
-    () => (typeof window === 'undefined' ? SERVER_BASIS : window.innerWidth),
-    () => SERVER_BASIS,
+    readViewportBasis,
+    readServerBasis,
   );
 
   // The window's extent along the hook's axis, for the REPORTED maximum of an
@@ -710,13 +738,8 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
   // (component:Resizable Performance and resources).
   const windowExtent = useSyncExternalStore(
     noopSubscribe,
-    () =>
-      typeof window === 'undefined'
-        ? null
-        : direction === 'vertical'
-          ? window.innerHeight
-          : window.innerWidth,
-    () => null,
+    direction === 'vertical' ? readWindowHeight : readWindowWidth,
+    readNoWindowExtent,
   );
 
   // With a container, its content box is the basis; without one, the released

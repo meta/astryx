@@ -562,6 +562,90 @@ describe('SegmentedControl disabled state', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it("does not run a caller's onClick on a disabled segment", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+    const handleChange = vi.fn();
+
+    render(
+      <SegmentedControl value="grid" onChange={handleChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem
+          value="list"
+          label="List"
+          isDisabled
+          onClick={handleClick}
+        />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).not.toHaveBeenCalled();
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  it("does not run a caller's onClick when the whole group is disabled", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" onClick={handleClick} />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("does not run a caller's onClick on a focusable disabled segment", async () => {
+    // A group disabled with a reason keeps its selected segment in the tab
+    // order, so Enter and Space can reach it and synthesize a click.
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled
+        disabledMessage="Choose a project to switch views">
+        <SegmentedControlItem value="grid" label="Grid" onClick={handleClick} />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+
+    const selected = screen.getByRole('radio', {name: 'Grid'});
+    selected.focus();
+    expect(selected).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("still runs a caller's onClick on an enabled segment", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+    const handleChange = vi.fn();
+
+    render(
+      <SegmentedControl value="grid" onChange={handleChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" onClick={handleClick} />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith('list');
+  });
+
   it('skips disabled items during keyboard navigation', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();

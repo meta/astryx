@@ -13,13 +13,13 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useRef, useMemo, type ReactNode} from 'react';
+import {useId, useRef, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useTranslator, type TranslatorFn} from '../../../i18n';
+import {useTranslator} from '../../../i18n';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
@@ -183,42 +183,6 @@ function resolveSortKey<T extends Record<string, unknown>>(
   return sortable.sortKey ?? column.key;
 }
 
-function getHeaderLabel<T extends Record<string, unknown>>(
-  column: TableColumn<T>,
-): string {
-  const {header} = column;
-  if (typeof header === 'string') {
-    return header;
-  }
-  return column.key;
-}
-
-function buildAriaLabel<T extends Record<string, unknown>>(
-  t: TranslatorFn,
-  column: TableColumn<T>,
-  direction: TableSortDirection | null,
-  rank: number | null,
-  total: number,
-): string {
-  const label = getHeaderLabel(column);
-  if (direction == null) {
-    return t('@astryx.table.sort.sortBy', {label});
-  }
-  const directionLabel =
-    direction === 'ascending'
-      ? t('@astryx.table.sort.direction.ascending')
-      : t('@astryx.table.sort.direction.descending');
-  if (rank != null && total > 1) {
-    return t('@astryx.table.sort.sortedByWithPriority', {
-      label,
-      direction: directionLabel,
-      rank,
-      total,
-    });
-  }
-  return t('@astryx.table.sort.sortedBy', {label, direction: directionLabel});
-}
-
 function getNextDirection(
   current: TableSortDirection | null,
   allowUnsortedState: boolean,
@@ -264,13 +228,11 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         ? 'arrowDown'
         : 'arrowsUpDown';
 
-  const ariaLabel = buildAriaLabel(
-    t,
-    column,
-    direction,
-    rank,
-    config.sort.length,
-  );
+  // The button is named by its column's text, so the column header keeps
+  // that name; direction lives in the header's aria-sort. Only the multi-sort
+  // priority, which aria-sort cannot carry, is a description
+  // (spec:AST-020 FR15; WCAG 1.3.1).
+  const priorityId = useId();
 
   const handleClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     const cfg = configRef.current;
@@ -315,37 +277,46 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   };
 
   return (
-    <button
-      type="button"
-      {...focusOutlineProps.focusVisible(
-        sortStyles.button,
-        column.align === 'end'
-          ? sortStyles.buttonAlignEnd
-          : column.align === 'center'
-            ? sortStyles.buttonAlignCenter
-            : null,
-      )}
-      aria-label={ariaLabel}
-      onClick={handleClick}>
-      <span>{children}</span>
-      <span
-        {...stylex.props(
-          direction != null
-            ? sortStyles.iconWrapperActive
-            : sortStyles.iconWrapperUnsorted,
-        )}>
-        <Icon
-          icon={iconName}
-          size="xsm"
-          color={direction != null ? 'accent' : 'secondary'}
-        />
-      </span>
+    <>
+      <button
+        type="button"
+        {...focusOutlineProps.focusVisible(
+          sortStyles.button,
+          column.align === 'end'
+            ? sortStyles.buttonAlignEnd
+            : column.align === 'center'
+              ? sortStyles.buttonAlignCenter
+              : null,
+        )}
+        aria-describedby={rank != null ? priorityId : undefined}
+        onClick={handleClick}>
+        <span>{children}</span>
+        <span
+          {...stylex.props(
+            direction != null
+              ? sortStyles.iconWrapperActive
+              : sortStyles.iconWrapperUnsorted,
+          )}>
+          <Icon
+            icon={iconName}
+            size="xsm"
+            color={direction != null ? 'accent' : 'secondary'}
+          />
+        </span>
+        {rank != null && (
+          <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
+            {rank}
+          </span>
+        )}
+      </button>
       {rank != null && (
-        <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
-          {rank}
+        // Hidden, so it adds nothing to the button's or the header's name;
+        // aria-describedby still reads it.
+        <span id={priorityId} hidden>
+          {t('@astryx.table.sort.priority', {rank, total: config.sort.length})}
         </span>
       )}
-    </button>
+    </>
   );
 }
 

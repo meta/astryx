@@ -1320,6 +1320,41 @@ describe('ContextMenu keyboard access for menuitemradio/menuitemcheckbox (#3829)
   });
 });
 
+describe('ContextMenu data-driven submenu inside a section', () => {
+  it('renders a submenu row for an item with nested items inside a section', () => {
+    render(
+      <ContextMenu
+        items={[
+          {
+            type: 'section',
+            title: 'Organize',
+            items: [
+              {label: 'Rename', onClick: () => {}},
+              {
+                label: 'Move to',
+                items: [
+                  {label: 'Folder A', onClick: () => {}},
+                  {label: 'Folder B', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(
+      screen.getByRole('menuitem', {name: 'Folder A', hidden: true}),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('ContextMenu press model', () => {
   const touch = {pointerType: 'touch', pointerId: 1};
   const item = (name: string) =>

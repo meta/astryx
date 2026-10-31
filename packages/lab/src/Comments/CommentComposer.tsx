@@ -259,6 +259,13 @@ export function CommentComposerBase({
     [focusKey],
   );
   const [actionError, setActionError] = useState<ErrorBannerContent>();
+  // Counts action failures so each one mounts its own Banner: a second failure
+  // with the same words is a new occasion and is announced again (AST-086 FR6).
+  const [actionErrorSerial, setActionErrorSerial] = useState(0);
+  const reportActionError = (content: ErrorBannerContent) => {
+    setActionError(content);
+    setActionErrorSerial(serial => serial + 1);
+  };
   const [isActionPending, setIsActionPending] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
@@ -303,7 +310,7 @@ export function CommentComposerBase({
       }
     } catch {
       if (isMountedRef.current) {
-        setActionError({
+        reportActionError({
           title: t('@astryx.commentComposer.uploadFailed'),
           actionLabel: t('@astryx.comments.retry'),
           onAction: () => beginImageUpload(files),
@@ -322,7 +329,7 @@ export function CommentComposerBase({
     }
     const images = files.filter(file => file.type.startsWith('image/'));
     if (images.length !== files.length) {
-      setActionError({
+      reportActionError({
         title: t('@astryx.commentComposer.imagesOnly'),
         actionLabel: t('@astryx.commentComposer.chooseImages'),
         onAction: () => {
@@ -378,6 +385,7 @@ export function CommentComposerBase({
       <VStack gap={1} width="100%" aria-busy={isBusy || undefined}>
         {errorBanner != null && (
           <ErrorBanner
+            key={error != null ? 'error' : `action-${actionErrorSerial}`}
             content={errorBanner}
             // The Banner unmounts once the retry starts; keep focus in the input.
             onBeforeAction={() => inputRef.current?.focus()}

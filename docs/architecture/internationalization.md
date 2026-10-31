@@ -317,6 +317,7 @@ inferred from an implementation pull request.
   `packages/core/src/Timestamp/formatRelativeTime.ts`,
   `packages/core/src/PowerSearch/formatFilterValue.ts`,
   `packages/core/src/NumberInput/numberParser.ts`,
+  `packages/core/src/utils/timeFormat.ts`,
   `packages/core/src/i18n/useCollator.ts`, `packages/charts/src/formatters.ts` —
   shared locale-sensitive formatters, parsers, and collation. Component consumers
   pass the provider locale; naming a module here does not approve a duplicate

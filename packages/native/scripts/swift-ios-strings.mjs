@@ -29,7 +29,15 @@ export const SWIFT_IOS_STRINGS_DIR = path.join(
 export const SWIFT_IOS_STRING_KEYS = [
   '@astryx.avatar.nameWithStatus',
   '@astryx.button.loading',
+  '@astryx.field.optional',
+  '@astryx.field.required',
+  '@astryx.input.readOnly',
+  '@astryx.input.statusButton.error',
+  '@astryx.input.statusButton.success',
+  '@astryx.input.statusButton.warning',
+  '@astryx.inputClearButton.tooltip',
   '@astryx.spinner.loading',
+  '@astryx.textInput.clearLabel',
   '@astryx.thumbnail.fallbackName',
   '@astryx.thumbnail.open',
   '@astryx.thumbnail.remove',
@@ -80,7 +88,12 @@ export function renderSwiftIOSStrings() {
     ];
     for (const key of SWIFT_IOS_STRING_KEYS) {
       const entry = catalog[key];
-      if (!entry) throw new Error(`${file} has no ${key}`);
+      // A catalog without a message falls back to English, as core does at
+      // run time; English itself must have every message.
+      if (!entry && locale.startsWith('en')) {
+        throw new Error(`${file} has no ${key}`);
+      }
+      if (!entry) continue;
       lines.push('', `/* ${entry.description.replace(/\*\//g, '* /')} */`);
       lines.push(`${quote(key)} = ${quote(entry.defaultMessage)};`);
     }

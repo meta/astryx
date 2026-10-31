@@ -358,6 +358,67 @@ describe('NumberInput', () => {
       expect(input).toHaveAttribute('aria-valuenow', '1234');
     });
 
+    it('keeps the whole text selected when focus arrives with it selected, as Tab does', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      expect(input).toHaveValue('1,500,000');
+
+      // Tab into a text field selects its text before the focus event.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+
+      // The editable text replaces the formatted text, and stays selected.
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+    });
+
+    it('does not swallow keystrokes when focus swaps no text', async () => {
+      const user = userEvent.setup();
+      function Controlled() {
+        const [value, setValue] = useState<number | null>(1);
+        return <NumberInput label="Amount" value={value} onChange={setValue} />;
+      }
+      render(
+        <>
+          <button type="button">Before</button>
+          <Controlled />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      // Tab into the field with its text selected, as a browser does. The
+      // text is the same at rest and focused, so nothing is swapped.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+      await user.keyboard('75');
+      expect(input).toHaveValue('75');
+    });
+
+    it('leaves the caret where a click put it', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      input.focus();
+      input.setSelectionRange(3, 3);
+      fireEvent.focus(input);
+      expect(input.selectionStart).toBe(input.selectionEnd);
+    });
+
     it('keeps ARIA value text on the committed value while an edit is pending', () => {
       function ControlledNumberInput() {
         const [controlledValue, setControlledValue] = useState(1234);
@@ -1505,7 +1566,7 @@ describe('NumberInput', () => {
           isReadOnly
         />,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       await user.keyboard('{ArrowUp}{ArrowDown}');
       expect(handleChange).not.toHaveBeenCalled();
@@ -1525,7 +1586,7 @@ describe('NumberInput', () => {
           />
         </div>,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       const event = new WheelEvent('wheel', {
         bubbles: true,
@@ -2174,7 +2235,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -2201,7 +2262,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -2228,7 +2289,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
 
     rerender(
@@ -2290,7 +2351,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100, ctrlKey: true});
 
@@ -2312,7 +2373,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100});
 

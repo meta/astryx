@@ -477,6 +477,7 @@ export function TopNavMenu({
     return (
       <div {...stylex.props(drawerStyles.section)}>
         <button
+          ref={ref}
           type="button"
           {...rest}
           onMouseEnter={onMouseEnterProp}

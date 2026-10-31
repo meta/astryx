@@ -537,13 +537,15 @@ export function TextInput({
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}
       />
+      {/* The Spinner comes first so it appears inward of the clear button
+          and the button keeps its place when the field turns busy. */}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && value !== '' && !isDisabled && !isReadOnly && (
         <InputClearButton
           label={t('@astryx.textInput.clearLabel', {label})}
           onClick={handleClear}
         />
       )}
-      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
     </div>
   );

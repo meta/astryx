@@ -157,6 +157,7 @@ jobs:
       - name: Publish changed packages
         env:
           DRY_RUN: ${{ inputs.dry-run }}
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
         run: |
           set -eu
           published=0
@@ -181,7 +182,14 @@ jobs:
             pnpm publish "./$pkg_dir" --tag latest --provenance --access public --no-git-checks
             published=$((published + 1))
           done
-          echo "Published $published package(s)."
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run complete; no packages were published."
+          else
+            node scripts/npm/verify-published.mjs \
+              --version "$RELEASE_VERSION" \
+              --tag latest
+            echo "Published $published package(s); registry verification passed."
+          fi
 
   # Canary publish — runs on every push to main. The @canary dist-tag always
   # points to the latest main commit:
@@ -190,12 +198,15 @@ jobs:
     name: Publish canary to npm
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    # Dedicated group, cancel-in-progress so a newer main push supersedes an
-    # in-flight canary. Independent of the stable group, so this can never
-    # cancel or starve a stable dispatch.
+    # Dedicated group, independent of the stable group, so this can never
+    # cancel or starve a stable dispatch. Never cancel in progress: a canary
+    # that has started may already have published some packages, and
+    # cancelling it mid-loop leaves a partial canary set on npm. Bursts still
+    # coalesce: while one canary runs, a newer push waits as the single pending
+    # run, and a later push replaces that pending run before it starts.
     concurrency:
       group: npm-release-canary
-      cancel-in-progress: true
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write # required for npm OIDC trusted publishing + provenance
@@ -237,8 +248,15 @@ jobs:
 
           echo "Publishing canary ${CANARY_VERSION}"
 
+          # Remember which canaryOnly packages were private before this
+          # ephemeral checkout removes the guard. Only those packages may be
+          # skipped when their npm name has not been bootstrapped yet.
+          PRIVATE_CANARY_PACKAGES="$RUNNER_TEMP/astryx-private-canary-packages.txt"
+          : > "$PRIVATE_CANARY_PACKAGES"
+          export PRIVATE_CANARY_PACKAGES
+
           # Stamp canary version into all publishable packages. canaryOnly
-          # packages (e.g. lab) stay `private: true` in git as npm's hard
+          # packages (for example Native) stay `private: true` in git as npm's hard
           # guarantee against a stable publish; here — in the ephemeral CI
           # checkout ONLY — we strip `private` so they publish to @canary.
           for pkg in packages/*/package.json packages/themes/*/package.json; do
@@ -247,7 +265,10 @@ jobs:
               const p = JSON.parse(fs.readFileSync('$pkg','utf8'));
               if (!p.name?.startsWith('@astryxdesign/')) process.exit(0);
               if (p.private && !p.astryx?.canaryOnly) process.exit(0);
-              if (p.private && p.astryx?.canaryOnly) delete p.private;
+              if (p.private && p.astryx?.canaryOnly) {
+                fs.appendFileSync(process.env.PRIVATE_CANARY_PACKAGES, p.name + '\n');
+                delete p.private;
+              }
               p.version = '${CANARY_VERSION}';
               for (const dt of ['dependencies','peerDependencies','devDependencies']) {
                 if (!p[dt]) continue;
@@ -262,10 +283,10 @@ jobs:
 
           # Publish each package with --tag canary. Failures are collected and
           # the job still fails at the end (never `|| true`-swallowed), but one
-          # rejected publish no longer aborts the loop: when lab's first OIDC
-          # publish was rejected (no npm package/trust bootstrapped yet), every
-          # package after it in the loop (all seven themes) stopped receiving
-          # canaries. Publishes are per-package and idempotent, so attempting
+          # rejected publish no longer aborts the loop: when a private
+          # canary-only package's first OIDC publish is rejected because its npm
+          # package/trust is not bootstrapped yet, packages after it still need
+          # their canaries. Publishes are per-package and idempotent, so attempting
           # the rest is always safe.
           FAILED=""
           for pkg_dir in packages/* packages/themes/*; do
@@ -275,6 +296,22 @@ jobs:
             IS_PUBLISHABLE=$(node -p "const p=require('./$pkg_dir/package.json'); (!p.private || p.astryx?.canaryOnly) && p.name?.startsWith('@astryxdesign/') ? 'yes' : 'no'")
             if [ "$IS_PUBLISHABLE" = "yes" ]; then
               NAME=$(node -p "require('./$pkg_dir/package.json').name")
+              if grep -Fxq "$NAME" "$PRIVATE_CANARY_PACKAGES"; then
+                PACKAGE_URL=$(node -e "process.stdout.write(new URL(encodeURIComponent(process.argv[1]), 'https://registry.npmjs.org/').href)" "$NAME")
+                HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "$PACKAGE_URL" || true)
+                case "$HTTP_STATUS" in
+                  200) ;;
+                  404)
+                    echo "::notice::Skipping absent private canary-only package ${NAME}; bootstrap it and register release.yml as its trusted publisher."
+                    continue
+                    ;;
+                  *)
+                    echo "::error::Registry lookup for ${NAME} returned HTTP ${HTTP_STATUS}"
+                    FAILED="${FAILED} ${NAME}"
+                    continue
+                    ;;
+                esac
+              fi
               echo "Publishing ${NAME}@${CANARY_VERSION}"
               if ! pnpm publish "./$pkg_dir" --tag canary --provenance --access public --no-git-checks; then
                 echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"

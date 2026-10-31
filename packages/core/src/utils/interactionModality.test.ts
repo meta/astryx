@@ -3,7 +3,8 @@
 /**
  * @file interactionModality.test.ts
  * @input The interaction-modality utility loaded more than once
- * @output Verifies document-wide continuity and shared Shift-key modality policy
+ * @output Verifies document-wide continuity, shared Shift-key modality policy,
+ *   and a second document's separate value
  * @position Unit coverage for interactionModality.ts
  */
 
@@ -86,6 +87,49 @@ describe('interactionModality', () => {
     expect(
       addEventListener.mock.calls.filter(([type]) => type === 'keydown'),
     ).toHaveLength(1);
+  });
+
+  it("keeps a second document's input apart from the page's", async () => {
+    const pageDocument = document.implementation.createHTMLDocument();
+    const secondDocument = document.implementation.createHTMLDocument();
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    tracker.__startInteractionModalityTrackingForTest();
+    tracker.trackInteractionModalityIn(secondDocument);
+
+    pageDocument.dispatchEvent(new Event('pointerdown'));
+    secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+    expect(tracker.getInteractionModality()).toBe('pointer');
+    expect(tracker.getInteractionModality(pageDocument)).toBe('pointer');
+    expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
+
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    pageDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+    expect(tracker.getInteractionModality()).toBe('keyboard');
+    expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
+  });
+
+  it("releases a second document's listeners with its last consumer", async () => {
+    const secondDocument = document.implementation.createHTMLDocument();
+    const tracker = await loadTracker();
+    const removeEventListener = vi.spyOn(secondDocument, 'removeEventListener');
+    const releaseFirst = tracker.trackInteractionModalityIn(secondDocument);
+    const releaseSecond = tracker.trackInteractionModalityIn(secondDocument);
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
+
+    releaseFirst();
+    releaseFirst();
+    secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+    expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
+    expect(removeEventListener).not.toHaveBeenCalled();
+
+    releaseSecond();
+    expect(removeEventListener.mock.calls.map(([type]) => type).sort()).toEqual(
+      ['keydown', 'pointerdown'],
+    );
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(tracker.getInteractionModality(secondDocument)).toBe('keyboard');
   });
 
   it('uses the keyboard-safe default without a document', async () => {

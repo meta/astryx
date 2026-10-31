@@ -47,13 +47,14 @@ Generated audit screenshots remain audit evidence rather than design authority.
 Private design sources stay private and are never named or linked here.
 
 New design specs start as `draft`. Initial promotion to `current`, later changes,
-and normative asset updates require exact-head approval from any current member
-of `.github/ENGOWNERS` or `.github/DESIGNOWNERS`. A mixed PR still needs an
+and normative asset updates require approval of their content from any current
+member of `.github/ENGOWNERS` or `.github/DESIGNOWNERS`
+(`architecture:knowledge-contracts` DEC-14). A mixed PR still needs an
 ENGOWNER for non-design current records. The design record names its content
 owners separately from this repository gate.
 
-A DESIGNOWNER approves with an exact-head review or `/approve-spec <head>`,
-like every other owner; in a mixed PR every other applicable code or spec-owner
+A DESIGNOWNER approves with a review or `/approve-spec <sha>`, like every other
+owner; in a mixed PR every other applicable code or spec-owner
 group remains required. The gate decides approval only; it never enables
 auto-merge.
 

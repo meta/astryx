@@ -370,6 +370,36 @@ describe('Toolbar', () => {
     expect(buttons[2]).toHaveAttribute('tabindex', '-1');
   });
 
+  it('keeps a link member in the arrow order and off the tab order', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Toolbar
+          label="Actions"
+          startContent={
+            <>
+              <button type="button">Cut</button>
+              <a href="https://example.com">Docs</a>
+              <button type="button">Paste</button>
+            </>
+          }
+        />
+        <button type="button">After</button>
+      </>,
+    );
+
+    const cut = screen.getByRole('button', {name: 'Cut'});
+    cut.focus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+
+    cut.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('link', {name: 'Docs'})).toHaveFocus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('button', {name: 'Paste'})).toHaveFocus();
+  });
+
   it('keeps its tab stop after outside dismissal of MoreMenu', async () => {
     const user = userEvent.setup();
     render(

@@ -29,6 +29,7 @@ import {
 } from '@testing-library/react';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {List, ListItem} from '../List';
@@ -381,6 +382,65 @@ describe('Item', () => {
   it('applies aria-disabled when isDisabled', () => {
     render(<Item label="Disabled" isDisabled data-testid="item" />);
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+    function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      return <a ref={ref} data-router-link {...props} />;
+    }
+    render(
+      <LinkProvider component={RouterLink}>
+        <Item
+          label="Billing"
+          href="/billing"
+          target="_blank"
+          rel="noopener"
+          isDisabled
+        />
+        <Item label="Profile" href="/profile" />
+      </LinkProvider>,
+    );
+    // No href, target or rel, so a screen reader's click, Enter or a link
+    // menu cannot navigate; it keeps the link role and skips the router link.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
+      expect(disabled).not.toHaveAttribute(attribute);
+    }
+    const enabled = screen.getByRole('link', {name: 'Profile'});
+    expect(enabled).toHaveAttribute('href', '/profile');
+    expect(enabled).toHaveAttribute('data-router-link');
+    expect(enabled).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
+    const {rerender} = render(<Item label="Billing" href="/billing" />);
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(<Item label="Billing" href="/billing" isDisabled />);
+    // The disabled row renders a plain anchor in place of the link component;
+    // focus moves to it instead of falling to the page.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+    rerender(<Item label="Billing" href="/billing" />);
+    expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
+  });
+
+  it('does not pull focus back to a row that changes while focus is elsewhere', () => {
+    const {rerender} = render(
+      <>
+        <Item label="Billing" href="/billing" />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(
+      <>
+        <Item label="Billing" href="/billing" isDisabled />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 
   it('disables the invisible button when isDisabled', () => {

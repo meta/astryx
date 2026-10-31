@@ -6,8 +6,8 @@ id: spec:AST-017
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: cixzhang
-approved_at: 2026-10-24
+approved_by: imdreamrunner
+approved_at: 2026-10-29
 phase: accepted
 owners: [cixzhang, josephfarina]
 affects_architecture:
@@ -108,7 +108,8 @@ affects_consumer_docs: [release-process, templates]
       "FR60",
       "DEC-26",
       "DEC-27",
-      "DEC-28"
+      "DEC-28",
+      "DEC-30"
     ]
   }
 }
@@ -159,9 +160,10 @@ one removal merged ahead of the decision to allow it.
   when a valid consumer scenario supported by the latest stable release of a
   published package must change source or configuration to keep its code,
   interaction, data, semantic output, or supported workflow working, or loses a
-  stable public surface. The review names that scenario and the released surface
-  it uses. For a surface other than a component, FR54 decides which scenarios are
-  valid and supported.
+  stable public surface. FR3's numeric-stepper presentation adaptation is not
+  a stable-surface loss when every condition in that rule holds. The review
+  names the consumer scenario and the released surface it uses. For a surface
+  other than a component, FR54 decides which scenarios are valid and supported.
 - **FR2 — Classify against the latest stable release.** A surface added and then
   renamed, removed, or reworked before any stable release has no installed
   consumer and is not breaking. Private or ignored packages are outside the
@@ -187,6 +189,24 @@ one removal merged ahead of the decision to allow it.
   surface and input mode. A change to documented
   interaction or accessibility behavior made for accessibility conformance is
   classified under FR53.
+
+  Numeric-entry fields MAY hide compact, component-owned auxiliary increment
+  and decrement buttons on coarse primary pointers as a nonbreaking
+  presentation adaptation, even when those buttons are documented and leave
+  the accessibility tree. This narrow rule applies only while existing public
+  props, types, exports, accepted values, validation, submitted values, and
+  numeric callbacks remain unchanged; direct numeric entry remains accessible
+  on the coarse-pointer device; and the field's role, accessible name, value
+  semantics, focusability, and keyboard stepping remain supported. Callers
+  MUST need no source or configuration migration. Non-coarse-pointer steppers
+  remain available, and the component record MUST state the pointer-conditioned
+  availability and verify the preserved entry and stepping contracts. Such an
+  intentional adaptation uses a patch `[feat]` Changeset that describes the
+  buttons' changed availability; it requires no opt-out or deprecation path.
+  This rule does not cover removing a public prop or export, removing an action
+  other than auxiliary numeric stepping, or losing an accessible numeric-entry
+  path. Those changes remain subject to FR1.
+
 - **FR4 — Preserved old usage is nonbreaking.** A rename or replacement is
   nonbreaking when the old released call, import, option, identifier, or input
   continues to work with equivalent meaning through a compatibility alias or
@@ -931,6 +951,7 @@ lands, maintainers apply its requirement in review and release approval.
 | FR54      | Changeset classification review against the surface's current record, then the same tier admission every Changeset receives                                                                                                                                                                                                                                     | a CLI correction the CLI record classifies as `[fix]`; a CLI change the CLI record leaves undecided; a CLI change the CLI record classifies as `[breaking]` on a patch plan; a component change                                                                                                                                   | A non-component change is classified by a rule this record restates instead of its surface record, a surface rule turns on risk or adoption, a surface-classified `[breaking]` change ships in a patch or a surface rule makes it patch-eligible, or a component change is classified by a surface record                                                                                                                                                                                                                                                                           |
 | FR59      | Pull request review of fine-pointer before-and-after evidence                                                                                                                                                                                                                                                                                                   | a touch change that also fixes a defect fine-pointer users hit; a deliberate cross-device consistency change; a touch-only change; a new fine-pointer look proposed with touch work                                                                                                                                               | A touch change alters fine-pointer behavior or appearance with neither reason, shows no fine-pointer before-and-after evidence, or ships a new fine-pointer look without its own owner decision                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR60      | Element counts per story at rest and open, fine and coarse pointer, against architecture INV7                                                                                                                                                                                                                                                                   | a surface component at rest; an open layer; a DOM reduction; a recorded exception; an open layer under touch with extra elements                                                                                                                                                                                                  | An element beyond INV7's budgets with no recorded owner exception, a hidden twin or second presentation, or a DOM reduction that removes a theme target or documented anatomy, or that is classified as breaking; an open layer more than 5 elements over its fine-pointer count, an added element that is themeable, a new anatomy part, or without a job in its record, or a closed layer, trigger, or repeated component above its fine-pointer count                                                                                                                            |
+| FR3       | Current component contract, latest-stable inspection, and coarse/non-coarse browser evidence                                                                                                                                                                                                                                                                    | Auxiliary numeric steppers hidden with accessible direct entry and keyboard stepping retained; lost entry path; removed public prop or essential action                                                                                                                                                                           | A qualifying numeric-stepper adaptation is labeled breaking, or the narrow rule is used to excuse a lost API, essential action, value/validation/callback contract, or accessible entry path                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Decision log
 
@@ -1449,6 +1470,18 @@ Decoration belongs on pseudo-elements and existing elements, and each
 implementation tries to use fewer than the allowance.
 
 Rejected: strict parity for layers, with an owner exception for every sheet frame.
+
+### DEC-30 — Numeric entry does not depend on compact touch steppers
+
+**Reference:** `spec:AST-017/DEC-30`
+**Decider:** `imdreamrunner`, `2026-10-29`
+
+Compact auxiliary numeric steppers may adapt to primary-pointer precision while
+accessible direct entry, numeric contracts, and keyboard stepping remain intact.
+FR3 defines the conditions for patch-compatible adaptation and its limits;
+button visibility is not independently frozen when those conditions hold.
+
+Rejected: classifying every documented auxiliary button's disappearance as breaking despite preserved numeric entry and caller contracts.
 
 ## Open questions
 

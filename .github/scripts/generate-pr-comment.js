@@ -3,16 +3,17 @@
 
 /**
  * @description Generates and posts PR comment with analysis results
- * @input --analysis <file> --base-stats <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout
  */
 
 const fs = require('node:fs');
 const {buildA11ySection} = require('./lib/a11y-format');
 const {buildVisualSection} = require('./lib/visual-format');
+const {renderPackageSizeSection} = require('./lib/package-size');
 // Report-file strings render as literal inline text, report numbers as
 // numbers — the comment's structure comes only from this file's literals.
-const {inline, num} = require('./lib/report-text');
+const {inline, num, sizeText} = require('./lib/report-text');
 
 const args = process.argv.slice(2);
 const getArg = name => {
@@ -22,6 +23,7 @@ const getArg = name => {
 
 const analysisFile = getArg('analysis') || 'analysis.json';
 const baseStatsFile = getArg('base-stats');
+const packageSizeFile = getArg('package-size');
 const a11yFile = getArg('a11y') || 'a11y-report.json';
 const visualFile = getArg('visual');
 const runUrl = getArg('run-url') || '';
@@ -96,13 +98,6 @@ function bytesDelta(after, before) {
     Number.isFinite(before)
     ? after - before
     : null;
-}
-
-// A measured byte count as text, or N/A. Only numbers reach the output.
-function sizeText(bytes) {
-  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'N/A';
-  if (Math.abs(bytes) < 1024) return `${bytes}B`;
-  return `${(bytes / 1024).toFixed(1)}KB`;
 }
 
 function signedSizeText(delta) {
@@ -301,6 +296,22 @@ if (analysis.bundleDelta) {
   bundleSection += `**Bundle size ${direction}:** ${delta > 0 ? '+' : ''}${delta} bytes\n\n`;
 }
 
+// Published package sizes from build-storybook's package-size check: the
+// download and unpacked size of every published package, base against head,
+// and any runtime dependency added or removed. The caller has already matched
+// its head.
+let packageSizeSection = '';
+if (packageSizeFile) {
+  try {
+    packageSizeSection = renderPackageSizeSection(
+      JSON.parse(fs.readFileSync(packageSizeFile, 'utf8')),
+      inline,
+    );
+  } catch (e) {
+    console.error('Warning: Could not read package size report:', e.message);
+  }
+}
+
 // Build storybook link section
 let storybookSection = '';
 if (storybookUrl) {
@@ -321,12 +332,17 @@ if (sandboxUrl) {
 `;
 }
 
-// Both previews share the exact-head Vercel deployment, never a Pages, canary,
-// production, or earlier-head fallback.
+// Both previews come from the branch's Vercel alias, which serves the
+// branch's latest deployment; until a push's deployment is ready it still
+// shows the previous head. Vercel shortens a long alias with a hash, and then there are
+// no links.
 let previewAvailabilitySection = '';
 if (previewState) {
   if (!storybookUrl || !sandboxUrl)
-    previewAvailabilitySection = `> **Preview availability:** Storybook and Sandbox are not both ready on the exact-head Vercel preview.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
+    previewAvailabilitySection = `> **Preview availability:** this branch's preview address cannot be known in advance; open the preview from Vercel's comment on this pull request.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
+  else
+    previewAvailabilitySection =
+      "> **Preview:** the links below open this branch's latest Vercel deployment, which can trail a new push until that push's deployment is ready.\n\n";
 }
 
 // Build footer with links
@@ -351,7 +367,7 @@ const body = `## PR Analysis Report
 <!-- astryx-pr-analysis -->
 
 ${diffModeCaveat}${previewAvailabilitySection}${storybookSection}${sandboxSection}${componentSection || (sizeSection ? '' : '_No new or modified components detected._\n\n')}
-${sizeSection}${budgetSection}${bundleSection}
+${sizeSection}${budgetSection}${bundleSection}${packageSizeSection}
 ${a11ySection}
 ${visualSection}---
 

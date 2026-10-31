@@ -18,7 +18,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {Profiler, useEffect} from 'react';
+import {Profiler, useEffect, useState} from 'react';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import * as stylex from '@stylexjs/stylex';
@@ -1143,6 +1143,353 @@ describe('useLayer', () => {
       expect(onTooltipShow).toHaveBeenCalledTimes(2);
     });
 
+    /**
+     * The browser's own hide: an Escape its close watcher answers never calls
+     * the hook's hide(). The engine fires `beforetoggle` synchronously as the
+     * hide starts, restores focus inside the hide when focus was inside the
+     * popover, and fires `toggle` in a task once it has ended; `showPopover()`
+     * throws throughout.
+     */
+    function installBrowserHidePopoverApi() {
+      // The ledger's backstop for a hide whose `toggle` never arrives is the
+      // next task; under fake timers, the test decides when that task runs,
+      // so the `toggle` tasks below end a hide first, as in a browser.
+      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      let operationsInFlight = 0;
+      const previouslyFocused = new WeakMap<HTMLElement, Element | null>();
+      const toggleTasks: (() => void)[] = [];
+      const fireToggle = (
+        popover: HTMLElement,
+        type: 'beforetoggle' | 'toggle',
+        newState: 'open' | 'closed',
+      ) => {
+        const event = new Event(type, {bubbles: false});
+        Object.defineProperty(event, 'newState', {
+          value: newState,
+          configurable: true,
+        });
+        popover.dispatchEvent(event);
+      };
+      const hide = (popover: HTMLElement) => {
+        operationsInFlight += 1;
+        try {
+          fireToggle(popover, 'beforetoggle', 'closed');
+          delete popover.dataset.open;
+          toggleTasks.push(() => fireToggle(popover, 'toggle', 'closed'));
+          const target = previouslyFocused.get(popover);
+          previouslyFocused.delete(popover);
+          if (
+            target instanceof HTMLElement &&
+            popover.contains(document.activeElement)
+          ) {
+            target.focus();
+          }
+        } finally {
+          operationsInFlight -= 1;
+        }
+      };
+      let refusals = 0;
+      const showSpy = vi.fn(function (this: HTMLElement) {
+        if (operationsInFlight > 0 || refusals > 0) {
+          refusals = Math.max(0, refusals - 1);
+          throw new DOMException(
+            "Failed to execute 'showPopover' on 'HTMLElement': Invalid to show a popover during another show operation",
+            'InvalidStateError',
+          );
+        }
+        operationsInFlight += 1;
+        try {
+          fireToggle(this, 'beforetoggle', 'open');
+          previouslyFocused.set(this, this.ownerDocument.activeElement);
+          this.dataset.open = 'true';
+          toggleTasks.push(() => fireToggle(this, 'toggle', 'open'));
+        } finally {
+          operationsInFlight -= 1;
+        }
+      });
+      const hideSpy = vi.fn(function (this: HTMLElement) {
+        hide(this);
+      });
+      HTMLElement.prototype.showPopover = showSpy;
+      HTMLElement.prototype.hidePopover = hideSpy;
+      return {
+        showSpy,
+        hideSpy,
+        /** The browser hides the popover itself: a close watcher's Escape. */
+        browserHide: (popover: HTMLElement) => hide(popover),
+        /** The task after the hide: the queued `toggle` events fire. */
+        runToggleTasks: () => {
+          for (const task of toggleTasks.splice(0)) {
+            task();
+          }
+        },
+        /** The engine refuses the next show too, whatever is in flight. */
+        refuseNextShow: () => {
+          refusals += 1;
+        },
+      };
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('defers the show a browser-run hide wakes until that hide has ended, and replays it at its toggle', async () => {
+      const {showSpy, browserHide, runToggleTasks} =
+        installBrowserHidePopoverApi();
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.error);
+        event.preventDefault();
+      };
+      window.addEventListener('error', onError);
+      const onTooltipShow = vi.fn();
+      const {getByRole} = render(
+        <FocusReturnHarness onTooltipShow={onTooltipShow} />,
+      );
+      const trigger = getByRole('button', {name: 'Trigger'});
+      const inside = getByRole('button', {name: 'Inside', hidden: true});
+      const popover = getByRole('dialog', {hidden: true});
+
+      act(() => trigger.focus());
+      fireEvent.click(trigger);
+      act(() => inside.focus());
+      runToggleTasks();
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      // Escape, answered by the browser's close watcher: it hides the popover
+      // on its own and returns focus to the trigger inside that hide; the
+      // tooltip asks to show.
+      act(() => browserHide(popover));
+      window.removeEventListener('error', onError);
+
+      expect(errors).toEqual([]);
+      expect(document.activeElement).toBe(trigger);
+      expect(popover).not.toHaveAttribute('data-open');
+      // The show was asked of the browser inside the hide and refused; the
+      // hook kept the refusal to itself and parked the show. Nothing else is
+      // asked before the hide ends at its `toggle`, not even after the
+      // script unwound.
+      await act(async () => {});
+      const refusals = () =>
+        showSpy.mock.results.filter(r => r.type === 'throw').length;
+      expect(refusals()).toBe(1);
+      expect(getByRole('tooltip', {hidden: true})).not.toHaveAttribute(
+        'data-open',
+      );
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+
+      // The task after the hide: the popover's `toggle` fires, the hook
+      // reconciles its state, and the parked show runs exactly once.
+      act(() => runToggleTasks());
+      await act(async () => {});
+      expect(refusals()).toBe(1);
+      expect(getByRole('tooltip', {hidden: true})).toHaveAttribute(
+        'data-open',
+        'true',
+      );
+      expect(onTooltipShow).toHaveBeenCalledTimes(2);
+      expect(popover).not.toHaveAttribute('data-open');
+    });
+
+    it('lets a replay the browser refuses again reach the page, and parks nothing more', async () => {
+      const {showSpy, browserHide, runToggleTasks, refuseNextShow} =
+        installBrowserHidePopoverApi();
+      const onTooltipShow = vi.fn();
+      const {getByRole} = render(
+        <FocusReturnHarness onTooltipShow={onTooltipShow} />,
+      );
+      const trigger = getByRole('button', {name: 'Trigger'});
+      const inside = getByRole('button', {name: 'Inside', hidden: true});
+      const popover = getByRole('dialog', {hidden: true});
+      act(() => trigger.focus());
+      fireEvent.click(trigger);
+      act(() => inside.focus());
+      runToggleTasks();
+      const refusals = () =>
+        showSpy.mock.results.filter(r => r.type === 'throw').length;
+
+      // The hide wakes the tooltip; the browser refuses; the show is parked.
+      act(() => browserHide(popover));
+      expect(refusals()).toBe(1);
+
+      // Hold the microtasks the ledger queues, to run the replay by hand.
+      const held: (() => void)[] = [];
+      const queue = vi
+        .spyOn(globalThis, 'queueMicrotask')
+        .mockImplementation(callback => {
+          held.push(callback);
+        });
+      try {
+        act(() => runToggleTasks());
+        // The hide's end queued the batch; the batch queues the one replay.
+        expect(held).toHaveLength(1);
+        held.shift()?.();
+        expect(held).toHaveLength(1);
+        const replay = held.shift();
+        // The replay runs outside the hide, so a browser that refuses again
+        // throws to the page from the replay's own microtask: nothing catches
+        // it, and nothing is parked again.
+        refuseNextShow();
+        expect(replay).toThrow(
+          expect.objectContaining({name: 'InvalidStateError'}),
+        );
+        expect(held).toHaveLength(0);
+      } finally {
+        queue.mockRestore();
+      }
+      await act(async () => {});
+      expect(refusals()).toBe(2);
+      expect(getByRole('tooltip', {hidden: true})).not.toHaveAttribute(
+        'data-open',
+      );
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens a layer at once when the press that closed another one opens it after the hide has returned', () => {
+      // A light dismiss runs at pointerup and the click that follows opens the
+      // next layer in the same gesture: the browser accepts that show (its
+      // hide has returned) although the hidden layer's `toggle` has not fired.
+      const {showSpy, browserHide, runToggleTasks} =
+        installBrowserHidePopoverApi();
+      const api: {first?: FixedLayerReturn; second?: FixedLayerReturn} = {};
+      const onSecondShow = vi.fn();
+      function Harness() {
+        api.first = useLayer({mode: 'fixed'});
+        api.second = useLayer({mode: 'fixed', onShow: onSecondShow});
+        return (
+          <>
+            {api.first.render(<span>First</span>, {x: 0, y: 0})}
+            {api.second.render(<span>Second</span>, {x: 0, y: 0})}
+          </>
+        );
+      }
+      const {getByText} = render(<Harness />);
+      act(() => api.first?.show());
+      const first = getByText('First').closest('[popover]') as HTMLElement;
+      const second = getByText('Second').closest('[popover]') as HTMLElement;
+
+      act(() => {
+        browserHide(first);
+        api.second?.show();
+      });
+      expect(showSpy.mock.results.every(r => r.type === 'return')).toBe(true);
+      expect(second).toHaveAttribute('data-open', 'true');
+      expect(onSecondShow).toHaveBeenCalledTimes(1);
+      expect(api.second?.isOpen).toBe(true);
+      // The first layer's hide ends at its toggle, with nothing left to replay.
+      act(() => runToggleTasks());
+      expect(onSecondShow).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps counting a browser-run hide across a render it causes (an inline onHide, a state update in the focus handler)', async () => {
+      const {showSpy, browserHide, runToggleTasks} =
+        installBrowserHidePopoverApi();
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.error);
+        event.preventDefault();
+      };
+      window.addEventListener('error', onError);
+      const onTooltipShow = vi.fn();
+      // The host re-renders inside the hide: the focus handler sets state,
+      // and `onHide` is a new function each render, so React rebinds the
+      // layer's `toggle` listener and ref while the hide is still running.
+      function RerenderingHarness() {
+        const [focusCount, setFocusCount] = useState(0);
+        const popover = useLayer({mode: 'context', onHide: () => {}});
+        const tooltip = useLayer({mode: 'context', onShow: onTooltipShow});
+        return (
+          <>
+            <button
+              type="button"
+              ref={el => {
+                popover.ref(el);
+                tooltip.ref(el);
+              }}
+              onFocus={() => {
+                setFocusCount(count => count + 1);
+                tooltip.show();
+              }}
+              onBlur={tooltip.hide}
+              onClick={popover.show}>
+              Trigger {focusCount}
+            </button>
+            {popover.render(<button type="button">Inside</button>, {
+              role: 'dialog',
+            })}
+            {tooltip.render(<span>Tip</span>, {role: 'tooltip'})}
+          </>
+        );
+      }
+      const {getByRole} = render(<RerenderingHarness />);
+      const trigger = getByRole('button', {name: /Trigger/});
+      const inside = getByRole('button', {name: 'Inside', hidden: true});
+      const popover = getByRole('dialog', {hidden: true});
+
+      act(() => trigger.focus());
+      fireEvent.click(trigger);
+      act(() => inside.focus());
+      runToggleTasks();
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+
+      act(() => browserHide(popover));
+      window.removeEventListener('error', onError);
+      expect(errors).toEqual([]);
+      await act(async () => {});
+      const refusals = () =>
+        showSpy.mock.results.filter(r => r.type === 'throw').length;
+      // One refusal, kept by the hook; still inside the hide's window, so
+      // nothing replayed yet, however the host re-rendered meanwhile.
+      expect(refusals()).toBe(1);
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+
+      act(() => runToggleTasks());
+      await act(async () => {});
+      expect(refusals()).toBe(1);
+      expect(getByRole('tooltip', {hidden: true})).toHaveAttribute(
+        'data-open',
+        'true',
+      );
+      expect(onTooltipShow).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases a browser-run hide whose element detaches before its toggle, so later shows run', async () => {
+      const {showSpy, browserHide} = installBrowserHidePopoverApi();
+      const api: {popover?: FixedLayerReturn; tooltip?: FixedLayerReturn} = {};
+      function Harness({withPopover}: {withPopover: boolean}) {
+        api.popover = useLayer({mode: 'fixed'});
+        api.tooltip = useLayer({mode: 'fixed'});
+        return (
+          <>
+            {withPopover &&
+              api.popover.render(<span>Popover</span>, {x: 0, y: 0})}
+            {api.tooltip.render(<span>Tip</span>, {x: 0, y: 0})}
+          </>
+        );
+      }
+      const {getByText, rerender} = render(<Harness withPopover />);
+      act(() => api.popover?.show());
+      const popover = getByText('Popover').closest('[popover]') as HTMLElement;
+      // The browser hides it, and React unmounts it before the `toggle` task.
+      act(() => browserHide(popover));
+      rerender(<Harness withPopover={false} />);
+      expect(popover.isConnected).toBe(false);
+
+      // The hide was synchronous: the task after it is past the window.
+      act(() => {
+        vi.runOnlyPendingTimers();
+      });
+      act(() => api.tooltip?.show());
+      await act(async () => {});
+      expect(showSpy).toHaveBeenCalledTimes(2);
+      expect(getByText('Tip').closest('[popover]')).toHaveAttribute(
+        'data-open',
+        'true',
+      );
+    });
+
     it('drops a deferred show that hide() cancels before it replays', async () => {
       const api: {popover?: FixedLayerReturn; tooltip?: FixedLayerReturn} = {};
       // While the popover hides, the tooltip asks to show and then changes
@@ -1886,6 +2233,16 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   const TRIGGER = rect(300, 400, 30, 100);
 
+  /** Let the next animation frame run, as the browser does before it paints. */
+  async function nextFrame() {
+    await act(
+      async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        }),
+    );
+  }
+
   /** Give the document a 720px-tall viewport for the duration of a test. */
   function viewport720() {
     return vi
@@ -2193,10 +2550,74 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     const before = observers.length;
     act(() => move?.callback([{intersectionRatio: 0.4}]));
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
-    // Re-armed on the new rect.
+    // Re-armed on the new rect at once; read in the next frame.
     expect(move?.disconnected).toBe(true);
     expect(observers.length).toBe(before + 1);
+    await nextFrame();
+    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    vi.unstubAllGlobals();
+  });
+
+  it('reads a move its observer reports after paint in the next frame, before that frame paints, never in the reporting task', async () => {
+    // Placing a layer afresh in the task right after the frame that scrolled
+    // its anchor lets Chromium lay it out for one more frame against the
+    // anchor's position before the scroll, over the anchor (spec:AST-059 FR8:
+    // clear from the second painted frame). The read waits for the next
+    // frame, before it paints, and several reports in one frame share it.
+    const observers: {
+      callback: (entries: {intersectionRatio: number}[]) => void;
+      options: IntersectionObserverInit;
+    }[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(
+          callback: (entries: {intersectionRatio: number}[]) => void,
+          options: IntersectionObserverInit,
+        ) {
+          observers.push({callback, options});
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    );
+    const latestMove = () =>
+      observers.filter(o => o.options?.rootMargin != null).at(-1);
+    const user = userEvent.setup();
+    const spy = placeBoxes(TRIGGER, rect(200, 350, 100, 200));
+    const {container, getByText} = render(<ClearHarness />);
+    await user.click(getByText('Trigger'));
+    const layerEl = container.querySelector('[popover]') as HTMLElement;
+    act(() => latestMove()?.callback([{intersectionRatio: 1}]));
+    await nextFrame();
+    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+
+    // A scroll carries the trigger under the layer; the observer reports it
+    // after the frame that painted the move, twice before the next frame.
+    spy.mockRestore();
+    const reads = vi.fn();
+    const covering = rect(16, 350, 688, 300);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        if (!this.hasAttribute('popover')) {
+          return TRIGGER;
+        }
+        reads();
+        return covering;
+      },
+    );
+    act(() => {
+      latestMove()?.callback([{intersectionRatio: 0.4}]);
+      latestMove()?.callback([{intersectionRatio: 0.6}]);
+    });
+    expect(layerEl).not.toHaveAttribute('data-astryx-clears-anchor');
+    expect(reads).not.toHaveBeenCalled();
+
+    // The next frame reads it once, switches it, and places it afresh.
+    await nextFrame();
+    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
+    expect(reads).toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
@@ -2248,9 +2669,10 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     spy = placeBoxes(TRIGGER, rect(16, 350, 688, 300));
     let armed = moves().length;
     act(() => latest().callback([{intersectionRatio: 0.7}]));
-    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
     expect(moves().length).toBe(armed + 1);
     expect(latest().options.threshold).toBe(0.7);
+    await nextFrame();
+    expect(layerEl).toHaveAttribute('data-astryx-clears-anchor');
 
     // A first report of 0 for a trigger that moved since the observer read
     // its rectangle re-arms at once on the new rectangle.

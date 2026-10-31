@@ -15,7 +15,11 @@ export {hasActiveFocusTrapEscape, useFocusTrap} from './useFocusTrap';
 export type {UseFocusTrapOptions, UseFocusTrapReturn} from './useFocusTrap';
 
 export {useAnnounce} from './useAnnounce';
-export type {AnnounceFn, AnnouncePoliteness} from './useAnnounce';
+export type {
+  AnnounceFn,
+  AnnouncePoliteness,
+  UseAnnounceOptions,
+} from './useAnnounce';
 
 export {useClipboard} from './useClipboard';
 export type {UseClipboardOptions, UseClipboardReturn} from './useClipboard';

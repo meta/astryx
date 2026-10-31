@@ -20,7 +20,7 @@
 import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {
   colorVars,
   radiusVars,
@@ -31,7 +31,7 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
 import {useFieldStatusAnnouncement} from './useFieldStatusAnnouncement';
@@ -63,6 +63,10 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
+    // A validation message often echoes the value that failed (an address, a
+    // URL). Let such an unbroken token wrap inside the field instead of
+    // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
+    overflowWrap: 'anywhere',
   },
   attached: {
     marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,
@@ -118,6 +122,9 @@ const colorStyles = stylex.create({
 export type FieldStatusVariant = keyof FieldStatusVariantMap;
 
 export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the rendered message box.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * The type of status to display.

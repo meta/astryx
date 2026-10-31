@@ -41,6 +41,10 @@ export interface LongPressGestureRecognizerOptions extends GestureRecognizerOpti
 }
 
 export class LongPressGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'longPress';
+  }
+
   minimumPressDuration: number;
   allowableMovement: number;
   numberOfTapsRequired: number;

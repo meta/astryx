@@ -301,13 +301,13 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
 
   const selectItem = useCallback(
     (item: T) => {
-      if (item.disabled) {
+      if (isDisabled || item.disabled) {
         return;
       }
       onSelect?.(item.value);
       closeAndReset();
     },
-    [onSelect, closeAndReset],
+    [isDisabled, onSelect, closeAndReset],
   );
 
   const onTriggerClick = useCallback(() => {

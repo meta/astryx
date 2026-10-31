@@ -39,9 +39,9 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
-import {CheckboxInput} from '../CheckboxInput';
-import {mergeProps} from '../utils';
-import {Item} from '../Item';
+import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
+import {mergeProps} from '../utils/mergeProps';
+import {Item} from '../Item/Item';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';

@@ -4,7 +4,8 @@
 
 /**
  * @file useScrollSettle.ts
- * @input A scroll container ref and a settle callback
+ * @input A scroll container ref, a settle callback, and optionally whether a
+ *   mouse drag holds it (usePointerDragScroll's `isDraggingRef`)
  * @output Calls back once, after scrolling (including momentum) stops
  * @position Internal behavior hook; consumed by Wheel.tsx and MonthScroller.tsx
  *
@@ -27,7 +28,10 @@
  *    moment without lifting and the scroll events stop, so the timer fires
  *    and the value commits to whatever is under the band. Chrome hides this
  *    because it has `scrollend`, which does not fire until the touch is
- *    released.
+ *    released. A mouse drag (usePointerDragScroll) is held the same way, and
+ *    there Chrome gives no cover at all: each `scrollTop` the drag assigns
+ *    ends in its own `scrollend`, so the settle waits for the drag's
+ *    `pointerup` as it waits for `touchend`.
  *
  * 2. **Momentum is not rest either.** iOS momentum runs on the UI thread and
  *    keeps going for a second or more after the finger is gone, and its scroll
@@ -41,7 +45,7 @@
  * underneath, and the fresh scroll events start the next premature settle —
  * each one landing a row further along, which is why the month climbed.
  *
- * So: the settle waits for the touch to end, and then for a quiet period
+ * So: the settle waits for the touch or the mouse drag to end, and then for a quiet period
  * measured from the LAST scroll event, which is what makes it outlast
  * momentum however long it runs. {@link useScrollSettle} also reports whether
  * the scroller is at rest, so a caller can refuse to reposition one that is
@@ -77,11 +81,14 @@ export type ScrollSettleState = {
  * @param ref - the scroll container
  * @param onSettle - called with the settled element; may change every render
  * @param isEnabled - skip attaching while false (e.g. a hidden panel)
+ * @param isHeldRef - true while a mouse drag holds the scroller
+ *   (usePointerDragScroll's `isDraggingRef`): not rest, however quiet
  */
 export function useScrollSettle(
   ref: React.RefObject<HTMLElement | null>,
   onSettle: (element: HTMLElement) => void,
   isEnabled: boolean = true,
+  isHeldRef?: React.RefObject<boolean>,
 ): ScrollSettleState {
   // The callback closes over render-fresh values (the option list, the current
   // value); keeping it in a ref means the listeners attach once instead of
@@ -101,11 +108,18 @@ export function useScrollSettle(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let hasSettled = false;
     let isTouching = false;
+    // Whether a mouse drag held this gesture, so its release re-arms the
+    // settle; a plain click does not.
+    let wasHeld = false;
 
     const settle = () => {
-      // A finger still on the glass is not rest, however quiet the scroller
-      // has gone. The release re-arms this.
-      if (hasSettled || isTouching) {
+      // A finger still on the glass, or a mouse button still holding a drag,
+      // is not rest, however quiet the scroller has gone. The release re-arms
+      // this.
+      if (isHeldRef?.current) {
+        wasHeld = true;
+      }
+      if (hasSettled || isTouching || isHeldRef?.current) {
         return;
       }
       hasSettled = true;
@@ -126,6 +140,9 @@ export function useScrollSettle(
       // the last of it however long it runs.
       hasSettled = false;
       isAtRestRef.current = false;
+      if (isHeldRef?.current) {
+        wasHeld = true;
+      }
       arm();
     };
 
@@ -144,11 +161,23 @@ export function useScrollSettle(
       arm();
     };
 
+    const onPointerEnd = () => {
+      // The drag's release: its glide to the nearest row re-arms this on its
+      // own, and the timer covers a release already on a row, which scrolls
+      // no further.
+      if (wasHeld) {
+        wasHeld = false;
+        arm();
+      }
+    };
+
     element.addEventListener('scroll', onScroll, {passive: true});
     element.addEventListener('scrollend', settle);
     element.addEventListener('touchstart', onTouchStart, {passive: true});
     element.addEventListener('touchend', onTouchEnd, {passive: true});
     element.addEventListener('touchcancel', onTouchEnd, {passive: true});
+    element.addEventListener('pointerup', onPointerEnd);
+    element.addEventListener('pointercancel', onPointerEnd);
 
     return () => {
       clearTimeout(timer);
@@ -157,8 +186,10 @@ export function useScrollSettle(
       element.removeEventListener('touchstart', onTouchStart);
       element.removeEventListener('touchend', onTouchEnd);
       element.removeEventListener('touchcancel', onTouchEnd);
+      element.removeEventListener('pointerup', onPointerEnd);
+      element.removeEventListener('pointercancel', onPointerEnd);
     };
-  }, [ref, isEnabled]);
+  }, [ref, isEnabled, isHeldRef]);
 
   return {isAtRestRef};
 }

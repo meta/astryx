@@ -147,6 +147,9 @@ defineTheme({
 
 - `defineTheme`'s `motion` widens to accept the three knobs beside the existing
   `MotionScaleConfig`; existing themes render exactly as before.
+- Until `reducedMotion: 'always'` ships, the public `motion` type has no
+  `reducedMotion` field and every theme follows each person's setting, as
+  `'system'` does (the known gap in `architecture:theme-authoring-contract`).
 - Core gains `--ease-entrance`, `--ease-move`, and `--ease-exit`, and a
   theme-root mark for `reducedMotion: 'always'` that every component style
   keying reduced motion on `prefers-reduced-motion` also keys on; Carousel's
