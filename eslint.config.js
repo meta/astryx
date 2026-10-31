@@ -400,7 +400,7 @@ export default defineConfig(
             ],
             'TimeInput/TimeInput.tsx': ['e.g., 2:30 PM', 'e.g., 14:30'],
             'Timer/Timer.tsx': ['m ', 'h '],
-            'Tokenizer/Tokenizer.tsx': ['Create "', ' more'],
+            'Tokenizer/Tokenizer.tsx': [' more'],
           },
         },
       ],
