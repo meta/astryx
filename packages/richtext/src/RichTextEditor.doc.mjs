@@ -241,6 +241,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'In a code block, Tab and Shift+Tab indent and outdent every line the selection touches, by the indent the block already uses: a tab when one of its lines starts with a tab, otherwise the fewest spaces an indented line starts with (2 to 8), otherwise 2 spaces. The selection stays on the same characters, and each press is one undo step. Escape then Tab still moves focus out of the editor.',
+      },
+      {
+        guidance: true,
+        description:
           'Thematic breaks (---, ***, ___, with or without spaces between) import as horizontal rules and export as ---. A dash line directly under a paragraph line stays with that paragraph, as in Markdown. Click a rule or arrow onto it to select it; Backspace removes it. RichTextView draws the same rules. Install @lexical/extension with the other lexical peers.',
       },
       {
