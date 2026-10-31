@@ -11,6 +11,7 @@ import type {
   ChatComposerTrigger,
   ChatComposerInputHandle,
 } from './ChatComposerInput';
+import {placeCaretAtEnd, insertTextAtCursor} from './chatComposerSelection';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 
@@ -1969,6 +1970,76 @@ describe('ChatComposerInput', () => {
       fireEvent.keyDown(textbox, {key: 'ArrowDown'});
 
       expect(spy.mock.calls.length).toBeGreaterThan(callsAfterOpen);
+    });
+  });
+
+  describe('IME caret anchoring into text nodes (issue #6411)', () => {
+    it('anchors placeCaretAtEnd inside a Text node when content is present', () => {
+      render(
+        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
+      );
+      const textbox = screen.getByRole('textbox');
+      textbox.textContent = 'hello world';
+      placeCaretAtEnd(textbox);
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorOffset).toBe('hello world'.length);
+    });
+
+    it('anchors placeCaretAtEnd inside an empty Text node when editable is empty', () => {
+      render(
+        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
+      );
+      const textbox = screen.getByRole('textbox');
+      placeCaretAtEnd(textbox);
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorOffset).toBe(0);
+    });
+
+    it('anchors insertTextAtCursor inside the inserted text node', () => {
+      render(
+        <ChatComposer onSubmit={() => {}} input={<ChatComposerInput />} />,
+      );
+      const textbox = screen.getByRole('textbox');
+      insertTextAtCursor(textbox, 'inserted text');
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
+      expect(selection.anchorNode?.textContent).toBe('inserted text');
+      expect(selection.anchorOffset).toBe('inserted text'.length);
+    });
+
+    it('anchors caret inside trailing text node after inserting a token', async () => {
+      let handle: ChatComposerInputHandle | null = null;
+      render(
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={h => {
+                handle = h;
+              }}
+            />
+          }
+        />,
+      );
+      act(() => {
+        handle?.insertToken({
+          value: '@cindy',
+          label: '@Cindy Zhang',
+          variant: 'blue',
+        });
+      });
+
+      const selection = window.getSelection()!;
+      expect(selection.rangeCount).toBeGreaterThan(0);
+      expect(selection.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
     });
   });
 });

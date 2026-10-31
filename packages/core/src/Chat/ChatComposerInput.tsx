@@ -540,14 +540,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       // end of the new content so the next keystroke appends rather
       // than prepends.
       if (wasFocused) {
-        const selection = window.getSelection();
-        if (selection) {
-          const range = document.createRange();
-          range.selectNodeContents(editable);
-          range.collapse(false);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
+        placeCaretAtEnd(editable);
       }
       setIsEmpty(controlledValue.length === 0);
     } else {
