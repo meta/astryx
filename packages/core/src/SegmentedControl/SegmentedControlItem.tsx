@@ -68,6 +68,13 @@ export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> 
 // Styles
 // =============================================================================
 
+// WCAG 2.2 AA "Target Size (Minimum)" / Apple HIG / Material floor for phone
+// surfaces. Sizes top out at 32px (`lg`), below the 44px every other
+// interactive target honours, so floor every size on a coarse pointer —
+// desktop density is unchanged — mirroring TouchDateField's monthArrow floor
+// (#6013).
+const TOUCH_TARGET = '44px';
+
 const styles = stylex.create({
   base: {
     position: 'relative',
@@ -95,6 +102,7 @@ const styles = stylex.create({
     transitionProperty: 'color, background-color, box-shadow',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
+    minHeight: {default: null, '@media (pointer: coarse)': TOUCH_TARGET},
   },
   selected: {
     // Forced colors (Windows High Contrast) strips the painted surface fill

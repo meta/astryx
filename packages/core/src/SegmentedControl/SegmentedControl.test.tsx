@@ -902,6 +902,67 @@ describe('forced colors (WCAG 1.4.11)', () => {
     // both render as authored.
     expect(getAllInjectedCss()).toContain('forced-color-adjust: none;');
   });
+  interface InjectedRule {
+    selector: string;
+    text: string;
+    media: string | null;
+  }
+
+  /**
+   * Every style rule StyleX has injected at runtime (`runtimeInjection` in the
+   * root vitest config), flattened out of any at-rule wrapper and tagged with
+   * that wrapper's condition — so a `@media (pointer: coarse)` rule stays
+   * distinguishable from the unconditional one. Mirrors the InputClearButton
+   * helper of the same name.
+   */
+  function injectedRules(): InjectedRule[] {
+    const walk = (rules: CSSRuleList, condition: string | null) =>
+      [...rules].flatMap((rule): InjectedRule[] => {
+        const {selectorText} = rule as CSSStyleRule;
+        if (typeof selectorText === 'string') {
+          return [
+            {selector: selectorText, text: rule.cssText, media: condition},
+          ];
+        }
+        const nested = (rule as CSSGroupingRule).cssRules;
+        if (nested == null) {
+          return [];
+        }
+        const own = (rule as CSSMediaRule).media?.mediaText;
+        return walk(nested, own != null && own !== '' ? own : condition);
+      });
+
+    return [...document.styleSheets].flatMap(sheet =>
+      walk(sheet.cssRules, null),
+    );
+  }
+
+  describe('touch target floor', () => {
+    it('floors segment items to 44px on coarse pointers only', () => {
+      render(
+        <SegmentedControl label="View" value="a" onChange={() => {}}>
+          <SegmentedControlItem value="a" label="Alpha" />
+          <SegmentedControlItem value="b" label="Beta" />
+        </SegmentedControl>,
+      );
+      const item = screen.getByRole('radio', {name: 'Alpha'});
+      const classes = [...item.classList];
+
+      // The coarse-pointer rule carries the 44px floor for the item's classes.
+      const coarse = injectedRules().filter(
+        r =>
+          r.media?.includes('pointer: coarse') &&
+          classes.some(c => r.selector.includes(c)),
+      );
+      expect(coarse.some(r => /min-height\s*:\s*44px/.test(r.text))).toBe(true);
+
+      // No unconditional floor: desktop density is unchanged.
+      const fine = injectedRules().filter(
+        r => r.media == null && classes.some(c => r.selector.includes(c)),
+      );
+      expect(fine.some(r => r.text.includes('min-height'))).toBe(false);
+    });
+  });
 });
 
 describe('pressed state', () => {
