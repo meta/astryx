@@ -47,7 +47,8 @@ inputs:
   requires-head-file:
     description: >-
       Optional path the work needs at the PR head. A head cut before that file
-      existed, whose diff does not touch it, does not apply (with a notice).
+      existed, whose diff does not touch it, does not apply (with a notice),
+      and `head_file_present` says so whether or not `touches` holds.
     required: false
     default: ''
 
@@ -93,6 +94,11 @@ outputs:
       A file listing the PR's changed paths, one per line (with
       `component-audit`); empty when the step could not list them.
     value: ${{ steps.scope.outputs.changed_files_path }}
+  head_file_present:
+    description: >-
+      `false` when the PR head lacks `requires-head-file` and its diff does not
+      touch it (a head cut before the file existed); `true` otherwise.
+    value: ${{ steps.scope.outputs.head_file_present }}
   applies:
     description: >-
       The job's work applies: not a specialized lane (spec, docsite or tooling
@@ -125,6 +131,7 @@ runs:
             release_bump: 'false',
             touches: 'true',
             applies: 'true',
+            head_file_present: 'true',
             decided: 'true',
           };
           // Outside a pull request, or when undecidable, every component audit
@@ -225,17 +232,21 @@ runs:
           }
           const specialized = ['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
           let applies = String(!specialized && touches === 'true');
+          // Whether the head has the file the work needs, decided whether or
+          // not `touches` holds; a diff that touches the file keeps it.
+          let headFilePresent = 'true';
           const headFile = process.env.SCOPE_HEAD_FILE;
-          if (applies === 'true' && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
+          if (!specialized && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
             try {
               await github.rest.repos.getContent({...context.repo, path: headFile, ref: pr.head.sha});
             } catch (error) {
               if (error.status === 404) {
                 core.notice(`This pull request's head has no ${headFile}; merge main to run this check.`);
-                applies = 'false';
+                headFilePresent = 'false';
               }
             }
           }
+          if (headFilePresent === 'false') applies = 'false';
           let componentScope = {};
           if (audit) {
             if (specialized) {
@@ -265,4 +276,4 @@ runs:
             fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
             componentScope.changed_files_path = changedFilesPath;
           }
-          report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies});
+          report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, head_file_present: headFilePresent});

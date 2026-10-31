@@ -4,8 +4,9 @@
  * @file ci-package-size-predating-head.test.mjs
  * Contract: a pull request whose head predates the package-size check (the
  * workflow comes from the merge ref, the checkout from the head) skips the
- * check visibly instead of failing build-storybook, and the comparison steps
- * after it run only when the head was measured.
+ * check instead of failing build-storybook: the scope step's
+ * `requires-head-file` notes the missing script (test-scope-action.test.mjs),
+ * and the comparison steps after it run only when the head was measured.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -43,18 +44,20 @@ function runStep(script, setup = () => {}) {
 }
 
 describe('package size on a head that predates it', () => {
+  const job = ci.jobs['build-storybook'];
   const measure = step('build-storybook', 'Measure published package size');
 
-  it('skips with a notice and no measurement when the head has no script', () => {
-    const result = runStep(measure.run);
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain(
-      '::notice title=Head predates the package-size check::',
+  it("asks the scope step whether the head has the check's script", () => {
+    const scope = job.steps.find(entry => entry.id === 'scope');
+    expect(scope.with['requires-head-file']).toBe(
+      '.github/scripts/package-size.mjs',
     );
-    expect(result.outputs).not.toContain('measured=true');
+    expect(measure.if).toContain(
+      "steps.scope.outputs.head_file_present != 'false'",
+    );
   });
 
-  it('measures, and says so, when the head has the script', () => {
+  it('records a measurement only after measuring', () => {
     const result = runStep(measure.run, root => {
       fs.mkdirSync(path.join(root, '.github/scripts'), {recursive: true});
       fs.writeFileSync(

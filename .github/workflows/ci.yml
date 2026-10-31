@@ -951,6 +951,8 @@ jobs:
           # infrastructure, `full_suite`, runs it too); the build itself
           # follows the specialized-lane outputs.
           paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
+          # A head cut before the package-size check has no script for it.
+          requires-head-file: .github/scripts/package-size.mjs
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -1082,15 +1084,11 @@ jobs:
       # package or the lockfile runs it.
       - name: Measure published package size
         id: package-size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
         # A head cut before the check has no script to run (the workflow comes
-        # from the merge ref, the checkout from the head): it skips, visibly,
-        # until it merges main.
+        # from the merge ref, the checkout from the head): the scope step notes
+        # it, and the check skips until the branch merges main.
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.head_file_present != 'false' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
         run: |
-          if [ ! -f .github/scripts/package-size.mjs ]; then
-            echo '::notice title=Head predates the package-size check::Skipping the package-size check; merge main to run it.'
-            exit 0
-          fi
           node .github/scripts/package-size.mjs measure --output package-size-head.json
           echo "measured=true" >> "$GITHUB_OUTPUT"
 
