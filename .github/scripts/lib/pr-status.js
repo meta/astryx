@@ -16,7 +16,9 @@
 
 const {inline, num} = require('./report-text');
 
-/** The heavy suites a pull request runs only on a maintainer's label. */
+const runLabels = require('../run-labels.cjs');
+
+/** The heavy suites a pull request runs only with its `ci:run-<suite>` label. */
 const SUITES = [
   {id: 'visual', label: 'Visual', jobs: ['visual-scout', 'pr-visual']},
   {id: 'a11y', label: 'Accessibility', jobs: ['pr-a11y']},
@@ -24,9 +26,9 @@ const SUITES = [
   {id: 'perf', label: 'Perf', jobs: ['perf']},
 ];
 
-/** The sentence a heavy suite shows when it did not run (one wording everywhere). */
+/** The sentence a heavy suite shows when it did not run (run-labels.cjs owns it). */
 function notRunSentence(suite) {
-  return `${suite.label} did not run on this pull request; add \`ci:run-${suite.id}\` to run it.`;
+  return runLabels.notRunSentence(suite.id);
 }
 
 const SCOPE_STEP = "Decide this job's scope";
