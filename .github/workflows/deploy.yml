@@ -155,18 +155,6 @@ jobs:
           path: package-size.json
           retention-days: 14
 
-      # A pull request compares its published package sizes with its merge
-      # base's from this measurement (ci.yml build-storybook).
-      - name: Measure published package size
-        run: node .github/scripts/package-size.mjs measure --output package-size.json
-
-      - name: Keep this commit's package size for PR size reports
-        uses: actions/upload-artifact@v7
-        with:
-          name: package-size-main-${{ needs.main-commit.outputs.sha }}
-          path: package-size.json
-          retention-days: 14
-
       - name: Verify package exports
         run: node scripts/verify-exports.mjs
 
