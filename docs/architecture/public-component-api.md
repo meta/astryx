@@ -373,8 +373,8 @@ Known verification gaps:
 
 - INV22: known gaps include `useLongPress`, `useMenuPress`,
   `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
-  `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
-  `useTooltip`, `useHoverCard`, and `useChatStreamScroll`: each attaches
+  `useOverlay`, `useCombobox`, `useMultiCombobox`, `useTooltip`,
+  `useHoverCard`, and `useChatStreamScroll`: each attaches
   gesture, press, drag, or motion behavior and has no `create…` factory yet;
   no full inventory exists yet. Each conforms by adding its factory and, where
   its signature cannot delegate, a ref-taking signature beside the deprecated
