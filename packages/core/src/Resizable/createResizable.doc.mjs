@@ -117,14 +117,14 @@ export const docs = {
       name: 'options.isReversed',
       type: 'boolean',
       description:
-        'The handle sits after the region it resizes (the region is at the end), so a drag toward the start grows it.',
+        'The handle sits after the region it resizes (the region is at the end), so a drag toward the start grows it. On a ResizeHandle, its own `isReversed` prop does the same: either one reverses the handle.',
       default: 'false',
     },
     {
       name: 'options.isDisabled',
       type: 'boolean',
       description:
-        'Ignores the drag and the keys and sets `aria-disabled`. The handle keeps its tab stop, so it stays discoverable.',
+        'Ignores the drag and the keys and sets `aria-disabled`. The handle keeps its tab stop, so it stays discoverable. On a ResizeHandle, its own `isDisabled` prop does the same: either one disables the handle.',
       default: 'false',
     },
     {

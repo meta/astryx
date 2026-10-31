@@ -89,6 +89,62 @@ describe('ResizeHandle on a useResizable(handleRef) region (component:Resizable 
     expect(document.body.style.cursor).toBe('');
   });
 
+  it('applies its own isReversed to the region it renders', () => {
+    function Reversed() {
+      const handleRef = useRef<HTMLDivElement>(null);
+      const region = useResizable(handleRef, {defaultSize: 200});
+      return (
+        <>
+          <output data-testid="size">{region.size}</output>
+          <ResizeHandle ref={handleRef} isReversed />
+        </>
+      );
+    }
+    render(<Reversed />);
+    fireEvent.keyDown(separator(), {key: 'ArrowRight'});
+    expect(size()).toBe(190);
+    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 100});
+    fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 80});
+    expect(size()).toBe(210);
+    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 80});
+  });
+
+  it('is disabled by its own isDisabled or by the region option', () => {
+    function Disabled({
+      handleIsDisabled,
+      optionIsDisabled,
+    }: {
+      handleIsDisabled: boolean;
+      optionIsDisabled: boolean;
+    }) {
+      const handleRef = useRef<HTMLDivElement>(null);
+      const region = useResizable(handleRef, {
+        defaultSize: 200,
+        isDisabled: optionIsDisabled,
+      });
+      return (
+        <>
+          <output data-testid="size">{region.size}</output>
+          <ResizeHandle ref={handleRef} isDisabled={handleIsDisabled} />
+        </>
+      );
+    }
+    const view = render(<Disabled handleIsDisabled optionIsDisabled={false} />);
+    expect(separator()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(separator(), {key: 'ArrowRight'});
+    expect(size()).toBe(200);
+    view.rerender(<Disabled handleIsDisabled={false} optionIsDisabled />);
+    expect(separator()).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.keyDown(separator(), {key: 'ArrowRight'});
+    expect(size()).toBe(200);
+    view.rerender(
+      <Disabled handleIsDisabled={false} optionIsDisabled={false} />,
+    );
+    expect(separator()).not.toHaveAttribute('aria-disabled');
+    fireEvent.keyDown(separator(), {key: 'ArrowRight'});
+    expect(size()).toBe(210);
+  });
+
   it('runs a caller onKeyDown before its own key handling (FR7)', () => {
     const onKeyDown = vi.fn();
     render(<Split options={{defaultSize: 200}} onKeyDown={onKeyDown} />);
