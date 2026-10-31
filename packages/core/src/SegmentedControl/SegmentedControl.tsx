@@ -19,7 +19,7 @@ import React, {useMemo, useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {useTooltip} from '../Tooltip';
 import type {
@@ -198,18 +198,19 @@ export function SegmentedControl({
   // the radios, skips disabled ones, wraps at the ends, handles Home/End, and
   // repairs the tab stop on mount and whenever items mount/disable — replacing
   // the component's former inline keyboard handler and tab-stop repair effect.
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: '[role="radio"]:not([aria-disabled="true"])',
-    hasRovingTabIndex: true,
-    // Disabled with a reason, the control keeps one Tab stop so the reason is
-    // reachable (FR2, FR7): the selected segment, else the first segment not
-    // disabled by its own isDisabled, else the first.
-    disabledTabStopSelectors: showsDisabledMessage
-      ? DISABLED_TAB_STOP_SELECTORS
-      : undefined,
-    wrap: true,
-    orientation: 'horizontal',
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: '[role="radio"]:not([aria-disabled="true"])',
+      hasRovingTabIndex: true,
+      // Disabled with a reason, the control keeps one Tab stop so the reason is
+      // reachable (FR2, FR7): the selected segment, else the first segment not
+      // disabled by its own isDisabled, else the first.
+      disabledTabStopSelectors: showsDisabledMessage
+        ? DISABLED_TAB_STOP_SELECTORS
+        : undefined,
+      wrap: true,
+      orientation: 'horizontal',
+    });
 
   const hint = useKeyboardHint({
     orientation: 'horizontal',
@@ -336,6 +337,6 @@ SegmentedControl.displayName = 'SegmentedControl';
 
 const DISABLED_TAB_STOP_SELECTORS = [
   '[role="radio"][aria-checked="true"]',
-  '[role="radio"]:not([data-segment-disabled])',
+  '[role="radio"]:not([data-astryx-segment-disabled])',
   '[role="radio"]',
 ] as const;

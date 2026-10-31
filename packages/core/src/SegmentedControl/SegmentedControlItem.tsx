@@ -245,7 +245,7 @@ export function SegmentedControlItem({
       aria-describedby={joinAriaIDs(ariaDescribedByProp, ctx.disabledReasonID)}
       data-value={value}
       // The group's fallback Tab stop skips segments disabled on their own.
-      data-segment-disabled={isDisabled || undefined}
+      data-astryx-segment-disabled={isDisabled || undefined}
       {...(!isSelected && !isItemDisabled ? pressable : undefined)}
       // Disabled items (including when the whole group is disabled) are not tab
       // stops — otherwise the selected segment stays keyboard-focusable but is

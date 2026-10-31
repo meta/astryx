@@ -13,7 +13,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import type {KeyboardEvent as ReactKeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {useListFocus} from './useListFocus';
+import {useInternalListFocus, useListFocus} from './useListFocus';
 
 const NO_DISABLED: string[] = [];
 
@@ -122,13 +122,15 @@ function RovingToolbar({
 }: {
   labels?: string[];
   disabledLabels?: string[];
-} & Parameters<typeof useListFocus>[0]) {
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: 'button, input, [tabindex]',
-    hasRovingTabIndex: true,
-    orientation: 'horizontal',
-    ...opts,
-  });
+} & Parameters<typeof useInternalListFocus>[0]) {
+  // The internal hook takes the public options plus the Core-only ones.
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: 'button, input, [tabindex]',
+      hasRovingTabIndex: true,
+      orientation: 'horizontal',
+      ...opts,
+    });
   return (
     <div
       ref={listRef}

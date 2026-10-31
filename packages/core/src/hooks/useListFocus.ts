@@ -110,16 +110,6 @@ export interface UseListFocusOptions {
   hasRovingTabIndex?: boolean;
 
   /**
-   * With `hasRovingTabIndex`, keeps one tab stop while every item is disabled:
-   * the selectors are tried in order within the list, the first element one
-   * of them matches carries `tabindex="0"`, and every other element the last
-   * selector matches carries `tabindex="-1"`. For a group that stays
-   * focusable while disabled, so its disabled reason is reachable by keyboard.
-   * Unset (the default): no item holds the stop while every item is disabled.
-   */
-  disabledTabStopSelectors?: ReadonlyArray<string>;
-
-  /**
    * When true, arrow keys are not stolen from a nested text input/textarea
    * whose caret is not at the boundary in the direction of travel (or that has
    * a non-collapsed selection), and are never stolen from a nested
@@ -129,6 +119,22 @@ export interface UseListFocusOptions {
    * @default false
    */
   hasCaretGuard?: boolean;
+}
+
+/**
+ * Options only Core components pass; this module's internal export, not
+ * re-exported from `hooks/index.ts`, so not public API.
+ */
+export interface InternalListFocusOptions extends UseListFocusOptions {
+  /**
+   * With `hasRovingTabIndex`, keeps one tab stop while every item is disabled:
+   * the selectors are tried in order within the list, the first element one
+   * of them matches carries `tabindex="0"`, and every other element the last
+   * selector matches carries `tabindex="-1"`. For a group that stays
+   * focusable while disabled, so its disabled reason is reachable by keyboard.
+   * Unset (the default): no item holds the stop while every item is disabled.
+   */
+  disabledTabStopSelectors?: ReadonlyArray<string>;
 }
 
 /**
@@ -335,6 +341,16 @@ function shouldDeferToCaret(target: EventTarget | null, key: string): boolean {
  */
 export function useListFocus<T extends HTMLElement = HTMLElement>(
   options: UseListFocusOptions = {},
+): UseListFocusReturn<T> {
+  return useInternalListFocus<T>(options);
+}
+
+/**
+ * {@link useListFocus} with the Core-only {@link InternalListFocusOptions}.
+ * Not re-exported from `hooks/index.ts`.
+ */
+export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
+  options: InternalListFocusOptions = {},
 ): UseListFocusReturn<T> {
   const {
     itemSelector = '[role="menuitem"]',
