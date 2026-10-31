@@ -304,9 +304,20 @@ presses nothing.
   controller's surfaces (`usePressFeedback` rows), keep the browser's
   long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. A
   finger or a pen takes the lock under any primary pointer, a touchscreen
-  laptop and a desktop pen tablet included; a mouse never does, so mouse
-  selection is unchanged (`spec:AST-017` FR59); content under a sheet's or a
-  pager's pan stays selectable.
+  laptop and a desktop pen tablet included; a mouse never does
+  (`spec:AST-017` FR59).
+
+  A mouse or pen drag that a recognizer claims takes no new text selection
+  and never clears the page's (`spec:AST-094` FR41): from the claim until a
+  task after the lift (the press's own `mouseup` and `click` come in its
+  task), the claiming elements and the document refuse a selection, and the
+  selection the page had when the press began is put back over whatever the
+  press or the drag made of it. A drag that starts on selectable text (a
+  character of text that allows a selection, or a text field) is not
+  claimed: no recognizer recognizes with it while it is down, so it selects
+  text, and content under a sheet's or a pager's pan stays selectable. A
+  press a recognizer claims at its own pointerdown, before it moves, is no
+  drag, and a tap claims only at its lift.
 
 - **Claiming.** When a recognizer recognizes, it owns its touches. Each
   element with a recognizer that can claim a moving touch (a pan, a swipe, a
