@@ -41,7 +41,7 @@ design and theme records also accept DESIGNOWNERS. Approve with
 `/approve-spec <full-sha>` at the start of a comment (the trigger matches the
 raw body) or a non-author review; `/revoke-spec` withdraws. The gate's details
 give the command to copy and why an approval no longer counts; it posts no
-comments. `spec-owner-approval` mirrors the spec half.
+comments. `spec-owner-approval` records the spec decision the other writers read.
 
 The gate never re-decides a merged or closed head. A run that starts after the
 merge publishes nothing, and neither does a run yielding to a newer one.
@@ -160,13 +160,12 @@ write-access author who is not an owner still needs an engineering owner's
 approval or the review app's exact-head approval. (Repo admins can still
 bypass.)
 
-### The mirror
+### The spec decision status
 
-`spec-owner-approval` now only mirrors the spec half of `review-required`.
-First re-flag every open PR (`gh workflow run review-signal.yml` with a blank
-`pr`) so each `review-required` carries its spec half; then remove the mirror
-from the required status checks on `main`. To re-publish a head's statuses, run
-`gh workflow run review-signal.yml -f pr=<number>`.
+`spec-owner-approval` is the spec-owner job's decision: the other writers of
+`review-required` read the spec half from it. It is not a required check;
+`review-required` blocks on a missing spec approval. To re-publish a head's
+statuses, run `gh workflow run review-signal.yml -f pr=<number>`.
 
 ## Why a commit status (not a check run)
 
