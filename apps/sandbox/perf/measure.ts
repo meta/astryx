@@ -32,7 +32,7 @@ export interface SceneSample {
    * 16 ms, the shortest duration the browser reports.
    */
   interactionMs: number;
-  /** JS heap after unmount minus before mount, KB, both after collection. */
+  /** JS heap after unmount minus before mount, KB, both after collection, on a warm cycle. */
   heapDeltaKb: number;
   /** Event listeners after unmount minus before mount. */
   listenerDelta: number;
@@ -76,59 +76,56 @@ async function collectedCounts(
   return {heapBytes: heap.value, listeners: counters.jsEventListeners};
 }
 
-/** Waits until no animation in the document is still running (at most 3 s). */
-export async function animationsSettled(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      document
-        .getAnimations()
-        .every(animation => animation.playState !== 'running'),
-    undefined,
-    {timeout: 3_000},
-  );
+async function mount(page: Page): Promise<void> {
+  await page.getByRole('button', {name: 'Mount scene', exact: true}).click();
+  await page
+    .locator('html[data-perf-scene="ready"]')
+    .waitFor({state: 'attached'});
+  await frames(page, 2);
+}
+
+async function unmount(page: Page): Promise<void> {
+  await page.getByRole('button', {name: 'Unmount scene', exact: true}).click();
+  await page.locator('html[data-perf-scene]').waitFor({state: 'detached'});
   await frames(page, 2);
 }
 
 /**
- * Mounts the scene the page shows, plays `interact`, unmounts it, and returns
- * the sample. The page must be freshly loaded on `?scene=<id>`.
+ * Plays one unmeasured mount, `interact` and unmount, then measures a second
+ * one in the same page and returns that sample. The first cycle pays for
+ * loading and compiling the scene's code and for caches that live past an
+ * unmount, so the sample is a warm mount, and its heap and listener deltas
+ * are what one more cycle leaves behind. The page must be freshly loaded on
+ * `?scene=<id>`.
  */
 export async function measureScene(
   page: Page,
   interact: (page: Page) => Promise<void>,
 ): Promise<SceneSample> {
+  await mount(page);
+  await interact(page);
+  await unmount(page);
+
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   try {
     const before = await collectedCounts(cdp);
 
-    const mount = await traceRendering(page, async () => {
-      await page
-        .getByRole('button', {name: 'Mount scene', exact: true})
-        .click();
-      await page.locator('html[data-perf-scene="ready"]').waitFor({
-        state: 'attached',
-      });
-      await frames(page, 2);
-    });
-    // The mount click is not part of the scene's interaction.
+    const mounted = await traceRendering(page, () => mount(page));
+    // The warm-up's and the mount click's entries are not the interaction's.
     await takeInteractions(page);
 
     const interaction = await traceRendering(page, () => interact(page));
     const durations = await takeInteractions(page);
 
-    await page
-      .getByRole('button', {name: 'Unmount scene', exact: true})
-      .click();
-    await page.locator('html[data-perf-scene]').waitFor({state: 'detached'});
-    await frames(page, 2);
+    await unmount(page);
     const after = await collectedCounts(cdp);
 
     return {
       mountLongTaskMs: round(
-        mount.longTasks.reduce((sum, task) => sum + task.durationMs, 0),
+        mounted.longTasks.reduce((sum, task) => sum + task.durationMs, 0),
       ),
-      mountLayouts: mount.layout,
+      mountLayouts: mounted.layout,
       interactionLayouts: interaction.layout,
       interactionMs: Math.max(0, ...durations),
       heapDeltaKb: round((after.heapBytes - before.heapBytes) / 1024),
