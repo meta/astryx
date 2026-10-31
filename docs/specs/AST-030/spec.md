@@ -320,9 +320,10 @@ they are separately named.
   code never runs with the repository's secrets.
 - **FR20 — An agent lane's push runs the fast checks; the heavy suites run when
   it is ready and before merge.** A push to a ready pull request authored by the
-  shared agent login, into `main`, in its run's first attempt, runs lint and
-  typecheck only, unless its trusted classification is spec-only. Its heavy jobs
-  skip, and the required contexts `test`, `build` and `docsite-test` (FR7)
+  shared agent login, into `main`, in its run's first attempt, runs only
+  typecheck in the CI workflow (lint keeps its own workflow), unless its trusted
+  classification is spec-only; the path-filtered workflows (FR14) are
+  unaffected. Its heavy jobs skip, and the required contexts `test`, `build` and `docsite-test` (FR7)
   report failure with "Heavy CI deferred: runs when marked ready and before
   merge", never success, so nothing merges on that run; the PR report says the
   same. Marking the pull request ready, opening or reopening it, and any later

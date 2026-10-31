@@ -26,6 +26,7 @@ import {
   HEAVY_DEFERRED,
   HEAVY_DEFERRED_MESSAGE,
   HEAVY_RUNS,
+  SHARED_AGENT_LOGINS,
   ungated,
 } from './ci-pr-gate.mjs';
 
@@ -45,6 +46,7 @@ const HEAVY = [
   'test-ui',
   'test-node',
   'native-swift-runner',
+  'test-native-swift',
   'run-labels',
   'size-base',
   'test-build',
@@ -107,6 +109,7 @@ function evaluate(condition, {github, needs = {}, jobNeeds = []}) {
       'failure',
       'startsWith',
       'contains',
+      'fromJSON',
       `return ${hasStatus ? '' : 'success() && '}(${expression});`,
     )(
       github,
@@ -118,6 +121,7 @@ function evaluate(condition, {github, needs = {}, jobNeeds = []}) {
       () => !succeeded,
       (value, prefix) => String(value ?? '').startsWith(prefix),
       (list, item) => list.includes(item),
+      JSON.parse,
     ),
   );
 }
@@ -184,6 +188,22 @@ describe('which pushes defer the heavy suites (spec:AST-030 FR20)', () => {
   it('never defers a release-branch pull request', () => {
     const github = pushEvent({base: 'release/v1.2.3'});
     expect(heavyCi(github).result).toBe('skipped');
+  });
+
+  it('names the shared agent logins in one list, the heavy-suite caps included', () => {
+    expect(HEAVY_CANDIDATE).toContain(
+      `fromJSON('${JSON.stringify(SHARED_AGENT_LOGINS)}')`,
+    );
+    const caps = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../actions/heavy-caps/action.yml'),
+      'utf8',
+    );
+    const listed = /const shared = (\[[^\]]*\])\.includes\(login\)/.exec(
+      caps,
+    )[1];
+    expect(JSON.parse(listed.replaceAll("'", '"'))).toEqual(
+      SHARED_AGENT_LOGINS,
+    );
   });
 
   it('runs everything for a spec-only change', () => {

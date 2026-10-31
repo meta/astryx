@@ -366,7 +366,7 @@ jobs:
   # (any later attempt runs everything). A spec-only change is never deferred.
   # Every other push skips this job, and nothing waits for it.
   heavy-ci:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.run_attempt == '1' && github.event.pull_request.user.login == 'cixzhang' && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.run_attempt == '1' && contains(fromJSON('["cixzhang"]'), github.event.pull_request.user.login) && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -786,8 +786,8 @@ jobs:
           paths: '^packages/native/.*(\.swift|/Package\.swift)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
 
   test-native-swift:
-    needs: [native-swift-runner]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [heavy-ci, native-swift-runner]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
     timeout-minutes: 30
     permissions:

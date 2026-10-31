@@ -57,9 +57,16 @@ export function ungated(condition) {
  * `main`. A release merge-back is never deferred. The `heavy-ci` job runs only
  * then, and defers unless the change is spec-only.
  */
+/**
+ * The shared agent logins. The heavy-suite caps
+ * (.github/actions/heavy-caps) list the same logins, and a test holds the two
+ * lists equal.
+ */
+export const SHARED_AGENT_LOGINS = ['cixzhang'];
+
 export const HEAVY_CANDIDATE =
   "(github.event_name == 'pull_request' && github.event.action == 'synchronize' && " +
-  "github.run_attempt == '1' && github.event.pull_request.user.login == 'cixzhang' && " +
+  `github.run_attempt == '1' && contains(fromJSON('${JSON.stringify(SHARED_AGENT_LOGINS)}'), github.event.pull_request.user.login) && ` +
   "github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))";
 
 /** `heavy-ci` decided to defer this push's heavy suites. */

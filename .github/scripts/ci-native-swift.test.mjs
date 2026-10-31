@@ -59,7 +59,7 @@ describe('native Swift routing', () => {
     expect(runner.steps.find(s => s.id === 'scope').uses).toBe(
       './.test-scope/.github/actions/test-scope',
     );
-    expect(swift.needs).toEqual(['native-swift-runner']);
+    expect(swift.needs).toEqual(['heavy-ci', 'native-swift-runner']);
     expect(swift['runs-on']).toBe(
       `\${{ ${applies} && 'macos-15' || 'ubuntu-slim' }}`,
     );

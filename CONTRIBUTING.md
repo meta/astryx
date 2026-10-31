@@ -941,8 +941,9 @@ Storybook story for anything you added or altered.
   full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
   are not limited.
 - **Pull requests from the shared agent login run the heavy suites when ready
-  and before merge.** A push to a ready agent pull request runs lint and
-  typecheck; `test`, `build` and `docsite-test` fail with "Heavy CI deferred"
+  and before merge.** A push to a ready agent pull request runs lint and, in
+  the CI workflow, only typecheck (path-filtered workflows run as usual);
+  `test`, `build` and `docsite-test` fail with "Heavy CI deferred"
   until the pull request is marked ready or reopened, or its latest run is
   re-run with **Re-run all jobs**, which runs everything at that head.
 

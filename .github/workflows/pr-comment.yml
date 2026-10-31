@@ -419,7 +419,7 @@ jobs:
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
               fallbackMessage: require('node:fs').existsSync('heavy-ci-deferred/heavy-ci-deferred.json')
-                ? 'Heavy CI deferred: runs when marked ready and before merge. Lint and typecheck ran on this push.'
+                ? 'Heavy CI deferred: runs when marked ready and before merge. Lint, typecheck and any path-filtered checks ran on this push.'
                 : undefined,
             });
 
