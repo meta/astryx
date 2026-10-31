@@ -932,6 +932,12 @@ Storybook story for anything you added or altered.
   takes effect on the next push or a close and reopen, and removing it stops
   that suite from the next run. When the accessibility audit did not run, the
   pull-request comment names `ci:run-a11y`.
+- **Every pull request runs a touched-components check** (visual,
+  accessibility and RTL for only the components it changes) on one standard
+  runner. It skips a wide change, one that touches more than five components
+  or changes shared styles (themes, tokens, shared `.stylex.ts` files); add
+  the `ci:run-*` labels for those. It is advisory: no required check waits for
+  it.
 - **Pull requests from a branch in this repository run CI without the label**,
   since pushing a branch here needs write access. Maintainers who work from a
   fork either push their branches here or apply `ci:run` themselves.
