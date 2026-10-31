@@ -682,7 +682,7 @@ this flow passes the historical review benchmark and is enforced on pull request
   keeps the shared contract (INV2). Until the core component has its own
   record, its public source and documentation stand in as that contract. The public name normally matches the root; a parent/member
   exception requires an exact top-level or full inline consumer-doc entry in
-  that root. Public semantic module records are nested at least one directory
+  that root. A platform implementation's record instead sits in the folder where core keeps the component, which is `<PublicName>/` when core keeps it in its own folder, and core's folder otherwise (`spec:AST-093` FR1). Public semantic module records are nested at least one directory
   beneath the same root as `<PublicName>.spec.md`; the parent component's
   `modules` list and the module's `parent_component` field must agree. Hidden,
   fixture, test, generated, build-output, coverage, dependency, and

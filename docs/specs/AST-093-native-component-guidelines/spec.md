@@ -53,12 +53,15 @@ validating, and reviewing individual native components while
 ## Requirements
 
 - **FR1 — A native component's spec lives beside its implementation.** Each
-  native component has its own folder in its language's implementation, named
-  as the core component, and its spec is `<Name>.spec.md` in that folder, as
-  core does (`packages/core/src/<Name>/<Name>.spec.md`). Each language has one
+  native component's views and spec live in one folder of its language's
+  implementation: the folder where core keeps the component, which is
+  `<Name>/` when core keeps it in its own folder, and core's folder otherwise
+  (core's `Avatar/AvatarStatusDot`, `List/ListItem`). The spec is
+  `<Name>.spec.md` in that folder, as core does
+  (`packages/core/src/<Name>/<Name>.spec.md`). Each language has one
   implementation package; for Swift that is `packages/native/apple/`, and the
-  spec is `packages/native/apple/Sources/Astryx/<Name>/<Name>.spec.md`, beside
-  the component's views. `<Name>` is the core component's name. The spec is a
+  spec is `packages/native/apple/Sources/Astryx/<Name>/<Name>.spec.md` in the
+  common case, beside the component's views. `<Name>` is the core component's name. The spec is a
   knowledge record of kind `component` with id `component:<language>/<Name>`
   that names its core component in `platform_of`, built from
   `docs/templates/knowledge/component-spec.md`
@@ -170,7 +173,7 @@ validating, and reviewing individual native components while
 
 | Contract | Verification                                                                                                                 | Representative states                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                           |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Review of the spec's path beside the component, plus `pnpm check:knowledge` on its record frontmatter, id, and `platform_of` | a spec per language; a spec for a component with no core contract                                                                                            | A component spec outside its component's folder, without valid record frontmatter, under another id, naming no core component, or renaming a core prop passes                                                                             |
+| FR1      | Review of the spec's path beside the component, plus `pnpm check:knowledge` on its record frontmatter, id, and `platform_of` | a spec per language; a spec for a component with no core contract; a member core keeps in another component's folder                                         | A component spec outside the folder where core keeps its component, without valid record frontmatter, under another id, naming no core component, or renaming a core prop passes                                                          |
 | FR2      | The spec's account of the platform control it builds on, or why none fits, and the state captures                            | a component built on a platform control; a component with no platform control                                                                                | A component draws its own control where a platform control fits, with no reason in its spec                                                                                                                                               |
 | FR3      | The spec's account of the platform guidelines it follows, and the captures                                                   | hit target size; largest Dynamic Type; Reduce Motion; VoiceOver focus                                                                                        | A capture shows a hit target below the platform minimum or text that does not scale                                                                                                                                                       |
 | FR4      | Theme test with two themes, plus source review for literals                                                                  | default theme; a second theme with different color, type, and shape                                                                                          | A brand value stays the same across both themes, or a platform-only visual prop is added                                                                                                                                                  |
