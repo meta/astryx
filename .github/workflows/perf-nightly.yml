@@ -15,8 +15,9 @@
 #   samples after a warm-up, the median kept (playwright.perf.config.ts).
 #   report: compares each metric with the 7-day median of main's recorded
 #   runs; a nightly or dispatched run on main appends itself to the history
-#   and, when any metric is more than 10% worse (and past the metric's floor),
-#   opens the "Nightly perf regression" issue or comments on the open one,
+#   and, when a metric is more than 10% worse (and past the metric's floor)
+#   on it and on the recorded run before it, opens the "Nightly perf
+#   regression" issue or comments on the open one,
 #   with the commits since the last good run (.github/scripts/perf-trend.mjs,
 #   .github/scripts/perf-regression-issue.mjs).
 # - The history is the `perf-history` artifact, carried from each recorded run

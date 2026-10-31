@@ -25,7 +25,7 @@ function formatValue(value) {
 export async function describeReport({github, context, report}) {
   const {owner, repo} = context.repo;
   const lines = [
-    `Nightly perf run on ${report.sha.slice(0, 7)} found ${report.regressions.length} metric(s) more than 10% worse than their 7-day median: [run](${report.runUrl}).`,
+    `Nightly perf run on ${report.sha.slice(0, 7)} found ${report.regressions.length} metric(s) more than 10% worse than their 7-day median, as on the recorded run before it: [run](${report.runUrl}).`,
     '',
     '| Scene | Metric | This run | 7-day median | Change |',
     '| --- | --- | ---: | ---: | ---: |',

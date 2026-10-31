@@ -25,6 +25,12 @@
  * 2 ms) is not a regression. A metric with fewer than three runs in the window
  * has no baseline yet. Every metric is better when lower.
  *
+ * A standard runner's speed swings by about a fifth from one machine to the
+ * next, more than the threshold, so one run over it is only pending: the
+ * regression is confirmed, and reported, when the metric was also over it on
+ * the recorded run before (the previous night, or a re-run dispatched right
+ * after). A run with any metric over the threshold is not a good run.
+ *
  * SYNC: METRICS names the fields of SceneSample in apps/sandbox/perf/measure.ts.
  */
 
@@ -122,7 +128,29 @@ export function findRegressions(scenes, baseline) {
   return regressions;
 }
 
-/** The newest recorded run with no regression, or null. */
+/** `scene/metric`, the key a run records for each metric over the threshold. */
+export function metricKey({scene, metric}) {
+  return `${scene}/${metric}`;
+}
+
+/**
+ * Splits the metrics over the threshold into those also over it on the
+ * previous recorded run (confirmed) and those over it for the first time
+ * (pending).
+ */
+export function confirmRegressions(overThreshold, history) {
+  const previous = new Set(history.runs.at(-1)?.overThreshold ?? []);
+  const confirmed = [];
+  const pending = [];
+  for (const regression of overThreshold) {
+    (previous.has(metricKey(regression)) ? confirmed : pending).push(
+      regression,
+    );
+  }
+  return {confirmed, pending};
+}
+
+/** The newest recorded run with no metric over the threshold, or null. */
 export function lastGoodRun(history) {
   for (let i = history.runs.length - 1; i >= 0; i--) {
     if (history.runs[i].good) return history.runs[i];
@@ -168,14 +196,27 @@ function format(metric, value) {
 }
 
 /** The job summary: every scene's medians beside its baseline. */
-export function renderSummary({scenes, baseline, regressions, range}) {
-  const flagged = new Set(regressions.map(r => `${r.scene}/${r.metric}`));
+export function renderSummary({
+  scenes,
+  baseline,
+  regressions,
+  pending = [],
+  range,
+}) {
+  const confirmed = new Set(regressions.map(metricKey));
+  const first = new Set(pending.map(metricKey));
   const lines = [
     '## Nightly perf scenes',
     '',
     regressions.length === 0
-      ? 'No metric is more than 10% worse than its 7-day median.'
-      : `**${regressions.length} metric(s) regressed** against the 7-day median.`,
+      ? 'No metric is more than 10% worse than its 7-day median on two recorded runs in a row.'
+      : `**${regressions.length} metric(s) regressed** against the 7-day median on two recorded runs in a row.`,
+    ...(pending.length === 0
+      ? []
+      : [
+          '',
+          `${pending.length} metric(s) are over the threshold for the first time (⏳); the next recorded run confirms or clears them.`,
+        ]),
     '',
     `| Scene | ${Object.values(METRICS)
       .map(m => m.label)
@@ -187,7 +228,8 @@ export function renderSummary({scenes, baseline, regressions, range}) {
       const value = metrics[metric];
       if (typeof value !== 'number') return '—';
       const base = baseline[scene]?.[metric];
-      const mark = flagged.has(`${scene}/${metric}`) ? ' ⚠️' : '';
+      const key = metricKey({scene, metric});
+      const mark = confirmed.has(key) ? ' ⚠️' : first.has(key) ? ' ⏳' : '';
       return base && base.runs >= MIN_BASELINE_RUNS
         ? `${format(metric, value)} (7d ${format(metric, base.median)})${mark}`
         : format(metric, value);
@@ -206,7 +248,11 @@ export function renderSummary({scenes, baseline, regressions, range}) {
 /** Compares a run with the history; returns the report and the next history. */
 export function evaluateRun({scenes, history, run}) {
   const baseline = baselineMedians(history, run.date);
-  const regressions = findRegressions(scenes, baseline);
+  const overThreshold = findRegressions(scenes, baseline);
+  const {confirmed: regressions, pending} = confirmRegressions(
+    overThreshold,
+    history,
+  );
   const good = lastGoodRun(history);
   const range =
     regressions.length > 0 && good != null && good.sha !== run.sha
@@ -218,7 +264,8 @@ export function evaluateRun({scenes, history, run}) {
         sha: run.sha,
         runId: run.runId,
         date: run.date,
-        good: regressions.length === 0,
+        good: overThreshold.length === 0,
+        overThreshold: overThreshold.map(metricKey),
         scenes,
       })
     : history;
@@ -232,6 +279,7 @@ export function evaluateRun({scenes, history, run}) {
         : null,
       range,
       regressions,
+      pending,
     },
     baseline,
     nextHistory,
@@ -252,6 +300,7 @@ export function runReport({resultsDir, historyFile, outDir, run}) {
     scenes,
     baseline,
     regressions: report.regressions,
+    pending: report.pending,
     range: report.range,
   });
   fs.mkdirSync(outDir, {recursive: true});

@@ -199,24 +199,73 @@ describe('history', () => {
 });
 
 describe('evaluateRun', () => {
+  // The newest recorded run was already over the threshold on Table's mount.
   const history = {
     version: 1,
-    runs: [run(4), run(3), run(2), run(1, undefined, {good: false})],
+    runs: [
+      run(4),
+      run(3),
+      run(2),
+      run(1, undefined, {
+        good: false,
+        overThreshold: ['table/mountLongTaskMs'],
+      }),
+    ],
+  };
+  const firstTime = {
+    version: 1,
+    runs: [run(4), run(3), run(2), run(1)],
   };
 
-  it('flags a regression with the commits since the last good run, and records it', () => {
+  it('confirms a metric over the threshold on two recorded runs in a row, with the commits since the last good run', () => {
     const {report, nextHistory} = evaluateRun({
       scenes: {table: {...SCENE, mountLongTaskMs: 200}},
       history,
       run: NIGHTLY,
     });
     expect(report.regressions.map(r => r.metric)).toEqual(['mountLongTaskMs']);
+    expect(report.pending).toEqual([]);
     expect(report.range).toEqual({from: 'sha-2', to: 'sha-now'});
     expect(report.recorded).toBe(true);
     expect(nextHistory.runs.at(-1)).toMatchObject({
       sha: 'sha-now',
       good: false,
+      overThreshold: ['table/mountLongTaskMs'],
     });
+  });
+
+  it('holds a metric over the threshold for the first time as pending, and records it', () => {
+    const {report, nextHistory} = evaluateRun({
+      scenes: {table: {...SCENE, mountLongTaskMs: 200}},
+      history: firstTime,
+      run: NIGHTLY,
+    });
+    expect(report.regressions).toEqual([]);
+    expect(report.pending.map(r => r.metric)).toEqual(['mountLongTaskMs']);
+    expect(report.range).toBeNull();
+    expect(nextHistory.runs.at(-1)).toMatchObject({
+      good: false,
+      overThreshold: ['table/mountLongTaskMs'],
+    });
+  });
+
+  it('does not confirm a different metric than the previous run had over', () => {
+    const {report} = evaluateRun({
+      scenes: {table: {...SCENE, mountLayouts: 20}},
+      history,
+      run: NIGHTLY,
+    });
+    expect(report.regressions).toEqual([]);
+    expect(report.pending.map(r => r.metric)).toEqual(['mountLayouts']);
+  });
+
+  it('reads a run recorded before confirmation as having nothing over', () => {
+    const {report} = evaluateRun({
+      scenes: {table: {...SCENE, mountLongTaskMs: 200}},
+      history: firstTime,
+      run: NIGHTLY,
+    });
+    expect(report.regressions).toEqual([]);
   });
 
   it('records a clean run as good, with no range', () => {
@@ -226,8 +275,12 @@ describe('evaluateRun', () => {
       run: NIGHTLY,
     });
     expect(report.regressions).toEqual([]);
+    expect(report.pending).toEqual([]);
     expect(report.range).toBeNull();
-    expect(nextHistory.runs.at(-1).good).toBe(true);
+    expect(nextHistory.runs.at(-1)).toMatchObject({
+      good: true,
+      overThreshold: [],
+    });
   });
 
   it('compares a pull request run without recording it', () => {
@@ -277,6 +330,20 @@ describe('runReport', () => {
 });
 
 describe('renderSummary', () => {
+  it('marks a metric over the threshold for the first time as pending', () => {
+    const summary = renderSummary({
+      scenes: {table: {...SCENE, mountLayouts: 20}},
+      baseline: {table: {mountLayouts: {median: 10, runs: 5}}},
+      regressions: [],
+      pending: [{scene: 'table', metric: 'mountLayouts'}],
+      range: null,
+    });
+    expect(summary).toContain('20 (7d 10) ⏳');
+    expect(summary).toContain(
+      '1 metric(s) are over the threshold for the first time',
+    );
+  });
+
   it('marks a regressed metric and shows its 7-day median', () => {
     const summary = renderSummary({
       scenes: {table: {...SCENE, mountLayouts: 20}},
