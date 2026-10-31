@@ -165,6 +165,34 @@ describe('RadioList', () => {
     expect(screen.getByText(/Required/)).toBeInTheDocument();
   });
 
+  it('keeps required radios valid until the group shows an error', () => {
+    const {rerender} = render(
+      <RadioList label="Preference" value="" onChange={() => {}} isRequired>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    // Native required alone makes Chromium report every radio invalid.
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toBeRequired();
+      expect(radio).toHaveAttribute('aria-invalid', 'false');
+    }
+    rerender(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        isRequired
+        status={{type: 'error', message: 'Pick one'}}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toHaveAttribute('aria-invalid', 'true');
+    }
+  });
+
   it('shows Optional indicator when isOptional is true', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}} isOptional>
@@ -470,6 +498,62 @@ describe('RadioList', () => {
       const pro = screen.getByRole('radio', {name: 'Pro', hidden: true});
       fireEvent.click(pro);
       expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not run a caller onClick while focusable-disabled', () => {
+      const onClick = vi.fn();
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" onClick={onClick} />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+        </RadioList>,
+      );
+      fireEvent.click(screen.getByRole('radio', {name: 'Pro', hidden: true}));
+      fireEvent.click(screen.getByRole('radio', {name: 'Free', hidden: true}));
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('does not run a caller onClick from the keyboard while focusable-disabled', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" onClick={onClick} />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+        </RadioList>,
+      );
+      await user.tab();
+      expect(
+        screen.getByRole('radio', {name: 'Free', hidden: true}),
+      ).toHaveFocus();
+      // Space activates the focused radio.
+      await user.keyboard(' ');
+      expect(onClick).not.toHaveBeenCalled();
+      // An arrow key moves onto the next radio, and the browser clicks it.
+      await user.keyboard('{ArrowDown}');
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('still runs a caller onClick on an enabled radio', () => {
+      const onClick = vi.fn();
+      render(
+        <RadioList label="Plan" value="free" onChange={() => {}}>
+          <RadioListItem label="Free" value="free" />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+        </RadioList>,
+      );
+      fireEvent.click(screen.getByRole('radio', {name: 'Pro'}));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
   describe('form participation', () => {

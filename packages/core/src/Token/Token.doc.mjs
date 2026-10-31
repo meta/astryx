@@ -88,7 +88,7 @@ export const docs = {
     },
   ],  theming: {
     targets: [
-      {className: 'astryx-token', visualProps: ['color', 'size']},
+      {className: 'astryx-token', visualProps: ['color', 'size'], states: ['disabled']},
     ],
   },
   usage: {
@@ -193,7 +193,7 @@ export const docsZh = {
   ],
   theming: {
     targets: [
-      {className: 'astryx-token', visualProps: ['color', 'size']},
+      {className: 'astryx-token', visualProps: ['color', 'size'], states: ['disabled']},
     ],
   },
   usage: {

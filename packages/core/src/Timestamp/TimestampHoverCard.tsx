@@ -26,11 +26,11 @@
 import type {ReactNode} from 'react';
 import {useCallback} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {HoverCard} from '../HoverCard';
-import {IconButton} from '../IconButton';
-import {Icon} from '../Icon';
+import {HoverCard} from '../HoverCard/HoverCard';
+import {IconButton} from '../IconButton/IconButton';
+import {Icon} from '../Icon/Icon';
 import {useClipboard} from '../hooks/useClipboard';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {
   colorVars,

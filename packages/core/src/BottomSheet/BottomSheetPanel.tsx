@@ -48,7 +48,8 @@ import {
   sizeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';

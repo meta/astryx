@@ -5,7 +5,7 @@
 /**
  * @file Slider.tsx
  * @input Uses React, useId, useRef, useCallback, useEffect, Field, Tooltip, useTooltip, VisuallyHidden
- * @output Exports Slider and its props; unfilled marks share the track token; modifier-only key presses do not restore the thumb focus ring; a drag belongs to the pointer that started it
+ * @output Exports Slider and its props; unfilled marks share the track token; modifier-only key presses do not restore the thumb focus ring; a drag belongs to the pointer that started it; two coincident range thumbs separate toward the press or the first movement
  * @position Core implementation; consumed by index.ts, tested by Slider.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -58,6 +58,8 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useTranslator} from '../i18n';
 // =============================================================================
 // Types
 // =============================================================================
@@ -512,6 +514,7 @@ export function Slider({ref, ...props}: SliderProps) {
     'aria-describedby': ariaDescribedByProp,
     ...restWithRange
   } = props;
+  const t = useTranslator();
   const {minStepsBetweenThumbs: _minSteps, ...restProps} =
     restWithRange as typeof restWithRange & {minStepsBetweenThumbs?: number};
   const {rest, container} = useFieldInputStyling('Slider', restProps, {
@@ -591,7 +594,9 @@ export function Slider({ref, ...props}: SliderProps) {
   // role="slider" in WAI-ARIA 1.2, so the thumb instead points its
   // aria-describedby at a visually hidden "Required" span — mirroring the
   // Field label's visible indicator (where isOptional takes precedence).
-  const conveysRequired = isRequired && !isOptional;
+  // A surrounding FormLayout's defaultOptionality="required" makes an unmarked
+  // field required too (FormLayout FR5).
+  const conveysRequired = useResolvedRequired({isRequired, isOptional});
 
   // Build aria-describedby
   const describedByParts: string[] = [];
@@ -667,8 +672,24 @@ export function Slider({ref, ...props}: SliderProps) {
     [isRange, values],
   );
 
+  // The pointer's value at a press on two coincident thumbs, while no
+  // movement has said which way the drag goes; the first value off it picks
+  // the thumb that can travel that way (see handlePointerMove).
+  const coincidentDragRef = useRef<number | null>(null);
+  // Whether the drag in progress began on two coincident thumbs: such a drag
+  // can always follow the pointer, so when the dragged thumb is held against
+  // the other one and the pointer passes it, the other thumb takes the drag.
+  const coincidentOriginRef = useRef(false);
+
   const updateValue = useCallback(
-    (thumbIndex: number, newVal: number, snap = true) => {
+    (
+      thumbIndex: number,
+      newVal: number,
+      snap = true,
+      // The other thumb's values to start from, when one event moves both
+      // (a drag handed from one coincident thumb to the other).
+      from: ReadonlyArray<number> = values,
+    ) => {
       if (isDisabled) {
         return;
       }
@@ -682,7 +703,7 @@ export function Slider({ref, ...props}: SliderProps) {
       );
 
       if (isRange) {
-        const currentValues = [...values] as [number, number];
+        const currentValues = [...from] as [number, number];
         currentValues[thumbIndex] = clamped;
 
         // Enforce minStepsBetweenThumbs
@@ -760,6 +781,8 @@ export function Slider({ref, ...props}: SliderProps) {
         detachLostCaptureRef.current = null;
         draggingThumbRef.current = null;
         dragPointerRef.current = null;
+        coincidentDragRef.current = null;
+        coincidentOriginRef.current = false;
         setDraggingThumb(null);
         fireChangeEnd();
       }
@@ -799,13 +822,33 @@ export function Slider({ref, ...props}: SliderProps) {
         pressedThumb == null || thumbs == null
           ? -1
           : Array.from(thumbs).indexOf(pressedThumb);
-      // A direct thumb press owns that thumb even when range values coincide.
-      // Track and mark presses still choose the nearest value.
-      const thumbIndex =
+      // A direct thumb press owns that thumb; track and mark presses choose
+      // the nearest value. Two thumbs on one value are the exception: only
+      // one of them can travel toward where the pointer goes. A track press
+      // beside them picks the thumb on its side. A press on the thumbs
+      // themselves (or on their shared value) moves nothing: the pressed
+      // thumb holds the press until the pointer moves, and the direction of
+      // that first movement from the press picks the thumb.
+      const isCoincident = isRange && values[0] === values[1];
+      let thumbIndex =
         pressedThumbIndex >= 0 ? pressedThumbIndex : getClosestThumb(newVal);
+      const parks =
+        isCoincident && (pressedThumbIndex >= 0 || newVal === values[0]);
+      // The first movement is measured from the pointer itself, not from a
+      // mark it pressed (a wide label sits away from its mark's value).
+      coincidentDragRef.current = parks
+        ? getValueFromPosition(e.clientX, e.clientY)
+        : null;
+      // Only a drag that began on the shared thumbs, the press that waited for
+      // the first movement, hands itself to the other thumb (FR6); a track
+      // press beside them already picked its thumb.
+      coincidentOriginRef.current = parks;
+      if (isCoincident && !parks) {
+        thumbIndex = newVal > values[0] ? 1 : 0;
+      }
       draggingThumbRef.current = thumbIndex;
       setDraggingThumb(thumbIndex);
-      updateValue(thumbIndex, newVal);
+      updateValue(thumbIndex, parks ? values[thumbIndex] : newVal);
 
       // Focus the thumb that owns this drag.
       thumbs?.[thumbIndex]?.focus();
@@ -834,7 +877,15 @@ export function Slider({ref, ...props}: SliderProps) {
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       }
     },
-    [isDisabled, getValueFromPosition, getClosestThumb, updateValue, endDrag],
+    [
+      isDisabled,
+      isRange,
+      values,
+      getValueFromPosition,
+      getClosestThumb,
+      updateValue,
+      endDrag,
+    ],
   );
 
   const handlePointerMove = useCallback(
@@ -847,6 +898,48 @@ export function Slider({ref, ...props}: SliderProps) {
         return;
       }
       const newVal = getValueFromPosition(e.clientX, e.clientY);
+      // Hands the drag to a thumb, with its focus and pressed paint.
+      const handTo = (thumbIndex: number) => {
+        if (thumbIndex === draggingThumbRef.current) {
+          return;
+        }
+        draggingThumbRef.current = thumbIndex;
+        setDraggingThumb(thumbIndex);
+        const thumbs =
+          trackRef.current?.querySelectorAll<HTMLElement>('[role="slider"]');
+        thumbs?.[thumbIndex]?.focus();
+        setKeyboardFocusThumb(null);
+      };
+      const pressValue = coincidentDragRef.current;
+      if (pressValue !== null) {
+        if (newVal === pressValue) {
+          return;
+        }
+        // The first movement from a press on coincident thumbs hands the
+        // drag to the thumb that can travel that way.
+        coincidentDragRef.current = null;
+        handTo(newVal > pressValue ? 1 : 0);
+      } else if (coincidentOriginRef.current) {
+        // A drag that began on coincident thumbs follows the pointer either
+        // way: once the pointer passes the other thumb, the dragged one stops
+        // against it and the other takes the drag (a first step that drifted
+        // the wrong way never sticks the drag).
+        const current = valuesRef.current;
+        const dragging = draggingThumbRef.current;
+        const other = dragging === 0 ? 1 : 0;
+        if (
+          (dragging === 0 && newVal > current[1]) ||
+          (dragging === 1 && newVal < current[0])
+        ) {
+          // The dragged thumb ends against the other one, as if it had
+          // followed the pointer there, and the other follows the pointer on.
+          const from = [...current];
+          from[dragging] = current[other];
+          handTo(other);
+          updateValue(other, newVal, true, from);
+          return;
+        }
+      }
       updateValue(draggingThumbRef.current, newVal);
     },
     [isDisabled, getValueFromPosition, updateValue],
@@ -980,8 +1073,8 @@ export function Slider({ref, ...props}: SliderProps) {
     // name from the visible label element via aria-labelledby.
     const thumbLabel = isRange
       ? thumbIndex === 0
-        ? 'Minimum value'
-        : 'Maximum value'
+        ? t('@astryx.slider.minimumThumb')
+        : t('@astryx.slider.maximumThumb')
       : undefined;
 
     // ARIA bounds must agree with the movement clamping in updateValue: in
@@ -1065,7 +1158,11 @@ export function Slider({ref, ...props}: SliderProps) {
           placement={tooltipPlacement}
           delay={0}
           focusTrigger="always"
-          isOpen={draggingThumb === thumbIndex ? true : undefined}>
+          // A drag keeps its own thumb's value showing and closes the other
+          // thumb's, which a drag handed over from it may have forced open.
+          isOpen={
+            draggingThumb === null ? undefined : draggingThumb === thumbIndex
+          }>
           {thumbElement}
         </Tooltip>
       );

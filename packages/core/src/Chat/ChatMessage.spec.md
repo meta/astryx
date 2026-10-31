@@ -1,18 +1,19 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:ChatMessage
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility, testing]
 verified_by:
   [
     packages/core/src/Chat/ChatMessage.test.tsx,
+    packages/core/src/Chat/ChatMessageBubble.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     apps/storybook/stories/ChatMessage.stories.tsx,
   ]
@@ -35,26 +36,17 @@ system_specs: [spec:AST-020, spec:AST-029]
 
 # ChatMessage component contract
 
-This record is an **observational backfill** written during the 2026-09-24
-component audit under `spec:AST-029/FR3–FR4`. Rows marked `verify` describe the
-audit base's released contract. Rows marked `proposed` describe the empty-slot
-behavior (FR3, FR6, ORD2, AR1–AR2, DEC-1) and await owner approval: `null`,
-booleans, and empty strings create no slot; any other slot content that renders
-nothing collapses its wrapper through CSS; and a name that renders no text falls
-back to the translated sender label. Slot content is never inspected to decide
-any of this. Unresolved questions remain open rather than becoming policy.
-
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `sender`, `children`, `avatar`, `name`, `metadata`, `density`, plus `BaseProps<HTMLElement>` and `ref` on the message article.                                                   |
-| Behavior                | Sender controls logical alignment and system-message suppression; density resolves explicit prop → message-list context → `balanced`; descendants receive the resolved context.  |
-| End-user impact         | People reading a conversation can distinguish user, assistant, and system messages while names and translated fallback labels preserve each article's sender identity.           |
-| Builder impact          | No new caller choice. Slot content that renders nothing leaves no empty space and no unnamed article.                                                                            |
-| Compatibility/readiness | Draft. No public API, default, or theming target changes; the empty-slot rows are a patch fix. Authority remains `draft` until exact-head owner approval.                        |
-| Review checks           | Reject a row that states unshipped behavior, changes sender or density meaning, treats caller content as component-owned, or turns the unresolved theming question into new API. |
-| Governing rules         | `architecture:public-component-api/INV1, INV3, INV5–INV6, INV8–INV9`; `architecture:component-theming-surface/INV3–INV6`; `spec:AST-029/FR3–FR6`.                                |
+| Area                    | Contract                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `sender`, `children`, `avatar`, `name`, `metadata`, `density`, plus `BaseProps<HTMLElement>` and `ref` on the message article.                                                  |
+| Behavior                | Sender controls logical alignment and system-message suppression; density resolves explicit prop → message-list context → `balanced`; descendants receive the resolved context. |
+| End-user impact         | People reading a conversation can distinguish user, assistant, and system messages while names and translated fallback labels preserve each article's sender identity.          |
+| Builder impact          | None.                                                                                                                                                                           |
+| Compatibility/readiness | Records shipped behavior; no public change. No implementation gap; one owner question stays open.                                                                               |
+| Review checks           | Reject a change that alters sender or density meaning, treats caller content as component-owned, or turns the unresolved theming question into new API.                         |
+| Governing rules         | `architecture:public-component-api/INV1, INV3, INV5–INV6, INV8–INV9`; `architecture:component-theming-surface/INV3–INV6`; `spec:AST-029/FR3–FR6`.                               |
 
 This table is a review projection; the body below is authoritative.
 
@@ -70,11 +62,8 @@ document.
 
 ## Compatibility and migration
 
-- Released default preserved: yes — the published `./Chat` subpath exports
-  `ChatMessage`, `ChatMessageProps`, `ChatMessageSender`, and `ChatDensity`.
-- Compatibility class: patch fix. Slot content that renders nothing creates no
-  visible slot, and a name that renders no text leaves the translated fallback
-  label; a name that renders text labels the article.
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: not applicable; the component owns no
   controllable value.
 - Migration decision: none.
@@ -122,18 +111,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                         | Basis                                                                  | Draft review state |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------ |
-| FR1 | `assistant` MUST align to inline start, `user` to inline end, and `system` to the centre; the root MUST reflect the sender on the `chat-message` target.                                                                                                                                                    | shipped implementation; consumer docs; focused tests                   | verify             |
-| FR2 | `system` MUST suppress the supplied avatar, name, and metadata while continuing to render `children`.                                                                                                                                                                                                       | shipped implementation; Chat family anatomy; focused tests             | verify             |
-| FR3 | A non-system message MUST render supplied avatar, name, children, and metadata in that visual order. `null`, boolean, and empty-string auxiliary values MUST NOT create wrappers; a wrapper whose content renders nothing MUST collapse (DEC-1).                                                            | owner direction; focused tests                                         | proposed           |
-| FR4 | Density MUST resolve explicit `density` → nearest `ChatMessageList` density → `balanced`, and the resolved value MUST reflect on the root target.                                                                                                                                                           | shipped implementation; consumer docs; focused tests; theming metadata | verify             |
-| FR5 | Descendants MUST receive the resolved `{sender, density}` value through `ChatMessageContext`.                                                                                                                                                                                                               | shipped implementation; descendant composition                         | verify             |
-| FR6 | The article MUST carry the translated sender fallback as `aria-label`, and a non-system `name` that is not a skipped scalar MUST also label it through `aria-labelledby`. A name that renders text names the article; one that renders none leaves the fallback (accessible name computation 1.2, step 2B). | owner direction; accessible name computation 1.2; focused tests        | proposed           |
-| FR7 | Accepted `ref`, DOM/data/ARIA props, `className`, `style`, and `xstyle` MUST reach and compose on the same article that carries the `chat-message` target.                                                                                                                                                  | `architecture:public-component-api/INV5–INV6, INV8`; focused tests     | settled            |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                   | Basis                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| FR1 | `assistant` MUST align to inline start, `user` to inline end, and `system` to the centre; the root MUST reflect the sender on the `chat-message` target.                                                                                                                                                    | shipped implementation; consumer docs; focused tests                   |
+| FR2 | `system` MUST suppress the supplied avatar, name, and metadata while continuing to render `children`.                                                                                                                                                                                                       | shipped implementation; Chat family anatomy; focused tests             |
+| FR3 | A non-system message MUST render supplied avatar, name, children, and metadata in that visual order. `null`, boolean, and empty-string auxiliary values MUST NOT create wrappers; a wrapper whose content renders nothing MUST collapse (DEC-1).                                                            | owner direction; focused tests                                         |
+| FR4 | Density MUST resolve explicit `density` → nearest `ChatMessageList` density → `balanced`, and the resolved value MUST reflect on the root target.                                                                                                                                                           | shipped implementation; consumer docs; focused tests; theming metadata |
+| FR5 | Descendants MUST receive the resolved `{sender, density}` value through `ChatMessageContext`.                                                                                                                                                                                                               | shipped implementation; descendant composition                         |
+| FR6 | The article MUST carry the translated sender fallback as `aria-label`, and a non-system `name` that is not a skipped scalar MUST also label it through `aria-labelledby`. A name that renders text names the article; one that renders none leaves the fallback (accessible name computation 1.2, step 2B). | owner direction; accessible name computation 1.2; focused tests        |
+| FR7 | Accepted `ref`, DOM/data/ARIA props, `className`, `style`, and `xstyle` MUST reach and compose on the same article that carries the `chat-message` target, except `aria-label` and `aria-labelledby`, which the component owns for naming (FR6, AR1).                                                       | `architecture:public-component-api/INV5–INV6, INV8`; focused tests     |
 
 ### Allowed variation
 
@@ -169,7 +155,8 @@ intentional decision.
 - **ORD2 — Accessible name.** A system `name` or a skipped scalar creates no
   name wrapper. Otherwise the article references the name wrapper's generated
   id; the rendered text there names the article, and empty text yields to the
-  translated fallback carried as `aria-label`.
+  translated fallback carried as `aria-label`. A caller `aria-label` or
+  `aria-labelledby` does not override this naming.
 
 ### Performance and resources
 
@@ -193,17 +180,17 @@ intentional decision.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                      | Representation authority | Hierarchy role | Component contract |
-| ---------------- | ------------------------------------------------------- | ------------------------ | -------------- | ------------------ |
-| Assistant        | Align the message column to logical start               | observed                 | content        | FR1                |
-| User             | Align the message column to logical end                 | observed                 | content        | FR1                |
-| System           | Centre the content column and suppress identity slots   | observed                 | supporting     | FR1–FR2            |
-| Name             | Use supporting type and secondary text colour tokens    | observed                 | supporting     | FR3                |
-| Density          | Increase root and child gaps across the three-step axis | observed                 | structure      | FR4                |
+| Anatomy or state | Design requirement                                                                                                               | Representation authority | Hierarchy role | Component contract |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | -------------- | ------------------ |
+| Assistant        | Align the message column to logical start                                                                                        | Current source           | content        | FR1                |
+| User             | Align the message column to logical end                                                                                          | Current source           | content        | FR1                |
+| System           | Centre the content column and suppress identity slots                                                                            | Current source           | supporting     | FR1–FR2            |
+| Name             | `none` — unsettled: the built-in name paints explicit supporting type and secondary colour on an untargeted descendant; see OQ1. | Current source           | supporting     | FR3                |
+| Density          | Increase root and child gaps across the three-step axis                                                                          | Current source           | structure      | FR4                |
 
-No component-local design decision is settled by this draft.
+No component-local design decision is recorded.
 
-### Theming reachability (observed)
+### Theming reachability
 
 | Anatomy part | Disposition                                                                                                                                                 |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -223,26 +210,38 @@ No component-local design decision is settled by this draft.
   and owns bubble presentation.
 - There is no current direct owner for ChatMessage's
   `compact | balanced | spacious` density vocabulary or ordering. FR4–FR5 record
-  the shipped axis and precedence observationally; routed global layout claims do
-  not settle that component-specific vocabulary.
-- `spec:AST-029` permits this observational draft and keeps the closed audit
-  inventory outside the component contract.
+  the shipped axis and precedence; routed global layout claims do not settle
+  that component-specific vocabulary.
+- `spec:AST-029` owns the audit evidence inventory this record's verification
+  map follows.
 
 ## Verification map
 
-| Contract     | Verification                                                    | Representative states                                                                      | Mutation or failure expectation                                                     | Audit section          |
-| ------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------- |
-| FR1–FR3      | `ChatMessage.test.tsx`; `ChatMessage.stories.tsx`               | all senders; skipped scalar, renders-nothing, numeric, content, and suppressed slot states | Removing the scalar skip or the CSS collapse leaves an empty slot or a gap          | `audit:ChatMessage/§4` |
-| FR4–FR5      | `ChatMessage.test.tsx`; `themingTargets.test.ts`                | standalone; inherited density; explicit override                                           | Changing precedence or reflection gives descendants and themes a different density  | `audit:ChatMessage/§2` |
-| FR6, AR1–AR2 | `ChatMessage.test.tsx`; Chromium accessibility tree             | visible, omitted, skipped-scalar, renders-nothing, and system names                        | Dropping the fallback `aria-label` or the name reference leaves an article unnamed  | `audit:ChatMessage/§1` |
-| FR7          | `ChatMessage.test.tsx`; public export and theming-target checks | ref; data prop; class; style                                                               | Moving passthrough or ref off the target article breaks the public root contract    | `audit:ChatMessage/§3` |
-| AR3          | Source review plus component-scoped accessibility audit         | rich and interactive descendants                                                           | The wrapper introduces an interactive role or takes ownership away from descendants | `audit:ChatMessage/§1` |
-| RTL          | `ChatMessage.stories.tsx`; component-scoped RTL audit           | all senders; narrow long content                                                           | Physical direction keeps user or assistant on the same side in both directions      | `audit:ChatMessage/§9` |
+| Contract     | Verification                                                                   | Representative states                                                                      | Mutation or failure expectation                                                    | Audit section          |
+| ------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------- |
+| FR1–FR3      | `ChatMessage.test.tsx`; `ChatMessage.stories.tsx`                              | all senders; skipped scalar, renders-nothing, numeric, content, and suppressed slot states | Removing the scalar skip or the CSS collapse leaves an empty slot or a gap         | `audit:ChatMessage/§4` |
+| FR4–FR5      | `ChatMessage.test.tsx`; `ChatMessageBubble.test.tsx`; `themingTargets.test.ts` | standalone; inherited density; explicit override                                           | Changing precedence or reflection gives descendants and themes a different density | `audit:ChatMessage/§2` |
+| FR6, AR1–AR2 | `ChatMessage.test.tsx`                                                         | visible, omitted, skipped-scalar, renders-nothing, and system names                        | Dropping the fallback `aria-label` or the name reference leaves an article unnamed | `audit:ChatMessage/§1` |
+| FR7          | `ChatMessage.test.tsx`; public export and theming-target checks                | ref; data prop; class; style                                                               | Moving passthrough or ref off the target article breaks the public root contract   | `audit:ChatMessage/§3` |
+| RTL          | `ChatMessage.stories.tsx`                                                      | all senders; narrow long content                                                           | Physical direction keeps user or assistant on the same side in both directions     | `audit:ChatMessage/§9` |
+
+Read from source, with no focused test yet:
+
+- FR1: start, end, and centre alignment by sender.
+- FR2: a system message still rendering its children.
+- FR3: the visual slot order.
+- FR7: a caller `aria-label` or `aria-labelledby` not overriding the naming,
+  and `xstyle` composing on the article.
+- ORD1: root and children gaps following the resolved density.
+- FR6: a name that renders no text leaving the fallback name.
+- PR1–PR2: no listener or Effect, and a context value that changes only with
+  sender or density.
+- AR3: no keyboard model of the component's own.
 
 ## Decision log
 
-- **DEC-1 — Slot emptiness follows the rendered DOM.** (`proposed`, awaiting
-  owner approval) ChatMessage skips only `null`, boolean, and empty-string
+- **DEC-1 — Slot emptiness follows the rendered DOM.** (`cixzhang`,
+  2026-10-31) ChatMessage skips only `null`, boolean, and empty-string
   slot values. Any other content is passed to React unchanged; its wrapper
   collapses with `:empty` when it renders nothing, and the article's naming
   falls back to `aria-label` when the referenced name renders no text.
@@ -255,8 +254,8 @@ No component-local design decision is settled by this draft.
   (`human-api`) The released family inventory exposes only the aggregate
   `chat-message` target, while the name's explicit type and colour prevent a root
   override from reaching it by inheritance. Adding or splitting a target changes
-  public theming API, so this draft records the reachability gap without choosing a
-  remedy.
+  public theming API, so this record states the reachability gap without choosing
+  a remedy.
 
 ## Content boundary
 

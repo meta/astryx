@@ -175,7 +175,7 @@ export const docs = {
       name: 'isFocusableDisabled',
       type: 'boolean',
       description:
-        'Keep a disabled input focusable with aria-disabled and readOnly so a caller-owned disabled reason remains discoverable. It blocks text entry, but when applied after results are already open, Enter can still select the highlighted option.',
+        'Keep a disabled input focusable with aria-disabled and readOnly so a caller-owned disabled reason remains discoverable. It blocks text entry, opening the results and picking a result, also from results that were open before it applied; Escape or Tab still closes them.',
       default: 'false',
     },
     {
@@ -334,7 +334,7 @@ export const docsZh = {
       name: 'isFocusableDisabled',
       type: 'boolean',
       description:
-        '使用 aria-disabled 和只读状态保持禁用输入框可聚焦，以便访问调用方提供的禁用原因。它会阻止文本输入，但如果结果已打开，按 Enter 仍可选择高亮选项。',
+        '使用 aria-disabled 和只读状态保持禁用输入框可聚焦，以便访问调用方提供的禁用原因。它会阻止文本输入、打开结果列表和选择结果，在它生效前已打开的结果中也是如此；Escape 或 Tab 仍可关闭列表。',
       default: 'false',
     },
     {
@@ -467,7 +467,7 @@ export const docsDense = {
     emptySearchText: 'Content when the query matched nothing. ReactNode.',
     isDisabled: 'Whether input disabled.',
     isFocusableDisabled:
-      'Keeps disabled input focusable and blocks text entry; an already-open highlight can still be selected with Enter.',
+      'Keeps disabled input focusable; blocks text entry, opening and picking, also from an already-open list (Escape/Tab close it).',
     hasAutoFocus: 'Auto-focus on mount.',
     debounceMs: 'Search debounce ms. 0 for sync.',
     size: 'Dropdown option padding size.',

@@ -323,6 +323,16 @@ export type DurationVarName = keyof typeof durationDefaults;
 
 export const easeDefaults = {
   '--ease-standard': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Entrances: a layer or element arriving. A theme's `character` sets it
+   * (spec:AST-108 FR2); at `'standard'` it equals --ease-standard.
+   */
+  '--ease-entrance': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  /**
+   * Moves: an element changing place or size on screen. A theme's
+   * `character` sets it; at `'standard'` it equals --ease-standard.
+   */
+  '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
   '--ease-exit': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
 } as const;
 

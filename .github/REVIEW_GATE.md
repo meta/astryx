@@ -33,24 +33,15 @@ neutral yellow "waiting" signal, not a red failure).
 ## Spec records
 
 Any PR that creates, changes, or archives a `current` architecture, component,
-family, design, or system spec waits on `spec-owner-approval` for its exact
-current head. Any handle in `.github/ENGOWNERS` can approve every record kind.
-Current design and theme records and normative design assets may also be approved
-by any handle in `.github/DESIGNOWNERS`. Mixed PRs still require an ENGOWNER for
-non-design current records. Same-repository owner reviews update the exact-head
-approval automatically. Fork review events cannot write
-with their read-only token, so an approver uses an issue comment containing
-`/approve-spec <full-head-sha>` instead; that command runs from the trusted
-default branch and a new commit invalidates it.
-
-Only that exact form decides the gate. The command must start the comment,
-lowercase and unindented, because the workflow trigger matches the raw comment
-body — an indented or capitalized command never starts the workflow, so the
-parser refuses it too rather than counting a comment nobody's run ever saw. The
-SHA itself may be either casing. A command that names no commit, names
-something other than one full 40-character SHA, or names a superseded commit
-changes nothing — so the gate replies once per head with the exact command to
-copy, rather than leaving the owner believing they approved.
+family, design, or system spec needs a spec owner's approval of its content
+(`architecture:knowledge-contracts` DEC-14), which `review-required` carries
+after code review: `pending`, never red, with `⏳ Waiting for human spec
+approval: …` naming who can approve. ENGOWNERS approve every record kind;
+design and theme records also accept DESIGNOWNERS. Approve with
+`/approve-spec <full-sha>` at the start of a comment (the trigger matches the
+raw body) or a non-author review; `/revoke-spec` withdraws. The gate's details
+give the command to copy and why an approval no longer counts; it posts no
+comments. `spec-owner-approval` mirrors the spec half.
 
 The gate never re-decides a merged or closed head. A run that starts after the
 merge publishes nothing, and neither does a run yielding to a newer one.
@@ -169,46 +160,13 @@ write-access author who is not an owner still needs an engineering owner's
 approval or the review app's exact-head approval. (Repo admins can still
 bypass.)
 
-`spec-owner-approval` must be a required status context on `main` as well. It is
-published on every PR — `success` when no knowledge records changed — so
-requiring it does not permanently strand unrelated work. **Until it is in the
-required list, a pending owner gate is advisory and does not block the merge
-button.** If the repository ever enables a merge queue, this gate also has to
-report on `merge_group` before the context is required, or queued entries stall
-waiting for a status nothing publishes.
+### The mirror
 
-### Making it required (ordered; do not reorder)
-
-An open PR whose head predates the gate has no `spec-owner-approval` status at
-all. Requiring the context first would block those heads on a status no event
-will produce, because the gate only runs on a new event. Backfill first.
-
-1. Land the gate changes. `workflow_dispatch` always runs the default branch's
-   copy.
-2. List the heads that would strand:
-
-   ```sh
-   gh pr list --state open --limit 300 --json number,headRefOid \
-     --jq '.[]|"\(.number) \(.headRefOid)"' \
-   | while read -r pr sha; do
-       state=$(gh api "repos/meta/astryx/commits/$sha/status" \
-         --jq '[.statuses[]|select(.context=="spec-owner-approval")|.state]
-               | if length==0 then "MISSING" else .[0] end')
-       [ "$state" = MISSING ] && echo "$pr"
-     done
-   ```
-
-3. Backfill each one; a reconcile only publishes the status:
-
-   ```sh
-   gh workflow run spec-owner-gate.yml -f pr=<number>
-   ```
-
-4. Re-run the step 2 query and confirm it prints nothing.
-5. Only then add `spec-owner-approval` to the required status checks on `main`.
-
-A `pending` result from the backfill is the correct outcome for a PR that
-genuinely awaits an owner, not a stranded head.
+`spec-owner-approval` now only mirrors the spec half of `review-required`.
+First re-flag every open, non-draft PR (the blank-`pr` backfill, in batches;
+see below) so each `review-required` carries its spec half; then remove the mirror
+from the required status checks on `main`. To re-publish a head's statuses, run
+`gh workflow run review-signal.yml -f pr=<number>`.
 
 ## Why a commit status (not a check run)
 
@@ -228,7 +186,13 @@ to failure).
 
 `review-signal.yml` has a `workflow_dispatch`:
 
-- blank `pr` input → re-flag **all** open PRs (backfill / mass recovery)
+- blank `pr` input → re-flag every open, **non-draft** PR (backfill / mass
+  recovery). A draft is re-flagged when it becomes ready for review.
+- blank `pr` plus `batch` `k/n` → re-flag only the open, non-draft PRs whose
+  number mod n is k−1. One job has 15 minutes, about 100 PRs, so split a large
+  backfill: `gh workflow run review-signal.yml -f batch=1/4`, then `2/4`, `3/4`
+  and `4/4`. A backfill also stops, failing with where it stopped, before the
+  job token's hourly API budget runs low; re-run after the reset it names.
 - a PR number → re-flag just that one
 
 Use it if a PR's `review-required` ever gets stuck (e.g. the workflow was added

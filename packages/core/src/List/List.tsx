@@ -29,7 +29,7 @@ import {
   type ListEdge,
   type ListMarkerStyle,
 } from './ListContext';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 

@@ -20,7 +20,7 @@ function inline(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/[|[\]`*_~]/g, (ch) => `\\${ch}`);
+    .replace(/[|[\]`*_~]/g, ch => `\\${ch}`);
 }
 
 /** A finite number, or the fallback. */
@@ -39,4 +39,15 @@ function safeUrl(value) {
   return /^https?:\/\/[^\s<>"'()\\]+$/.test(url) ? url : null;
 }
 
-module.exports = {inline, num, safeUrl};
+/**
+ * A measured byte count as text (`900B`, `1.5KB`, `2.25MB`), or N/A. Shared by
+ * every size the PR report shows.
+ */
+function sizeText(bytes) {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'N/A';
+  if (Math.abs(bytes) < 1024) return `${bytes}B`;
+  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+}
+
+module.exports = {inline, num, safeUrl, sizeText};

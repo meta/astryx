@@ -153,10 +153,10 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
    * When disabled with a reason, keeps the input focusable via `aria-disabled`
    * (instead of the native `disabled` attribute) and `readOnly` so an
    * associated disabled-reason tooltip stays discoverable by keyboard and
-   * assistive technology. Query and text mutation are blocked, but an
-   * already-open highlighted option can still be selected with Enter after a
-   * transition into this state. Consumers (Typeahead) own the tooltip and
-   * wrapper.
+   * assistive technology. Query and text mutation, opening the list, and a
+   * pick by Enter or a press are blocked, also from a list that was open
+   * before this state applied; Escape or Tab still closes it. Consumers
+   * (Typeahead) own the tooltip and wrapper.
    * @default false
    */
   isFocusableDisabled?: boolean;
@@ -687,11 +687,25 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Show the layer, deferring past the active click if a pointer is down.
   // Without this, popover="auto" light-dismiss immediately closes the
   // dropdown when it opens between pointerdown and pointerup/click.
+  // Read at show time, so a search or bootstrap that settles after the field
+  // became disabled does not open the list (spec:AST-085 FR2).
+  const isDisabledRef = useRef(isDisabled);
+  useIsomorphicLayoutEffect(() => {
+    isDisabledRef.current = isDisabled;
+  }, [isDisabled]);
   const showLayer = useCallback(() => {
+    if (isDisabledRef.current) {
+      return;
+    }
     if (pointerActiveRef.current) {
       document.addEventListener(
         'click',
-        () => requestAnimationFrame(() => popover.show()),
+        () =>
+          requestAnimationFrame(() => {
+            if (!isDisabledRef.current) {
+              popover.show();
+            }
+          }),
         {once: true},
       );
     } else {
@@ -915,6 +929,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle item selection
   const handleSelect = useCallback(
     (item: T) => {
+      // A disabled field changes nothing, also from a list that was open
+      // before it became disabled (spec:AST-085 FR2).
+      if (isDisabled) {
+        return;
+      }
       // Bump generation to invalidate any in-flight async searches
       searchGenRef.current++;
       if (searchTimeoutRef.current) {
@@ -933,7 +952,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [onChange, popover, searchSource, setLoading],
+    [isDisabled, onChange, popover, searchSource, setLoading],
   );
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
@@ -984,7 +1003,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // dropdown never reopens until the user clicks away and back (#6845). See
   // wasAlreadyFocusedRef above for how the two cases are told apart.
   const handleClick = useCallback(() => {
-    if (!wasAlreadyFocusedRef.current || popover.isOpen) {
+    if (isDisabled || !wasAlreadyFocusedRef.current || popover.isOpen) {
       return;
     }
     if (
@@ -997,6 +1016,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
     openIfEligible();
   }, [
+    isDisabled,
     popover.isOpen,
     hasEntriesOnFocus,
     query.length,
@@ -1047,6 +1067,24 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // into the freshly-cleared field -- producing a second, spurious
       // selection on the next real Enter.
       if (isImeKeyEvent(e.nativeEvent)) {
+        return;
+      }
+
+      // A focusable-disabled field opens no list and picks nothing; it only
+      // lets a list that was open before it became disabled close
+      // (spec:AST-085 FR2).
+      if (isDisabled) {
+        // Enter on a list that is still open picks nothing, and must not
+        // submit an enclosing form either, as it would not while enabled.
+        if (popover.isOpen && e.key === 'Enter') {
+          e.preventDefault();
+        }
+        if (popover.isOpen && (e.key === 'Escape' || e.key === 'Tab')) {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+          }
+          popover.hide();
+        }
         return;
       }
 
@@ -1123,6 +1161,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       }
     },
     [
+      isDisabled,
       popover,
       results,
       highlightedIndex,
@@ -1218,8 +1257,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         placeholder={placeholder}
         // When a disabled-reason tooltip is shown the input keeps focusability
         // via aria-disabled + readOnly instead of the native disabled
-        // attribute. Query and text mutation are blocked, but an already-open
-        // highlighted option can still be selected with Enter after transition.
+        // attribute. Query and text mutation, opening and picking are blocked
+        // by the handlers above (spec:AST-085 FR2).
         disabled={isDisabled && !isFocusableDisabled}
         readOnly={isFocusableDisabled || undefined}
         autoFocus={hasAutoFocus}

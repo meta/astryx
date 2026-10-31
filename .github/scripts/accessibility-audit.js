@@ -71,7 +71,7 @@ const requestedStories = (storiesArg || '').split(',').filter(Boolean);
 // --components present but EMPTY means the caller derived an explicit empty
 // audit set (pr-a11y on a PR whose core/src changes map to no component —
 // e.g. a shared test file). Audit nothing and pass. Only an ABSENT flag
-// means "all stories" (the a11y-weekly contract).
+// means "all stories" (the full release-check contract).
 const emptyComponentSet = componentsArg !== null && components.length === 0;
 if (storiesArg !== null && requestedStories.length === 0) {
   throw new Error('--stories requires at least one story id');

@@ -32,6 +32,7 @@ import type {LinkComponentType} from '../Link/types';
 import {composeEventHandlers} from '../utils';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import type {focusOwnerProps} from '../privateAttributes/focusOwner.stylex';
 export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Ref forwarded to the container element. */
@@ -103,13 +104,26 @@ export function TokenLink({
           : composeEventHandlers(onMouseUpProp, onMouseUp)
       }>
       {icon}
-      <LinkComponent
-        ref={linkRef as Ref<HTMLAnchorElement>}
-        href={href}
-        aria-disabled={isDisabled || undefined}
-        {...linkStyleProps}>
-        {labelContent}
-      </LinkComponent>
+      {isDisabled ? (
+        // A disabled link stays a focusable link with no destination, as a
+        // disabled Link does (spec:AST-085 FR1, FR5; component:Link FR5).
+        <a
+          ref={linkRef as Ref<HTMLAnchorElement>}
+          role="link"
+          aria-disabled={true}
+          tabIndex={0}
+          {...linkStyleProps}
+          {...disabledInteractionProps()}>
+          {labelContent}
+        </a>
+      ) : (
+        <LinkComponent
+          ref={linkRef as Ref<HTMLAnchorElement>}
+          href={href}
+          {...linkStyleProps}>
+          {labelContent}
+        </LinkComponent>
+      )}
       {endContent}
       {removeButton}
     </span>

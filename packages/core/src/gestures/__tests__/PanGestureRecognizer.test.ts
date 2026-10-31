@@ -8,15 +8,15 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
+import {UIKIT_PAN, UIKIT_VELOCITY} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
-import {createHarness, scrollProbe} from './harness';
+import {createHarness} from './harness';
 
 describe('PanGestureRecognizer', () => {
   it('begins past the hysteresis and leaves the threshold out of the translation', () => {
     const h = createHarness();
     const pan = new PanGestureRecognizer({name: 'pan'});
-    const hysteresis = UIKIT_GESTURES.pan.hysteresis.value;
+    const hysteresis = UIKIT_PAN.hysteresis.value;
     h.finger(1).down(100, 100, 0, {recognizers: [pan]});
     h.finger(1).move(100 + hysteresis - 0.1, 100, 16);
     expect(pan.state).toBe('possible');
@@ -75,7 +75,7 @@ describe('PanGestureRecognizer', () => {
   });
 
   it('releases at 0 after a rest longer than the stillness interval (AST-100 FR2)', () => {
-    const stillness = UIKIT_GESTURES.velocity.stillness.value;
+    const stillness = UIKIT_VELOCITY.stillness.value;
     const release = (liftAt: number) => {
       const h = createHarness();
       const pan = new PanGestureRecognizer({name: 'pan'});

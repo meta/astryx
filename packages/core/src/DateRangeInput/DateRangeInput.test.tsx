@@ -11,22 +11,22 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
-// getButton/queryButton instead of getByRole('button', {name}): the closed
-// popover keeps a two-month Calendar (~85 role=button nodes) mounted, which
-// made every role+name query compute ~85 accessible names through jsdom's
+// getButton/queryButton instead of getByRole('button', {name}): the open
+// popover holds a two-month Calendar (~85 role=button nodes), which makes
+// every role+name query compute ~85 accessible names through jsdom's
 // slow getComputedStyle (~450ms per query). See fastRoleQueries.ts.
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {DateRangeInput} from './DateRangeInput';
-import type {DateRange} from './DateRangeInput';
+import type {DateRange, DateRangeInputProps} from './DateRangeInput';
 import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -764,6 +764,146 @@ describe('DateRangeInput', () => {
       fireEvent.click(getButton('Open calendar'));
       expect(getButton(/Range:/)).toHaveAttribute('aria-expanded', 'false');
     });
+  });
+});
+
+describe('DateRangeInput calendar while the popover is closed', () => {
+  const calendarGrid = () => document.querySelector('[role="grid"]');
+
+  it('renders no calendar until the popover opens, and none after it closes', () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+    expect(calendarGrid()).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).not.toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).toBeNull();
+  });
+
+  it('moves focus into the popover on each open from the toggle', async () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(toggle);
+      // The first calendar control takes focus, not the dialog surface.
+      await waitFor(() => {
+        expect(getButton('Previous month')).toHaveFocus();
+      });
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    }
+  });
+});
+
+describe('DateRangeInput disabled commit boundaries', () => {
+  const props = {
+    label: 'Range',
+    value: {start: '2026-01-01', end: '2026-01-03'},
+    onChange: vi.fn(),
+    changeAction: vi.fn(),
+    disabledMessage: 'Reporting is locked',
+    presets: [
+      {
+        label: 'Last three days',
+        getRange: () => ({start: '2026-01-08', end: '2026-01-10'}),
+      },
+    ],
+    numberOfMonths: 1,
+    min: '2026-01-01',
+    max: '2026-01-31',
+  } satisfies DateRangeInputProps;
+
+  beforeEach(() => {
+    props.onChange.mockClear();
+    props.changeAction.mockClear();
+  });
+
+  it('blocks pointer and keyboard preset commits while disabled, preserving focus and reason', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    const preset = getButton('Last three days');
+    act(() => preset.focus());
+    rerender(<DateRangeInput {...props} isDisabled />);
+    fireEvent.click(preset);
+    await user.keyboard('{Enter} ');
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(preset).toHaveFocus();
+    expect(preset).not.toHaveAttribute('disabled');
+    expect(preset).toHaveAttribute('aria-disabled', 'true');
+    expect(preset).toHaveAttribute('data-disabled');
+    expect(preset).toHaveAccessibleDescription('Reporting is locked');
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('blocks range commits after disabling an open picker without closing or moving focus', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<DateRangeInput {...props} />);
+    await user.click(getButton('Open calendar'));
+    await waitFor(() => expect(getButton('Last three days')).toHaveFocus());
+    fireEvent.click(getButton(/January 15, 2026/));
+    expect(props.onChange).not.toHaveBeenCalled();
+    const end = getButton(/January 16, 2026/);
+    act(() => end.focus());
+
+    rerender(<DateRangeInput {...props} isDisabled />);
+    fireEvent.click(end);
+    await user.keyboard('{Enter} ');
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(end).toHaveFocus();
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'true');
+
+    rerender(<DateRangeInput {...props} />);
+    await user.click(getButton(/January 15, 2026/));
+    await user.click(end);
+    const range = {start: '2026-01-15', end: '2026-01-16'};
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith(range);
+    expect(props.changeAction).toHaveBeenCalledExactlyOnceWith(range);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('preserves loading-only selection dismissal without committing a range', () => {
+    const {rerender} = render(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    rerender(<DateRangeInput {...props} isLoading />);
+    const preset = getButton('Last three days');
+    expect(preset).not.toHaveAttribute('aria-disabled');
+    expect(preset).not.toHaveAttribute('data-disabled');
+    expect(preset).not.toHaveAttribute('aria-describedby');
+    fireEvent.click(preset);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
+
+    rerender(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    fireEvent.click(getButton(/January 15, 2026/));
+    rerender(<DateRangeInput {...props} isLoading />);
+    fireEvent.click(getButton(/January 16, 2026/));
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

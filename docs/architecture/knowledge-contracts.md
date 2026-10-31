@@ -260,7 +260,7 @@ Every record is either:
   pull request. External contributors follow the normal contribution flow and
   MUST NOT be asked to author specifications; maintainers own any missing
   authority. A human request supplies intent but becomes committed current
-  authority only through exact-head owner approval.
+  authority only through owner approval of the current spec content (DEC-14).
 
 ### Review evidence placement
 
@@ -712,11 +712,13 @@ this flow passes the historical review benchmark and is enforced on pull request
   and head bytes. DD-only requires unchanged path, kind, authority, and every byte
   outside a valid optional block.
 - `.github/scripts/change-scope.cjs` identifies pure spec-record changes.
-- `.github/workflows/spec-owner-gate.yml` binds approval to the exact pull
-  request head. Approval for every record kind derives from `.github/ENGOWNERS`;
-  current design and theme records, normative design assets, and DD-only current
-  component/module changes additionally accept `.github/DESIGNOWNERS`. A mixed
-  DD plus other component/module edit requires both groups. Record metadata never
+- `.github/workflows/review-signal.yml` publishes the one review gate,
+  `review-required`, which carries spec-owner approval too (DEC-14). One owner approval covers every knowledge-record change in the pull
+  request and binds the approved spec content, not a commit. Approval for every
+  record kind derives from `.github/ENGOWNERS`; current design and theme records,
+  normative design assets, and DD-only current component/module changes
+  additionally accept `.github/DESIGNOWNERS`. A mixed DD plus other
+  component/module edit requires both groups. Record metadata never
   self-authorizes. The gate decides approval only; it never enables auto-merge.
 - `.github/workflows/review-signal.yml` lets a DESIGNOWNER author bypass the
   engineering gate only when trusted-base code verifies every changed Core line
@@ -770,8 +772,8 @@ maintainers and review agents are responsible for the spec system. They record
 the ruling in the same branch when possible, or in a small linked lower spec PR
 when the contributor branch cannot be updated. Rejected implementation is
 removed or changed; a rejected alternative is recorded only when it protects a
-consequential boundary from being debated again. Final exact-head approval
-attests that the decision and implementation agree.
+consequential boundary from being debated again. Final owner approval of the
+current spec content attests that the decision and implementation agree.
 
 Rejected: requiring the owner to open a second pull request for every ruling,
 because it separates the answer from the change and adds unnecessary review
@@ -908,8 +910,8 @@ remains in `docs/design/`.
 A team DESIGNOWNER may include the local decision, implementation, and evidence
 in one atomic appearance-only pull request. DD-only current-record changes route
 to design approval; mixing a DD edit with another component/module contract edit
-requires both design and engineering. A DESIGNOWNER approves with an exact-head
-review or `/approve-spec <head>` like every other owner. The Core code gate is bypassed only when trusted-base
+requires both design and engineering. A DESIGNOWNER approves with
+`/approve-spec <sha>` like every other owner. The Core code gate is bypassed only when trusted-base
 classification proves an existing-file declaration-only appearance diff and no
 other code reason applies. Any uncertainty, contributor-authored change, behavior,
 JSX, API, package, barrel, new component, or unknown runtime path fails closed to
@@ -918,11 +920,11 @@ engineering review.
 External contributors explain intent and supply normal evidence; maintainers own
 specification work and never require contributors to author it. A request or
 conversation is decision input, not committed authority. The edited current
-record becomes reusable only after exact-head owner approval.
+record becomes reusable only after owner approval of its content (DEC-14).
 
 Rejected: sidecar records or one design record per pixel tweak, because they split
 routine intent from its owner; treating a design request as authority before
-exact-head approval, because reviewable intent is not yet committed policy.
+owner approval, because reviewable intent is not yet committed policy.
 
 ### DEC-11 — A review-app approval clears the code gate for write-access authors
 
@@ -984,23 +986,95 @@ documentation stand in as that contract.
 Rejected: package-local spec formats, because their records skip structure
 checks, the owner gate, and path routing.
 
+### DEC-14 — One owner approval binds a pull request's spec content
+
+**Reference:** `architecture:knowledge-contracts/DEC-14`
+**Decider:** `cixzhang`, `2026-10-28`
+
+A spec owner reviews a pull request's knowledge-record changes together and
+approves or reworks them as a whole. The approval binds the **spec content**:
+one fingerprint over every changed knowledge-record and normative design-asset
+path, each read at a commit. In Markdown records the fingerprint omits the
+front-matter `authority`, `approved_by`, and `approved_at` values, so recording
+an approval and moving a record from `draft` to `current` never change it. The
+workflow computes every fingerprint from the pull request's files; no comment,
+label, or status supplies it.
+
+- **Approving acts.** Each of these, by an eligible owner, approves the content
+  of the commit it names, and counts while that commit's fingerprint equals the
+  current head's:
+  - an `/approve-spec <sha>` comment naming a full commit SHA; the SHA states
+    which content the owner reviewed;
+  - a GitHub approving review, for its commit.
+
+  `/revoke-spec`, with or without a SHA, and a request for changes on other
+  spec content withdraw that owner's approval until they approve again. A
+  request for changes on the current spec content holds the gate until that
+  owner approves again. Reactions are not approvals.
+  Eligibility follows the owner groups above. An ENGOWNER author may approve
+  their own pull request with `/approve-spec`; an approving review by the
+  author never counts.
+
+- **What keeps approval.** Commits that change only other paths, merges from
+  the base branch, rebases, and approval bookkeeping keep the fingerprint, so
+  they keep every approval.
+- **What resets it.** A change to approved spec text, a newly changed spec
+  path, or a head that drops an approved spec change; the earlier approval stops
+  counting until an owner approves a commit that carries the current content.
+- **One review gate.** `review-required` carries both the code review and the
+  spec approval. Code review leads while it is missing; once it is satisfied, a
+  missing spec approval shows on the same status; success needs both. A missing
+  approval is `pending`, never a failure. The status names who can approve:
+
+  | Spec groups still missing                | `review-required` text                                                                    |
+  | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+  | engineering (alone or with design/theme) | `⏳ Waiting for human spec approval: an eng owner can reply /approve-spec <sha>`          |
+  | design or theme only                     | `⏳ Waiting for human spec approval: a design or eng owner can reply /approve-spec <sha>` |
+
+  A request for changes holding the gate names its owner instead: `…: @owner
+requested changes and can reply /approve-spec <sha>`. An approved spec change
+  reads `✅ Spec approved by @owner` beside the code review result. An ENGOWNER
+  approval satisfies every group.
+
+- **Details.** The gate's details give the head's command to copy, list the
+  changed records (id, title, authority change, and the group each needs), the
+  changed paths and the fingerprint, and say why an earlier act no longer
+  counts: the spec changed after approval, it was revoked, or the command was
+  malformed.
+- **Mirror.** `spec-owner-approval` reports the spec half with a minimal
+  description while branch protection still requires it; it decides nothing
+  `review-required` does not already show.
+- **Event coverage.** Every pull-request event, same-repository review, and
+  owner command re-evaluates the gate, and each evaluation publishes a terminal
+  state for the head it read. A fork review carries a read-only token and is
+  skipped, so owners approve a fork pull request with the command. Comments that
+  are not owner commands start no runner.
+
+Rejected: exact-head binding (recording the approval and every base merge
+forced re-approval of unchanged text); per-record or per-section approval
+(spec review is all or nothing); a command without a SHA (a push just before
+it would be approved unseen); a separate spec status (one gate, one message);
+reaction approvals (no event, so a polling job); a workflow-pushed
+`draft`-to-`current` change (it starts no checks and cannot write a fork).
+
 ## Verification
 
-| Invariant                         | Evidence                                                                                                                                                                                                     | Failure signal                                                                                                                                                                                                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV6                        | `scripts/check-knowledge.test.mjs`                                                                                                                                                                           | An unapproved current record or unmigrated active record passes                                                                                                                                                                                               |
-| INV5, INV7                        | `.github/scripts/change-scope.test.mjs`                                                                                                                                                                      | A template, schema, guidance, architecture, code change, unsafe rename, or truncated list qualifies as spec-only                                                                                                                                              |
-| Approval follows the current head | `.github/scripts/spec-owner-decision.test.mjs`                                                                                                                                                               | An approval for another commit clears the gate, a self-declared owner becomes an approver, or the wrong owner group approves a current record                                                                                                                 |
-| INV3, INV4, INV11                 | Blinded historical review benchmark                                                                                                                                                                          | Reviewer re-asks a settled decision, invents a new one, approves an unsettled public delta, or treats a contradiction as preserves                                                                                                                            |
-| INV10                             | Record-content and review-disposition fixtures                                                                                                                                                               | A spec assigns a PR verdict, or a reviewer treats a PR link as authority                                                                                                                                                                                      |
-| INV13                             | Blinded spec-authorship fixture plus overlap-search receipt                                                                                                                                                  | An author creates parallel authority, searches only landed records or filenames, misses open work on the canonical owner, or treats an open PR as authority                                                                                                   |
-| INV14, INV15                      | Narrow-decision and mixed-intent review fixtures                                                                                                                                                             | A current visual slice is forced to contract its whole module, a separable tagalong blocks a repair, or review reports a gap without a landing-ready remedy                                                                                                   |
-| INV16, INV17                      | Spec-first review and missing-context fixtures                                                                                                                                                               | Generated checklist completeness overrides authority, review invents product direction, restates supplied context, or fails to identify an unrelated tagalong or affected caller state                                                                        |
-| INV18                             | Spec-review mechanism analysis plus owner migration receipt                                                                                                                                                  | A new/amended product spec requires a private mechanism without proving it is public, silently invalidates an existing current record, or leaves touched architecture wording in the product contract                                                         |
-| INV19                             | Spec-review ownership-collision receipt and human decision                                                                                                                                                   | Automated review approves a product contract, omits current/open owner overlap, misses a collision or architecture leak, or returns only a human hold without actionable written analysis                                                                     |
-| INV20, DEC-9                      | `scripts/check-knowledge.test.mjs` and `scripts/review-global-baselines.mjs`                                                                                                                                 | A matching review misses a current global claim, loads a draft/nonmatching claim, loses base-commit provenance, or treats the rest of a routed record as authority                                                                                            |
-| INV21, DEC-10                     | `.github/scripts/component-design-decisions.test.mjs`, `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/lib/classify-visual.test.mjs` | A malformed/local DD escapes validation, stale approval clears a new head, owner routing loses mixed-change gates, or executable/API/unknown runtime code is misclassified as appearance-only                                                                 |
-| DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                   | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate |
+| Invariant                         | Evidence                                                                                                                                                                                                     | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV6                        | `scripts/check-knowledge.test.mjs`                                                                                                                                                                           | An unapproved current record or unmigrated active record passes                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV5, INV7                        | `.github/scripts/change-scope.test.mjs`                                                                                                                                                                      | A template, schema, guidance, architecture, code change, unsafe rename, or truncated list qualifies as spec-only                                                                                                                                                                                                                                                                                                                                                                              |
+| Approval follows the spec content | `.github/scripts/spec-owner-decision.test.mjs`                                                                                                                                                               | An approval of other spec content clears the gate, a self-declared owner becomes an approver, or the wrong owner group approves a current record                                                                                                                                                                                                                                                                                                                                              |
+| INV3, INV4, INV11                 | Blinded historical review benchmark                                                                                                                                                                          | Reviewer re-asks a settled decision, invents a new one, approves an unsettled public delta, or treats a contradiction as preserves                                                                                                                                                                                                                                                                                                                                                            |
+| INV10                             | Record-content and review-disposition fixtures                                                                                                                                                               | A spec assigns a PR verdict, or a reviewer treats a PR link as authority                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| INV13                             | Blinded spec-authorship fixture plus overlap-search receipt                                                                                                                                                  | An author creates parallel authority, searches only landed records or filenames, misses open work on the canonical owner, or treats an open PR as authority                                                                                                                                                                                                                                                                                                                                   |
+| INV14, INV15                      | Narrow-decision and mixed-intent review fixtures                                                                                                                                                             | A current visual slice is forced to contract its whole module, a separable tagalong blocks a repair, or review reports a gap without a landing-ready remedy                                                                                                                                                                                                                                                                                                                                   |
+| INV16, INV17                      | Spec-first review and missing-context fixtures                                                                                                                                                               | Generated checklist completeness overrides authority, review invents product direction, restates supplied context, or fails to identify an unrelated tagalong or affected caller state                                                                                                                                                                                                                                                                                                        |
+| INV18                             | Spec-review mechanism analysis plus owner migration receipt                                                                                                                                                  | A new/amended product spec requires a private mechanism without proving it is public, silently invalidates an existing current record, or leaves touched architecture wording in the product contract                                                                                                                                                                                                                                                                                         |
+| INV19                             | Spec-review ownership-collision receipt and human decision                                                                                                                                                   | Automated review approves a product contract, omits current/open owner overlap, misses a collision or architecture leak, or returns only a human hold without actionable written analysis                                                                                                                                                                                                                                                                                                     |
+| INV20, DEC-9                      | `scripts/check-knowledge.test.mjs` and `scripts/review-global-baselines.mjs`                                                                                                                                 | A matching review misses a current global claim, loads a draft/nonmatching claim, loses base-commit provenance, or treats the rest of a routed record as authority                                                                                                                                                                                                                                                                                                                            |
+| INV21, DEC-10                     | `.github/scripts/component-design-decisions.test.mjs`, `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/lib/classify-visual.test.mjs` | A malformed/local DD escapes validation, stale approval clears a new head, owner routing loses mixed-change gates, or executable/API/unknown runtime code is misclassified as appearance-only                                                                                                                                                                                                                                                                                                 |
+| DEC-14                            | `.github/scripts/spec-owner-reconcile.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/spec-owner-workflow.test.mjs`                                                          | A non-spec commit, base merge, rebase, or status flip resets approval; changed spec text or a new spec path keeps it; a command naming other spec content, a reaction, a non-owner act, or an author review approves; `review-required` succeeds while spec approval is missing or before the spec decision is published; a revoke or request for changes naming other spec content is ignored; a missing approval reports failure; or an evaluation leaves its head without a terminal state |
+| DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                   | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                 |
 
 | Invariant            | Evidence                                                                                                                                 | Failure signal                                                                                                                                                                                                   |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

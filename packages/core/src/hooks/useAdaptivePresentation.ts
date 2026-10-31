@@ -7,7 +7,10 @@
  * @input Uses React's external-store subscription over window.matchMedia
  *   and the touch presentation's compact-touch query
  * @output Resolves popover/bottom-sheet presentation policy
- * @position Internal overlay policy shared across component families
+ * @position Internal overlay policy shared across component families. A
+ *   component that also switches input modes under a finger resolves its
+ *   `presentation` with usePresentation (utils/presentation.ts), whose
+ *   surface is this one's
  */
 
 import {useCallback, useSyncExternalStore} from 'react';

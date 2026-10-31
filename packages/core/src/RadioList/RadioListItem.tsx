@@ -326,6 +326,12 @@ export function RadioListItem({
         // from submission, matching a natively disabled control.
         form={keepsFocusableForMessage ? '' : undefined}
         required={context.isRequired}
+        // Chromium reports an unanswered native-required radio invalid before
+        // any interaction; the invalid state follows the group's status
+        // instead (RadioList FR6).
+        aria-invalid={
+          context.isRequired ? context.status?.type === 'error' : undefined
+        }
         onChange={() => {
           if (isDisabled) {
             return;
@@ -334,8 +340,11 @@ export function RadioListItem({
         }}
         // A consumer onClick rides on the radio input itself, so it fires for
         // both direct control clicks and row-surface clicks the row delegates
-        // to the input — the same routing CheckboxListItem uses.
-        onClick={onClick}
+        // to the input — the same routing CheckboxListItem uses. A disabled
+        // radio that stays focusable (`aria-disabled`, not native `disabled`)
+        // is not silenced by the browser, so drop the handler here
+        // (`spec:AST-085` FR2), as CheckboxInput does.
+        onClick={isDisabled ? undefined : onClick}
         // The radio names itself from the visible label element, which works
         // for a rich label as well as a plain string. `aria-label` replaces
         // that name rather than adding to it, so the two are mutually

@@ -5,11 +5,12 @@
 # "Heavy suite runs" step right after it; a held job fails here with the
 # reason, so it never passes a required join untested.
 #
-# - One author's suites run for their three oldest open non-draft pull
-#   requests, and for at most twelve heavy runs a UTC day.
+# - One author's suites run for their fifteen oldest open non-draft pull
+#   requests, and for at most a hundred heavy runs a UTC day.
 # - The shared agent login counts each branch prefix as an author, with that
 #   login also held to its five oldest pull requests and forty runs a day.
-# - A re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
+# - An engineering owner (.github/ENGOWNERS, read from the base commit), a
+#   re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
 #   runs the suite.
 #
 # Each limit is one entry in `limits`, checked in order.
@@ -43,14 +44,21 @@ runs:
               )
             ).search.nodes);
 
+          // An author's oldest open non-draft pull requests that run heavy suites.
+          const OLDEST = 15;
+          // An author's heavy runs a UTC day.
+          const DAILY = 100;
           const limits = [
             // Pull request numbers rise with creation, and the search returns
             // the oldest, so it holds every older one that could queue this.
             async function oldestPullRequests() {
               const nodes = await openPullRequests();
               const older = list => list.filter(p => p.number < pr.number).length;
-              if (older(nodes.filter(p => mine(p.headRefName))) >= 3 || (shared && older(nodes) >= 5)) {
-                return 'Queued behind your 3 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.';
+              if (older(nodes.filter(p => mine(p.headRefName))) >= OLDEST) {
+                return `Queued behind your ${OLDEST} oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.`;
+              }
+              if (shared && older(nodes) >= 5) {
+                return "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
               }
             },
             // A heavy run is a run on one of those pull requests whose heavy job
@@ -61,7 +69,7 @@ runs:
               const key = (repo, branch) => `${repo}:${branch}`;
               const oldest = new Map([
                 [key(pr.head.repo.full_name, pr.head.ref), pr.head.ref],
-                ...[...nodes.filter(p => mine(p.headRefName)).slice(0, 3), ...(shared ? nodes.slice(0, 5) : [])].map(p => [
+                ...[...nodes.filter(p => mine(p.headRefName)).slice(0, OLDEST), ...(shared ? nodes.slice(0, 5) : [])].map(p => [
                   key(p.headRepository?.nameWithOwner, p.headRefName),
                   p.headRefName,
                 ]),
@@ -84,13 +92,25 @@ runs:
                   if (mine(run.head_branch)) laneHeavy += 1;
                 }
               }
-              if (laneHeavy >= 12 || (shared && loginHeavy >= 40)) {
+              if (laneHeavy >= DAILY || (shared && loginHeavy >= 40)) {
                 return 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
               }
             },
           ];
 
           try {
+            // Engineering owners are exempt. The roster is read from the base
+            // commit, so a pull request cannot add its own author, and parsed
+            // like the spec-owner gate's: `#` comments out the rest of a line.
+            const {data: roster} = await github.rest.repos.getContent({
+              ...context.repo, path: '.github/ENGOWNERS', ref: pr.base.sha,
+            });
+            const owners = Buffer.from(roster.content, 'base64').toString('utf8')
+              .split('\n').map(line => line.replace(/#.*/, ''))
+              .flatMap(line => line.match(/@[\w-]+/g) ?? [])
+              .map(handle => handle.slice(1).toLowerCase());
+            if (owners.includes(login.toLowerCase())) return;
+
             for (const limit of limits) {
               const held = await limit();
               if (held) {

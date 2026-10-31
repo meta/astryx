@@ -29,7 +29,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';

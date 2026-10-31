@@ -1680,3 +1680,46 @@ describe('ResizableProps source compatibility (AST-010 API5)', () => {
     expect(prePr._onResizeCancel).toBeUndefined();
   });
 });
+
+describe('useResizable window reads after a commit', () => {
+  // React re-reads a useSyncExternalStore snapshot after the commit whenever
+  // getSnapshot is a new function, and a window size read after the DOM has
+  // changed forces a layout of the whole page. A re-render with unchanged
+  // inputs reads the window during render only.
+  function readsAfterCommit(direction: 'horizontal' | 'vertical') {
+    const reads = {count: 0};
+    const width = vi.spyOn(window, 'innerWidth', 'get');
+    const height = vi.spyOn(window, 'innerHeight', 'get');
+    width.mockImplementation(() => {
+      reads.count += 1;
+      return 1024;
+    });
+    height.mockImplementation(() => {
+      reads.count += 1;
+      return 768;
+    });
+    function Region({tick}: {tick: number}) {
+      useResizable({defaultSize: 240, direction});
+      // Runs in the commit, before passive effects: every read counted
+      // after it happened after the DOM changed.
+      useLayoutEffect(() => {
+        reads.count = 0;
+      });
+      return createElement('div', {'data-tick': tick});
+    }
+    const {rerender} = render(createElement(Region, {tick: 0}));
+    act(() => rerender(createElement(Region, {tick: 1})));
+    const count = reads.count;
+    width.mockRestore();
+    height.mockRestore();
+    return count;
+  }
+
+  it('reads the window width again only during render, not after the commit', () => {
+    expect(readsAfterCommit('horizontal')).toBe(0);
+  });
+
+  it('reads the window height again only during render, not after the commit', () => {
+    expect(readsAfterCommit('vertical')).toBe(0);
+  });
+});

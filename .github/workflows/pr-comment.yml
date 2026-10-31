@@ -10,9 +10,8 @@
 # drift between a fork path and a same-repo path.
 #
 # Safety: resolves scope and PR identity from the GitHub API. Privileged jobs
-# check out only trusted default-branch code. Both preview URLs are resolved
-# from one exact-head Vercel deployment after route probes; the Pages result
-# remains a separate source-CI artifact, never a preview-link fallback.
+# check out only trusted default-branch code. Both preview links are the
+# branch's Vercel alias, known without waiting for a deployment.
 
 name: PR Comment
 
@@ -20,7 +19,6 @@ on:
   workflow_run:
     workflows: ['CI']
     types: [completed]
-  deployment_status:
 
 permissions: {}
 
@@ -111,105 +109,6 @@ jobs:
             core.setOutput('spec_only', String(changeScope.specOnly));
             core.setOutput('tooling_only', String(changeScope.toolingOnly));
 
-  resolve-preview:
-    if: >-
-      github.event_name == 'deployment_status' &&
-      github.event.deployment_status.state == 'success' &&
-      github.event.deployment.environment == 'Preview' &&
-      github.event.deployment.creator.login == 'vercel[bot]'
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-      pull-requests: read
-      deployments: read
-    outputs:
-      valid: ${{ steps.preview.outputs.valid }}
-      pr_number: ${{ steps.preview.outputs.pr_number }}
-      head_sha: ${{ steps.preview.outputs.head_sha }}
-      origin: ${{ steps.preview.outputs.origin }}
-    steps:
-      - name: Checkout trusted default-branch code
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: Check trusted resolver availability
-        id: trusted
-        run: |
-          if [ -f .github/scripts/lib/vercel-preview.mjs ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            # A new deployment_status workflow can run before its helper lands
-            # on main. Never load the untrusted PR branch as a substitute.
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Preview resolver is not on trusted main yet; skipping this deployment."
-          fi
-
-      - name: Resolve current Vercel PR preview
-        id: preview
-        if: steps.trusted.outputs.available == 'true'
-        uses: actions/github-script@v9
-        with:
-          retries: 3
-          script: |
-            const {pathToFileURL} = require('node:url');
-            const {resolveVercelDeploymentEvent} = await import(
-              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/vercel-preview.mjs`).href
-            );
-            const preview = await resolveVercelDeploymentEvent({
-              github,
-              ...context.repo,
-              deployment: context.payload.deployment,
-              status: context.payload.deployment_status,
-            });
-            if (!preview) {
-              core.notice('No current, non-draft PR matches this exact Vercel Preview deployment.');
-              core.setOutput('valid', 'false');
-              return;
-            }
-            core.setOutput('valid', 'true');
-            core.setOutput('pr_number', String(preview.prNumber));
-            core.setOutput('head_sha', preview.headSha);
-            core.setOutput('origin', preview.origin);
-
-  preview-comment:
-    needs: resolve-preview
-    if: needs.resolve-preview.outputs.valid == 'true'
-    concurrency:
-      group: pr-report-${{ needs.resolve-preview.outputs.pr_number }}
-      cancel-in-progress: false
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-      pull-requests: write
-      deployments: read
-    steps:
-      - name: Checkout trusted default-branch code
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: Post exact-head preview links before CI completes
-        uses: actions/github-script@v9
-        env:
-          PR_NUMBER: ${{ needs.resolve-preview.outputs.pr_number }}
-          HEAD_SHA: ${{ needs.resolve-preview.outputs.head_sha }}
-          PREVIEW_ORIGIN: ${{ needs.resolve-preview.outputs.origin }}
-        with:
-          retries: 3
-          script: |
-            const {pathToFileURL} = require('node:url');
-            const {reconcileEarlyPreviewComment} = await import(
-              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
-            );
-            await reconcileEarlyPreviewComment({
-              github,
-              ...context.repo,
-              prNumber: Number(process.env.PR_NUMBER),
-              headSha: process.env.HEAD_SHA,
-              origin: process.env.PREVIEW_ORIGIN,
-            });
-
   spec-only-reconcile:
     needs: resolve
     concurrency:
@@ -289,7 +188,7 @@ jobs:
     concurrency:
       group: pr-report-${{ needs.resolve.outputs.pr_number }}
       cancel-in-progress: false
-    # Only the exact-head Vercel deployment supplies Storybook and Sandbox PR links.
+    # Storybook and Sandbox links are the branch's Vercel alias.
     # Visual evidence remains attached to the exact CI run.
     if: >-
       always() &&
@@ -301,7 +200,6 @@ jobs:
     permissions:
       pull-requests: write
       actions: read
-      deployments: read # resolve the exact-head Vercel Preview deployment
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
     outputs:
@@ -513,8 +411,7 @@ jobs:
   # main's latest commit. Main's checks must show main's health, not a pull
   # request's. The jobs above therefore never fail the run: every fallible step
   # continues on error, and this job reports their outcome as the PR Comment
-  # status on the pull request's own head. (The deployment_status lane already
-  # runs on the pull request's head commit.)
+  # status on the pull request's own head.
   report:
     needs: [resolve, spec-only-reconcile, comment]
     if: >-
