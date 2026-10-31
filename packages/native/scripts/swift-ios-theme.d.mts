@@ -20,8 +20,19 @@ export declare const SWIFT_TOKENS_FILE: string;
 export declare function swiftMember(token: string): SwiftMember | null;
 export declare function swiftThemeName(themeName: string): string;
 export declare function themeFileName(swiftName: string): string;
-export declare function toHexColor(value: string): string | null;
-export declare function toPoints(value: string): number | null;
+/** `#RRGGBBAA` in sRGB, or `display-p3 #RRGGBBAA` outside sRGB. */
+export declare function toColor(value: string, notes?: string[]): string;
+export declare function toPoints(
+  value: string,
+  notes?: string[],
+  options?: {borderWidth?: boolean},
+): number;
+export declare function toWeight(value: string, notes?: string[]): number;
+export declare function toLeading(
+  value: string,
+  fontSize: number | undefined,
+  notes?: string[],
+): number;
 export interface ShadowLayer {
   x: number;
   y: number;
@@ -32,8 +43,8 @@ export interface ShadowLayer {
 }
 export declare function toShadow(
   value: string,
-  mode: 'light' | 'dark',
-): ShadowLayer[] | null;
+  notes?: string[],
+): ShadowLayer[];
 export declare function toFamilies(value: string): string[] | null;
 export declare function valueForMode(
   value: string,

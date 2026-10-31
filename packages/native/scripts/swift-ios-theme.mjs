@@ -10,7 +10,9 @@
  *   Theme.<swiftName>
  * @position Implements the Swift theme generator spec
  *   (specs/swift/library/theme-generator.md). Run by `generate:swift-ios`; the
- *   Swift output is committed and a test fails when any file drifts.
+ *   Swift output is committed and a test fails when any file drifts. CSS
+ *   values convert in css-values.mjs; a value it cannot convert fails the
+ *   run (G7).
  *
  * SYNC: When modified, update this header and the theme generator spec.
  */
@@ -18,6 +20,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {
+  CssValueError,
+  toColor,
+  toLeading,
+  toPoints,
+  toShadow,
+  toWeight,
+  valueForMode,
+} from './css-values.mjs';
+
+export {toColor, toLeading, toPoints, toShadow, toWeight, valueForMode};
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -41,7 +54,6 @@ const REGENERATE = 'pnpm -F @astryxdesign/native generate:swift-ios';
 // needs it.
 const KEEP =
   /^--(color-|spacing-|radius-|size-element-|border-width$|font-size-|font-weight-|font-family-|text-(heading-\d|display-\d|body|large|label|supporting|code)-|shadow-(low|med|high)$)/;
-const REM = 16;
 
 // Words Swift reserves as identifiers. A member or theme name that equals one
 // fails the run (G3, G6).
@@ -128,183 +140,13 @@ const swiftIdent = name => (SWIFT_KEYWORDS.has(name) ? `\`${name}\`` : name);
 // Values (G7)
 // ---------------------------------------------------------------------------
 
-function hex2(n) {
-  return Math.round(n).toString(16).padStart(2, '0').toUpperCase();
-}
-
-// The CSS color keywords core's resolved tokens use.
-const NAMED_COLORS = {
-  black: '#000000FF',
-  white: '#FFFFFFFF',
-  transparent: '#00000000',
-};
-
-/** A CSS color as `#RRGGBBAA`, or null when it is not a plain color. */
-export function toHexColor(value) {
-  const v = value.trim();
-  let m = /^#([0-9a-f]{3,8})$/i.exec(v);
-  if (m) {
-    let h = m[1];
-    if (h.length === 3 || h.length === 4) h = [...h].map(c => c + c).join('');
-    if (h.length === 6) h += 'FF';
-    return h.length === 8 ? `#${h.toUpperCase()}` : null;
-  }
-  m =
-    /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)$/i.exec(
-      v,
-    );
-  if (m) {
-    const alpha =
-      m[4] === undefined
-        ? 1
-        : m[4].endsWith('%')
-          ? parseFloat(m[4]) / 100
-          : parseFloat(m[4]);
-    return `#${hex2(+m[1])}${hex2(+m[2])}${hex2(+m[3])}${hex2(alpha * 255)}`;
-  }
-  m =
-    /^hsla?\(\s*(-?[\d.]+)(?:deg)?[,\s]+([\d.]+)%[,\s]+([\d.]+)%(?:[,\s/]+([\d.]+%?))?\s*\)$/i.exec(
-      v,
-    );
-  if (m) {
-    // Exact sRGB, then each channel rounded to the nearest of 256 steps,
-    // halves up (G7).
-    const h = (((+m[1] % 360) + 360) % 360) / 360;
-    const sat = +m[2] / 100;
-    const l = +m[3] / 100;
-    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
-    const p = 2 * l - q;
-    const channel = t => {
-      const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
-      if (u < 1 / 6) return p + (q - p) * 6 * u;
-      if (u < 1 / 2) return q;
-      if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
-      return p;
-    };
-    const alpha =
-      m[4] === undefined
-        ? 1
-        : m[4].endsWith('%')
-          ? parseFloat(m[4]) / 100
-          : parseFloat(m[4]);
-    // Round away float noise first so an exact half rounds up.
-    const byte = c => hex2(Math.round(c * 255 * 1e6) / 1e6);
-    return `#${byte(channel(h + 1 / 3))}${byte(channel(h))}${byte(channel(h - 1 / 3))}${byte(alpha)}`;
-  }
-  m =
-    /^oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+(-?[\d.]+)(?:deg)?(?:\s*\/\s*([\d.]+%?))?\s*\)$/i.exec(
-      v,
-    );
-  if (m) {
-    // Exact OKLCH → OKLab → linear sRGB → sRGB, clipped to the sRGB gamut,
-    // then each channel rounded to the nearest of 256 steps, halves up (G7).
-    const part = (text, percentOf) =>
-      text.endsWith('%')
-        ? (parseFloat(text) / 100) * percentOf
-        : parseFloat(text);
-    const L = part(m[1], 1);
-    const C = part(m[2], 0.4);
-    const hue = (parseFloat(m[3]) * Math.PI) / 180;
-    const a = C * Math.cos(hue);
-    const b = C * Math.sin(hue);
-    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-    const mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-    const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-    const linear = [
-      4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
-      -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
-      -0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s,
-    ];
-    const encode = c => {
-      const x = Math.min(1, Math.max(0, c));
-      return x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
-    };
-    const alpha = m[4] === undefined ? 1 : part(m[4], 1);
-    const byte = c => hex2(Math.round(c * 255 * 1e6) / 1e6);
-    return `#${linear.map(c => byte(encode(c))).join('')}${byte(alpha)}`;
-  }
-  return NAMED_COLORS[v.toLowerCase()] ?? null;
-}
-
-/**
- * The value of a token in one mode: a whole-value `light-dark(a, b)` is `a` in
- * light and `b` in dark (G1); any other value is returned unchanged.
- */
-export function valueForMode(value, mode) {
-  const m = /^\s*light-dark\((.*)\)\s*$/s.exec(value);
-  if (!m) return value;
-  let depth = 0;
-  for (let i = 0; i < m[1].length; i++) {
-    const c = m[1][i];
-    if (c === '(') depth++;
-    else if (c === ')') depth--;
-    else if (c === ',' && depth === 0) {
-      const part = mode === 'light' ? m[1].slice(0, i) : m[1].slice(i + 1);
-      return part.trim();
-    }
-  }
-  return value;
-}
-
-/** Splits a CSS list at its top-level commas. */
-function splitTopLevel(value) {
-  const parts = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < value.length; i++) {
-    const c = value[i];
-    if (c === '(') depth++;
-    else if (c === ')') depth--;
-    else if (c === ',' && depth === 0) {
-      parts.push(value.slice(start, i));
-      start = i + 1;
-    }
-  }
-  parts.push(value.slice(start));
-  return parts.map(part => part.trim());
-}
-
-/**
- * A CSS `box-shadow` list as shadow layers in one mode, or null (G7). A drop
- * layer is `x y blur color` with no spread; an inset layer is a ring,
- * `inset 0 0 0 <width> color`. A `light-dark()` color is taken per mode. Any
- * other layer has no exact SwiftUI form, so the list is null.
- */
-export function toShadow(value, mode) {
-  const layers = [];
-  for (const layer of splitTopLevel(value.trim())) {
-    const m =
-      /^(inset\s+)?(\S+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?\s+((?:light-dark|rgba?|hsla?|oklch)\(.*\)|#[0-9A-Fa-f]+|[a-z]+)$/s.exec(
-        layer,
-      );
-    if (!m) return null;
-    const [x, y, blur] = [m[2], m[3], m[4]].map(toPoints);
-    const spread = m[5] == null ? 0 : toPoints(m[5]);
-    const color = toHexColor(valueForMode(m[6], mode));
-    if (x == null || y == null || blur == null || spread == null || !color) {
-      return null;
-    }
-    const isInset = m[1] != null;
-    if (isInset ? x !== 0 || y !== 0 || blur !== 0 : spread !== 0) return null;
-    layers.push({x, y, blur, spread, isInset, color});
-  }
-  return layers.length ? layers : null;
-}
-
-/** A CSS length or unitless number as points, or null. */
-export function toPoints(value) {
-  const m = /^(-?[\d.]+)(rem|px)?$/.exec(value.trim());
-  if (!m) return null;
-  return m[2] === 'rem' ? parseFloat(m[1]) * REM : parseFloat(m[1]);
-}
-
 /** A CSS font-family stack as family names in order, or null. */
 export function toFamilies(value) {
   const families = [];
   const re = /\s*("([^"]*)"|'([^']*)'|([^,]+?))\s*(,|$)/gy;
   let m;
   const v = value.trim();
-  if (!v || /var\(|calc\(/.test(v)) return null;
+  if (!v || /\b(var|calc|env|attr)\(/.test(v)) return null;
   while (re.lastIndex < v.length && (m = re.exec(v))) {
     const name = (m[2] ?? m[3] ?? m[4] ?? '').trim();
     if (!name) return null;
@@ -378,30 +220,55 @@ export function localTokensLeftOut(theme) {
   return Object.keys(theme.localTokens ?? {}).sort();
 }
 
+const isWeight = token => /^--font-weight-|-weight$/.test(token);
+const isLeading = token => token.endsWith('-leading');
+
+/**
+ * One token's value in one mode as its Swift value (G7). A loss goes into
+ * `notes`; a value with no static form throws CssValueError.
+ */
+function convertToken(token, value, group, typedSoFar, notes) {
+  if (group === 'color') return toColor(value, notes);
+  if (group === 'shadow') return toShadow(value, notes);
+  if (isFamily(token)) {
+    const families = toFamilies(value);
+    if (!families) throw new CssValueError('a font family is a list of names');
+    return families;
+  }
+  if (isWeight(token)) return toWeight(value, notes);
+  if (isLeading(token)) {
+    const size = typedSoFar[token.replace(/-leading$/, '-size')]?.value;
+    return toLeading(value, size, notes);
+  }
+  return toPoints(value, notes, {borderWidth: token === '--border-width'});
+}
+
 /**
  * Every kept token of a theme in one mode, read only from core's resolver:
- * `{token: {group, member, value}}` with typed values (G1, G5, G7).
+ * `{token: {group, member, value}}` with typed values (G1, G5, G7). A value
+ * with no static form fails the run with the theme, mode, token, value, and
+ * reason.
  */
 async function resolveMode(theme, mode) {
   const {resolveThemeTokens} = await core();
   const out = {};
-  for (let [token, value] of Object.entries(
+  const entries = Object.entries(
     resolveThemeTokens(theme === CORE_DEFAULTS ? null : theme, {mode}),
-  )) {
-    if (!KEEP.test(token) || typeof value !== 'string') continue;
+  )
+    .filter(([token, value]) => KEEP.test(token) && typeof value === 'string')
+    // A length line height divides by its style's size, so sizes go first.
+    .sort(([a], [b]) => Number(isLeading(a)) - Number(isLeading(b)));
+  for (const [token, value] of entries) {
     const {group, member} = swiftMember(token);
-    if (group !== 'shadow') value = valueForMode(value, mode);
-    const fail = kind => {
-      throw new Error(
-        `${theme.name} ${mode}: ${token} is not a ${kind} Swift can read: ${value}`,
-      );
-    };
     let typed;
-    if (group === 'color') typed = toHexColor(value) ?? fail('color');
-    else if (group === 'shadow')
-      typed = toShadow(value, mode) ?? fail('shadow');
-    else if (isFamily(token)) typed = toFamilies(value) ?? fail('font family');
-    else typed = toPoints(value) ?? fail('size');
+    try {
+      typed = convertToken(token, valueForMode(value, mode), group, out, []);
+    } catch (error) {
+      if (!(error instanceof CssValueError)) throw error;
+      throw new Error(
+        `${theme.name} ${mode}: ${token} = ${value}: ${error.message}; Swift has no static value`,
+      );
+    }
     out[token] = {group, member, value: typed};
   }
   return out;
@@ -685,7 +552,8 @@ ${structs}
 }
 
 /**
- * SwiftUI's own color for `RRGGBBAA` in a color space (`sRGB`), each 8-bit
+ * SwiftUI's own color for `RRGGBBAA` in a color space (`sRGB` or
+ * `displayP3`), each 8-bit
  * channel written as `0`, `1`, or the exact decimal of its step over 255
  * (G7). A decimal literal, not `n / 255`, keeps Swift's type checker fast on
  * a theme's hundreds of colors.
@@ -699,7 +567,11 @@ function swiftColor(space, hex) {
 }
 
 function swiftValue(type, value) {
-  if (type === 'Color') return swiftColor('sRGB', value.slice(1));
+  if (type === 'Color') {
+    return value.startsWith('#')
+      ? swiftColor('sRGB', value.slice(1))
+      : swiftColor('displayP3', value.split('#')[1]);
+  }
   if (type === '[String]')
     return `[${value.map(v => JSON.stringify(v)).join(', ')}]`;
   if (type === '[ShadowLayer]')
