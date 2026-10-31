@@ -21,7 +21,7 @@
  * - /packages/cli/assets/templates/blocks/components/ButtonGroup/ (showcase blocks)
  */
 
-import {useMemo, type ReactNode} from 'react';
+import {useMemo, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
@@ -35,6 +35,7 @@ import type {ButtonGroupOrientation} from './ButtonGroupContext';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useToolbar} from '../Toolbar/ToolbarContext';
 
 // =============================================================================
 // Props
@@ -190,46 +191,64 @@ export function ButtonGroup({
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
 
-  const childCount = useMemo(() => {
+  const toolbarContext = useToolbar();
+  const [isNestedInToolbar, setIsNestedInToolbar] = useState(false);
+
+  // Initial estimate from renderable children; accurately synchronized with
+  // actual rendered members collected by useListFocus after layout.
+  const [renderedCount, setRenderedCount] = useState<number>(() => {
     if (Array.isArray(children)) {
       return children.flat().filter(isRenderable).length;
     }
     return isRenderable(children) ? 1 : 0;
-  }, [children]);
-
-  const resolvedRole = roleProp ?? (childCount >= 3 ? 'toolbar' : 'group');
-  const isToolbar = resolvedRole === 'toolbar';
-
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // Roving rewrites `tabindex` on every item, so the selector cannot key off
-    // a value: `[tabindex="0"]` would drop each member the moment it is
-    // stamped -1. `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, a[href], [tabindex]',
-    // A member's layer renders inline inside the group (useLayer does not
-    // portal it), so a key pressed in an open DropdownMenu bubbles here. The
-    // boundary is the group's own root or any layer, whichever is nearer to
-    // the target. Naming the group's own root is what keeps a group rendered
-    // inside a Popover or Toast working: bailing on any [popover] ancestor
-    // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [role="toolbar"], [popover]',
-    orientation,
-    hasRovingTabIndex: isToolbar,
   });
 
-  // When not roving (e.g. role="group" for 2 or fewer members), ensure any items
-  // that were assigned tabindex="-1" return to standard natural Tab order.
+  const isInsideToolbar = toolbarContext != null || isNestedInToolbar;
+
+  // When nested inside a Toolbar, preserve role="group" and yield roving tabindex
+  // and focus management to the parent Toolbar so it retains a single Tab stop.
+  const resolvedRole = isInsideToolbar
+    ? 'group'
+    : (roleProp ?? (renderedCount >= 3 ? 'toolbar' : 'group'));
+  const isToolbar = resolvedRole === 'toolbar';
+
+  const {listRef, handleKeyDown, handleFocus, getItems} =
+    useListFocus<HTMLDivElement>({
+      // Roving rewrites `tabindex` on every item, so the selector cannot key off
+      // a value: `[tabindex="0"]` would drop each member the moment it is
+      // stamped -1. `a[href]` catches a Button rendered with `href`.
+      itemSelector: 'button, a[href], [tabindex]',
+      // A member's layer renders inline inside the group (useLayer does not
+      // portal it), so a key pressed in an open DropdownMenu bubbles here. The
+      // boundary is the group's own root or any layer, whichever is nearer to
+      // the target. Naming the group's own root is what keeps a group rendered
+      // inside a Popover or Toast working: bailing on any [popover] ancestor
+      // instead would swallow every arrow key it owns.
+      boundarySelector: '[role="group"], [role="toolbar"], [popover]',
+      orientation,
+      hasRovingTabIndex: isToolbar,
+    });
+
   useIsomorphicLayoutEffect(() => {
-    if (!isToolbar && listRef.current) {
-      const items = listRef.current.querySelectorAll<HTMLElement>(
-        'button, a[href], [tabindex]',
+    const listEl = listRef.current;
+    if (listEl) {
+      const closestBoundary = listEl.parentElement?.closest(
+        '[role="toolbar"], [popover], dialog',
       );
-      for (const el of items) {
-        if (el.getAttribute('tabindex') === '-1') {
-          el.removeAttribute('tabindex');
-        }
+      const inToolbar =
+        toolbarContext != null ||
+        (closestBoundary != null &&
+          closestBoundary.getAttribute('role') === 'toolbar');
+      if (inToolbar !== isNestedInToolbar) {
+        setIsNestedInToolbar(inToolbar);
       }
     }
-  }, [isToolbar, childCount, listRef]);
+    const count = getItems().length;
+    if (count !== renderedCount) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- rendered member count is derived from DOM layout
+      setRenderedCount(count);
+    }
+  });
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),

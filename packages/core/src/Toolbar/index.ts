@@ -13,3 +13,5 @@
 
 export {Toolbar} from './Toolbar';
 export type {ToolbarProps, ToolbarSize} from './Toolbar';
+export {ToolbarContext, useToolbar} from './ToolbarContext';
+export type {ToolbarContextValue} from './ToolbarContext';
