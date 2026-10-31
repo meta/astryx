@@ -306,3 +306,81 @@ describe('generate-pr-comment touch-only budget', () => {
     expect(out).not.toContain('Touch-only size budget');
   });
 });
+
+describe('published package size', () => {
+  function withPackageSize(report) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-package-size-'));
+    try {
+      const file = path.join(dir, 'package-size.json');
+      fs.writeFileSync(file, JSON.stringify(report));
+      return runComment({newComponents: [], modifiedComponents: []}, [
+        '--package-size',
+        file,
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+
+  const sizes = (packedBytes, files = 10) => ({
+    packedBytes,
+    unpackedBytes: packedBytes * 4,
+    files,
+  });
+
+  it('renders the section after the bundle summary, with new dependencies', () => {
+    const out = withPackageSize({
+      headSha: 'a'.repeat(40),
+      budget: {packedPercent: 5, packedMinBytes: 1024},
+      packages: [
+        {
+          name: '@astryxdesign/core',
+          base: sizes(100000, 10),
+          head: sizes(110000, 12),
+          overBudget: true,
+        },
+      ],
+      addedDependencies: [
+        {
+          package: '@astryxdesign/core',
+          field: 'dependencies',
+          name: 'left-pad',
+          range: '^1.3.0',
+        },
+      ],
+      removedDependencies: [],
+      verdict: 'over-budget',
+    });
+    expect(out.indexOf('### Bundle Size Summary')).toBeLessThan(
+      out.indexOf('### Published Package Size'),
+    );
+    expect(out).toContain(
+      '| @astryxdesign/core | 97.7KB | 107.4KB | +9.8KB (+10.0%) ⚠️ |',
+    );
+    expect(out).toContain('| 10 → 12 |');
+    expect(out).toContain('left-pad');
+    expect(out).toContain('**⚠️ Over the package budget:**');
+  });
+
+  it('renders report strings as literal text', () => {
+    const out = withPackageSize({
+      packages: [
+        {
+          name: '<img src=x onerror=alert(1)>',
+          base: sizes(1000),
+          head: sizes(2000),
+          overBudget: false,
+        },
+      ],
+      addedDependencies: [],
+      removedDependencies: [],
+      verdict: 'pass',
+    });
+    expect(out).not.toContain('<img src=x');
+  });
+
+  it('leaves the section out without a report', () => {
+    const out = runComment({newComponents: [], modifiedComponents: []});
+    expect(out).not.toContain('Published Package Size');
+  });
+});
