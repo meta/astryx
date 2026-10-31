@@ -38,6 +38,7 @@ import {expect, test, type Page} from '@playwright/test';
 import {build} from 'esbuild';
 import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
+import {controlClock} from './controlClock';
 
 let script = '';
 
@@ -161,7 +162,8 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   const {start, busy, tracked, control} = await blockedRun(page, SLOW);
   // Judged against what the compositor presented in the same window, not a
   // display-rate bound: a loaded runner's compositor skips frames for every
-  // animation alike. The bound's own verdict is recorded beside it.
+  // animation alike, and the harness reads a slow tail inside the block at
+  // its own pace. The bound's own verdict is recorded beside it.
   const proof = busyWindowProof(tracked, busy, {
     axis: 'x',
     settledWithin: 2,
@@ -222,40 +224,12 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   const controlAt = new Map(
     control.flatMap(f => (f.box == null ? [] : [[f.t, f.box.x] as const])),
   );
-  // The control's own time at each frame: 240 px out in 400 ms, back in
-  // 400 ms. Its position gives two times a cycle; the frame's timestamp,
-  // late by tens of ms at most, picks one, so a frame within 24 px of a turn,
-  // where the two are within 80 ms, is left out.
-  const clock: {i: number; ms: number}[] = [];
-  let origin: number | null = null;
-  for (const [i, f] of inside.entries()) {
-    const x = controlAt.get(f.t);
-    if (x == null || x < 24 || x > 216) {
-      continue;
-    }
-    const out = x / 0.6;
-    const back = 800 - x / 0.6;
-    if (origin == null) {
-      // The first usable frame's direction, from the next usable one.
-      const next = inside
-        .slice(i + 1)
-        .map(g => controlAt.get(g.t))
-        .find(y => y != null && y >= 24 && y <= 216);
-      if (next == null) {
-        break;
-      }
-      origin = f.t - (next > x ? out : back);
-    }
-    const expected = f.t - origin;
-    const cycle = Math.round((expected - out) / 800);
-    const candidates = [out, back, out + 800, back - 800].map(
-      ms => ms + cycle * 800,
-    );
-    const ms = candidates.reduce((best, c) =>
-      Math.abs(c - expected) < Math.abs(best - expected) ? c : best,
-    );
-    clock.push({i, ms});
-  }
+  // The control's own time at each frame (controlClock): 240 px out in
+  // 400 ms, back in 400 ms, read from its position on the origin most frames
+  // agree with, so no one frame's stamp or direction sets it.
+  const clock = controlClock(
+    inside.map(f => ({t: f.t, x: controlAt.get(f.t) ?? null})),
+  );
   /** How far the box's curve time drifts from the control's, ms. */
   const drift = (times: number[]) => {
     const gaps = clock.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
