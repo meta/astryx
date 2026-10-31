@@ -36,6 +36,8 @@ import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {
   borderVars,
   colorVars,
+  durationVars,
+  easeVars,
   fontWeightVars,
   shadowVars,
   sizeVars,
@@ -148,7 +150,18 @@ const styles = stylex.create({
     borderEndStartRadius: '2px',
     backgroundColor: colorVars['--color-background-popover'],
     backgroundImage: 'none',
-    boxShadow: shadowVars['--shadow-med'],
+    // A transparent ring sits where the selected ring draws, so selecting
+    // eases only the ring's colour; without it the browser pairs the ring
+    // with the elevation shadow and morphs one into the other.
+    boxShadow: `0 0 0 2px transparent, ${shadowVars['--shadow-med']}`,
+    // The selected ring and dimming ease in and out, so a pin changes state as
+    // one surface instead of snapping; reduced motion makes the change instant.
+    transitionProperty: 'box-shadow, opacity',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: easeVars['--ease-standard'],
     color: colorVars['--color-text-secondary'],
     cursor: {
       default: 'pointer',
