@@ -241,7 +241,7 @@ runs:
               await github.rest.repos.getContent({...context.repo, path: headFile, ref: pr.head.sha});
             } catch (error) {
               if (error.status === 404) {
-                core.notice(`This pull request's head has no ${headFile}; merge main to run this check.`);
+                core.notice(`This pull request's head has no ${headFile}, so this job skips what needs it; merging main brings it in.`);
                 headFilePresent = 'false';
               }
             }
