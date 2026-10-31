@@ -236,15 +236,20 @@ guidance owns the process used to propose and test APIs.
   any release. The public data attributes are `data-astryx-theme`, the theme
   scope (`spec:AST-066` FR6); `data-astryx-media`, the media-surface scope that
   theme compilation emits; `data-astryx-aspect-ratio-override`
-  (`component:AspectRatio` FR3); and `data-astryx-token` and
-  `data-astryx-token-value` (`component:ChatComposerTokenElement` FR1). They
-  change only under INV9. The code that owns them writes them at its own sites,
-  among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
-  theme build, AspectRatio, and the Chat composer, and the lint rule allows
-  their names.
+  (`component:AspectRatio` FR3); `data-astryx-token` and
+  `data-astryx-token-value` (`component:ChatComposerTokenElement` FR1);
+  `data-astryx-menu-press`, the menu-root marker
+  (`module:DropdownMenu/useMenuPress`); `data-astryx-pressable`, the press
+  marker (`component:SegmentedControlItem` FR7); and `data-astryx-edge-comp`,
+  exported as `EDGE_COMP_ATTR` (INV12). They change only under INV9. The code
+  that owns them writes them at its own sites, among them Theme, MediaTheme,
+  `reset.css`, `generateThemeRules.ts`, the CLI theme build, AspectRatio, the
+  Chat composer, the press and menu-press hooks, and the edge-compensation
+  styles, and the lint rule allows their names.
 
-This record applies to stable public packages. Lab components are not stable
-public promises until promotion.
+This record applies to the published Core package, and INV23 also applies to
+Lab and RichText source. Lab components are not stable public promises until
+promotion.
 
 ## Change coupling
 
@@ -372,9 +377,6 @@ Known verification gaps:
   `data-astryx-richtext-code-syntax`; no full inventory exists yet. Each
   conforms by moving into an owner module in its own package. Lab's Schedule
   reads Core's `data-astryx-popover-fallback-close`, and conforms through Core's
-  public API or an attribute Lab owns. `data-astryx-pressable`,
-  `data-astryx-menu-press`, and `data-astryx-edge-comp` are reachable through
-  public exports, hook types, or consumer docs, so they stay public under INV12
-  until those exports are deprecated under INV9.
+  public API or an attribute Lab owns.
 
 These gaps are named here rather than treating partial checks as complete proof.
