@@ -45,9 +45,9 @@ function safeUrl(value) {
  */
 function sizeText(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'N/A';
-  if (Math.abs(bytes) < 1024) return `${bytes}B`;
-  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+  if (Math.abs(bytes) < 1024) return `${bytes} B`;
+  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 module.exports = {inline, num, safeUrl, sizeText};
