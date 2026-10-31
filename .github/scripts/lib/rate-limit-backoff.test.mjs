@@ -219,6 +219,7 @@ describe('the gate and report jobs that share the API budget wait it out', () =>
     ['pr-comment.yml', 'resolve'],
     ['pr-comment.yml', 'spec-only-reconcile'],
     ['pr-comment.yml', 'comment'],
+    ['main-heavy-lanes.yml', 'dispatch'],
   ])('%s %s installs the wait before its first request', (workflow, job) => {
     const steps = scripts(workflow, job);
     expect(steps.length).toBeGreaterThan(0);
@@ -235,6 +236,7 @@ describe('the gate and report jobs that share the API budget wait it out', () =>
       ['review-signal.yml', 'flag'],
       ['review-clear.yml', 'clear'],
       ['rerequest-review-on-update.yml', 'rerequest-review'],
+      ['main-heavy-lanes.yml', 'dispatch'],
     ]) {
       const script = scripts(workflow, job)[0];
       expect(script).toContain(
