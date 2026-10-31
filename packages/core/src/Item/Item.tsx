@@ -742,9 +742,9 @@ export function Item({
         )}>
         {label}
       </span>
-      {description != null && (
+      {hasRenderableDescription && (
         <span
-          id={hasRenderableDescription ? descriptionID : undefined}
+          id={descriptionID}
           {...stylex.props(
             styles.description,
             isInline && styles.inlineDescription,
@@ -772,7 +772,7 @@ export function Item({
 
   const content = (
     <>
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span
           {...stylex.props(
             styles.startContent,
@@ -830,7 +830,7 @@ export function Item({
         </span>
       )}
 
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span
           {...stylex.props(
             styles.endContent,

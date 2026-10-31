@@ -9,7 +9,7 @@
  * SYNC: When Item component changes, update tests to match new behavior
  */
 
-import {use, useRef} from 'react';
+import {use, useRef, type ReactNode} from 'react';
 import {
   afterEach,
   beforeAll,
@@ -1511,5 +1511,50 @@ describe('swipeActions', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('Item empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const {container: withSlots} = render(
+      <Item
+        label="Item"
+        startContent={value as ReactNode}
+        endContent={value as ReactNode}
+      />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withSlots.innerHTML).toBe(without.innerHTML);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no description wrapper for %s', (_name, description) => {
+    const {container: withDescription} = render(
+      <Item label="Item" description={description as ReactNode} />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withDescription.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders no description element for an empty string', () => {
+    render(<Item label="Item" description="" />);
+    const label = screen.getByText('Item');
+    expect(label.parentElement?.children).toHaveLength(1);
+  });
+
+  it('renders 0 in the start, end and description slots, as React does', () => {
+    render(
+      <Item label="Item" startContent={0} endContent={0} description={0} />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
   });
 });
