@@ -5,8 +5,7 @@
 /**
  * @file MultiSelector.tsx
  * @input Uses React, StyleX, usePopover, useTooltip, CheckboxInput, Field, Badge, Icon, InputGroupContext
- * @output Exports MultiSelector with input, secondary, and ghost trigger variants;
- *   disabled value commits are blocked even while the panel remains open
+ * @output Exports MultiSelector with input, secondary, and ghost trigger variants
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -1589,15 +1588,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
       announceSearch(t('@astryx.multiSelector.resultCount', {count}));
     },
-    [
-      isDisabled,
-      isEffectivelyReadOnly,
-      announceSearch,
-      isLoading,
-      selectableItems,
-      getCreateQuery,
-      t,
-    ]
+    [announceSearch, isLoading, selectableItems, getCreateQuery, t],
   );
 
   // The panel's empty message is role="presentation" — role="listbox" permits
@@ -1629,8 +1620,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     announce: announceSearch,
   });
 
-  // Guard every value commit: an already-open panel can still deliver pointer
-  // or create-Enter events after disablement. Keep the surface and focus owner.
+  // Handle toggle
   // Clear all selected values. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValues = useCallback(() => {
