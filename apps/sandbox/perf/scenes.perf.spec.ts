@@ -2,17 +2,18 @@
 
 /**
  * @file scenes.perf.spec.ts
- * @input The built Sandbox's perf scenes page (apps/sandbox/out, served by
- *   playwright.perf.config.ts), PERF_SAMPLES (default 5), PERF_RESULTS_DIR
- *   (default test-results/perf)
+ * @input The built Sandbox's perf scenes page (apps/sandbox/out, served here
+ *   by the accessibility harness's static server), PERF_SAMPLES (default 5),
+ *   PERF_RESULTS_DIR (default test-results/perf)
  * @output One JSON file per scene: every sample and the per-metric median
  * @position The perf scenes' measurement driver. Run locally with
  *   `pnpm build && pnpm -F @astryxdesign/sandbox build` then
  *   `pnpm exec playwright test --config playwright.perf.config.ts`.
  *
  * Each sample loads the scene in a fresh browser context, so no sample
- * inherits another's heap, caches or listeners. One warm-up sample per scene
- * is discarded: it pays for code loading and the first compilation.
+ * inherits another's heap, caches or listeners, and inside that context plays
+ * one unmeasured cycle before the measured one (measure.ts): the numbers are a
+ * warm mount and what one more cycle leaves behind.
  *
  * SYNC: Scenes come from apps/sandbox/src/app/(raw)/pages/perf-scenes/sceneIds.ts.
  */
@@ -20,24 +21,38 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
-import {frames} from '../../../internal/interaction-harness/src/index';
+import {
+  serveStatic,
+  type StaticServer,
+} from '../../../internal/a11y-spec/src/storybook';
+import {
+  frames,
+  waitForRest,
+} from '../../../internal/interaction-harness/src/index';
 import {
   PERF_SCENES,
   type PerfSceneId,
 } from '../src/app/(raw)/pages/perf-scenes/sceneIds';
-import {
-  EVENT_TIMING_LOG,
-  animationsSettled,
-  measureScene,
-  type SceneSample,
-} from './measure';
+import {EVENT_TIMING_LOG, measureScene, type SceneSample} from './measure';
 
 const SAMPLES = positiveInteger('PERF_SAMPLES', 5);
-const WARMUPS = 1;
 const RESULTS_DIR = path.resolve(
   process.env.PERF_RESULTS_DIR ?? 'test-results/perf',
 );
 const OVERLAY_CYCLES = 50;
+const SANDBOX_DIR = 'apps/sandbox/out';
+
+let server: StaticServer | undefined;
+test.beforeAll(async () => {
+  server = await serveStatic(SANDBOX_DIR, {
+    sentinel: 'pages/perf-scenes/index.html',
+    missing: root =>
+      `No built Sandbox with the perf scenes at ${root}. Run \`pnpm build && pnpm -F @astryxdesign/sandbox build\` first.`,
+  });
+});
+test.afterAll(async () => {
+  await server?.close();
+});
 
 function positiveInteger(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -84,10 +99,10 @@ const INTERACTIONS: Readonly<
       .pressSequentially('an', {delay: 50});
     await frames(page, 2);
   },
-  // Expand all 50 folders at once and let the layout glide finish.
+  // Expand all 50 folders at once and let the layout glide come to rest.
   'tree-list': async page => {
     await page.getByRole('button', {name: 'Expand all', exact: true}).click();
-    await animationsSettled(page);
+    await waitForRest(page.getByRole('tree'));
   },
   // Append a section to the long document.
   markdown: async page => {
@@ -120,8 +135,9 @@ function median(values: readonly number[]): number {
 for (const scene of PERF_SCENES) {
   test(scene, async ({browser}, testInfo) => {
     const samples: SceneSample[] = [];
-    for (let run = 0; run < WARMUPS + SAMPLES; run++) {
+    for (let run = 0; run < SAMPLES; run++) {
       const context = await browser.newContext({
+        baseURL: server?.origin,
         viewport: {width: 1280, height: 800},
       });
       try {
@@ -132,10 +148,7 @@ for (const scene of PERF_SCENES) {
           .locator('html[data-perf-page="interactive"]')
           .waitFor({state: 'attached'});
         await page.evaluate(() => document.fonts.ready);
-        const sample = await measureScene(page, INTERACTIONS[scene]);
-        if (run >= WARMUPS) {
-          samples.push(sample);
-        }
+        samples.push(await measureScene(page, INTERACTIONS[scene]));
       } finally {
         await context.close();
       }

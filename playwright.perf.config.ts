@@ -20,7 +20,6 @@
 import {defineConfig, devices} from '@playwright/test';
 
 const isCI = (process.env.CI ?? '') !== '';
-const PORT = 4179;
 
 export default defineConfig({
   testDir: 'apps/sandbox/perf',
@@ -29,17 +28,10 @@ export default defineConfig({
   // Timing data: one browser at a time.
   workers: 1,
   fullyParallel: false,
-  // A scene's warm-up and samples run inside one test; overlay churn plays
-  // 150 open/close pairs per sample.
+  // A scene's samples run inside one test, each with a warm-up cycle; overlay
+  // churn plays 150 open/close pairs per cycle.
   timeout: 6 * 60_000,
   forbidOnly: isCI,
   reporter: isCI ? [['list'], ['github']] : [['list']],
-  use: {baseURL: `http://127.0.0.1:${PORT}`},
-  webServer: {
-    command: `node apps/sandbox/perf/serve.mjs --port ${PORT}`,
-    url: `http://127.0.0.1:${PORT}/pages/perf-scenes/`,
-    reuseExistingServer: !isCI,
-    timeout: 60_000,
-  },
   projects: [{name: 'chromium', use: {...devices['Desktop Chrome']}}],
 });
