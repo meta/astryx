@@ -18,7 +18,7 @@
  * - /packages/core/src/hooks/useListFocus.test.tsx
  */
 
-import {useCallback, useRef} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
@@ -442,12 +442,42 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
 
   // --- Roving tabindex ownership (opt-in via `hasRovingTabIndex`) -------------
 
+  // Track items that useListFocus stamped with roving tabindex and their original
+  // tabindex attribute value (string or null if the attribute was not present).
+  const stampedTabIndicesRef = useRef<Map<HTMLElement, string | null>>(
+    new Map(),
+  );
+
+  /**
+   * Restore original tabindex values for all items this hook instance stamped,
+   * without touching any elements outside this level's managed items.
+   */
+  const restoreTabIndices = useCallback(() => {
+    if (stampedTabIndicesRef.current.size === 0) {
+      return;
+    }
+    for (const [el, original] of stampedTabIndicesRef.current) {
+      if (el.isConnected) {
+        if (original == null) {
+          el.removeAttribute('tabindex');
+        } else {
+          el.setAttribute('tabindex', original);
+        }
+      }
+    }
+    stampedTabIndicesRef.current.clear();
+  }, []);
+
   /**
    * Set `tabindex` on an item, but only when it differs (avoids redundant DOM
    * writes). Uses setAttribute so the value reflects even for elements (like
-   * `<button>`) whose default tabIndex is already 0.
+   * `<button>`) whose default tabIndex is already 0. Records the item's original
+   * tabindex prior to roving management.
    */
   const setTabIndex = useCallback((el: HTMLElement, value: 0 | -1) => {
+    if (!stampedTabIndicesRef.current.has(el)) {
+      stampedTabIndicesRef.current.set(el, el.getAttribute('tabindex'));
+    }
     if (el.getAttribute('tabindex') !== String(value)) {
       el.setAttribute('tabindex', String(value));
     }
@@ -464,6 +494,20 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
     if (enabled.length === 0) {
       return;
     }
+    // Clean up any items that were previously stamped but are no longer in items
+    const currentItemSet = new Set(items);
+    for (const [el, original] of stampedTabIndicesRef.current) {
+      if (!currentItemSet.has(el)) {
+        if (el.isConnected) {
+          if (original == null) {
+            el.removeAttribute('tabindex');
+          } else {
+            el.setAttribute('tabindex', original);
+          }
+        }
+        stampedTabIndicesRef.current.delete(el);
+      }
+    }
     const current = enabled.find(el => el.getAttribute('tabindex') === '0');
     const tabbable = current ?? enabled[0];
     for (const el of items) {
@@ -472,12 +516,21 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
   }, [getItems, isItemDisabled, setTabIndex]);
 
   // Keep the tab stop valid across renders (items added/removed, disabled
-  // toggled). Runs after every commit but only when roving tabindex is on.
+  // toggled). When roving tabindex is disabled, restore original tabindex
+  // values on only the items useListFocus stamped.
   useIsomorphicLayoutEffect(() => {
     if (hasRovingTabIndex) {
       syncTabStops();
+    } else {
+      restoreTabIndices();
     }
   });
+
+  useEffect(() => {
+    return () => {
+      restoreTabIndices();
+    };
+  }, [restoreTabIndices]);
 
   /**
    * Move focus to `items[index]`. When roving tabindex is enabled, also move

@@ -21,20 +21,22 @@
  * - /packages/cli/assets/templates/blocks/components/ButtonGroup/ (showcase blocks)
  */
 
-import {useMemo, type ReactNode} from 'react';
+import {useMemo, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
 import type {Elevation} from '../utils/types';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
 import {useListFocus} from '../hooks/useListFocus';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps, composeEventHandlers, isRenderable} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
 import type {ButtonGroupOrientation} from './ButtonGroupContext';
 import {themeProps} from '../utils/themeProps';
-
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useToolbar} from '../Toolbar/ToolbarContext';
+
 // =============================================================================
 // Props
 // =============================================================================
@@ -79,6 +81,13 @@ export interface ButtonGroupProps extends BaseProps<HTMLDivElement> {
    * @default false
    */
   isDisabled?: boolean;
+
+  /**
+   * Explicit role override. By default, ButtonGroup adapts:
+   * - 3 or more members: `role="toolbar"` with `aria-orientation` and roving tabindex.
+   * - 2 or fewer members (e.g. split buttons): `role="group"` with standard Tab order.
+   */
+  role?: 'group' | 'toolbar';
 
   /**
    * Test ID for testing frameworks.
@@ -131,9 +140,14 @@ const elevationStyles = stylex.create({
  * Children automatically detect the group via context and apply position-aware
  * styles in pure CSS.
  *
- * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, focus wraps, and disabled members are
- * skipped (the APG roving tabindex technique, via `useListFocus`).
+ * A group with 3 or more members exposes `role="toolbar"` with `aria-orientation`
+ * and acts as a composite widget with a single Tab stop and arrow-key roving focus
+ * (WAI-ARIA APG toolbar pattern).
+ *
+ * A group with 2 or fewer members (e.g. split button) exposes `role="group"` and
+ * keeps every member in the natural Tab order without roving tabindex.
+ *
+ * An explicit `role` override (`'toolbar'` or `'group'`) can be provided.
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.
@@ -172,24 +186,68 @@ export function ButtonGroup({
   'data-testid': testId,
   onKeyDown,
   onFocus,
+  role: roleProp,
   ...props
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // Roving rewrites `tabindex` on every item, so the selector cannot key off
-    // a value: `[tabindex="0"]` would drop each member the moment it is
-    // stamped -1. `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, a[href], [tabindex]',
-    // A member's layer renders inline inside the group (useLayer does not
-    // portal it), so a key pressed in an open DropdownMenu bubbles here. The
-    // boundary is the group's own root or any layer, whichever is nearer to
-    // the target. Naming the group's own root is what keeps a group rendered
-    // inside a Popover or Toast working: bailing on any [popover] ancestor
-    // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
+  const toolbarContext = useToolbar();
+  const [isNestedInToolbar, setIsNestedInToolbar] = useState(false);
+
+  // Initial estimate from renderable children; accurately synchronized with
+  // actual rendered members collected by useListFocus after layout.
+  const [renderedCount, setRenderedCount] = useState<number>(() => {
+    if (Array.isArray(children)) {
+      return children.flat().filter(isRenderable).length;
+    }
+    return isRenderable(children) ? 1 : 0;
+  });
+
+  const isInsideToolbar = toolbarContext != null || isNestedInToolbar;
+
+  // When nested inside a Toolbar, preserve role="group" and yield roving tabindex
+  // and focus management to the parent Toolbar so it retains a single Tab stop.
+  const resolvedRole = isInsideToolbar
+    ? 'group'
+    : (roleProp ?? (renderedCount >= 3 ? 'toolbar' : 'group'));
+  const isToolbar = resolvedRole === 'toolbar';
+
+  const {listRef, handleKeyDown, handleFocus, getItems} =
+    useListFocus<HTMLDivElement>({
+      // Roving rewrites `tabindex` on every item, so the selector cannot key off
+      // a value: `[tabindex="0"]` would drop each member the moment it is
+      // stamped -1. `a[href]` catches a Button rendered with `href`.
+      itemSelector: 'button, a[href], [tabindex]',
+      // A member's layer renders inline inside the group (useLayer does not
+      // portal it), so a key pressed in an open DropdownMenu bubbles here. The
+      // boundary is the group's own root or any layer, whichever is nearer to
+      // the target. Naming the group's own root is what keeps a group rendered
+      // inside a Popover or Toast working: bailing on any [popover] ancestor
+      // instead would swallow every arrow key it owns.
+      boundarySelector: '[role="group"], [role="toolbar"], [popover]',
+      orientation,
+      hasRovingTabIndex: isToolbar,
+    });
+
+  useIsomorphicLayoutEffect(() => {
+    const listEl = listRef.current;
+    if (listEl) {
+      const closestBoundary = listEl.parentElement?.closest(
+        '[role="toolbar"], [popover], dialog',
+      );
+      const inToolbar =
+        toolbarContext != null ||
+        (closestBoundary != null &&
+          closestBoundary.getAttribute('role') === 'toolbar');
+      if (inToolbar !== isNestedInToolbar) {
+        setIsNestedInToolbar(inToolbar);
+      }
+    }
+    const count = getItems().length;
+    if (count !== renderedCount) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- rendered member count is derived from DOM layout
+      setRenderedCount(count);
+    }
   });
 
   const contextValue = useMemo(
@@ -214,10 +272,17 @@ export function ButtonGroup({
             className,
             style,
           )}
-          role="group"
+          role={resolvedRole}
           aria-label={label}
-          onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
-          onFocus={composeEventHandlers(onFocus, handleFocus)}
+          aria-orientation={isToolbar ? orientation : undefined}
+          onKeyDown={composeEventHandlers(
+            onKeyDown,
+            isToolbar ? handleKeyDown : undefined,
+          )}
+          onFocus={composeEventHandlers(
+            onFocus,
+            isToolbar ? handleFocus : undefined,
+          )}
           aria-disabled={isDisabled || undefined}
           data-testid={testId}>
           {children}

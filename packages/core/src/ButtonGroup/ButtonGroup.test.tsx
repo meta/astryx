@@ -26,9 +26,24 @@ import {IconButton} from '../IconButton';
 import {DropdownMenu} from '../DropdownMenu';
 import {Tooltip} from '../Tooltip';
 import {HoverCard} from '../HoverCard';
+import {Toolbar} from '../Toolbar';
 
 describe('ButtonGroup', () => {
-  it('renders a group with aria-label', () => {
+  it('renders a group with aria-label for 2 members', () => {
+    render(
+      <ButtonGroup label="Actions">
+        <Button label="Copy" />
+        <Button label="Cut" />
+      </ButtonGroup>,
+    );
+
+    const group = screen.getByRole('group');
+    expect(group).toBeInTheDocument();
+    expect(group).toHaveAttribute('aria-label', 'Actions');
+    expect(group).not.toHaveAttribute('aria-orientation');
+  });
+
+  it('renders a toolbar with aria-orientation for 3 or more members', () => {
     render(
       <ButtonGroup label="Actions">
         <Button label="Copy" />
@@ -37,9 +52,36 @@ describe('ButtonGroup', () => {
       </ButtonGroup>,
     );
 
-    const group = screen.getByRole('group');
-    expect(group).toBeInTheDocument();
-    expect(group).toHaveAttribute('aria-label', 'Actions');
+    const toolbar = screen.getByRole('toolbar');
+    expect(toolbar).toBeInTheDocument();
+    expect(toolbar).toHaveAttribute('aria-label', 'Actions');
+    expect(toolbar).toHaveAttribute('aria-orientation', 'horizontal');
+  });
+
+  it('honors explicit role override', () => {
+    const {rerender} = render(
+      <ButtonGroup label="Actions" role="group">
+        <Button label="Copy" />
+        <Button label="Cut" />
+        <Button label="Paste" />
+      </ButtonGroup>,
+    );
+
+    expect(screen.getByRole('group')).toBeInTheDocument();
+    expect(screen.getByRole('group')).not.toHaveAttribute('aria-orientation');
+
+    rerender(
+      <ButtonGroup label="Actions" role="toolbar">
+        <Button label="Copy" />
+        <Button label="Cut" />
+      </ButtonGroup>,
+    );
+
+    expect(screen.getByRole('toolbar')).toBeInTheDocument();
+    expect(screen.getByRole('toolbar')).toHaveAttribute(
+      'aria-orientation',
+      'horizontal',
+    );
   });
 
   it('renders all child buttons', () => {
@@ -500,7 +542,7 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
-      const group = screen.getByRole('group');
+      const group = screen.getByRole('toolbar');
       const [first, middle, last] = items(group);
 
       expect([first, middle, last].map(el => el.textContent)).toEqual([
@@ -700,6 +742,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions" orientation="vertical">
           <Button label="Copy" />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
 
@@ -913,22 +956,74 @@ describe('ButtonGroup', () => {
       expect(tabIndexOf('Cut')).toBe('0');
     });
 
-    it('repairs the tab stop when the member holding it unmounts', () => {
-      const {rerender} = render(
-        <ButtonGroup label="Actions">
-          <Button label="Copy" />
-          <Button label="Cut" />
-        </ButtonGroup>,
+    it('keeps all members in natural Tab order without roving tabindex for 2 members', async () => {
+      const user = userEvent.setup();
+      render(
+        bracketed(
+          <ButtonGroup label="Actions">
+            <Button label="Save" />
+            <Button label="More" />
+          </ButtonGroup>,
+        ),
       );
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Save'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'More'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+    });
+
+    it('repairs the tab stop when the member holding it unmounts (4 -> 3 members)', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        bracketed(
+          <ButtonGroup label="Actions">
+            <Button label="Copy" />
+            <Button label="Cut" />
+            <Button label="Paste" />
+            <Button label="Delete" />
+          </ButtonGroup>,
+        ),
+      );
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
       expect(tabIndexOf('Copy')).toBe('0');
+      expect(tabIndexOf('Cut')).toBe('-1');
+      expect(tabIndexOf('Paste')).toBe('-1');
+      expect(tabIndexOf('Delete')).toBe('-1');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Copy'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
 
       rerender(
-        <ButtonGroup label="Actions">
-          <Button label="Cut" />
-        </ButtonGroup>,
+        bracketed(
+          <ButtonGroup label="Actions">
+            <Button label="Cut" />
+            <Button label="Paste" />
+            <Button label="Delete" />
+          </ButtonGroup>,
+        ),
       );
 
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
       expect(tabIndexOf('Cut')).toBe('0');
+      expect(tabIndexOf('Paste')).toBe('-1');
+      expect(tabIndexOf('Delete')).toBe('-1');
+
+      await user.tab({shift: true});
+      expect(screen.getByRole('button', {name: 'Cut'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
     });
 
     it('repairs the tab stop when the member holding it becomes disabled', () => {
@@ -936,6 +1031,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions">
           <Button label="Copy" />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
       expect(tabIndexOf('Copy')).toBe('0');
@@ -944,6 +1040,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions">
           <Button label="Copy" isDisabled />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
 
@@ -958,6 +1055,7 @@ describe('ButtonGroup', () => {
           <ButtonGroup label="Docs actions">
             <Button label="Docs" href="https://example.com" />
             <Button label="Print" />
+            <Button label="Share" />
           </ButtonGroup>,
         ),
       );
@@ -966,6 +1064,7 @@ describe('ButtonGroup', () => {
         screen.getByRole('link', {name: 'Docs'}).getAttribute('tabindex'),
       ).toBe('0');
       expect(tabIndexOf('Print')).toBe('-1');
+      expect(tabIndexOf('Share')).toBe('-1');
 
       await user.tab();
       await user.tab();
@@ -996,7 +1095,7 @@ describe('ButtonGroup', () => {
     it('leaves the tab stop on its own members when a member owns an open menu', async () => {
       const user = userEvent.setup();
       render(
-        <ButtonGroup label="Approve action">
+        <ButtonGroup label="Approve action" role="toolbar">
           <Button label="Allow once" />
           <DropdownMenu
             hasChevron={false}
@@ -1020,6 +1119,287 @@ describe('ButtonGroup', () => {
       });
       expect(item.getAttribute('tabindex')).not.toBe('0');
       expect(tabIndexOf('Allow once')).toBe('0');
+    });
+
+    it('preserves internal DropdownMenu tabindex attributes and keyboard navigation when group drops from 3 to 2 members', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        <ButtonGroup label="Actions">
+          <Button key="first" label="First" />
+          <Button key="second" label="Second" />
+          <DropdownMenu
+            key="menu"
+            button={{label: 'Options', isIconOnly: true}}
+            items={[{label: 'Option 1'}, {label: 'Option 2'}]}
+          />
+        </ButtonGroup>,
+      );
+
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      expect(tabIndexOf('First')).toBe('0');
+      expect(tabIndexOf('Second')).toBe('-1');
+      expect(screen.getByRole('button', {name: /Options/})).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+
+      rerender(
+        <ButtonGroup label="Actions">
+          <Button key="first" label="First" />
+          <DropdownMenu
+            key="menu"
+            button={{label: 'Options', isIconOnly: true}}
+            items={[{label: 'Option 1'}, {label: 'Option 2'}]}
+          />
+        </ButtonGroup>,
+      );
+
+      expect(screen.getByRole('group')).toBeInTheDocument();
+      expect(tabIndexOf('First')).toBeNull();
+      const trigger = screen.getByRole('button', {name: /Options/});
+      expect(trigger.getAttribute('tabindex')).toBeNull();
+
+      await user.click(trigger);
+
+      const item1 = screen.getByRole('menuitem', {
+        name: 'Option 1',
+        hidden: true,
+      });
+      const item2 = screen.getByRole('menuitem', {
+        name: 'Option 2',
+        hidden: true,
+      });
+      expect(item1.getAttribute('tabindex')).toBeDefined();
+      expect(item1.getAttribute('tabindex')).not.toBeNull();
+
+      item1.focus();
+      expect(item1).toHaveFocus();
+      fireEvent.keyDown(item1, {key: 'ArrowDown'});
+      expect(item2).toHaveFocus();
+    });
+
+    it('resolves to toolbar with single Tab stop when 3 buttons are wrapped in a Fragment', async () => {
+      const user = userEvent.setup();
+      render(
+        bracketed(
+          <ButtonGroup label="Fragment group">
+            <>
+              <Button label="Frag 1" />
+              <Button label="Frag 2" />
+              <Button label="Frag 3" />
+            </>
+          </ButtonGroup>,
+        ),
+      );
+
+      const toolbar = screen.getByRole('toolbar');
+      expect(toolbar).toBeInTheDocument();
+      expect(toolbar).toHaveAttribute('aria-orientation', 'horizontal');
+      expect(tabIndexOf('Frag 1')).toBe('0');
+      expect(tabIndexOf('Frag 2')).toBe('-1');
+      expect(tabIndexOf('Frag 3')).toBe('-1');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Frag 1'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+    });
+
+    it('resolves to toolbar with single Tab stop when a wrapper component renders 3 buttons', async () => {
+      const user = userEvent.setup();
+      function CustomWrapper() {
+        return (
+          <>
+            <Button label="Wrap 1" />
+            <Button label="Wrap 2" />
+            <Button label="Wrap 3" />
+          </>
+        );
+      }
+
+      render(
+        bracketed(
+          <ButtonGroup label="Wrapper group">
+            <CustomWrapper />
+          </ButtonGroup>,
+        ),
+      );
+
+      const toolbar = screen.getByRole('toolbar');
+      expect(toolbar).toBeInTheDocument();
+      expect(tabIndexOf('Wrap 1')).toBe('0');
+      expect(tabIndexOf('Wrap 2')).toBe('-1');
+      expect(tabIndexOf('Wrap 3')).toBe('-1');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Wrap 1'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+    });
+
+    it('preserves role="group" and single Tab stop when nested inside a Toolbar', async () => {
+      const user = userEvent.setup();
+      render(
+        bracketed(
+          <Toolbar
+            label="Main Toolbar"
+            startContent={
+              <>
+                <Button label="Tool 1" />
+                <ButtonGroup label="Nested group">
+                  <Button label="Nested 1" />
+                  <Button label="Nested 2" />
+                  <Button label="Nested 3" />
+                </ButtonGroup>
+                <Button label="Tool 2" />
+              </>
+            }
+          />,
+        ),
+      );
+
+      const group = screen.getByRole('group', {name: 'Nested group'});
+      expect(group).toBeInTheDocument();
+      expect(group).not.toHaveAttribute('aria-orientation');
+
+      const toolbar = screen.getByRole('toolbar', {name: 'Main Toolbar'});
+      expect(toolbar).toBeInTheDocument();
+
+      expect(tabIndexOf('Tool 1')).toBe('0');
+      expect(tabIndexOf('Nested 1')).toBe('-1');
+      expect(tabIndexOf('Nested 2')).toBe('-1');
+      expect(tabIndexOf('Nested 3')).toBe('-1');
+      expect(tabIndexOf('Tool 2')).toBe('-1');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Tool 1'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+
+      screen.getByRole('button', {name: 'Tool 1'}).focus();
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('button', {name: 'Nested 1'})).toHaveFocus();
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('button', {name: 'Nested 2'})).toHaveFocus();
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('button', {name: 'Nested 3'})).toHaveFocus();
+      await user.keyboard('{ArrowRight}');
+      expect(screen.getByRole('button', {name: 'Tool 2'})).toHaveFocus();
+    });
+
+    it('honors explicit role override outside toolbar and avoids nested toolbar conflict inside Toolbar', () => {
+      const {rerender} = render(
+        <ButtonGroup label="Explicit toolbar" role="toolbar">
+          <Button label="A" />
+          <Button label="B" />
+        </ButtonGroup>,
+      );
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBe('0');
+      expect(tabIndexOf('B')).toBe('-1');
+
+      rerender(
+        <ButtonGroup label="Explicit group" role="group">
+          <Button label="A" />
+          <Button label="B" />
+          <Button label="C" />
+        </ButtonGroup>,
+      );
+      expect(screen.getByRole('group')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBeNull();
+      expect(tabIndexOf('B')).toBeNull();
+      expect(tabIndexOf('C')).toBeNull();
+
+      rerender(
+        <Toolbar
+          label="Outer Toolbar"
+          startContent={
+            <ButtonGroup label="Explicit inside toolbar" role="toolbar">
+              <Button label="A" />
+              <Button label="B" />
+              <Button label="C" />
+            </ButtonGroup>
+          }
+        />,
+      );
+      expect(
+        screen.getByRole('group', {name: 'Explicit inside toolbar'}),
+      ).toBeInTheDocument();
+    });
+
+    it('handles dynamic member transitions (4 -> 3 -> 2 -> 3)', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        bracketed(
+          <ButtonGroup label="Dynamic actions">
+            <Button label="A" />
+            <Button label="B" />
+            <Button label="C" />
+            <Button label="D" />
+          </ButtonGroup>,
+        ),
+      );
+
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBe('0');
+      expect(tabIndexOf('B')).toBe('-1');
+      expect(tabIndexOf('C')).toBe('-1');
+      expect(tabIndexOf('D')).toBe('-1');
+
+      rerender(
+        bracketed(
+          <ButtonGroup label="Dynamic actions">
+            <Button label="A" />
+            <Button label="B" />
+            <Button label="C" />
+          </ButtonGroup>,
+        ),
+      );
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBe('0');
+      expect(tabIndexOf('B')).toBe('-1');
+      expect(tabIndexOf('C')).toBe('-1');
+
+      rerender(
+        bracketed(
+          <ButtonGroup label="Dynamic actions">
+            <Button label="A" />
+            <Button label="B" />
+          </ButtonGroup>,
+        ),
+      );
+      expect(screen.getByRole('group')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBeNull();
+      expect(tabIndexOf('B')).toBeNull();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'A'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'B'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+
+      rerender(
+        bracketed(
+          <ButtonGroup label="Dynamic actions">
+            <Button label="A" />
+            <Button label="B" />
+            <Button label="C" />
+          </ButtonGroup>,
+        ),
+      );
+      expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBe('0');
+      expect(tabIndexOf('B')).toBe('-1');
+      expect(tabIndexOf('C')).toBe('-1');
     });
   });
 });
