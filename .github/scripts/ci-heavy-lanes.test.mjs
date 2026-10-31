@@ -379,6 +379,21 @@ describe("main's release-check every three hours and full unit run about hourly 
     ).toEqual([releaseCheck(sha), unitRun]);
   });
 
+  it("brings a unit run for a person's own release-check of the tip, such as the release owner's", async () => {
+    const calls = await run({
+      runs: [check(10, {head_sha: sha, actor: {login: 'someone'}}), check(40)],
+      units: [check(30)],
+    });
+    // The scheduler's own release-check is inside its window.
+    expect(calls.dispatch).toEqual([unitRun]);
+    // A unit run already at the tip, whoever started it, is enough.
+    const covered = await run({
+      runs: [check(10, {head_sha: sha, actor: {login: 'someone'}}), check(40)],
+      units: [check(5, {head_sha: sha, actor: {login: 'someone'}}), check(30)],
+    });
+    expect(covered.dispatch).toEqual([]);
+  });
+
   it('keeps counting a check a person re-runs', async () => {
     const calls = await run({
       runs: [check(90, {head_sha: sha, triggering_actor: {login: 'someone'}})],

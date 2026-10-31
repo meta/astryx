@@ -213,7 +213,8 @@ they are separately named.
   existing finding policies. Main's heavy-lane workflow MUST dispatch that
   release-check for `main`'s tip, bound to that commit, on a push to `main` and
   on a quarter-hourly schedule, unless the tip already has one or one was
-  dispatched in the last three hours (DEC-11, FR24). A check replaced while waiting,
+  dispatched in the last 175 minutes, so the quarter-hourly tick after
+  three hours dispatches (DEC-11, FR24). A check replaced while waiting,
   which never ran, does not count. A check covers every merge up to its commit,
   so every merge is covered by the next one. The dispatched checks share one
   concurrency group that never cancels a running check: at most one runs and
@@ -328,8 +329,9 @@ they are separately named.
   never scoped to a change) only in a run that main's heavy-lane workflow
   dispatches for `main`'s tip about once an hour, on its own schedule: a push
   dispatches it at once when none started in the last 55 minutes, and the
-  quarter-hourly schedule picks up the tip a burst left. Every commit that gets
-  a release-check (FR12) also gets a unit run. That run reports one pass or
+  quarter-hourly schedule picks up the tip a burst left. Every release-check of
+  `main`'s tip (FR12), the scheduler's or one a person dispatches such as the
+  release owner's own, brings a unit run of that commit. That run reports one pass or
   fail for that exact commit. It runs to completion: it
   has its own concurrency group, which no push cancels, and a newer dispatch
   queues behind it. A unit run that is skipped, cancelled or otherwise does not
@@ -339,7 +341,8 @@ they are separately named.
   both a passing release-check and a passing full unit run (DEC-15).
 - **FR24 — Main's release-check runs every three hours, and once before each
   weekday cut.** FR12's release-check of `main`'s tip is dispatched when none
-  started in the last three hours, and once each weekday at about 06:30
+  started in the last 175 minutes, so about every three hours on the
+  quarter-hourly schedule, and once each weekday at about 06:30
   Pacific time whatever the window, unless the tip already has one, so a check
   finishes about an hour before the 08:00 release cut. The release cut's own
   exact-commit checks are unchanged (DEC-19).
@@ -394,8 +397,8 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                                                               | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                                                        | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                   | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
-| FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs` | push run; dispatched unit run; tip with a release-check; unit run cancelled, skipped or timed out; newer recheck; cut commit with and without a passing unit run                                                                                                                                                                             | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run    |
-| FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                              | release-check 170 and 180 minutes old; weekday 06:37 Pacific inside the window; the pre-cut check already started; a weekend morning; standard and daylight time                                                                                                                                                                             | a release-check starts inside the three-hour window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                            |
+| FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs` | push run; dispatched unit run; tip with the scheduler's or a person's release-check; unit run cancelled, skipped or timed out; newer recheck; cut commit with and without a passing unit run                                                                                                                                                 | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run    |
+| FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                              | release-check 170 and 176 minutes old; weekday 06:37 Pacific inside the window; the pre-cut check already started; a weekend morning; standard and daylight time                                                                                                                                                                             | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                            |
 
 ## Decision log
 
