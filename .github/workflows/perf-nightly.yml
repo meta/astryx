@@ -1,0 +1,267 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Nightly perf scenes: real-Chromium mount, interaction and leak numbers for
+# five fixed scenes (apps/sandbox/src/app/(raw)/pages/perf-scenes/), measured
+# on main every night and compared with main's own 7-day median.
+#
+# - Runs nightly on main and by manual dispatch (spec:AST-030 FR18). A pull
+#   request runs it only while it carries the `ci:run-perf` label last applied
+#   by someone with write, maintain or admin access, decided by CI's own
+#   run-labels.cjs; like the `ci:run-*` suite labels, it takes effect on the
+#   next push or a close and reopen, and applying a label starts no run
+#   (FR12, FR17). The pull request's paths must also touch what the
+#   scenes measure (spec:AST-030 FR14).
+# - build: the packages and the Sandbox, once. measure: every scene, five
+#   samples after a warm-up, the median kept (playwright.perf.config.ts).
+#   report: compares each metric with the 7-day median of main's recorded
+#   runs; a nightly or dispatched run on main appends itself to the history
+#   and, when any metric is more than 10% worse (and past the metric's floor),
+#   opens the "Nightly perf regression" issue or comments on the open one,
+#   with the commits since the last good run (.github/scripts/perf-trend.mjs,
+#   .github/scripts/perf-regression-issue.mjs).
+# - The history is the `perf-history` artifact, carried from each recorded run
+#   to the next: it needs only `actions: read`, no branch to write and no
+#   Actions cache (which this repository keeps off). A gap longer than the
+#   artifact's retention starts a fresh history.
+# - Every job keeps the 15-minute budget on standard runners; split a job that
+#   nears it (shard measure by scene), never raise it.
+name: Nightly perf
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: ['main']
+    # What the scenes measure or run (spec:AST-030 FR14): Core and the build
+    # plugin that compiles its styles, the default theme, the scenes and their
+    # fixtures, the driver and its config, the trend and label scripts and this
+    # workflow.
+    paths:
+      - 'packages/core/**'
+      - 'packages/build/**'
+      - 'packages/themes/neutral/**'
+      - 'apps/sandbox/src/app/(raw)/pages/perf-scenes/**'
+      - 'apps/sandbox/src/app/(fullscreen)/pages/markdown-perf/benchmark.ts'
+      - 'apps/sandbox/src/app/(sandbox)/pages/table-lab/tableLabData.ts'
+      - 'apps/sandbox/perf/**'
+      - 'internal/interaction-harness/src/**'
+      - 'playwright.perf.config.ts'
+      - '.github/scripts/perf-*.mjs'
+      - '.github/scripts/run-labels.cjs'
+      - '.github/scripts/review-signal-decision.cjs'
+      - '.github/workflows/perf-nightly.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+
+permissions: {}
+
+# A pull request's newer push replaces its running measurement. Recorded runs
+# on main share one group and never cancel each other, so two runs cannot
+# both extend the same history.
+concurrency:
+  group: "perf-${{ github.event.pull_request.number || (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'main') || github.run_id }}"
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ci:run-perf')) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      # The label rule is CI's own (run-labels.cjs, with the review gate's
+      # write-access check), from the merge commit's trusted sparse checkout.
+      - name: Check out the decision script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/run-labels.cjs
+            .github/scripts/review-signal-decision.cjs
+          sparse-checkout-cone-mode: false
+          path: .run-labels
+          persist-credentials: false
+
+      - name: Decide whether to measure
+        id: decide
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const {owner, repo} = context.repo;
+            if (context.eventName === 'schedule') {
+              // A fork's copy of the schedule measures nothing.
+              const ours = `${owner}/${repo}` === 'meta/astryx';
+              if (!ours) core.notice('Nightly perf runs only on meta/astryx.');
+              core.setOutput('run', String(ours));
+              return;
+            }
+            if (context.eventName === 'workflow_dispatch') {
+              core.setOutput('run', 'true');
+              return;
+            }
+            const {decideRunLabel} = require(
+              `${process.env.GITHUB_WORKSPACE}/.run-labels/.github/scripts/run-labels.cjs`,
+            );
+            const runs = await decideRunLabel({
+              github, context, core, suite: 'perf', label: 'ci:run-perf',
+            });
+            core.setOutput('run', String(runs));
+
+  build:
+    needs: [gate]
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      - name: Build the packages
+        run: pnpm build
+
+      - name: Build the Sandbox
+        run: pnpm -F @astryxdesign/sandbox build
+
+      - name: Upload the built Sandbox
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-sandbox
+          path: apps/sandbox/out
+          retention-days: 1
+          if-no-files-found: error
+
+  measure:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      - name: Install Chromium
+        run: npx playwright install chromium
+
+      - name: Download the built Sandbox
+        uses: actions/download-artifact@v8
+        with:
+          name: perf-sandbox
+          path: apps/sandbox/out
+
+      - name: Measure the scenes
+        env:
+          PERF_RESULTS_DIR: perf-results
+        run: pnpm exec playwright test --config playwright.perf.config.ts
+
+      - name: Upload the scene results
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-results
+          path: perf-results
+          retention-days: 30
+          if-no-files-found: error
+
+  report:
+    needs: [measure]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Find the last recorded history
+        id: previous
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const {data} = await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: 'perf-nightly.yml', branch: 'main',
+              status: 'success', per_page: 20,
+            });
+            for (const run of data.workflow_runs) {
+              if (run.id === context.runId) continue;
+              if (!['schedule', 'workflow_dispatch'].includes(run.event)) continue;
+              const {data: artifacts} = await github.rest.actions.listWorkflowRunArtifacts({
+                owner, repo, run_id: run.id, name: 'perf-history',
+              });
+              if (artifacts.artifacts.some(artifact => !artifact.expired)) {
+                core.setOutput('run-id', String(run.id));
+                return;
+              }
+            }
+            core.notice('No earlier perf history; this run starts one.');
+
+      - name: Download the last recorded history
+        if: steps.previous.outputs.run-id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: perf-history
+          path: previous-history
+          run-id: ${{ steps.previous.outputs.run-id }}
+          github-token: ${{ github.token }}
+
+      - name: Download the scene results
+        uses: actions/download-artifact@v8
+        with:
+          name: perf-results
+          path: perf-results
+
+      - name: Compare with the 7-day median and report
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const workspace = process.env.GITHUB_WORKSPACE;
+            const {runReport} = await import(`${workspace}/.github/scripts/perf-trend.mjs`);
+            const {upsertRegressionIssue} = await import(
+              `${workspace}/.github/scripts/perf-regression-issue.mjs`
+            );
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const {report, summary} = runReport({
+              resultsDir: `${workspace}/perf-results`,
+              historyFile: `${workspace}/previous-history/perf-history.json`,
+              outDir: `${workspace}/perf-report`,
+              run: {
+                sha: context.sha,
+                runId: context.runId,
+                runUrl,
+                event: context.eventName,
+                ref: context.ref,
+                repository: `${context.repo.owner}/${context.repo.repo}`,
+                date: new Date().toISOString(),
+              },
+            });
+            await core.summary.addRaw(summary).write();
+            const outcome = await upsertRegressionIssue({github, context, report});
+            core.info(`Regression issue: ${outcome}.`);
+
+      - name: Upload the history
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-history
+          path: perf-report/perf-history.json
+          retention-days: 90
+          if-no-files-found: error

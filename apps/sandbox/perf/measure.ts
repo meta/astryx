@@ -10,6 +10,9 @@
  *   (`traceRendering`); heap and listener counts from the DevTools protocol
  *   after a forced garbage collection; interaction latency from the page's
  *   own Event Timing entries, the measurement behind INP.
+ *
+ * SYNC: Keep the metric names equal to METRICS in
+ *   .github/scripts/perf-trend.mjs.
  */
 
 import type {CDPSession, Page} from '@playwright/test';
