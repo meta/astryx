@@ -351,7 +351,13 @@ export function RadioListItem({
         // exclusive — aria-labelledby would otherwise win over it.
         aria-label={ariaLabel}
         aria-labelledby={ariaLabel == null ? labelID : undefined}
-        aria-describedby={hasDescription ? descriptionID : undefined}
+        // The item's own description, then the group's disabled reason
+        // (RadioList's disabledMessage), which describes each radio (FR5).
+        aria-describedby={
+          [hasDescription ? descriptionID : null, context.disabledMessageID]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),

@@ -470,6 +470,66 @@ describe('RadioList', () => {
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
+    it('describes each radio with the reason, as well as the radiogroup', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Free', 'Pro']) {
+        const radio = screen.getByRole('radio', {name});
+        expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(radio).toHaveAccessibleDescription(
+          'Upgrade your account to change plans',
+        );
+      }
+      expect(
+        screen
+          .getByRole('radiogroup')
+          .getAttribute('aria-describedby')
+          ?.split(' '),
+      ).toContain(tooltip.id);
+    });
+
+    it("keeps a radio's own description ahead of the reason", () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem
+            label="Free"
+            value="free"
+            description="Up to 3 projects"
+          />
+        </RadioList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const radio = screen.getByRole('radio', {name: 'Free'});
+      const ids = radio.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(radio).toHaveAccessibleDescription(
+        'Up to 3 projects Upgrade your account to change plans',
+      );
+    });
+
+    it('adds no reason to the radios of a group that is not disabled', () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" />
+        </RadioList>,
+      );
+      expect(screen.getByRole('radio', {name: 'Free'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
     it('does not render a tooltip when not disabled', () => {
       render(
         <RadioList

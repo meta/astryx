@@ -223,10 +223,12 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'radio-list-option-disabled-with-message',
     binding: 'RadioListItem',
-    summary: 'an unavailable option kept tabReachable for a group-level reason',
+    summary:
+      'an unavailable option kept tabReachable and described by its group-level reason',
     facts: optionFacts({
       checked: true,
       disabled: true,
+      description: 'Managed by your administrator',
       operable: false,
       tabReachable: true,
       pointerCancellation: false,
