@@ -19,6 +19,12 @@ export const docs = {
   ],
   params: [
     {
+      name: 'handleRef',
+      type: 'RefObject<HTMLElement | null>',
+      description:
+        "The handle's ref, passed first: `useResizable(handleRef, options)` attaches createResizable to the element and returns its size, collapse state and controls. Give the same ref to ResizeHandle, or to a plain element. The options are createResizable's: the params below, plus isReversed, isDisabled, label and collapsedLabel. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
+    },
+    {
       name: 'defaultSize',
       type: 'SizeValue | ResizableSize',
       description:
@@ -120,13 +126,18 @@ export const docs = {
       name: 'props',
       type: 'ResizableProps',
       description:
-        'Props to spread on the resizable component or pass to ResizeHandle.',
+        'Configuration-object form only: props to spread on the resizable component or pass to ResizeHandle.',
     },
   ],
   usage: {
     description:
-      'Hook for adding drag-to-resize behavior to layout regions. Supports single-region and multi-region configurations with snap points, collapsible panels, localStorage persistence, and cascade resize ordering.',
+      'Hook for adding drag-to-resize behavior to layout regions. `useResizable(handleRef, options)` is createResizable in React: one region per call, driven by the handle behind the ref. The configuration-object form supports single-region and multi-region configurations with snap points, collapsible panels, localStorage persistence, and cascade resize ordering.',
     bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Pass the handle’s ref first, give it to ResizeHandle, and render the panel at `size`: `const sidebar = useResizable(handleRef, {defaultSize: 260})`, `<LayoutPanel width={sidebar.size}>`, `<ResizeHandle ref={handleRef} />`.',
+      },
       {
         guidance: true,
         description:
@@ -160,7 +171,7 @@ export const docs = {
     ],
   },
   relatedComponents: ['Resizable', 'AppShell', 'Layout', 'SideNav'],
-  relatedHooks: ['useCollapsible'],
+  relatedHooks: ['createResizable', 'useCollapsible'],
   importPath: '@astryxdesign/core/Resizable',
   category: 'layout',
 };
@@ -168,8 +179,10 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Adds drag-to-resize behavior to layout regions. Supports single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
+    'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call. Config-object form: single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
   paramDescriptions: {
+    handleRef:
+      "handle's ref, passed first; options = createResizable's. Without it: one config object, returns props too.",
     defaultSize:
       'initial pixels, exact N%, or percent(value, {min: pixel(value)}) / percent(value, {max: pixel(value)}); resolves once.',
     minSize:
@@ -195,12 +208,18 @@ export const docsDense = {
     collapse: 'programmatically collapse region.',
     expand: 'expand from collapsed state.',
     resize: 'resize to specific px value.',
-    props: 'props to spread on resizable component / pass to ResizeHandle.',
+    props:
+      'config-object form only: props to spread on resizable component / pass to ResizeHandle.',
   },
   usage: {
     description:
-      'Adds drag-to-resize behavior to layout regions. Supports single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
+      'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call. Config-object form: single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
     bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Pass the handle ref first, give it to ResizeHandle, render the panel at size.',
+      },
       {
         guidance: true,
         description:
