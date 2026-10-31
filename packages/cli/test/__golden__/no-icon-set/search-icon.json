@@ -1,0 +1,257 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "icon",
+    "matchCount": 223,
+    "results": [
+      {
+        "domain": "component",
+        "name": "Icon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx component Icon",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons --index",
+        "parent": "astryx docs foundations",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "IconButton",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/IconButton",
+        "command": "astryx component IconButton",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useInputContainer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useInputContainer",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useInputStatusIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useInputStatusIcon",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons theme-overrides",
+        "parent": "astryx docs icons --index",
+        "mentions": [
+          "This lets you swap the icon set (e.g."
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons icon-variants",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "BaseTypeaheadCustomSearch",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BaseTypeaheadCustomSearch --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "BottomSheetSnapPoints",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BottomSheetSnapPoints --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "BreadcrumbsDeepHierarchy",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BreadcrumbsDeepHierarchy --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "BreadcrumbsWithIcons",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BreadcrumbsWithIcons --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ButtonFloating",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ButtonFloating --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ButtonGroupShowcase",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ButtonGroupShowcase --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ButtonWithIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ButtonWithIcon --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "CenterHorizontal",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template CenterHorizontal --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "CenterInsideACard",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template CenterInsideACard --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ChatComposerDrawerShowcase",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ChatComposerDrawerShowcase --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ChatComposerDrawerWithProgress",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ChatComposerDrawerWithProgress --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ChatComposerFooterActions",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ChatComposerFooterActions --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ChatComposerFullFeatured",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ChatComposerFullFeatured --type block",
+        "mentions": []
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

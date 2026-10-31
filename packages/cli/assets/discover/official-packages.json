@@ -146,6 +146,10 @@
         },
         {
           "kind": "component",
+          "name": "MobilePowerSearch"
+        },
+        {
+          "kind": "component",
           "name": "MobileTokenizer"
         },
         {
@@ -191,6 +195,10 @@
         {
           "kind": "component",
           "name": "Tour"
+        },
+        {
+          "kind": "component",
+          "name": "TourStep"
         },
         {
           "kind": "component",

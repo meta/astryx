@@ -112,6 +112,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string[]} [alsoExampleFor]
  * @property {string[]} [alsoShowcaseFor]
  * @property {string[]} [componentsUsed]
+ * @property {Record<string, string>} [icons] the icon definition each
+ *   imported icon draws, by its imported name
  * @property {boolean} [isShowcase]
  * @property {string} filePath
  * @property {string} docPath
@@ -665,6 +667,7 @@ async function discoverPages() {
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
     });
@@ -695,6 +698,7 @@ async function discoverBlocks() {
       isReady: doc?.isReady ?? true,
       aspectRatio: doc?.aspectRatio ?? 1,
       componentsUsed: doc?.componentsUsed ?? [],
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       isShowcase: doc?.isShowcase ?? false,
       ...(typeof doc?.exampleFor === 'string'
         ? {exampleFor: doc.exampleFor}
@@ -740,6 +744,7 @@ async function discoverExternalBlocks(cwd = process.cwd()) {
         isReady: doc?.isReady ?? true,
         aspectRatio: doc?.aspectRatio ?? 1,
         componentsUsed: doc?.componentsUsed ?? [],
+        ...(doc?.icons ? {icons: doc.icons} : {}),
         isShowcase: doc?.isShowcase ?? false,
         ...(typeof doc?.exampleFor === 'string'
           ? {exampleFor: doc.exampleFor}
@@ -1341,6 +1346,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       // so read it off the envelope shape here.
       componentsUsed:
         /** @type {{componentsUsed?: string[]}} */ (doc).componentsUsed ?? [],
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: sourcePath,
       docPath,
       package: pkgLabel,

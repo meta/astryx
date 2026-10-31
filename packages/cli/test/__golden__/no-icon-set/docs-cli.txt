@@ -1,0 +1,17 @@
+<text>
+
+package: @astryxdesign/cli
+
+<text>
+
+<text>
+
+component-lookups  <text>
+host-entry         <text>
+
+<text>
+
+commands  <text>
+api       <text>
+
+<text>

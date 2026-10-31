@@ -1,12 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
-import type {KeyboardEvent} from 'react';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
+import {Activity, type KeyboardEvent} from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link';
 import {NavHeadingMenu} from './NavHeadingMenu';
 import {NavHeadingMenuItem} from './NavHeadingMenuItem';
 import {NavHeadingCloseContext} from './NavMenuContext';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 
 describe('NavHeadingMenu', () => {
   it('renders with role="menu"', () => {
@@ -126,6 +129,203 @@ describe('NavHeadingMenuItem', () => {
       'aria-disabled',
       'true',
     );
+  });
+
+  it('exposes no destination on a disabled link item', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const item = screen.getByRole('menuitem');
+    // No href means no navigation path at all: not a pointer click, a
+    // middle-click, an assistive-technology activation, or Enter.
+    expect(item).not.toHaveAttribute('href');
+    // The row keeps its shape and still reports the disabled state.
+    expect(item.tagName).toBe('A');
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('does not reach a custom link component when a link item is disabled', () => {
+    function CustomLink({
+      children,
+      ref,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      return (
+        <a ref={ref} data-custom-link {...props}>
+          {children}
+        </a>
+      );
+    }
+    render(
+      <LinkProvider component={CustomLink}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+        </NavHeadingMenu>
+      </LinkProvider>,
+    );
+    const item = screen.getByRole('menuitem');
+    expect(item).not.toHaveAttribute('data-custom-link');
+    expect(item).not.toHaveAttribute('href');
+  });
+
+  it('keeps an enabled link item on the custom link component', () => {
+    function CustomLink({
+      children,
+      ref,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      return (
+        <a ref={ref} data-custom-link {...props}>
+          {children}
+        </a>
+      );
+    }
+    render(
+      <LinkProvider component={CustomLink}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" />
+        </NavHeadingMenu>
+      </LinkProvider>,
+    );
+    const item = screen.getByRole('menuitem');
+    expect(item).toHaveAttribute('data-custom-link');
+    expect(item).toHaveAttribute('href', '/docs');
+  });
+
+  it('keeps a disabled link item focusable but out of the Tab order', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const item = screen.getByRole('menuitem');
+    // No href and no tabindex would make the anchor unfocusable.
+    expect(item).toHaveAttribute('tabindex', '-1');
+    item.focus();
+    expect(item).toHaveFocus();
+  });
+
+  it('keeps focus on a link item that becomes disabled while focused', () => {
+    const {rerender} = render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    const disabled = screen.getByRole('menuitem');
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+  });
+
+  it('does not steal focus when an unfocused link item toggles disabled', () => {
+    const {rerender} = render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+      </NavHeadingMenu>,
+    );
+    rerender(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" isDisabled />
+      </NavHeadingMenu>,
+    );
+    expect(screen.getByRole('menuitem')).not.toHaveFocus();
+  });
+
+  it('does not pull focus back when an Activity boundary reveals a row', () => {
+    const tree = (mode: 'visible' | 'hidden') => (
+      <>
+        <button type="button">Elsewhere</button>
+        <Activity mode={mode}>
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Docs" href="/docs" />
+          </NavHeadingMenu>
+        </Activity>
+      </>
+    );
+    const {rerender} = render(tree('visible'));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide the row while it holds focus, then move focus elsewhere.
+    rerender(tree('hidden'));
+    const other = screen.getByRole('button', {name: 'Elsewhere'});
+    other.focus();
+    expect(other).toHaveFocus();
+
+    // Revealing the same node must leave focus where the person put it.
+    rerender(tree('visible'));
+    expect(other).toHaveFocus();
+  });
+
+  it('leaves focus on the page when an Activity boundary reveals a row', () => {
+    const tree = (mode: 'visible' | 'hidden') => (
+      <Activity mode={mode}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Docs" href="/docs" />
+        </NavHeadingMenu>
+      </Activity>
+    );
+    const {rerender} = render(tree('visible'));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide while focused, then drop focus to the page.
+    rerender(tree('hidden'));
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    // The same node re-attaches on reveal; it was not replaced, so it must not
+    // pull focus back from the page.
+    rerender(tree('visible'));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('does not take focus on reveal when isDisabled flipped while hidden', () => {
+    const tree = (mode: 'visible' | 'hidden', isDisabled: boolean) => (
+      <>
+        <button type="button">Elsewhere</button>
+        <Activity mode={mode}>
+          <NavHeadingMenu>
+            <NavHeadingMenuItem
+              label="Billing"
+              href="/billing"
+              isDisabled={isDisabled}
+            />
+          </NavHeadingMenu>
+        </Activity>
+      </>
+    );
+    const {rerender} = render(tree('visible', false));
+    screen.getByRole('menuitem').focus();
+    expect(screen.getByRole('menuitem')).toHaveFocus();
+
+    // Hide while focused, swap the row's element type while hidden, then move
+    // focus to another control.
+    rerender(tree('hidden', false));
+    rerender(tree('hidden', true));
+    const other = screen.getByRole('button', {name: 'Elsewhere'});
+    other.focus();
+    expect(other).toHaveFocus();
+
+    // The swapped-in node attaches only now and must not take focus.
+    rerender(tree('visible', true));
+    expect(screen.getByRole('menuitem')).not.toHaveAttribute('href');
+    expect(other).toHaveFocus();
   });
 
   it('renders description text', () => {
@@ -436,5 +636,79 @@ describe('NavHeadingMenuItem pass-through props', () => {
     const item = screen.getByTestId('item');
     expect(item).toHaveAttribute('role', 'menuitem');
     expect(item).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('NavHeadingMenu as an action group (family:action-groups)', () => {
+  beforeEach(() => {
+    __resetMenuPressForTest();
+  });
+
+  const item = (name: string) => screen.getByRole('menuitem', {name});
+  const finger = {pointerType: 'touch', pointerId: 1};
+  const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
+
+  function renderMenu() {
+    const onDashboard = vi.fn();
+    const onSettings = vi.fn();
+    const closeMenu = vi.fn();
+    render(
+      <NavHeadingCloseContext value={{closeMenu}}>
+        <NavHeadingMenu>
+          <NavHeadingMenuItem label="Dashboard" onClick={onDashboard} />
+          <NavHeadingMenuItem label="Settings" onClick={onSettings} />
+          <NavHeadingMenuItem label="Archive" isDisabled />
+        </NavHeadingMenu>
+      </NavHeadingCloseContext>,
+    );
+    return {onDashboard, onSettings, closeMenu};
+  }
+
+  it('renders a link item undraggable, so a mouse press that slides to another item is not a drag', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Sign out" onClick={() => {}} />
+      </NavHeadingMenu>,
+    );
+    expect(item('Docs')).toHaveAttribute('draggable', 'false');
+    expect(item('Sign out')).not.toHaveAttribute('draggable');
+  });
+
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item to the browser', () => {
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Docs" href="/docs" />
+        <NavHeadingMenuItem label="Status" href="/status" />
+      </NavHeadingMenu>,
+    );
+    expectNativeLinkClicks(item('Docs'));
+  });
+
+  it('acts on the item a finger lifts on, once, after sliding from another (FR1, FR2)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Dashboard'), finger);
+    fireEvent.pointerMove(item('Settings'), finger);
+    fireEvent.pointerUp(item('Settings'), finger);
+    expect(onSettings).toHaveBeenCalledTimes(1);
+    expect(onDashboard).not.toHaveBeenCalled();
+  });
+
+  it('acts on the item a held mouse lifts on (FR5)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Settings'), mouse);
+    fireEvent.pointerMove(item('Dashboard'), mouse);
+    fireEvent.pointerUp(item('Dashboard'), mouse);
+    expect(onDashboard).toHaveBeenCalledTimes(1);
+    expect(onSettings).not.toHaveBeenCalled();
+  });
+
+  it('acts on nothing for a lift on a disabled item (FR2)', () => {
+    const {onDashboard, onSettings} = renderMenu();
+    fireEvent.pointerDown(item('Dashboard'), finger);
+    fireEvent.pointerMove(item('Archive'), finger);
+    fireEvent.pointerUp(item('Archive'), finger);
+    expect(onDashboard).not.toHaveBeenCalled();
+    expect(onSettings).not.toHaveBeenCalled();
   });
 });

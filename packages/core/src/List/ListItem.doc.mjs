@@ -104,7 +104,7 @@ export const docs = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: 'Selected state; sets aria-selected on the item.',
+      description: 'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
       default: 'false',
     },
     {
@@ -196,7 +196,7 @@ export const docsZh = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: '选中状态；在项目上设置 aria-selected。',
+      description: '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
       default: 'false',
     },
     {
@@ -236,6 +236,6 @@ export const docsDense = {
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
     isDisabled: 'Disabled state; sets aria-disabled.',
-    isSelected: 'Selected state; sets aria-selected.',
+    isSelected: 'Selected state; sets aria-current="true".',
   },
 };

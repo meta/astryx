@@ -36,10 +36,17 @@ import * as path from 'node:path';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {normalizeProviderId} from '../../foundation/identity/provider-identity.mjs';
 import {integrationDocTypes} from '../docs/_adapter.mjs';
+import {
+  iconSetCoverage,
+  iconSetIssues,
+} from '../../foundation/discovery/icon-set-checks.mjs';
+import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
+import {templateIconNotes} from '../../foundation/discovery/template-icon-notes.mjs';
 import {integrationDocConsistency} from '../../foundation/discovery/doc-consistency.mjs';
 import {
   integrationDocCommands,
   integrationDocTargets,
+  projectUsesIconSets,
 } from './_adapter.mjs';
 import {
   THEME_SLUG_RE,
@@ -111,6 +118,9 @@ export {validateLoadedIntegration, isListedIssue};
  *   may not fail `--strict` until the next (architecture:cli-surface INV35);
  *   `integration verify` still fails on a package.json npm cannot pack.
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration} [integration]
+ * @property {import('../../foundation/discovery/icon-set-checks.mjs').IconSetCoverage[]} [iconSets]
+ *   Which definitions each icon set leaves unmapped (spec:AST-084 FR15).
+ * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
  *   what the public-import check could not judge
  */
@@ -299,15 +309,23 @@ async function findUnreachableContributionIssues(
  * Shared core for the local and installed entry points.
  * @param {string} packageDir
  * @param {{name: string, version?: string}} identity
- * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string}} [options]
+ * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean}} [options]
  *   `own`: the package is the one being authored in the current folder;
- *   `cwd`: the folder whose package manager an install command names
+ *   `cwd`: the folder whose package manager an install command names;
+ *   `iconSets`: read the experimental `experimental.iconSets` root (default
+ *   true). Off, the root is not resolved or checked and `iconSets` is not
+ *   filled, as in a CLI without icon sets.
  * @returns {Promise<ValidateResult>}
  */
 async function validateAtPackageDir(
   packageDir,
   identity,
-  {scanUnreachable = false, own = false, cwd = packageDir} = {},
+  {
+    scanUnreachable = false,
+    own = false,
+    cwd = packageDir,
+    iconSets = true,
+  } = {},
 ) {
   /** @type {Issue[]} */
   const issues = [];
@@ -420,6 +438,9 @@ async function validateAtPackageDir(
     codemods: resolveRoot(manifest.codemods, 'codemods'),
     docs: resolveRoot(manifest.docs, 'docs'),
     themes: resolveRoot(manifest.themes, 'themes'),
+    iconSets: iconSets
+      ? resolveRoot(manifest.experimental?.iconSets, 'experimental.iconSets')
+      : undefined,
     issuesUrl: manifest.issuesUrl,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
@@ -469,6 +490,16 @@ async function validateAtPackageDir(
   }
   if (loaded.themes && !rootProblem(loaded.themes))
     issues.push(...unreadThemeFolderIssues(packageDir, loaded));
+  // The icon-set checks (AST-084 FR15): data against descriptor, module
+  // exports, and theme map, all read statically.
+  if (loaded.iconSets && !rootProblem(loaded.iconSets)) {
+    /** @type {Map<string, import('../../foundation/discovery/icon-set-checks.mjs').IconSetUnchecked[]>} */
+    const unchecked = new Map();
+    issues.push(...iconSetIssues(packageDir, loaded, unchecked));
+    // Which definitions each set leaves unmapped, and what the checks could
+    // not judge: listed, never an issue.
+    result.iconSets = iconSetCoverage(loaded, unchecked);
+  }
   // What the docs say that no reader serves: a prop listed twice, an
   // overlay's text for a prop the doc lacks, an empty or unreachable section,
   // and an overlay of no topic.
@@ -504,6 +535,25 @@ async function validateAtPackageDir(
         absoluteRoots,
       )),
     );
+  }
+  // Authoring only: a template or namespace doc that sets `stability` is
+  // dropped by a CLI before the release that reads it. Noted, never an issue.
+  if (scanUnreachable) {
+    /** @type {any} */
+    let pkg = {};
+    try {
+      pkg = JSON.parse(
+        fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+      );
+    } catch {
+      // package.json problems are reported by their own check.
+    }
+    const notes = await olderCliNotes(loaded, pkg, packageDir);
+    if (notes.length > 0) result.olderCliNotes = notes;
+    // Each template `icons` key the template's source never imports: a note
+    // with its fix, never an issue (spec:AST-084 FR10).
+    const iconNotes = await templateIconNotes(loaded, packageDir);
+    if (iconNotes.length > 0) (result.notes ??= []).push(...iconNotes);
   }
 
   return result;
@@ -652,9 +702,16 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
+ * @param {{iconSets?: boolean}} [options] `iconSets`: check the package's
+ *   experimental icon sets; by default only when the project at `cwd` sets
+ *   `experimental.iconSet`
  * @returns {Promise<ValidateResult>}
  */
-export async function validateInstalledIntegration(spec, cwd = process.cwd()) {
+export async function validateInstalledIntegration(
+  spec,
+  cwd = process.cwd(),
+  {iconSets} = {},
+) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
   // degrades into a diagnostic — so catch it here and return an issue instead
@@ -697,7 +754,7 @@ export async function validateInstalledIntegration(spec, cwd = process.cwd()) {
   return validateAtPackageDir(
     packageDir,
     {name: pkg.name ?? spec, version: pkg.version},
-    {cwd},
+    {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
   );
 }
 
@@ -869,6 +926,12 @@ export async function validateIntegration(pkg, options = {}) {
       ...(docTypes ? {docTypes} : {}),
       ...(docNames ? {docNames} : {}),
       ...(blockComponents ? {blockComponents} : {}),
+      // Additive, never counted: present only for a package with icon sets,
+      // or with descriptors an older CLI drops.
+      ...(result.found && result.iconSets ? {iconSets: result.iconSets} : {}),
+      ...(result.found && result.olderCliNotes
+        ? {olderCliNotes: result.olderCliNotes}
+        : {}),
       // Template assets npm could not place, when there are any.
       ...(examples && examples.unchecked.length > 0
         ? {

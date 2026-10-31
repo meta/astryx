@@ -122,6 +122,55 @@ const groups = [
       'Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.',
     headers: ['Token', 'Light', 'Dark'],
     formatRow: lightDarkRow,
+    // One line per status role (architecture:theme-tokens INV11), so a reader
+    // picks the token by the surface it sits on.
+    extraContent: [
+      {
+        type: 'prose',
+        text: 'Status roles: pick the token by the surface. `<status>` is info, success, warning, or error.',
+      },
+      {
+        type: 'table',
+        headers: ['Status role', 'Use it for', 'Pairs with'],
+        rows: [
+          [
+            '--color-text-<status>',
+            'Status text on the page or a card (4.5:1 or more).',
+            '—',
+          ],
+          [
+            '--color-icon-<status>',
+            'Status icons on the page or a card. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-border-<status>',
+            'Status borders on the page or a card, such as an invalid field. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-<status>',
+            'Strong status fill, such as a Badge or StatusDot.',
+            '--color-on-<status>',
+          ],
+          [
+            '--color-on-<status>',
+            'Text and icons on the strong fill (4.5:1 or more).',
+            '--color-<status>',
+          ],
+          [
+            '--color-<status>-muted',
+            'Pale status fill, such as a Banner.',
+            '--color-on-<status>-muted',
+          ],
+          [
+            '--color-on-<status>-muted',
+            'Text and icons on the pale fill (4.5:1 or more).',
+            '--color-<status>-muted',
+          ],
+        ],
+      },
+    ],
   },
   {
     key: 'data',
@@ -209,7 +258,7 @@ const groups = [
     exportName: 'durationDefaults',
     title: 'Duration Tokens',
     description:
-      'Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio.',
+      "Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio. Of a theme's two `motion` knobs, `tempo` (0.75–1.5) scales every duration here; `character` leaves durations alone. A duration scale beats `tempo` for the bands it sets, and explicit `tokens` beat both. `tempo` leaves these unscaled: finger tracking, momentum, the rubber band, the on-screen keyboard, the press's onset delay, cancel distance and tap flash, hover-intent delays, gesture thresholds, Spinner's and Skeleton's loops, and the 200 ms Reduce Motion cap.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },
@@ -218,7 +267,8 @@ const groups = [
     previewType: 'easing-curve',
     exportName: 'easeDefaults',
     title: 'Easing Tokens',
-    description: 'Easing curves for animations and transitions.',
+    description:
+      "Easing curves for animations and transitions. Of a theme's two `motion` knobs, `character` sets `--ease-entrance` and `--ease-move`: `crisp` decelerates without overshoot, `expressive` overshoots slightly, and at `standard` both equal `--ease-standard`; `--ease-exit` keeps its own curve at every character. `tempo` leaves curves alone. A duration scale's own fields win over the knobs, and explicit `tokens` win over everything. No curve here shapes motion that follows a finger or the system (dragging, momentum, the rubber band, the on-screen keyboard), and the press's clocks, hover-intent delays and gesture thresholds keep their timing whatever the character.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },
@@ -285,6 +335,7 @@ for (const group of groups) {
   /** @type {import('@astryxdesign/cli/authoring').ReferenceContentBlock[]} */
   const content = [
     {type: 'prose', text: group.description},
+    ...(group.extraContent ?? []),
     {type: 'table', headers: group.headers, rows},
   ];
 

@@ -17,6 +17,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useCallback,
@@ -45,7 +46,8 @@ import {
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -80,8 +82,9 @@ import {
 import {useDevWarning} from '../hooks/useDevWarning';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while this
-  // field's own input holds focus (spec:AST-085 FR6). Defaults repeat it.
+  // While disabled or busy the field takes no hover ring, but the focus ring
+  // returns while this field's own input holds focus (spec:AST-085 FR6).
+  // Defaults repeat the shared border and shadow.
   disabledFocusRing: {
     borderColor: {
       default: colorVars['--color-border-emphasized'],
@@ -292,7 +295,9 @@ export interface DateInputProps extends Omit<
   changeAction?: (value: ISODateString | undefined) => void | Promise<void>;
 
   /**
-   * Whether the input is in a loading state.
+   * Whether the input is in a loading state. The field stays focusable and
+   * exposes `aria-busy` with a Spinner; typing, picking, and clearing are
+   * blocked until loading ends.
    * @default false
    */
   isLoading?: boolean;
@@ -319,9 +324,9 @@ export interface DateInputProps extends Omit<
   placeholder?: string;
 
   /**
-   * The size of the input.
-   * - 'sm': Compact size (18px height)
-   * - 'md': Default size (26px height)
+   * The size of the input. The field height follows the theme's element-size
+   * token for the chosen size (`--size-element-sm`, `--size-element-md`, or
+   * `--size-element-lg`).
    * @default 'md'
    */
   size?: DateInputSize;
@@ -675,7 +680,7 @@ function PointerDateField({
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -686,7 +691,13 @@ function PointerDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Handle clear button click
@@ -709,11 +720,16 @@ function PointerDateField({
   // Handle date selection from calendar
   const handleDateSelect = useCallback(
     (selectedDate: ISODateString) => {
+      // An already-open calendar can outlive an enabled owner. Reject the
+      // whole selection, including dismissal, so its focused day stays put.
+      if (isDisabled) {
+        return;
+      }
       fireChange(selectedDate);
       setPendingInput(null);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   // Handle input text change - update immediately if valid and allowed
@@ -826,6 +842,7 @@ function PointerDateField({
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
@@ -835,7 +852,10 @@ function PointerDateField({
         stylex.props(
           inputWrapperStyles.base,
           sizeStyles[size],
-          isEffectivelyDisabled && inputWrapperStyles.disabled,
+          // Disabled paint belongs to the disabled state only; a busy field
+          // keeps its ordinary paint and shows the Spinner (spec:AST-085
+          // FR6, family:buttons FR4).
+          isDisabled && inputWrapperStyles.disabled,
           isEffectivelyDisabled && styles.disabledFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
@@ -939,17 +959,21 @@ function PointerDateField({
       {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {popover.render(
-        <Calendar
-          handleRef={calendarRef}
-          mode="single"
-          value={optimisticValue ?? null}
-          onChange={handleDateSelect}
-          min={min}
-          max={max}
-          dateConstraints={dateConstraints}
-          numberOfMonths={numberOfMonths}
-          weekStartsOn={weekStartsOn}
-        />,
+        // The layer renders its children open or closed, so mount the
+        // calendar only while it is open; it opens on the current value.
+        !popover.isOpen ? null : (
+          <Calendar
+            handleRef={calendarRef}
+            mode="single"
+            value={optimisticValue ?? null}
+            onChange={handleDateSelect}
+            min={min}
+            max={max}
+            dateConstraints={dateConstraints}
+            numberOfMonths={numberOfMonths}
+            weekStartsOn={weekStartsOn}
+          />
+        ),
         {placement: 'below', alignment: 'start'},
       )}
       {showsDisabledMessage &&
@@ -1039,6 +1063,8 @@ PointerDateField.displayName = 'PointerDateField';
  * ```
  */
 export function DateInput(props: DateInputProps) {
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = props.isDisabled || inputGroupState.isDisabled;
   const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
   useDevWarning(
     'DateInput',
@@ -1056,11 +1082,11 @@ export function DateInput(props: DateInputProps) {
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} />;
+      return <NativeDateField {...rest} isDisabled={isDisabled} />;
     case 'sheet':
-      return <TouchDateField {...rest} />;
+      return <TouchDateField {...rest} isDisabled={isDisabled} />;
     case 'desktop':
-      return <PointerDateField {...rest} />;
+      return <PointerDateField {...rest} isDisabled={isDisabled} />;
   }
 }
 

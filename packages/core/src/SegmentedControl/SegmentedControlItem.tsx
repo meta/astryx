@@ -210,11 +210,17 @@ export function SegmentedControlItem({
 
   // Consumer-first: a consumer onClick can call preventDefault() to opt out of
   // selection; otherwise selection proceeds when enabled and not selected.
-  const handleClick = composeEventHandlers(onClickProp, () => {
-    if (!isItemDisabled && !isSelected) {
-      ctx.onChange(value);
-    }
-  });
+  // A disabled segment invokes no caller callback (spec:AST-085 FR2), so the
+  // consumer onClick is left out while it is disabled, including the selected
+  // segment of a group disabled with a reason, which stays focusable.
+  const handleClick = composeEventHandlers(
+    isItemDisabled ? undefined : onClickProp,
+    () => {
+      if (!isItemDisabled && !isSelected) {
+        ctx.onChange(value);
+      }
+    },
+  );
 
   const iconElement = icon ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>{icon}</span>

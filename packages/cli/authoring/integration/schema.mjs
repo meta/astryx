@@ -93,6 +93,10 @@ export const integrationBaseSchema = z.object({
   codemods: z.string().optional(),
   docs: z.string().optional(),
   themes: z.string().optional(),
+  // Experimental roots (spec:AST-017 FR27). An unknown key inside is
+  // stripped, as unknown top-level keys are, so a newer CLI's experiment
+  // never fails an older CLI's parse.
+  experimental: z.object({iconSets: z.string().optional()}).optional(),
   issuesUrl: z.string().url().optional(),
   docsiteUrl: z.string().url().optional(),
 });

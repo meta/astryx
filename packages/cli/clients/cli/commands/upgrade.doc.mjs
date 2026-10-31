@@ -108,14 +108,17 @@ export const doc = {
   ],
   outsideProject: 'own',
   exitCodes: [
-    {code: 0, when: 'success, including complete dry-run previews'},
+    {
+      code: 0,
+      when: 'success, including complete dry-run previews and runs whose only findings are manual migrations',
+    },
     {
       code: 1,
       when:
         'missing or invalid --from, --registry with --list or a migration flag, a --path escape, ' +
         'no installed @astryxdesign/core (or legacy @xds/core), jscodeshift missing and not installed by --install-deps, ' +
         'an astryx.config that fails validation and that no pending config codemod repairs, ' +
-        'an unreadable or invalid protection declaration, a protected file that still requires a codemod change, ' +
+        'an unreadable or invalid protection declaration, a protected file that still requires a codemod change, a generated file that must be regenerated, ' +
         'an unknown codemod, a codemod or post-codemod hook failure, or unresolved registry items',
     },
   ],
@@ -160,6 +163,13 @@ export const doc = {
     {
       type: 'prose',
       text:
+        'upgrade does not scan installed dependencies or version-control folders at all, including through a symbolic link: ' +
+        'a symlinked `node_modules`, or a link whose target is inside one or inside a package store such as `.yarn/cache`, is skipped. ' +
+        'Other symbolically linked folders are scanned so a change they need is reported, but nothing is written through them.',
+    },
+    {
+      type: 'prose',
+      text:
         'Rules work as they do in Git: a later rule wins, so `linguist-generated=false` or a `!` line in an ignore file ' +
         'returns a file to normal handling. A folder name such as `dist` or `generated` protects nothing by itself. ' +
         'If a protection file cannot be read or parsed, upgrade stops with ERR_CODEMOD_PROTECTION_SOURCE before it writes anything.',
@@ -193,6 +203,41 @@ export const doc = {
         '(the rules that protect it), `codemods`, and `commands`. A generated file can name the command that rebuilds it on a ' +
         '`Command:` line in its header, such as `// Command: pnpm run gen:panel`; upgrade prints it as ' +
         '`Regenerate with: <command>` and lists it in `commands`.',
+    },
+    {
+      type: 'prose',
+      text:
+        'A protected file a codemod cannot parse, such as a vendored bundle written for another toolchain, cannot need a ' +
+        'change the codemod can prove, and upgrade never writes it. upgrade skips it, lists it under ' +
+        '`declinedCandidates` with the parse error and where it occurred, and carries on; on its own it does not fail the run. ' +
+        'If another codemod in the same upgrade still requires a change to that file (the 0.6.0 theme selector migration, for one, ' +
+        'adds a TODO comment above a selector it cannot parse), the file is listed once, under `protectedFiles`, and the run is ' +
+        'incomplete as for any protected file. A file upgrade owns that does not parse still fails the run with ERR_CODEMOD_FAILED.',
+    },
+    {type: 'heading', level: 3, text: 'Manual migrations and regeneration'},
+    {
+      type: 'prose',
+      text:
+        'Some changes a codemod can find but not make. upgrade lists them in the result, so a script can keep the rest of the run and act on each. ' +
+        'Code a codemod can identify but cannot migrate safely is a manual migration: upgrade lists each file with its line, ' +
+        'the codemod and what to change, finishes the run, and exits 0. With --json they are in `declinedCandidates`, one row per file (each finding in `reason` starts with `manual migration needed (<codemod>):`, and a file with several findings lists them all, joined by `; `), and `complete` stays true. ' +
+        'A generated file that must be rebuilt is listed in `regenerate` with the command that rebuilds it, such as `astryx theme build`: a protected generated file a codemod still needs to change ' +
+        '(also in `protectedFiles`), or a generated output a codemod found out of date (also in `protectedFiles`, with the rule that protects it, when the project marks it generated). With --apply, upgrade runs your `hooks.postCodemod` commands and checks again. ' +
+        'If a protected file still needs rebuilding, the run is incomplete exactly as for any protected file: it exits 1 and the result says `complete: false` and `errorCode: "ERR_CODEMOD_PROTECTED"`. ' +
+        'If a file nothing protects still needs rebuilding, no protected file is in the way: the codemod could not make a required change, so it is also in `errors` and the run fails with `ERR_CODEMOD_FAILED`, as described below. ' +
+        'Either way, rebuild it, then run the same upgrade again. ' +
+        'When a codemod also failed, the failure is reported as below, and the receipt it carries still lists `declinedCandidates` and `regenerate`, ' +
+        'unless a protected file to regenerate also remains, in which case the run returns `ERR_CODEMOD_PROTECTED` with the failure in `errors`.',
+    },
+    {type: 'heading', level: 3, text: 'A failed codemod'},
+    {
+      type: 'prose',
+      text:
+        'When a codemod or a `hooks.postCodemod` command fails, upgrade still makes every other change, exits 1 with ERR_CODEMOD_FAILED, and does not refresh the agent docs. ' +
+        'With --json, the result is the usual error, `{"error": ..., "code": "ERR_CODEMOD_FAILED"}`, plus a `receipt`: the same fields a finished run returns, with `complete: false`, ' +
+        'each failure in `errors`, and every file upgrade changed (or would change) in `modifiedFiles`, so a script can review, keep, or revert them. ' +
+        'An error that stops the run after codemods have written files, such as an astryx.config that fails validation, carries a `receipt` too. ' +
+        'Rerun past a failed codemod with --skip-codemod.',
     },
   ],
 };

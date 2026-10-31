@@ -90,6 +90,15 @@
  *   | 'ERR_SIGNAL_TERMINATED'
  *   | 'ERR_VERSIONS_UNAVAILABLE'
  *   | 'ERR_PROJECT_REQUIRED'
+ *   | 'ERR_RENDER_COMPILE'
+ *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
+ *   | 'ERR_RENDER_MISSING_DEPENDENCY'
+ *   | 'ERR_RENDER_BROWSER_API'
+ *   | 'ERR_RENDER_ASSET_TOO_LARGE'
+ *   | 'ERR_RENDER_TIMEOUT'
+ *   | 'ERR_RENDER_FAILED'
+ *   | 'ERR_RENDER_NOT_ASTRYX'
+ *   | 'ERR_RENDER_SOURCE_DAMAGED'
  * )} ErrorCode
  */
 
@@ -163,7 +172,7 @@ export const ERROR_CODES = Object.freeze({
   ERR_UNKNOWN_FEATURE: 'ERR_UNKNOWN_FEATURE',
   /** A `--codemod` value did not match any registered codemod (upgrade). */
   ERR_UNKNOWN_CODEMOD: 'ERR_UNKNOWN_CODEMOD',
-  /** One or more codemods failed during an upgrade run. */
+  /** One or more codemods, or a post-codemod hook, failed during an upgrade run. */
   ERR_CODEMOD_FAILED: 'ERR_CODEMOD_FAILED',
   /** A required codemod change remains blocked by a protected consumer file. */
   ERR_CODEMOD_PROTECTED: 'ERR_CODEMOD_PROTECTED',
@@ -253,6 +262,58 @@ export const ERROR_CODES = Object.freeze({
    * integration package) and was run outside one. Nothing was written.
    */
   ERR_PROJECT_REQUIRED: 'ERR_PROJECT_REQUIRED',
+
+  // ── Render (experimental) ────────────────────────────────────────
+  /**
+   * The page given to `astryx experimental render` does not compile (a syntax
+   * or type-syntax error). Nothing was written.
+   */
+  ERR_RENDER_COMPILE: 'ERR_RENDER_COMPILE',
+  /**
+   * The page module has no default export to render. Nothing was written.
+   */
+  ERR_RENDER_NO_DEFAULT_EXPORT: 'ERR_RENDER_NO_DEFAULT_EXPORT',
+  /**
+   * The page imports a package that is not installed where the page is.
+   * Nothing was written.
+   */
+  ERR_RENDER_MISSING_DEPENDENCY: 'ERR_RENDER_MISSING_DEPENDENCY',
+  /**
+   * The page reads a browser-only API (window, document, …) while rendering,
+   * and a rendered page has no browser yet. Nothing was written.
+   */
+  ERR_RENDER_BROWSER_API: 'ERR_RENDER_BROWSER_API',
+  /**
+   * A local file the page uses is too large to inline into one HTML file.
+   * Nothing was written.
+   */
+  ERR_RENDER_ASSET_TOO_LARGE: 'ERR_RENDER_ASSET_TOO_LARGE',
+  /**
+   * The page did not finish rendering in time and was stopped. Nothing was
+   * written.
+   */
+  ERR_RENDER_TIMEOUT: 'ERR_RENDER_TIMEOUT',
+  /**
+   * The page threw while rendering for any other reason. Nothing was written.
+   */
+  ERR_RENDER_FAILED: 'ERR_RENDER_FAILED',
+  /**
+   * `render --reverse` was given an HTML file that holds no Astryx markup and
+   * no embedded source, so there is nothing to rebuild. Nothing was written.
+   */
+  ERR_RENDER_NOT_ASTRYX: 'ERR_RENDER_NOT_ASTRYX',
+  /**
+   * `render --reverse` refused the received file: its embedded source is
+   * damaged (not valid, or a file does not match its checksum), lists a path
+   * twice, carries a module, stylesheet or JSON file the page does not
+   * import or an image, font or media file whose bytes are not one, or
+   * carries a file a
+   * render never embeds (a dotfile, node_modules, a manifest, lockfile or
+   * tool configuration, a file a test, story or benchmark runner would run,
+   * or any kind but a page module, stylesheet, JSON file or image). Nothing
+   * was written.
+   */
+  ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
 });
 
 /**

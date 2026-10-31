@@ -5,13 +5,15 @@
  *
  * A failed `component`, `template` or `docs` lookup already knows which
  * entries to suggest; this module decides their order, so the entry the
- * caller most likely meant comes first. It never makes a list longer.
+ * caller most likely meant comes first. Asked for the closest entries only,
+ * it also cuts a list where the matches get weaker. It never makes a list
+ * longer.
  *
  * Names are compared as words: `DropdownMenuItem`, `dropdown-menu-item` and
  * `Dropdown Menu Items` all read as `dropdown menu item`.
  *
  * @input  the name the caller typed and the candidate entries
- * @output the entries, reordered
+ * @output the entries, reordered, and cut when asked
  * @position lib: shared by the component, template and docs lookup errors
  */
 
@@ -79,15 +81,15 @@ function affinityOf(typed, name) {
 }
 
 /**
- * The same items, closest to the typed name first; each item is as close as
- * its closest name. Equal matches keep their original order.
+ * The items scored against the typed name, closest first; equal matches keep
+ * their original order.
  * @template T
  * @param {string} typedName
  * @param {T[]} items
  * @param {(item: T) => Array<string | undefined>} namesOf
- * @returns {T[]}
+ * @returns {Array<{item: T, best: number}>}
  */
-export function orderByAffinity(typedName, items, namesOf) {
+function scoreByAffinity(typedName, items, namesOf) {
   const typed = nameWords(typedName);
   const scored = items.map((item, index) => {
     let best = 0;
@@ -97,30 +99,73 @@ export function orderByAffinity(typedName, items, namesOf) {
     return {item, index, best};
   });
   scored.sort((a, b) => b.best - a.best || a.index - b.index);
-  return scored.map(s => s.item);
+  return scored;
+}
+
+/**
+ * The same items, closest to the typed name first; each item is as close as
+ * its closest name. Equal matches keep their original order.
+ *
+ * With `closest`, the list also stops where the matches get weaker. Only
+ * typed words longer than one character count here. When the best item
+ * carries every such word, only the items that carry every one of them stay;
+ * when it carries some of them, the items that carry none are left out. When
+ * no item carries one, nothing is left out. The list only ever gets shorter,
+ * and its order does not change.
+ * @template T
+ * @param {string} typedName
+ * @param {T[]} items
+ * @param {(item: T) => Array<string | undefined>} namesOf
+ * @param {{closest?: boolean}} [options]
+ * @returns {T[]}
+ */
+export function orderByAffinity(typedName, items, namesOf, options = {}) {
+  const scored = scoreByAffinity(typedName, items, namesOf);
+  if (!options.closest) return scored.map(s => s.item);
+  // One-letter words (`a` in `a11y`, `use-a-theme`) say nothing about which
+  // entry was meant, so the cut counts only the longer typed words.
+  const words = nameWords(typedName).filter(w => w.length > 1);
+  const tierOf = (/** @type {T} */ item) => {
+    let best = 0;
+    for (const name of namesOf(item)) {
+      if (name) best = Math.max(best, affinityOf(words, name));
+    }
+    // Tiers: 1 some typed word, 2 every typed word, 4 the same words.
+    return Math.floor(best / 10);
+  };
+  const tiers = scored.map(s => tierOf(s.item));
+  const top = Math.max(0, ...tiers);
+  if (top === 0) return scored.map(s => s.item);
+  const need = Math.min(top, 2);
+  return scored.filter((_, i) => tiers[i] >= need).map(s => s.item);
 }
 
 /**
  * Docs route suggestions, closest to the typed route first. When every
  * suggestion sits under one namespace the typed route also starts with, that
  * shared part is left out of the comparison: it says nothing about which page
- * was meant. Equal matches keep their order.
+ * was meant. Equal matches keep their order. `closest` stops the list where
+ * the matches get weaker, as in {@link orderByAffinity}.
  * @template {{name: string}} T
  * @param {string} topic - the typed route
  * @param {T[]} suggestions
+ * @param {{closest?: boolean}} [options]
  * @returns {T[]}
  */
-export function orderRouteSuggestions(topic, suggestions) {
+export function orderRouteSuggestions(topic, suggestions, options = {}) {
   let shared = suggestions.length > 0 ? suggestions[0].name : '';
   for (const {name} of suggestions) {
     while (shared && !name.startsWith(shared)) shared = shared.slice(0, -1);
   }
   const namespace = shared.slice(0, shared.lastIndexOf('/') + 1);
   return namespace && topic.startsWith(namespace)
-    ? orderByAffinity(topic.slice(namespace.length), suggestions, s => [
-        s.name.slice(namespace.length),
-      ])
-    : orderByAffinity(topic, suggestions, s => [s.name]);
+    ? orderByAffinity(
+        topic.slice(namespace.length),
+        suggestions,
+        s => [s.name.slice(namespace.length)],
+        options,
+      )
+    : orderByAffinity(topic, suggestions, s => [s.name], options);
 }
 
 /** Library names a synonym may start with (`MUI TextField`). */

@@ -55,7 +55,7 @@ export const docs = {
       name: 'options.onHighlight',
       type: '(row: HTMLElement | null) => void',
       description:
-        'Move the highlight; null clears it. Defaults to moving DOM focus with preventScroll onto the row, and onto the menu root when there is no row. A picker that highlights through aria-activedescendant supplies its own.',
+        'Move the highlight; null clears it. Defaults to moving DOM focus with preventScroll onto the row, and onto the menu root when there is no row; after a pointer press that focus does not match :focus-visible. A picker that highlights through aria-activedescendant supplies its own.',
     },
     {
       name: 'options.onActivate',
@@ -164,7 +164,7 @@ export const docsDense = {
     'options.onTriggerPress':
       'mouse press / held finger on trigger: open, return whether it opened (false = the press closed it).',
     'options.onHighlight':
-      'move highlight (null clears); default = focus w/ preventScroll, menu root when no row.',
+      'move highlight (null clears); default = focus w/ preventScroll (not :focus-visible after a pointer press), menu root when no row.',
     'options.onActivate':
       'act on row under release; default = dispatch click w/ release button + modifiers.',
     'options.onDismiss': 'MOUSE released outside: close. Finger: never called.',

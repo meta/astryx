@@ -63,6 +63,7 @@ import {
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView, indexView} from '../../foundation/doc-compiler/lenses.mjs';
+import {isExperimentalTreeNode} from '../../foundation/doc-compiler/tree.mjs';
 import {semverCompare, isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import {checkAppThemes, checkThemes} from './theme-checks.mjs';
 import {availableLine, RUN_FROM_PROJECT, upgradeLine} from '../../foundation/release/notices.mjs';
@@ -112,6 +113,9 @@ import {checkBuilt} from './built-checks.mjs';
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
+ * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string}}|null} [iconSets]
+ *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.
@@ -509,9 +513,15 @@ export function checkImplicitIntegrations(ctx) {
         : '';
     // A declared root counts only when it exists: the manifest's keys are a
     // claim, and `integration-issues` reports the ones that are not true.
-    const declared = ['components', 'templates', 'themes', 'docs', 'codemods'].filter(
-      root => integration[/** @type {'components'} */ (root)],
-    );
+    const declared = [
+      'components',
+      'templates',
+      'themes',
+      'docs',
+      'codemods',
+      // An experimental root counts only in a project that opts in.
+      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+    ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
       if (typeof dir !== 'string') return false;
@@ -908,6 +918,66 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
+ * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet` names a set
+ * that is not installed, or one that is installed but withdrawn (with why);
+ * warns when two or more sets are installed and none is the project's, and
+ * for each other installed set that was withdrawn, with why.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
+ * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconSets(ctx) {
+  const state = ctx.iconSets;
+  const id = 'icon-sets';
+  const label = 'Icon sets';
+  if (state == null) return null;
+  const {sets, withdrawn, choice} = state;
+  // Only a project that opts in with `experimental.iconSet` gets the check.
+  if (!choice.configured) return null;
+  if (choice.status === 'missing') {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: choice.reason,
+      fix: 'Install the package that ships the set, or set experimental.iconSet in astryx.config to an installed set (`astryx experimental icon --list` names them).',
+    };
+  }
+  if (choice.status === 'withdrawn') {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: choice.reason,
+      fix: 'Run `astryx integration check` in the package that ships the set, or install the module its data names; or set experimental.iconSet in astryx.config to a valid installed set (`astryx experimental icon --list` names them).',
+    };
+  }
+  /** @type {string[]} */
+  const problems = [];
+  if (choice.status === 'ambiguous') problems.push(choice.reason);
+  for (const each of withdrawn) problems.push(each.reason);
+  if (problems.length > 0) {
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: problems.join(' | '),
+      fix:
+        choice.status === 'ambiguous'
+          ? 'Set experimental.iconSet in astryx.config to "<package>/<set>" so templates use one set.'
+          : 'Run `astryx integration check` in the package that ships the set, or install its module.',
+    };
+  }
+  return {
+    id,
+    label,
+    status: 'pass',
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}`,
+  };
+}
+
+/**
  * Check 10 — report the detected package manager, and say so when the project's
  * own declaration disagrees with what is on disk.
  *
@@ -1207,6 +1277,9 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
       id,
       label,
       status: 'pass',
+      // Experimental schemas are checked like every other but are sections
+      // of their experimental route, so the count is unchanged without them
+      // (spec:AST-017 FR27).
       message: `All ${audit.sections} authoring schemas are readable in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
     };
   } catch (err) {
@@ -1275,7 +1348,9 @@ export async function checkCliDocs(_ctx, options = {}) {
       id,
       label,
       status: 'pass',
-      message: `All ${audit.docs} CLI docs are readable: ${audit.tree} in the \`${formatCliCommand('docs cli')}\` tree and ${audit.authoring} in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
+      // Experimental docs are checked like every other but not counted
+      // (spec:AST-017 FR27).
+      message: `All ${audit.docs - audit.experimental.docs} CLI docs are readable: ${audit.tree - audit.experimental.tree} in the \`${formatCliCommand('docs cli')}\` tree and ${audit.authoring - audit.experimental.authoring} in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
     };
   } catch (err) {
     return {
@@ -1348,7 +1423,11 @@ export async function checkDocsTree(_ctx, options = {}) {
         fix: DOCS_TREE_FIX,
       };
     }
-    const nodes = [...tree.nodes.values()];
+    // Experimental docs are checked like every other but not counted
+    // (spec:AST-017 FR27).
+    const nodes = [...tree.nodes.values()].filter(
+      node => !isExperimentalTreeNode(tree, node),
+    );
     const namespaces = nodes.filter(node => node.kind === 'namespace').length;
     return {
       id,
@@ -1366,6 +1445,7 @@ export async function checkDocsTree(_ctx, options = {}) {
     };
   }
 }
+
 
 /**
  * Every topic reads progressively, in every language it ships: it loads, its
@@ -1391,16 +1471,23 @@ export async function checkDocsProgressiveDisclosure(ctx) {
   if (catalog) {
     // A guide the docs tree places is a topic read by its route; it is held
     // to the same budget as every flat topic.
-    const guides = [...(await projectTree(catalog)).nodes.values()]
+    const tree = await projectTree(catalog);
+    const placed = [...tree.nodes.values()]
       // A flat topic in a topic level is checked above, as a topic.
-      .filter(node => node.kind === 'generic' && !node.ref?.flatTopic)
-      .map(guideEntry);
+      .filter(node => node.kind === 'generic' && !node.ref?.flatTopic);
+    // An experimental guide is checked but not counted (spec:AST-017 FR27).
+    const uncounted = new Set(
+      placed
+        .filter(node => isExperimentalTreeNode(tree, node))
+        .map(node => node.route),
+    );
+    const guides = placed.map(guideEntry);
     for (const entry of [...catalog.entries(), ...guides]) {
       for (const lang of [null, ...overlayLanguages(entry)]) {
         const where = lang ? `${entry.name} [${lang}]` : entry.name;
         try {
           const doc = detailView(await compileTopic(catalog, entry, lang));
-          if (lang == null) topics += 1;
+          if (lang == null && !uncounted.has(entry.name)) topics += 1;
           const indexBytes = docsIndexBytes(buildDocsIndexData(doc));
           if (indexBytes > DOC_OUTPUT_BUDGET_BYTES) {
             problems.push(
@@ -1890,7 +1977,8 @@ async function runComputerChecks(cwd) {
 /**
  * Ordered list of synchronous check functions. Append here to add a check.
  * (checkConfig is async and is awaited separately by {@link runChecks}.)
- * @type {Array<(ctx: DoctorContext) => DoctorCheck>}
+ * A check that returns null does not apply to the project and is left out.
+ * @type {Array<(ctx: DoctorContext) => DoctorCheck | null>}
  */
 export const SYNC_CHECKS = [
   checkNodeVersion,
@@ -1900,6 +1988,7 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIconSets,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
@@ -1962,6 +2051,8 @@ export async function runChecks(options = {}) {
   let configuredIntegrations = null;
   /** @type {string|null} */
   let projectError = null;
+  /** @type {DoctorContext['iconSets']} */
+  let iconSets = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
@@ -2057,6 +2148,11 @@ export async function runChecks(options = {}) {
         docsCatalog = null;
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
+      try {
+        iconSets = await project.iconSets();
+      } catch {
+        iconSets = null;
+      }
       integrationIssues = await project.issues();
     } catch {
       // Best-effort: once the project has loaded, a later read that throws
@@ -2082,6 +2178,7 @@ export async function runChecks(options = {}) {
     configuredIntegrations,
     configError,
     projectError,
+    iconSets,
   };
 
   /** @type {DoctorCheck[]} */
@@ -2089,7 +2186,8 @@ export async function runChecks(options = {}) {
   // Run the theme checks and config check after the environment checks. The
   // released `themes` check keeps its place, ahead of the app-theme checks.
   for (const fn of SYNC_CHECKS) {
-    checks.push(fn(ctx));
+    const check = fn(ctx);
+    if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
       checks.push(checkThemes(cwd, appThemeChecks), ...appThemeChecks);

@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {useMemo, type ReactElement, type Ref} from 'react';
+import {createContext, use, useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {BaseTable} from './BaseTable';
@@ -135,6 +135,17 @@ const scrollWrapperStyles = stylex.create({
   },
 });
 
+/**
+ * The Table's own name, for the scroll region that names itself after it.
+ * Internal to Table: the scroll wrapper is not given it as a prop, so it adds
+ * nothing to the public table types.
+ */
+const TableNameContext = createContext<{
+  label?: string;
+  labelledBy?: string;
+} | null>(null);
+TableNameContext.displayName = 'TableNameContext';
+
 function TableScrollWrapper({
   children,
   htmlProps,
@@ -151,7 +162,17 @@ function TableScrollWrapper({
   afterTable?: React.ReactNode;
 }) {
   const t = useTranslator();
-  const label = t('@astryx.table.label');
+  const tableName = use(TableNameContext);
+  // The focusable scroll region takes the table's own name (spec:AST-025
+  // FR12), so two tables are not two groups both named "Table". It is named
+  // the way the table is: `aria-labelledby` wins over `aria-label`, as it does
+  // in accessible-name computation; the generic name is the fallback for an
+  // unnamed table.
+  const labelledBy = tableName?.labelledBy;
+  const label =
+    labelledBy != null
+      ? undefined
+      : (tableName?.label ?? t('@astryx.table.label'));
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: 'inline',
     keyboardAccess: {owner: 'content'},
@@ -161,6 +182,9 @@ function TableScrollWrapper({
   const viewportProps = getViewportProps<HTMLDivElement>({
     role: 'group',
     'aria-label': label,
+    // A plugin's explicit name stays authoritative (Table FR1).
+    'aria-labelledby':
+      restHtmlProps['aria-label'] == null ? labelledBy : undefined,
     ...(state.inline.isScrollable ? {tabIndex: 0} : {}),
     ...restHtmlProps,
     ref,
@@ -240,18 +264,26 @@ function TableInner<T extends Record<string, unknown>>({
     }),
     [density, dividers, isStriped, hasHover, verticalAlign, textOverflow],
   );
+  const tableLabel = rest['aria-label'];
+  const tableLabelledBy = rest['aria-labelledby'];
+  const tableName = useMemo(
+    () => ({label: tableLabel, labelledBy: tableLabelledBy}),
+    [tableLabel, tableLabelledBy],
+  );
 
   return (
     <TableContext value={contextValue}>
-      <BaseTable<T>
-        ref={ref}
-        data={data}
-        columns={columns}
-        plugins={mergedPlugins}
-        textOverflow={textOverflow}
-        scrollWrapper={TableScrollWrapper}
-        {...rest}
-      />
+      <TableNameContext value={tableName}>
+        <BaseTable<T>
+          ref={ref}
+          data={data}
+          columns={columns}
+          plugins={mergedPlugins}
+          textOverflow={textOverflow}
+          scrollWrapper={TableScrollWrapper}
+          {...rest}
+        />
+      </TableNameContext>
     </TableContext>
   );
 }

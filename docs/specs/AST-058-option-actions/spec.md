@@ -174,6 +174,10 @@ Read from `packages/core/src` at this record's base commit.
 | a row                       | `row` with exactly two `gridcell`s                                                      | The option — everything it renders today — then its action. System-minted rows have an empty action cell.                                                            | —       | `spec:AST-058` | proposed  |
 | reaching an action          | pointer, touch, inline-end arrow + Enter, screen reader through `aria-activedescendant` | Every supported modality; never hover, swipe, or Tab alone.                                                                                                          | —       | `spec:AST-058` | proposed  |
 
+The action cell is a part named in each adopter's option anatomy: a rendered
+content slot the caller fills with a component
+(`architecture:public-component-api` INV18).
+
 Not public: the row and cell markup, how the active descendant is tracked,
 how the action column is sized, and which hook walks the grid.
 

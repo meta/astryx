@@ -47,11 +47,13 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -172,7 +174,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 });
 
@@ -253,7 +255,9 @@ export interface TextAreaProps extends Omit<
    */
   rows?: number;
   /**
-   * Whether the textarea is disabled.
+   * Whether the textarea is disabled. A disabled textarea is dimmed, cannot be
+   * edited, and is left out of form submission, but it stays in the tab order
+   * (`aria-disabled`, not the native attribute).
    * @default false
    */
   isDisabled?: boolean;
@@ -261,7 +265,7 @@ export interface TextAreaProps extends Omit<
    * Whether the textarea is read-only.
    * The value is shown at full opacity and still submits with the form, but
    * cannot be edited. Unlike `isDisabled`, a read-only textarea is not dimmed
-   * and stays in the tab order — use it for a value the user should see and
+   * and keeps its form value — use it for a value the user should see and
    * send but not change. `isDisabled` takes precedence when both are set.
    * @default false
    */
@@ -273,8 +277,8 @@ export interface TextAreaProps extends Omit<
    * discoverable by keyboard and assistive technology. The field cannot be
    * edited (it becomes read-only) while disabled.
    *
-   * Use this instead of wrapping a disabled textarea in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled textarea in `Tooltip`, so the
+   * reason is attached to the field itself.
    *
    * @example
    * ```
@@ -414,6 +418,7 @@ export function TextArea({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextAreaProps) {
   const {rest, container} = useFieldInputStyling('TextArea', restProps, {
@@ -427,6 +432,7 @@ export function TextArea({
   const announce = useAnnounce();
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
   const counterID = useId();
@@ -443,12 +449,20 @@ export function TextArea({
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the textarea container (which already exists)
+  // Disabled-reason tooltip. The tooltip listeners attach to the textarea container (which already exists)
   // and the textarea stays perceivable via aria-disabled instead of the native
   // disabled attribute. The field is made read-only so it can't be typed into,
   // and value mutation is blocked by the isDisabled guard in handleChange.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
+  // A disabled field keeps its tab stop but, like a natively disabled one,
+  // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
+  const fieldProps = isDisabled
+    ? Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+        ),
+      )
+    : rest;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -561,6 +575,7 @@ export function TextArea({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -598,6 +613,7 @@ export function TextArea({
             inputWrapperStyles.base,
             styles.wrapper,
             isDisabled && inputWrapperStyles.disabled,
+            isDisabled && inputDisabledFocusStyles.ring,
             status && inputStatusBorderStyles[status.type],
             status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             status && inputStatusFocusWithinStyles[status.type],
@@ -612,26 +628,33 @@ export function TextArea({
           </span>
         )}
         <textarea
-          {...rest}
+          {...fieldProps}
           ref={useMergedRefs(ref, textareaRef)}
           id={id}
           name={isDisabled ? undefined : htmlName}
           value={optimisticValue}
           onChange={handleChange}
-          onPaste={onPaste}
+          onPaste={isDisabled ? undefined : onPaste}
           onFocus={onFocus}
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
-          // With a disabledMessage the textarea keeps focusability via
-          // aria-disabled so the reason is focus-discoverable; readOnly + the
-          // handleChange guard keep the value from changing.
-          disabled={isDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
-          readOnly={isReadOnly || showsDisabledMessage || undefined}
+          // A disabled textarea keeps its place in the tab order
+          // (spec:AST-085): aria-disabled instead of the native attribute,
+          // with readOnly + the handleChange guard keeping the value from
+          // changing.
+          aria-disabled={isDisabled ? 'true' : undefined}
+          readOnly={isReadOnly || isDisabled || undefined}
           spellCheck={hasSpellCheck}
           autoFocus={hasAutoFocus}
           data-autofocus={hasAutoFocus || undefined}
+          // A caller aria-labelledby names the textarea together with the
+          // field's own label, which it would otherwise replace.
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(fieldLabelID, ariaLabelledByProp)
+              : undefined
+          }
           aria-describedby={
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
@@ -684,7 +707,10 @@ export function TextArea({
               // live-region announcement carry the meaning.
               <Icon icon="warning" size="sm" />
             )}
-            {valueLength}/{maxLength}
+            {t('@astryx.textArea.counter', {
+              count: valueLength,
+              limit: maxLength,
+            })}
           </div>
         )}
       </div>

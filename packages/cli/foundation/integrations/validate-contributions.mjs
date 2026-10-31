@@ -259,7 +259,7 @@ export function rootProblem(root) {
  * `unreadable_root` error. The contribution checks skip all three.
  * A readable root reached through a symlinked folder is a `symlinked_root`
  * warning: npm pack does not follow it, so the published package loses it.
- * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, __manifestFile?: string}} resolved
+ * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, iconSets?: string, __manifestFile?: string}} resolved
  *   absolute resolved roots (undefined when not declared)
  * @param {Issue[]} issues
  * @param {string} [packageDir] the package the roots belong to
@@ -271,6 +271,7 @@ function checkRoots(resolved, issues, packageDir) {
     'codemods',
     'docs',
     'themes',
+    'iconSets',
   ]);
   for (const kind of kinds) {
     const root = resolved[kind];
@@ -2438,6 +2439,7 @@ async function allLoadedIntegrationIssues(loaded) {
       codemods: loaded.codemods,
       docs: loaded.docs,
       themes: loaded.themes,
+      iconSets: loaded.iconSets,
       __manifestFile: loaded.__manifestFile,
     },
     issues,

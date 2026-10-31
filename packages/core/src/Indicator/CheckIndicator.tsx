@@ -34,7 +34,8 @@ import * as stylex from '@stylexjs/stylex';
 import type {SVGProps} from 'react';
 import {Icon} from '../Icon/Icon';
 import {colorVars} from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import type {IndicatorProps} from './types';
 
 /** The check glyph matches the control sizes the indicator families share. */

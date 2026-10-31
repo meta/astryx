@@ -72,7 +72,7 @@ describe('Button', () => {
       'utf8',
     );
     expect(groupStylesSource).toContain(
-      "':where(.astryx-input-group > *):focus-visible'",
+      '`${DIRECT_INPUT_GROUP_ADDON}:focus-visible`',
     );
     expect(groupStylesSource).toMatch(
       /zIndex:\s*\{\s*default: null,\s*\[DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE\]: 2,/,
@@ -147,6 +147,13 @@ describe('Button', () => {
     expect(button).toBeDisabled();
     expect(button.className).toContain('styles.inactive');
     expect(button.className).toContain('styles.disabled');
+  });
+
+  it('keeps a caller-supplied aria-disabled and aria-busy', () => {
+    render(<Button label="Assign" aria-disabled="true" aria-busy={true} />);
+    const button = screen.getByRole('button', {name: 'Assign'});
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('aria-busy', 'true');
   });
 
   it('sets aria-busy synchronously while clickAction is pending', async () => {

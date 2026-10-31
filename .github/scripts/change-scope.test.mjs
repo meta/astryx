@@ -357,3 +357,71 @@ describe('positive CI surfaces', () => {
     }
   });
 });
+
+describe('full-suite scope', () => {
+  const full = files =>
+    classifyChanges(files.map(filename => ({filename}))).fullSuite;
+
+  it('scopes component, shared-module, docs and spec changes to the import graph', () => {
+    expect(full(['packages/core/src/Button/Button.tsx'])).toBe(false);
+    expect(full(['packages/core/src/motion/animator.ts'])).toBe(false);
+    expect(full(['packages/lab/src/Sketch/Sketch.tsx'])).toBe(false);
+    expect(full(['apps/docsite/src/app/page.tsx'])).toBe(false);
+    expect(full(['docs/specs/AST-001-overlay-policy/spec.md'])).toBe(false);
+    expect(full(['apps/storybook/stories/Button.stories.tsx'])).toBe(false);
+    // A Changeset beside the change is release notes, not infrastructure.
+    expect(
+      full([
+        'packages/core/src/Layer/useLayer.tsx',
+        '.changeset/layer-slot-second-render.md',
+      ]),
+    ).toBe(false);
+  });
+
+  it('runs everything for shared infrastructure', () => {
+    for (const file of [
+      'package.json',
+      'pnpm-lock.yaml',
+      'vitest.config.ts',
+      '.github/workflows/ci.yml',
+      '.github/scripts/change-scope.cjs',
+      'internal/interaction-harness/src/busy.ts',
+      'scripts/build-css.mjs',
+      'packages/themes/neutral/src/index.ts',
+      'packages/build/src/index.ts',
+      'packages/core/src/theme/tokens.stylex.ts',
+      'packages/core/package.json',
+      'packages/core/tsconfig.json',
+      'packages/core/vite.config.ts',
+      'packages/core/src/test-utils/render.tsx',
+      'packages/core/src/testing/fixtures.ts',
+      'packages/core/src/__mocks__/matchMedia.ts',
+      'packages/core/src/setupTests.ts',
+      'packages/lab/src/vitest.setup.ts',
+      'packages/core/babel-plugin-add-extensions.cjs',
+      'packages/lab/babel-plugin-add-extensions.cjs',
+      'apps/storybook/.storybook/preview.tsx',
+      // Node tooling keeps its whole Node project (FR8), internal/ included.
+      'internal/scripts/lib/a-future-strategy.mjs',
+      'scripts/score-ledger.mjs',
+    ]) {
+      expect(full(['packages/core/src/Button/Button.tsx', file]), file).toBe(
+        true,
+      );
+    }
+  });
+
+  it('runs everything when the changed-file list is incomplete', () => {
+    expect(
+      classifyChanges([{filename: 'packages/core/src/Button/Button.tsx'}], {
+        expectedCount: 2,
+      }).fullSuite,
+    ).toBe(true);
+    expect(classifyChanges([], {expectedCount: 1}).fullSuite).toBe(true);
+  });
+
+  it('runs everything when there are no paths to scope from', () => {
+    expect(classifyChanges([]).fullSuite).toBe(true);
+    expect(classifyChanges([], {expectedCount: 0}).fullSuite).toBe(true);
+  });
+});

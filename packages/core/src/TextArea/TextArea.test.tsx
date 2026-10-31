@@ -13,9 +13,27 @@ import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {TextArea} from './TextArea';
+import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+
+// jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
+const RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -166,11 +184,50 @@ describe('TextArea', () => {
     expect(screen.getByRole('textbox')).toHaveAttribute('rows', '3');
   });
 
-  it('is disabled when isDisabled is true', () => {
+  it('exposes aria-disabled and read-only, not native disabled, when isDisabled is true', () => {
     render(
       <TextArea label="Description" isDisabled value="" onChange={() => {}} />,
     );
-    expect(screen.getByRole('textbox')).toBeDisabled();
+    const textarea = screen.getByRole('textbox');
+    expect(textarea).not.toBeDisabled();
+    expect(textarea).toHaveAttribute('aria-disabled', 'true');
+    expect(textarea).toHaveAttribute('readonly');
+  });
+
+  it('keeps a disabled textarea in the tab order (spec:AST-085)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <TextArea label="First" value="" onChange={() => {}} />
+        <TextArea label="Second" isDisabled value="" onChange={() => {}} />
+        <TextArea label="Third" value="" onChange={() => {}} />
+      </>,
+    );
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('textbox', {name: 'Second'})).toHaveFocus();
+  });
+
+  it('runs no caller handler from a disabled textarea and rings it under focus (spec:AST-085 FR2, FR6)', async () => {
+    const user = userEvent.setup();
+    const handlers = {onPaste: vi.fn(), onKeyDown: vi.fn()};
+    render(
+      <TextArea
+        label="Notes"
+        isDisabled
+        value=""
+        onChange={() => {}}
+        {...handlers}
+      />,
+    );
+    const textarea = screen.getByRole('textbox');
+    await user.click(textarea);
+    await user.keyboard('a');
+    await user.paste('x');
+    for (const handler of Object.values(handlers)) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+    expect(textarea.parentElement).toHaveClass(RING);
   });
 
   it('is not disabled by default', () => {
@@ -463,6 +520,38 @@ describe('TextArea', () => {
         />,
       );
       expect(screen.getByText('5/20')).toBeInTheDocument();
+    });
+
+    it('formats the counter from the catalog with locale number formatting', () => {
+      render(
+        <InternationalizationProvider
+          locale="de-DE"
+          overrides={{
+            'de-DE': {
+              '@astryx.textArea.counter': '{count, number} von {limit, number}',
+            },
+          }}>
+          <TextArea
+            label="Bio"
+            value={'a'.repeat(62)}
+            onChange={() => {}}
+            maxLength={2000}
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByText('62 von 2.000')).toBeInTheDocument();
+    });
+
+    it('formats an English counter with grouped digits', () => {
+      render(
+        <TextArea
+          label="Bio"
+          value="hi"
+          onChange={() => {}}
+          maxLength={2000}
+        />,
+      );
+      expect(screen.getByText('2/2,000')).toBeInTheDocument();
     });
 
     it('does not display counter when maxLength is not provided', () => {
@@ -872,7 +961,10 @@ describe('TextArea', () => {
           />
         </form>,
       );
-      expect(screen.getByRole('textbox')).toBeDisabled();
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
@@ -1049,13 +1141,13 @@ describe('TextArea', () => {
       expect(textarea).toHaveValue('');
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable when disabled without a reason', () => {
       render(
         <TextArea label="Notes" value="" onChange={() => {}} isDisabled />,
       );
       const textarea = screen.getByRole('textbox');
-      expect(textarea).toBeDisabled();
-      expect(textarea).not.toHaveAttribute('aria-disabled');
+      expect(textarea).not.toBeDisabled();
+      expect(textarea).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -1194,5 +1286,32 @@ describe('TextArea theme target names', () => {
     expect(root).not.toBeNull();
     expect(root).toHaveClass('astryx-text-area');
     expect(root).not.toHaveClass('astryx-textarea');
+  });
+});
+
+describe('TextArea caller aria-labelledby', () => {
+  it('names the textarea by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    const textarea = screen.getByRole('textbox', {name: 'Notes Billing'});
+    expect(textarea.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'billing-heading',
+    );
+  });
+
+  it('leaves a textarea named by its label element without a caller aria-labelledby', () => {
+    render(<TextArea label="Notes" value="" onChange={() => {}} />);
+    expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
+      'aria-labelledby',
+    );
   });
 });

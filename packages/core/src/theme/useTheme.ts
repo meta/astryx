@@ -239,13 +239,19 @@ export function useThemeName(): string | null {
 
 /**
  * Return the nearest theme object, falling back to the registered root theme
- * only when no provider context is available.
+ * only when no provider context is available. With `enabled` false it reads
+ * nothing and subscribes to nothing, for a consumer that needs the theme only
+ * in some configurations.
  * @internal
  */
-export function useThemeDefinition(): DefinedTheme | undefined {
-  const ctx = use(ThemeContext);
+export function useThemeDefinition(enabled = true): DefinedTheme | undefined {
+  // `use` may be called conditionally, unlike the other hooks.
+  const ctx = enabled ? use(ThemeContext) : null;
   const hasCtx = ctx != null;
-  const rootThemeName = useRootThemeNameAttr(hasCtx);
+  const rootThemeName = useRootThemeNameAttr(hasCtx || !enabled);
+  if (!enabled) {
+    return undefined;
+  }
   return ctx?.theme ?? getRegisteredTheme(rootThemeName) ?? undefined;
 }
 

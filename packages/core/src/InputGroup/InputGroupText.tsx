@@ -27,6 +27,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {inputGroupItemProps} from './groupStyles';
 
 const styles = stylex.create({
   text: {
@@ -98,6 +99,7 @@ export function InputGroupText({
     <div
       ref={ref}
       {...rest}
+      {...inputGroupItemProps}
       {...mergeProps(
         themeProps('input-group-text'),
         stylex.props(styles.text, xstyle),

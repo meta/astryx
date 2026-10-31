@@ -129,6 +129,10 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   Object.defineProperty(cmd, COMMAND_DOCS, {value: {doc, fn}, configurable: true});
   // Help shows doc tokens as commands, the way `astryx docs` does.
   if (doc.summary) cmd.description(renderTokens(doc.summary));
+  // An experimental command says so wherever its name is listed in help.
+  if (doc.stability === 'experimental') {
+    cmd.description(`[experimental] ${cmd.description() || ''}`.trimEnd());
+  }
   if (doc.deprecated) {
     const base = cmd.description() || '';
     cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);

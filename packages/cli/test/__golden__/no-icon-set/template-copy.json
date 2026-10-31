@@ -1,0 +1,27 @@
+{
+  "apiVersion": 1,
+  "type": "template.copy",
+  "package": "@astryxdesign/core",
+  "data": {
+    "template": "settings-dialog",
+    "outputDir": "out/json",
+    "fileName": "page.tsx",
+    "filesCopied": 1,
+    "demoMediaReplaced": 0,
+    "notes": [
+      "<text>",
+      "<text>"
+    ],
+    "missingPackages": [
+      "@heroicons/react"
+    ],
+    "installCommand": "pnpm add @heroicons/react@\"^2.2.0\""
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

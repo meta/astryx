@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit CommandPalette
 
 /**
  * @file CommandPalette.a11y.chromium.spec.ts

@@ -81,7 +81,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Makes the input read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only input is not dimmed and stays in the tab order. Stepping is off in every form while read-only: arrow keys, the wheel, and the number steppers. isDisabled takes precedence when both are set.',
+        'Makes the input read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only input is not dimmed and keeps its form value. Stepping is off in every form while read-only: arrow keys, the wheel, and the number steppers. isDisabled takes precedence when both are set.',
       default: 'false',
     },
     {
@@ -160,7 +160,7 @@ export const docs = {
       name: 'hasNumberSteppers',
       type: 'boolean',
       description:
-        'Shows increment and decrement buttons at the end of the input.',
+        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available.',
       default: 'false',
     },
     {
@@ -226,12 +226,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -308,7 +310,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -401,7 +403,7 @@ export const docsZh = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        '将输入框设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读输入框不会变暗，并保留在 Tab 顺序中。只读时所有步进方式均被禁用：方向键、滚轮和步进按钮。同时设置时 isDisabled 优先。',
+        '将输入框设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读输入框不会变暗，并保留其表单值。只读时所有步进方式均被禁用：方向键、滚轮和步进按钮。同时设置时 isDisabled 优先。',
       default: 'false',
     },
     {
@@ -474,7 +476,8 @@ export const docsZh = {
     {
       name: 'hasNumberSteppers',
       type: 'boolean',
-      description: '是否在输入框末尾显示递增和递减按钮。',
+      description:
+        '在精细指针设备上于输入框末尾显示递增和递减按钮。粗指针设备（例如触摸屏）上隐藏按钮；仍可直接输入数值或使用键盘步进。',
       default: 'false',
     },
     {
@@ -613,7 +616,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -687,7 +690,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
     anatomy: [
@@ -720,10 +723,12 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerXstyle:
+      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
     containerClassName: 'Class name for the field container.',
     containerStyle: 'Inline styles for the field container.',
-    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlXstyle:
+      'StyleX styles for the visual control box (border, background, icons); not the native input.',
     controlClassName: 'Class name for the visual control box.',
     controlStyle: 'Inline styles for the visual control box.',
     label: 'Label text (always rendered for accessibility).',
@@ -737,7 +742,7 @@ export const docsDense = {
     isRequired: 'Field required (mutually exclusive w/ isOptional).',
     isDisabled: 'Input disabled.',
     isReadOnly:
-      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed, stays in tab order.',
+      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed.',
     disabledMessage:
       'Explains why input is disabled. With isDisabled, shows tooltip on hover/focus + keeps input focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled NumberInput in Tooltip.',
     placeholder: 'Placeholder text.',
@@ -754,7 +759,8 @@ export const docsDense = {
       'Formats committed value at rest; raw number is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
-    hasNumberSteppers: 'Show increment + decrement buttons. Defaults to false.',
+    hasNumberSteppers:
+      'Show increment + decrement buttons on fine pointers; hidden on coarse pointers. Defaults to false.',
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:

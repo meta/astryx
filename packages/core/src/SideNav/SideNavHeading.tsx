@@ -47,13 +47,24 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
+import {
+  NavHeadingCloseContext,
+  NavHeadingDismissContext,
+} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 // =============================================================================
 // Styles
 // =============================================================================
+
+/** The rows a press can act on in the heading's menu. */
+const HEADING_MENU_ITEM_SELECTOR =
+  '[role="menuitem"]:not([aria-disabled="true"])';
 
 const styles = stylex.create({
   root: {
@@ -188,6 +199,17 @@ const styles = stylex.create({
     // font-size back to inherit to keep the glyph at the 14px it renders at
     // today. The 28px min box still wins over Icon's width/height.
     fontSize: 'inherit',
+  },
+  // The link part of a whole-heading link row that also has end content.
+  linkBesideEndContent: {
+    display: 'flex',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacingVars['--spacing-2'],
+    flexGrow: 1,
+    minWidth: 0,
+    textDecoration: 'none',
+    color: 'inherit',
   },
   headerEndContent: {
     flexShrink: 0,
@@ -406,6 +428,28 @@ export function SideNavHeading({
     popoverId: isCollapsed ? popover.id : undefined,
   });
 
+  // A press that slides across the menu's items acts on the item it lifts on,
+  // the highlight following the pointer (`family:action-groups` FR1-FR3,
+  // FR5); a mouse released outside closes it. Only the role="menu" region is
+  // tracked, not the heading button above it.
+  const headingMenuRef = useRef<HTMLDivElement>(null);
+  const headingMenuPress = useMenuPress({
+    menuRef: headingMenuRef,
+    itemSelector: HEADING_MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+    isEnabled: !!menu,
+  });
+  const headingMenuPointerDown = pressOnItemsOnly(
+    headingMenuPress.menuProps.onPointerDown,
+    HEADING_MENU_ITEM_SELECTOR,
+  );
+  const dismissCtx = useMemo(() => ({dismiss: closeMenu}), [closeMenu]);
+  const headingMenuTouch = stylex.props(
+    useMenuOverflow(headingMenuRef, menu, popover.isOpen)
+      ? menuTouchActionStyles.scrolls
+      : menuTouchActionStyles.fits,
+  );
+
   const closeMenuCtx = useMemo(() => ({closeMenu}), [closeMenu]);
 
   // setTriggerEl belongs on the chevron button, not this root: it is the
@@ -522,7 +566,13 @@ export function SideNavHeading({
               {/* The menu role is scoped to the actual menu items so the
                   heading button above stays a valid sibling, not an invalid
                   child of a role="menu" element. */}
-              <div role="menu" aria-label={heading}>
+              <div
+                ref={headingMenuRef}
+                role="menu"
+                aria-label={heading}
+                {...headingMenuPress.menuProps}
+                onPointerDown={headingMenuPointerDown}
+                {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
                   {menu}
                 </NavHeadingCloseContext>
@@ -640,6 +690,36 @@ export function SideNavHeading({
     </button>
   );
 
+  // Whole heading is a link (no menu, single headingHref). End content may
+  // be a control, which must not sit inside the link (no interactive content
+  // in an <a>), so with end content the row is a div holding the link and the
+  // end content side by side, as the mixed mode does.
+  if (isWholeHeadingLink && headingHref && headerEndContentElement) {
+    return (
+      <div
+        ref={ref}
+        data-testid={testId}
+        {...mergeProps(
+          themeProps('side-nav-heading'),
+          stylex.props(styles.root, xstyle),
+          className,
+          style,
+        )}>
+        <LinkComponent
+          href={headingHref}
+          {...focusOutlineProps.focusVisible(
+            styles.linkBesideEndContent,
+            styles.menuTrigger,
+          )}
+          {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
+          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {renderTextContent()}
+        </LinkComponent>
+        {headerEndContentElement}
+      </div>
+    );
+  }
+
   // Whole heading is a link (no menu, single headingHref)
   if (isWholeHeadingLink && headingHref) {
     return (
@@ -714,8 +794,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {
@@ -790,8 +878,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {

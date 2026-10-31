@@ -18,7 +18,10 @@ import {
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
-import {inspectPackageExport} from './package-exports.mjs';
+import {
+  inspectPackageExport,
+  sourceExportTarget,
+} from './package-exports.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -996,7 +999,8 @@ function packageMain(packageDir) {
 /**
  * The local module a doc's import names: the doc's own `import`, else the
  * subpath its directory publishes, read through the package's `exports` (its
- * `main` when it has none). Undefined when the package directory is unknown;
+ * `main` when it has none). A subpath's `source` condition wins when its file
+ * is in the package, so the answer does not depend on a build. Undefined when the package directory is unknown;
  * null when the import names another package or resolves to no file.
  *
  * @param {{name?: string, __packageDir?: string, __packageExports?: Record<string, unknown>|null}} integration
@@ -1027,11 +1031,13 @@ export function importedModule(integration, docPath, doc) {
     specifier === packageName
       ? '.'
       : `./${specifier.slice(packageName.length + 1)}`;
-  return inspectPackageExport(
-    {name: packageName, exports: exportsMap ?? undefined},
-    packageDir,
-    subpath,
-  ).target;
+  const pkg = {name: packageName, exports: exportsMap ?? undefined};
+  // The `source` condition first, when its file is there, so a family lists
+  // the same members whether or not the package has been built.
+  return (
+    sourceExportTarget(pkg, packageDir, subpath) ??
+    inspectPackageExport(pkg, packageDir, subpath).target
+  );
 }
 
 /**

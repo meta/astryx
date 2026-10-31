@@ -3,7 +3,7 @@
 /**
  * @file Item.test.tsx
  * @input Uses vitest, @testing-library/react, Item component
- * @output Unit tests for Item
+ * @output Unit tests for Item, including flat marker DOM and numbered-row scope
  * @position Testing; validates Item component implementation
  *
  * SYNC: When Item component changes, update tests to match new behavior
@@ -29,8 +29,10 @@ import {
 } from '@testing-library/react';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {List, ListItem} from '../List';
 
 /**
  * Item in delegation mode: `interactiveRef` points at a nested control that
@@ -382,6 +384,65 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+    function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      return <a ref={ref} data-router-link {...props} />;
+    }
+    render(
+      <LinkProvider component={RouterLink}>
+        <Item
+          label="Billing"
+          href="/billing"
+          target="_blank"
+          rel="noopener"
+          isDisabled
+        />
+        <Item label="Profile" href="/profile" />
+      </LinkProvider>,
+    );
+    // No href, target or rel, so a screen reader's click, Enter or a link
+    // menu cannot navigate; it keeps the link role and skips the router link.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
+      expect(disabled).not.toHaveAttribute(attribute);
+    }
+    const enabled = screen.getByRole('link', {name: 'Profile'});
+    expect(enabled).toHaveAttribute('href', '/profile');
+    expect(enabled).toHaveAttribute('data-router-link');
+    expect(enabled).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
+    const {rerender} = render(<Item label="Billing" href="/billing" />);
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(<Item label="Billing" href="/billing" isDisabled />);
+    // The disabled row renders a plain anchor in place of the link component;
+    // focus moves to it instead of falling to the page.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+    rerender(<Item label="Billing" href="/billing" />);
+    expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
+  });
+
+  it('does not pull focus back to a row that changes while focus is elsewhere', () => {
+    const {rerender} = render(
+      <>
+        <Item label="Billing" href="/billing" />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(
+      <>
+        <Item label="Billing" href="/billing" isDisabled />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
   it('disables the invisible button when isDisabled', () => {
     const {container} = render(
       <Item label="Disabled" onClick={() => {}} isDisabled />,
@@ -479,6 +540,12 @@ describe('Item', () => {
     expect(root?.querySelector('[data-testid="marker"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="start"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="end"]')).toBeInTheDocument();
+    // A bullet or caller-owned marker needs no extra formatting group: marker,
+    // start, primary and end retain the released flat row structure.
+    expect(root?.children).toHaveLength(4);
+    expect(button?.parentElement).toBe(root);
+    expect(screen.getByTestId('start').parentElement?.parentElement).toBe(root);
+    expect(screen.getByTestId('end').parentElement?.parentElement).toBe(root);
     expect(
       button?.querySelector('[data-testid="marker"]'),
     ).not.toBeInTheDocument();
@@ -590,6 +657,38 @@ describe('Item', () => {
       />,
     );
     expect(hasStrut()).toBe(false);
+  });
+
+  it('groups only the numbered composing row, not marked Items in its slots', () => {
+    render(
+      <List listStyle="decimal">
+        <ListItem
+          data-testid="numbered-row"
+          label="Numbered"
+          startContent={<span data-testid="numbered-start">S</span>}
+          endContent={
+            <Item
+              data-testid="nested-row"
+              label="Nested item"
+              marker={<span>•</span>}
+              startContent={<span data-testid="nested-start">S</span>}
+              endContent={<span>E</span>}
+            />
+          }
+        />
+      </List>,
+    );
+    const numbered = screen.getByTestId('numbered-row');
+    expect(numbered.children).toHaveLength(2);
+    const group = numbered.children[1];
+    expect(
+      screen.getByTestId('numbered-start').parentElement?.parentElement,
+    ).toBe(group);
+    const nested = screen.getByTestId('nested-row');
+    expect(nested.children).toHaveLength(4);
+    expect(
+      screen.getByTestId('nested-start').parentElement?.parentElement,
+    ).toBe(nested);
   });
 
   // ===========================================================================
@@ -721,6 +820,7 @@ describe('swipeActions', () => {
     vi.useRealTimers();
   });
 
+  /** The first finger down: the primary touch pointer. */
   function touch(
     element: Element,
     type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
@@ -731,7 +831,25 @@ describe('swipeActions', () => {
     fireEvent[type](element, {
       clientX: x,
       clientY: y,
+      isPrimary: true,
       pointerId: 7,
+      pointerType: 'touch',
+    });
+  }
+
+  /** A second finger: a touch pointer that is not the primary one. */
+  function secondFinger(
+    element: Element,
+    type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
+    x: number,
+    y = 10,
+  ) {
+    vi.advanceTimersByTime(10);
+    fireEvent[type](element, {
+      clientX: x,
+      clientY: y,
+      isPrimary: false,
+      pointerId: 8,
       pointerType: 'touch',
     });
   }
@@ -955,6 +1073,105 @@ describe('swipeActions', () => {
       clientY: 10,
       pointerId: 1,
       pointerType: 'mouse',
+    });
+  });
+
+  describe('a pinch', () => {
+    /** A touchmove listing both fingers; true when the row cancelled it. */
+    const pinchMoveCancelled = (row: Element, x: number) =>
+      !fireEvent.touchMove(row, {
+        cancelable: true,
+        touches: [
+          {clientX: x, clientY: 10},
+          {clientX: 300 - x, clientY: 10},
+        ],
+      });
+
+    it('lets the touch go when a second finger lands on the row before the axis is decided, and cancels nothing', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerDown', 60);
+      // The fingers spread apart; the first one travels toward the leading
+      // side far past the axis lock.
+      touch(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      // The browser takes the pinch.
+      touch(row, 'pointerCancel', 160);
+      secondFinger(row, 'pointerCancel', 0);
+      settled();
+      expect(travelOf(row)).toBe('');
+    });
+
+    it('lets the touch go when the second finger lands off the row', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(document.body, 'pointerDown', 60, 200);
+      touch(row, 'pointerMove', 130);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      touch(row, 'pointerCancel', 160);
+    });
+
+    it('never starts a drag from a finger that is not the first one down', () => {
+      const {row} = renderRow();
+      // The first finger is somewhere else on the page; this one lands on
+      // the row and travels sideways.
+      secondFinger(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      secondFinger(row, 'pointerUp', 160);
+    });
+
+    it('keeps a drag the row already owns when a second finger lands', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('35px');
+      secondFinger(row, 'pointerDown', 200);
+      touch(row, 'pointerMove', 60);
+      expect(pinchMoveCancelled(row, 60)).toBe(true);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('50px');
+      touch(row, 'pointerUp', 60);
+      secondFinger(row, 'pointerUp', 200);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+    });
+
+    it('stops listening to the document once the axis is decided or the touch ends', () => {
+      const add = vi.spyOn(document, 'addEventListener');
+      const remove = vi.spyOn(document, 'removeEventListener');
+      try {
+        const {row} = renderRow();
+        const watching = () =>
+          add.mock.calls.filter(([type]) => type === 'pointerdown').length -
+          remove.mock.calls.filter(([type]) => type === 'pointerdown').length;
+        const before = watching();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerMove', 40);
+        expect(watching()).toBe(before);
+        touch(row, 'pointerUp', 40);
+        settled();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerUp', 12);
+        expect(watching()).toBe(before);
+      } finally {
+        add.mockRestore();
+        remove.mockRestore();
+      }
     });
   });
 

@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REPO="facebook/astryx"
+REPO="meta/astryx"
 MODE="${1:-dry-run}"
 PARALLEL=15
 STALE_DAYS=60  # branches with no PR older than this are also flagged

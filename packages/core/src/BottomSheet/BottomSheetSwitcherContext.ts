@@ -22,6 +22,7 @@ import type {
 import {createContext} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
+import type {BottomSheetStackView} from './bottomSheetStack';
 
 export type BottomSheetSwitcherPhase =
   | 'entering'
@@ -93,6 +94,11 @@ export interface BottomSheetSwitcherContextValue {
     event: BottomSheetSwitcherTransitionEvent,
   ) => void;
   onSheetScrimOpacityChange: (sheetId: string, opacity: number) => void;
+  /**
+   * The switcher's place in the stack of presented modal sheets. The whole
+   * switcher is one level; each step's positioner recedes by this view.
+   */
+  stackView: BottomSheetStackView;
   /** Consumer dialog props the switcher forwards to every sheet dialog. */
   dialogProps: BottomSheetSwitcherDialogProps;
   onDialogCancel: (event: SyntheticEvent<HTMLDialogElement>) => void;

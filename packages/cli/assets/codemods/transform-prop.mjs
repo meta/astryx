@@ -1,27 +1,47 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Find imported components, resolve their local JSX names (including aliases),
- * and yield matching JSX prop paths to a visitor.
+ * Find imported components, resolve their local names (including aliases and
+ * namespace members) at a use site, and yield matching JSX prop paths to a
+ * visitor.
  *
- * This helper intentionally stops at the JSX boundary. It does not follow
- * variables, helper calls, object spreads, wrapper components, or types.
- *
- * @param {any} root jscodeshift collection for one source file
- * @param {any} j configured jscodeshift instance
- * @param {{
+ * `transformProp` intentionally stops at the JSX boundary. It does not follow
+ * variables, helper calls, object spreads, wrapper components, or types. The
+ * resolver it is built on (`importedComponents`, `resolveImportedComponent`,
+ * `isModuleBinding`) is exported for transforms that prove other use sites.
+ */
+
+/**
+ * @typedef {{
  *   matchesImport: (source: string) => boolean,
  *   components: ReadonlyMap<string, ReadonlySet<string>>,
  *   normalizeComponentName?: (name: string) => string,
- * }} options
- * @param {(propPath: any, context: {component: string, localName: string}) => void} visit
+ * }} ImportOptions
  */
-export function transformProp(root, j, options, visit) {
+
+/**
+ * @typedef {{
+ *   direct: Map<string, {component: string, props: ReadonlySet<string>}>,
+ *   namespaces: Set<string>,
+ *   normalize: (name: string) => string,
+ *   components: ReadonlyMap<string, ReadonlySet<string>>,
+ * }} ImportedComponents
+ */
+
+/**
+ * Local names bound by accepted runtime imports: named, aliased and default
+ * component imports, and namespace imports.
+ * @param {any} root jscodeshift collection for one source file
+ * @param {any} j configured jscodeshift instance
+ * @param {ImportOptions} options
+ * @returns {ImportedComponents}
+ */
+export function importedComponents(root, j, options) {
   const normalize = options.normalizeComponentName ?? (name => name);
-  /** @type {Map<string, {component: string, props: ReadonlySet<string>}>} */
-  const directBindings = new Map();
+  /** @type {ImportedComponents['direct']} */
+  const direct = new Map();
   /** @type {Set<string>} */
-  const namespaceBindings = new Set();
+  const namespaces = new Set();
 
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
     const source = importPath.node.source.value;
@@ -46,53 +66,83 @@ export function transformProp(root, j, options, visit) {
         const component = normalize(importedName);
         const props = options.components.get(component);
         if (!props) continue;
-        directBindings.set(specifier.local?.name ?? importedName, {
-          component,
-          props,
-        });
+        direct.set(specifier.local?.name ?? importedName, {component, props});
       } else if (specifier.type === 'ImportDefaultSpecifier' && subpathProps) {
-        directBindings.set(specifier.local.name, {
+        direct.set(specifier.local.name, {
           component: subpathName,
           props: subpathProps,
         });
       } else if (specifier.type === 'ImportNamespaceSpecifier') {
-        namespaceBindings.add(specifier.local.name);
+        namespaces.add(specifier.local.name);
       }
     }
   });
 
-  if (directBindings.size === 0 && namespaceBindings.size === 0) return;
+  return {direct, namespaces, normalize, components: options.components};
+}
+
+/**
+ * True when `localName` at `path` resolves to a module-scope binding. A
+ * parameter or local declaration with the same name shadows the import.
+ * @param {any} path any node path inside the file
+ * @param {string} localName
+ */
+export function isModuleBinding(path, localName) {
+  return path.scope?.lookup(localName)?.path.node.type === 'Program';
+}
+
+/**
+ * Resolve a component reference (`Card`, `Lib.Card`, or their JSX forms) to
+ * the imported component it names at `scopePath`, or null.
+ * @param {any} nameNode Identifier, JSXIdentifier, MemberExpression, or JSXMemberExpression
+ * @param {any} scopePath the path whose scope the reference is evaluated in
+ * @param {ImportedComponents} imports
+ * @returns {{component: string, props: ReadonlySet<string>, localName: string} | null}
+ */
+export function resolveImportedComponent(nameNode, scopePath, imports) {
+  let localName;
+  let binding;
+  if (nameNode?.type === 'JSXIdentifier' || nameNode?.type === 'Identifier') {
+    localName = nameNode.name;
+    binding = imports.direct.get(localName);
+  } else if (
+    (nameNode?.type === 'JSXMemberExpression' ||
+      (nameNode?.type === 'MemberExpression' && !nameNode.computed)) &&
+    (nameNode.object?.type === 'JSXIdentifier' ||
+      nameNode.object?.type === 'Identifier') &&
+    (nameNode.property?.type === 'JSXIdentifier' ||
+      nameNode.property?.type === 'Identifier') &&
+    imports.namespaces.has(nameNode.object.name)
+  ) {
+    localName = nameNode.object.name;
+    const component = imports.normalize(nameNode.property.name);
+    const props = imports.components.get(component);
+    if (props) binding = {component, props};
+  }
+  if (!binding || !isModuleBinding(scopePath, localName)) return null;
+  return {...binding, localName};
+}
+
+/**
+ * @param {any} root jscodeshift collection for one source file
+ * @param {any} j configured jscodeshift instance
+ * @param {ImportOptions} options
+ * @param {(propPath: any, context: {component: string, localName: string}) => void} visit
+ */
+export function transformProp(root, j, options, visit) {
+  const imports = importedComponents(root, j, options);
+  if (imports.direct.size === 0 && imports.namespaces.size === 0) return;
 
   root.find(j.JSXOpeningElement).forEach((/** @type {any} */ jsxPath) => {
-    const name = jsxPath.node.name;
-    let localName;
-    let component;
-    let props;
-
-    if (name.type === 'JSXIdentifier') {
-      localName = name.name;
-      const binding = directBindings.get(localName);
-      if (!binding) return;
-      ({component, props} = binding);
-    } else if (
-      name.type === 'JSXMemberExpression' &&
-      name.object?.type === 'JSXIdentifier' &&
-      name.property?.type === 'JSXIdentifier' &&
-      namespaceBindings.has(name.object.name)
-    ) {
-      localName = name.object.name;
-      component = normalize(name.property.name);
-      props = options.components.get(component);
-      if (!props) return;
-    } else {
-      return;
-    }
-
-    // A parameter or local declaration with the imported name shadows the
-    // module binding. Only JSX tags whose root binding resolves to Program are
-    // considered usages of the import discovered above.
-    const bindingScope = jsxPath.scope.lookup(localName);
-    if (!bindingScope || bindingScope.path.node.type !== 'Program') return;
+    // Only JSX tags whose root binding resolves to Program are usages of the
+    // import discovered above.
+    const resolved = resolveImportedComponent(
+      jsxPath.node.name,
+      jsxPath,
+      imports,
+    );
+    if (!resolved) return;
+    const {component, props, localName} = resolved;
 
     for (let index = 0; index < jsxPath.node.attributes.length; index++) {
       const attribute = jsxPath.node.attributes[index];

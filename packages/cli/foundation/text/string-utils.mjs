@@ -209,6 +209,39 @@ export async function searchComponents(needle, coreDir, components) {
     }
   }
 
+  // --- Pass 3: a name made of other words around a component's name ---
+  // Only when nothing above matched: a contiguous run of the needle's words
+  // ("Primitive Button", "Meta Employee Typeahead") that is a component's
+  // whole name. Longer runs and runs nearer the end score higher.
+  if (scored.size === 0) {
+    const words = String(needle)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    const byLower = new Map(allNames.map(n => [n.toLowerCase(), n]));
+    const longest = Math.max(0, ...allNames.map(n => n.length));
+    for (let i = 0; i < words.length; i++) {
+      let run = '';
+      for (let j = i + 1; j <= words.length; j++) {
+        // Grow the run one word at a time; stop once no name is that long.
+        run += words[j - 1];
+        if (run.length > longest) break;
+        if (run.length < 4 || run === term) continue;
+        const comp = byLower.get(run);
+        if (!comp) continue;
+        const span = j - i;
+        const atEnd = j === words.length ? 1 : 0;
+        addMatch(comp, 10 + Math.min(span, 4) + atEnd, 'name part "' + run + '"');
+      }
+    }
+    // Keep only the strongest name parts, so a weaker part never sits
+    // beside the best one.
+    const best = Math.max(0, ...[...scored.values()].map(r => r.score));
+    for (const [name, r] of scored) if (r.score < best) scored.delete(name);
+  }
+
   const results = Array.from(scored.values())
     .map(r =>
       keywordAt.has(r.name)

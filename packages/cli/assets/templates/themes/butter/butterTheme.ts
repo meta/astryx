@@ -107,6 +107,25 @@ const SECONDARY_COMPLEX_SELECTOR = {
     SECONDARY_BUTTON[':hover'],
 } as const;
 
+/**
+ * Butter's bright status rims and glyphs in input status scopes. Light mode
+ * uses mid-ramp stops so a rim reaches 3:1 on the field (theme-tokens INV11).
+ */
+const INPUT_STATUS_VARS = {
+  'status:success': {
+    '--color-border-success': lightDark(green.light[55], green.light[70]),
+    '--color-icon-success': lightDark(green.light[55], green.light[70]),
+  },
+  'status:warning': {
+    '--color-border-warning': lightDark(yellow.light[55], yellow.light[80]),
+    '--color-icon-warning': lightDark(yellow.light[55], yellow.light[80]),
+  },
+  'status:error': {
+    '--color-border-error': red.light[60],
+    '--color-icon-error': red.light[60],
+  },
+} as const;
+
 export const butterTheme = defineTheme({
   name: 'butter',
 
@@ -186,6 +205,19 @@ export const butterTheme = defineTheme({
     '--color-on-success': [green.light[85], green.dark[15]],
     '--color-on-error': [red.light[95], red.dark[15]],
     '--color-on-warning': [yellow.light[95], yellow.dark[15]],
+
+    // Info is its own blue status, independent of the accent.
+    '--color-info': [accent.light[40], accent.dark[70]],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': [accent.light[40], accent.dark[70]],
+    '--color-text-success': [green.light[25], green.dark[80]],
+    '--color-text-warning': [yellow.light[25], yellow.dark[85]],
+    '--color-text-error': [red.light[25], red.dark[80]],
+    '--color-on-info-muted': 'var(--color-text-blue)',
+    '--color-on-success-muted': [green.light[25], green.dark[80]],
+    '--color-on-warning-muted': [yellow.light[25], yellow.dark[85]],
+    '--color-on-error-muted': [red.light[25], red.dark[90]],
 
     // Icon
     '--color-icon-accent': [accent.light[40], yellow.dark[90]],
@@ -410,34 +442,23 @@ export const butterTheme = defineTheme({
       },
     },
 
-    // Banner backgrounds match the semantic badge fills.
-    // Banner status colors — override the muted tokens locally so the
-    // header (which reads --color-*-muted via StyleX) renders vivid fills
-    // matching the badge palette. Scoped to the banner root, doesn't leak.
+    // Banner status surfaces and content use the reviewed vivid pair.
     banner: {
       'status:info': {
-        '--color-accent-muted': accent.light[55],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-accent': neutral.light[15],
+        '--color-info-muted': accent.light[55],
+        '--color-on-info-muted': neutral.light[15],
       },
       'status:success': {
         '--color-success-muted': green.light[70],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-success': neutral.light[15],
+        '--color-on-success-muted': neutral.light[15],
       },
       'status:warning': {
         '--color-warning-muted': yellow.light[80],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-warning': neutral.light[15],
+        '--color-on-warning-muted': neutral.light[15],
       },
       'status:error': {
         '--color-error-muted': red.light[60],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-error': neutral.light[15],
+        '--color-on-error-muted': neutral.light[15],
       },
     },
 
@@ -561,9 +582,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     'text-area': {
       base: {
@@ -571,9 +590,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     'number-input': {
       base: {
@@ -581,9 +598,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     'date-input': {
       base: {
@@ -591,9 +606,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     'time-input': {
       base: {
@@ -601,9 +614,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     selector: {
       base: {
@@ -611,9 +622,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'multi-selector': {
@@ -622,9 +631,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
     },
     'complex-selector': {'variant:secondary': SECONDARY_COMPLEX_SELECTOR},
@@ -634,9 +641,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
     tokenizer: {
       base: {
@@ -644,9 +649,7 @@ export const butterTheme = defineTheme({
         paddingInline: 'var(--spacing-3)',
         borderColor: 'var(--color-border)',
       },
-      'status:success': {'--color-success': green.light[70]},
-      'status:warning': {'--color-warning': yellow.light[80]},
-      'status:error': {'--color-error': red.light[60]},
+      ...INPUT_STATUS_VARS,
     },
 
     // Display sizes use Sarina — the signature buttery display

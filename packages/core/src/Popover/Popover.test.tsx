@@ -10,12 +10,31 @@
  * SYNC: When Popover.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+  cleanup,
+  renderHook,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import React, {useRef} from 'react';
+import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
 import type {UsePopoverReturn} from './usePopover';
@@ -945,6 +964,54 @@ describe('Popover', () => {
       expect(trigger).toHaveFocus();
     });
 
+    it('does not move focus into a popover that closed before its first frame', () => {
+      // Auto-focus waits a frame for the content to mount. A popover dismissed
+      // within that frame must not pull focus into its hidden content.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+        frames.delete(frame);
+      });
+      try {
+        render(
+          <Popover
+            content={
+              <button type="button" data-testid="inside-content">
+                Inside
+              </button>
+            }
+            label="Test">
+            <button type="button">Open</button>
+          </Popover>,
+        );
+        const trigger = screen.getByRole('button', {name: 'Open'});
+        trigger.focus();
+
+        fireEvent.click(trigger);
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.keyDown(document, {key: 'Escape'});
+        expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+        // The open's frame runs late, as on a busy machine.
+        act(() => {
+          const due = [...frames.values()];
+          frames.clear();
+          due.forEach(callback => callback(0));
+        });
+        expect(trigger).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('returns focus to the trigger on light dismiss', () => {
       render(
         <Popover
@@ -977,6 +1044,223 @@ describe('Popover', () => {
 
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+  });
+
+  describe('in a second document', () => {
+    // An app can render a Popover into a same-origin iframe or a Document
+    // Picture-in-Picture window through a portal. Every press and focus change
+    // then happens in that document, and none of them reaches this one.
+    let frame: HTMLIFrameElement;
+    let secondDocument: Document;
+
+    beforeEach(() => {
+      frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      secondDocument = frame.contentDocument!;
+      // The Popover API stand-in above, on the second window's own prototype.
+      const {prototype} = secondDocument.defaultView!.HTMLElement;
+      prototype.showPopover = HTMLElement.prototype.showPopover;
+      prototype.hidePopover = HTMLElement.prototype.hidePopover;
+    });
+
+    afterEach(() => {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+    });
+
+    function renderInSecondDocument(hasLightDismiss = true) {
+      render(
+        createPortal(
+          <>
+            <Popover
+              label="Settings"
+              hasLightDismiss={hasLightDismiss}
+              content={
+                <>
+                  <button type="button">First</button>
+                  <button type="button">Last</button>
+                </>
+              }>
+              <button type="button">Settings</button>
+            </Popover>
+            <p>Outside</p>
+          </>,
+          secondDocument.body,
+        ),
+      );
+      const view = within(secondDocument.body);
+      const trigger = view.getByRole('button', {name: 'Settings'});
+      const surface = view.getByRole('dialog', {
+        name: 'Settings',
+        hidden: true,
+      });
+      const first = view.getByRole('button', {name: 'First', hidden: true});
+      return {trigger, surface, first, view};
+    }
+
+    /** Open from the trigger, as a pointer would, and wait for focus to enter. */
+    async function open(trigger: HTMLElement, surface: HTMLElement) {
+      trigger.focus();
+      fireEvent.click(trigger, {detail: 1});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() =>
+        expect(surface.contains(secondDocument.activeElement)).toBe(true),
+      );
+    }
+
+    it('focuses the first content control on open', async () => {
+      const {trigger, surface, first} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      expect(first).toHaveFocus();
+    });
+
+    it('wraps Tab from the last control back to the first', async () => {
+      const {trigger, surface, first, view} = renderInSecondDocument();
+      await open(trigger, surface);
+      const last = view.getByRole('button', {
+        name: 'Close popover',
+        hidden: true,
+      });
+      last.focus();
+
+      expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+      expect(first).toHaveFocus();
+    });
+
+    it('closes on Escape through the layer stack and returns focus to the trigger', async () => {
+      const {trigger, surface} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      // The stack claims the press, so the browser's own close watcher does
+      // not act on it a second time.
+      expect(
+        fireEvent.keyDown(secondDocument.activeElement!, {key: 'Escape'}),
+      ).toBe(false);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('closes on Escape when light dismiss is off', async () => {
+      const {trigger, surface} = renderInSecondDocument(false);
+      await open(trigger, surface);
+
+      fireEvent.keyDown(secondDocument.activeElement!, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('returns focus to the trigger after an outside click', async () => {
+      const {trigger, surface} = renderInSecondDocument();
+      await open(trigger, surface);
+
+      // The press on non-focusable content blurs focus to the body, then the
+      // browser's light dismiss closes the popover with a `toggle` event.
+      (secondDocument.activeElement as HTMLElement).blur();
+      expect(secondDocument.activeElement).toBe(secondDocument.body);
+      const toggle = new secondDocument.defaultView!.Event('toggle');
+      Object.defineProperty(toggle, 'newState', {value: 'closed'});
+      fireEvent(secondDocument.querySelector('[popover]')!, toggle);
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+
+    it('keeps a Dialog and the Popover opened inside it in one order', () => {
+      // jsdom has no modal <dialog>; stand in for it on the second window.
+      const {prototype: dialogPrototype} =
+        secondDocument.defaultView!.HTMLDialogElement;
+      dialogPrototype.showModal = function (this: HTMLDialogElement) {
+        this.setAttribute('open', '');
+      };
+      dialogPrototype.close = function (this: HTMLDialogElement) {
+        this.removeAttribute('open');
+      };
+      const onOpenChange = vi.fn();
+      render(
+        createPortal(
+          <Dialog
+            isOpen={true}
+            onOpenChange={onOpenChange}
+            purpose="info"
+            aria-label="Host">
+            <Popover
+              label="Tip"
+              content={<button type="button">Inside</button>}>
+              <button type="button">Open tip</button>
+            </Popover>
+          </Dialog>,
+          secondDocument.body,
+        ),
+      );
+      const trigger = within(secondDocument.body).getByRole('button', {
+        name: 'Open tip',
+        hidden: true,
+      });
+      fireEvent.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      // A press in this document reaches neither layer of the other one.
+      fireEvent.keyDown(document, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // The Dialog declines a close request while the Popover is above it.
+      const closeRequest = new secondDocument.defaultView!.Event('cancel', {
+        cancelable: true,
+      });
+      fireEvent(secondDocument.querySelector('dialog')!, closeRequest);
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      // In its own document, Escape closes the Popover, then the Dialog.
+      fireEvent.keyDown(secondDocument, {key: 'Escape'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(onOpenChange).not.toHaveBeenCalled();
+      fireEvent.keyDown(secondDocument, {key: 'Escape'});
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    });
+
+    it('re-measures its overflow when its own window resizes', () => {
+      const {trigger, surface} = renderInSecondDocument();
+      const secondWindow = secondDocument.defaultView!;
+      const frames: FrameRequestCallback[] = [];
+      const requestFrame = vi
+        .spyOn(secondWindow, 'requestAnimationFrame')
+        .mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+      const runFrames = () =>
+        act(() => frames.splice(0).forEach(callback => callback(0)));
+      fireEvent.click(trigger, {detail: 1});
+      runFrames();
+      expect(surface.className).not.toContain(
+        'Popover__styles.surfaceScrollable',
+      );
+
+      // The window the Popover renders in gets too short for its content.
+      const {prototype} = secondWindow.HTMLElement;
+      const sizes = [
+        vi.spyOn(prototype, 'clientHeight', 'get').mockReturnValue(100),
+        vi.spyOn(prototype, 'scrollHeight', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'clientWidth', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'scrollWidth', 'get').mockReturnValue(200),
+      ];
+      try {
+        act(() => {
+          secondWindow.dispatchEvent(new secondWindow.Event('resize'));
+        });
+        runFrames();
+        expect(surface.className).toContain(
+          'Popover__styles.surfaceScrollable',
+        );
+      } finally {
+        sizes.forEach(size => size.mockRestore());
+        requestFrame.mockRestore();
+      }
     });
   });
 
@@ -1082,5 +1366,143 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover focus region (DEC-9)', () => {
+  function Page({isModal}: {isModal: boolean}) {
+    return (
+      <div>
+        <Popover
+          isModal={isModal}
+          hasCloseButton={false}
+          label="Details"
+          content={
+            <>
+              <button type="button">First inside</button>
+              <button type="button">Last inside</button>
+            </>
+          }>
+          <button type="button">Open details</button>
+        </Popover>
+        <button type="button">Elsewhere 1</button>
+        <button type="button">Elsewhere 2</button>
+      </div>
+    );
+  }
+
+  async function openDetails() {
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+    // A pointer press focuses the trigger before its click opens the popover.
+    trigger.focus();
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'First inside', hidden: true}),
+      ).toHaveFocus(),
+    );
+  }
+
+  describe.each([
+    ['non-modal', false],
+    ['modal', true],
+  ])('%s', (_name, isModal) => {
+    it('leaves a Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 1'}).focus();
+      await user.tab();
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 2'})).toHaveFocus();
+    });
+
+    it('leaves a Shift+Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 2'}).focus();
+      await user.tab({shift: true});
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
+    });
+
+    it('cycles Tab and Shift+Tab inside the open popover', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+      const first = screen.getByRole('button', {
+        name: 'First inside',
+        hidden: true,
+      });
+      const last = screen.getByRole('button', {
+        name: 'Last inside',
+        hidden: true,
+      });
+
+      await user.tab();
+      expect(last).toHaveFocus();
+      await user.tab();
+      expect(first).toHaveFocus();
+      await user.tab({shift: true});
+      expect(last).toHaveFocus();
+    });
+
+    it('closes on Escape from inside and returns focus to the trigger', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      await user.keyboard('{Escape}');
+
+      const trigger = screen.getByRole('button', {name: 'Open details'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+  });
+});
+
+describe('usePopover trigger ref', () => {
+  // The layer object changes whenever onShow or onHide does. A trigger ref
+  // that changed with it made React detach and reattach the trigger on every
+  // render of a caller that passes inline callbacks.
+  it('stays the same function when onShow and onHide change across renders', () => {
+    const {result, rerender} = renderHook(
+      ({onShow, onHide}: {onShow: () => void; onHide: () => void}) =>
+        usePopover({onShow, onHide}),
+      {initialProps: {onShow: () => {}, onHide: () => {}}},
+    );
+    const first = result.current.triggerRef;
+
+    rerender({onShow: () => {}, onHide: () => {}});
+
+    expect(result.current.triggerRef).toBe(first);
+  });
+
+  it('leaves the trigger style alone on a render with new callbacks', () => {
+    function Trigger({count}: {count: number}) {
+      const popover = usePopover({onShow: () => {}, onHide: () => {}});
+      return (
+        <button type="button" ref={popover.triggerRef}>
+          Open {count}
+        </button>
+      );
+    }
+    const {rerender} = render(<Trigger count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Open/});
+    const anchorName = trigger.style.getPropertyValue('anchor-name');
+    expect(anchorName).toMatch(/^--astryx-layer-/);
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(trigger, {attributes: true, attributeFilter: ['style']});
+
+    rerender(<Trigger count={1} />);
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+
+    expect(records).toHaveLength(0);
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe(anchorName);
   });
 });

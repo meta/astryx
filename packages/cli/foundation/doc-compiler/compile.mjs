@@ -23,6 +23,7 @@
 
 import {parseTemplate} from '../../authoring/doctypes/template/parse.mjs';
 import {parseTheme} from '../../authoring/doctypes/theme/parse.mjs';
+import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/parse.mjs';
 import {
   mergeTopic,
   problemsInTopic,
@@ -68,6 +69,7 @@ export const COMPILED_DOC_KINDS = /** @type {const} */ ([
   'enum',
   'theme',
   'namespace',
+  'icon-definition',
 ]);
 
 /**
@@ -80,6 +82,7 @@ export const ROOT_KINDS = Object.freeze({
   hooks: ['function'],
   templates: ['page', 'block'],
   themes: ['theme'],
+  'icon-definitions': ['icon-definition'],
   'self-docs': ['command', 'function', 'schema', 'enum'],
   tree: ['namespace', 'generic'],
 });
@@ -393,6 +396,7 @@ function applyOverlay(docs, translation) {
  */
 export function parserFor(root) {
   if (root === 'themes') return parseTheme;
+  if (root === 'icon-definitions') return parseIconDefinition;
   if (root === 'templates') return parseTemplate;
   return parseReadableDoc;
 }
@@ -492,10 +496,14 @@ export function lowerDoc(input, {check = true, node: wantNode = true} = {}) {
   const result = {node: null, diagnostics};
   let view = file.doc;
   // A theme descriptor is read statically; its parse result is the doc.
-  if (check || input.root === 'themes') {
+  // A theme descriptor and an icon definition are read statically; the parse
+  // result is the doc.
+  const staticRoot =
+    input.root === 'themes' || input.root === 'icon-definitions';
+  if (check || staticRoot) {
     try {
       const parsed = parserFor(input.root)(file.doc, input.label ?? file.file);
-      if (input.useParsed || input.root === 'themes') view = parsed;
+      if (input.useParsed || staticRoot) view = parsed;
     } catch (error) {
       result.failed = true;
       result.failure = error;

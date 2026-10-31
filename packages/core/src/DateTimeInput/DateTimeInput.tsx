@@ -71,9 +71,6 @@ import {
   type ISOTimeString,
   parseDateInput,
   parseISOTime,
-  parseTimeInput,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isTimeInRange,
   adjustTime,
@@ -102,6 +99,11 @@ import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale, useTranslator} from '../i18n';
+import {
+  formatLocaleTime,
+  parseLocaleTime,
+  resolveHourFormat,
+} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -412,8 +414,11 @@ export interface DateTimeInputProps extends Omit<
   hasSeconds?: boolean;
 
   /**
-   * Hour display format.
-   * @default '12h'
+   * Hour display format: '12h' with the locale's day period, or '24h'.
+   * When unset, follows the `InternationalizationProvider` locale's hour
+   * cycle (`en-US` 12-hour, `en-GB` 24-hour); a per-user preference rides on
+   * the locale tag (`en-US-u-hc-h23`).
+   * @default the locale's hour cycle
    */
   hourFormat?: DateTimeInputHourFormat;
 
@@ -836,8 +841,11 @@ function PointerDateTimeField({
   }
   const nativeTimeValue = nativeTimeDraft ?? valueParts.time;
 
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
+  const formatDisplayTime = useCallback(
+    (time: ISOTimeString, includeSeconds: boolean) =>
+      formatLocaleTime(time, locale, hourFormat, includeSeconds),
+    [locale, hourFormat],
+  );
 
   const timeDisplayValue = useMemo(() => {
     if (timePendingInput !== null) {
@@ -852,12 +860,12 @@ function PointerDateTimeField({
     if (timePendingInput === null || !timePendingInput.trim()) {
       return true;
     }
-    const parsed = parseTimeInput(timePendingInput, hasSeconds);
+    const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
     if (!parsed) {
       return false;
     }
     return isTimeInRange(parsed, timeMin, timeMax);
-  }, [timePendingInput, hasSeconds, timeMin, timeMax]);
+  }, [timePendingInput, locale, hasSeconds, timeMin, timeMax]);
 
   const resolvedTimePlaceholder = useMemo(() => {
     if (isTimeFocused && !timeDisplayValue) {
@@ -1362,7 +1370,7 @@ function PointerDateTimeField({
       const text = e.target.value;
       setTimePendingInput(text);
 
-      const parsed = parseTimeInput(text, hasSeconds);
+      const parsed = parseLocaleTime(text, locale, hasSeconds);
 
       // Typing narrows nothing — free-form entry is the contract, and a time
       // between two options must stay reachable. The list instead follows the
@@ -1386,6 +1394,7 @@ function PointerDateTimeField({
       }
     },
     [
+      locale,
       hasSeconds,
       timeMin,
       timeMax,
@@ -1440,7 +1449,7 @@ function PointerDateTimeField({
         return;
       }
 
-      const parsed = parseTimeInput(timePendingInput, hasSeconds);
+      const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, timeMin, timeMax)) {
         if (parsed !== valueParts.time && valueParts.date) {
           const combined = combineDateTime(valueParts.date, parsed);
@@ -1453,6 +1462,7 @@ function PointerDateTimeField({
     },
     [
       timePendingInput,
+      locale,
       hasSeconds,
       timeMin,
       timeMax,
@@ -1530,7 +1540,7 @@ function PointerDateTimeField({
               const typed =
                 timeHighlightFollowsTypingRef.current &&
                 timePendingInput !== null
-                  ? parseTimeInput(timePendingInput, hasSeconds)
+                  ? parseLocaleTime(timePendingInput, locale, hasSeconds)
                   : null;
               const option = timeOptions[activeTimeIndex];
               if (typed) {
@@ -1582,6 +1592,7 @@ function PointerDateTimeField({
     },
     [
       valueParts,
+      locale,
       hasSeconds,
       timeIncrement,
       timeMin,
@@ -1937,17 +1948,21 @@ function PointerDateTimeField({
 
       {!usesNativePicker &&
         popover.render(
-          <Calendar
-            handleRef={calendarRef}
-            mode="single"
-            value={valueParts.date ?? null}
-            onChange={(d: ISODateString) => handleDateChange(d, 'calendar')}
-            min={calendarMin}
-            max={calendarMax}
-            dateConstraints={dateConstraints}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />,
+          // Mounted only while open, like the time list below; the calendar
+          // opens on the current value.
+          !popover.isOpen ? null : (
+            <Calendar
+              handleRef={calendarRef}
+              mode="single"
+              value={valueParts.date ?? null}
+              onChange={(d: ISODateString) => handleDateChange(d, 'calendar')}
+              min={calendarMin}
+              max={calendarMax}
+              dateConstraints={dateConstraints}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          ),
           {placement: 'below', alignment: 'start'},
         )}
 
@@ -2030,11 +2045,18 @@ export function DateTimeInput(props: DateTimeInputProps) {
     props.presentation,
     props.nativePicker,
   );
+  const locale = useLocale();
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
-    ...rest
+    ...surfaceProps
   } = props;
+  // Every surface gets the resolved hour format, so typed text, the native
+  // field's resting text, preset times, and the sheet wheels agree.
+  const rest = {
+    ...surfaceProps,
+    hourFormat: resolveHourFormat(locale, props.hourFormat),
+  };
   if (effective === 'native') {
     return (
       <PointerDateTimeField

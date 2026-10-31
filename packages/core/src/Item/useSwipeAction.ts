@@ -32,6 +32,12 @@
  * signal WebKit honours. Before the axis is decided, and for a drag the
  * scroller got, nothing is cancelled.
  *
+ * A pinch is the browser's: the root's `touch-action` keeps `pinch-zoom`, and
+ * a second finger that lands anywhere before the axis is decided turns the
+ * touch into a pinch, so the row lets it go and cancels nothing. A finger
+ * that is not the first one down never starts a drag. Once the row owns a
+ * drag, a second finger does not break it.
+ *
  * The drag's travel is one custom property written on the root, coalesced to
  * one write per frame; the root's transform reads it and the panels'
  * transforms read its negation, so the row moves and the panel appears fixed
@@ -211,6 +217,8 @@ export function useSwipeAction({
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frameRef = useRef<number | null>(null);
   const pendingRef = useRef<number | null>(null);
+  /** Removes the document listener that watches for a pinch's second finger. */
+  const stopPinchWatchRef = useRef<(() => void) | null>(null);
   const [state, setState] = useState<SwipeState>(IDLE_STATE);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -237,8 +245,46 @@ export function useSwipeAction({
       if (frameRef.current != null) {
         cancelAnimationFrame(frameRef.current);
       }
+      stopPinchWatchRef.current?.();
+      stopPinchWatchRef.current = null;
     },
     [],
+  );
+
+  const stopWatchingForPinch = useCallback(() => {
+    stopPinchWatchRef.current?.();
+    stopPinchWatchRef.current = null;
+  }, []);
+
+  /**
+   * Until the axis is decided, a second finger anywhere on the page makes
+   * the touch a pinch: the row gives it up and cancels nothing, so the
+   * browser zooms. The finger can land off the row, so the document listens.
+   */
+  const watchForPinch = useCallback(
+    (drag: DragState) => {
+      stopWatchingForPinch();
+      const onAnyPointerDown = (event: PointerEvent) => {
+        if (
+          event.pointerType === 'touch' &&
+          event.pointerId !== drag.pointerId &&
+          drag.claimed === null
+        ) {
+          drag.claimed = false;
+          stopWatchingForPinch();
+        }
+      };
+      document.addEventListener('pointerdown', onAnyPointerDown, {
+        capture: true,
+        passive: true,
+      });
+      stopPinchWatchRef.current = () => {
+        document.removeEventListener('pointerdown', onAnyPointerDown, {
+          capture: true,
+        });
+      };
+    },
+    [stopWatchingForPinch],
   );
 
   /** Write the travel (physical px) the transforms read. */
@@ -446,10 +492,24 @@ export function useSwipeAction({
   const onPointerDown = useCallback(
     (event: ReactPointerEvent) => {
       const current = stateRef.current;
+      const inFlight = dragRef.current;
+      if (inFlight != null) {
+        // A second finger before the axis is decided: a pinch, not a swipe.
+        if (
+          event.pointerType === 'touch' &&
+          event.pointerId !== inFlight.pointerId &&
+          inFlight.claimed === null
+        ) {
+          inFlight.claimed = false;
+          stopWatchingForPinch();
+        }
+        return;
+      }
       if (
         !isEnabled ||
         event.pointerType !== 'touch' ||
-        dragRef.current != null ||
+        // Another finger is already down: this one is part of a pinch.
+        event.isPrimary === false ||
         current.phase === 'settling' ||
         current.phase === 'held'
       ) {
@@ -459,7 +519,7 @@ export function useSwipeAction({
       const inlineSign: 1 | -1 = isRtlElement(root) ? -1 : 1;
       inlineSignRef.current = inlineSign;
       const startTime = now();
-      dragRef.current = {
+      const drag: DragState = {
         // Logical: the physical travel through the inline sign.
         baseTravel: travelRef.current * inlineSign,
         claimed: null,
@@ -476,8 +536,10 @@ export function useSwipeAction({
         startY: event.clientY,
         travel: 0,
       };
+      dragRef.current = drag;
+      watchForPinch(drag);
     },
-    [isEnabled, rootRef],
+    [isEnabled, rootRef, stopWatchingForPinch, watchForPinch],
   );
 
   const onPointerMove = useCallback(
@@ -497,6 +559,9 @@ export function useSwipeAction({
         if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < AXIS_LOCK_PX) {
           return;
         }
+        // The axis is decided now, whichever way: a later finger is the
+        // swipe's to ignore or the scroller's to use.
+        stopWatchingForPinch();
         // More horizontal than vertical is the row's, the rest the scroller's.
         if (Math.abs(deltaX) <= Math.abs(deltaY)) {
           drag.claimed = false;
@@ -555,7 +620,7 @@ export function useSwipeAction({
       drag.lastTime = now();
       paintOnNextFrame(sign * drag.inlineSign * offset);
     },
-    [paintOnNextFrame, rootRef, writeDuration],
+    [paintOnNextFrame, rootRef, stopWatchingForPinch, writeDuration],
   );
 
   const endGesture = useCallback(
@@ -565,6 +630,7 @@ export function useSwipeAction({
         return;
       }
       dragRef.current = null;
+      stopWatchingForPinch();
       if (drag.claimed !== true) {
         return;
       }
@@ -598,7 +664,7 @@ export function useSwipeAction({
       }
       settle(side, 0, 'idle');
     },
-    [rootRef, settle, slideOutAndFire],
+    [rootRef, settle, slideOutAndFire, stopWatchingForPinch],
   );
 
   const onPointerUp = useCallback(

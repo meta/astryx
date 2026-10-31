@@ -192,6 +192,18 @@ export const y2kTheme = defineTheme({
     '--color-on-error': [red.light[30], red.dark[20]],
     '--color-on-warning': [yellow.light[30], yellow.dark[20]],
 
+    '--color-info': [blue.light[40], blue.dark[75]],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': [blue.light[20], blue.dark[75]],
+    '--color-text-success': [green.light[30], green.dark[75]],
+    '--color-text-warning': [yellow.light[30], yellow.dark[85]],
+    '--color-text-error': [red.light[30], red.dark[75]],
+    '--color-on-info-muted': 'var(--color-text-blue)',
+    '--color-on-success-muted': 'var(--color-text-green)',
+    '--color-on-warning-muted': 'var(--color-text-yellow)',
+    '--color-on-error-muted': 'var(--color-text-red)',
+
     // Icon
     '--color-icon-accent': [neutral.light[15], neutral.dark[95]],
     '--color-icon-primary': [neutral.light[15], neutral.dark[95]],
@@ -393,28 +405,20 @@ export const y2kTheme = defineTheme({
         borderRadius: '0px',
       },
       'status:info': {
-        backgroundColor: 'var(--color-background-blue)',
-        '--color-text-primary': 'var(--color-text-blue)',
-        '--color-text-secondary': 'var(--color-text-blue)',
-        '--color-accent': 'var(--color-text-blue)',
+        '--color-info-muted': 'var(--color-background-blue)',
+        '--color-on-info-muted': 'var(--color-text-blue)',
       },
       'status:success': {
-        backgroundColor: 'var(--color-background-green)',
-        '--color-text-primary': 'var(--color-text-green)',
-        '--color-text-secondary': 'var(--color-text-green)',
-        '--color-success': 'var(--color-text-green)',
+        '--color-success-muted': 'var(--color-background-green)',
+        '--color-on-success-muted': 'var(--color-text-green)',
       },
       'status:warning': {
-        backgroundColor: 'var(--color-background-yellow)',
-        '--color-text-primary': 'var(--color-text-yellow)',
-        '--color-text-secondary': 'var(--color-text-yellow)',
-        '--color-warning': 'var(--color-text-yellow)',
+        '--color-warning-muted': 'var(--color-background-yellow)',
+        '--color-on-warning-muted': 'var(--color-text-yellow)',
       },
       'status:error': {
-        backgroundColor: 'var(--color-background-red)',
-        '--color-text-primary': 'var(--color-text-red)',
-        '--color-text-secondary': 'var(--color-text-red)',
-        '--color-error': 'var(--color-text-red)',
+        '--color-error-muted': 'var(--color-background-red)',
+        '--color-on-error-muted': 'var(--color-text-red)',
       },
     },
 

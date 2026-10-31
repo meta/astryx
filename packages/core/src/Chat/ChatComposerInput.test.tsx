@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {StrictMode} from 'react';
+import {createRef, StrictMode, useLayoutEffect} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -82,12 +82,6 @@ describe('ChatComposerInput', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders disabled state', () => {
-      render(<ChatComposerInput isDisabled />);
-      const textbox = screen.getByRole('textbox');
-      expect(textbox).toHaveAttribute('contenteditable', 'false');
-    });
-
     it('marks the textbox as multiline', () => {
       render(<ChatComposerInput />);
       expect(screen.getByRole('textbox')).toHaveAttribute(
@@ -102,6 +96,170 @@ describe('ChatComposerInput', () => {
       render(<ChatComposerInput triggers={[createMentionTrigger()]} />);
       const combobox = screen.getByRole('combobox');
       expect(combobox).not.toHaveAttribute('aria-multiline');
+    });
+  });
+
+  describe('disabled editing', () => {
+    it('keeps focus, draft, description, and Tab entry when the composer disables it', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const view = (isDisabled: boolean, value = 'Draft') => (
+        <>
+          <button type="button">Before</button>
+          <p id="reason">Unavailable while sending</p>
+          <ChatComposer
+            isDisabled={isDisabled}
+            value={value}
+            onChange={onChange}
+            onSubmit={() => {}}
+            input={<ChatComposerInput aria-describedby="reason" />}
+          />
+        </>
+      );
+      const {rerender} = render(view(false));
+      await user.tab();
+      await user.tab();
+      const editor = screen.getByRole('textbox');
+      expect(editor).toHaveFocus();
+
+      rerender(view(true));
+      expect(screen.getByRole('textbox')).toBe(editor);
+      expect(editor).toHaveFocus();
+      expect(editor).toHaveTextContent('Draft');
+      expect(editor).toHaveAttribute('contenteditable', 'false');
+      expect(editor).toHaveAttribute('aria-disabled', 'true');
+      expect(editor).toHaveAccessibleDescription('Unavailable while sending');
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(editor).toHaveFocus();
+
+      rerender(view(true, 'External update'));
+      expect(editor).toHaveTextContent('External update');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('blocks input, submission, paste, drop, and consumer callbacks', () => {
+      const onInteraction = vi.fn();
+      render(
+        <ChatComposerInput
+          isDisabled
+          value="Draft"
+          onChange={onInteraction}
+          onSubmit={onInteraction}
+          onKeyDown={onInteraction}
+          onKeyDownCapture={onInteraction}
+          onInput={onInteraction}
+          onPaste={onInteraction}
+          onFiles={onInteraction}
+          onDrop={onInteraction}
+        />,
+      );
+      const editor = screen.getByRole('textbox');
+      fireEvent.keyDown(editor, {key: 'Enter'});
+      fireEvent.input(editor);
+      fireEvent.paste(editor, {
+        clipboardData: {files: [], getData: () => 'blocked'},
+      });
+      const file = new File(['content'], 'blocked.txt', {type: 'text/plain'});
+      fireEvent.paste(editor, {
+        clipboardData: {files: [file], getData: () => ''},
+      });
+      expect(
+        fireEvent.drop(editor, {
+          dataTransfer: {files: [file], types: ['Files']},
+        }),
+      ).toBe(false);
+      expect(editor).toHaveTextContent('Draft');
+      expect(onInteraction).not.toHaveBeenCalled();
+    });
+
+    it('blocks retained-handle mutations and token deletion until re-enabled', () => {
+      const handleRef = createRef<ChatComposerInputHandle>();
+      const onChange = vi.fn();
+      const view = (isDisabled: boolean) => (
+        <ChatComposerInput
+          isDisabled={isDisabled}
+          handleRef={handleRef}
+          onChange={onChange}
+        />
+      );
+      const {rerender} = render(view(false));
+      const editor = screen.getByRole('textbox');
+      const handle = handleRef.current!;
+      let tokenId: string | undefined;
+      act(() => {
+        tokenId = handle.insertToken({value: '@sam', label: 'Sam'});
+      });
+      window.getSelection()!.collapse(editor.lastChild, 1);
+      rerender(view(true));
+      onChange.mockClear();
+      // emitChange is itself silent while disabled, so the draft is checked
+      // directly: neither the value nor the editor's markup (the token) may
+      // change.
+      const valueBefore = handle.getValue();
+      const markupBefore = editor.innerHTML;
+
+      act(() => {
+        handle.insertText('blocked');
+        expect(
+          handle.insertToken({value: '@alex', label: 'Alex'}),
+        ).toBeUndefined();
+        handle.expandToken(tokenId!);
+      });
+      fireEvent.keyDown(editor, {key: 'Backspace'});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(handle.getValue()).toBe(valueBefore);
+      expect(editor.innerHTML).toBe(markupBefore);
+      handle.focus();
+      expect(editor).toHaveFocus();
+
+      rerender(view(false));
+      act(() => handle.insertText('enabled'));
+      expect(handle.getValue()).toContain('enabled');
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes suggestions without selecting or reopening after re-enabling', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn(() => '@sam ');
+      const triggers = [createMentionTrigger({onSelect})];
+      const onDisabledCommit = vi.fn();
+      function Example({isDisabled = false}: {isDisabled?: boolean}) {
+        useLayoutEffect(() => {
+          if (isDisabled) {
+            const editor = screen.getByRole('combobox');
+            onDisabledCommit({
+              expanded: editor.getAttribute('aria-expanded'),
+              controls: editor.getAttribute('aria-controls'),
+              activeDescendant: editor.getAttribute('aria-activedescendant'),
+            });
+          }
+        }, [isDisabled]);
+        return (
+          <ChatComposerInput isDisabled={isDisabled} triggers={triggers} />
+        );
+      }
+      const {rerender} = render(<Example />);
+      const editor = screen.getByRole('combobox');
+      await user.type(editor, '@');
+      await screen.findByText('Cindy Zhang');
+      expect(editor).toHaveAttribute('aria-expanded', 'true');
+
+      rerender(<Example isDisabled />);
+      expect(onDisabledCommit).toHaveBeenCalledExactlyOnceWith({
+        expanded: 'false',
+        controls: null,
+        activeDescendant: null,
+      });
+      expect(
+        screen.queryByRole('option', {hidden: true}),
+      ).not.toBeInTheDocument();
+      await user.keyboard('{Enter}');
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(editor).toHaveTextContent('@');
+
+      rerender(<Example />);
+      expect(editor).toHaveAttribute('aria-expanded', 'false');
     });
   });
 
@@ -586,20 +744,6 @@ describe('ChatComposerInput', () => {
       });
       expect(allowed).toBe(false);
       expect(onFiles).toHaveBeenCalledWith([file]);
-    });
-
-    it('does not emit dropped files while disabled', () => {
-      const onFiles = vi.fn();
-      render(<ChatComposerInput isDisabled onFiles={onFiles} />);
-      const textbox = screen.getByRole('textbox');
-      const file = new File(['content'], 'blocked.txt', {type: 'text/plain'});
-
-      const allowed = fireEvent.drop(textbox, {
-        dataTransfer: {files: [file], types: ['Files']},
-      });
-
-      expect(allowed).toBe(false);
-      expect(onFiles).not.toHaveBeenCalled();
     });
   });
 

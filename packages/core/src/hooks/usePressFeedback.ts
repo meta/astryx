@@ -30,8 +30,11 @@ import {installPressFeedback, pressableProps} from '../utils/pressFeedback';
  * while a touch press is believed (after the onset delay, cancelled by travel
  * or by a scroll) and for the release, and the composed style paints the
  * pressed token at the press's strength on the first frame and fades it over
- * the release, keeping `:active` for a mouse. A press is themed through
- * `--color-overlay-pressed`, which the hold, the flash and the fade all read.
+ * the release, keeping `:active` for a mouse on a desktop. On a phone or
+ * tablet the stylesheet drops `:active` for every press, so the controller
+ * also paints a mouse, trackpad or Space-key press there, at once. A press is
+ * themed through `--color-overlay-pressed`, which the hold, the flash and the
+ * fade all read.
  * Every Astryx component that paints a press already does this; reach for it
  * when a local component paints its own press and must behave like the rest
  * of the system under a finger.

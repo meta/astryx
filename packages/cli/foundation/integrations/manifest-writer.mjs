@@ -214,6 +214,9 @@ function removeFileIfUnchanged(file, expectedContents) {
  * Add a contribution root to an integration manifest, creating the manifest
  * when requested and none exists.
  *
+ * `kind` is a root key, or a dotted path into a nested object literal
+ * (`experimental.iconSets`), which is created when missing.
+ *
  * If the key already has `rootPath`, this is an idempotent no-op. A different
  * author-owned value is a typed refusal. `dryRun` performs every read and
  * source-shape check but writes nothing. `createIfMissing` creates a minimal
@@ -231,9 +234,11 @@ export async function patchIntegrationRoot(
   rootPath,
   {dryRun = false, verify, createIfMissing = false} = {},
 ) {
-  if (!/^[A-Za-z_$][\w$]*$/u.test(kind)) {
+  const keys = kind.split('.');
+  if (!keys.every(key => /^[A-Za-z_$][\w$]*$/u.test(key))) {
     throw new Error(`Invalid integration root key "${kind}".`);
   }
+  const leaf = /** @type {string} */ (keys[keys.length - 1]);
   assertWithin(rootPath, packageDir, {label: `${kind} root`});
 
   const existingManifest = findLocalIntegrationManifestOrNull(packageDir);
@@ -266,7 +271,14 @@ export async function patchIntegrationRoot(
       )
     );
   }
-  const current = manifest[kind];
+  /** @type {unknown} */
+  let current = manifest;
+  for (const key of keys) {
+    current =
+      current != null && typeof current === 'object'
+        ? /** @type {Record<string, unknown>} */ (current)[key]
+        : undefined;
+  }
   if (current !== undefined) {
     if (current !== rootPath) {
       throw new IntegrationRootConflictError(kind, String(current), rootPath);
@@ -289,16 +301,50 @@ export async function patchIntegrationRoot(
       {cause: error},
     );
   }
-  const object = findManifestObject(j, ast);
+  let object = findManifestObject(j, ast);
   if (!object) {
     throw new Error(
       `Could not update ${path.basename(manifestFile)} safely: its default export is not a static object literal.`,
     );
   }
+  // Walk to the object that holds the leaf key, creating each missing one.
+  for (const key of keys.slice(0, -1)) {
+    const holder = object.properties.find((/** @type {any} */ property) =>
+      propertyNamed(property, key),
+    );
+    if (!holder) {
+      // A spread here may set this key: an object added beside it would
+      // replace the spread's whole object and drop what it sets.
+      if (
+        object.properties.some((/** @type {any} */ property) =>
+          [
+            'SpreadElement',
+            'SpreadProperty',
+            'ExperimentalSpreadProperty',
+          ].includes(property?.type),
+        )
+      ) {
+        throw new Error(
+          `Could not update ${path.basename(manifestFile)} safely: it spreads another object (\`...\`) where "${key}" would go, so a written "${key}" could replace what the spread sets. Set "${kind}: '${rootPath}'" in it yourself.`,
+        );
+      }
+      const created = j.objectExpression([]);
+      object.properties.push(j.objectProperty(j.identifier(key), created));
+      object = created;
+      continue;
+    }
+    const value = unwrapManifestExpression(holder.value);
+    if (!j.ObjectExpression.check(value)) {
+      throw new Error(
+        `Could not update ${path.basename(manifestFile)} safely: its \`${key}\` field is not a static object literal. Set "${kind}: '${rootPath}'" in it yourself.`,
+      );
+    }
+    object = value;
+  }
 
   if (
     object.properties.some((/** @type {any} */ property) =>
-      propertyNamed(property, kind),
+      propertyNamed(property, leaf),
     )
   ) {
     throw new Error(
@@ -307,7 +353,7 @@ export async function patchIntegrationRoot(
   }
 
   object.properties.push(
-    j.objectProperty(j.identifier(kind), j.stringLiteral(rootPath)),
+    j.objectProperty(j.identifier(leaf), j.stringLiteral(rootPath)),
   );
   let next = ast.toSource({quote: 'single', reuseWhitespace: true});
   if (source.endsWith('\n') && !next.endsWith('\n')) next += '\n';

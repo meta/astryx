@@ -30,12 +30,16 @@ import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {scanAllPackages, findComponentInPackages} from './_package-scanner.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {collectIdentities} from '../../foundation/integrations/contribution-inventory.mjs';
+import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
 import {userCacheDir} from '../../foundation/env/user-dirs.mjs';
 import {CLI_ROOT, findInstalledPackage} from '../../foundation/fs/paths.mjs';
-import {parseDiscoverCatalog} from '../../authoring/discover/parse.mjs';
+import {
+  DISCOVER_KINDS,
+  parseDiscoverCatalog,
+} from '../../authoring/discover/parse.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
@@ -99,7 +103,22 @@ const DEPENDENCY_FIELDS = [
  *   docs?: string[],
  *   themes?: string[],
  *   codemods?: string[],
+ *   iconSets?: string[],
+ *   iconSetDetails?: IconSetSummary[],
+ *   withdrawnIconSets?: Array<{name: string, reason: string}>,
  * }} InstalledPackage
+ */
+
+/**
+ * What discover shows about one installed icon set (spec:AST-084 FR17).
+ * @typedef {object} IconSetSummary
+ * @property {string} name
+ * @property {string} displayName
+ * @property {string} description
+ * @property {string} license
+ * @property {number} iconCount
+ * @property {{variant?: string}} [default]
+ * @property {string[]} definitions the icon definitions its `map` covers
  */
 
 /**
@@ -218,16 +237,44 @@ export async function describeInstalled(project, scanned) {
       );
     // Components come from the scan above; loading every component doc again
     // here would only slow the list down.
+    // Icon sets are read below, only with the opt-in.
     const {identities} = await collectIdentities({
       ...integration,
       components: undefined,
+      iconSets: undefined,
     });
+    // Icon sets are listed the way every icon surface sees them: a set that
+    // is invalid or whose module does not resolve answers nothing (FR9).
+    // They are experimental (spec:AST-017 FR27), so discover lists them only
+    // in a project that opts in with `experimental.iconSet`.
+    const {sets, withdrawn} = optedIntoIconSets(project)
+      ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
+      : {sets: [], withdrawn: []};
     installed.push({
       ...base,
       templates: identities.templates.map(t => t.id),
       docs: identities.docs,
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
+      iconSets: sets.map(set => set.name),
+      iconSetDetails: sets.map(set => ({
+        name: set.name,
+        displayName: set.displayName,
+        description: set.description,
+        license: set.license,
+        iconCount: set.data.icons.length,
+        ...(set.data.default ? {default: set.data.default} : {}),
+        definitions: [...Object.keys(set.data.map ?? {})].sort(),
+      })),
+      // Never listed; named only to say why a lookup of one answers nothing.
+      ...(withdrawn.length > 0
+        ? {
+            withdrawnIconSets: withdrawn.map(each => ({
+              name: each.name,
+              reason: each.reason,
+            })),
+          }
+        : {}),
     });
   }
   return installed;
@@ -505,13 +552,14 @@ function savedCopyPath(cacheDir, from, request) {
 /**
  * @param {string} file
  * @param {string} label
+ * @param {boolean} iconSets the project opts into icon sets
  */
-function readSavedCopy(file, label) {
+function readSavedCopy(file, label, iconSets) {
   try {
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     return {
       savedAt: String(saved.savedAt),
-      catalog: parseDiscoverCatalog(saved.catalog, label),
+      catalog: parseDiscoverCatalog(saved.catalog, label, {iconSets}),
     };
   } catch {
     return null;
@@ -541,8 +589,9 @@ function writeSavedCopy(file, catalog) {
  * @param {{package?: string, version?: string}} request
  * @param {string} label
  * @param {number} timeoutMs
+ * @param {boolean} iconSets the project opts into icon sets
  */
-async function callSource(source, request, label, timeoutMs) {
+async function callSource(source, request, label, timeoutMs, iconSets) {
   const controller = new AbortController();
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
@@ -561,7 +610,7 @@ async function callSource(source, request, label, timeoutMs) {
       ),
       timedOut,
     ]);
-    return parseDiscoverCatalog(answer, label);
+    return parseDiscoverCatalog(answer, label, {iconSets});
   } finally {
     clearTimeout(timer);
   }
@@ -586,6 +635,9 @@ async function callOwnSources(project, request = {}, options = {}) {
   const result = {sources: [], packages: []};
   const fromDoor = doorSources();
   if (project == null && fromDoor.length === 0) return result;
+  // Without the opt-in, icon-set items and fields are unknown before the
+  // catalog is checked, so one cannot fail a source (spec:AST-051 FR7).
+  const iconSets = optedIntoIconSets(project);
 
   /** @type {Array<{from: string, key?: string, source?: DiscoverSource, error?: string}>} */
   const origins = [];
@@ -635,7 +687,7 @@ async function callOwnSources(project, request = {}, options = {}) {
     /** @type {import('../../authoring/discover/type').DiscoverCatalog} */
     let catalog;
     try {
-      catalog = await callSource(source, ask, label, timeoutMs);
+      catalog = await callSource(source, ask, label, timeoutMs, iconSets);
       writeSavedCopy(file, catalog);
       result.sources.push({
         name: catalog.source.name,
@@ -646,7 +698,7 @@ async function callOwnSources(project, request = {}, options = {}) {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const saved = readSavedCopy(file, label);
+      const saved = readSavedCopy(file, label, iconSets);
       if (saved == null) {
         result.sources.push({
           name: from,
@@ -724,8 +776,64 @@ export async function callSources(project, request = {}, options = {}) {
     ],
     // Source order: the first entry per integration is the one discover
     // keeps. Official packages are put first only where discover shows them.
-    packages: [...own.packages, ...added],
+    // An experimental kind is a kind this project does not read unless it
+    // opts in, so its items are ignored like any unknown kind (FR7).
+    packages: withoutUnreadKinds(project, [...own.packages, ...added]),
   };
+}
+
+/**
+ * The experimental item kinds a catalog may list (spec:AST-017 FR27):
+ * `icon-set`, read only in a project that sets `experimental.iconSet`.
+ */
+export const EXPERIMENTAL_KINDS = /** @type {const} */ (['icon-set']);
+
+/** The item kinds every project reads: the catalog kinds, less experimental ones. */
+export const STABLE_KINDS = DISCOVER_KINDS.filter(
+  kind =>
+    !(/** @type {readonly string[]} */ (EXPERIMENTAL_KINDS).includes(kind)),
+);
+
+/**
+ * The item kinds discover reads in the project at the working directory, or
+ * the stable kinds when it cannot be read.
+ * @returns {Promise<readonly string[]>}
+ */
+export async function loadReadKinds() {
+  return readKinds(await Project.load().catch(() => undefined));
+}
+
+/**
+ * The item kinds discover reads in this project: every stable kind, and the
+ * experimental ones when the project opts in.
+ * @param {Project | undefined} project
+ * @returns {readonly string[]}
+ */
+export function readKinds(project) {
+  return optedIntoIconSets(project) ? DISCOVER_KINDS : STABLE_KINDS;
+}
+
+/**
+ * Whether the project opts into icon sets with `experimental.iconSet`.
+ * @param {Project | undefined} project
+ */
+export function optedIntoIconSets(project) {
+  return Boolean(project?.config?.experimental?.iconSet);
+}
+
+/**
+ * @template {{contributions: Array<{kind: string}>}} P
+ * @param {Project | undefined} project
+ * @param {P[]} packages
+ * @returns {P[]}
+ */
+function withoutUnreadKinds(project, packages) {
+  if (optedIntoIconSets(project)) return packages;
+  const kinds = readKinds(project);
+  return packages.map(pkg => ({
+    ...pkg,
+    contributions: pkg.contributions.filter(c => kinds.includes(c.kind)),
+  }));
 }
 
 /**
@@ -935,6 +1043,7 @@ export const KIND_FIELDS = /** @type {const} */ ([
   ['theme', 'themes'],
   ['codemod', 'codemods'],
   ['agent-doc', 'agentDocs'],
+  ['icon-set', 'iconSets'],
 ]);
 
 /**

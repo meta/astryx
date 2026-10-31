@@ -226,7 +226,10 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   MAY join it only in a minor release that names the addition, and a change
   that can fail a build that passes, including a stricter rule for an existing
   finding, MAY ship only in a minor release that names it. Before that
-  release, its checks and failure codes MAY change in any release. A name a
+  release, its checks and failure codes MAY change in any release. A failure
+  code that fires only for a package declaring an experimental manifest key
+  (`spec:AST-017/FR27`, `spec:AST-084`) MAY join in a patch release, since a
+  package without the key never sees it. A name a
   patch release adds to Core or the CLI (a component, template, or topic) MAY
   raise a conflict with a package's own name. Each `doctor integration`
   subcommand MUST keep its exit codes, and its JSON MAY change only by

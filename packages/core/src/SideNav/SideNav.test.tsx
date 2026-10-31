@@ -26,6 +26,9 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {Button} from '../Button';
 import {SideNav} from './SideNav';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
+import {NavHeadingMenu, NavHeadingMenuItem} from '../NavMenu';
 import {SideNavCollapseButton} from './SideNavCollapseButton';
 import {SideNavHeading} from './SideNavHeading';
 import {SideNavItem} from './SideNavItem';
@@ -425,6 +428,165 @@ describe('SideNavHeading', () => {
       </>
     );
 
+    it('leaves a press on caller content that is not an item to that content: a button click and a link click run (interaction-modality INV4)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      const onButton = vi.fn();
+      const onLink = vi.fn((event: React.MouseEvent) => event.preventDefault());
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <>
+              <button type="button" onClick={onButton}>
+                Switch account
+              </button>
+              <a href="#docs" onClick={onLink}>
+                Docs
+              </a>
+            </>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      for (const pointer of [
+        {pointerType: 'mouse', pointerId: 1, button: 0},
+        {pointerType: 'touch', pointerId: 2},
+      ]) {
+        onButton.mockClear();
+        onLink.mockClear();
+        const button = screen.getByRole('button', {
+          name: 'Switch account',
+          hidden: true,
+        });
+        fireEvent.pointerDown(button, pointer);
+        fireEvent.pointerUp(button, pointer);
+        // A pointer's click reports detail 1 (a keyboard's reports 0).
+        fireEvent.click(button, {detail: 1});
+        expect(onButton).toHaveBeenCalledTimes(1);
+        const link = screen.getByRole('link', {name: 'Docs', hidden: true});
+        fireEvent.pointerDown(link, pointer);
+        fireEvent.pointerUp(link, pointer);
+        fireEvent.click(link, {detail: 1});
+        expect(onLink).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its menu to the browser', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      expectNativeLinkClicks(
+        screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
+      );
+    });
+
+    it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="One" onClick={() => {}} />
+              <NavHeadingMenuItem label="Two" onClick={() => {}} />
+              <NavHeadingMenuItem label="Three" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      item('One').focus();
+      fireEvent.keyDown(item('One'), {key: 'ArrowDown'});
+      expect(item('Two')).toHaveFocus();
+      fireEvent.keyDown(item('Two'), {key: 'ArrowDown'});
+      expect(item('Three')).toHaveFocus();
+      fireEvent.keyDown(item('Three'), {key: 'ArrowUp'});
+      expect(item('Two')).toHaveFocus();
+    });
+
+    it('closes when a mouse pressed on a NavHeadingMenu item is released outside the menu (useMenuPress FR3)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <>
+          <SideNavHeading
+            heading="My App"
+            menu={
+              <NavHeadingMenu>
+                <NavHeadingMenuItem label="Alpha" onClick={() => {}} />
+                <NavHeadingMenuItem label="Beta" onClick={() => {}} />
+              </NavHeadingMenu>
+            }
+          />
+          <button type="button">Outside</button>
+        </>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      const mouse = {pointerType: 'mouse', pointerId: 3, button: 0};
+      const outside = screen.getByRole('button', {name: 'Outside'});
+      fireEvent.pointerDown(
+        screen.getByRole('menuitem', {name: 'Alpha', hidden: true}),
+        mouse,
+      );
+      fireEvent.pointerMove(outside, mouse);
+      fireEvent.pointerUp(outside, mouse);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('acts on the item a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      const onAlpha = vi.fn();
+      const onBeta = vi.fn();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <>
+              <div role="menuitem" tabIndex={-1} onClick={onAlpha}>
+                Alpha
+              </div>
+              <div role="menuitem" tabIndex={-1} onClick={onBeta}>
+                Beta
+              </div>
+            </>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      for (const pointer of [
+        {pointerType: 'touch', pointerId: 1},
+        {pointerType: 'mouse', pointerId: 2, button: 0},
+      ]) {
+        onAlpha.mockClear();
+        onBeta.mockClear();
+        fireEvent.pointerDown(item('Alpha'), pointer);
+        fireEvent.pointerMove(item('Beta'), pointer);
+        fireEvent.pointerUp(item('Beta'), pointer);
+        expect(onBeta).toHaveBeenCalledTimes(1);
+        expect(onAlpha).not.toHaveBeenCalled();
+      }
+    });
+
     it('does not wrap the heading menu popup in a modal dialog', async () => {
       const user = userEvent.setup();
       render(<SideNavHeading heading="My App" menu={menuItems} />);
@@ -668,18 +830,27 @@ describe('SideNavHeading headerEndContent', () => {
     expect(screen.getByTestId('end-badge')).toBeInTheDocument();
   });
 
-  it('renders headerEndContent inside the link in isWholeHeadingLink path', () => {
+  it('renders headerEndContent beside the link, not inside it, in isWholeHeadingLink path', () => {
+    const onPress = vi.fn();
     render(
       <SideNavHeading
         heading="My App"
         headingHref="/home"
-        headerEndContent={<span data-testid="end-badge">3</span>}
+        headerEndContent={
+          <button type="button" onClick={onPress}>
+            Create
+          </button>
+        }
       />,
     );
-    const badge = screen.getByTestId('end-badge');
-    expect(badge).toBeInTheDocument();
-    // Badge renders inside the link
-    expect(badge.closest('a')).not.toBeNull();
+    const link = screen.getByRole('link', {name: 'My App'});
+    expect(link).toHaveAttribute('href', '/home');
+    // A control inside a link is invalid and its press would follow the link.
+    const button = screen.getByRole('button', {name: 'Create'});
+    expect(button.closest('a')).toBeNull();
+    expect(link.parentElement).toBe(button.parentElement?.parentElement);
+    fireEvent.click(button);
+    expect(onPress).toHaveBeenCalledTimes(1);
   });
 
   it('renders headerEndContent in isWholeHeadingTrigger path', () => {
@@ -793,10 +964,71 @@ describe('SideNavItem', () => {
     expect(button).not.toHaveAttribute('aria-current');
   });
 
-  it('disables the button when isDisabled', () => {
+  // spec:AST-085 FR1, FR2: a disabled item stays focusable but is inert.
+  it('keeps a disabled item focusable and exposes aria-disabled', () => {
     render(<SideNavItem label="Dashboard" isDisabled />);
-    const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    button.focus();
+    expect(button).toHaveFocus();
+  });
+
+  it('does not run onClick on a disabled item from a click, Enter or Space', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<SideNavItem label="Dashboard" onClick={handleClick} isDisabled />);
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.click(button);
+    button.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('renders a disabled item with href as a focusable button that does not navigate', () => {
+    const handleClick = vi.fn();
+    render(
+      <SideNavItem
+        label="Dashboard"
+        href="/dashboard"
+        onClick={handleClick}
+        isDisabled
+      />,
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).not.toHaveAttribute('href');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(button);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('exposes aria-disabled on the primary of a disabled split row', () => {
+    render(
+      <SideNavItem label="Settings" href="/settings" collapsible isDisabled>
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+    const primary = screen.getByRole('button', {name: 'Settings'});
+    expect(primary).not.toHaveAttribute('disabled');
+    expect(primary).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps focus on an item that becomes disabled while focused', () => {
+    const item = (isDisabled: boolean) => (
+      <SideNavItem
+        label="Dashboard"
+        onClick={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(item(false));
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    button.focus();
+    rerender(item(true));
+    expect(screen.getByRole('button', {name: 'Dashboard'})).toHaveFocus();
   });
 
   it('calls onClick handler', async () => {
@@ -2276,6 +2508,18 @@ describe('SideNavItem — mobile drawer close-on-activate', () => {
     expect(closeMobileNav).not.toHaveBeenCalled();
   });
 
+  it('does not close the mobile nav when a disabled item is activated', async () => {
+    const user = userEvent.setup();
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem label="Home" href="/" isDisabled data-testid="item" />,
+    );
+    const item = screen.getByTestId('item');
+    fireEvent.click(item);
+    item.focus();
+    await user.keyboard('{Enter}');
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
   it('does not close the mobile nav when a row action is clicked', async () => {
     const user = userEvent.setup();
     const onActionClick = vi.fn();
@@ -2324,7 +2568,7 @@ describe('SideNav keyboard operation', () => {
     expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
   });
 
-  it('skips a disabled item in the tab order', async () => {
+  it('keeps a disabled item in the tab order', async () => {
     const user = userEvent.setup();
     render(
       <SideNav>
@@ -2336,6 +2580,8 @@ describe('SideNav keyboard operation', () => {
 
     await user.tab();
     expect(screen.getByRole('button', {name: 'Dashboard'})).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Archived'})).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
   });
@@ -2390,7 +2636,37 @@ describe('SideNav keyboard operation', () => {
 // Focus management (audit §6 V7)
 // =============================================================================
 
+/**
+ * Holds requestAnimationFrame callbacks until `flush`, so a test decides when
+ * a popover's auto-focus frame runs instead of racing a timer.
+ */
+function holdAnimationFrames() {
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    nextFrame += 1;
+    frames.set(nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+    frames.delete(frame);
+  });
+  return {
+    flush() {
+      act(() => {
+        const due = [...frames.values()];
+        frames.clear();
+        due.forEach(callback => callback(performance.now()));
+      });
+    },
+  };
+}
+
 describe('SideNav focus management', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('keeps focus on the toggle when a group collapses', async () => {
     const user = userEvent.setup();
     render(
@@ -2428,6 +2704,7 @@ describe('SideNav focus management', () => {
   });
 
   it('returns focus to the trigger when the collapsed submenu closes', async () => {
+    const frames = holdAnimationFrames();
     const user = userEvent.setup();
     renderCollapsed(
       <SideNavItem label="Settings" icon={StubIcon} data-testid="parent">
@@ -2438,10 +2715,33 @@ describe('SideNav focus management', () => {
     const trigger = screen.getByTestId('parent');
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // The submenu focuses its first link in the frame after it opens.
+    frames.flush();
+    expect(screen.getByText('General').closest('a')).toHaveFocus();
 
+    // Closing restores focus as part of the close itself.
     await user.keyboard('{Escape}');
-    // The layer restores focus asynchronously after it closes.
-    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger).toHaveFocus();
+  });
+
+  it('keeps focus on the trigger when the submenu closes before its first frame', async () => {
+    const frames = holdAnimationFrames();
+    const user = userEvent.setup();
+    renderCollapsed(
+      <SideNavItem label="Settings" icon={StubIcon} data-testid="parent">
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+
+    const trigger = screen.getByTestId('parent');
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    // The open's auto-focus frame, late on a busy runner, must not land
+    // focus in the closed submenu.
+    frames.flush();
+    expect(trigger).toHaveFocus();
   });
 });
 
@@ -3696,33 +3996,280 @@ describe('SideNav collapse conflict warning', () => {
 // SideNavItem — collapsed-from-mount rail tooltip
 // =============================================================================
 
+// Two interchangeable link components: switching between them remounts the
+// rendered link element.
+function RailLinkA({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+  return <a ref={ref} {...props} />;
+}
+
+function RailLinkB({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+  return <a ref={ref} {...props} />;
+}
+
 describe('SideNavItem collapsed-from-mount rail tooltip', () => {
-  // #7692: a childless item that mounts inside an already-collapsed SideNav
-  // renders its Tooltip inside the very element anchorRef points at. React
-  // attaches that ref only after the tooltip's layout effect has run, so the
-  // tooltip never attached and a persisted collapsed rail lost all tooltips
-  // on page load.
-  it('anchors the rail tooltip when the nav is collapsed at mount', async () => {
-    render(
+  // #7435 / #7692: a childless item that mounts inside an already-collapsed
+  // SideNav (the persisted-collapse case) must attach its tooltip on the first
+  // render, and the tooltip must describe the control that takes focus — the
+  // link or button — not the row around it.
+  function railTooltipFor(trigger: HTMLElement) {
+    const id = trigger.getAttribute('aria-describedby');
+    return id == null ? null : document.getElementById(id);
+  }
+
+  function renderRail(item: ReactNode) {
+    return render(
       <SideNav
         aria-label="Main"
         collapsible={{isCollapsed: true, hasButton: false}}>
-        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        {item}
       </SideNav>,
     );
-    const link = screen.getByRole('link', {name: 'Dashboard'});
-    const anchor = link.parentElement as HTMLElement;
+  }
 
-    // The tooltip attaches despite mounting inside its own anchor: the item
-    // row is described by the tooltip layer.
-    await waitFor(() => {
-      expect(anchor.getAttribute('aria-describedby')).not.toBe('');
-    });
-    const layer = document.getElementById(
-      anchor.getAttribute('aria-describedby') as string,
+  let showPopover: ReturnType<typeof vi.spyOn> | undefined;
+
+  afterEach(() => {
+    showPopover?.mockRestore();
+    showPopover = undefined;
+    vi.useRealTimers();
+  });
+
+  it('describes the rail link by its tooltip when the nav is collapsed at mount', () => {
+    renderRail(
+      <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />,
     );
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+
+    const layer = railTooltipFor(link);
     expect(layer).not.toBeNull();
     expect(layer).toHaveAttribute('role', 'tooltip');
     expect(layer).toHaveTextContent('Dashboard');
+  });
+
+  it('shows a disabled item its label when the pointer rests on its row', async () => {
+    // The disabled control is `pointer-events: none`, so in a browser the
+    // pointer lands on the row; the tooltip has to listen there.
+    vi.useFakeTimers();
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    renderRail(
+      <SideNavItem
+        label="Analytics (Coming Soon)"
+        icon={StubIcon}
+        href="/analytics"
+        isDisabled
+      />,
+    );
+    // Let the row's tooltip attach after the commit.
+    await act(async () => {});
+    const button = screen.getByRole('button', {
+      name: 'Analytics (Coming Soon)',
+    });
+    const row = button.parentElement as HTMLElement;
+    const layer = screen.getByRole('tooltip', {hidden: true});
+    expect(layer).toHaveTextContent('Analytics (Coming Soon)');
+
+    fireEvent.mouseEnter(row);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(spy.mock.contexts).toContain(layer);
+  });
+
+  it('describes a disabled rail item on the control that takes focus', async () => {
+    // spec:AST-085 FR5: the disabled control keeps its tab stop, so the label
+    // tooltip has to describe it, not the row around it.
+    renderRail(
+      <SideNavItem
+        label="Analytics (Coming Soon)"
+        icon={StubIcon}
+        href="/analytics"
+        isDisabled
+      />,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {
+      name: 'Analytics (Coming Soon)',
+    });
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(railTooltipFor(button)).toHaveTextContent('Analytics (Coming Soon)');
+    expect(button.parentElement).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('shows a disabled rail item its label when Tab focuses it', async () => {
+    // The row listens for the tooltip, but it is not focusable itself, so it
+    // has to hear the focus that bubbles up from the control.
+    const user = userEvent.setup();
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    renderRail(
+      <SideNavItem
+        label="Analytics (Coming Soon)"
+        icon={StubIcon}
+        href="/analytics"
+        isDisabled
+      />,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {
+      name: 'Analytics (Coming Soon)',
+    });
+
+    await user.tab();
+    expect(button).toHaveFocus();
+    expect(spy.mock.contexts).toContain(railTooltipFor(button));
+  });
+
+  it('describes the link once a disabled item is enabled in the rail', () => {
+    const item = (isDisabled: boolean) => (
+      <SideNavItem
+        label="Dashboard"
+        icon={StubIcon}
+        href="/dashboard"
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = renderRail(item(true));
+    rerender(
+      <SideNav
+        aria-label="Main"
+        collapsible={{isCollapsed: true, hasButton: false}}>
+        {item(false)}
+      </SideNav>,
+    );
+
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    expect(railTooltipFor(link)).toHaveTextContent('Dashboard');
+  });
+
+  it('describes the new control when a rail item gains an href', () => {
+    const item = (href?: string) => (
+      <SideNavItem
+        label="Dashboard"
+        icon={StubIcon}
+        href={href}
+        onClick={() => {}}
+      />
+    );
+    const {rerender} = renderRail(item());
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    expect(railTooltipFor(button)).toHaveTextContent('Dashboard');
+
+    rerender(
+      <SideNav
+        aria-label="Main"
+        collapsible={{isCollapsed: true, hasButton: false}}>
+        {item('/dashboard')}
+      </SideNav>,
+    );
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    expect(railTooltipFor(link)).toHaveTextContent('Dashboard');
+  });
+
+  it('binds the replacement when a rail link element is replaced', () => {
+    // Switching the link component remounts the element; the tooltip must
+    // follow the new element.
+    vi.useFakeTimers();
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    const item = (as: typeof RailLinkA) => (
+      <SideNavItem
+        label="Dashboard"
+        icon={StubIcon}
+        href="/dashboard"
+        as={as}
+      />
+    );
+    const {rerender} = renderRail(item(RailLinkA));
+    const first = screen.getByRole('link', {name: 'Dashboard'});
+    rerender(
+      <SideNav
+        aria-label="Main"
+        collapsible={{isCollapsed: true, hasButton: false}}>
+        {item(RailLinkB)}
+      </SideNav>,
+    );
+
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    expect(link).not.toBe(first);
+    const layer = railTooltipFor(link);
+    expect(layer).toHaveTextContent('Dashboard');
+    fireEvent.mouseEnter(link);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(spy.mock.contexts).toContain(layer);
+  });
+
+  it("keeps the tooltip beside a caller's changing aria-describedby", () => {
+    const item = (hint: string) => (
+      <SideNavItem
+        label="Dashboard"
+        icon={StubIcon}
+        href="/dashboard"
+        aria-describedby={hint}
+      />
+    );
+    const {rerender} = renderRail(item('hint-a'));
+    rerender(
+      <SideNav
+        aria-label="Main"
+        collapsible={{isCollapsed: true, hasButton: false}}>
+        {item('hint-b')}
+      </SideNav>,
+    );
+
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const ids = (link.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(ids).toContain('hint-b');
+    expect(ids).toContain(tooltip.id);
+    expect(ids).not.toContain('hint-a');
+  });
+
+  it('shows the label when keyboard focus reaches a rail link', () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    renderRail(
+      <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />,
+    );
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    const layer = railTooltipFor(link);
+    // jsdom does not model `:focus-visible`; stand in for a keyboard focus.
+    const realMatches = link.matches.bind(link);
+    vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+
+    fireEvent.focusIn(link);
+    expect(spy.mock.contexts).toContain(layer);
+  });
+
+  it('keeps a tooltip that was open when the rail expanded shut on the next collapse', () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    const rail = (isCollapsed: boolean) => (
+      <SideNav aria-label="Main" collapsible={{isCollapsed, hasButton: false}}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+      </SideNav>
+    );
+    const {rerender} = render(rail(true));
+    const link = screen.getByRole('link', {name: 'Dashboard'});
+    fireEvent.mouseEnter(link);
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(spy.mock.contexts).toContain(railTooltipFor(link));
+
+    // Expanding (from a shortcut, say) removes the trigger without a leave.
+    rerender(rail(false));
+    spy.mockClear();
+    rerender(rail(true));
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });

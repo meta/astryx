@@ -1,9 +1,0 @@
-/* Copyright (c) Meta Platforms, Inc. and affiliates. */
-
-/* Neutralize the headerless CodeBlock copy button's negative margin so it
-   isn't flush against the container's right edge. */
-.commandBlock > button {
-  margin-inline-end: 0;
-  inset-inline-end: var(--spacing-3);
-  inset-block-start: var(--spacing-2);
-}

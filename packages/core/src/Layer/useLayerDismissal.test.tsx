@@ -10,9 +10,10 @@
  * question the stack exists to answer.
  */
 
-import {render, fireEvent} from '@testing-library/react';
-import {describe, expect, it, vi, afterEach} from 'vitest';
+import {render, fireEvent, cleanup} from '@testing-library/react';
+import {describe, expect, it, vi, afterEach, beforeEach} from 'vitest';
 import {StrictMode, useRef} from 'react';
+import {createPortal} from 'react-dom';
 
 import {LayerDepthProvider} from './LayerDepthContext';
 import {useLayerDismissal} from './useLayerDismissal';
@@ -466,6 +467,88 @@ describe('useLayerDismissal', () => {
 
       fireEvent.blur(field);
       expect(ask(onAsk)).toBe(true);
+    });
+
+    it('answers against the top-most layer of its own document', () => {
+      // A layer that opened later in a second document is on top there, not
+      // here: it cannot make a close request in this document decline.
+      const onAsk = vi.fn();
+      const frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      try {
+        render(<CloseRequestLayer onAsk={onAsk} />);
+        render(
+          createPortal(
+            <Layer onDismiss={vi.fn()} />,
+            frame.contentDocument!.body,
+          ),
+        );
+
+        expect(ask(onAsk)).toBe(true);
+      } finally {
+        cleanup();
+        frame.remove();
+      }
+    });
+  });
+
+  describe('in a second document', () => {
+    // A same-origin iframe stands in for any second document an app renders
+    // layers into through a portal, Document Picture-in-Picture included. A
+    // key press reaches only the document it happened in.
+    let frame: HTMLIFrameElement;
+    let secondDocument: Document;
+
+    beforeEach(() => {
+      frame = document.createElement('iframe');
+      document.body.appendChild(frame);
+      secondDocument = frame.contentDocument!;
+    });
+
+    afterEach(() => {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+    });
+
+    it('dismisses the top-most layer of the document the press arrived in', () => {
+      const here = vi.fn();
+      const there = vi.fn();
+      render(<Layer onDismiss={here} />);
+      // Registered later, so one order across both documents would put it on
+      // top of the layer here as well.
+      render(createPortal(<Layer onDismiss={there} />, secondDocument.body));
+
+      fireEvent.keyDown(secondDocument, {key: 'Escape'});
+      expect(there).toHaveBeenCalledTimes(1);
+      expect(here).not.toHaveBeenCalled();
+
+      pressEscape();
+      expect(here).toHaveBeenCalledTimes(1);
+      expect(there).toHaveBeenCalledTimes(1);
+    });
+
+    it('listens in a document once, and only while it holds a layer', () => {
+      const added = vi.spyOn(secondDocument, 'addEventListener');
+      const removed = vi.spyOn(secondDocument, 'removeEventListener');
+      const keydownCalls = (spy: typeof added) =>
+        spy.mock.calls.filter(([type]) => type === 'keydown').length;
+
+      const {unmount} = render(
+        createPortal(
+          <>
+            <Layer onDismiss={vi.fn()} />
+            <Layer onDismiss={vi.fn()} />
+          </>,
+          secondDocument.body,
+        ),
+      );
+      expect(keydownCalls(added)).toBe(1);
+      expect(keydownCalls(removed)).toBe(0);
+
+      unmount();
+      expect(keydownCalls(removed)).toBe(1);
     });
   });
 

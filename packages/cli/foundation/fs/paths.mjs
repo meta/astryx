@@ -687,10 +687,16 @@ export function findNodeModulesPackage(startDir, name) {
  *
  * @param {string} startDir
  * @param {string} name
+ * @param {number} [maxDepth] how many folders to walk up; `Infinity` walks
+ *   every ancestor, as Node's own resolution does
  * @returns {string|null} the package directory, or null when not installed
  */
-export function findInstalledPackage(startDir, name) {
-  for (const dir of readFolders(startDir, INSTALLED_REACH)) {
+export function findInstalledPackage(
+  startDir,
+  name,
+  maxDepth = INSTALLED_REACH,
+) {
+  for (const dir of readFolders(startDir, maxDepth)) {
     const packageDir = installedIn(dir, name);
     if (packageDir) return packageDir;
   }

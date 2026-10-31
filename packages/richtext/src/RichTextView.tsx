@@ -41,6 +41,7 @@ import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
 import type {
   AnyLexicalExtension,
@@ -119,6 +120,14 @@ export interface RichTextViewProps extends BaseProps {
    * serializable props.
    */
   markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
    * Additional read-only plugins to render inside the composer (e.g. hover
    * cards, decorators).
@@ -202,6 +211,7 @@ export function RichTextView({
   value,
   nodes,
   markdownExtensions,
+  codeLanguages,
   plugins,
   namespace = 'astryx-view',
   onParseError,
@@ -323,8 +333,8 @@ export function RichTextView({
         />
         {/* After the content, so the copy buttons and checkboxes follow it
             in tab order. */}
-        <CodeBlockHeaderPlugin />
-        <CodeSyntaxPlugin />
+        <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+        <CodeSyntaxPlugin codeLanguages={codeLanguages} />
         {markdownExtensions != null && markdownExtensions.length > 0 ? (
           <MarkdownExtensionsPlugin
             extensions={markdownExtensions}

@@ -120,8 +120,23 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
   // A run from a subfolder upgrades the project the folder belongs to, and
   // names files relative to the folder it ran in.
   const scoped = scopeToProject(options, cwd);
-  return relativeToOrigin(
-    await run(scoped.options, {cwd: scoped.cwd, origin: scoped.origin}),
-    scoped,
-  );
+  let result;
+  try {
+    result = await run(scoped.options, {
+      cwd: scoped.cwd,
+      origin: scoped.origin,
+    });
+  } catch (err) {
+    // A failure after codemods wrote carries their receipt; name its files
+    // from the folder the command ran in, as a returned receipt does.
+    const receipt = /** @type {any} */ (err)?.receipt;
+    if (err instanceof AstryxError && receipt) {
+      /** @type {any} */ (err).receipt = relativeToOrigin(
+        {type: 'upgrade.run', data: receipt},
+        scoped,
+      ).data;
+    }
+    throw err;
+  }
+  return relativeToOrigin(result, scoped);
 }

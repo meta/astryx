@@ -104,8 +104,9 @@ async function withStdoutOnStderr(load) {
  * no-cache jiti instance. A fresh CommonJS `.js` read evicts and reloads through
  * `require`; an ESM `.js` or `.mjs` read uses a cache-busted file URL. The
  * nearest package.json `type` decides `.js`, matching Node's package scopes.
- * Normal loads retain module caching. `fresh` is an explicit migration-only
- * escape hatch for rereading files that a codemod changed during this process.
+ * Normal loads retain module caching. `fresh` rereads a file that changed
+ * during this process: one a codemod rewrote, or an edited doc file (the doc
+ * importers in ../doc-compiler/import.mjs read each change once).
  * Anything the module writes to stdout while it loads goes to stderr.
  *
  * @param {string} file absolute path

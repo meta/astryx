@@ -499,3 +499,34 @@ describe('component dispatcher — detail levels on single component (text only)
     SLOW,
   );
 });
+
+describe('component not-found suggestions', () => {
+  const suggested = async (/** @type {string} */ name) => {
+    const error = await component(name, {cwd}).catch(e => e);
+    expect(error).toBeInstanceOf(AstryxError);
+    expect(error.code).toBe('ERR_UNKNOWN_COMPONENT');
+    return error.suggestions.map((/** @type {{name: string}} */ s) => s.name);
+  };
+
+  it(
+    'leaves out a weaker match after a strong first suggestion',
+    async () => {
+      // FieldLabel is another name for it; past the second suggestion, the
+      // matches on one word of the name ("input", "label") are weaker and add
+      // only noise.
+      const names = await suggested('InputLabel');
+      expect(names[0]).toBe('FieldLabel');
+      expect(names).toHaveLength(2);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a close spelling of the whole name after a stronger first match',
+    async () => {
+      expect(await suggested('Blockqoute')).toContain('Blockquote');
+      expect(await suggested('TextrAea')).toContain('TextArea');
+    },
+    SLOW,
+  );
+});

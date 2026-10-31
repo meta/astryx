@@ -430,7 +430,7 @@ export default function MotionJsMirrorPage() {
                   <ChartPane mode="after" />
                   <Text type="supporting" color="secondary">
                     <code>scaledMs(&apos;--duration-reveal&apos;)</code> and{' '}
-                    <code>
+                    <code style={{overflowWrap: 'anywhere'}}>
                       bezierAt(parseBezier(rawToken(&apos;--ease-move&apos;)),
                       k)
                     </code>{' '}
@@ -468,7 +468,7 @@ export default function MotionJsMirrorPage() {
         />
       </VStack>
 
-      <Grid columns={{minWidth: 460}} gap={4}>
+      <Grid columns={{minWidth: 460, max: 2}} gap={4}>
         <DemoCard
           title="Why the defaults are not hardcoded in JS"
           question="Because a theme retunes the whole scale, and a constants file would quietly stop agreeing with the stylesheet.">

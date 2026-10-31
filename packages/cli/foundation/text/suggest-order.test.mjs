@@ -86,6 +86,50 @@ describe('orderByAffinity', () => {
   });
 });
 
+describe('orderByAffinity with closest', () => {
+  const closest = (/** @type {string[]} */ list, /** @type {string} */ typed) =>
+    orderByAffinity(typed, list, n => [n], {closest: true});
+
+  it('keeps the items with every typed word after the same words, and drops the weaker ones', () => {
+    expect(
+      closest(
+        [
+          'zeta-panel',
+          'other',
+          'wide-panel-grid',
+          'panel-grid',
+          'grid-panel-x',
+        ],
+        'PanelGrid',
+      ),
+    ).toEqual(['panel-grid', 'wide-panel-grid', 'grid-panel-x']);
+  });
+
+  it('keeps every item with a typed word when the best has only some of them', () => {
+    expect(closest(['table', 'card-grid', 'list-view'], 'card list')).toEqual([
+      'card-grid',
+      'list-view',
+    ]);
+  });
+
+  it('does not count one-letter words', () => {
+    const list = ['use-a-theme', 'author-a-theme', 'card', 'table'];
+    expect(closest(list, 'a11y')).toEqual(list);
+    expect(closest(list, 'make-a-card')).toEqual(['card']);
+  });
+
+  it('keeps the whole list, in its order, when no item has a typed word', () => {
+    expect(closest(['c', 'b', 'a'], 'thing')).toEqual(['c', 'b', 'a']);
+  });
+
+  it('only ever shortens the list', () => {
+    const list = ['alpha-beta', 'beta', 'gamma', 'alpha'];
+    const out = closest(list, 'alpha beta');
+    expect(out.every(n => list.includes(n))).toBe(true);
+    expect(out.length).toBeLessThanOrEqual(list.length);
+  });
+});
+
 describe('rankComponentSuggestions', () => {
   const all = [
     'Zebra',
@@ -248,6 +292,15 @@ describe('orderRouteSuggestions', () => {
     expect(names(orderRouteSuggestions('guide/help/extra', kids))[0]).toBe(
       'guide/help',
     );
+  });
+
+  it('with closest, keeps only the child the route names', () => {
+    expect(
+      names(orderRouteSuggestions('guide/ship-it', kids, {closest: true})),
+    ).toEqual(['guide/ship']);
+    expect(
+      names(orderRouteSuggestions('guide/theme', kids, {closest: true})),
+    ).toEqual(names(kids));
   });
 
   it('compares whole routes when the suggestions share no namespace', () => {

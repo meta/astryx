@@ -11,7 +11,7 @@ export const butterPaletteRefs = {
     dark: {25: '#52237b', 80: '#ddb9f6', 90: '#f2daff'},
   },
   green: {
-    light: {25: '#004a05', 70: '#7bbf7a', 80: '#a2d7a0', 85: '#b6e3b4', 90: '#caeec8'},
+    light: {25: '#004a05', 55: '#4a984a', 70: '#7bbf7a', 80: '#a2d7a0', 85: '#b6e3b4', 90: '#caeec8'},
     dark: {15: '#013004', 20: '#063c0a', 70: '#83bc82', 80: '#a8d4a6', 90: '#cdedcc'},
   },
   neutral: {
@@ -31,7 +31,7 @@ export const butterPaletteRefs = {
     dark: {15: '#4c0700', 25: '#6f1400', 80: '#ffb09b', 85: '#ffc5b5', 90: '#ffd9cf'},
   },
   yellow: {
-    light: {25: '#443c00', 30: '#514700', 70: '#bfae35', 80: '#dfcf5b', 85: '#f0df72', 90: '#fdee8c', 95: '#fff7c0'},
+    light: {25: '#443c00', 30: '#514700', 55: '#958500', 70: '#bfae35', 80: '#dfcf5b', 85: '#f0df72', 90: '#fdee8c', 95: '#fff7c0'},
     dark: {15: '#2c2600', 25: '#443c00', 70: '#bcae4e', 75: '#cdbe59', 85: '#eedf75', 90: '#fdee8c'},
   },
   teal: {
@@ -40,6 +40,7 @@ export const butterPaletteRefs = {
   },
   accent: {
     light: {35: '#194ce8', 40: '#225bff', 55: '#4d82ff'},
+    dark: {70: '#81a9ff'},
   },
   cyan: {
     light: {25: '#004649', 80: '#8dd2d3', 90: '#a9eff0'},

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file BottomSheetKeyboard.a11y.browser.spec.ts
@@ -358,7 +359,9 @@ async function openNestedPopover(
     await page.getByRole('checkbox', {name: 'Show scrim'}).check();
   }
   await page.getByRole('button', {name: 'Open sheet', exact: true}).click();
-  const openSheets = page.locator('dialog[open]');
+  // A modal sheet is an open dialog; a non-modal one is a manual popover in
+  // the top layer, which has no `open` attribute (component:BottomSheet FR11).
+  const openSheets = page.locator('dialog[open], dialog:popover-open');
   await expect(openSheets).toHaveCount(1);
   const about = page.getByRole('button', {name: 'About', exact: true});
   // WebKit does not focus a button on mouse click, so open from the keyboard.

@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Tooltip, useTooltip} from '@astryxdesign/core/Tooltip';
 import {Button} from '@astryxdesign/core/Button';
@@ -160,6 +161,137 @@ export const LongContent: Story = {
     content:
       'This is a longer tooltip that contains more detailed information about the element.',
     children: <Button label="Hover for more info">Hover for more info</Button>,
+  },
+};
+
+/** Sixty lines: taller than the room above or below a mid-page trigger. */
+const TALL_LINES = Array.from(
+  {length: 60},
+  (_, i) => `Line ${i + 1} of a tooltip taller than the space around it`,
+);
+
+/**
+ * Content taller than the room above and below its trigger. The page is two
+ * and a half viewports tall so the trigger can be scrolled to any height.
+ */
+export const TallContent: Story = {
+  parameters: {layout: 'fullscreen'},
+  args: {
+    placement: 'above',
+    content: (
+      <div>
+        {TALL_LINES.map(line => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>
+    ),
+    children: <Button label="Hover for details">Hover for details</Button>,
+  },
+  render: args => (
+    <div
+      style={{
+        minHeight: '250vh',
+        display: 'grid',
+        placeItems: 'center',
+      }}>
+      <Tooltip {...args} />
+    </div>
+  ),
+};
+
+/**
+ * A tall tooltip held open while its render call moves from a plain container
+ * into a paragraph, which hosts the layer elsewhere and remounts it. The
+ * replacement must keep its trigger clear exactly as the first one did.
+ */
+export const TallContentMovingHost: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: function TallContentMovingHostExample() {
+    const [inParagraph, setInParagraph] = useState(false);
+    const tooltip = useTooltip({placement: 'above', isOpen: true});
+    const rendered = tooltip.renderTooltip(
+      <div>
+        {TALL_LINES.map(line => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>,
+    );
+    return (
+      <div style={{minHeight: '100vh', display: 'grid', placeItems: 'center'}}>
+        <div
+          style={{
+            position: 'fixed',
+            insetBlockStart: 16,
+            insetInlineStart: 16,
+          }}>
+          <Button
+            label="Move the tooltip's host"
+            onClick={() => setInParagraph(value => !value)}>
+            Move the tooltip&apos;s host
+          </Button>
+        </div>
+        <Button
+          label="Tall tooltip trigger"
+          ref={tooltip.ref}
+          aria-describedby={tooltip.describedBy}>
+          Tall tooltip trigger
+        </Button>
+        {inParagraph ? <p>{rendered}</p> : <div>{rendered}</div>}
+      </div>
+    );
+  },
+};
+
+/**
+ * A tooltip held open while its caller replaces the trigger element with
+ * another one in the same place. The replacement is the anchor from then on,
+ * and the tooltip must keep it clear as it moves or resizes.
+ */
+export const TallContentReplacedTrigger: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: function TallContentReplacedTriggerExample() {
+    const [generation, setGeneration] = useState(0);
+    const tooltip = useTooltip({placement: 'above', isOpen: true});
+    return (
+      <div style={{minHeight: '100vh'}}>
+        <div
+          style={{
+            position: 'fixed',
+            insetBlockStart: 16,
+            insetInlineStart: 16,
+          }}>
+          <Button
+            label="Replace the trigger"
+            onClick={() => setGeneration(value => value + 1)}>
+            Replace the trigger
+          </Button>
+        </div>
+        {/* The trigger's bottom edge sits 682px down, so it grows upward. */}
+        <div
+          style={{
+            blockSize: 682,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+          }}>
+          <Button
+            key={generation}
+            label={`Trigger ${generation + 1}`}
+            ref={tooltip.ref}
+            aria-describedby={tooltip.describedBy}>
+            {`Trigger ${generation + 1}`}
+          </Button>
+        </div>
+        {tooltip.renderTooltip(
+          <div>
+            <div>A tooltip that stays open</div>
+            {Array.from({length: 17}, (_, i) => (
+              <div key={i}>{`Line ${i + 1}`}</div>
+            ))}
+          </div>,
+        )}
+      </div>
+    );
   },
 };
 

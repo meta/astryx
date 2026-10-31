@@ -57,8 +57,15 @@ export function registerUpgrade(program) {
           // already printed the error before throwing.
           logger.setSilent(json);
           if (e instanceof AstryxError) {
-            if (json) jsonError(e.message, undefined, e.code);
-            else {
+            if (json) {
+              // A failed migration still names the files it already changed.
+              jsonError(
+                e.message,
+                undefined,
+                e.code,
+                /** @type {any} */ (e).receipt,
+              );
+            } else {
               // The logger was silent only for --list; replay the error there.
               // Non-list failures were already printed by the API.
               if (isList) logger.error(e.message);

@@ -597,12 +597,12 @@ export const PREVIEW_PLAN: ReadonlyArray<PreviewRow> = [
     today: 'Nothing.',
     gap: 'No hover or active transition, unlike every sibling nav item.',
     shows:
-      'A tint transition at the state token, beside the untransitioned original.',
+      'A tint transition at the state token (--duration-fast on --ease-standard), gated to fine pointers that hover, beside the untransitioned original.',
     hardCase:
       'Hover on a touch device, where a tap fires a false hover. The rubric requires this to be gated to fine pointers, and this is the cheapest place to prove the gate works.',
     controls: ['duration', 'pointer type', 'reduced motion'],
     status: 'built',
-    rig: 'TintRig',
+    rig: 'NavTintRig',
     priority: 3,
     measurementNote: null,
   },

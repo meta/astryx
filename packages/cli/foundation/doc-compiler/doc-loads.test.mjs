@@ -65,12 +65,11 @@ const RUNNERS = {
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'eval ×2',
       'import(<computed>) ×3',
     ],
   },
@@ -101,6 +100,34 @@ const RUNNERS = {
   'clients/cli/commands/blog.mjs': {
     runs: SELF_DOCS,
     sites: ['import ../../../api/blog/blog.doc.mjs', 'import ./blog.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/icon.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/icon/icon.doc.mjs',
+      'import ../../../../api/icon/iconAdd.doc.mjs',
+      'import ../../../../api/icon/iconMap.doc.mjs',
+      'import ../../../../api/icon/iconNewDefinition.doc.mjs',
+      'import ../../../../api/icon/iconNewSet.doc.mjs',
+      'import ../../../../api/icon/iconUse.doc.mjs',
+      'import ../experimental-icon-add.doc.mjs',
+      'import ../experimental-icon-map.doc.mjs',
+      'import ../experimental-icon-new-definition.doc.mjs',
+      'import ../experimental-icon-new-set.doc.mjs',
+      'import ../experimental-icon-use.doc.mjs',
+      'import ../experimental-icon.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/index.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/render.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-render.doc.mjs',
+    ],
   },
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
@@ -190,10 +217,7 @@ const RUNNERS = {
   },
   'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../api/hook/hook.doc.mjs',
-      'import ./hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,
@@ -276,6 +300,14 @@ const RUNNERS = {
     runs: "a package's component docs and topics, to read the props, overlays, sections, and replaces/extends they declare",
     sites: ['importDocModule ×2'],
   },
+  'foundation/discovery/doc-stability.mjs': {
+    runs: "an integration's template docs, to see which set `stability`",
+    sites: ['loadTopicModule'],
+  },
+  'foundation/discovery/template-icon-notes.mjs': {
+    runs: "an integration's template docs, to read the icons each declares",
+    sites: ['loadTopicModule'],
+  },
   'foundation/discovery/doc-fluff.mjs': {
     runs: "the CLI's own guides, to measure the median share of content words a topic's density is compared with",
     sites: ['builtinGuideFiles'],
@@ -309,17 +341,25 @@ const RUNNERS = {
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],
   },
   'foundation/doc-compiler/import.mjs': {
-    runs: 'authored doc files, for the doc reader and discovery',
+    runs: 'authored doc files, for the doc reader and discovery, and again after an edit',
     sites: [
-      '.import()',
-      'createJiti',
-      'import(<computed>) ×2',
-      'importUserModule',
+      '.import() ×2',
+      'createJiti ×2',
+      'import(<computed>) ×4',
+      'importUserModule ×2',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
     runs: 'authored doc files, each one handed to the compiler, with the loader its reader has always used',
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
+  },
+  'foundation/render/page-worker.mjs': {
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker',
+    sites: ['.import() ×3', 'createJiti ×2', 'require(@stylexjs/babel-plugin)'],
+  },
+  'foundation/render/render-page.mjs': {
+    runs: 'the render worker, so a page that never finishes can be stopped',
+    sites: ['worker_threads.Worker'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',

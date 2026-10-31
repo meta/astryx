@@ -2125,10 +2125,13 @@ describe('integrationPackCheck', () => {
     ).toThrow(/without a files array/);
   });
 
-  it('reports npm missing from PATH as pack_failed', async () => {
+  it('reports pack_failed when no npm can be found', async () => {
     writePackage({files: ['astryx.integration.mjs', 'themes']});
     const originalPath = process.env.PATH;
+    const originalExecPath = process.execPath;
     process.env.PATH = '';
+    // A Node with no npm beside it, and no npm on the PATH.
+    process.execPath = path.join(tmpDir, 'no-npm', 'bin', 'node');
     try {
       const result = await integrationPackCheck({cwd: tmpDir});
       expect(result.data.packable).toBe(false);
@@ -2140,6 +2143,7 @@ describe('integrationPackCheck', () => {
       );
     } finally {
       process.env.PATH = originalPath;
+      process.execPath = originalExecPath;
     }
   });
 

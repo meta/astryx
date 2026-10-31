@@ -95,6 +95,116 @@ describe('theme build adaptations', () => {
     );
   });
 
+  it('emits scoped status aliases in built CSS and preserves child extension parity', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-aliases',
+      tokens: {
+        '--color-info': '#225bff',
+        '--color-text-blue': '#203a6c',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {'--color-text-success': '#123456'},
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-green': '#abcdef'}},
+          },
+        ],
+      },
+      onDark: {
+        tokens: {'--color-text-blue': '#fefefe'},
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-aliases.css'),
+      'utf8',
+    );
+    const mediaAlias = '--color-text-info: var(--color-text-blue);';
+    const adaptationAlias = '--color-text-success: var(--color-text-green);';
+    const authoredRole = '--color-text-success: #123456;';
+    // The authored Info fill is a concrete hue, so theme generation derives
+    // its content, text, and pale-fill content (theme-compilation INV17).
+    for (const role of ['on-info', 'text-info', 'on-info-muted']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-${role}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+    }
+    // The dark media surface that sets the hue rebinds the text alias.
+    expect(css).toContain(mediaAlias);
+    expect(css).toContain(adaptationAlias);
+    expect(css.split(authoredRole).length - 1).toBeGreaterThanOrEqual(2);
+    expect(css.lastIndexOf(authoredRole)).toBeGreaterThan(
+      css.lastIndexOf(adaptationAlias),
+    );
+
+    const {statusAliasesTheme: builtTheme} = await import(
+      pathToFileURL(path.join(themesDir, 'status-aliases.js')).href
+    );
+    const source = defineTheme(input);
+    const childInput = {
+      name: 'status-alias-child',
+      tokens: {'--color-text-blue': '#345678'},
+    };
+    const fromSource = defineTheme({...childInput, extends: source});
+    const fromBuilt = defineTheme({...childInput, extends: builtTheme});
+    expect(generateThemeCSS(fromBuilt)).toEqual(generateThemeCSS(fromSource));
+  });
+
+  it('derives a complete status set for a minimal theme in built CSS (INV17)', async () => {
+    const {defineTheme, generateThemeCSS} =
+      await import('@astryxdesign/core/theme');
+    const project = path.join(tmpDir, 'project');
+    const themesDir = path.join(project, 'themes');
+    const input = {
+      name: 'status-minimal',
+      tokens: {
+        '--color-success': '#3FB950',
+        '--color-warning': '#D29922',
+        '--color-error': '#F85149',
+        '--color-info': '#6E40C9',
+      },
+    };
+    const themeFile = writeTheme(themesDir, input.name, JSON.stringify(input));
+    const result = await build(project, themeFile);
+    expect(result.code, result.stderr).toBe(0);
+
+    const css = fs.readFileSync(
+      path.join(themesDir, 'status-minimal.css'),
+      'utf8',
+    );
+    for (const status of ['success', 'warning', 'error', 'info']) {
+      expect(css).toMatch(
+        new RegExp(
+          `--color-text-${status}: light-dark\\(#[0-9A-F]{6}, #[0-9A-F]{6}\\);`,
+        ),
+      );
+      expect(css).toContain(
+        `--color-icon-${status}: var(--color-text-${status});`,
+      );
+    }
+    // Built and runtime output derive the same values.
+    const runtime = generateThemeCSS(defineTheme(input));
+    const derived = css.match(/--color-text-warning: [^;]+;/)?.[0];
+    expect(derived).toBeDefined();
+    expect(JSON.stringify(runtime)).toContain(derived);
+  });
+
   it.each([
     ['defined', writeTheme],
     ['plain', writePlainTheme],

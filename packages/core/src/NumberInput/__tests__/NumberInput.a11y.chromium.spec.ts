@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /** Real-browser and accessibility-tree binding evidence for NumberInput. */
 

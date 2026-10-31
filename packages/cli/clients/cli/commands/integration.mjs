@@ -77,6 +77,24 @@ async function verifyPackage(program) {
         ),
       );
     }
+    // Only a package that ships an experimental icon set gets this line;
+    // every other package's output is unchanged.
+    const local = result.data.contributions?.local;
+    if (local && (local.iconSets ?? []).length > 0) {
+      const counts = [
+        ['component', local.components.length],
+        ['template', local.templates.length],
+        ['theme', local.themes.length],
+        ['doc topic', local.docs.length],
+        ['codemod', local.codemods.length],
+        ['icon set', (local.iconSets ?? []).length],
+      ]
+        .filter(([, count]) => Number(count) > 0)
+        .map(([word, count]) => `${count} ${word}${count === 1 ? '' : 's'}`);
+      if (counts.length > 0) {
+        blocks.push(text(`Contributes ${counts.join(', ')}.`));
+      }
+    }
     if (issues.length > 0) {
       blocks.push(
         list(
@@ -132,10 +150,14 @@ async function checkPackage(program, options) {
         ),
       );
     } else {
+      // A package-wide issue every check reports is printed once, under the
+      // first check; the counts below are unchanged.
+      /** @type {Set<string>} */
+      const seen = new Set();
       data.checks.forEach((check, index) => {
         // A blank line keeps each check's output apart from the next.
         if (index > 0) emit(text(''));
-        printIntegrationCheckResponse(check.response);
+        printIntegrationCheckResponse(check.response, seen);
       });
     }
     const plural = (/** @type {number} */ n, /** @type {string} */ word) =>

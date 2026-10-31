@@ -88,6 +88,7 @@ export interface CommandPaletteItemProps extends Omit<
   isHighlighted?: boolean;
   /**
    * Whether this item is currently selected (picker mode).
+   * When omitted inside CommandPalette, derived from the palette value.
    * @default false
    */
   isSelected?: boolean;
@@ -202,7 +203,11 @@ export function CommandPaletteItem({
       }
       onMouseEnter={onMouseEnterProp}
       {...mergeProps(
-        themeProps('command-palette-item'),
+        themeProps('command-palette-item', {
+          highlighted: isHighlighted ? 'highlighted' : null,
+          selected: isSelected ? 'selected' : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.item,
           !isDisabled && interactionOverlayStyles.backgroundColor,

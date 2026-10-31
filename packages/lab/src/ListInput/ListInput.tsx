@@ -6,7 +6,7 @@
  * @file ListInput.tsx
  * @input React, StyleX, Astryx field/list/button/icon/layer/empty-state primitives, the container-reveal hook, compact size context, browser scroll geometry, programmatic theme tokens, and shared Lab reorder styles
  * @output Exports ListInput and its controlled data, column, renderer, and change types
- * @position Lab experiment (RFC facebook/astryx#4531) for editing compact repeated records
+ * @position Lab experiment (RFC meta/astryx#4531) for editing compact repeated records
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/ListInput/ListInput.doc.mjs
@@ -808,6 +808,29 @@ export function ListInput<T>({
       announce(t('@astryx.listInput.announceReorderCancelled'));
     }
   }, [isDisabled, isLoading, announce, t]);
+
+  // A second pointer that lands anywhere during a pointer reorder (the second
+  // finger of a pinch) cancels the reorder. A pinch whose first finger slid
+  // first zooms without a pointercancel, so the drag would otherwise commit on
+  // release and drop the row at the end of the list.
+  useEffect(() => {
+    if (!isPointerReorderActive) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const activeState = reorderStateRef.current;
+      if (
+        activeState?.mode === 'pointer' &&
+        activeState.pointerId !== event.pointerId
+      ) {
+        setReorderState(null);
+        announce(t('@astryx.listInput.announceReorderCancelled'));
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () =>
+      document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [isPointerReorderActive, announce, t]);
 
   useEffect(() => {
     const activeAnimations = activeMutationAnimationsRef.current;

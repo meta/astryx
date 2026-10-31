@@ -12,7 +12,8 @@
  * (role="menuitemradio"). The row owns the role and aria-checked; there is no
  * nested native <input> (per the WAI-ARIA menuitemradio pattern). Selection
  * state + onChange come from DropdownMenuRadioGroupContext. Keyboard nav +
- * Enter/Space activation come from the parent DropdownMenu.
+ * Enter/Space activation come from the parent DropdownMenu. Caller onClick and
+ * onPointerMove run after the row's own selection and hover focus.
  *
  * The round radio visual is the shared radio indicator, decorative
  * (aria-hidden) — the row owns the checked state, and menu radios pick up the
@@ -21,7 +22,12 @@
  * the inline-end of the row on coarse-pointer (touch) devices via CSS `order`.
  */
 
-import {useCallback, type PointerEvent, type ReactNode} from 'react';
+import {
+  useCallback,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
@@ -29,7 +35,7 @@ import {Item} from '../Item';
 import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuRadioGroupContext} from './DropdownMenuContext';
 
@@ -97,9 +103,9 @@ export interface DropdownMenuRadioItemProps extends Omit<
    */
   icon?: ReactNode | IconType;
   /**
-   * Whether this individual radio item is disabled. Disabled items stay
-   * focusable (via `aria-disabled`) so they remain discoverable by keyboard
-   * and assistive technology, but selection is blocked.
+   * Whether this individual radio item is disabled. Disabled items expose
+   * `aria-disabled`, block selection, and are currently skipped by
+   * DropdownMenu arrow-key navigation.
    * @default false
    */
   isDisabled?: boolean;
@@ -114,6 +120,10 @@ export interface DropdownMenuRadioItemProps extends Omit<
 
 /**
  * A single option in a DropdownMenuRadioGroup (role="menuitemradio").
+ *
+ * Consumer click and pointer-move handlers compose after the row's own
+ * selection and hover-focus behavior; disabled activation stops before the
+ * consumer click handler.
  *
  * @example
  * ```
@@ -133,6 +143,8 @@ export function DropdownMenuRadioItem({
   xstyle,
   className,
   style,
+  onClick,
+  onPointerMove,
   ...rest
 }: DropdownMenuRadioItemProps) {
   const menuCtx = useDropdownMenuContext();
@@ -147,15 +159,19 @@ export function DropdownMenuRadioItem({
   const isChecked = groupCtx.value === value;
   const RadioControl = useIndicator('radio');
 
-  const handleClick = useCallback(() => {
-    if (isDisabled) {
-      return;
-    }
-    groupCtx.onChange(value);
-    if (groupCtx.hasCloseOnSelect) {
-      menuCtx?.closeMenu();
-    }
-  }, [isDisabled, groupCtx, value, menuCtx]);
+  const handleClick = useCallback(
+    (event: MouseEvent) => {
+      if (isDisabled) {
+        return;
+      }
+      groupCtx.onChange(value);
+      if (groupCtx.hasCloseOnSelect) {
+        menuCtx?.closeMenu();
+      }
+      onClick?.(event as MouseEvent<HTMLElement>);
+    },
+    [isDisabled, groupCtx, value, menuCtx, onClick],
+  );
 
   const handlePointerMove = useCallback(
     (e: PointerEvent<HTMLElement>) => focusMenuItemOnHover(e, isDisabled),
@@ -168,7 +184,7 @@ export function DropdownMenuRadioItem({
       role="menuitemradio"
       aria-checked={isChecked}
       tabIndex={isDisabled ? undefined : -1}
-      onPointerMove={handlePointerMove}
+      onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper — see DropdownMenuCheckboxItem: the target belongs on the
         // visible circle, and the indicator already owns its control size.

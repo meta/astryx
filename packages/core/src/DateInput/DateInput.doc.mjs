@@ -79,7 +79,7 @@ export const docs = {
       name: 'isLoading',
       type: 'boolean',
       description:
-        'Whether the input is in a loading state. Disables interaction and shows a spinner.',
+        'Whether the input is in a loading state. The field stays focusable and exposes `aria-busy` with a spinner; typing, picking, and clearing are blocked until loading ends.',
       default: 'false',
     },
     {
@@ -256,6 +256,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'On a fine pointer the field follows the WAI-ARIA combobox pattern with a dialog popup, as in the APG date picker combobox: ArrowDown or Alt+ArrowDown opens the calendar, and Escape closes it and returns focus to the field.',
+      },
+      {
+        guidance: true,
+        description:
           'Use DateInput inside InputGroup when adding a short static prefix or suffix, such as a due-date hint.',
       },
       {
@@ -301,7 +306,7 @@ export const docs = {
         name: 'Calendar popover',
         required: false,
         description:
-          'A month grid that appears when the icon is clicked or the input is focused.',
+          'A month grid that appears when the icon or the input is clicked, or when ArrowDown is pressed in the input.',
       },
       {
         name: 'Clear button',
@@ -350,6 +355,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Show a loading state with changeAction when the date triggers a server-side save.',
+      },
+      {
+        guidance: true,
+        description:
+          'On a fine pointer the field follows the WAI-ARIA combobox pattern with a dialog popup, as in the APG date picker combobox: ArrowDown or Alt+ArrowDown opens the calendar, and Escape closes it and returns focus to the field.',
       },
       {
         guidance: false,
@@ -401,7 +411,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框和日历。输入框仍可聚焦并暴露 `aria-disabled`，但不能输入或打开日历。',
+      description:
+        '禁用输入框和日历。输入框仍可聚焦并暴露 `aria-disabled`，但不能输入或打开日历。',
       default: 'false',
     },
     {
@@ -429,7 +440,8 @@ export const docsZh = {
     {
       name: 'isLoading',
       type: 'boolean',
-      description: '输入框是否处于加载状态。禁用交互并显示加载指示器。',
+      description:
+        '输入框是否处于加载状态。字段仍可聚焦，并通过 `aria-busy` 和加载指示器表示忙碌；加载结束前不能输入、选择或清除日期。',
       default: 'false',
     },
     {
@@ -602,6 +614,11 @@ export const docsDense = {
       {
         guidance: true,
         description:
+          'On a fine pointer the field follows the WAI-ARIA combobox pattern with a dialog popup, as in the APG date picker combobox: ArrowDown or Alt+ArrowDown opens the calendar, and Escape closes it and returns focus to the field.',
+      },
+      {
+        guidance: true,
+        description:
           'Use inside InputGroup for a short static prefix or suffix, such as a due-date hint.',
       },
       {
@@ -638,7 +655,8 @@ export const docsDense = {
     value: 'selected date YYYY-MM-DD',
     onChange: 'callback on date change',
     changeAction: 'async action after onChange; drives optimistic UI',
-    isLoading: 'loading state; disables interaction, shows spinner',
+    isLoading:
+      'loading state; stays focusable w/ aria-busy + spinner; blocks typing, picking, clearing',
     min: 'min selectable date (YYYY-MM-DD)',
     max: 'max selectable date (YYYY-MM-DD)',
     dateConstraints: 'custom constraint fns to disable specific dates',

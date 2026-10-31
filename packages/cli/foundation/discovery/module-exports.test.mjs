@@ -9,7 +9,11 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {moduleExportSource, staticExportObject} from './module-exports.mjs';
+import {
+  moduleExportOrigin,
+  moduleExportSource,
+  staticExportObject,
+} from './module-exports.mjs';
 
 /** @type {string} */
 let dir;
@@ -169,4 +173,37 @@ describe('moduleExportSource', () => {
     fs.renameSync(next, file);
     expect(moduleExportSource(file, 'AcmePanel')).toBeNull();
   });
+});
+
+describe('a library of thousands of icons', () => {
+  it('finds the origin of every export in about linear time', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-many-exports-'));
+    try {
+      const count = 3000;
+      fs.writeFileSync(
+        path.join(dir, 'icon.js'),
+        'export function make(name) { return function Icon() { return name; }; }\n',
+      );
+      const lines = ["import {make} from './icon.js';"];
+      for (let i = 0; i < count; i++) {
+        lines.push(`const Glyph${i} = make('g${i}');`);
+        lines.push(
+          `export {Glyph${i}, Glyph${i} as Glyph${i}Icon, Glyph${i} as LucideGlyph${i}};`,
+        );
+      }
+      const file = path.join(dir, 'index.js');
+      fs.writeFileSync(file, `${lines.join('\n')}\n`);
+      const started = Date.now();
+      for (let i = 0; i < count; i++) {
+        expect(moduleExportOrigin(file, `Glyph${i}Icon`)).toEqual({
+          file,
+          name: `Glyph${i}`,
+        });
+      }
+      // Walking the whole module once per lookup took minutes.
+      expect(Date.now() - started).toBeLessThan(10_000);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 60_000);
 });

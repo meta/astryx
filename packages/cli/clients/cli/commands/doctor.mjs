@@ -22,7 +22,14 @@ import {
   validateIntegration,
 } from '../../../api/integration/validate-integration.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, record, records, text} from '../formatters/index.mjs';
+import {
+  emit,
+  list,
+  section,
+  record,
+  records,
+  text,
+} from '../formatters/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as doctorCommand} from './doctor.doc.mjs';
 import {doc as doctorIntegrationGroup} from './doctor-integration.doc.mjs';
@@ -87,16 +94,56 @@ function printHuman(report) {
 
 /**
  * @param {Array<{code: string, severity: string, message: string}>} issues
+ * @param {Set<string>} [seen] issues an earlier check printed
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function issueBlocks(issues) {
-  if (issues.length === 0) return [];
+function issueBlocks(issues, seen) {
+  const fresh = unseen(issues, seen);
+  if (fresh.length === 0) return alsoApply(issues, fresh);
   return [
     section('Integration issues'),
-    records(issues, {
+    records(fresh, {
       fields: ['severity', 'code', 'message', 'fix', 'file', 'line'],
       format: {severity: statusToken},
     }),
+    ...alsoApply(issues, fresh),
+  ];
+}
+
+/**
+ * The issues not printed yet, recording them as printed. `integration
+ * check` runs several checks that each report an experimental icon set's
+ * package-wide issues; each is printed once, under the first check. Every
+ * other issue prints under each check that reports it, as it always has.
+ * @template {{code: string, message: string}} T
+ * @param {T[]} issues
+ * @param {Set<string> | undefined} seen
+ * @returns {T[]}
+ */
+function unseen(issues, seen) {
+  if (!seen) return issues;
+  const once = (/** @type {T} */ issue) => /icon/u.test(issue.code);
+  const fresh = issues.filter(
+    issue => !once(issue) || !seen.has(`${issue.code}\0${issue.message}`),
+  );
+  for (const issue of issues) {
+    if (once(issue)) seen.add(`${issue.code}\0${issue.message}`);
+  }
+  return fresh;
+}
+
+/**
+ * One line naming the issues an earlier check already printed.
+ * @param {unknown[]} issues
+ * @param {unknown[]} fresh
+ */
+function alsoApply(issues, fresh) {
+  const repeated = issues.length - fresh.length;
+  if (repeated === 0) return [];
+  return [
+    text(
+      `${repeated} package-wide issue${repeated === 1 ? '' : 's'} listed above also appl${repeated === 1 ? 'ies' : 'y'} here.`,
+    ),
   ];
 }
 
@@ -209,8 +256,9 @@ function blockComponentsBlocks(report) {
 
 /**
  * @param {import('../../../api/integration/validate-integration.type.mjs').ValidateIntegrationResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-function printIntegrationValidation(data) {
+function printIntegrationValidation(data, seen) {
   const {warnings, errors} = summarizeIssues(data.issues);
   emit(
     section(
@@ -218,7 +266,7 @@ function printIntegrationValidation(data) {
     ),
     ...(data.issues.length > 0
       ? [
-          records(data.issues, {
+          records(unseen(data.issues, seen), {
             fields: ['severity', 'code', 'message', 'fix', 'file', 'line'],
             format: {severity: statusToken},
           }),
@@ -235,6 +283,8 @@ function printIntegrationValidation(data) {
     ...docTypesBlocks(data.docTypes, errors > 0),
     ...docNamesBlocks(data.docNames),
     ...blockComponentsBlocks(data.blockComponents),
+    ...iconSetCoverageBlocks(data.iconSets),
+    ...olderCliNoteBlocks(data.olderCliNotes),
     ...(data.exampleAssets && data.exampleAssets.unchecked.length > 0
       ? [
           text(
@@ -259,14 +309,98 @@ function printIntegrationValidation(data) {
 }
 
 /**
- * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationTemplateConflictResponse['data']} data
+ * The optional icon definitions each icon set leaves unmapped, and the icons
+ * that fit (spec:AST-084 FR15). Listed, never counted: nothing here fails.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[] | undefined} sets
+ * @returns {import('../formatters/index.mjs').Block[]}
  */
-function printTemplateConflicts(data) {
+function iconSetCoverageBlocks(sets) {
+  const listed = (sets ?? []).filter(
+    each => each.unmappedDefinitions.length > 0 || each.suggestions.length > 0,
+  );
+  const unchecked = (sets ?? []).flatMap(each =>
+    (each.unchecked ?? []).map(item => ({
+      set: each.set,
+      item: item.icon
+        ? `icon ${item.icon}`
+        : item.adapter
+          ? `adapter ${item.adapter}`
+          : `theme map ${item.entry}`,
+      reason: item.reason,
+    })),
+  );
+  return [
+    ...(unchecked.length > 0
+      ? [
+          section('Not checked'),
+          records(unchecked, {fields: ['set', 'item', 'reason']}),
+          text(
+            'The icon-set checks could not judge these; they are never counted and never fail a check.',
+          ),
+        ]
+      : []),
+    ...unmappedBlocks(listed),
+  ];
+}
+
+/**
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[]} listed
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function unmappedBlocks(listed) {
+  if (listed.length === 0) return [];
+  return [
+    section('Unmapped icon definitions (optional)'),
+    records(
+      listed.map(each => ({
+        set: each.set,
+        unmapped: each.unmappedDefinitions.length,
+      })),
+      {fields: ['set', 'unmapped']},
+    ),
+    // One line per definition: what it means and its words, so an author
+    // can pick from the text alone; a suggested icon when one fits.
+    ...listed.map(each => {
+      const suggested = new Map(
+        each.suggestions.map(({definition, icon}) => [definition, icon]),
+      );
+      const setFlag = listed.length === 1 ? '' : ` --set ${each.set}`;
+      return list(
+        each.unmappedDefinitions.map(
+          definition =>
+            `${definition.name}: ${definition.description} Words: ${definition.words.join(', ')}.${suggested.has(definition.name) ? ` Suggested: astryx experimental icon map ${definition.name} ${suggested.get(definition.name)}${setFlag}` : ''}`,
+        ),
+      );
+    }),
+    text(
+      'Mapping these is optional and never fails a check. Map one with `astryx experimental icon map <definition> <icon id>`; list your icons with `astryx experimental icon --set <set> --all-icons`; see how many definitions each set maps with `astryx experimental icon --list`.',
+    ),
+  ];
+}
+
+/**
+ * Descriptors an older CLI drops: listed, never counted.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').OlderCliNote[] | undefined} notes
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function olderCliNoteBlocks(notes) {
+  if (!notes || notes.length === 0) return [];
+  return [
+    section('Notes for older CLIs'),
+    records(notes, {fields: ['file', 'kind', 'message']}),
+  ];
+}
+
+/**
+ * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationTemplateConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
+ */
+function printTemplateConflicts(data, seen) {
   const output = [
     section(
       `Checking integration templates: ${integrationLabel(data) ?? '(local package)'}`,
     ),
-    ...issueBlocks(data.issues),
+    ...issueBlocks(data.issues, seen),
   ];
   if (data.conflicts.length === 0 && data.issues.length === 0) {
     output.push(text('[ok] No template ids conflict with Core.'));
@@ -406,13 +540,14 @@ function propDriftBlocks(report, failed) {
 
 /**
  * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationComponentConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-function printComponentConflicts(data) {
+function printComponentConflicts(data, seen) {
   const output = [
     section(
       `Checking integration components: ${integrationLabel(data) ?? '(local package)'}`,
     ),
-    ...issueBlocks(data.issues),
+    ...issueBlocks(data.issues, seen),
   ];
   // An [ok] after a failed check reads as a pass: say nothing it could not check.
   const failed = data.issues.some(issue => issue.severity === 'error');
@@ -443,8 +578,9 @@ function printComponentConflicts(data) {
 
 /**
  * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationDocConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-function printDocConflicts(data) {
+function printDocConflicts(data, seen) {
   const output = [
     section(
       `Checking integration docs: ${integrationLabel(data) ?? '(local package)'}`,
@@ -458,6 +594,7 @@ function printDocConflicts(data) {
           issue.code !== 'doc_fluff' &&
           issue.code !== 'stray_doc_pointer',
       ),
+      seen,
     ),
   ];
   if (
@@ -561,16 +698,17 @@ function printDocConflicts(data) {
  * Print one `doctor integration` check's result as its own subcommand prints
  * it. `astryx integration check` prints each check it runs through this.
  * @param {import('../../../api/integration/integration-check.type.mjs').IntegrationCheckResponse} response
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-export function printIntegrationCheckResponse(response) {
+export function printIntegrationCheckResponse(response, seen) {
   if (response.type === 'integration.validate') {
-    printIntegrationValidation(response.data);
+    printIntegrationValidation(response.data, seen);
   } else if (response.type === 'integration.component-conflicts') {
-    printComponentConflicts(response.data);
+    printComponentConflicts(response.data, seen);
   } else if (response.type === 'integration.template-conflicts') {
-    printTemplateConflicts(response.data);
+    printTemplateConflicts(response.data, seen);
   } else {
-    printDocConflicts(response.data);
+    printDocConflicts(response.data, seen);
   }
 }
 

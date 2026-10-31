@@ -10,5 +10,17 @@ export const doc = {
   isReady: true,
   isShowcase: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['TopNav', 'TopNavMegaMenu', 'TopNavMegaMenuItem', 'TopNavMegaMenuFeaturedCard'],
+  componentsUsed: [
+    'TopNav',
+    'TopNavMegaMenu',
+    'TopNavMegaMenuItem',
+    'TopNavMegaMenuFeaturedCard',
+  ],
+  icons: {
+    BookOpenIcon: 'book',
+    CodeBracketIcon: 'code',
+    MagnifyingGlassIcon: 'search',
+    RocketLaunchIcon: 'rocket',
+    ShieldCheckIcon: 'shield',
+  },
 };

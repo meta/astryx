@@ -738,7 +738,8 @@ describe('checkCliDocs', () => {
         id: 'cli-docs',
         label: 'CLI docs',
         status: 'pass',
-        message: `All ${audit.docs} CLI docs are readable: ${audit.tree} in the \`${formatCliCommand('docs cli')}\` tree and ${audit.authoring} in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
+        // Experimental docs are checked but not counted (spec:AST-017 FR27).
+        message: `All ${audit.docs - audit.experimental.docs} CLI docs are readable: ${audit.tree - audit.experimental.tree} in the \`${formatCliCommand('docs cli')}\` tree and ${audit.authoring - audit.experimental.authoring} in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
       });
     },
     SLOW,
@@ -878,7 +879,9 @@ describe('checkAuthoringDocs against the public authoring surface', () => {
         id: 'authoring-docs',
         label: 'Authoring docs',
         status: 'pass',
-        message: `All ${AUTHORING_SELF_DOCS.length} authoring schemas are readable in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
+        // The three experimental icon-set schemas are checked but not
+        // counted (spec:AST-017 FR27).
+        message: `All ${AUTHORING_SELF_DOCS.length - 3} authoring schemas are readable in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
       });
     },
     SLOW,
@@ -995,7 +998,8 @@ describe('checkAuthoringDocs against the public authoring surface', () => {
       fs.rmSync(path.join(root, source));
       const sources = without(source);
       expect(await auditAuthoringSelfDocs({root, sources})).toEqual({
-        sections: sources.length,
+        sections: sources.length - 3,
+        experimental: 3,
         unreachable: [],
         failed: [],
         oversized: [],

@@ -11,7 +11,12 @@ import type {PropSpec, PropType} from './types.js';
 
 export type ParsedType =
   | {readonly ok: true; readonly type: PropType}
-  | {readonly ok: false; readonly reason: string};
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      /** True for a callback whose only arguments are DOM events. */
+      readonly eventOnly?: boolean;
+    };
 
 /** Web-only types, keyed by name, with the reason each has no native form. */
 const WEB_ONLY_TYPES: Readonly<Record<string, string>> = {
@@ -33,7 +38,16 @@ const WEB_ONLY_TYPES: Readonly<Record<string, string>> = {
   ChangeEvent: 'DOM event',
   DragEvent: 'DOM event',
   ClipboardEvent: 'DOM event',
+  FormEvent: 'DOM event',
+  TouchEvent: 'DOM event',
+  SyntheticEvent: 'DOM event',
 };
+
+/** True for a DOM event type, with or without its element parameter. */
+function isDomEvent(text: string): boolean {
+  const name = /^(?:React\.)?([A-Z]\w*)(?:<[\s\S]*>)?$/.exec(text.trim())?.[1];
+  return name != null && WEB_ONLY_TYPES[name] === 'DOM event';
+}
 
 const ok = (type: PropType): ParsedType => ({ok: true, type});
 const no = (reason: string): ParsedType => ({ok: false, reason});
@@ -134,10 +148,24 @@ function parseFunction(text: string): ParsedType | null {
     );
   }
   const params = arrow[0].slice(1, -1).trim();
-  const args: PropType[] = [];
-  for (const param of params ? splitTop(params, ',') : []) {
+  const types = (params ? splitTop(params, ',') : []).map(param => {
     const match = /^([A-Za-z_$][\w$]*)\??\s*:\s*([\s\S]+)$/.exec(param);
-    const parsed = parseDocType(match ? match[2] : param);
+    return match ? match[2] : param;
+  });
+  // A value callback ends with the DOM event that caused it, as in
+  // `(checked: boolean, e: ChangeEvent) => void`. The values are the portable
+  // callback; the trailing event is the web's part. A callback that carries
+  // only an event stays on the web.
+  let end = types.length;
+  while (end > 0 && isDomEvent(types[end - 1])) {
+    end--;
+  }
+  if (end === 0 && types.length > 0) {
+    return {ok: false, reason: 'callback argument: DOM event', eventOnly: true};
+  }
+  const args: PropType[] = [];
+  for (const type of types.slice(0, end)) {
+    const parsed = parseDocType(type);
     if (!parsed.ok) {
       return no(`callback argument: ${parsed.reason}`);
     }
@@ -148,9 +176,10 @@ function parseFunction(text: string): ParsedType | null {
 
 /**
  * Parses a documented type string. Supported portable forms: `string`,
- * `number`, `boolean`, closed string unions, arrays, plain object literals,
- * callbacks with portable arguments, and named types. A union of different
- * kinds has no Swift or Kotlin form.
+ * `number`, `boolean`, closed string or number unions, arrays, plain object
+ * literals, callbacks with portable arguments (a trailing DOM event argument
+ * is the web's part), named types, and `string | boolean` (words or a
+ * switch). Any other union of different kinds has no Swift or Kotlin form.
  */
 export function parseDocType(raw: string): ParsedType {
   const text = stripOuterParens(raw.replace(/\s+/g, ' ').trim());
@@ -170,6 +199,16 @@ export function parseDocType(raw: string): ParsedType {
     if (members.every(m => /^'[^']*'$/.test(m))) {
       return ok({kind: 'enum', values: members.map(m => m.slice(1, -1))});
     }
+    if (members.every(m => /^-?\d+(?:\.\d+)?$/.test(m))) {
+      return ok({kind: 'numberEnum', values: members.map(Number)});
+    }
+    if (
+      members.length === 2 &&
+      members.includes('string') &&
+      members.includes('boolean')
+    ) {
+      return ok({kind: 'textOrBoolean'});
+    }
     const webOnly = members.find(m => WEB_ONLY_TYPES[m] != null);
     if (webOnly) {
       return no(WEB_ONLY_TYPES[webOnly]);
@@ -186,6 +225,9 @@ export function parseDocType(raw: string): ParsedType {
   }
   if (WEB_ONLY_TYPES[t] != null) {
     return no(WEB_ONLY_TYPES[t]);
+  }
+  if (isDomEvent(t)) {
+    return no('DOM event');
   }
 
   const generic = /^(?:Readonly)?Array<([\s\S]+)>$/.exec(t);

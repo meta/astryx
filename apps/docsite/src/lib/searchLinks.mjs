@@ -4,8 +4,8 @@
  * @file Where a search result opens on the site.
  * @input A result of the CLI's search (`search()` from `@astryxdesign/cli/api`)
  *   and the site's link tables, built with the site by searchLinkTables().
- * @output The site path the result opens: a component, template, theme, or
- *   doc page, with the anchor of a doc section.
+ * @output The site destination each result opens, plus the title and category
+ *   of a registered document destination.
  * @position Shared by scripts/generate-data.mjs (builds the tables) and the
  *   site's search API (reads them). Plain JS so both can import it.
  *
@@ -15,6 +15,8 @@
  * result opens through the pages and redirects the site generated, never by
  * building `/docs/<route>`.
  */
+
+import {exampleAnchorId} from './exampleAnchor.mjs';
 
 /**
  * @typedef {object} SearchLinkTables
@@ -27,6 +29,8 @@
  * @property {Record<string, string>} blocks - Block name -> the page that shows it.
  * @property {Record<string, string>} titles - A doc page's path, or a
  *   section's path with its anchor, -> the title the site shows for it.
+ * @property {Record<string, string>} categories - A doc page's path, or a
+ *   section's path with its anchor, -> the registry category of that page.
  */
 
 /**
@@ -39,11 +43,11 @@
 /**
  * The tables a result's link is read from.
  * @param {object} site
- * @param {Array<{topic: string, title?: string, sections?: Array<{id?: string, title: string}>}>} site.docTopics
+ * @param {Array<{topic: string, title?: string, category?: string | null, sections?: Array<{id?: string, title: string}>}>} site.docTopics
  * @param {Record<string, string>} site.docRedirects
  * @param {string[]} site.components
  * @param {string[]} site.templates
- * @param {Array<{name: string, dirName: string, exampleFor: string | null}>} site.blocks
+ * @param {Array<{name: string, dirName: string, exampleFor: string | null, isShowcase?: boolean}>} site.blocks
  * @param {string[]} site.packagePages - Slugs of package pages (`cli` for
  *   @astryxdesign/cli), which /docs/<slug> also serves.
  * @param {SectionAnchors} site.sectionAnchors
@@ -54,6 +58,8 @@ export function searchLinkTables(site) {
   const anchors = {};
   /** @type {Record<string, string>} */
   const titles = {};
+  /** @type {Record<string, string>} */
+  const categories = {};
   // A namespace page (and a merged page) holds the sections of several
   // guides, and a section key is unique only within its guide. Each guide's
   // slug redirects to its first section, so the redirects give each guide's
@@ -78,10 +84,13 @@ export function searchLinkTables(site) {
   for (const page of site.docTopics) {
     const ids = pageAnchors.get(page.topic) ?? [];
     const guides = (starts.get(page.topic) ?? []).sort((a, b) => a[0] - b[0]);
-    titles[`/docs/${page.topic}`] = page.title ?? page.topic;
+    const pageHref = `/docs/${page.topic}`;
+    titles[pageHref] = page.title ?? page.topic;
+    if (page.category) categories[pageHref] = page.category;
     (page.sections ?? []).forEach((section, i) => {
-      titles[`/docs/${page.topic}#${ids[i]}`] =
-        `${page.title ?? page.topic} › ${section.title}`;
+      const sectionHref = `${pageHref}#${ids[i]}`;
+      titles[sectionHref] = `${page.title ?? page.topic} › ${section.title}`;
+      if (page.category) categories[sectionHref] = page.category;
       if (!section.id) return;
       // The guides whose range holds this section: the latest start at or
       // before it (two slugs can share a start: a namespace with no text of
@@ -108,7 +117,9 @@ export function searchLinkTables(site) {
     const owner = block.exampleFor;
     const href =
       owner && components.has(owner)
-        ? `/components/${owner}`
+        ? block.isShowcase
+          ? `/components/${owner}`
+          : `/components/${owner}#${exampleAnchorId(block.dirName)}`
         : owner && templates.has(owner)
           ? `/templates/${owner}`
           : null;
@@ -129,6 +140,7 @@ export function searchLinkTables(site) {
     templates: [...templates].sort(),
     blocks,
     titles,
+    categories,
   };
 }
 
@@ -233,4 +245,18 @@ export function searchResultTitle(result, href, tables) {
   // A doc with no page of its own (an API or command reference) keeps the
   // CLI's title, without the docs tree's placeholder level for unfiled docs.
   return result.title?.replace(/^Unorganized › /, '');
+}
+
+/**
+ * The registry category of the page a doc result opens. Results without a
+ * Docsite page have no category, so presentation can use a deterministic
+ * fallback without inventing taxonomy for a registered page.
+ * @param {{domain: string}} result
+ * @param {string} href - searchResultHref of the result.
+ * @param {SearchLinkTables} tables
+ * @returns {string | undefined}
+ */
+export function searchResultCategory(result, href, tables) {
+  if (result.domain !== 'doc') return undefined;
+  return tables.categories[href];
 }

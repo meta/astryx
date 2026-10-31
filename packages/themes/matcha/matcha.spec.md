@@ -88,19 +88,11 @@ Known normal-text exceptions in the maintained mappings are:
 
 - light secondary body text at 16px is 3.83:1 on the body; typographic role and
   placement distinguish it from primary content;
-- light Banner descriptions at 13px over a white surface or card are 3.89:1
-  for info, 3.83:1 for success, 4.10:1 for warning, and 3.54:1 for error. Over
-  the light body `#f0f0e0`, the same translucent fills produce 3.39:1, 3.37:1,
-  3.63:1, and 3.11:1 respectively. The status icon, title, and written
-  description identify each state independently of color;
-- success Badge labels at 13px are 3.58:1 light and 4.25:1 dark; the label and
-  solid semantic fill identify the state;
-- error Badge labels at 13px and destructive Button labels at 16px are 4.06:1
-  light and 3.23:1 dark; the written action or status, component shape, and
-  error fill are independent cues;
-- light warning FieldStatus text at 13px is 2.52:1 when its translucent fill is
-  composited over white and 2.23:1 over the light body `#f0f0e0`; its warning
-  icon and message text identify the state;
+- light success, warning, and error Banner descriptions and FieldStatus text are
+  4.58:1, 5.01:1, and 4.73:1 when their translucent fills are composited over
+  white. Over the light body `#f0f0e0`, the same pairs are 4.03:1, 4.42:1, and
+  4.14:1. The status icon, title, and written description identify each state
+  independently of color;
 - light Green, Orange, Pink, Red, and Yellow categorical text is respectively
   4.21:1, 4.03:1, 4.94:1, 4.14:1, and 2.41:1 when each translucent tint is
   composited over white. Over the light body `#f0f0e0`, the same pairs are

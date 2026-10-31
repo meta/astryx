@@ -52,7 +52,9 @@ import {Icon} from '../Icon';
 import {useLayer} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {currentGesture} from '../Layer/gestureCounter';
 import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
+import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
   DropdownMenuContext,
@@ -174,6 +176,18 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-background-surface'],
     outline: 'none',
     userSelect: 'none',
+  },
+  // The menu's own inset inside the sheet content box (menuBottomSheetStyles
+  // .content): the 16px / 4px the sheet keeps plus the menu's 4px padding.
+  sheetMenuInset: {
+    paddingBlockStart: `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    paddingBlockEnd: spacingVars['--spacing-1'],
+    paddingInline: `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
+    // Bleeding rows read the padding this element applies.
+    '--container-padding-block-start': `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-block-end': spacingVars['--spacing-1'],
+    '--container-padding-inline-start': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-inline-end': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
   },
   sheetHeader: {
     display: 'flex',
@@ -354,6 +368,11 @@ export function ContextMenu({
   // Element focused before the menu opened, restored when it closes so focus
   // does not fall to <body> after Escape or outside-click dismissal.
   const triggerFocusRef = useRef<HTMLElement | null>(null);
+  // The gesture of the finger press that opened the menu (`Layer/
+  // gestureCounter`), null when a mouse or the keyboard opened it: the
+  // browser's compatibility mouse events for that same press are not presses
+  // outside.
+  const openingGestureRef = useRef<number | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
@@ -461,7 +480,10 @@ export function ContextMenu({
   // Dismiss on any click outside the menu. We use popover="manual" (not
   // "auto") because the native light-dismiss treats the mouseup from the
   // opening right-click as a dismiss event. Handling it ourselves via
-  // mousedown avoids that race.
+  // mousedown avoids that race. A touch's compatibility mousedown for the
+  // press that opened the menu (sent mid-hold by iOS, or as a long press
+  // lifts by Chromium) belongs to that press's gesture, so it is not read as
+  // a press outside; any later press is a new gesture and closes as before.
   useEffect(() => {
     if (!isOpen || usesBottomSheet) {
       return;
@@ -478,6 +500,9 @@ export function ContextMenu({
         return;
       }
       judged.add(e);
+      if (currentGesture() === openingGestureRef.current) {
+        return;
+      }
       if (menu && !menu.contains(e.target as Node)) {
         closeMenu();
       }
@@ -589,6 +614,14 @@ export function ContextMenu({
       const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
       const localY =
         isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      // A finger's long press reaches here as a pointer `contextmenu` where
+      // the browser sends one (Chromium); its compatibility mousedown then
+      // belongs to the opening press. A mouse or the keyboard opens without
+      // one, so every later mousedown is a press outside.
+      openingGestureRef.current =
+        (e.nativeEvent as Partial<PointerEvent>).pointerType === 'touch'
+          ? currentGesture()
+          : null;
       openAtLocalPoint(localX, localY, e.currentTarget as HTMLElement);
     },
     [isDisabled, openAtLocalPoint, getAnchorBaseRect],
@@ -610,6 +643,9 @@ export function ContextMenu({
     onLongPress: useCallback(
       (point: {x: number; y: number}) => {
         const rect = getAnchorBaseRect();
+        // The finger is still down: the compatibility mousedown iOS sends
+        // mid-hold, or Chromium as it lifts, belongs to this press.
+        openingGestureRef.current = currentGesture();
         openAtLocalPoint(
           rect ? point.x - rect.left : point.x,
           rect ? point.y - rect.top : point.y,
@@ -705,7 +741,13 @@ export function ContextMenu({
       {...mergeProps(
         themeProps('context-menu'),
         stylex.props(
-          usesBottomSheet ? styles.sheetMenu : styles.menu,
+          usesBottomSheet
+            ? [
+                styles.sheetMenu,
+                menuBottomSheetStyles.content,
+                styles.sheetMenuInset,
+              ]
+            : styles.menu,
           !usesBottomSheet &&
             (hasOverflow ? styles.touchPanYPinchZoom : styles.touchPinchZoom),
           xstyle,
@@ -721,6 +763,24 @@ export function ContextMenu({
     </div>
   );
 
+  // The root view's heading stands alone; a sub-menu's sits in a row with its
+  // back button.
+  const sheetViewHeading = (
+    <Heading
+      ref={setSheetHeadingRef}
+      level={3}
+      tabIndex={-1}
+      xstyle={[
+        styles.sheetViewHeading,
+        submenuPath.length === 0 && [
+          styles.sheetRootHeading,
+          menuBottomSheetStyles.headingAlone,
+        ],
+      ]}>
+      {currentTitle}
+    </Heading>
+  );
+
   const renderedBottomSheetContent =
     itemsProp !== undefined ? (
       <div
@@ -729,12 +789,17 @@ export function ContextMenu({
         tabIndex={0}
         {...mergeProps(
           themeProps('context-menu'),
-          stylex.props(styles.sheetMenu, xstyle),
+          stylex.props(
+            styles.sheetMenu,
+            menuBottomSheetStyles.content,
+            styles.sheetMenuInset,
+            xstyle,
+          ),
           className,
           style,
         )}>
-        <div {...stylex.props(styles.sheetHeader)}>
-          {submenuPath.length > 0 && (
+        {submenuPath.length > 0 ? (
+          <div {...stylex.props(styles.sheetHeader)}>
             <Button
               label={backLabel}
               variant="ghost"
@@ -745,18 +810,11 @@ export function ContextMenu({
               isIconOnly
               onClick={() => setSubmenuPath(path => path.slice(0, -1))}
             />
-          )}
-          <Heading
-            ref={setSheetHeadingRef}
-            level={3}
-            tabIndex={-1}
-            xstyle={[
-              styles.sheetViewHeading,
-              submenuPath.length === 0 && styles.sheetRootHeading,
-            ]}>
-            {currentTitle}
-          </Heading>
-        </div>
+            {sheetViewHeading}
+          </div>
+        ) : (
+          sheetViewHeading
+        )}
         <MenuBottomSheetActionList
           items={currentItems}
           onSelect={handleBottomSheetSelect}

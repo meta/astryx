@@ -106,7 +106,7 @@ function Harness({
 async function openSelector(
   name = 'Visible fields',
 ): Promise<HTMLButtonElement> {
-  const trigger = screen.getByRole('button', {
+  const trigger = screen.getByRole('combobox', {
     name,
   }) as HTMLButtonElement;
   fireEvent.keyDown(trigger, {key: 'ArrowDown'});
@@ -416,7 +416,7 @@ describe('TransferListSelector', () => {
     );
 
     expect(
-      screen.getByRole('button', {name: 'Visible fields'}),
+      screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveTextContent('3 selected');
   });
 
@@ -462,7 +462,7 @@ describe('TransferListSelector', () => {
     expect(fieldset).not.toContainElement(cancel);
     expect(apply).toBeDisabled();
     expect(
-      screen.getByRole('button', {name: 'Visible fields'}),
+      screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveAttribute('aria-disabled', 'true');
 
     view.rerender(
@@ -564,7 +564,7 @@ describe('TransferListSelector', () => {
       screen.getByTestId('column-selector').closest('.astryx-complex-selector'),
     ).toHaveAttribute('data-size', 'sm');
     expect(
-      screen.getByRole('button', {name: 'Table columns'}),
+      screen.getByRole('combobox', {name: 'Table columns'}),
     ).toHaveTextContent('Customize columns');
     expect(
       screen.getByTestId('column-selector').closest('.astryx-field'),

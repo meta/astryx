@@ -2,6 +2,9 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
+import {java} from '@astryxdesign/core/CodeBlock/languages/java';
+import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
+import {IconButton} from '@astryxdesign/core/IconButton';
 
 const meta: Meta<typeof CodeBlock> = {
   title: 'Core/CodeBlock',
@@ -151,6 +154,124 @@ export const OverflowStop: Story = {
     language: 'tsx',
     code: 'const fits = true;',
   },
+};
+
+// No title and no language label, so there is no header and Copy floats in
+// the corner. The first line is longer than the block, so it must end before
+// the button rather than run under it.
+export const CopyClearance: Story = {
+  args: {
+    code: 'pnpm --filter @astryxdesign/core exec vitest run src/CodeBlock --reporter=verbose --coverage\nexit 0',
+    width: '360px',
+  },
+};
+
+// A product action beside Copy, as a ghost sm IconButton like Copy. With a
+// header it sits in the header; with no title and the label hidden it sits
+// in the corner column beside the code.
+const terminalIcon = (
+  <svg
+    viewBox="0 0 24 24"
+    width={16}
+    height={16}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true">
+    <path d="m7 11 2-2-2-2" />
+    <path d="M11 13h4" />
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+  </svg>
+);
+const runAction = (
+  <IconButton
+    variant="ghost"
+    size="sm"
+    label="Run in terminal"
+    tooltip="Run in terminal"
+    icon={terminalIcon}
+  />
+);
+
+export const EndContent: Story = {
+  args: {
+    code: 'npm install @astryxdesign/core',
+    language: 'bash',
+    endContent: runAction,
+    width: '360px',
+  },
+};
+
+export const EndContentHeaderless: Story = {
+  args: {
+    code: 'pnpm --filter @astryxdesign/core exec vitest run src/CodeBlock --reporter=verbose --coverage\nexit 0',
+    language: 'bash',
+    hasLanguageLabel: false,
+    endContent: runAction,
+    width: '360px',
+  },
+};
+
+// A taller caller control (the default IconButton size) still sits centred on
+// the first line of a headerless one-line block.
+export const EndContentTall: Story = {
+  args: {
+    code: 'npm install @astryxdesign/core',
+    language: 'bash',
+    hasLanguageLabel: false,
+    endContent: (
+      <IconButton label="Run in terminal" variant="ghost" icon={terminalIcon} />
+    ),
+    width: '360px',
+  },
+};
+
+// Built-in languages colour with no setup.
+export const BuiltInLanguages: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 520}}>
+      <CodeBlock
+        language="cpp"
+        code={
+          '#include <vector>\n// Sum a vector\nint sum(const std::vector<int>& v) {\n  int total = 0;\n  for (int x : v) total += x;\n  return total;\n}'
+        }
+      />
+      <CodeBlock
+        language="rust"
+        code={
+          '// Parse a port\nfn port(s: &str) -> Result<u16, String> {\n    s.parse::<u16>().map_err(|e| e.to_string())\n}'
+        }
+      />
+      <CodeBlock
+        language="sql"
+        code={
+          "-- Active users this week\nSELECT id, name FROM users\nWHERE last_seen > NOW() - INTERVAL '7 days'\nORDER BY name;"
+        }
+      />
+    </div>
+  ),
+};
+
+// A less common language is one import, passed as the language.
+export const LanguageModules: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 520}}>
+      <CodeBlock
+        language={thrift}
+        code={
+          '# A user record\nstruct User {\n  1: required i64 id;\n  2: optional string name;\n}'
+        }
+      />
+      <CodeBlock
+        language={java}
+        code={
+          '// Greet a user\npublic final class Greeter {\n  String greet(String name) { return "hello, " + name; }\n}'
+        }
+      />
+    </div>
+  ),
 };
 
 export const JSON: Story = {

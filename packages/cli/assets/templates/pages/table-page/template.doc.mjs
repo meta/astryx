@@ -28,4 +28,5 @@ export const doc = {
   ],
   isReady: true,
   category: 'Table - Basic',
+  icons: {ArrowDownTrayIcon: 'download', MagnifyingGlassIcon: 'search'},
 };

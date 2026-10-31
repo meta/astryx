@@ -19,6 +19,7 @@
  */
 
 import {
+  use,
   useEffect,
   useRef,
   useState,
@@ -42,8 +43,8 @@ import {
   shadowVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {Spinner} from '../Spinner';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {Spinner} from '../Spinner/Spinner';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 
@@ -51,8 +52,12 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles as inputGroupStyles} from '../InputGroup/groupStyles';
-import {mergeProps} from '../utils';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  groupStyles as inputGroupStyles,
+  inputGroupItemProps,
+} from '../InputGroup/groupStyles';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -60,7 +65,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 import type {ButtonVariantMap} from './index';
 
 /**
@@ -235,10 +240,22 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    // Forced colors replace the fill with ButtonFace; a border keeps the
+    // destructive fill's shape visible (architecture:theme-tokens INV11). A
+    // border, not an outline, leaves the shared focus ring intact.
+    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
+    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     // The ring matches the variant it rings: an accent-colored outline on a
     // red button reads as another control's focus. Only the color differs —
     // width, style and offset come from the shared outline.
-    outlineColor: {default: null, ':focus-visible': colorVars['--color-error']},
+    outlineColor: {
+      default: null,
+      ':focus-visible': colorVars['--color-error'],
+    },
   },
 });
 
@@ -615,7 +632,9 @@ export function Button({
   // the consumer is deliberately showing it.
   const delaySpinner = isPending || isInterruptible;
   const groupDisabled = buttonGroup?.isDisabled ?? false;
-  const isTrueDisabled = isDisabled || groupDisabled;
+  const inputGroupState = use(InputGroupInternalContext);
+  const isTrueDisabled =
+    isDisabled || groupDisabled || inputGroupState.isDisabled;
   // Busy-only: the button can't fire again purely because an action is in
   // flight, not because it's genuinely isDisabled/group-disabled. Per the API
   // Conventions "Disabled vs Busy" rule, busy is visual-only (aria-busy +
@@ -832,14 +851,19 @@ export function Button({
         href={href}
         target={target}
         rel={rel}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
-        aria-busy={isLoadingState || undefined}
-        aria-disabled={useAriaDisabled || undefined}
+        // A caller's own busy or disabled state is kept, so a component that
+        // hands these props to a Button (a caller-rendered trigger) is heard.
+        aria-busy={isLoadingState || props['aria-busy'] || undefined}
+        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
@@ -851,14 +875,19 @@ export function Button({
         ref={mergedButtonRef}
         type={type}
         disabled={useAriaDisabled ? undefined : buttonDisabled}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
-        aria-busy={isLoadingState || undefined}
-        aria-disabled={useAriaDisabled || undefined}
+        // A caller's own busy or disabled state is kept, so a component that
+        // hands these props to a Button (a caller-rendered trigger) is heard.
+        aria-busy={isLoadingState || props['aria-busy'] || undefined}
+        aria-disabled={useAriaDisabled || props['aria-disabled'] || undefined}
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}

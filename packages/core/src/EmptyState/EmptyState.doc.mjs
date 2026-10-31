@@ -81,7 +81,7 @@ export const docs = {
       { guidance: false, description: 'Use an EmptyState for error messages that require immediate action; use a Banner instead.' },
     ],
     anatomy: [
-      {name: 'Container', required: true, description: 'The centered status region that owns spacing, reading order, and the compact layout variant.'},
+      {name: 'Container', required: true, description: 'The centered root that owns spacing, reading order, and the compact layout variant.'},
       {name: 'Icon', required: false, description: 'A visual cue above the title that reinforces the context, like a search icon for no results.'},
       {name: 'Title', required: true, description: 'Primary message explaining what is empty: "No projects yet" not "No data".'},
       {name: 'Description', required: false, description: 'Additional context explaining why it is empty or what the user can do.'},

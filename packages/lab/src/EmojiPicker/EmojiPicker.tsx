@@ -526,22 +526,22 @@ export function EmojiPicker({
             <Center>
               <Spinner size="sm" label={t('@astryx.emojiPicker.loading')} />
             </Center>
-          ) : queryWords.length === 0 && categories === 'failed' ? (
-            <HStack paddingInline={3}>
-              <Text type="supporting" color="secondary">
-                {t('@astryx.emojiPicker.loadFailed')}
-              </Text>
-            </HStack>
           ) : null}
           <HStack
             role="status"
             aria-atomic="true"
             paddingInline={3}
             data-emoji-picker-search-status="true">
-            {noResultsMessage != null && (
+            {queryWords.length === 0 && categories === 'failed' ? (
               <Text type="supporting" color="secondary">
-                {noResultsMessage}
+                {t('@astryx.emojiPicker.loadFailed')}
               </Text>
+            ) : (
+              noResultsMessage != null && (
+                <Text type="supporting" color="secondary">
+                  {noResultsMessage}
+                </Text>
+              )
             )}
           </HStack>
         </VStack>

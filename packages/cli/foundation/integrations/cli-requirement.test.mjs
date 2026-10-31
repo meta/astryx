@@ -10,6 +10,8 @@ import {
   NAMESPACE_DOCS_CLI,
   SECTION_IDS_CLI,
   DOC_TOKENS_CLI,
+  STABILITY_CLI,
+  TEMPLATE_ICONS_CLI,
   TEMPLATE_REPLACES_CLI,
   cliRangeProblem,
   componentReplacesCliProblem,
@@ -340,6 +342,8 @@ describe('every feature check names its CLI floor', () => {
     sectionIdsCliProblem: '0.6.4',
     sectionPositionCliProblem: '0.7.4',
     themesCliProblem: '0.6.4',
+    stabilityCliProblem: STABILITY_CLI,
+    templateIconsCliProblem: TEMPLATE_ICONS_CLI,
     // The release doc tokens ship in.
     docTokensCliProblem: '0.7.4',
   };
@@ -369,6 +373,11 @@ describe('every feature check names its CLI floor', () => {
       // `replaces`, and 0.6.6 reads its `keywords`.
       replacesCliProblem: '0.6.4',
       keywordsCliProblem: '0.6.6',
+      // Tied to the next patch slot: published 0.7.3 refuses `stability` on
+      // a template or namespace doc.
+      stabilityCliProblem: '0.7.4',
+      // Published 0.7.3 refuses a template's `icons`.
+      templateIconsCliProblem: '0.7.4',
     });
   });
 });

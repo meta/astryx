@@ -21,7 +21,7 @@
  *   changes. Browsers without the Highlight API show plain code.
  */
 
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isCodeNode, CodeNode} from '@lexical/code';
 import {$getNodeByKey, type NodeKey} from 'lexical';
@@ -29,8 +29,10 @@ import {
   applyHighlightRangesFlat,
   TOKEN_TYPES,
   tokenize,
+  type CodeLanguage,
   type TokenLine,
 } from '@astryxdesign/core/CodeBlock';
+import {listedLanguage, sameLanguages} from './codeLanguages';
 
 /** The class the theme adds to every code block (editorTheme.ts). */
 export const CODE_SYNTAX_CLASS = 'astryx-richtext-code';
@@ -71,7 +73,7 @@ function supportsHighlights(): boolean {
  */
 export function renderedTokens(
   code: string,
-  language: string,
+  language: string | CodeLanguage,
   rendered: string,
 ): TokenLine[] | null {
   const lines = tokenize(code, language);
@@ -103,9 +105,24 @@ interface Colored {
   readonly cleanup: () => void;
 }
 
-export function CodeSyntaxPlugin(): null {
+export function CodeSyntaxPlugin({
+  codeLanguages,
+}: {
+  /** Language values a fence may name (component:Markdown FR30). */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
+} = {}): null {
   const [editor] = useLexicalComposerContext();
+  // Keep one list while it names the same values, so an inline
+  // `codeLanguages={[…]}` does not re-colour every block on each parent
+  // render (adjusting state during render, not in an Effect).
+  const [languages, setLanguages] = useState(codeLanguages);
+  if (!sameLanguages(languages, codeLanguages)) {
+    setLanguages(codeLanguages);
+  }
 
+  // Synchronizes the editor's code blocks with the CSS highlight registry:
+  // Lexical update and mutation listeners colour each block, and the cleanup
+  // removes the listeners and every highlight range they added.
   useEffect(() => {
     if (!supportsHighlights()) {
       return undefined;
@@ -142,7 +159,7 @@ export function CodeSyntaxPlugin(): null {
       previous?.cleanup();
       const tokens = renderedTokens(
         block.code,
-        block.language,
+        listedLanguage(languages, block.language) ?? block.language,
         element.textContent ?? '',
       );
       if (tokens == null) {
@@ -187,7 +204,7 @@ export function CodeSyntaxPlugin(): null {
       }
       blocks.clear();
     };
-  }, [editor]);
+  }, [editor, languages]);
 
   return null;
 }

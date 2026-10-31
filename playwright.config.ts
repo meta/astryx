@@ -25,7 +25,12 @@
  * Cross-browser specs use `.a11y.browser.spec.ts`; Chromium-only contracts keep
  * `.a11y.chromium.spec.ts`. The WebKit project runs only the former.
  *
- * SYNC: When a package gains an accessibility binding, add its spec glob here.
+ * Pull requests run a scoped selection of the same files with
+ * `pnpm test:a11y-contract:pr`; each spec's `@pr-a11y` header lines decide when
+ * (`.github/scripts/a11y-pr-contracts.mjs`). A new spec needs no workflow edit.
+ *
+ * SYNC: When a package gains an accessibility binding outside these globs, add
+ *   its glob here and in `.github/scripts/a11y-pr-contracts.test.mjs`.
  */
 
 import {defineConfig, devices} from '@playwright/test';

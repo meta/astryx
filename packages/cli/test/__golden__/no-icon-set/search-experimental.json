@@ -1,0 +1,63 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "experimental",
+    "matchCount": 3,
+    "results": [
+      {
+        "domain": "doc",
+        "name": "authoring/field-reference",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/field-reference config",
+        "parent": "astryx docs authoring/field-reference --index",
+        "mentions": [
+          "Declares which integrations to load, where to route issue links, post-codemod hooks, local debug-log and gap-report handlers, a discover source, and experimental layout components.…",
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "authoring/field-reference",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/field-reference schema-doc",
+        "parent": "astryx docs authoring/field-reference --index",
+        "mentions": [
+          "docs mention \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "authoring/field-reference",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/field-reference template-doc",
+        "parent": "astryx docs authoring/field-reference --index",
+        "mentions": [
+          "docs mention \"experimental\""
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

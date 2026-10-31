@@ -57,6 +57,9 @@ export const AUTHORING_SELF_DOCS = [
   'doctypes/template/template.doc.mjs',
   'doctypes/template/integration-template.doc.mjs',
   'doctypes/theme/theme.doc.mjs',
+  'doctypes/icon-set/icon-set.doc.mjs',
+  'doctypes/icon-set/icon-set-data.doc.mjs',
+  'doctypes/icon-definition/icon-definition.doc.mjs',
 ];
 
 /** Blocks a self-doc note may carry that a topic section can render. */
@@ -127,21 +130,27 @@ export async function loadAuthoringSelfDocs(
  * @returns {string[][]}
  */
 function fieldRows(fields) {
-  return fields.flatMap(field => [
-    [
-      String(field.name),
-      String(field.type ?? ''),
-      field.required ? 'yes' : 'no',
-      [
-        field.description,
-        field.default != null ? `Default: ${field.default}.` : null,
-        field.example != null ? `Example: ${field.example}.` : null,
-      ]
-        .filter(Boolean)
-        .join(' '),
-    ],
-    ...fieldRows(field.fields ?? []),
-  ]);
+  // An experimental field is documented on its feature's experimental route,
+  // never in the stable schema's table (spec:AST-017 FR27).
+  return fields.flatMap(field =>
+    field.stability === 'experimental'
+      ? []
+      : [
+          [
+            String(field.name),
+            String(field.type ?? ''),
+            field.required ? 'yes' : 'no',
+            [
+              field.description,
+              field.default != null ? `Default: ${field.default}.` : null,
+              field.example != null ? `Example: ${field.example}.` : null,
+            ]
+              .filter(Boolean)
+              .join(' '),
+          ],
+          ...fieldRows(field.fields ?? []),
+        ],
+  );
 }
 
 /**
@@ -192,7 +201,24 @@ export function selfDocSection(doc) {
 }
 
 /**
- * The `authoring` topic: one section per self-doc, in the order given.
+ * Whether a self-doc documents an experimental surface (spec:AST-017 FR27).
+ * @param {any} doc
+ */
+export function isExperimentalSelfDoc(doc) {
+  return doc?.stability === 'experimental';
+}
+
+/**
+ * The route that serves the experimental self-docs, one section each:
+ * stable `astryx docs authoring/field-reference` never lists them
+ * (spec:AST-084 FR0).
+ */
+export const EXPERIMENTAL_AUTHORING_ROUTE = 'cli/experimental/icon-set-files';
+
+/**
+ * The `authoring` topic: one section per stable self-doc, in the order
+ * given. An experimental self-doc is a section of
+ * {@link EXPERIMENTAL_AUTHORING_ROUTE} instead.
  * @param {any[]} docs
  * @returns {import('../../authoring/doctypes/reference/type').ReferenceDoc}
  */
@@ -206,8 +232,23 @@ export function buildAuthoringReferenceDoc(docs) {
     keywords: ['authoring reference', 'field reference', 'every field'],
     description:
       'Every file an integration author writes, field by field: the integration manifest, astryx.config, codemods, identity, and each doc type. The guides that use them are the rest of {@link namespace:authoring}.',
-    sections: docs.map(selfDocSection),
+    sections: docs
+      .filter(doc => !isExperimentalSelfDoc(doc))
+      .map(selfDocSection),
   });
+}
+
+/**
+ * The sections of {@link EXPERIMENTAL_AUTHORING_ROUTE}: one per experimental
+ * self-doc that loads, in reading order.
+ * @returns {Promise<any[]>}
+ */
+export async function buildExperimentalAuthoringSections() {
+  const {loaded} = await loadAuthoringSelfDocs();
+  return loaded
+    .map(entry => entry.doc)
+    .filter(isExperimentalSelfDoc)
+    .map(selfDocSection);
 }
 
 /**
@@ -225,6 +266,7 @@ export async function buildAuthoringTopic() {
  * @param {{root?: string, sources?: string[], budget?: number}} [options]
  * @returns {Promise<{
  *   sections: number,
+ *   experimental: number,
  *   unreachable: string[],
  *   failed: {source: string, error: string}[],
  *   oversized: {key: string, title: string, bytes: number}[],
@@ -240,11 +282,19 @@ export async function auditAuthoringSelfDocs({
     source => !listed.has(source),
   );
   const {loaded, failed} = await loadAuthoringSelfDocs(sources, root);
-  const topic = buildAuthoringReferenceDoc(loaded.map(entry => entry.doc));
+  const docs = loaded.map(entry => entry.doc);
+  const topic = buildAuthoringReferenceDoc(docs);
+  const experimental = docs.filter(isExperimentalSelfDoc).map(selfDocSection);
   return {
     sections: topic.sections.length,
+    // Experimental schemas (spec:AST-017 FR27), counted apart: they are
+    // sections of the experimental route, not of `astryx docs authoring`.
+    experimental: experimental.length,
     unreachable,
     failed,
-    oversized: oversizedDocSections(topic.sections, budget),
+    oversized: oversizedDocSections(
+      [...topic.sections, ...experimental],
+      budget,
+    ),
   };
 }

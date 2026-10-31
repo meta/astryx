@@ -26,7 +26,8 @@ state-taxonomy records:
 | [Typography hierarchy](typography-hierarchy.md)                   | Legible, distinguishable text roles across themes and layouts                        |
 | [Iconography](iconography.md)                                     | Icon meaning, size, artwork, color, composition, and accessibility                   |
 | [Color emphasis](color-emphasis.md)                               | Semantic color roles, contrast intent, and local emphasis                            |
-| [Motion](motion.md)                                               | Meaningful movement, timing hierarchy, easing intent, and reduced motion             |
+| [Motion](motion.md)                                               | Meaningful movement, timing hierarchy, and easing intent                             |
+| [Reduced motion](reduced-motion.md)                               | Cross-fade on touch and immediate change otherwise under reduced motion              |
 | [Ordered collection reordering](ordered-collection-reordering.md) | Drag preview, candidate insertion, commit, and settle intent for ordered collections |
 | [Template composition](template-composition.md)                   | Page- and block-level layout, hierarchy, spacing, component fidelity, and theming    |
 
@@ -46,17 +47,15 @@ Generated audit screenshots remain audit evidence rather than design authority.
 Private design sources stay private and are never named or linked here.
 
 New design specs start as `draft`. Initial promotion to `current`, later changes,
-and normative asset updates require exact-head approval from any current member
-of `.github/ENGOWNERS` or `.github/DESIGNOWNERS`. A mixed PR still needs an
+and normative asset updates require approval of their content from any current
+member of `.github/ENGOWNERS` or `.github/DESIGNOWNERS`
+(`architecture:knowledge-contracts` DEC-14). A mixed PR still needs an
 ENGOWNER for non-design current records. The design record names its content
 owners separately from this repository gate.
 
-A DESIGNOWNER author may attest the exact PR head for the design-approval group
-by marking it ready for review. That evidence also counts in a mixed PR, while
-every other applicable code or spec-owner group remains required. The existing
-gate may enable squash auto-merge only when every changed path is a recognized
-spec record, every required group has approved, and all branch checks pass.
-Normative assets and indexes are outside that scope; any code path prevents the
-spec-only auto-merge path.
+A DESIGNOWNER approves with a review or `/approve-spec <sha>`, like every other
+owner; in a mixed PR every other applicable code or spec-owner
+group remains required. The gate decides approval only; it never enables
+auto-merge.
 
 Use `docs/templates/knowledge/design-spec.md`.

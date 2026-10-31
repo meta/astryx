@@ -861,6 +861,26 @@ describe('TreeList', () => {
       });
     });
 
+    it("keeps focus on an item's inner link when the item becomes disabled (spec:AST-085 FR4)", () => {
+      const tree = (isDisabled: boolean) => [
+        {
+          id: 'docs',
+          label: 'Docs',
+          isExpanded: true,
+          children: [
+            {id: 'report', label: 'Report', href: '/report', isDisabled},
+          ],
+        },
+      ];
+      const {rerender} = render(<TreeList items={tree(false)} />);
+      // A pointer click leaves focus on the inner link.
+      screen.getByRole('link', {name: 'Report', hidden: true}).focus();
+      rerender(<TreeList items={tree(true)} />);
+      const disabled = screen.getByRole('link', {name: 'Report', hidden: true});
+      expect(disabled).not.toHaveAttribute('href');
+      expect(disabled).toHaveFocus();
+    });
+
     it('does not follow a disabled link row', () => {
       const items = [
         {
@@ -879,6 +899,12 @@ describe('TreeList', () => {
       const row = link.closest<HTMLElement>('.astryx-tree-list-item')!;
       fireEvent.click(row.firstElementChild!);
       expect(onLinkClick).not.toHaveBeenCalled();
+      // No destination, so a screen reader's click or a link menu cannot
+      // navigate either (spec:AST-085 FR2).
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      for (const attribute of ['href', 'target']) {
+        expect(link).not.toHaveAttribute(attribute);
+      }
     });
 
     describe('row clicks outside the label (FR7)', () => {

@@ -112,6 +112,100 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
+    // render (experimental: may change or be removed in a patch release)
+    {
+      value: 'render.page',
+      stability: 'experimental',
+      description:
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'render.reverse',
+      stability: 'experimental',
+      description:
+        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
+    },
+
+    // experimental icon (installed icon sets, AST-084): experimental values,
+    // documented under `astryx docs cli/experimental`, not in this table.
+    {
+      value: 'icon.search',
+      stability: 'experimental',
+      description:
+        'The echoed query, `matchCount` (every match, before `limit`), and matches: icons from the installed icon sets ranked by meaning, each {set, id, package, module, export, import, words, definitions, variants, reason, score}.',
+    },
+    {
+      value: 'icon.detail',
+      stability: 'experimental',
+      description:
+        "One icon's fields, as a match names them, with every variant's import line. The envelope names the set's package.",
+    },
+    {
+      value: 'icon.list',
+      stability: 'experimental',
+      description:
+        "The project's icon-set state (status, projectSet, reason), each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers (built-in, all of Astryx's, and its own), and each withdrawn set with its reason.",
+    },
+    {
+      value: 'icon.use',
+      stability: 'experimental',
+      description:
+        'The `experimental.iconSet` written to astryx.config, the set it names as `<package>/<set>`, the config file, whether it was created, the value it replaced, and whether anything changed.',
+    },
+    {
+      value: 'icon.mapMany',
+      stability: 'experimental',
+      description:
+        'Many `map` entries written at once (--pairs): the set, its package, the data file, each entry {definition, icon, previous, changed}, whether anything changed, and the generated files rewritten.',
+    },
+    {
+      value: 'icon.map',
+      stability: 'experimental',
+      description:
+        'One `map` entry of the icon set being authored: the set, its package, the data file, the definition, the icon id now mapped (null after --remove), the id it replaced, and whether the file changed.',
+    },
+    {
+      value: 'icon.add',
+      stability: 'experimental',
+      description:
+        "One icon registered in the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the definition mapped to it, the definition file written when it added the set's own, the files written, and whether anything changed.",
+    },
+    {
+      value: 'icon.definitions',
+      stability: 'experimental',
+      description:
+        'Every Astryx icon definition (--definitions): each {name, builtIn, description, words}.',
+    },
+    {
+      value: 'icon.setIcons',
+      stability: 'experimental',
+      description:
+        'Every icon of one set (--set with --all-icons): the set, its package, how many icons, and each icon {id, export, words, definitions}, by id.',
+    },
+    {
+      value: 'icon.addVariants',
+      stability: 'experimental',
+      description:
+        'One variant added for every icon of the set at once (--all): the set, its package, the variant, the module read, how many icons gained it, how many already had it, the ids the module has no export for, the files written, and whether anything changed.',
+    },
+    {
+      value: 'icon.definitionMatches',
+      stability: 'experimental',
+      description:
+        "The icon definitions that fit an export, before it is added: the export, its source module, the id it would get, at most 10 matches {name, description, source (astryx or set), score, reason, command}, and the command that adds the set's own definition when none fits.",
+    },
+    {
+      value: 'icon.newSet',
+      stability: 'experimental',
+      description:
+        "An icon set started in the integration package: the set's name, the manifest's `experimental.iconSets` root (and whether it was declared now), the manifest file, the files written, whether they were written or only planned, and with --from how many icons it wrapped and what to do next.",
+    },
+    {
+      value: 'icon.newDefinition',
+      stability: 'experimental',
+      description:
+        "An icon set's own icon definition: its name, the manifest file, the files written (the definition and, with --icon, the data file), and whether they were written or only planned.",
+    },
 
     // discover (external / integration packages)
     {
@@ -132,7 +226,7 @@ export const doc = {
     {
       value: 'discover.item',
       description:
-        'One item that is not an installed component, for an @scope/name/<item> query: its kind, name, package, version, and whether the project has the package. The envelope\'s package names the same package.',
+        "One item that is not an installed component, for an @scope/name/<item> query: its kind, name, package, version, and whether the project has the package. The envelope's package names the same package.",
     },
     {
       value: 'discover.search',
@@ -294,7 +388,7 @@ export const doc = {
     {
       value: 'upgrade.run',
       description:
-        'The run receipt: from/to versions, codemod count, integrations processed, the agent-docs summary, sourcePathFound (false when the resolved source directory does not exist, so no source file was read), and (apply mode) filesChanged, transformsApplied, and per-codemod errors. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run.',
+        'The run receipt: from/to versions, codemod count, integrations processed, the agent-docs summary, sourcePathFound (false when the resolved source directory does not exist, so no source file was read), and (apply mode) filesChanged, transformsApplied, and per-codemod errors. regenerate lists generated files to rebuild, each with its codemods, commands and messages. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run.',
     },
 
     // manifest
@@ -338,7 +432,7 @@ export const doc = {
     {
       value: 'integration.validate',
       description:
-        'The validation result: validated (false when nothing was validated: with no package.json the issues list carries one no_package error so the command exits 1, and with a package.json but no integration manifest the issues list is empty and proves nothing), the package name and version (both null when validated is false) plus issues, an AstryxIntegrationIssue[] of {code, severity: warning | error, message, fix?, file?, line?} (fix: the change that resolves it; file and line: where, relative to the package), and notes when there are any: {code, message, next?} information beside the issues (text output marks a next note [next minor]); a note fails nothing by default, and one with next: true counts as a warning under integration check --next, fails integration check --strict --next, and fails --strict from the next minor release. Notes include invalid_cli_command for a malformed cliCommand and cli_peer_version when the running CLI is outside the @astryxdesign/cli peer range of the package, and the package layout findings added after the last minor release, each with its fix in the message (duplicate_component_doc, symlinked_root, unreadable_file, invalid_package_json, no_provider_id, source_without_component_doc where a doc and its source still pair), and doc_name_mismatch and unknown_block_component, until they become warnings in the next minor release. For the commands a topic writes, runner_command (written with a package runner), plain_command (written bare), package_manager_command (written for one package manager) and doc_token (a token that does not parse) notes each give the file, line and the token to write. A doc_target_not_found note names a doc whose replaces or extends names no topic and no guide of the CLI docs or the docs of the package (such as a namespace), and a doc_section_unplaced note a section whose before or after names no section of what it extends (it is added at the end), and a duplicate_guide_replacement note two docs of the package that replace one guide; they become warnings in the next minor release. When the manifest loads, docTypes checks each doc against its published authoring type: status (checked | skipped), reason, typescript, docs, findings (all warnings, each naming the field and a fix), unchecked, and fixtures (test fixture docs not checked). When the manifest loads, docNames lists the component doc names it could not judge: status (checked), findings (always empty; a doc name the module its import names provably does not export is a doc_name_mismatch note, with its fix in the message) and unchecked ({file, name, reason}: a doc whose name differs from the name it is listed under and whose source exports cannot all be read, such as a re-export from another package). When the manifest loads, blockComponents lists the component names templates give in exampleFor or componentsUsed that could not be judged: status (checked), findings (always empty; a name neither the package nor Core has, and the template does not import, is an unknown_block_component note, with its fix in the message) and unchecked ({file, name, reason}: a name the template may reach through anything other than named imports and re-exports from Core, React, StyleX, local helpers or the entry of the package itself, such as an import from another package, a default or namespace import, an alias of or member read off an imported binding, require() or a dynamic import(), or a local module that cannot be read, or any name Core would have to resolve when Core is not installed). Since 0.7.3 each import apps cannot use is also a note (its fix in the message), listed only and failing --strict from the next minor. So are the examples a package ships: component_without_example (a published component no block shows with exampleFor and isShowcase: true, or names in alsoShowcaseFor), template_category (a category written as a path, such as components/X), showcase_not_standalone (a showcase importing server-only code or reading process.env past NODE_ENV) and template_asset_not_packed (a new URL(…, import.meta.url) asset missing, or left out by npm pack --dry-run). When npm cannot list the files, an asset no files entry can reach is still a note and any other is listed in exampleAssets ({status: checked, findings: [], unchecked}, only when it lists any) as {file, asset, reason}. publicImports ({status: checked, findings: [], unchecked}) lists each import the check could not judge as {file, specifier, reason}; never counted or failed on.',
+        'The validation result: validated (false when nothing was validated: with no package.json the issues list carries one no_package error so the command exits 1, and with a package.json but no integration manifest the issues list is empty and proves nothing), the package name and version (both null when validated is false) plus issues, an AstryxIntegrationIssue[] of {code, severity: warning | error, message, fix?, file?, line?} (fix: the change that resolves it; file and line: where, relative to the package), and notes when there are any: {code, message, next?} information beside the issues (text output marks a next note [next minor]); a note fails nothing by default, and one with next: true counts as a warning under integration check --next, fails integration check --strict --next, and fails --strict from the next minor release. Notes include invalid_cli_command for a malformed cliCommand and cli_peer_version when the running CLI is outside the @astryxdesign/cli peer range of the package, and the package layout findings added after the last minor release, each with its fix in the message (duplicate_component_doc, symlinked_root, unreadable_file, invalid_package_json, no_provider_id, source_without_component_doc where a doc and its source still pair), and doc_name_mismatch and unknown_block_component, until they become warnings in the next minor release. For the commands a topic writes, runner_command (written with a package runner), plain_command (written bare), package_manager_command (written for one package manager) and doc_token (a token that does not parse) notes each give the file, line and the token to write. A doc_target_not_found note names a doc whose replaces or extends names no topic and no guide of the CLI docs or the docs of the package (such as a namespace), and a doc_section_unplaced note a section whose before or after names no section of what it extends (it is added at the end), and a duplicate_guide_replacement note two docs of the package that replace one guide; they become warnings in the next minor release. When the manifest loads, docTypes checks each doc against its published authoring type: status (checked | skipped), reason, typescript, docs, findings (all warnings, each naming the field and a fix), unchecked, and fixtures (test fixture docs not checked). When the manifest loads, docNames lists the component doc names it could not judge: status (checked), findings (always empty; a doc name the module its import names provably does not export is a doc_name_mismatch note, with its fix in the message) and unchecked ({file, name, reason}: a doc whose name differs from the name it is listed under and whose source exports cannot all be read, such as a re-export from another package). When the manifest loads, blockComponents lists the component names templates give in exampleFor or componentsUsed that could not be judged: status (checked), findings (always empty; a name neither the package nor Core has, and the template does not import, is an unknown_block_component note, with its fix in the message) and unchecked ({file, name, reason}: a name the template may reach through anything other than named imports and re-exports from Core, React, StyleX, local helpers or the entry of the package itself, such as an import from another package, a default or namespace import, an alias of or member read off an imported binding, require() or a dynamic import(), or a local module that cannot be read, or any name Core would have to resolve when Core is not installed). Since 0.7.3 each import apps cannot use is also a note (its fix in the message), listed only and failing --strict from the next minor. So are the examples a package ships: component_without_example (a published component no block shows with exampleFor and isShowcase: true, or names in alsoShowcaseFor), template_category (a category written as a path, such as components/X), showcase_not_standalone (a showcase importing server-only code or reading process.env past NODE_ENV) and template_asset_not_packed (a new URL(…, import.meta.url) asset missing, or left out by npm pack --dry-run). When npm cannot list the files, an asset no files entry can reach is still a note and any other is listed in exampleAssets ({status: checked, findings: [], unchecked}, only when it lists any) as {file, asset, reason}. publicImports ({status: checked, findings: [], unchecked}) lists each import the check could not judge as {file, specifier, reason}; never counted or failed on. For the package being authored, olderCliNotes ({file, kind: template | namespace, field, message}) lists each descriptor field a CLI before 0.7.4 refuses, such as stability on a template or namespace doc; it is present only when it has entries, and is never counted or fails a check.',
     },
     {
       value: 'integration.template-conflicts',

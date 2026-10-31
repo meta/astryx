@@ -1,0 +1,254 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "close",
+    "matchCount": 45,
+    "results": [
+      {
+        "domain": "component",
+        "name": "AlertDialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/AlertDialog",
+        "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheet",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheet",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "BottomSheetSwitcher",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/BottomSheet",
+        "command": "astryx component BottomSheetSwitcher",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "DialogHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Dialog",
+        "command": "astryx component DialogHeader",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Drawer",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component Drawer",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "DrawerHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component DrawerHeader",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "DropdownMenuSubMenu",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/DropdownMenu",
+        "command": "astryx component DropdownMenuSubMenu",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Toast",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Toast",
+        "command": "astryx component Toast",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useImperativeAlertDialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useImperativeAlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useImperativeDialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useImperativeDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useListFocus",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useListFocus",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "usePopover",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Popover",
+        "command": "astryx hook usePopover",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "authoring/building-blocks/components/describe-the-component/subcomponent",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/building-blocks/components/describe-the-component/subcomponent write-the-subcomponent-doc",
+        "parent": "astryx docs authoring/building-blocks/components/describe-the-component/subcomponent --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "authoring/field-reference",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs authoring/field-reference schema-doc",
+        "parent": "astryx docs authoring/field-reference --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "browser-support",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs browser-support how-these-tiers-move-over-time",
+        "parent": "astryx docs browser-support --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "cli/api/functions/build",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/api/functions/build",
+        "parent": "astryx docs cli/api/functions",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons available-names",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons theme-overrides",
+        "parent": "astryx docs icons --index",
+        "mentions": [
+          "This lets you swap the icon set (e.g."
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "migration/component-migration",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs migration/component-migration move-the-app-frame-first",
+        "parent": "astryx docs migration/component-migration --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "styling/styling-advanced",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs styling/styling-advanced compound-components",
+        "parent": "astryx docs styling/styling-advanced --index",
+        "mentions": []
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

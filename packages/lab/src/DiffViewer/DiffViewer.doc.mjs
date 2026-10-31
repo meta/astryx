@@ -112,9 +112,15 @@ export const docs = {
     },
     {
       name: 'language',
-      type: 'string',
+      type: 'string | CodeLanguage',
       description:
-        'Syntax-highlighting language. Defaults to one inferred from the file extension; unknown extensions render as plain text.',
+        'Syntax-highlighting language: a built-in identifier, or a CodeBlock language value imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Defaults to one inferred from the file name or extension among the built-ins and codeLanguages; an unmatched file renders as plain text.',
+    },
+    {
+      name: 'codeLanguages',
+      type: 'ReadonlyArray<CodeLanguage>',
+      description:
+        'Language values the file name or extension may infer, such as [graphql, dockerfile]; a later entry wins. Pass the same list to every DiffViewer on a review page.',
     },
     {
       name: 'hasLineNumbers',

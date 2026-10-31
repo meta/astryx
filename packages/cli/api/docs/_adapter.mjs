@@ -39,6 +39,7 @@ import {
 } from '../../foundation/doc-compiler/read.mjs';
 import {
   buildDocsTree,
+  isExperimentalTreeNode,
   loadTreeInputs,
 } from '../../foundation/doc-compiler/tree.mjs';
 import {sortDiagnostics} from '../../foundation/doc-compiler/diagnostics.mjs';
@@ -58,6 +59,8 @@ import {
 } from '../../foundation/discovery/cli-self-docs.mjs';
 import {
   AUTHORING_REFERENCE_ROUTE,
+  EXPERIMENTAL_AUTHORING_ROUTE,
+  isExperimentalSelfDoc,
   loadAuthoringSelfDocs,
   schemaFieldTable,
   selfDocSection,
@@ -74,6 +77,7 @@ import {
   discoverIntegrationTemplatesForOne,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {orderRouteSuggestions} from '../../foundation/text/suggest-order.mjs';
@@ -390,8 +394,8 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** @type {ReturnType<typeof loadTreeInputs> | undefined} */
-let cliTreeInputs;
+/** The CLI's own tree files, loaded again after one of them changes. */
+const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
 /**
  * Every flat topic in the catalog, as the tree's topic levels read it.
@@ -438,8 +442,7 @@ async function flatTopicInputs(catalog) {
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  if (fresh || !cliTreeInputs) cliTreeInputs = loadTreeInputs();
-  const cli = await cliTreeInputs;
+  const cli = await cliTreeInputs({fresh});
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],
@@ -570,11 +573,15 @@ function identitiesOf(tree) {
 /**
  * The CLI's authoring docs, by kind and name. The field reference under
  * `astryx docs authoring` reads each as one section keyed by its name, so a
- * link to one opens that section. Loaded once per process, like the CLI's
- * tree files.
- * @type {Promise<Map<string, any>> | undefined}
+ * link to one opens that section. Loaded again after one of them changes,
+ * like the CLI's tree files.
  */
-let authoringDocs;
+const authoringDocs = reusedWhileUnchanged(() =>
+  loadAuthoringSelfDocs().then(
+    ({loaded}) =>
+      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
+  ),
+);
 
 /**
  * The CLI authoring doc a link names. The `authoring` namespace is the CLI's
@@ -584,11 +591,7 @@ let authoringDocs;
  * @returns {Promise<any | null>}
  */
 async function authoringDoc(kind, name) {
-  authoringDocs ??= loadAuthoringSelfDocs().then(
-    ({loaded}) =>
-      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
-  );
-  return (await authoringDocs).get(`${kind}\u0000${name}`) ?? null;
+  return (await authoringDocs()).get(`${kind}\u0000${name}`) ?? null;
 }
 
 /**
@@ -672,14 +675,20 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         ? await authoringDoc(parsed.kind, parsed.name)
         : null;
     if (authored) {
+      // An experimental schema is a section of its experimental route, not
+      // of the field reference (spec:AST-084 FR0).
+      const experimental = isExperimentalSelfDoc(authored);
+      const route = experimental
+        ? EXPERIMENTAL_AUTHORING_ROUTE
+        : AUTHORING_REFERENCE_ROUTE;
       return {
         link: {
           target,
           id: createDocId(provider, authored.type, authored.name),
-          route: AUTHORING_REFERENCE_ROUTE,
+          route,
           title: authored.displayName ?? authored.name,
           summary: renderTokens(authored.description ?? ''),
-          command: `astryx docs authoring ${authored.name}`,
+          command: `astryx docs ${experimental ? route : 'authoring'} ${authored.name}`,
         },
         kind: parsed.kind,
         typed: {doc: authored, providerId: CLI_PROVIDER_ID, tree: false},
@@ -1668,9 +1677,20 @@ export function placeLinks(tree, node) {
     up: node.parent == null ? 'astryx docs' : `astryx docs ${node.parent}`,
   };
   const parent = node.parent == null ? undefined : tree.get(node.parent);
-  const siblings =
+  // A stable node moves only to stable neighbors, so its links read as they
+  // do without experimental features (spec:AST-017 FR27, spec:AST-084 FR0),
+  // and an experimental node only to experimental ones, so each next read
+  // still names this one as its previous.
+  const experimental = isExperimentalTreeNode(tree, node);
+  const siblings = (
     parent?.slots.find(slot => slot.children.includes(node.route))?.children ??
-    [];
+    []
+  ).filter(route => {
+    const sibling = tree.get(route);
+    return (
+      sibling == null || isExperimentalTreeNode(tree, sibling) === experimental
+    );
+  });
   const at = siblings.indexOf(node.route);
   if (at > 0) links.previous = `astryx docs ${siblings[at - 1]}`;
   if (at !== -1 && at < siblings.length - 1) {
@@ -1824,8 +1844,11 @@ function movedRoute(topic, tree) {
 
 /**
  * The error for a docs argument that names nothing. For a route, it suggests
- * the children of the deepest namespace the route reaches; otherwise, every
- * topic and every top-level namespace.
+ * every child of the deepest namespace the route reaches, closest first.
+ * Otherwise it suggests the docs the argument names in another spelling, or
+ * failing that the topics and top-level namespaces, closest first and cut
+ * where the matches get weaker (every one of them when none shares a word
+ * with the argument).
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
  * @returns {Promise<AstryxError>}
@@ -1834,6 +1857,8 @@ export async function unknownTopicError(topic, catalog) {
   const tree = await projectTree(catalog);
   /** @type {Array<{name: string, reason: string}>} */
   let suggestions = [];
+  // Route children stay whole (spec:AST-046); only the other lists are cut.
+  let routeChildren = false;
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -1843,6 +1868,7 @@ export async function unknownTopicError(topic, catalog) {
     ) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
+        routeChildren = true;
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -1874,7 +1900,9 @@ export async function unknownTopicError(topic, catalog) {
     ];
   }
   if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions);
+    suggestions = orderRouteSuggestions(topic, suggestions, {
+      closest: !routeChildren,
+    });
   }
   // A route that moved names where it went, ahead of the usual suggestions
   // (spec:AST-046 FR9, FR6).

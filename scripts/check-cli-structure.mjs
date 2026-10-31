@@ -171,7 +171,11 @@ for (const kind of dirsIn(DOCTYPES)) {
   // return union from, so a kind missing there is silently unnarrowable for
   // consumers (`type === 'schema'` reads as a no-overlap comparison). Checking
   // the JSDoc catches it at the source rather than in the emitted artifact.
-  const docType = `${kind[0].toUpperCase()}${kind.slice(1)}Doc`;
+  // A kebab kind names its type in PascalCase: `icon-set` is IconSetDoc.
+  const docType = `${kind
+    .split('-')
+    .map(part => `${part[0].toUpperCase()}${part.slice(1)}`)
+    .join('')}Doc`;
   if (!aggregateParserReturns.includes(docType)) {
     errors.push(
       `doc-type "${kind}" is missing from the @returns union of authoring/doctypes/parse.mjs (expected ${docType})`,
@@ -624,6 +628,29 @@ for (const m of apiIndexSrc.matchAll(/export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)
   }
 }
 
+/** Functions exported from api/experimental.mjs, the experimental entry
+ *  (spec:AST-017 FR21): a CommandDoc marked `stability: 'experimental'` may
+ *  name one of these instead of a stable api/index.mjs export. */
+const experimentalApiExports = new Set();
+const experimentalEntry = path.join(API, 'experimental.mjs');
+if (fs.existsSync(experimentalEntry)) {
+  const src = fs.readFileSync(experimentalEntry, 'utf8');
+  for (const m of src.matchAll(/export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (m[2].endsWith('.type.mjs')) continue;
+    for (const part of m[1].split(',')) {
+      const name = part.trim().split(/\s+/).pop();
+      if (name && /^\w+$/.test(name)) experimentalApiExports.add(name);
+    }
+  }
+  for (const name of experimentalApiExports) {
+    if (apiExports.has(name)) {
+      errors.push(
+        `api boundary: '${name}' is exported from both api/index.mjs and api/experimental.mjs — an experimental function stays off the stable entry`,
+      );
+    }
+  }
+}
+
 /** @type {Set<string>} known FR1 gaps: fn values not yet exported.
  *  Remove an entry when the function is exported; do not add entries. */
 const FR1_KNOWN_GAPS = new Set();
@@ -645,7 +672,9 @@ function checkCommandDocFn(dir) {
     if (!fnMatch) continue; // group-only CommandDoc (no fn field)
     fr1Count++;
     const fn = fnMatch[1];
-    if (!apiExports.has(fn) && !FR1_KNOWN_GAPS.has(fn)) {
+    const experimentalFn =
+      experimentalApiExports.has(fn) && /stability:\s*['"]experimental['"]/.test(src);
+    if (!apiExports.has(fn) && !experimentalFn && !FR1_KNOWN_GAPS.has(fn)) {
       errors.push(
         `FR1: CommandDoc ${path.relative(CLI, full)} names fn '${fn}' which is not exported from api/index.mjs`,
       );

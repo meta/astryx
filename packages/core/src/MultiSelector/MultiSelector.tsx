@@ -18,6 +18,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -74,6 +75,7 @@ import {
 } from '../Selector/utils';
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {
   getInteractionModality,
@@ -99,8 +101,9 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
@@ -902,7 +905,7 @@ export interface MultiSelectorProps<
    * Not called when nothing is selected — the placeholder shows instead — and
    * not called for triggerDisplay 'badges', which renders Badge elements
    * rather than text.
-   * @default items => `${items.length} selected` for 'count', "A, B, C, +N" for 'labels'
+   * @default the translated `@astryx.multiSelector.selectedCount` message ("2 selected") for 'count', "A, B, C, +N" for 'labels'
    */
   formatValue?: (items: MultiSelectorSelectedItem[]) => string;
 
@@ -1087,7 +1090,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   description,
   isOptional = false,
   isRequired = false,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isReadOnly = false,
   disabledMessage,
   options,
@@ -1134,8 +1137,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   onFocus,
   onKeyDown: onKeyDownProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: MultiSelectorProps<T>) {
+  const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('MultiSelector', restProps, {
     containerXstyle,
     containerClassName,
@@ -1178,6 +1185,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const listboxId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
+  const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -1187,7 +1195,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
-  const inputGroup = useInputGroup();
 
   const [searchQuery, setSearchQuery] = useState('');
   // A typed query shows the search row's clear (✕) button, which becomes
@@ -1208,11 +1215,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useMultiCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip listeners attach to the existing trigger container.
+  // The trigger stays focusable via aria-disabled. Trigger guards and the value
+  // commit guards below block activation, including from an already-open panel.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1241,6 +1246,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the trigger together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const triggerLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
   const selectableItems = useMemo(
@@ -1437,6 +1448,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
@@ -1533,21 +1545,27 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Announce the filtered result count from the query-change handler (matching
   // BaseTypeahead) rather than a reactive effect: computing the count for the
   // next query here fires the announcement exactly once per keystroke and does
-  // not re-speak on unrelated re-renders. Reuses the announce instance shared
-  // with the selection-count announcements above.
+  // not re-speak on unrelated re-renders. The count, the create row and the
+  // empty panel's message state one thing, how the search ended, so they go
+  // through the search's own `hasReplace` announcer: one the next keystroke
+  // replaces before it is exposed is withdrawn rather than joined
+  // (`spec:AST-086` FR9, FR13), and keystrokes arriving within one frame,
+  // from a scanner, dictation or automation, say only the last query's.
+  // Selection changes keep the plain announcer above, so they still join.
+  const announceSearch = useAnnounce({hasReplace: true});
   const handleSearchChange = useCallback(
     (nextQuery: string) => {
       setSearchQuery(nextQuery);
       if (nextQuery.length === 0) {
         // Emptying the query clears the region rather than announcing a count.
-        announce('');
+        announceSearch('');
         return;
       }
       // While isLoading the panel deliberately shows nothing, so announcing a
       // result would put a claim in the one channel the screen has gone quiet
       // for.
       if (isLoading) {
-        announce('');
+        announceSearch('');
         return;
       }
       const count = filterOptionsByQuery(selectableItems, nextQuery).length;
@@ -1557,7 +1575,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           // The create row is the one result on screen, so the panel is not
           // empty and the rendered-message route below stays silent; say the
           // row.
-          announce(
+          announceSearch(
             t('@astryx.multiSelector.createOption', {query: nextCreateQuery}),
           );
           return;
@@ -1568,9 +1586,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         // keystroke — an async load landing with nothing that matches.
         return;
       }
-      announce(t('@astryx.multiSelector.resultCount', {count}));
+      announceSearch(t('@astryx.multiSelector.resultCount', {count}));
     },
-    [announce, isLoading, selectableItems, getCreateQuery, t],
+    [announceSearch, isLoading, selectableItems, getCreateQuery, t],
   );
 
   // The panel's empty message is role="presentation" — role="listbox" permits
@@ -1595,12 +1613,20 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const realItemCount = sortedItems.length - leadingCount;
   const isPanelEmpty =
     surface.isOpen && !isLoading && realItemCount === 0 && !hasCreateRow;
-  useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
+  // Through the search's announcer: the empty panel is how the search ended,
+  // so it and the count replace each other while not yet exposed
+  // (`spec:AST-086` FR13).
+  useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery, {
+    announce: announceSearch,
+  });
 
   // Handle toggle
   // Clear all selected values. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValues = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onChange([]);
     announceSelection([]);
     if (changeAction) {
@@ -1610,6 +1636,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     onChange,
     changeAction,
     startTransition,
@@ -1638,6 +1665,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   const handleToggle = useCallback(
     (itemValue: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(itemValue)
         ? optimisticValue.filter(v => v !== itemValue)
         : [...optimisticValue, itemValue];
@@ -1652,6 +1682,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1686,6 +1717,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       : false;
 
   const handleSelectAll = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     let newValue: string[];
     if (allEnabledSelected) {
       // Deselect all enabled items, keep disabled items that are selected
@@ -1711,6 +1745,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     allEnabledSelected,
     enabledItems,
     optimisticValue,
@@ -1727,6 +1762,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the option the caller adds is visible.
   const commitCreate = useCallback(
     (query: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(query)
         ? optimisticValue
         : [...optimisticValue, query];
@@ -1741,6 +1779,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1877,7 +1916,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ??
-              `${optimisticValue.length} selected`}
+              t('@astryx.multiSelector.selectedCount', {
+                count: optimisticValue.length,
+              })}
           </span>
         );
 
@@ -1920,6 +1961,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     placeholder,
     formatValue,
     maxBadges,
+    t,
   ]);
 
   // Render search input
@@ -2445,7 +2487,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': ariaLabelledBy,
+    'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -2481,6 +2523,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       // in this mode; the selector's own wiring below wins over them.
       ...rest,
       'aria-describedby': ariaDescribedByProp,
+      // Only a caller value is handed back, so a control that names itself
+      // with its own aria-labelledby before spreading keeps it.
+      ...(ariaLabelledByProp != null
+        ? {'aria-labelledby': ariaLabelledByProp}
+        : null),
       ref: mergeRefs<HTMLElement>(el => {
         popover.triggerRef(el);
         triggerRef.current = el;
@@ -2553,6 +2600,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         }}
         onClick={handleControlBoxClick}
         {...pressable}
+        {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
           themeProps('multi-selector', {
             variant,
@@ -2736,6 +2784,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
+      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

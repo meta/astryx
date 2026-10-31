@@ -29,7 +29,13 @@
  * For toggle selection, use SelectableCard.
  */
 
-import {type ReactNode, type MouseEvent, useRef, type Ref} from 'react';
+import {
+  type ReactNode,
+  type MouseEvent,
+  useCallback,
+  useRef,
+  type Ref,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -60,7 +66,11 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
 // element the controller writes to (`pressedAlpha`) at the press's strength,
 // 1 while on and 1 → 0 over the release, and inherited resolved by the
 // `::after` that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayColor = 'var(--_press-paint)';
+const pressedOverlayImage = 'var(--_press-paint-image)';
+/** Written by the press controller while it paints a press. */
+const PRESSED_ON = '[data-astryx-press="on"]';
+/** Written by the press controller for the press's release. */
+const PRESSED_FADING = '[data-astryx-press="fading"]';
 
 const styles = stylex.create({
   interactive: {
@@ -74,16 +84,18 @@ const styles = stylex.create({
   },
   // Hover and pressed overlay. Hover is guarded by @media (hover: hover) so
   // touch devices don't show a stuck hover state; the press has two arms,
-  // `:active` for a mouse and `data-astryx-press` for a finger.
+  // `:active` for a mouse and `data-astryx-press` for the press controller.
   overlay: {
-    // The `::after` layer paints whatever `--_press-overlay` says, and the
-    // interaction arms set that variable on the element itself. Setting the
-    // pseudo-element's colour from compound keys (`:active::after`) would
-    // leave the touch arms unable to outrank the mouse arm: a pseudo-element
-    // key carries the highest generated priority, and the `data-astryx-press`
-    // attribute the touch press model writes must win over `:active`, which
-    // still matches under a finger (see interactionOverlay.stylex.ts). Same
-    // enabled guard as the shared overlay utility.
+    // The `::after` layer paints the hover and mouse states as its colour,
+    // `--_press-overlay`, which their arms set on the element itself (same
+    // enabled guard as the shared overlay utility). The press the controller
+    // paints (a finger's, and on a touch-first device a mouse's or a key's)
+    // is the same layer's image, keyed on the `data-astryx-press` attribute
+    // the controller writes. Every arm of that press is a plain property of
+    // the `::after`, which outranks the layer's own defaults in a layered
+    // stylesheet and a flat one alike. A custom property's attribute arm
+    // does not: a layered build emits the property's default outside the
+    // priority layers its attribute arms land in, and the default wins.
     '--_press-overlay': {
       default: 'transparent',
       ':where(:not(:disabled,[aria-disabled="true"]))': {
@@ -98,32 +110,42 @@ const styles = stylex.create({
             colorVars['--color-overlay-hover'],
           ':active': colorVars['--color-overlay-pressed'],
         },
-        // The touch arms paint through the press's strength, which the
-        // card's `pressedAlpha` arms own: 1 on the first frame of a believed
-        // press, then 1 → 0 over the release. The `::after` inherits the
-        // resolved colour and repaints with it on every frame of the fade.
-        '[data-astryx-press="on"]': pressedOverlayColor,
-        '[data-astryx-press="fading"]': pressedOverlayColor,
       },
-    },
-    // A believed touch press paints on the first frame, and the release is the
-    // strength's own animation, so neither may pass through the layer's colour
-    // transition (it would fade the onset in, and drag behind the release).
-    // The mouse states keep the fast fade.
-    '--_press-overlay-transition': {
-      default: durationVars['--duration-fast'],
-      '[data-astryx-press="on"]': '0s',
-      '[data-astryx-press="fading"]': '0s',
     },
     '::after': {
       content: '""',
       position: 'absolute',
       inset: 0,
       pointerEvents: 'none',
-      transitionProperty: 'background-color',
-      transitionDuration: 'var(--_press-overlay-transition)',
+      // A press the controller paints shows on its first frame and fades on
+      // its strength's own animation, so the colour it replaces drops out at
+      // once rather than crossfading: no transition while it paints. The
+      // mouse states keep the fast fade.
+      transitionProperty: {
+        default: 'background-color',
+        [PRESSED_ON]: 'none',
+        [PRESSED_FADING]: 'none',
+      },
+      transitionDuration: durationVars['--duration-fast'],
       transitionTimingFunction: easeVars['--ease-standard'],
-      backgroundColor: 'var(--_press-overlay)',
+      // While the controller paints, the colour yields to the image: a
+      // touchscreen beside a fine pointer still matches `:active` under a
+      // finger, and the press would otherwise paint twice.
+      backgroundColor: {
+        default: 'var(--_press-overlay)',
+        [PRESSED_ON]: 'transparent',
+        [PRESSED_FADING]: 'transparent',
+      },
+      // The press at its strength, which the card's `pressedAlpha` arms own:
+      // 1 on the first frame of a believed press, then 1 → 0 over the
+      // release. The `::after` inherits the resolved paint and repaints with
+      // it on every frame of the fade. Read only inside this element's own
+      // arms, so a pressed ancestor's strength never paints here.
+      backgroundImage: {
+        default: null,
+        [PRESSED_ON]: pressedOverlayImage,
+        [PRESSED_FADING]: pressedOverlayImage,
+      },
     },
   },
   // Borderless variants (everything except `default`): drop the transparent
@@ -311,6 +333,41 @@ export function ClickableCard({
   const pressable = usePressFeedback();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  // The isDisabled value of the link that just detached: a link card that
+  // flips it replaces its hidden link (router component and plain anchor),
+  // and only that replacement takes focus back.
+  const detachedDisabledRef = useRef<boolean | null>(null);
+
+  // A focused link remounts when isDisabled changes: the replacement takes
+  // focus back, without scrolling, if focus fell to the page. Any other
+  // detach and attach (a hidden Activity or Suspense boundary revealed
+  // again) leaves focus where the person put it.
+  const setInteractiveRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (node == null) {
+        const previous = interactiveRef.current;
+        restoreFocusRef.current =
+          previous != null && previous === previous.ownerDocument.activeElement;
+        detachedDisabledRef.current = isDisabled;
+        interactiveRef.current = null;
+        return;
+      }
+      interactiveRef.current = node;
+      const isFlip =
+        detachedDisabledRef.current != null &&
+        detachedDisabledRef.current !== isDisabled;
+      const active = node.ownerDocument.activeElement;
+      const hasFallen = active == null || active === node.ownerDocument.body;
+      if (restoreFocusRef.current && isFlip && hasFallen) {
+        node.focus({preventScroll: true});
+      }
+      restoreFocusRef.current = false;
+      detachedDisabledRef.current = null;
+    },
+    [isDisabled],
+  );
+
   const LinkComponent = useLinkComponent();
 
   const {onClick, onMouseUp} = useClickableContainer({
@@ -330,6 +387,9 @@ export function ClickableCard({
     : onMouseUp;
 
   const isLink = href != null;
+
+  // Disabled links have no href, so bypass the router and render an anchor.
+  const LinkRoot = isDisabled ? 'a' : LinkComponent;
 
   // Only the `default` variant has a visible border. Card draws a transparent
   // 1px border on every other variant purely to avoid layout jitter; we drop
@@ -369,8 +429,8 @@ export function ClickableCard({
       onMouseUp={!isDisabled ? handleMouseUp : undefined}
       {...props}>
       {isLink ? (
-        <LinkComponent
-          ref={interactiveRef as React.Ref<HTMLAnchorElement>}
+        <LinkRoot
+          ref={setInteractiveRef}
           href={isDisabled ? undefined : href}
           target={isDisabled ? undefined : target}
           role={isDisabled ? 'link' : undefined}
@@ -383,7 +443,7 @@ export function ClickableCard({
         />
       ) : (
         <button
-          ref={interactiveRef as React.Ref<HTMLButtonElement>}
+          ref={setInteractiveRef}
           type="button"
           aria-label={label}
           aria-disabled={isDisabled || undefined}

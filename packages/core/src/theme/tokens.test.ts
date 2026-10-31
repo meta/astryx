@@ -1,13 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme} from './defineTheme';
+import {defineTheme, generateThemeRules} from './defineTheme';
 import {
   resolveThemeToken,
   resolveThemeTokens,
   tokenVar,
   tokenVars,
 } from './tokens';
+import {colorDefaults} from './tokens.stylex';
+import {domainTokenDefaults} from './domainTokens';
 
 const testTheme = defineTheme({
   name: 'test',
@@ -97,6 +99,21 @@ describe('resolveThemeToken', () => {
   it('resolves one token', () => {
     expect(resolveThemeToken(testTheme, '--color-accent', {mode: 'dark'})).toBe(
       '#FF5555',
+    );
+  });
+
+  it('resolves the exit curve to its accelerating default and to an override', () => {
+    // No rise at the start (y1 = 0): an exit moves off from rest and leaves
+    // fast, so its travel stays visible for the whole duration.
+    expect(resolveThemeToken(null, '--ease-exit', {mode: 'light'})).toBe(
+      'cubic-bezier(0.3, 0, 0.6, 0.6)',
+    );
+    const snappyExit = defineTheme({
+      name: 'snappy-exit',
+      tokens: {'--ease-exit': 'ease-in'},
+    });
+    expect(resolveThemeToken(snappyExit, '--ease-exit', {mode: 'dark'})).toBe(
+      'ease-in',
     );
   });
 
@@ -327,5 +344,98 @@ describe('focus outline tokens', () => {
     expect(tokens['--focus-outline-color']).toBe('#00FF00');
     expect(tokens['--focus-outline-width']).toBe('4px');
     expect(tokens['--focus-outline-offset']).toBe('0px');
+  });
+});
+
+describe('resolveThemeTokens and derived status roles', () => {
+  it('resolves an unset status role to the value the theme CSS derives (INV17)', () => {
+    const theme = defineTheme({
+      name: 'derived-status',
+      tokens: {'--color-success': '#3FB950'},
+    });
+    const css = generateThemeRules(theme).join('\n');
+    const emitted =
+      /--color-text-success: light-dark\((#[0-9A-F]{6}), (#[0-9A-F]{6})\)/.exec(
+        css,
+      );
+    expect(emitted).not.toBeNull();
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'light'}),
+    ).toBe(emitted![1]);
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'dark'}),
+    ).toBe(emitted![2]);
+    // Icon and border follow the derived text role.
+    expect(
+      resolveThemeToken(theme, '--color-icon-success', {mode: 'light'}),
+    ).toBe(emitted![1]);
+  });
+
+  it('keeps a status role the theme sets', () => {
+    const theme = defineTheme({
+      name: 'set-status',
+      tokens: {'--color-success': '#3FB950', '--color-text-success': '#123456'},
+    });
+    expect(
+      resolveThemeToken(theme, '--color-text-success', {mode: 'light'}),
+    ).toBe('#123456');
+  });
+});
+
+// INV10 governs only the colour tokens Astryx defines. The check reads Astryx's
+// own defaults, never consumer, application, or theme-author variables.
+describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
+  const property = '(?:text|icon|background|border)';
+  const intent = '(?:accent|neutral|info|success|warning|error)';
+  const hue = '(?:blue|cyan|gray|green|orange|pink|purple|red|teal|yellow)';
+  const emphasis = '(?:primary|secondary|disabled|emphasized)';
+  const surface = '(?:surface|body|card|popover|muted|inverted)';
+  const variant = '(?:-(?:muted|emphasized|hover|pressed|inverted))?';
+  const shapes = [
+    // 1 and 3: property first, then role, then an optional variant.
+    `^--color-${property}-(?:${emphasis}|${intent}|${surface}|${hue})${variant}$`,
+    // 2 and 3: the intent's own colour, then an optional variant.
+    `^--color-${intent}${variant}$`,
+    // 4: content on a fill.
+    `^--color-on-(?:${intent}${variant}|dark|light)$`,
+    // 5: domain layers.
+    '^--color-(?:data|syntax)-[a-z0-9-]+$',
+  ].map(source => new RegExp(source));
+  const utilityNames = new Set([
+    '--color-border',
+    '--color-overlay',
+    '--color-overlay-hover',
+    '--color-overlay-pressed',
+    '--color-shadow',
+    '--color-skeleton',
+    '--color-track',
+    '--color-tint-hover',
+  ]);
+  const colourNames = [
+    ...Object.keys(colorDefaults),
+    ...Object.keys(domainTokenDefaults),
+  ].filter(name => name.startsWith('--color-'));
+
+  it('checks a non-empty colour vocabulary', () => {
+    expect(colourNames.length).toBeGreaterThan(50);
+  });
+
+  it('gives every colour token Astryx defines one of the five shapes', () => {
+    const misfits = colourNames.filter(
+      name =>
+        !utilityNames.has(name) && !shapes.some(shape => shape.test(name)),
+    );
+    expect(misfits).toEqual([]);
+  });
+
+  it('rejects names outside the grammar', () => {
+    for (const name of [
+      '--color-status-foreground-success',
+      '--color-success-text',
+      '--color-foreground-error',
+      '--color-success-on',
+    ]) {
+      expect(shapes.some(shape => shape.test(name))).toBe(false);
+    }
   });
 });

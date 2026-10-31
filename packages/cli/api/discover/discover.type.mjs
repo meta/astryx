@@ -55,6 +55,7 @@
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
+ * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
  * @property {string} [latest] The latest release a discover source knows.
  */
 
@@ -70,6 +71,7 @@
  * @property {string[]} [themes]
  * @property {string[]} [codemods]
  * @property {string[]} [agentDocs]
+ * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
  * @property {string} [description]
  * @property {string[]} [aliases] The integration's other package names.
  * @property {string} source The discover source that lists it; `Astryx` for
@@ -136,11 +138,23 @@
  *   title?: string,
  *   summary?: string,
  *   keywords?: string[],
+ *   license?: string,
+ *   iconCount?: number,
+ *   default?: {variant?: string},
+ *   definitions?: string[],
+ *   command?: string,
  *   installed: boolean,
  *   installedAs?: string,
  *   install?: string,
  *   source?: string,
- * }} data
+ * }} data For an icon set, `title` and `summary` are its display name and
+ *   description, and it carries `license`, `iconCount`, `default` (the variant
+ *   an icon's own export draws, when the set names one), the shared icon names
+ *   its `map` covers (`definitions`), and `command`, which searches the set's icons. A source's
+ *   entry carries `iconCount` and `definitions` when the source lists them.
+ *   The icon-set fields (`license`, `iconCount`, `default`, `definitions`,
+ *   and `command`) are experimental: they may change or be removed in a patch
+ *   release.
  */
 
 /**

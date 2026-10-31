@@ -290,6 +290,44 @@ describe('doctor integration — command', () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it('validate type-checks each icon set descriptor against IconSetDoc', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/icons', version: '1.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {experimental: {iconSets: './icon-sets'}};\n",
+    );
+    const dir = path.join(tmpDir, 'icon-sets', 'outline');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'outline.doc.mjs'),
+      "export default {type: 'icon-set', name: 'outline', displayName: 'Outline', description: 'D', maintained: true, license: 'MIT'};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'outline.icons.json'),
+      JSON.stringify({schemaVersion: 1, module: '@acme/icons', icons: []}),
+    );
+    process.chdir(tmpDir);
+
+    await createProgram().parseAsync([
+      'node',
+      'astryx',
+      'doctor',
+      'integration',
+      'validate',
+      '--json',
+    ]);
+
+    const result = JSON.parse(logCalls.join('\n'));
+    expect(result.data.docTypes).toMatchObject({
+      status: 'checked',
+      docs: 1,
+      findings: [],
+    });
+  });
+
   it('validate says there is no doc to type-check, rather than asking for TypeScript', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-no-docs-'));
     try {

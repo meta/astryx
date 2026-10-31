@@ -116,7 +116,12 @@ const APPROVED_IMPLEMENTATION_FILES = [
   // NumberInput's locale-aware read of typed and pasted text: it derives the
   // grouping/decimal separators and group sizes from Intl rather than a table.
   'packages/core/src/NumberInput/numberParser.ts',
+  // TimeInput/DateTimeInput time text: the locale's hour cycle, digits,
+  // separator and day-period words, read off Intl and parsed back.
+  'packages/core/src/utils/timeFormat.ts',
   'packages/core/src/i18n/useCollator.ts',
+  // Joins several catalog messages into one locale-correct list (INV8).
+  'packages/core/src/i18n/useListFormatter.ts',
   'packages/charts/src/formatters.ts',
 ];
 
@@ -133,6 +138,7 @@ const APPROVED_TEST_ORACLE_FILES = [
   'packages/core/src/Timestamp/tooltipEntries.test.ts',
   'packages/core/src/PowerSearch/formatFilterValue.test.ts',
   'packages/core/src/Timestamp/Timestamp.test.tsx',
+  'packages/core/src/i18n/__tests__/useListFormatter.test.tsx',
 ];
 
 // These exact helper suites are the public default-behavior oracles. Production

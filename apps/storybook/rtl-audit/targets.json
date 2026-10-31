@@ -59,6 +59,7 @@
     "component": "CheckboxInput",
     "storyId": "core-checkboxinput--size-comparison",
     "dims": ["D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "inputSelectorBySize": {
@@ -104,6 +105,7 @@
     "component": "RadioList",
     "storyId": "core-radiolist--rich-content",
     "dims": ["D2", "D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "prev": "input[aria-label=\"Pro\"]",
@@ -124,6 +126,7 @@
     "component": "Switch",
     "storyId": "core-switch--default",
     "dims": ["D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
     "sizes": ["sm", "md"],
     "selectors": {
       "inputSelector": "input[type=\"checkbox\"]"
@@ -239,6 +242,18 @@
     "selectors": {
       "overlay": ".astryx-dropdown-menu",
       "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "DropdownMenuSubMenu",
+    "storyId": "core-dropdownmenusubmenu--row-states",
+    "dims": ["D4"],
+    "setup": {
+      "click": "[role=\"menuitem\"]:has-text(\"Share\")"
+    },
+    "selectors": {
+      "overlay": "[data-testid=\"dropdown-menu-submenu-flyout\"]",
+      "overlayRoot": "[role=\"menu\"]"
     }
   },
   {
@@ -404,6 +419,24 @@
     }
   },
   {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content-headerless",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
     "component": "FileInput",
     "storyId": "core-fileinput--with-error-status",
     "dims": ["D2"],
@@ -455,6 +488,18 @@
     "selectors": {
       "overlay": ".astryx-multi-selector-popup",
       "overlayRoot": "[role=\"combobox\"]"
+    }
+  },
+  {
+    "component": "ComplexSelector",
+    "storyId": "core-complexselector--controlled-toolbar-trigger",
+    "dims": ["D4"],
+    "setup": {
+      "click": "button[aria-haspopup=\"dialog\"]"
+    },
+    "selectors": {
+      "overlay": ".astryx-complex-selector-popup",
+      "overlayRoot": "button[aria-haspopup=\"dialog\"]"
     }
   },
   {

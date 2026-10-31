@@ -1,10 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {Activity, type ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ClickableCard} from './ClickableCard';
-import {hasReleaseFade, readsPressStrength} from '../__tests__/pressState';
+import {LinkProvider} from '../Link';
+import {
+  afterPaintsPress,
+  hasReleaseFade,
+  pressArmsShadowedByDefault,
+  readsPressStrength,
+} from '../__tests__/pressState';
 
 describe('ClickableCard', () => {
   it('renders children', () => {
@@ -166,6 +173,100 @@ describe('ClickableCard', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
+  it('does not render a disabled link through the router link component', () => {
+    function RouterLink({
+      href,
+      children,
+    }: {
+      href?: string;
+      children?: ReactNode;
+    }) {
+      if (href == null) {
+        throw new Error('Router link requires an href');
+      }
+      return <a href={href}>{children}</a>;
+    }
+
+    render(
+      <LinkProvider component={RouterLink}>
+        <ClickableCard label="Disabled link" href="/settings" isDisabled>
+          <span>Content</span>
+        </ClickableCard>
+      </LinkProvider>,
+    );
+
+    const link = screen.getByRole('link', {name: 'Disabled link'});
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('href');
+  });
+
+  it('keeps focus when a focused link card toggles its disabled state', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <ClickableCard label="Focus card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+
+    rerender(
+      <ClickableCard label="Focus card" href="/settings" isDisabled>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+
+    rerender(
+      <ClickableCard label="Focus card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+  });
+
+  it('leaves focus where the person put it when a hidden card is revealed', async () => {
+    const user = userEvent.setup();
+    function Harness({isHidden}: {isHidden: boolean}) {
+      return (
+        <>
+          <Activity mode={isHidden ? 'hidden' : 'visible'}>
+            <ClickableCard label="Hidden card" href="/settings">
+              <span>Content</span>
+            </ClickableCard>
+          </Activity>
+          <button type="button">Elsewhere</button>
+        </>
+      );
+    }
+    const {rerender} = render(<Harness isHidden={false} />);
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Hidden card'})).toHaveFocus();
+    rerender(<Harness isHidden />);
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Harness isHidden={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
+  it('takes focus back without scrolling the page', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <ClickableCard label="Scroll card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    await user.tab();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    rerender(
+      <ClickableCard label="Scroll card" href="/settings" isDisabled>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    focus.mockRestore();
+  });
+
   it('runs onClick once from the keyboard via the hidden button', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
@@ -257,11 +358,17 @@ describe('ClickableCard pressed state (touch)', () => {
       throw new Error('the card carries no pressable marker');
     }
     // The controller writes the card; the card owns the strength and its
-    // release, and `--_press-overlay` (what the `::after` paints) is the
-    // pressed token at that strength on both touch arms.
+    // release, and its `::after` paints the pressed token at that strength
+    // as its image on both arms, its hover and mouse colour yielding.
     expect(hasReleaseFade(card)).toBe(true);
     expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(card)).toBe(true);
+    expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(afterPaintsPress(card)).toBe(true);
+    // No press arm sits on a custom property the card also declares without
+    // it: in a layered stylesheet that declaration wins and the press never
+    // paints.
+    expect(pressArmsShadowedByDefault(card)).toEqual([]);
   });
 
   it('carries none of it when disabled', () => {

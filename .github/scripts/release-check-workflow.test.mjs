@@ -23,14 +23,19 @@ const packageJson = JSON.parse(
   fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
 );
 const releaseJobs = [
-  'check-scope',
-  'check-components',
+  'release-authority',
+  'test-registry-e2e',
+  // Decides the pull-request opt-ins; on a release check it opts nothing in
+  // and succeeds, so the owners that need it run.
+  'run-labels',
   'build-storybook',
   'typecheck',
   'visual-scout',
   'pr-visual',
   'pr-a11y-shard',
   'pr-a11y-audit',
+  'pr-a11y-guards',
+  'pr-a11y-specs',
   'pr-a11y',
   'a11y-contracts-shard',
   'a11y-contracts',
@@ -72,11 +77,17 @@ function runs(
     branch = releaseBranch,
     needs = dependencies(job),
     cancelled = false,
+    labels = [],
   } = {},
 ) {
   const expression = (job.if ?? 'true')
     .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
-    .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]');
+    .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]')
+    // GitHub's object filter: `labels.*.name` lists the labels' names.
+    .replace(
+      /contains\(github\.event\.pull_request\.labels\.\*\.name, '([^']+)'\)/g,
+      "(github.event.pull_request?.labels ?? []).some(label => label.name === '$1')",
+    );
   // GitHub injects success() unless the expression has a status function.
   if (
     !/\b(always|cancelled|success|failure)\(/.test(expression) &&
@@ -89,13 +100,39 @@ function runs(
     'needs',
     'always',
     'cancelled',
+    'steps',
+    'startsWith',
     `return Boolean(${expression});`,
   )(
-    {event_name: event},
+    {
+      event_name: event,
+      base_ref: event === 'pull_request' ? 'main' : '',
+      event: {pull_request: {labels: labels.map(name => ({name}))}},
+    },
     {operation, 'release-branch': branch},
     needs,
     () => true,
     () => cancelled,
+    // The scope step puts everything in scope outside a pull request.
+    {
+      scope: {
+        outputs: {
+          spec_only: 'false',
+          docsite_only: 'false',
+          tooling_only: 'false',
+          full_suite: 'true',
+          release_bump: 'false',
+          touches: 'true',
+          applies: 'true',
+          decided: 'true',
+          has_components: 'true',
+          has_rtl_components: 'true',
+          has_rtl_harness: 'true',
+          force_full_component_audits: 'true',
+        },
+      },
+    },
+    (value, prefix) => String(value ?? '').startsWith(prefix),
   );
 }
 
@@ -230,7 +267,8 @@ describe('explicit release routing', () => {
 
   it.each([
     'pr-a11y-shard',
-    'pr-a11y',
+    'pr-a11y-guards',
+    'pr-a11y-specs',
     'a11y-contracts-shard',
     'visual-scout',
     'pr-visual',
@@ -239,6 +277,46 @@ describe('explicit release routing', () => {
     const needs = dependencies(jobs[name]);
     needs['build-storybook'].result = 'failure';
     expect(runs(jobs[name], {needs})).toBe(false);
+  });
+
+  it('passes pr-a11y only when both accessibility owners succeed', () => {
+    const join = jobs['pr-a11y'];
+    const owner = step('pr-a11y', 'Require every accessibility owner');
+    expect(join.if).toContain('always()');
+    expect(owner.env).toEqual({
+      GUARDS_RESULT: '${{ needs.pr-a11y-guards.result }}',
+      SPECS_RESULT: '${{ needs.pr-a11y-specs.result }}',
+    });
+    const result = shell(owner.run, {
+      GUARDS_RESULT: 'success',
+      SPECS_RESULT: 'success',
+    });
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ['failure', 'success'],
+    ['cancelled', 'success'],
+    ['skipped', 'success'],
+    ['success', 'failure'],
+    ['success', 'cancelled'],
+    ['success', 'skipped'],
+  ])('blocks pr-a11y when its owners are %s/%s', (guards, specs) => {
+    const join = jobs['pr-a11y'];
+    const needs = dependencies(join);
+    needs['pr-a11y-guards'].result = guards;
+    needs['pr-a11y-specs'].result = specs;
+    expect(
+      runs(join, {
+        needs,
+        cancelled: guards === 'cancelled' || specs === 'cancelled',
+      }),
+    ).toBe(true);
+    const result = shell(
+      step('pr-a11y', 'Require every accessibility owner').run,
+      {GUARDS_RESULT: guards, SPECS_RESULT: specs},
+    );
+    expect(result.status).not.toBe(0);
   });
 
   it('keeps dispatch concurrency separate and non-cancelling', () => {
@@ -276,7 +354,7 @@ describe('explicit release routing', () => {
 
 describe('exact main pre-cut authority', () => {
   const authority = step(
-    'check-scope',
+    'release-authority',
     'Validate exact main pre-cut authority',
   );
 
@@ -284,7 +362,7 @@ describe('exact main pre-cut authority', () => {
     expect(runs(authority, {branch: 'main'})).toBe(true);
     expect(runs(authority)).toBe(false);
     expect(runs(authority, {branch: 'main', operation: 'capture'})).toBe(false);
-    expect(jobs['check-scope'].outputs.release_head).toContain(
+    expect(jobs['release-authority'].outputs.release_head).toContain(
       'steps.main-authority.outputs.head',
     );
   });
@@ -373,8 +451,8 @@ describe('exact main and release branch completion', () => {
       githubScript(join, {needs: complete}),
     ).resolves.toBeUndefined();
     expect(jobs['release-check'].needs).toEqual([
-      'check-scope',
-      'check-components',
+      'release-authority',
+      'test-registry-e2e',
       'build-storybook',
       'typecheck',
       'pr-visual',
@@ -491,57 +569,22 @@ describe('exact main and release branch completion', () => {
 
 describe('full release scope without PR metadata or maintenance writes', () => {
   it('forces broad scope before any changed-file classification', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-release-scope-'));
-    try {
-      for (const [job, name, expected] of [
-        [
-          'check-scope',
-          'Determine change scope',
-          {
-            docsite_only: 'false',
-            spec_only: 'false',
-            tooling_only: 'false',
-            release_bump: 'false',
-          },
-        ],
-        [
-          'check-components',
-          'Check for component changes',
-          Object.fromEntries(
-            Object.entries(fullOutputs).filter(
-              ([key]) => !key.endsWith('_only'),
-            ),
-          ),
-        ],
-      ]) {
-        const output = path.join(dir, `${job}.txt`);
-        const script = step(job, name).run.replaceAll(
-          '${{ github.event_name }}',
-          'workflow_dispatch',
-        );
-        const result = shell(
-          script,
-          {
-            GITHUB_OUTPUT: output,
-            ...(job === 'check-scope'
-              ? {EVENT_NAME: 'workflow_dispatch', BASE_REF: ''}
-              : {}),
-          },
-          'git() { echo "must not inspect changed files" >&2; return 99; }',
-        );
-        expect(result.status, result.stderr).toBe(0);
-        expect(
-          Object.fromEntries(
-            fs
-              .readFileSync(output, 'utf8')
-              .trim()
-              .split('\n')
-              .map(line => line.split('=')),
-          ),
-        ).toEqual(expected);
+    // No release job classifies changed files: the authority job has no
+    // classifier, and every job with a scope step runs the scope action,
+    // which puts everything in scope outside a pull request
+    // (test-scope-action.test.mjs).
+    expect(
+      jobs['release-authority'].steps.some(item => item.id === 'scope'),
+    ).toBe(false);
+    for (const job of releaseJobs) {
+      for (const item of jobs[job].steps ?? []) {
+        if (item.id === 'scope') {
+          expect(item.uses, job).toBe(
+            './.test-scope/.github/actions/test-scope',
+          );
+          expect(item.with?.['outside-pull-request'], job).not.toBe('skip');
+        }
       }
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
     }
   });
 
@@ -582,7 +625,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
 
   it('runs the canonical accessibility command without a component filter for full scope', () => {
     const audit = step('pr-a11y-audit', 'Run accessibility audit');
-    expect(runs(step('pr-a11y', 'Run accessibility audit'))).toBe(false);
+    expect(runs(step('pr-a11y-guards', 'Run accessibility audit'))).toBe(false);
     expect(step('pr-a11y-audit', 'Require every audit shard').run).toContain(
       '"$SHARD_RESULT" != success',
     );
@@ -627,7 +670,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
           }),
         );
         const result = shell(
-          step('pr-a11y', 'Run accessibility audit').run.replaceAll(
+          step('pr-a11y-guards', 'Run accessibility audit').run.replaceAll(
             '${{ github.event_name }}',
             'pull_request',
           ),
@@ -653,7 +696,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
 
   it('does not silently audit everything when PR scope resolution fails', () => {
     const result = shell(
-      step('pr-a11y', 'Run accessibility audit').run.replaceAll(
+      step('pr-a11y-guards', 'Run accessibility audit').run.replaceAll(
         '${{ github.event_name }}',
         'pull_request',
       ),
@@ -668,7 +711,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
   });
 
   it('clones full history only where the release-branch validator reads it', () => {
-    const checkout = jobs['check-scope'].steps.find(step =>
+    const checkout = jobs['release-authority'].steps.find(step =>
       step.uses?.startsWith('actions/checkout@'),
     );
     const expression = String(checkout.with['fetch-depth']).replace(
@@ -687,9 +730,7 @@ describe('full release scope without PR metadata or maintenance writes', () => {
         (value, prefix) => String(value).startsWith(prefix),
       );
     expect(depth('workflow_dispatch', releaseBranch)).toBe('0');
-    expect(depth('pull_request', '', 'release/v0.6.5')).toBe('0');
     expect(depth('workflow_dispatch', 'main')).toBe('50');
-    expect(depth('pull_request', '', 'main')).toBe('50');
   });
 
   it('keeps exhaustive a11y contracts and their artifacts release-only', () => {
@@ -727,13 +768,17 @@ describe('full release scope without PR metadata or maintenance writes', () => {
     expect(contracts.env.A11Y_CONTRACT_WORKERS).toBe(4);
     // Shard legs that run four pages or workers get four cores.
     for (const job of ['visual-scout', 'pr-a11y-shard']) {
-      expect(jobs[job]['runs-on'], job).toBe('4-core-ubuntu');
+      expect(jobs[job]['runs-on'], job).toContain(
+        "'4-core-ubuntu' || 'ubuntu-latest'",
+      );
     }
     expect(
       step('visual-scout', 'Scout this shard of the release plan').run,
     ).toContain('--concurrency 4');
     // Four workers need four cores; on two the CPU-bound specs time out.
-    expect(jobs['a11y-contracts-shard']['runs-on']).toBe('4-core-ubuntu');
+    expect(jobs['a11y-contracts-shard']['runs-on']).toContain(
+      "'4-core-ubuntu' || 'ubuntu-latest'",
+    );
     expect(contracts['continue-on-error']).toBeUndefined();
     // The join fails closed: a failed shard, or an evidence set no shard
     // produced, blocks release-check through a11y-contracts.
@@ -751,17 +796,18 @@ describe('full release scope without PR metadata or maintenance writes', () => {
       );
       expect(step('a11y-contracts', name).with['delete-merged']).toBe(true);
     }
-    for (const name of [
-      'Run modal close visibility guard',
-      'Run theme var reachability guard',
-      'Run story play guard',
+    for (const [job, name] of [
+      ['pr-a11y-guards', 'Run modal close visibility guard'],
+      ['pr-a11y-guards', 'Run theme var reachability guard'],
+      ['pr-a11y-guards', 'Run story play guard'],
+      ['pr-a11y-specs', 'Run browser accessibility specs'],
     ]) {
       expect(
-        runs(step('pr-a11y', name), {event: 'pull_request', operation: ''}),
+        runs(step(job, name), {event: 'pull_request', operation: ''}),
         name,
       ).toBe(true);
-      expect(runs(step('pr-a11y', name)), name).toBe(true);
-      expect(step('pr-a11y', name)['continue-on-error']).toBeUndefined();
+      expect(runs(step(job, name)), name).toBe(true);
+      expect(step(job, name)['continue-on-error']).toBeUndefined();
     }
   });
 
@@ -771,14 +817,15 @@ describe('full release scope without PR metadata or maintenance writes', () => {
         jobs['pr-rtl-shard'].strategy.matrix.include.map(leg => leg.package),
       ),
     ]).toEqual(['core', 'lab', 'charts', 'richtext', 'vega']);
+    // Outside a pull request the scope step reports full scope.
     expect(step('pr-rtl-shard', 'Resolve RTL shard scope').run).toContain(
-      '--force-full "${{ needs.check-components.outputs.force_full_component_audits }}"',
+      '--force-full "${{ steps.scope.outputs.force_full_component_audits }}"',
     );
     expect(step('pr-rtl', 'Require every applicable RTL shard').run).toContain(
-      '--force-full "${{ needs.check-components.outputs.force_full_component_audits }}"',
+      '--force-full "${{ steps.scope.outputs.force_full_component_audits }}"',
     );
     expect(step('pr-rtl-shard', 'Require completed RTL shard report').if).toBe(
-      'always()',
+      "always() && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')",
     );
     expect(step('pr-rtl-shard', 'Run RTL audit')['continue-on-error']).toBe(
       true,

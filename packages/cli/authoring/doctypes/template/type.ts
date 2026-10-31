@@ -51,6 +51,17 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  isReady: false show as "(WIP)" in the gallery and CLI. */
   isReady?: boolean;
 
+  /** The icon definition each icon the source imports draws
+   *  (`{TrashIcon: 'delete'}`), keyed by the name a named import reads
+   *  (`{Trash as TrashIcon}` is `Trash`) or a default import's local name
+   *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
+   *  icon set, each declared icon is replaced by the set's icon for that
+   *  definition (`astryx docs cli/experimental/icon-definitions`), and every
+   *  key is reported as mapped or kept. A name imported from two modules
+   *  (`TrashIcon` from an outline and a solid module) needs one key.
+   *  @experimental May change or be removed in a patch release. */
+  icons?: Record<string, string>;
+
   /** Whether this template is a scaffolding tool only (e.g. blank page).
    *  Scaffold templates are available via the CLI but hidden from
    *  browsable template galleries like the craft browser. */

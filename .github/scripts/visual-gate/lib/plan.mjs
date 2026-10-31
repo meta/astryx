@@ -454,6 +454,28 @@ export function representativeStories(stories) {
 }
 
 /**
+ * The components a scoped pull request's visual gate audits (spec:AST-030
+ * FR13): every touched component, which must have a stable representative,
+ * plus each reverse-dependent folder that has one. A dependent folder with no
+ * stable story is reported, not audited.
+ *
+ * @param {ReturnType<typeof readStoryIndex>} stories
+ * @param {string[]} touched
+ * @param {string[]} dependents
+ * @returns {{components: string[], dropped: string[]}}
+ */
+export function visualComponentScope(stories, touched, dependents) {
+  const representatives = representativeStories(stories);
+  const kept = [];
+  const dropped = [];
+  for (const dependent of new Set(dependents)) {
+    if (touched.includes(dependent)) continue;
+    (representatives.has(dependent) ? kept : dropped).push(dependent);
+  }
+  return {components: [...new Set([...touched, ...kept])], dropped};
+}
+
+/**
  * Select the focused PR stories for touched components and fail closed when a
  * requested component has no stable representative in the built Storybook.
  *

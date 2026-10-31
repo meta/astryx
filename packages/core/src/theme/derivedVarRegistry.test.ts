@@ -86,11 +86,30 @@ const STRUCTURAL_VARS = new Set([
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
   '--table-row-overlay',
+  // The width a cell's row divider draws (0 on the last row), which a pinned
+  // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
+  // Private runtime plumbing, never authored by a theme.
+  '--_table-row-divider-width',
+  // A gliding row's divider, carried on the row for the glide
+  // (Table/glidingDivider.ts). Private runtime plumbing.
+  '--_table-row-glide-width',
+  '--_table-row-glide-style',
+  '--_table-row-glide-color',
+  '--_table-row-glide-offset',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
   // padding, propagated down the tree. Structural, never authored by a theme.
   '--_section-padding-propagated',
+  // Layout's middle row tells LayoutContent that a divider-less header or
+  // footer sits beside it (Layout/layoutEdges.stylex.ts). Structural, never
+  // authored by a theme.
+  '--_layout-flush-block-start',
+  '--_layout-flush-block-end',
+  // ProgressBar's filled share of the track, written inline from `value` on
+  // every render and read by the fill's transform. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-fill',
 ]);
 
 /**
@@ -228,6 +247,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   DropdownMenu: 'dropdown-menu',
   Field: 'field',
   HoverCard: 'hover-card',
+  Icon: 'icon',
   Item: 'item',
   NumberInput: 'number-input',
   Popover: 'popover',
@@ -292,12 +312,11 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
-  // The interaction overlay's fill and its transition on the ::after layer of
-  // the cards: written by the component's own hover / pressed arms (mouse
-  // `:active`, touch `data-astryx-press`), never a value a theme author sets; the
-  // overlay colours themselves are the shared interaction tokens.
+  // The interaction overlay's colour on the ::after layer of the cards:
+  // written by the component's own hover and mouse `:active` arms, never a
+  // value a theme author sets; the overlay colours themselves are the shared
+  // interaction tokens.
   '--_press-overlay',
-  '--_press-overlay-transition',
   // The touch press's paint at its current strength, declared once by the
   // shared overlay styles on the element the controller writes to and read
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
@@ -495,6 +514,20 @@ describe('getDerivedVars', () => {
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual(['--_textarea-inline-padding']);
     expect(result[0].replaces).toBe(true);
+  });
+
+  it('marks icon width and height as replacing the source property', () => {
+    // spec:AST-087 FR10: the glyph reads these vars for its dimension, so a
+    // raw width/height beside them would only compete with its size styles.
+    for (const [property, varName] of [
+      ['width', '--_icon-width'],
+      ['height', '--_icon-height'],
+    ]) {
+      const result = getDerivedVars('icon', property);
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual([varName]);
+      expect(result[0].replaces).toBe(true);
+    }
   });
 
   it('marks progress-bar-mark width and height as replacing the source property', () => {

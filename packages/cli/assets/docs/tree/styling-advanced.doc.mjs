@@ -142,7 +142,7 @@ const overrides = stylex.create({
         },
         {
           type: 'prose',
-          text: 'The upgrade treats a `components` map as a theme when it belongs to a `defineTheme()` call imported from Astryx, an object typed as an Astryx theme, or a theme object with a static `name` whose component entries are style objects. It leaves computed theme keys, unqualified classes, unknown consumer classes, declarations, comments, and CSS inside JavaScript or TypeScript strings unchanged. It adds `TODO(astryx upgrade)` when a map has both an old and a canonical key, and when a bare class Astryx once emitted has no known meaning on the target it qualifies. Review each TODO by hand.',
+          text: 'The upgrade treats a `components` map as a theme when it belongs to a `defineTheme()` call imported from Astryx, an object typed as an Astryx theme, or the theme object a same-stem theme descriptor (`<stem>.doc.mjs`) declares: the top-level binding exported as `<stem>`, with a static `name` and component entries that are style objects. A look-alike object anywhere else, such as a theme object from another library in the same file, is not an Astryx theme. It leaves computed theme keys, unqualified classes, unknown consumer classes, declarations, comments, and CSS inside JavaScript or TypeScript strings unchanged. It adds `TODO(astryx upgrade)` when a map has both an old and a canonical key, and when a bare class Astryx once emitted has no known meaning on the target it qualifies. Review each TODO by hand.',
         },
       ],
     },

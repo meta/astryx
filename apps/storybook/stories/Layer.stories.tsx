@@ -1520,3 +1520,68 @@ export const Playground: Story = {
   },
   render: () => <PlaygroundDemo />,
 };
+
+/**
+ * A trigger that carries a focus-driven layer (the shape of a tooltip, shown
+ * on plain focus) and opens a light-dismissible layer. An Escape the browser's
+ * close watcher answers is a hide the browser runs itself: with focus inside
+ * the layer, it returns focus to the trigger while the document still counts
+ * the layer as hiding, and the focus-driven layer asks to show inside that
+ * window. A tap outside is the browser's hide too, but it returns no focus:
+ * the press itself took it.
+ */
+function BrowserHideWakesAFocusLayerDemo() {
+  const content = useLayer({mode: 'context', lightDismiss: true});
+  const hint = useLayer({mode: 'context'});
+  // A second light-dismissible layer, opened by a press that light-dismisses
+  // the first one; like a menu, it moves focus into itself right after the
+  // show, which only works when the show ran at once.
+  const other = useLayer({mode: 'context', lightDismiss: true});
+  const otherInsideRef = useRef<HTMLButtonElement | null>(null);
+  return (
+    <div {...stylex.props(styles.demoArea)}>
+      <Button
+        ref={el => {
+          content.ref(el);
+          hint.ref(el);
+        }}
+        label="Show layer"
+        onFocus={hint.show}
+        onBlur={hint.hide}
+        onClick={() => (content.isOpen ? content.hide() : content.show())}
+      />
+      {content.render(
+        <div {...stylex.props(styles.popoverContent)}>
+          <Text type="body">A light-dismissible layer.</Text>
+          <Button label="Inside" onClick={content.hide} />
+        </div>,
+        {placement: 'below', alignment: 'center'},
+      )}
+      {hint.render(
+        <div {...stylex.props(styles.popoverContent)} role="tooltip">
+          <Text type="body">Shown while the trigger has focus.</Text>
+        </div>,
+        {placement: 'above', alignment: 'center'},
+      )}
+      <Button
+        ref={other.ref}
+        label="Show the other layer"
+        onClick={() => {
+          other.show();
+          otherInsideRef.current?.focus();
+        }}
+      />
+      {other.render(
+        <div {...stylex.props(styles.popoverContent)}>
+          <Text type="body">The other layer.</Text>
+          <Button ref={otherInsideRef} label="Inside the other" />
+        </div>,
+        {placement: 'below', alignment: 'center'},
+      )}
+    </div>
+  );
+}
+
+export const BrowserHideWakesAFocusLayer: Story = {
+  render: () => <BrowserHideWakesAFocusLayerDemo />,
+};

@@ -9,11 +9,14 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  DEFAULT_COMPACT_DEFINITION,
   DEFAULT_WIDTH_BREAKPOINTS,
   WIDTH_BREAKPOINT_NAMES,
+  compactDefinition,
   defineTheme,
   generateAdaptationCSS,
   generateThemeCSS,
+  generateThemeRules,
   type DefineThemeInput,
   type DefinedTheme,
 } from './index';
@@ -80,6 +83,7 @@ describe('width breakpoint metadata', () => {
         },
         rules: [],
       },
+      __adaptationRules: [],
       __axes: {},
     } as unknown as DefinedTheme;
 
@@ -100,6 +104,41 @@ describe('width breakpoint metadata', () => {
         } as unknown as DefineThemeInput['adaptations'],
       }),
     ).toThrow(message);
+  });
+});
+
+describe('compact definition (spec:AST-012 FR9)', () => {
+  it('is width below md or height below 500 at the default points', () => {
+    expect(DEFAULT_COMPACT_DEFINITION).toEqual({
+      widthBelow: 768,
+      heightBelow: 500,
+      query: '(width < 768px), (height < 500px)',
+      coarsePointerQuery:
+        '(width < 768px) and (pointer: coarse), (height < 500px) and (pointer: coarse)',
+    });
+    expect(compactDefinition()).toEqual(DEFAULT_COMPACT_DEFINITION);
+  });
+
+  it("follows a theme's effective md point and keeps the height edge", () => {
+    const theme = defineTheme({
+      name: 'wide-md',
+      adaptations: {widthBreakpoints: {md: 800, lg: 1100}},
+    });
+    const points = theme.__adaptations?.widthBreakpoints;
+    if (points == null) {
+      throw new Error('theme has no effective width breakpoints');
+    }
+    expect(compactDefinition(points)).toEqual({
+      widthBelow: 800,
+      heightBelow: 500,
+      query: '(width < 800px), (height < 500px)',
+      coarsePointerQuery:
+        '(width < 800px) and (pointer: coarse), (height < 500px) and (pointer: coarse)',
+    });
+  });
+
+  it('is frozen, so no caller can change the shared definition', () => {
+    expect(Object.isFrozen(DEFAULT_COMPACT_DEFINITION)).toBe(true);
   });
 });
 
@@ -259,6 +298,379 @@ describe('rule order and writes', () => {
 
     expect(theme.__adaptations.rules).toHaveLength(2);
     expect(count(generateAdaptationCSS(theme).component, '@media')).toBe(1);
+  });
+
+  it('keeps status aliases at the root so conditional authored roles win', () => {
+    const theme = defineTheme({
+      name: 'conditional-status-role-precedence',
+      tokens: {'--color-text-blue': '#0074e2'},
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-info': '#123456'}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#0055aa'}},
+          },
+        ],
+      },
+      onDark: {tokens: {'--color-text-blue': '#ffffff'}},
+    });
+    const {component} = generateThemeCSS(theme);
+    const adaptationCss = generateAdaptationCSS(theme).component;
+
+    // The root alias follows source-only adaptation writes through var(); the
+    // dark media surface that sets the hue rebinds its own alias.
+    expect(count(component, '--color-text-info: var(--color-text-blue);')).toBe(
+      2,
+    );
+    expect(component).toContain('--color-text-info: #123456;');
+    expect(adaptationCss).toContain('--color-text-blue: #0055aa;');
+    expect(adaptationCss).not.toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('replays authored status roles after overlapping adaptation and media aliases', () => {
+    const theme = defineTheme({
+      name: 'conditional-status-role-replay',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-info': '#123456'}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#0055aa'}},
+          },
+        ],
+      },
+      onDark: {tokens: {'--color-text-blue': '#ffffff'}},
+    });
+    const css = generateThemeCSS(theme).component;
+    const alias = '--color-text-info: var(--color-text-blue);';
+    const authored = '--color-text-info: #123456;';
+
+    // The adaptation-only source keeps its alias where that condition matches,
+    // and the media surface that sets the hue gets its own.
+    expect(count(css, alias)).toBe(2);
+    // The authored role is emitted normally and replayed after adaptation aliases.
+    expect(count(css, authored)).toBe(2);
+    // The replay follows the adaptation alias; the media alias sits in its
+    // own surface block.
+    expect(css.lastIndexOf(authored)).toBeGreaterThan(css.indexOf(alias));
+  });
+
+  it('suppresses a root alias that an adaptation would turn into a cycle', () => {
+    const theme = defineTheme({
+      name: 'adaptation-closes-root-role-cycle',
+      tokens: {'--color-text-blue': '#0074e2'},
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-blue': 'var(--color-text-info)'}},
+          },
+        ],
+      },
+    });
+    const rootCss = generateThemeRules(theme).join('\n');
+    const fullCss = generateThemeCSS(theme).component;
+
+    expect(fullCss).toContain('--color-text-blue: var(--color-text-info);');
+    expect(rootCss).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('checks generated aliases across overlapping adaptation rules', () => {
+    const theme = defineTheme({
+      name: 'overlapping-generated-role-cycle',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              tokens: {
+                '--color-text-blue': 'var(--color-text-success)',
+              },
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {'--color-text-green': 'var(--color-text-info)'},
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+
+    // Both rules can match together, so the second alias would close a loop
+    // through the first and is not emitted.
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
+    expect(css).not.toContain('--color-text-success: var(--color-text-green);');
+  });
+
+  it('keeps aliases across mutually exclusive adaptation conditions', () => {
+    const theme = defineTheme({
+      name: 'mutually-exclusive-status-references',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {'--color-text-blue': 'var(--color-text-success)'},
+            },
+          },
+          {
+            when: {pointer: 'fine'},
+            value: {
+              tokens: {'--color-text-green': 'var(--color-text-info)'},
+            },
+          },
+        ],
+      },
+    });
+
+    expect(generateThemeCSS(theme).component).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('keeps an alias when a later matching rule repairs the cycle', () => {
+    const theme = defineTheme({
+      name: 'repaired-status-reference',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': 'var(--color-text-info)'}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#abcdef'}},
+          },
+        ],
+      },
+    });
+
+    expect(generateThemeCSS(theme).component).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('checks the final authored-role replay before emitting aliases', () => {
+    const theme = defineTheme({
+      name: 'adaptation-role-replay-cycle',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {'--color-text-info': 'var(--color-text-success)'},
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {
+                '--color-text-blue': '#123456',
+                '--color-text-green': 'var(--color-text-info)',
+              },
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+
+    expect(css).not.toContain('--color-text-success: var(--color-text-green);');
+  });
+
+  it('preserves important declarations while modeling later repairs', () => {
+    const theme = defineTheme({
+      name: 'important-status-reference',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {
+                '--color-text-blue': 'var(--color-text-info) !important',
+              },
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#123456'}},
+          },
+        ],
+      },
+    });
+    const rootCss = generateThemeRules(theme).join('\n');
+
+    expect(rootCss).not.toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('does not treat an escaped bang as declaration priority', () => {
+    const theme = defineTheme({
+      name: 'escaped-bang-status-reference',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              tokens: {
+                '--color-text-blue': 'var(--color-text-info) \\!important',
+              },
+            },
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#123456'}},
+          },
+        ],
+      },
+    });
+    const rootCss = generateThemeRules(theme).join('\n');
+
+    expect(rootCss).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
+  it('does not treat an important() function as declaration priority', () => {
+    const theme = defineTheme({
+      name: 'important-function-status-reference',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': 'red !important()'}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': 'var(--color-text-info)'}},
+          },
+        ],
+      },
+    });
+
+    expect(generateThemeRules(theme).join('\n')).not.toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('does not model a dropped declaration as a cycle repair', () => {
+    const theme = defineTheme({
+      name: 'dropped-status-repair',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': 'var(--color-text-info)'}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-blue': '#abcdef;'}},
+          },
+        ],
+      },
+    });
+    const warnings: string[] = [];
+    const rootCss = generateThemeRules(theme, warnings).join('\n');
+
+    expect(rootCss).not.toContain('--color-text-info: var(--color-text-blue);');
+    expect(generateAdaptationCSS(theme, warnings).component).not.toContain(
+      '--color-text-blue: #abcdef;',
+    );
+    expect(warnings.some(warning => warning.includes('dropped'))).toBe(true);
+  });
+
+  it('keeps a root alias when a matching rule overwrites that alias', () => {
+    const theme = defineTheme({
+      name: 'overwritten-root-status-alias',
+      tokens: {'--color-text-blue': '#0066cc'},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--color-text-info': '#123456'}},
+          },
+        ],
+      },
+    });
+    theme.__adaptationRules![0].tokens['--color-text-info'] =
+      'var(--color-text-info)';
+
+    expect(generateThemeRules(theme).join('\n')).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('invalidates cached status aliases after legacy token mutation', () => {
+    const theme = defineTheme({
+      name: 'mutated-status-alias-cache',
+      tokens: {'--color-text-blue': '#0074e2'},
+    });
+
+    expect(generateThemeCSS(theme).component).toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+    theme.tokens['--color-text-blue'] = 'var(--color-text-info)';
+    expect(generateThemeCSS(theme).component).not.toContain(
+      '--color-text-info: var(--color-text-blue);',
+    );
+  });
+
+  it('invalidates cached rules after legacy adaptation component mutation', () => {
+    const theme = defineTheme({
+      name: 'mutated-adaptation-component-cache',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {
+              components: {button: {base: {borderWidth: '1px'}}},
+            },
+          },
+        ],
+      },
+    });
+
+    expect(generateThemeCSS(theme).component).toContain('border-width: 1px');
+    theme.__adaptationRules = theme.__adaptationRules!.map(rule => ({
+      ...rule,
+      components: {button: {base: {borderWidth: '9px'}}},
+    }));
+    const css = generateThemeCSS(theme).component;
+    expect(css).toContain('border-width: 9px');
+    expect(css).not.toContain('border-width: 1px');
+  });
+
+  it('emits a guarded alias when only an adaptation authors the source', () => {
+    const theme = defineTheme({
+      name: 'adaptation-only-status-source',
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-blue': '#0055aa'}},
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+
+    expect(css).toContain('--color-text-blue: #0055aa;');
+    expect(css).toContain('--color-text-info: var(--color-text-blue);');
   });
 
   it('lets explicit values beat generated values within one rule', () => {

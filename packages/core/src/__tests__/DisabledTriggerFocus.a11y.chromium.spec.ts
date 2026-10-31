@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file DisabledTriggerFocus.a11y.chromium.spec.ts
@@ -37,7 +38,7 @@ const CASES = [
   },
   {
     storyId: 'a11y-disabled-trigger-focus--complex-selector-trigger',
-    role: 'button',
+    role: 'combobox',
     name: 'View options',
   },
 ] as const;

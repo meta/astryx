@@ -23,6 +23,7 @@ import {createLayerScopedContext as createContext} from '../Layer/layerScopedCon
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
+import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
@@ -74,7 +75,15 @@ const styles = stylex.create({
 // Props — Discriminated Union
 // =============================================================================
 
-interface ToggleButtonGroupBaseProps {
+/**
+ * Host props reach the group element (`architecture:public-component-api`
+ * INV5): `className`, `style`, `id`, `aria-*`, `data-*` and handlers. The group
+ * keeps its own `role`, `aria-label` and theme target.
+ */
+interface ToggleButtonGroupBaseProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'onChange' | 'defaultValue' | 'role' | 'aria-label'
+> {
   /** Toggle button children. */
   children: ReactNode;
 
@@ -184,7 +193,14 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
     size,
     isDisabled = false,
     xstyle,
+    className,
+    style,
     'data-testid': testId,
+    // Read through `props` below, where the union narrows them by `type`.
+    type: _type,
+    value: _value,
+    onChange: _onChange,
+    ...hostProps
   } = props;
 
   const isMultiple = props.type === 'multiple';
@@ -225,6 +241,7 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
   return (
     <ToggleButtonGroupContext value={contextValue}>
       <div
+        {...hostProps}
         role="group"
         aria-label={label}
         data-testid={testId}
@@ -235,6 +252,8 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
             orientation === 'vertical' && styles.vertical,
             xstyle,
           ),
+          className,
+          style,
         )}>
         {children}
       </div>

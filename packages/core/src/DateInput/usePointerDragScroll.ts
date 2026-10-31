@@ -5,7 +5,8 @@
 /**
  * @file usePointerDragScroll.ts
  * @input A scroll container ref
- * @output Lets a mouse drag the container's contents the way a finger does
+ * @output Lets a mouse drag the container's contents the way a finger does,
+ *   and reports while a drag holds it (`isDraggingRef`)
  * @position Internal behavior hook; consumed by Wheel.tsx
  *
  * ## Why this exists
@@ -38,12 +39,20 @@
  * then jumps a whole one. The drag therefore suspends snapping, and restores
  * it once the release has settled somewhere legal.
  *
+ * ## A held drag is not rest
+ *
+ * Every `scrollTop` the drag assigns is a programmatic scroll, and Chromium
+ * ends each one with a `scrollend` — 14 moves, 14 of them. A settle listening
+ * for `scrollend` alone would commit the row under the band at every step,
+ * with the button still down. `isDraggingRef` tells `useScrollSettle` the
+ * drag is still held, the way a touch that has not ended does.
+ *
  * SYNC: When modified, update:
  * - /packages/core/src/DateInput/Wheel.tsx
  * - /packages/core/src/DateInput/DateInputTouch.test.tsx
  */
 
-import {useEffect} from 'react';
+import {useEffect, useRef} from 'react';
 
 /**
  * Movement below this stays a click. A mouse shifts a pixel or two under the
@@ -53,6 +62,16 @@ export const DRAG_SLOP = 4;
 
 /** How long to wait for a release's settle before restoring snapping. */
 const SETTLE_FALLBACK_MS = 260;
+
+/** What {@link usePointerDragScroll} reports back about the drag. */
+export type PointerDragScrollState = {
+  /**
+   * True while a mouse drag holds the container: from the press that moved
+   * past {@link DRAG_SLOP} until its release. Pass it to `useScrollSettle`,
+   * which treats a held drag as it treats a finger still down.
+   */
+  isDraggingRef: React.RefObject<boolean>;
+};
 
 /**
  * Let a mouse drag `ref`'s contents, on a container that already scrolls and
@@ -65,7 +84,9 @@ const SETTLE_FALLBACK_MS = 260;
 export function usePointerDragScroll(
   ref: React.RefObject<HTMLElement | null>,
   isEnabled: boolean = true,
-): void {
+): PointerDragScrollState {
+  const isDraggingRef = useRef(false);
+
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {
@@ -75,9 +96,9 @@ export function usePointerDragScroll(
     let pointerId: number | null = null;
     let originY = 0;
     let originScrollTop = 0;
-    let isDragging = false;
+    isDraggingRef.current = false;
     // Survives from the drag's end to the click it produces, which is the
-    // whole reason it is not just `isDragging`.
+    // whole reason it is not just `isDraggingRef`.
     let wasDragged = false;
     let restoreTimer: number | undefined;
 
@@ -120,7 +141,7 @@ export function usePointerDragScroll(
       pointerId = event.pointerId;
       originY = event.clientY;
       originScrollTop = element.scrollTop;
-      isDragging = false;
+      isDraggingRef.current = false;
       // Not captured yet: a press that never moves has to stay a click on the
       // row under it, and capturing here would retarget that click.
     };
@@ -130,11 +151,11 @@ export function usePointerDragScroll(
         return;
       }
       const delta = event.clientY - originY;
-      if (!isDragging) {
+      if (!isDraggingRef.current) {
         if (Math.abs(delta) < DRAG_SLOP) {
           return;
         }
-        isDragging = true;
+        isDraggingRef.current = true;
         element.setPointerCapture(event.pointerId);
         suspendSnap();
         // Dragging across rows would otherwise select their text, leaving the
@@ -151,10 +172,10 @@ export function usePointerDragScroll(
         return;
       }
       pointerId = null;
-      if (!isDragging) {
+      if (!isDraggingRef.current) {
         return;
       }
-      isDragging = false;
+      isDraggingRef.current = false;
       wasDragged = true;
       element.style.removeProperty('user-select');
       if (element.hasPointerCapture(event.pointerId)) {
@@ -204,9 +225,12 @@ export function usePointerDragScroll(
       element.removeEventListener('pointerup', onPointerEnd);
       element.removeEventListener('pointercancel', onPointerEnd);
       element.removeEventListener('click', onClickCapture, {capture: true});
+      isDraggingRef.current = false;
       restoreSnap();
     };
   }, [ref, isEnabled]);
+
+  return {isDraggingRef};
 }
 
 /**

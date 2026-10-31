@@ -93,6 +93,13 @@ export const JSON_SUPPORTED = new Set([
   'blog',
   'discover',
   'search',
+  'experimental icon',
+  'experimental icon add',
+  'experimental icon map',
+  'experimental icon use',
+  'experimental icon new-set',
+  'experimental icon new-definition',
+  'experimental render',
   'build',
   'swizzle',
   'gap-report',
@@ -309,6 +316,13 @@ const commands = [
   {name: 'search', path: './commands/search.mjs', register: 'registerSearch'},
   {name: 'build', path: './commands/build.mjs', register: 'registerBuild'},
   {name: 'doctor', path: './commands/doctor.mjs', register: 'registerDoctor'},
+  // Experimental commands (spec:AST-017 FR27): last, so every stable command
+  // keeps its place in help.
+  {
+    name: 'experimental',
+    path: './commands/experimental/index.mjs',
+    register: 'registerExperimental',
+  },
   // Registered after every other command: the manifest lists the commands in
   // registration order.
   {name: 'manifest', path: './commands/manifest.mjs', register: 'registerManifest'},

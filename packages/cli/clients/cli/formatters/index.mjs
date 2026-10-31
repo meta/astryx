@@ -119,6 +119,9 @@ export class Block {
  * @property {'wrap' | 'truncate'} [overflow] - What an inline record longer
  *   than {@link WRAP_WIDTH} does: `wrap` (the default) continues under the
  *   first column; `truncate` cuts it to one line.
+ * @property {(item: any) => boolean} [sizesColumn] - Which inline records the
+ *   first column is sized from (default: all). A record left out keeps its
+ *   place and overhangs a narrower column, so adding it changes no other line.
  */
 
 /** @param {unknown} v @returns {boolean} */
@@ -318,8 +321,12 @@ function inlineRecords(items, options) {
     return fmt ? fmt(o[k]) : renderValue(o[k]);
   };
   const leads = items.map(o => (isEmpty(o[lead]) ? '' : value(o, lead)));
+  const sizes = options.sizesColumn ?? (() => true);
   const column = Math.min(
-    Math.max(0, ...leads.map(l => displayWidth(l))),
+    Math.max(
+      0,
+      ...leads.filter((_, i) => sizes(items[i])).map(l => displayWidth(l)),
+    ),
     INLINE_LEAD_MAX,
   );
   const indent = ' '.repeat(column + 2);

@@ -32,11 +32,14 @@ when motion is reduced.
 - **DR2 — Weight determines timing.** Small local feedback SHOULD feel faster
   than large entrances, exits, or continuous movement.
 - **DR3 — Movement settles naturally.** Easing SHOULD communicate controlled
-  deceleration rather than ornamental bounce or elasticity.
+  deceleration rather than ornamental bounce or elasticity; a theme's
+  expressive character may overshoot on entrances and moves only
+  (`spec:AST-108`).
 - **DR4 — Stable content stays stable.** Motion SHOULD avoid unnecessary layout
   disruption and preserve reading and interaction context.
 - **DR5 — Reduced motion preserves meaning.** Every animated transition MUST have
   an immediate or minimally moving form that communicates the same state change.
+  `design:reduced-motion` owns the current reduced-motion rule.
 
 ## Anatomy and hierarchy
 

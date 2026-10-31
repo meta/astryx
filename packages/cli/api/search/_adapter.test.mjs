@@ -85,7 +85,7 @@ describe('gatherCandidatesReused', () => {
   );
 
   it(
-    'gathers again when a file the gather read changes, in a linked package too',
+    'gathers again when a file the gather read or imported changes, in a linked package too',
     async () => {
       // A consumer whose integration is a symlink to a package folder
       // elsewhere, as a workspace package is.
@@ -162,7 +162,26 @@ describe('gatherCandidatesReused', () => {
         // An edited file the gather read: the linked package's manifest.
         const later = new Date(Date.now() + 5_000);
         fs.utimesSync(path.join(pkg, 'package.json'), later, later);
-        expect(await gatherCandidatesReused(options)).not.toBe(second);
+        const third = await gatherCandidatesReused(options);
+        expect(third).not.toBe(second);
+
+        // An edited doc the gather imported: the next gather reads its new
+        // content, not the module this process imported first.
+        fs.writeFileSync(
+          path.join(pkg, 'components', 'FancyGizmo.doc.mjs'),
+          `export default {
+            type: 'component',
+            name: 'FancyGizmo',
+            keywords: ['gizmo'],
+            usage: {description: 'A shinier part, now with sprockets.'},
+            props: [],
+          };\n`,
+        );
+        const fourth = await gatherCandidatesReused(options);
+        expect(fourth).not.toBe(third);
+        expect(
+          JSON.stringify(fourth.all.find(c => c.name === 'FancyGizmo')),
+        ).toContain('A shinier part, now with sprockets.');
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
         fs.rmSync(pkg, {recursive: true, force: true});

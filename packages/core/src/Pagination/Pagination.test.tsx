@@ -965,7 +965,7 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      expect(box).toBeDisabled();
+      expect(box).toHaveAttribute('aria-disabled', 'true');
       // Disabled input never fires a change.
       await user.type(box, '5{Enter}');
       expect(onChange).not.toHaveBeenCalled();
@@ -999,7 +999,7 @@ describe('Pagination', () => {
       // editable box is inert rather than accepting entries it can't resolve.
       expect(
         screen.getByRole('spinbutton', {name: 'Go to page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('renders the localized "Page" label by default and a custom pageLabel', () => {

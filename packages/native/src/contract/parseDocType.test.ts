@@ -4,6 +4,18 @@ import {describe, expect, it} from 'vitest';
 import {parseDocType} from './parseDocType.js';
 
 describe('parseDocType', () => {
+  it('reads words-or-a-switch, and no other union of different kinds', () => {
+    expect(parseDocType('string | boolean')).toEqual({
+      ok: true,
+      type: {kind: 'textOrBoolean'},
+    });
+    expect(parseDocType('boolean | string')).toEqual({
+      ok: true,
+      type: {kind: 'textOrBoolean'},
+    });
+    expect(parseDocType('string | number').ok).toBe(false);
+  });
+
   it('reads portable forms', () => {
     expect(parseDocType('string')).toEqual({ok: true, type: {kind: 'string'}});
     expect(parseDocType("'sm' | 'md' | 'lg'")).toEqual({
@@ -48,5 +60,50 @@ describe('parseDocType', () => {
     if (!parsed.ok) {
       expect(parsed.reason).toContain(reason);
     }
+  });
+});
+
+describe('parseDocType callbacks and closed number sets', () => {
+  it('keeps the values of a value callback and leaves its DOM event on the web', () => {
+    expect(
+      parseDocType(
+        '(checked: boolean, e: ChangeEvent<HTMLInputElement>) => void',
+      ),
+    ).toEqual({ok: true, type: {kind: 'fn', args: [{kind: 'boolean'}]}});
+    expect(
+      parseDocType('(value: string, event: React.ChangeEvent) => void'),
+    ).toEqual({ok: true, type: {kind: 'fn', args: [{kind: 'string'}]}});
+  });
+
+  it.each([
+    '(e: FocusEvent<HTMLInputElement>) => void',
+    '(event: MouseEvent) => void',
+  ])('keeps the event-only callback %s on the web', type => {
+    expect(parseDocType(type)).toEqual({
+      ok: false,
+      reason: 'callback argument: DOM event',
+      eventOnly: true,
+    });
+  });
+
+  it('refuses an event that is not last', () => {
+    const parsed = parseDocType('(e: MouseEvent, value: string) => void');
+    expect(parsed).toMatchObject({
+      ok: false,
+      reason: 'callback argument: DOM event',
+    });
+    expect(parsed).not.toHaveProperty('eventOnly');
+  });
+
+  it('reads a closed set of numbers', () => {
+    expect(parseDocType('1 | 2 | 3')).toEqual({
+      ok: true,
+      type: {kind: 'numberEnum', values: [1, 2, 3]},
+    });
+    expect(parseDocType('0 | 0.5 | 1')).toEqual({
+      ok: true,
+      type: {kind: 'numberEnum', values: [0, 0.5, 1]},
+    });
+    expect(parseDocType("1 | 'auto'").ok).toBe(false);
   });
 });

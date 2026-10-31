@@ -429,7 +429,9 @@ describe('Switch', () => {
           continue;
         }
         for (const node of record.addedNodes) {
-          if (node.textContent) {written.push(node.textContent);}
+          if (node.textContent) {
+            written.push(node.textContent);
+          }
         }
       }
     });
@@ -563,6 +565,24 @@ describe('Switch', () => {
     expect(screen.getByRole('switch')).toBeRequired();
   });
 
+  it('keeps a required switch valid until status shows an error', () => {
+    const {rerender} = render(
+      <Switch label="Accept" value={false} onChange={() => {}} isRequired />,
+    );
+    // Native required alone makes Chromium report the switch invalid.
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'false');
+    rerender(
+      <Switch
+        label="Accept"
+        value={false}
+        onChange={() => {}}
+        isRequired
+        status={{type: 'error', message: 'Required'}}
+      />,
+    );
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'true');
+  });
+
   describe('disabledMessage', () => {
     const h = {hidden: true} as const;
 
@@ -678,6 +698,51 @@ describe('Switch', () => {
       );
       await user.click(screen.getByRole('switch', h));
       expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not run caller key handlers while disabled', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      render(
+        <Switch
+          label="Enable notifications"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          isDisabled
+        />,
+      );
+      await user.tab();
+      expect(screen.getByRole('switch')).toHaveFocus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+    });
+
+    it('still runs caller key handlers on an enabled switch', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      render(
+        <Switch
+          label="Enable notifications"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+        />,
+      );
+      await user.tab();
+      // Releasing Tab lands a keyup on the newly focused switch; count only
+      // the key pressed after it.
+      onKeyDown.mockClear();
+      onKeyUp.mockClear();
+      await user.keyboard('{Enter}');
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+      expect(onKeyUp).toHaveBeenCalledTimes(1);
     });
 
     it('stays focusable via aria-disabled when disabled without a reason', async () => {

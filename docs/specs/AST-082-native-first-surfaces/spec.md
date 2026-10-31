@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-10-21
+approved_at: 2026-10-24
 phase: accepted
 owners: [cixzhang]
 affects_architecture:
@@ -36,10 +36,10 @@ that exist only on some platforms.
 
 Every component has one shared core contract that keeps its meaning, words,
 states, and accessibility the same everywhere, and a contract per platform that
-adds what only that platform can do. A developer sees the props of the platform
-they build for, in TypeScript and in each native language, and a prop from
-another platform is an error rather than a silent no-op. Documentation and the
-CLI show the same split.
+adds the props that platform honors beyond the core. A developer sees the props
+of the platform they build for, in TypeScript and in each native language, and a
+prop from another platform is an error rather than a silent no-op. Documentation
+and the CLI show the same split.
 
 `@astryxdesign/core` serves the web. `@astryxdesign/native` serves the native
 platforms and reads core in one direction only, so web users install nothing
@@ -79,23 +79,70 @@ depends only on runtimes it can maintain.
   express: native platforms are not limited to web markup and CSS, and the web
   is not limited to what native implementations can draw.
 - **FR3 — A component has a core contract and a contract per platform.** The
-  core contract is the component's name, its shared props with their meaning and
-  defaults, its states, its words, and its accessibility semantics (name, role,
-  state, focus behavior, and announcements). It is the same on every platform
-  that offers the component. A platform contract adds props only that platform
-  can honor. It never removes, renames, or changes the meaning of a core prop.
-  The web contract holds the web base props: styling inputs, DOM events, refs,
-  element choice, and HTML attributes. A component may exist on some platforms
-  only; using it elsewhere fails at type check or build with a message that names
-  the supported platforms, and never renders a silent substitute.
+  core contract is the component's name, the props every platform that offers
+  the component honors with the same meaning and defaults, its states, its
+  words, and its accessibility semantics (name, role, state, focus behavior, and
+  announcements). It is the same on every platform that offers the component.
+  - A platform honors a prop when the prop behaves the way core already defines
+    for that platform's input type. `tooltip` stays in the core: core defines
+    what a tooltip does where there is no hover (Tooltip `touchTrigger`), and a
+    touch platform behaves that way.
+  - A prop leaves the core only when a platform that offers the component cannot
+    match core's defined behavior for its input type. Such a prop belongs to the
+    contracts of the platforms that can (web, iOS, macOS, Android, Windows), and
+    the same prop may appear in several platform contracts with one meaning
+    (FR8). `rel` and `target` on a link belong to the web contract: an app
+    platform opens every link through the system and has no relationship or
+    browsing context to set.
+  - Within one language, one API serves every platform that language's apps
+    run on and adapts per device, as SwiftUI's `.help` shows a tooltip on
+    macOS and becomes a hint on iOS. A prop is scoped to a single platform only
+    when no honest behavior exists on that language's other platforms; such a
+    prop states its reason, and never makes an app branch by platform (`#if`)
+    for behavior that could adapt.
+  - A platform never offers a prop it does not fully honor. A prop a platform
+    accepts but ignores, or honors only in part, breaks
+    `architecture:public-component-api/INV2`.
+  - A platform contract never removes, renames, or changes the meaning of a core
+    prop. Moving a released prop from the core to the web contract changes no
+    web caller's types, because the web types are the core contract plus the web
+    contract; native contracts stop offering it.
+  - The web contract holds the web base props: styling inputs, DOM events, refs,
+    element choice, and HTML attributes.
+  - A component may exist on some platforms only; using it elsewhere fails at
+    type check or build with a message that names the supported platforms, and
+    never renders a silent substitute.
 - **FR4 — The core contract is portable.** Every core prop has a form in each
   language a supported platform's apps are written in, including Swift and
-  Kotlin: strings, numbers, booleans, closed string sets, arrays, records of
-  these, optional values, and callbacks whose arguments are portable. Free-form
-  content (`ReactNode`) and render functions are not portable. They belong to the
-  web contract and to any platform contract whose implementation runs React; the
-  core expresses content as a typed slot instead, such as text, an icon, or a
-  named Astryx component.
+  Kotlin: strings, numbers, booleans, closed string sets, open string sets,
+  booleans combined with a closed string set, arrays, records of these, optional
+  values, and callbacks whose arguments are portable.
+  - An **open string set** is a set of built-in names that a theme or an
+    application extends, as core's augmentable maps are. Its wire value is the
+    name, the same as on the web. Each native platform's type for it is a
+    string-backed value with a constant for each built-in name, and that
+    platform's theme build adds a constant for each name the theme declares, as
+    the web theme build writes the TypeScript augmentation. Any name decodes; a
+    platform that receives a name it has no rule for draws the component's base
+    look, as the web does for an augmented name with no built-in style.
+  - A **boolean combined with a closed string set**, such as CheckboxInput
+    `value: boolean | 'indeterminate'`, keeps `true`, `false`, and every named
+    state as distinct values on every platform, and its wire value is the same
+    as the web value.
+  - A prop whose web type is wider than these kinds may name a portable closed
+    set of the values every platform supports, each mapped to one web value,
+    such as Button `width`: `content` (the default) or `fill`, where `fill` is
+    the web's `'100%'`. The prop's other web values stay in the web contract.
+  - Free-form content (`ReactNode`) and render functions are not portable. They
+    belong to the web contract and to any platform contract whose implementation
+    runs React; the core expresses content as a typed slot instead. A **text**
+    slot is a string. An **icon** slot is a shared icon name (FR17), which each
+    platform resolves the way FR17 says; on a native platform, in a development
+    build an unknown name stops with a message that names the icon, and in a
+    release build it draws nothing. A **content** slot holds named Astryx
+    components. A platform contract may accept a wider form for the same slot,
+    such as a React node on the web; the slot keeps one meaning, and the core
+    form is what every native platform accepts.
 - **FR5 — Platform props are platform-scoped types.** `@astryxdesign/core`
   exposes the core contracts and the web contracts; its default types are the web
   contracts, unchanged for web callers. `@astryxdesign/native` exposes the native
@@ -164,19 +211,29 @@ depends only on runtimes it can maintain.
   `defineNativeTheme(theme, config)`, which takes a `DefinedTheme` unchanged and
   adds native-only visual intent; it never sets or overrides tokens:
   - **Durable intent.** Members name an outcome a person sees, never a platform
-    feature name or an OS version. The first member is `material`, typed
-    `'opaque' | 'translucent'`. Every native platform reads durable intent and
-    realizes it with the closest capability of the running OS version, such as
-    the system glass material on iOS versions that have one, or an earlier
-    system blur. A platform with no such capability renders as if the member
-    were absent.
+    feature name or an OS version. The members are `material`, typed
+    `'opaque' | 'translucent'`; `corners`, typed `'smooth' | 'stepped'`, where
+    smooth draws the platform's own rounded corner at the radius token and
+    stepped draws square steps the size of `border-width`, as many as fit in the
+    radius, with borders following the same steps; `imageScaling`, typed
+    `'smooth' | 'pixelated'`, where pixelated scales raster images by nearest
+    neighbour; and `textGrid`, a positive integer, the number of grid cells per
+    em the typeface is drawn on, to which text sizes, including the platform's
+    text-size growth, snap so one grid cell covers whole device pixels, never
+    below the person's text-size setting. An absent member keeps the platform's
+    default look. Every native platform reads durable intent and realizes it
+    with the closest capability of the running OS version, such as the system
+    glass material on iOS versions that have one, or an earlier system blur. A
+    platform with no such capability renders as if the member were absent.
   - **Platform entries.** `platforms.<platform>` uses the platform names of FR1
     and FR5 and holds an ordered list of entries. An entry may name an OS version
     range, `minVersion` and an optional `maxVersion`; an entry without a range
     applies to every supported version. An entry holds members from that
     platform's own vocabulary, such as `material: 'liquidGlass'` for `ios`, and
     `components`: overrides for that platform's theme targets, including targets
-    that exist only in that platform's contract. An entry applies only on its
+    that exist only in that platform's contract, drawn from that platform's
+    published list of theme targets and members, so an unknown target or member
+    is a type error. An entry applies only on its
     platform and inside its range. There, its members replace durable members of
     the same name, and a later matching entry replaces an earlier one.
   - A platform feature name is valid only inside its platform's entry, and a
@@ -194,7 +251,10 @@ depends only on runtimes it can maintain.
   that version's controls and materials. A capability newer than the running OS
   degrades to the closest earlier platform equivalent or to durable intent, never
   to a broken or blank state. Touch targets meet the platform minimum, and text
-  follows the platform's text-size setting. A native platform is supported only
+  follows the platform's text-size setting. When a component chooses between
+  presentations by screen size, compact is `spec:AST-012` FR9 in points or
+  density-independent pixels, not the platform's size classes; the platform's
+  own control still presents the chosen surface. A native platform is supported only
   when it meets the FR12 criteria on its oldest and newest supported OS versions.
 - **FR12 — Approaches are compared on one scorecard.** Every candidate way of
   building a native platform is measured the same way. Candidates include
@@ -257,7 +317,9 @@ depends only on runtimes it can maintain.
   mounted rules, and rendered web markup are byte-identical whether or not the
   native package is installed. The web contract keeps every prop and base prop it
   has today. A removal that FR7 or FR8 implies for a web caller is a breaking
-  change and ships only in a planned minor under `spec:AST-017`.
+  change and ships only in a planned minor under `spec:AST-017`, and so does
+  making an existing web prop an icon slot where the web renders a string as
+  text today.
 - **FR15 — Native support ships on the canary channel until a platform is
   supported.** `@astryxdesign/native` is a private, canary-only package
   (`spec:AST-033/FR4`): it publishes only to the canary channel and never as a
@@ -274,7 +336,14 @@ depends only on runtimes it can maintain.
   build time, so a core contract change reaches every native platform on its next
   build; generated Swift and Kotlin bindings carry nothing from core at run time.
   A package-boundary check enforces both directions: core never imports native,
-  and native never imports core outside the portable entry. The portable entry
+  and native never imports core outside the portable entry. Until the portable
+  entry ships, a native build script may read core at build time through
+  `@astryxdesign/core/theme` and `@astryxdesign/core/theme/tokens`, and read
+  core's component documentation, its built-in icon names, and its locale
+  catalogs as data, to
+  generate native code and to check native coverage in native tests. The
+  boundary check lists each such read by name and refuses any other, and no
+  native runtime code or generated binding imports core. The portable entry
   is an entry of `@astryxdesign/core` (DEC-8). It makes `react-dom` and StyleX
   optional peers of core and keeps resolved token values apart from the web theme
   compiler.
@@ -287,15 +356,19 @@ depends only on runtimes it can maintain.
   native platform is supported only when its map covers every built-in name. An
   icon the app or theme defines replaces the platform default. Native theme
   configuration names platform icons as data inside a platform entry, such as
-  `icons: {close: {systemName: 'xmark.circle'}}`, so an icon that exists only on
-  some OS versions can be scoped like any other platform term; images an app
+  `icons: {close: {systemName: 'xmark.circle'}}`, or an image the app ships,
+  such as `{assetName: 'pixel.close'}`, so an icon that exists only on
+  some OS versions can be scoped like any other platform term; other images an app
   supplies are registered in code. A native platform has no default for a name it
-  does not map and never substitutes a web icon. Icon accessibility follows the
+  does not map and never substitutes a web icon. An asset icon the app does not
+  ship stops a development build with a message that names the asset, and draws
+  nothing in a release build, as an unknown icon name does. Icon accessibility follows the
   core contract: an icon is decorative unless it carries a label.
 
 - **FR18 — The theme definition has a portable part and a web part.** The
-  portable entry exports `PortableTheme`: a theme's name, tokens, and theme-local
-  tokens, each resolvable without CSS to a concrete value per color mode, such as
+  portable entry exports `PortableTheme`: a theme's name, tokens, theme-local
+  tokens, and the compact definition of `spec:AST-012` FR9 (the effective `md`
+  width point and the 500 height edge), each resolvable without CSS to a concrete value per color mode, such as
   a color, a length in density-independent units, a number, or a font name. The
   web part holds what only the web compiles or renders: component overrides keyed
   by web theme targets, icon and indicator registries of React elements,
@@ -306,6 +379,35 @@ depends only on runtimes it can maintain.
   parts with content, it reports each one in development as having no native
   meaning rather than dropping it silently; native component theming comes from
   platform entries (FR10), and native icons follow FR17.
+- **FR19 — A logic core drives native views through one wire.** For the
+  candidate in which component logic runs in TypeScript inside a native app
+  (FR12), `@astryxdesign/native` defines one wire, generated from the same
+  contracts as every binding (FR5). The wire is a canary surface of that
+  candidate (FR15).
+  - **Nodes.** A screen is a tree of nodes. A node names its component, has a
+    `key` unique among its siblings, may carry shared base props (FR7), carries
+    its data props as that platform's contract defines them, and lists in
+    `events` the callbacks the logic handles. A content slot (FR4) carries
+    child nodes. A native view receives only the callbacks listed in `events`.
+  - **Actions.** When a view calls a listed callback, the host sends one action:
+    the node's `key`, its component, the callback's name, and the callback's
+    portable arguments in order.
+  - **Compatibility.** A host draws every node it can read. A node it cannot
+    read, because the component is unknown to it, a value lies outside its
+    closed set, or a prop it requires is missing, renders as unsupported in its
+    place, and its siblings still render. Props a host does not know are
+    ignored.
+  - **Bridge.** The host loads the logic bundle and calls its global
+    `astryxStart(host)`, passing two calls in: `connected(version)` and
+    `changed(tree)`. It gets back a bridge it reads the current tree from and
+    dispatches actions to. Trees and actions cross as JSON, and the bridge has
+    a version.
+  - **Failure.** A missing entry, a JavaScript error, a bridge version that
+    differs from the host's, or a tree the host cannot read at all stops the
+    host: it reports the failure, draws no tree, ignores any later tree, and
+    sends no action. The logic core refuses input that is not an action.
+  - **Engine.** The logic core uses ECMAScript built-ins only, so it runs in any
+    engine FR13 allows.
 
 ### Platform support
 
@@ -329,12 +431,20 @@ depends only on runtimes it can maintain.
 - `architecture:theme-compilation` gains the native theme boundary when a native
   platform ships (INV9, INV10).
 - `architecture:theme-authoring-contract` gains `PortableTheme` as the portable
-  part of `DefinedTheme` when the portable entry ships. `DefineThemeInput` and
-  `DefinedTheme` are unchanged for web callers.
+  part of `DefinedTheme` when the portable entry ships. `DefineThemeInput` is
+  unchanged for web callers; `DefinedTheme` gains the compact definition
+  (`spec:AST-012` FR9) additively, derived from the theme's effective `md` point,
+  and is otherwise unchanged.
 - The `theme` and `cli` consumer docs and every component's documentation gain
   platform marking when the first native contract ships.
-- `@astryxdesign/native` does not exist yet, and `@astryxdesign/core` has no
-  portable entry yet. Core peer-depends on `react-dom` and StyleX, and its theme entry includes
+- `@astryxdesign/native` ships on the canary channel with the FR19 wire: the
+  generated node and action types, the logic core and bridge, and a Swift logic
+  host. Its contract model still types FR4 open string sets as closed sets, so
+  the generated node types for each platform and the Swift binding both reject
+  a theme-added name, such as a Button `variant`; the TypeScript types refuse
+  it, and a Swift host renders the node as unsupported instead of drawing the
+  component's base look.
+- `@astryxdesign/core` has no portable entry yet. Core peer-depends on `react-dom` and StyleX, and its theme entry includes
   the web theme compiler.
 - Built-in icon names are defined beside the web icon registry, which maps them to
   React elements; the portable entry carries the names only when it ships.
@@ -343,23 +453,24 @@ depends only on runtimes it can maintain.
 
 ## Verification
 
-| Contract | Verification                                                                                                                       | Representative states                                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR3 | Component documentation metadata check, plus type and build tests importing a platform-specific component                          | a shared component; a web-only component; a component on some native platforms; an unsupported platform                                                                                                | A component declares no platforms, claims an unsupported native platform, or an unsupported import type-checks, builds, or renders a substitute                                            |
-| FR4      | Contract generation to TypeScript, Swift, and Kotlin, compiled in each language                                                    | every core prop kind; a free-form content or render-function prop in the core                                                                                                                          | A core prop has no Swift or Kotlin form, or a non-portable prop enters the core                                                                                                            |
-| FR5, FR6 | Type checks of fixture apps against each package and condition                                                                     | core default (web); each native condition; `shared`; a platform prop in another platform's file and in a shared file                                                                                   | A platform prop type-checks under another platform's condition or under `shared`, a core prop is missing under any condition, or web types change                                          |
-| FR7      | Generated base-prop surfaces per platform, plus runtime targeting tests                                                            | shared base props; a core-owned concept; a core prop that reuses a base name; each targeted part                                                                                                       | A shared base prop differs by platform, an owned concept's base prop overrides the core prop, or base props reach a different part on another platform                                     |
-| FR8      | Contract name check over every component                                                                                           | core prop vs platform prop; Swift and Kotlin keywords; platform toolkit names; reclaimed names; one name in two platform contracts                                                                     | A collision passes, a reclaimed name is undeclared, or a same-named platform prop appears in a merged type                                                                                 |
-| FR9      | Documentation and CLI output checks                                                                                                | core only; each platform selection; native package absent                                                                                                                                              | Output for one platform lists another platform's prop, or a prop is unmarked                                                                                                               |
-| FR10     | `defineNativeTheme` unit and type tests, plus a resolution test per platform                                                       | durable `material` only; entry with and without a range; overlapping entries; platform `components`; native theme extension; a token in native configuration; platform term outside its entry or range | A token can be set, a platform term type-checks outside its entry or range, an entry applies outside its platform or range, overlap order is ignored, or extension drops members           |
-| FR11     | FR12 experience scores per scenario step, oldest and newest supported OS                                                           | navigation, sheet, menu, picker, switch, text entry, scrolling, keyboard shortcut, large text; a capability newer than the running OS                                                                  | A step draws a custom control where the platform provides one, misses the touch-target minimum, ignores the text-size setting, or breaks on the oldest supported OS                        |
-| FR12     | Scenario replay on candidates and reference, on real release builds and devices                                                    | each scenario on each candidate and the toolkit reference; oldest and newest supported OS; a lower-end device per platform                                                                             | A candidate is scored without the reference, on a debug build, on emulation only, on one OS version, or on a different scenario set, or a visual score is given without device captures    |
-| FR13     | Dependency manifest audit of each native platform package                                                                          | platform SDK; first-party project; a React Native out-of-tree desktop platform; third-party optional integration; third-party fork                                                                     | A third-party library or fork is required to install, build, or render on the platform                                                                                                     |
-| FR14     | Compiler and render output comparison, core dependency graph check, and a web type surface diff                                    | each maintained theme with and without the native package installed; runtime-mounted and built CSS; components; web types before and after                                                             | Any byte of CSS, mounted rules, or rendered web markup differs, core depends on native, or a web prop disappears outside a planned minor                                                   |
-| FR15     | Package metadata and release-channel checks                                                                                        | native package manifest; a stable release; a canary release                                                                                                                                            | The native package is publishable as a stable release before a platform is supported                                                                                                       |
-| FR16     | Package-boundary check, plus a native fixture app installed and bundled without `react-dom` or StyleX                              | an import of the portable entry; an import of a core component or the web theme entry from native; a core import of native; a core contract change                                                     | Native resolves a DOM type, `react-dom`, StyleX, or a web module; either direction of the boundary is crossed; or a core contract change does not reach native contracts on the next build |
-| FR17     | Icon map coverage check per native platform, plus override resolution tests                                                        | every built-in name; a namespaced name; a theme platform icon with and without a version range; an app-registered icon                                                                                 | A built-in name has no platform default, a theme or app icon fails to replace the default, a scoped icon applies outside its range, or a web icon is substituted                           |
-| FR18     | Type tests over `PortableTheme` and `DefinedTheme`, token resolution tests per color mode, and `defineNativeTheme` reporting tests | each maintained theme; a theme with component overrides, icons, indicators, media surfaces, and adaptations; light and dark; a length, a color, and a font token                                       | `DefinedTheme` changes for a web caller, a portable token needs CSS to resolve, `PortableTheme` references a React or DOM type, or a web part with content is dropped without a report     |
+| Contract | Verification                                                                                                                                                  | Representative states                                                                                                                                                                                                                                                                                                                                                          | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR3 | Component documentation metadata check, plus type and build tests importing a platform-specific component, plus a per-platform prop check over every contract | a shared component; a web-only component; a component on some native platforms; an unsupported platform; a prop every offering platform honors; a prop only some platforms honor; a released prop moved from the core to the web contract; a prop that adapts across one language’s platforms; a single-platform prop                                                          | A component declares no platforms, claims an unsupported native platform, or an unsupported import type-checks, builds, or renders a substitute, a platform type accepts a prop that platform cannot honor, a core prop is missing on a platform that offers the component, or moving a prop to the web contract changes a web caller’s types, or a single-platform prop has no stated reason or makes an app branch by platform for behavior that could adapt                                                                                                                     |
+| FR4      | Contract generation to TypeScript, Swift, and Kotlin, compiled in each language                                                                               | every core prop kind; a boolean combined with a closed string set; an open string set with a built-in name, a theme-declared name, and a name the platform has no rule for; a projected prop at each portable value and at a web-only value; a text, icon, and content slot, and a web call site passing a wider form; a free-form content or render-function prop in the core | A core prop has no Swift or Kotlin form, a non-portable prop enters the core, a named state collapses into `true` or `false`, a theme-declared name is rejected by a platform type, an unknown open-set name fails instead of drawing the base look, a wire value differs from the web value, a projected value maps to a different web value or a web-only value reaches a native type, or a slot accepts a wider form on a platform that cannot render it                                                                                                                        |
+| FR5, FR6 | Type checks of fixture apps against each package and condition                                                                                                | core default (web); each native condition; `shared`; a platform prop in another platform's file and in a shared file                                                                                                                                                                                                                                                           | A platform prop type-checks under another platform's condition or under `shared`, a core prop is missing under any condition, or web types change                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| FR7      | Generated base-prop surfaces per platform, plus runtime targeting tests                                                                                       | shared base props; a core-owned concept; a core prop that reuses a base name; each targeted part                                                                                                                                                                                                                                                                               | A shared base prop differs by platform, an owned concept's base prop overrides the core prop, or base props reach a different part on another platform                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR8      | Contract name check over every component                                                                                                                      | core prop vs platform prop; Swift and Kotlin keywords; platform toolkit names; reclaimed names; one name in two platform contracts                                                                                                                                                                                                                                             | A collision passes, a reclaimed name is undeclared, or a same-named platform prop appears in a merged type                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR9      | Documentation and CLI output checks                                                                                                                           | core only; each platform selection; native package absent                                                                                                                                                                                                                                                                                                                      | Output for one platform lists another platform's prop, or a prop is unmarked                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR10     | `defineNativeTheme` unit and type tests, plus a resolution test per platform, plus captures that look at a drawn corner and a drawn image                     | durable `material` only; entry with and without a range; overlapping entries; platform `components`; native theme extension; a token in native configuration; platform term outside its entry or range; each of `corners`, `imageScaling`, and `textGrid` present and absent; a platform entry with an unknown component target or member                                      | A token can be set, a platform term type-checks outside its entry or range, an entry applies outside its platform or range, overlap order is ignored, or extension drops members, a durable member changes anything when absent, `textGrid` shrinks text below the text-size setting, or an unknown target or member type-checks, or `textGrid` leaves a grid cell on a fraction of a device pixel, `corners: 'stepped'` draws anything but square `border-width` steps that fill the radius with the border following them, or `imageScaling: 'pixelated'` smooths a raster image |
+| FR11     | FR12 experience scores per scenario step, oldest and newest supported OS                                                                                      | navigation, sheet, menu, picker, switch, text entry, scrolling, keyboard shortcut, large text; a capability newer than the running OS                                                                                                                                                                                                                                          | A step draws a custom control where the platform provides one, misses the touch-target minimum, ignores the text-size setting, or breaks on the oldest supported OS                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR12     | Scenario replay on candidates and reference, on real release builds and devices                                                                               | each scenario on each candidate and the toolkit reference; oldest and newest supported OS; a lower-end device per platform                                                                                                                                                                                                                                                     | A candidate is scored without the reference, on a debug build, on emulation only, on one OS version, or on a different scenario set, or a visual score is given without device captures                                                                                                                                                                                                                                                                                                                                                                                            |
+| FR13     | Dependency manifest audit of each native platform package                                                                                                     | platform SDK; first-party project; a React Native out-of-tree desktop platform; third-party optional integration; third-party fork                                                                                                                                                                                                                                             | A third-party library or fork is required to install, build, or render on the platform                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR14     | Compiler and render output comparison, core dependency graph check, and a web type surface diff                                                               | each maintained theme with and without the native package installed; runtime-mounted and built CSS; components; web types before and after; an existing web prop that renders a string as text becomes an icon slot                                                                                                                                                            | Any byte of CSS, mounted rules, or rendered web markup differs, core depends on native, or a web prop disappears outside a planned minor, or an existing web prop that renders a string as text becomes an icon slot in a patch rather than a planned minor                                                                                                                                                                                                                                                                                                                        |
+| FR15     | Package metadata and release-channel checks                                                                                                                   | native package manifest; a stable release; a canary release                                                                                                                                                                                                                                                                                                                    | The native package is publishable as a stable release before a platform is supported                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| FR16     | Package-boundary check, plus a native fixture app installed and bundled without `react-dom` or StyleX                                                         | an import of the portable entry; an import of a core component or the web theme entry from native; a listed build-time read from a native build script; an unlisted one; a core import of native; a core contract change                                                                                                                                                       | Native resolves a DOM type, `react-dom`, StyleX, or a web module; either direction of the boundary is crossed, an unlisted build-time read passes; or a core contract change does not reach native contracts on the next build                                                                                                                                                                                                                                                                                                                                                     |
+| FR17     | Icon map coverage check per native platform, plus override resolution tests                                                                                   | every built-in name; a namespaced name; a theme platform icon with and without a version range; an app-registered icon; an icon slot given an unknown name in a development and a release build; an asset icon the app ships and one it does not; a missing asset icon in a development and a release build                                                                    | A built-in name has no platform default, a theme or app icon fails to replace the default, a scoped icon applies outside its range, a web icon is substituted, or an unknown name draws something in a release build or does not stop a development build with its name, or a missing asset icon draws a substitute, or a development build does not stop with a missing asset’s name                                                                                                                                                                                              |
+| FR18     | Type tests over `PortableTheme` and `DefinedTheme`, token resolution tests per color mode, and `defineNativeTheme` reporting tests                            | each maintained theme; a theme with component overrides, icons, indicators, media surfaces, and adaptations; light and dark; a length, a color, and a font token; a theme that overrides `md`, whose compact definition follows the override                                                                                                                                   | A `DefinedTheme` member a web caller uses is removed or changes, a portable token needs CSS to resolve, `PortableTheme` references a React or DOM type, a web part with content is dropped without a report, or the compact definition does not follow a theme's effective `md`                                                                                                                                                                                                                                                                                                    |
+| FR19     | Wire type tests per platform condition, Swift decoding tests, host tests in a JavaScript engine, and a logic core run with no host globals                    | a tree with a content slot; a listed and an unlisted callback; an unknown component; an unknown closed-set value; a missing required prop; a node carrying a prop the host does not know; input that is not an action; a bundle with no entry; a JavaScript error; a bridge version mismatch; a tree the host cannot read at all; a tree sent after a failure                  | A view gets an unlisted callback, an action carries a different key or arguments, one unreadable node blanks its siblings, a prop the host does not know makes its node unsupported, the logic core accepts input that is not an action, or a failed host draws a tree or sends an action                                                                                                                                                                                                                                                                                          |
 
 ## Decision log
 
@@ -456,7 +567,8 @@ Web users install nothing native, native apps load nothing web, and a core
 release never waits on a native platform. Core keeps the core and web contracts;
 `@astryxdesign/native` holds the native platform contracts, the Swift and Kotlin
 bindings, native theme configuration, and native implementations, and reads core
-only through the portable entry (FR16).
+only through the portable entry, apart from the build-time reads FR16 lists
+until that entry ships.
 
 Rejected: native types and implementations inside `@astryxdesign/core`, because
 every web consumer would carry them and core's API would grow with each platform.
@@ -508,11 +620,82 @@ foreign next to system controls.
 
 Native platforms need a theme's identity, not its CSS. Splitting `DefinedTheme`
 into `PortableTheme` and a web part gives native the shared identity through the
-portable entry, keeps React elements and CSS out of native apps, and changes
-nothing for web callers, because `DefinedTheme` is still the whole.
+portable entry, keeps React elements and CSS out of native apps, and removes
+nothing for web callers, because `DefinedTheme` is still the whole; the portable
+compact definition it gains is additive.
 
 Rejected: native reading the whole `DefinedTheme`, because it carries React
 elements, CSS maps, and DOM-typed imports native cannot use.
+
+### DEC-12 — Open sets extend per theme, and a wider web type may project to native
+
+**Reference:** `spec:AST-082/DEC-12`
+**Decider:** cixzhang, 2026-10-23
+
+A theme's own variants reach every platform the way they reach the web: the
+platform theme build adds the theme's names to a string-backed type, so code
+names them like built-ins, and any name decodes, so a newer theme never breaks
+an older app. Where a web prop accepts values no native platform can honor,
+the core names the few that every platform supports instead of leaving the
+prop web-only.
+
+Rejected: an enum of built-in names with a case for any other string, because
+theme names would stay plain strings and the theme build would generate
+nothing.
+
+### DEC-13 — A boolean with named states has one portable form
+
+**Reference:** `spec:AST-082/DEC-13`
+**Decider:** cixzhang, 2026-10-23
+
+Props such as a checkbox's mixed state or a tooltip's `'auto'` mean the same on
+every platform, so one rule gives each platform `true`, `false`, and the named
+states as distinct values, and the wire carries the web's value unchanged.
+Web callers see no change.
+
+Rejected: a native name per component for the same values, because one value
+would have two names. Rejected: changing core to a closed string set, because
+it breaks web callers outside a planned minor release.
+
+### DEC-14 — The core holds only what every platform honors
+
+**Reference:** `spec:AST-082/DEC-14`
+**Decider:** cixzhang, 2026-10-24
+
+A prop kept everywhere for consistency, but ignored where a platform cannot
+honor it, tells callers it works when it does not. So the core holds the props
+every platform that offers a component honors as core defines them, and a prop
+some platforms cannot honor lives in the contracts of those that can. One module
+can still serve several platforms, and a prop can work on only some of them.
+People build once in a language and run on every device it reaches, so within a
+language the API adapts per device and a single-platform prop is the rare
+exception.
+
+Rejected: keeping every web prop in the core with a per-platform opt-out list,
+because each platform's real surface would be the core minus a list nobody
+reads.
+
+### DEC-15 — A logic-core tree degrades per node, and a failed host stays failed
+
+**Reference:** `spec:AST-082/DEC-15`
+**Decider:** cixzhang, 2026-10-23
+
+A newer logic core can reach an older app, so a host draws what it can read and
+marks only the node it cannot read as unsupported, rather than failing the whole
+screen. A host that cannot trust the bridge at all stops instead, and stays
+stopped, so a person never sees controls that do nothing.
+
+### DEC-16 — Corners, image scaling, and the text grid are durable intent
+
+**Reference:** `spec:AST-082/DEC-16`
+**Decider:** cixzhang, 2026-10-23
+
+A brand whose look is stepped, pixelated, or grid-aligned names an outcome a
+person sees, and it means the same on every native platform, so the brand writes
+it once as durable intent rather than repeating it in each platform's entry.
+
+Rejected: iOS platform-entry terms only, because every other native platform
+would need the same words again.
 
 ## Open questions
 

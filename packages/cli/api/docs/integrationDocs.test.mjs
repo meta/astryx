@@ -450,11 +450,11 @@ describe('integration-contributed topics', () => {
 
   it('offers the contributed topics as suggestions on an unknown one', async () => {
     scaffold({'deploying.doc.mjs': topic()});
-    await expect(docs('nope-not-a-topic', undefined, {cwd: tmpDir, full: true})).rejects.toBeInstanceOf(
+    await expect(docs('zzqx-qqzz', undefined, {cwd: tmpDir, full: true})).rejects.toBeInstanceOf(
       AstryxError,
     );
     try {
-      await docs('nope-not-a-topic', undefined, {cwd: tmpDir, full: true});
+      await docs('zzqx-qqzz', undefined, {cwd: tmpDir, full: true});
     } catch (err) {
       expect(err.suggestions.map(s => s.name)).toContain('deploying');
     }

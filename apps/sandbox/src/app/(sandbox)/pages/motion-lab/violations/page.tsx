@@ -262,6 +262,11 @@ export default function ViolationsPage() {
                       label: 'Proposed — --duration-state, --ease-state',
                       content: <TintRig mode="after" />,
                     },
+                    {
+                      tone: 'neutral',
+                      label: 'No transition',
+                      content: <TintRig mode="none" />,
+                    },
                   ]}
                 />
               )}
@@ -294,6 +299,8 @@ export default function ViolationsPage() {
                       between 150 and 175 at all. That it is hard to see at 1×
                       is the honest finding, and it is the argument for treating
                       this family as a lint fix rather than a design change.
+                      With the device set to reduce motion, the tokenised pane
+                      changes at once at any speed.
                     </Text>
                   </>
                 )}

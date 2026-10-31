@@ -3,24 +3,25 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:Field
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-28
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
   [
     packages/core/src/Field/Field.test.tsx,
+    packages/core/src/FormLayout/FormLayout.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     packages/core/src/docPropLiterals.test.ts,
     packages/core/src/docPropReferences.test.ts,
+    apps/storybook/rtl-audit/verified-not-applicable.json,
   ]
 modules: []
 families: [family:input-fields]
-design_specs:
-  [design:spatial-hierarchy, design:typography-hierarchy, design:system-states]
+design_specs: []
 architecture:
   [
     architecture:public-component-api,
@@ -42,7 +43,7 @@ system_specs:
 | Behavior                | Single controls use a native label association; groups use a labelled span. Status messages receive stable IDs and use persistent live regions. Horizontal-label mode exposes one protected `data-layout` theme axis.                                           |
 | End-user impact         | People can identify a custom control, hear its description and changing status, and keep label/control/status relationships together across ordinary and horizontal form layouts.                                                                               |
 | Builder impact          | Builders provide the control and its ID, wire descriptions/status IDs to that control, choose group semantics when needed, and use a status placement that is safe for the wrapped surface.                                                                     |
-| Compatibility/readiness | This draft records released behavior. It adds no API or policy. The released default `statusVariant="attached"` for arbitrary children conflicts with the capability boundary in `family:input-fields/FR8` and remains open.                                    |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The default `statusVariant="attached"` for arbitrary children conflicts with `family:input-fields/FR8`; listed under Current-state impact, with the migration open (OQ1).                             |
 | Review checks           | Reject a lost label/group association, dropped root props, caller replacement of `data-layout`, duplicate/missing status announcement, escaped local z-index, undocumented public literals, or a claim that all custom controls safely support attached status. |
 | Governing rules         | Established public `Field` interface; `family:input-fields` shared ownership and FR8; `architecture:public-component-api/INV5–INV8`; `spec:AST-027/FR1–FR3`; HTML label and ARIA naming/description semantics.                                                  |
 
@@ -55,7 +56,7 @@ This table is a review projection; the body below is authoritative.
 ## Compatibility and migration
 
 - Released default preserved: yes; `statusVariant` still defaults to `attached` in the current implementation.
-- Compatibility class: observational only; this draft changes no public prop, default, or behavior.
+- Compatibility class: records shipped behavior; no public prop, default, export, or DOM change.
 - Controlled/uncontrolled behavior: caller-owned and unchanged.
 - Migration decision: none; resolving OQ1 requires a separate compatibility decision.
 
@@ -78,31 +79,29 @@ This table is a review projection; the body below is authoritative.
 
 ## Public concepts
 
-| Concept                | Closed values or states                           | Meaning                                                                                          | Availability by variant/orientation/state                              | Default                        | Owner                 | Stability                 | Invalid-value behavior                |
-| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------ | --------------------- | ------------------------- | ------------------------------------- |
-| label mode             | single control; group                             | Chooses a native `<label htmlFor>` or a `<span>` named through `aria-labelledby`.                | All layouts.                                                           | single control                 | `component:Field`     | released                  | Type-constrained                      |
-| label visibility       | visible; visually hidden                          | Hides label and description visually while preserving them for assistive technology.             | All layouts.                                                           | visible                        | `component:Field`     | released                  | Type-constrained                      |
-| optionality marker     | none; optional; required                          | Shows the localized exception to FormLayout's optionality default.                               | Label presentation.                                                    | none                           | `component:Field`     | released                  | Both set warns; optional wins visibly |
-| status placement       | `attached`; `detached`; `tooltip`                 | Places a status box behind the control, below it, or leaves visible tooltip affordance to input. | Message required for a rendered box; tooltip still announces messages. | `attached` (see OQ1)           | `family:input-fields` | released; conformance gap | Type-constrained                      |
-| width                  | absent; number; CSS size string                   | Sizes the complete ordinary field box.                                                           | Ordinary box layout; horizontal-label mode uses `display: contents`.   | containing layout              | `component:Field`     | released                  | Type-constrained                      |
-| field layout           | ordinary box; `horizontal-labels` from FormLayout | Stacks content or projects label and input group into the parent grid.                           | Resolved from `FormLayoutContext`.                                     | ordinary box                   | `component:Field`     | released                  | Context-constrained                   |
-| description/status IDs | explicit; generated from `inputID`; absent        | Names stable description and message elements for caller-owned `aria-describedby` wiring.        | Generated only when the corresponding text is present.                 | generated when text is present | `component:Field`     | released                  | Empty text omits output               |
+| Concept                | Closed values or states                           | Meaning                                                                                          | Availability by variant/orientation/state                              | Default                        | Owner                 | Stability                 | Invalid-value behavior                                                                                                  |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------ | --------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| label mode             | single control; group                             | Chooses a native `<label htmlFor>` or a `<span>` named through `aria-labelledby`.                | All layouts.                                                           | single control                 | `component:Field`     | released                  | Type-constrained                                                                                                        |
+| label visibility       | visible; visually hidden                          | Hides label and description visually while preserving them for assistive technology.             | All layouts.                                                           | visible                        | `component:Field`     | released                  | Type-constrained                                                                                                        |
+| optionality marker     | none; optional; required                          | Shows the localized exception to FormLayout's optionality default.                               | Label presentation.                                                    | none                           | `component:Field`     | released                  | Both set warns; optional wins visibly, unless FormLayout's default is optional, which suppresses it and shows required. |
+| status placement       | `attached`; `detached`; `tooltip`                 | Places a status box behind the control, below it, or leaves visible tooltip affordance to input. | Message required for a rendered box; tooltip still announces messages. | `attached` (see OQ1)           | `family:input-fields` | released; conformance gap | Type-constrained                                                                                                        |
+| width                  | absent; number; CSS size string                   | Sizes the complete ordinary field box.                                                           | Ordinary box layout; horizontal-label mode uses `display: contents`.   | containing layout              | `component:Field`     | released                  | Type-constrained                                                                                                        |
+| field layout           | ordinary box; `horizontal-labels` from FormLayout | Stacks content or projects label and input group into the parent grid.                           | Resolved from `FormLayoutContext`.                                     | ordinary box                   | `component:Field`     | released                  | Context-constrained                                                                                                     |
+| description/status IDs | explicit; generated from `inputID`; absent        | Names stable description and message elements for caller-owned `aria-describedby` wiring.        | Generated only when the corresponding text is present.                 | generated when text is present | `component:Field`     | released                  | Empty text omits output                                                                                                 |
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                                          | Basis                                                                  | Draft review state                  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------- |
-| FR1 | A single-control label renders as `<label htmlFor={inputID}>`; a group label renders as a non-label element with `labelID` for caller-owned `aria-labelledby`.                                                                                               | Established public interface; HTML and ARIA semantics                  | settled observation                 |
-| FR2 | Visually hidden labels and descriptions remain in the DOM and out of layout flow.                                                                                                                                                                            | Established public interface and accessibility behavior                | settled observation                 |
-| FR3 | Description and status IDs use explicit values when supplied and otherwise resolve to `${inputID}-desc` and `${inputID}-status` only when text exists.                                                                                                       | Established public interface                                           | settled observation                 |
-| FR4 | Error status messages announce assertively and warning/success messages politely through persistent live regions; tooltip placement renders no `FieldStatus` box but preserves the announcement.                                                             | Existing tests; family ownership                                       | settled observation                 |
-| FR5 | Ordinary layout orders label, control, then optional status. Horizontal-label mode places the label wrapper before one description/control/status group and reflects `data-layout="horizontal-labels"`; caller props cannot replace that owned theme marker. | Established layout interface; `architecture:public-component-api/INV5` | settled observation                 |
-| FR6 | `width` applies to the ordinary root field box; it does not style the caller-owned control and has no box to target in horizontal-label mode.                                                                                                                | Established public interface; `family:input-fields` shared owner       | settled observation                 |
-| FR7 | Root ref, data/ARIA/DOM inputs, events, `xstyle`, class name, and inline style reach or compose on the root without replacing component-owned semantics.                                                                                                     | `architecture:public-component-api/INV5–INV8`                          | settled observation                 |
-| FR8 | The Field root isolates every local attached-status paint relationship without assigning the root a page-level z-index.                                                                                                                                      | `spec:AST-027/FR1–FR3`, `FR11`                                         | settled observation                 |
-| FR9 | Attached status is safe only for an opaque, bordered, fixed-height control with reliable size reflection; custom, tall, wrapped, translucent, or non-bordered controls use detached or component-owned placement.                                            | `family:input-fields/FR8`; current default mismatch                    | human decision for released default |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| FR1 | A single-control label renders as `<label htmlFor={inputID}>`; a group label renders as a non-label element with `labelID` for caller-owned `aria-labelledby`.                                                                                                                                                                                                                                                                                          | Established public interface; HTML and ARIA semantics                  |
+| FR2 | Visually hidden labels and descriptions remain in the DOM and out of layout flow.                                                                                                                                                                                                                                                                                                                                                                       | Established public interface and accessibility behavior                |
+| FR3 | Description and status IDs use explicit values when supplied and otherwise resolve to `${inputID}-desc` and `${inputID}-status` only when text exists.                                                                                                                                                                                                                                                                                                  | Established public interface                                           |
+| FR4 | Error status messages announce assertively and warning/success messages politely through persistent live regions; tooltip placement renders no `FieldStatus` box but preserves the announcement.                                                                                                                                                                                                                                                        | Existing tests; family ownership                                       |
+| FR5 | Ordinary layout orders label, control, then optional status. Horizontal-label mode places the label wrapper before one description/control/status group and reflects `data-layout="horizontal-labels"`; caller props cannot replace that owned theme marker.                                                                                                                                                                                            | Established layout interface; `architecture:public-component-api/INV5` |
+| FR6 | `width` applies to the ordinary root field box; it does not style the caller-owned control and has no box to target in horizontal-label mode.                                                                                                                                                                                                                                                                                                           | Established public interface; `family:input-fields` shared owner       |
+| FR7 | Root ref, data/ARIA/DOM inputs, events, `xstyle`, class name, and inline style reach or compose on the root without replacing component-owned semantics.                                                                                                                                                                                                                                                                                                | `architecture:public-component-api/INV5–INV8`                          |
+| FR8 | The Field root isolates every local attached-status paint relationship without assigning the root a page-level z-index.                                                                                                                                                                                                                                                                                                                                 | `spec:AST-027/FR1–FR3`, `FR11`                                         |
+| FR9 | Field MUST give attached placement only to an opaque, bordered, fixed-height control with reliable size reflection; tall, wrapped, translucent, non-bordered, or otherwise ineligible controls, as custom controls normally are, use detached or component-owned placement. Implementation gap: `statusVariant` defaults to `attached` for every child, so an ineligible control receives attached placement unless the caller chooses otherwise (OQ1). | `family:input-fields/FR8`                                              |
 
 ### Allowed variation
 
@@ -125,11 +124,11 @@ Draft requirements identify their basis so observed code is not mistaken for an 
 
 - **ORD1 — Root props.** Caller DOM/data/event props are forwarded first; Field-owned visual-state reflection is applied afterward; StyleX, caller class, and caller inline style compose in the documented order.
 - **ORD2 — IDs.** Explicit description/status ID wins; otherwise text presence derives an ID from `inputID`; absent text produces no ID-bearing element.
-- **ORD3 — Optionality.** FormLayout default optionality suppresses the matching visible marker; if both local booleans are true, Field warns and the optional marker wins visibly.
+- **ORD3 — Optionality.** FormLayout default optionality suppresses the matching visible marker; if both local booleans are true, Field warns and the optional marker wins visibly, unless FormLayout's default is optional, which suppresses it so the required marker shows.
 
 ### Performance and resources
 
-- **PR1 — No per-field global resource.** Field owns no listener, observer, timer, or external store. Status announcement delegates to the shared persistent live-region runtime.
+- **PR1 — No per-field global resource.** Field owns no listener, observer, timer, or external store. Status announcement delegates to the shared persistent live-region runtime, and a `labelTooltip` brings the shared Tooltip's listeners and layer.
 
 ## Accessibility contract
 
@@ -140,11 +139,9 @@ Draft requirements identify their basis so observed code is not mistaken for an 
 
 ## Design relationships
 
-| Anatomy or state              | Design requirement                                       | Representation authority                               | Hierarchy role            | Component contract |
-| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------ | ------------------------- | ------------------ |
-| Label and description         | `design:typography-hierarchy/DR4`, `DR6`                 | prescribed roles; exact tuning remains token-owned     | label and supporting text | FR1–FR3            |
-| Label/control/status grouping | `design:spatial-hierarchy` local and group relationships | prescribed relationship; exact gap remains token-owned | one field group           | FR5                |
-| Semantic status               | `design:system-states/DR2`                               | delegated to FieldStatus and wrapped input             | supporting feedback       | FR4, FR9           |
+No current repository design record governs component-local visual tuning.
+The label, description, and status use shared semantic type, color, and
+spacing tokens.
 
 ### Theming anatomy
 
@@ -193,20 +190,31 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
 
 ## Verification map
 
-| Contract                 | Verification                                                                           | Representative states                                                                                | Mutation or failure expectation                                                                                                | Audit section               |
-| ------------------------ | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
-| FR1–FR3, AR1–AR2, AR4    | `Field.test.tsx` DOM/accessibility tests                                               | single control, group, visible/hidden label, explicit/generated IDs                                  | A lost association, wrong element, missing hidden text, or wrong ID fails.                                                     | `audit:Field/accessibility` |
-| FR4, AR3                 | `Field.test.tsx` announcement tests plus exact-head browser accessibility evidence     | first mount, update, repeat, error, warning, attached, detached, tooltip                             | A missing, duplicate, stale, or wrong-urgency announcement fails.                                                              | `audit:Field/accessibility` |
-| FR5–FR7, ORD1            | `Field.test.tsx`, BaseProps lint, theming-target tests, and exact-head visual evidence | ordinary/horizontal layout; class/style/xstyle/data/event/ref; description/status                    | Dropped caller input, replaceable layout marker, wrong order, or lost target fails.                                            | `audit:Field/api`           |
-| FR8                      | computed-style tests and exact-head browser rendering                                  | attached, detached, tooltip, no status                                                               | Removing isolation or ranking the root outside its parent fails.                                                               | `audit:Field/code-health`   |
-| FR9                      | family contract review and component-owned visual evidence                             | eligible bordered control; custom/tall/non-bordered control                                          | Attached placement on an ineligible surface remains visible as the current conformance gap.                                    | `audit:Field/behavior`      |
-| Theming anatomy          | knowledge validation and theming-target tests                                          | Field root, label, description, caller control, status, shared input affordances, indicator, tooltip | Missing, duplicate, or wrongly owned dispositions fail.                                                                        | `audit:Field/theming`       |
-| Documentation projection | docs typecheck and prop literal/reference tests                                        | labelIcon; all status placements; anatomy and usage guidance                                         | Docs omit or misstate a public type/literal/owner and validation fails or review rejects it.                                   | `audit:Field/docs`          |
-| RTL applicability        | exact-head RTL audit and verified-N/A registry                                         | all checked-in Field stories and source                                                              | A directional glyph, physical inline placement, order, scroll/drag, overlay, or directional keyboard behavior makes N/A stale. | `audit:Field/i18n-rtl`      |
+| Contract                     | Verification                                                                                                           | Representative states                                                                                | Mutation or failure expectation                                                                                                                                 | Audit section               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| FR1–FR3, ORD2, AR1, AR2, AR4 | `Field.test.tsx` label-element, group-label, hidden label and description, description-ID, and generated-ID cases      | Single control, group, visible and hidden label, explicit and generated IDs                          | A lost association, wrong element, missing hidden text, or wrong ID fails.                                                                                      | `audit:Field/accessibility` |
+| FR4, AR3                     | `Field.test.tsx` announcement and tooltip-placement cases                                                              | First mount, update, repeat, error, warning, tooltip, no message                                     | A missing, duplicate, stale, or wrong-urgency announcement fails.                                                                                               | `audit:Field/accessibility` |
+| FR5, FR6, ORD1               | `Field.test.tsx` horizontal-labels, width, and narrow-row cases                                                        | Ordinary and horizontal layout; string and number width; narrow row                                  | A replaceable layout marker, wrong grid grouping, or width on the inner control fails. Evidence gap: no test asserts the ordinary label, control, status order. | `audit:Field/layout`        |
+| FR7                          | `Field.test.tsx` ref and horizontal-labels root-props cases                                                            | Ref; class, style, data, and event props in horizontal mode                                          | A dropped ref or caller-replaced layout marker fails. Evidence gap: no test asserts root `xstyle`, class, style, and event props in the ordinary layout.        | `audit:Field/api`           |
+| ORD3                         | `Field.test.tsx` optional, required, and both-set cases; `FormLayout.test.tsx` default-optionality cases through Field | Optional; required; both; form default                                                               | A missing marker, no warning when both are set, or a marker that restates the form default fails.                                                               | `audit:Field/behavior`      |
+| FR8                          | `Field.test.tsx` attached-layer and local-stacking cases                                                               | Attached, no status, custom control                                                                  | Removing isolation or ranking the root outside its parent fails.                                                                                                | `audit:Field/code-health`   |
+| FR9                          | `Field.test.tsx` attached-layer case for a custom control                                                              | Custom control with an attached status                                                               | The test pins the current attached default, so it changes when the FR9 gap closes.                                                                              | `audit:Field/behavior`      |
+| PR1                          | Evidence gap: no test asserts the absence of per-field global resources                                                | —                                                                                                    | —                                                                                                                                                               | `audit:Field/code-health`   |
+| Theming anatomy              | `scripts/check-knowledge.mjs`; `themingTargets.test.ts`                                                                | Field root, label, description, caller control, status, shared input affordances, indicator, tooltip | Invalid dispositions, or a rendered class absent from the documented targets, fails.                                                                            | `audit:Field/theming`       |
+| Documentation projection     | `docPropLiterals.test.ts`; `docPropReferences.test.ts`                                                                 | Status placements, `labelIcon`, and other documented props                                           | A documented literal or prop reference that drifts from the source type fails.                                                                                  | `audit:Field/docs`          |
+| RTL applicability            | `apps/storybook/rtl-audit/verified-not-applicable.json` entry for `core/Field`                                         | Checked-in Field stories                                                                             | A story that gains directional placement or behavior makes the not-applicable entry stale.                                                                      | `audit:Field/i18n-rtl`      |
+
+## Current-state impact
+
+- **Attached default (FR9).** Field defaults `statusVariant` to `attached` for
+  every child, against `family:input-fields/FR8`; how to migrate the default is
+  OQ1.
+- **Label tooltip (FieldLabel FR8).** A `labelTooltip` is reachable only by
+  pointer, as `component:FieldLabel` FR8 records, against WCAG 2.2 SC 2.1.1.
 
 ## Decision log
 
-No component-local decision is asserted. This draft records released behavior and leaves the current family-owned status-placement conflict in OQ1.
+No component-local decision. Field applies `family:input-fields` and `spec:AST-027`.
 
 ## Open questions
 
@@ -214,4 +222,5 @@ No component-local decision is asserted. This draft records released behavior an
 
 ## Content boundary
 
-This draft records verified shipped behavior and the current family-owned conformance gap. It does not approve a new default, migration, theme target, or compatibility promise, and it does not duplicate audit scores or run evidence.
+This file does not duplicate consumer prop tables/examples, current audit
+results, implementation steps, or family/system rules. It links to their owners.

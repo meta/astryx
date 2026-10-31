@@ -15,6 +15,7 @@ import {
   forEachIntegrationDoc,
   integrationSourceForDoc,
 } from '../../foundation/discovery/component-discovery.mjs';
+import {Project} from '../../foundation/config/project.mjs';
 import {discoverIntegrationDocs} from '../../foundation/discovery/docs-discovery.mjs';
 import {packageDocTargets} from '../docs/_adapter.mjs';
 import {comparePropDocs} from '../../foundation/discovery/prop-drift.mjs';
@@ -155,4 +156,21 @@ export async function integrationDocCommands(integration) {
     return [];
   }
   return findDocCommands(discovered);
+}
+
+/**
+ * Whether the project at `cwd` opts in to icon sets (`experimental.iconSet`).
+ * An installed package's experimental root is read only then
+ * (spec:AST-017 FR27, spec:AST-084 FR0): a project without it gets what a CLI
+ * without icon sets reports. A config that does not load opts in to nothing.
+ * @param {string} cwd
+ * @returns {Promise<boolean>}
+ */
+export async function projectUsesIconSets(cwd) {
+  try {
+    const project = await Project.load(cwd);
+    return Boolean(project.config?.experimental?.iconSet);
+  } catch {
+    return false;
+  }
 }

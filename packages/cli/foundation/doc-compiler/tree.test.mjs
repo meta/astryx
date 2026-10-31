@@ -289,6 +289,40 @@ describe('buildDocsTree', () => {
     ]);
   });
 
+  it('adopts from every package only on an experimental CLI namespace', () => {
+    const CLI = '@astryxdesign/cli';
+    /** @param {object} extra */
+    const shared = extra => ({
+      ...ns('words', {
+        slots: {all: {title: 'All', accepts: {kinds: ['generic']}}},
+        adopts: [
+          {
+            source: {group: 'words', kinds: ['generic'], packages: 'all'},
+            into: 'all',
+          },
+        ],
+        ...extra,
+      }),
+      provider: CLI,
+      providerId: CLI,
+      source: `${CLI}/tree/words.doc.mjs`,
+    });
+    const docs = [
+      guide('mine', {group: 'words', provider: CLI, providerId: CLI}),
+      guide('theirs', {group: 'words'}),
+    ];
+    const stable = buildDocsTree({namespaces: [shared({})], docs});
+    expect(stable.get('words')?.slots[0].children).toEqual(['words/mine']);
+    const experimental = buildDocsTree({
+      namespaces: [shared({stability: 'experimental'})],
+      docs,
+    });
+    expect(experimental.get('words')?.slots[0].children).toEqual([
+      'words/mine',
+      'words/theirs',
+    ]);
+  });
+
   it('prefers explicit placement over adoption, and never falls back', () => {
     const namespaces = [
       ns('guides'),

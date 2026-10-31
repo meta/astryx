@@ -500,7 +500,7 @@ function emitIndex(index, owner, run) {
  * name (`assert-response  assertResponse()`).
  * @param {import('../../../api/docs/docs.type.mjs').DocsNodeChild} child
  * @param {string} owner the package that owns the namespace
- * @returns {{name: string, summary: string}}
+ * @returns {{name: string, summary: string, experimental: boolean}}
  */
 function childRow(child, owner) {
   const titleAddsIdentity =
@@ -510,10 +510,18 @@ function childRow(child, owner) {
   return {
     // A child another package owns says which one.
     name: child.package === owner ? child.name : `${child.name} (${child.package})`,
+    // An experimental child is marked as help marks an experimental command,
+    // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
-      titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary,
+      `${
+        child.stability === 'experimental' &&
+        !/^experimental\b/iu.test(child.summary)
+          ? '[experimental] '
+          : ''
+      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
       getCliInvocation(),
     ),
+    experimental: child.stability === 'experimental',
   };
 }
 
@@ -551,10 +559,19 @@ function emitNode(node, detail, run) {
         ...(node.slots.length === 1 && slot.title === node.title
           ? []
           : [section(slot.title)]),
-        records(slot.children.map(child => childRow(child, node.package)), {
-          fields: ['name', 'summary'],
-          layout: 'inline',
-        }),
+        records(
+          slot.children.map(child => childRow(child, node.package)),
+          {
+            fields: ['name', 'summary'],
+            layout: 'inline',
+            // Stable rows set the column, so an experimental entry changes no
+            // stable line (spec:AST-017 FR27); a long experimental name
+            // overhangs. A slot of experimental entries only sizes from them.
+            sizesColumn: row =>
+              !row.experimental ||
+              slot.children.every(child => child.stability === 'experimental'),
+          },
+        ),
       ]),
       text(
         [

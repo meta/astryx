@@ -1,18 +1,18 @@
 # Contributing to Astryx
 
-For the full contribution process — what we accept, how to propose new components, and how API decisions are made — read the **[Contributing wiki](https://github.com/facebook/astryx/wiki/Contributing)**.
+For the full contribution process — what we accept, how to propose new components, and how API decisions are made — read the **[Contributing wiki](https://github.com/meta/astryx/wiki/Contributing)**.
 
 Key pages:
 
 - **[Pull request intents](docs/contributing/pull-requests.md)** — choose one primary intent, its evidence bar, and the matching PR template
 - **[API conventions guide](docs/contributing/api-conventions.md)** — practical naming, composition, styling, proposal, and review guidance linked to current owner records
-- **[Design Conventions](https://github.com/facebook/astryx/wiki/Design-Conventions)** — the design-side bar: tokens, spacing, radius, elevation, type, color, motion, and state representations
-- **[Specification Protocol](https://github.com/facebook/astryx/wiki/Component-Specification-Protocol)** — the 9-phase process for new components
-- **[Component Lifecycle](https://github.com/facebook/astryx/wiki/Component-Lifecycle)** — how components move from lab → core and templates from hidden → visible
-- **[API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration)** — how we resolve API design questions
-- **[Contributing Templates](https://github.com/facebook/astryx/wiki/Contributing-Templates)** — building templates/blocks and the template grading rubric
-- **[Blog Review Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)** — how docsite blog posts are reviewed
-- **[Contributing with AI](https://github.com/facebook/astryx/wiki/Contributing-with-AI-Assistants)** — safe zones, spec protocol, and working with AI tools
+- **[Design Conventions](https://github.com/meta/astryx/wiki/Design-Conventions)** — the design-side bar: tokens, spacing, radius, elevation, type, color, motion, and state representations
+- **[Specification Protocol](https://github.com/meta/astryx/wiki/Component-Specification-Protocol)** — the 9-phase process for new components
+- **[Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycle)** — how components move from lab → core and templates from hidden → visible
+- **[API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration)** — how we resolve API design questions
+- **[Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates)** — building templates/blocks and the template grading rubric
+- **[Blog Review Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)** — how docsite blog posts are reviewed
+- **[Contributing with AI](https://github.com/meta/astryx/wiki/Contributing-with-AI-Assistants)** — safe zones, spec protocol, and working with AI tools
 
 This file covers local development setup.
 
@@ -87,7 +87,7 @@ pnpm --version   # 11.x.x
 
 ```bash
 # Clone without downloading historical file contents up front
-git clone --filter=blob:none https://github.com/facebook/astryx.git
+git clone --filter=blob:none https://github.com/meta/astryx.git
 cd astryx
 
 # Install dependencies
@@ -171,6 +171,7 @@ astryx/
 | `pnpm build`      | Build all packages                           |
 | `pnpm test`       | Run all tests                                |
 | `pnpm test:watch` | Run tests in watch mode                      |
+| `pnpm typecheck`  | Typecheck every package (after `pnpm build`) |
 | `pnpm storybook`  | Start Storybook at localhost:6006            |
 | `pnpm lint`       | Lint all packages                            |
 
@@ -369,10 +370,10 @@ with no theme.
 ## Accessibility Checklist
 
 Every new component — and any change to an interactive one — must clear the
-**[Accessibility Checklist](https://github.com/facebook/astryx/wiki/Accessibility-Checklist)**
+**[Accessibility Checklist](https://github.com/meta/astryx/wiki/Accessibility-Checklist)**
 (wiki) before review. The checklist lives on the wiki so accessibility
 experts can refine it without a code PR; reviewers block on it (it is `A1`–`A16`
-on the [Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric)),
+on the [Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric)),
 and it is a hard requirement for a lab → core promotion (see
 `packages/lab/README.md`).
 
@@ -384,9 +385,10 @@ Two repo-side rules worth restating here:
   WAI-ARIA APG patterns and are tested once; a bespoke reimplementation of
   one is a review reject.
 - CI is the enforcement layer, not a replacement for the checklist: the
-  `pr-a11y` job in `ci.yml` runs an axe audit on every PR that touches
-  components, a weekly workflow scans the full component surface, and the
-  `useAnnounce` lint rule rejects hand-wired `aria-live` regions. axe only
+  `pr-a11y` job in `ci.yml` runs an axe audit after merges to `main` and
+  before each release (and on a pull request labelled `ci:run-a11y`), at
+  full scope across the component surface, and the `useAnnounce` lint rule
+  rejects hand-wired `aria-live` regions. axe only
   catches static, DOM-level issues — keyboard behavior, focus management, and
   announcement timing are exactly what the checklist and the component's unit
   tests cover.
@@ -479,6 +481,11 @@ pnpm test:watch
 # Specific package
 pnpm -F @astryxdesign/core test
 
+# One Vitest project, as CI runs it (CI shards each across legs)
+pnpm test:ui            # the ui project, without the FR23 benchmark
+pnpm test:ui:isolated   # the FR23 benchmark alone, as test-ui leg 1 runs it
+pnpm test:node
+
 # With coverage
 pnpm test:coverage
 
@@ -497,10 +504,53 @@ src/Button/
 └── Button.test.tsx   # Tests live here
 ```
 
+### Where tests go, and how CI finds them
+
+CI collects tests by file name, never from a list of test files, so a new test
+needs no edit to `.github/workflows/`. Put the test where its kind is collected
+and CI picks it up:
+
+| Kind                                     | Put it                                                                                                             | Collected by                                                              | CI job                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Unit and integration (jsdom or Node)     | `*.test.ts(x)` / `*.test.mjs` beside the code, in a path the `ui` or `node` project of `vitest.config.ts` includes | the `ui` and `node` Vitest projects                                       | `test-ui`, `test-node` (sharded)                              |
+| Browser accessibility or engine behavior | `*.a11y.chromium.spec.ts` (Chromium) or `*.a11y.browser.spec.ts` (Chromium and WebKit) under `packages/*/src/`     | `pnpm test:a11y-contract`; pull requests run `pnpm test:a11y-contract:pr` | `pr-a11y`; every spec in the release check's `a11y-contracts` |
+| Visual regression                        | a Storybook story                                                                                                  | the visual plan                                                           | `pr-visual`                                                   |
+
+A browser spec runs on a pull request when the PR changes the spec, its
+component folder, or the component it is named after (`ChatSendButton.a11y.chromium.spec.ts`
+belongs to `core/ChatSendButton`). A changed knowledge record (`<Name>.spec.md`)
+counts toward neither the folder nor a path token, since no browser renders it.
+Routing lines in the spec's header comment change that, and the runner rejects
+any other value:
+
+```ts
+// @pr-a11y always                 every PR that changes components
+// @pr-a11y scope core/Selector ^apps/storybook/stories/ComboboxA11y
+//                                 also when one token matches: a component, or
+//                                 a regular expression over changed paths
+// @pr-a11y audit DateInput        only on a "[Component Audit] DateInput:" PR
+// @pr-a11y release-only           never on a PR; the release check runs it
+```
+
+These routes apply when a pull request runs the accessibility owner, which it
+does only with the `ci:run-a11y` label; `main` and release checks run every
+spec. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
+from your branch would run (component tokens need CI's `analysis.json`; without
+it the runner says so and leaves those specs out). A spec writes its receipts under
+`test-results/<name>/` or, for a component audit, a top-level
+`<name>-audit-evidence/` folder; CI uploads them, with the selection and the
+reports, in one `pr-a11y-evidence-<sha>` artifact. A component-audit pull
+request whose component has an audit spec also runs that component's own axe
+pass; an audit that must wait for an open dialog or menu, grades a different
+component set, or has no audit spec has an entry in
+`.github/a11y-audit-axe.json`.
+
 ### Accessibility audits
 
-PRs that touch components run an axe-core audit (the `pr-a11y` CI job) over
-the Storybook stories of the changed components. The job **fails** when it
+Merges to `main` (checked at the newest commit of a burst), every release
+check, and a PR labelled `ci:run-a11y`
+that touches components run an axe-core audit (the `pr-a11y` CI job); on a PR
+it covers the Storybook stories of the changed components. The job **fails** when it
 finds a violation that is not listed in the checked-in baseline,
 `.github/a11y-baseline.json`. Violations are keyed
 `Component::Story::rule-id`, so unrelated markup churn does not invalidate
@@ -551,7 +601,8 @@ focus, or real activation is reported `unrun` there and proven in Chromium.
 pnpm storybook:build
 npx playwright install chromium
 
-pnpm test:a11y-contract      # the Chromium lane (also runs inside pr-a11y)
+pnpm test:a11y-contract      # the Chromium lane, every spec (the release check)
+pnpm test:a11y-contract:pr origin/main --dry-run   # what a PR from this branch runs (drop --dry-run to run it)
 ```
 
 Adopting the pattern in a new component means binding to the existing contract,
@@ -561,14 +612,14 @@ not copying its assertions — see the package README and
 
 ### RTL audits
 
-PRs that touch components also run an RTL audit (`pr-rtl`), scoped to the
-changed components like `pr-a11y`. It is soft-gated — findings show in the job
+The same events run an RTL audit (`pr-rtl`); on a labelled PR it is scoped to
+the changed components like `pr-a11y`. It is soft-gated — findings show in the job
 summary but don't block. Repro locally with `pnpm rtl:audit -- --filter Avatar`
 (the `--` matters: `pnpm -F` is itself `--filter`). The report classifies every
 scoped component as **measured**, **verified N-A**, or a **coverage gap**; an
-unexplained all-N-A result is not a clean RTL result. The weekly unfiltered run
-applies the same contract to the full existing roster, while PR CI applies it
-to new and changed components. See `apps/storybook/rtl-audit/README.md`.
+unexplained all-N-A result is not a clean RTL result. The release-check's unfiltered run
+applies the same contract to the full existing roster, while a labelled PR
+applies it to new and changed components. See `apps/storybook/rtl-audit/README.md`.
 
 ### Modal close visibility guard
 
@@ -615,9 +666,9 @@ Chromium and fails on any other cursor.
 
 The docsite playground runs user-authored code in a sandboxed iframe with an
 opaque origin, tied to the page only by a nonce-attested MessagePort handshake
-(`apps/docsite/src/app/playground/previewChannel.ts`). The `docsite-browser`
-job feeds the existing required `docsite-test` check and proves that boundary
-in Chromium against a production build: a reloaded
+(`apps/docsite/src/app/playground/previewChannel.ts`). The required
+`docsite-test` check's browser-contract step proves that boundary in
+Chromium against a production build: a reloaded
 preview document recovers with the current code and theme, and a document that
 previewed code navigated the frame to receives nothing. The sandbox only exists
 in production builds (`next dev` cannot serve its assets to an opaque origin),
@@ -769,7 +820,7 @@ minor only when the owner explicitly names it.
 
 Before the Version Packages PR merges, a patch release self-grades its complete
 generated changelogs and draft GitHub Release notes against the public [Blog Review
-Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
+Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
 under the `update` profile and records the result on that PR. Every criterion
 must pass; failures are fixed on the PR and the complete text is re-graded. A
 minor release instead requires Cindy's explicit human editorial approval of the
@@ -790,7 +841,7 @@ yet" — open the PR as a draft and mark it ready for review when it's done.
 ## What's expected of a change
 
 The bar — what a change has to carry, and what blocks — lives on the
-**[Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric)**.
+**[Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric)**.
 It is stated there once, so it cannot drift between this file, the reviewer
 instructions, and the wiki. Read it before you open a PR: it is the same page
 the reviewer applies to your change, and every check carries an id
@@ -798,7 +849,7 @@ the reviewer applies to your change, and every check carries an id
 
 What you will find there:
 
-- **[The bright lines that block](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#the-checks)** —
+- **[The bright lines that block](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#the-checks)** —
   hardcoded colors (`T1`, `T3`) · removing a themeable surface (`T2`) · raw CSS
   where StyleX suffices (`T8`) or raw HTML where a primitive exists (`T29`) · a
   broken accessible path (`A8`) and the accessibility bright lines (`A1`, `A3`,
@@ -808,15 +859,15 @@ What you will find there:
   changeset (`X20`). Severity is set by **what breaks if it ships**, not by how
   likely the trigger is — the rubric states each rule, its exceptions, and how
   it is judged.
-- **[The bar for your kind of change](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
+- **[The bar for your kind of change](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
   a bug fix owes evidence it was broken before and is fixed now; a new feature
   runs the automatable checks plus whatever the diff touches; a new component in
   `core` gets a full audit; a new component in `lab` is deliberately lax, with
   the audit as the **promotion gate** rather than an entry fee.
-- **[Which checks your diff earns](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
+- **[Which checks your diff earns](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
   a trigger table from what you touched to the checks that fire, so a two-line
   fix is not reviewed like a new component.
-- **[Recorded component grades](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#recording-an-audit)** —
+- **[Recorded component grades](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#recording-an-audit)** —
   audited components have a score and an open-blocker count in the wiki's
   `component-scores.json` ledger, which is useful context on what shape a
   component is in before you change it. Most components are unaudited, which
@@ -863,11 +914,38 @@ Storybook story for anything you added or altered.
 > `.github/workflows/**` can't be pushed on your behalf — GitHub requires the
 > author to update those; we'll ping you if so.)
 
+### When CI runs on your pull request
+
+- **Drafts run no CI.** Marking the pull request ready for review starts
+  CI, which runs the checks your change reaches.
+- **A pull request from a fork runs CI once a maintainer labels it
+  `ci:run`.** Only maintainers can apply labels, so you don't need to ask: a
+  maintainer adds it after a first look. The label takes effect on your next
+  push, or when the maintainer closes and reopens the pull request; CI then
+  runs on each push while the label stays. Until then the required checks fail
+  with "Waiting for a maintainer's ci:run label".
+- **`ci:run-visual`, `ci:run-a11y` and `ci:run-rtl` each opt a pull request
+  into one heavy suite** (visual regression, accessibility, RTL), which
+  otherwise runs on `main` after the pull request merges. Someone with write
+  access applies the label for the evidence a change needs before merging; a
+  label applied without write access runs nothing. Like `ci:run`, a label
+  takes effect on the next push or a close and reopen, and removing it stops
+  that suite from the next run. When the accessibility audit did not run, the
+  pull-request comment names `ci:run-a11y`.
+- **Pull requests from a branch in this repository run CI without the label**,
+  since pushing a branch here needs write access. Maintainers who work from a
+  fork either push their branches here or apply `ci:run` themselves.
+- **Heavy browser suites are shared per author.** They run for an author's
+  fifteen oldest open pull requests, up to a hundred such runs a day. A pull
+  request past either limit shows a failing check that says why, and runs in
+  full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
+  are not limited.
+
 ## Code Style
 
 The design-system rules — StyleX usage, semantic tokens, theming, API
 conventions, accessibility — are on the wiki and indexed from the
-[Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric).
+[Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric).
 What this repo enforces mechanically:
 
 - TypeScript strict mode

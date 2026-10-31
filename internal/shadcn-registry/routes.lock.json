@@ -616,6 +616,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-mobile-power-search",
+      "path": "components/lab/mobile-power-search",
+      "aliases": []
+    },
+    {
       "name": "component-lab-mobile-tokenizer",
       "path": "components/lab/mobile-tokenizer",
       "aliases": []
@@ -3737,6 +3742,11 @@
     {
       "name": "example-visually-hidden-supplementary-context",
       "path": "examples/visually-hidden/supplementary-context",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
       "aliases": []
     },
     {

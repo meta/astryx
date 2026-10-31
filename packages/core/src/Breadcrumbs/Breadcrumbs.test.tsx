@@ -2,6 +2,8 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 import userEvent from '@testing-library/user-event';
 import {Breadcrumbs} from './Breadcrumbs';
 import {BreadcrumbItem} from './BreadcrumbItem';
@@ -435,6 +437,62 @@ describe('BreadcrumbItem menu', () => {
     );
   });
 
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its menu to the browser', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', href: '/design'},
+            {label: 'Engineering', href: '/engineering'},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const row = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    expectNativeLinkClicks(row.closest('a') ?? row);
+  });
+
+  it('acts on the menu item a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    const onFirst = vi.fn();
+    const onSecond = vi.fn();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', onClick: onFirst},
+            {label: 'Engineering', onClick: onSecond},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const FIRST = 'Design';
+    const SECOND = 'Engineering';
+    const item = (name: string) =>
+      screen.getByRole('menuitem', {name, hidden: true});
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      onFirst.mockClear();
+      onSecond.mockClear();
+      fireEvent.pointerDown(item(FIRST), pointer);
+      fireEvent.pointerMove(item(SECOND), pointer);
+      fireEvent.pointerUp(item(SECOND), pointer);
+      expect(onSecond).toHaveBeenCalledTimes(1);
+      expect(onFirst).not.toHaveBeenCalled();
+    }
+  });
+
   it('portability: a DropdownMenuOption[] renders its items on open', async () => {
     const user = userEvent.setup();
     render(
@@ -455,6 +513,38 @@ describe('BreadcrumbItem menu', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Data', hidden: true}),
     ).toBeInTheDocument();
+  });
+
+  it('after a pointer open, a row the mouse rests on takes focus without :focus-visible', async () => {
+    // Nothing else in this file activates the shared modality tracking, so
+    // the menu crumb must activate it for its rows to follow the last input
+    // (architecture:interaction-modality INV1).
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem menu={items}>Teams</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    // The open focuses the first row in the next frame; let it land first,
+    // so the row the mouse moves onto is one that does not have focus yet.
+    await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    });
+    const design = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    expect(design).toHaveFocus();
+    const engineering = screen.getByRole('menuitem', {
+      name: 'Engineering',
+      hidden: true,
+    });
+    const focusSpy = vi.spyOn(engineering, 'focus');
+    fireEvent.pointerMove(engineering, {pointerType: 'mouse'});
+    expect(engineering).toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
   });
 
   it('fires the item onClick and closes the menu on select', async () => {

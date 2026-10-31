@@ -14,7 +14,9 @@
  *   Internal to the CLI.
  */
 
+import * as path from 'node:path';
 import {
+  readStaticDescriptorValue,
   readThemeDescriptorValue,
   themeDescriptorLabel,
 } from '../discovery/theme-discovery.mjs';
@@ -242,6 +244,18 @@ export async function compileDocs(project, {lang = null} = {}) {
         check: true,
         ...(input.root === 'templates' ? {loader: 'template'} : {}),
         ...(input.root === 'tree' ? {loader: 'native'} : {}),
+        ...(input.root === 'icon-definitions'
+          ? {
+              label: `Icon definition ${path.basename(input.file)} in ${input.owner}`,
+              readStatic: () =>
+                readStaticDescriptorValue(
+                  input.file,
+                  `Icon definition ${path.basename(input.file)} in ${input.owner}`,
+                  'IconDefinitionDoc',
+                  {data: true},
+                ),
+            }
+          : {}),
         ...(input.root === 'themes'
           ? {
               label: themeDescriptorLabel(input.file, input.owner),

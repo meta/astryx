@@ -20,7 +20,7 @@
 import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {
   colorVars,
   radiusVars,
@@ -31,7 +31,7 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
 import {useFieldStatusAnnouncement} from './useFieldStatusAnnouncement';
@@ -51,9 +51,22 @@ const ATTACHED_OVERLAP = `var(--_field-status-overlap, ${spacingVars['--spacing-
 
 const styles = stylex.create({
   base: {
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
+    // A validation message often echoes the value that failed (an address, a
+    // URL). Let such an unbroken token wrap inside the field instead of
+    // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
+    overflowWrap: 'anywhere',
   },
   attached: {
     marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,
@@ -91,15 +104,15 @@ const styles = stylex.create({
 const colorStyles = stylex.create({
   warning: {
     backgroundColor: colorVars['--color-warning-muted'],
-    color: colorVars['--color-text-yellow'],
+    color: colorVars['--color-on-warning-muted'],
   },
   error: {
     backgroundColor: colorVars['--color-error-muted'],
-    color: colorVars['--color-text-red'],
+    color: colorVars['--color-on-error-muted'],
   },
   success: {
     backgroundColor: colorVars['--color-success-muted'],
-    color: colorVars['--color-text-green'],
+    color: colorVars['--color-on-success-muted'],
   },
 });
 
@@ -109,6 +122,9 @@ const colorStyles = stylex.create({
 export type FieldStatusVariant = keyof FieldStatusVariantMap;
 
 export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the rendered message box.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * The type of status to display.

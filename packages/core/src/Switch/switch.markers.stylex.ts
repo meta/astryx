@@ -9,6 +9,11 @@ import * as stylex from '@stylexjs/stylex';
 export const switchScope: ReturnType<typeof stylex.defineMarker> =
   stylex.defineMarker();
 
-/** Focus-ring marker; unlike `switchScope`, it stays on while disabled. */
-export const switchFocusScope: ReturnType<typeof stylex.defineMarker> =
+/**
+ * Marks the switch's own focusable input, the track's preceding sibling, so
+ * the track's focus ring follows that input's `:focus-visible` alone. Unlike
+ * `switchScope`, it stays on while disabled (a focusable-disabled switch
+ * still shows the ring).
+ */
+export const switchFocusInput: ReturnType<typeof stylex.defineMarker> =
   stylex.defineMarker();

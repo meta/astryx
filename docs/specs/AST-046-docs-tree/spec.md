@@ -86,6 +86,11 @@ and references from other packages are an open question (OQ2).
   the doc's kind. A placement that fails MUST withdraw the doc with a
   diagnostic; it MUST NOT fall back to adoption. A doc that two rules adopt MUST
   be withdrawn with a diagnostic that names both namespaces.
+  The one exception is a CLI namespace marked `stability: 'experimental'`,
+  which MAY adopt a doc group from every package with `source.packages: 'all'`
+  (`spec:AST-084/DEC-7`); it applies only to the experimental icon sets behind
+  the project's opt-in, and every stable namespace keeps one adoption rule per
+  package with unchanged output.
 - **FR3 — Namespaces never list or scan their children.** A namespace doc
   declares its slots and its adoption rules. It MUST NOT enumerate its
   children, and the compiler MUST NOT infer a parent from a folder. A child
