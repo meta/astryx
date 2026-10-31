@@ -677,6 +677,8 @@ export class GestureHost {
   private wheel: WheelGesture | null = null;
   /** Whether the document routes every wheel to the live wheel gesture. */
   private isWheelLatched = false;
+  /** Scratch: the last committed step, so its slow continuation is absorbed. */
+  private lastStep: {axis: 'x' | 'y'; sign: number; last: number} | null = null;
   /** Scratch: an uncommitted step's travel, carried across a short gap. */
   private pendingStep: {axis: 'x' | 'y'; travel: number; count: number; last: number} | null = null;
   /** Wheels already taken: each element on the path with a listener hears one. */
@@ -2011,6 +2013,9 @@ export class GestureHost {
           s.decayed = true;
         }
         s.previous = size;
+        if (this.lastStep != null) {
+          this.lastStep.last = time;
+        }
       }
     }
     if (gesture == null) {
@@ -2103,6 +2108,7 @@ export class GestureHost {
         ? {x: gesture.x - sign * px, y: gesture.y}
         : {x: gesture.x, y: gesture.y - sign * px};
     this.pendingStep = null;
+    this.lastStep = {axis: s.axis, sign, last: time};
     this.arena.moved([{id, ...at(12), time}]);
     this.arena.moved([{id, ...at(52), time: time + 16}]);
     this.arena.ended([{id, ...at(52), time: time + 16}]);
@@ -2220,6 +2226,19 @@ export class GestureHost {
         t0: time,
         count: carry?.count ?? 0,
       };
+      const along = isHorizontal ? dx : dy;
+      if (
+        this.lastStep != null &&
+        this.lastStep.axis === gesture.step.axis &&
+        time - this.lastStep.last <= 400 &&
+        Math.sign(along) === this.lastStep.sign &&
+        Math.abs(along) < 6
+      ) {
+        // The slow tail of a swipe that already stepped: absorb it.
+        gesture.step.committed = true;
+        gesture.step.sign = this.lastStep.sign;
+        this.lastStep.last = time;
+      }
     }
     this.arena.began(
       kind === 'pan'
@@ -2235,6 +2254,10 @@ export class GestureHost {
     if (ids.every(id => this.arena.participantsOf(id).length === 0)) {
       this.arena.cancelled(ids, time);
       return kept;
+    }
+    if (gesture.step?.committed) {
+      // An absorbed tail: the contact never moves the pan.
+      this.arena.cancelled(ids, time);
     }
     return gesture;
   }
