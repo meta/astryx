@@ -262,16 +262,40 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     expect(calls.dispatch).toEqual([]);
   });
 
-  it('checks a tip again when its run failed, since that run may have checked a newer commit', async () => {
+  it('counts a failed check of the tip, so a red quiet main is not checked again', async () => {
     const calls = await run({
-      runs: [check(70, {head_sha: sha, conclusion: 'failure'})],
+      runs: [
+        check(70, {
+          head_sha: sha,
+          conclusion: 'failure',
+          display_title: `Release check ${sha}`,
+        }),
+      ],
     });
-    expect(calls.dispatch).toEqual(dispatched(sha));
-    // ...but a failed run still holds the window.
-    const recent = await run({
-      runs: [check(20, {head_sha: sha, conclusion: 'failure'})],
-    });
-    expect(recent.dispatch).toEqual([]);
+    expect(calls.dispatch).toEqual([]);
+  });
+
+  it('checks a tip again when its run was asked to check an older commit', async () => {
+    // A merge landed between the tip read and the dispatch: the run checked
+    // out the tip and failed its exact-head check for the older commit.
+    const older = 'c'.repeat(40);
+    const mismatched = minutes =>
+      check(minutes, {
+        head_sha: sha,
+        conclusion: 'failure',
+        display_title: `Release check ${older}`,
+      });
+    expect((await run({runs: [mismatched(70)]})).dispatch).toEqual(
+      dispatched(sha),
+    );
+    // ...but it still holds the window.
+    expect((await run({runs: [mismatched(20)]})).dispatch).toEqual([]);
+  });
+
+  it('names each release-check run after the commit it was asked to check', () => {
+    expect(ci['run-name']).toBe(
+      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && format('Release check {0}', inputs['expected-head']) || github.event.pull_request.title || github.event.merge_group.head_commit.message || github.workflow }}",
+    );
   });
 
   it('does not check a tip twice', async () => {

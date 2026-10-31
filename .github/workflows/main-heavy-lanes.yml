@@ -55,10 +55,13 @@ jobs:
             });
             const checks = data.workflow_runs.filter(run =>
               run.actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
-            // A failed run may have checked out a newer commit than it was
-            // asked to check and failed on that, so only a passing or running
-            // check covers the tip; a failed one still counts toward the window.
-            if (checks.some(run => run.head_sha === tip && (run.status !== 'completed' || run.conclusion === 'success'))) {
+            // A run that checked out a newer commit than its name says it was
+            // asked to check (a merge landed between the tip read and the
+            // dispatch) failed on that and is no check of it; it still holds
+            // the window.
+            const askedFor = run => /^Release check ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1];
+            const checked = run => run.head_sha === tip && (askedFor(run) ?? tip) === tip;
+            if (checks.some(checked)) {
               core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
               return;
             }

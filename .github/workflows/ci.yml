@@ -6,6 +6,10 @@
 # Merge queue: test + build also run on merge_group events so the
 # merge queue can gate on them before landing a PR.
 name: CI
+# A release-check names the commit it was asked to check, so main's scheduler
+# can tell a failed check of that commit from a run that checked out a newer
+# one (spec:AST-030 DEC-11). Every other run keeps GitHub's usual name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && format('Release check {0}', inputs['expected-head']) || github.event.pull_request.title || github.event.merge_group.head_commit.message || github.workflow }}"
 
 on:
   pull_request:
