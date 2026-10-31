@@ -373,10 +373,11 @@ export const RADIO_GROUP_BINDING_STATES = [
     id: 'segmented-option-group-disabled-with-message',
     binding: 'SegmentedControlItem',
     summary:
-      'a selected unavailable segment kept tabReachable for the group reason',
+      'a selected unavailable segment kept tabReachable and described by the group reason',
     facts: optionFacts({
       checked: true,
       disabled: true,
+      description: 'Choose a project to switch views',
       operable: false,
       tabReachable: true,
       pointerCancellation: false,
