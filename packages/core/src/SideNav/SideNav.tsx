@@ -591,7 +591,12 @@ export function SideNav({
     pendingFocusRef.current = null;
     const nav = navRef.current;
     const active = nav?.ownerDocument.activeElement;
-    if (wasCollapsed || nav == null || active == null || !nav.contains(active)) {
+    if (
+      wasCollapsed ||
+      nav == null ||
+      active == null ||
+      !nav.contains(active)
+    ) {
       return;
     }
     const rows = [...rowsRef.current]

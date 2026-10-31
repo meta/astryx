@@ -18,13 +18,9 @@
 import {createContext, use} from 'react';
 
 export type SideNavRenderMode =
-  | 'default'
-  | 'topbar'
-  | 'drawer'
-  | 'drawer-content';
+  'default' | 'topbar' | 'drawer' | 'drawer-content';
 
-export const SideNavRenderContext =
-  createContext<SideNavRenderMode>('default');
+export const SideNavRenderContext = createContext<SideNavRenderMode>('default');
 SideNavRenderContext.displayName = 'SideNavRenderContext';
 
 /**

@@ -4324,6 +4324,14 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(elsewhere).toHaveFocus();
   });
 
+  it('moves no focus from a row the collapsed rail keeps', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    const team = screen.getByRole('link', {name: 'Team'});
+    team.focus();
+    rerender(<Rail isCollapsed />);
+    expect(screen.getByRole('link', {name: 'Team'})).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});

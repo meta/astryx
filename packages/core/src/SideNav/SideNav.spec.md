@@ -160,6 +160,13 @@ Consumer migration instructions belong in consumer docs and release notes.
   accessible name, state, DOM order, or tab order.
 - **AR2 — Visible focus.** A nested row's focus indicator MUST paint in full at
   every depth (FR5).
+- **AR3 — Focus leaves a row the collapsed rail removes.** When the rail
+  collapses while focus is on a row the collapsed rail does not render (FR2),
+  focus moves to the collapse toggle rendered inside the SideNav, or, with
+  none, to the nearest row still in the rail, the preceding one first.
+  Focus anywhere else, a row the rail keeps included, is not moved
+  (WCAG 2.2 SC 2.4.3; as `component:LayoutPanel` AR2 does for a collapsing
+  panel).
 
 ## Design relationships
 
@@ -205,6 +212,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR2, FR3  | Real-browser collapsed rail and flyout                                                                                                                                                         | Collapsed rail with nested children                                                                                                                                                     | Any change to the collapsed rail, or an indent on the flyout's top level, fails.                                                                                                                                                                                                                                                                                                                  | `audit:SideNav/layout`   |
 | AR1       | Accessibility-tree comparison of nested rows                                                                                                                                                   | Plain, split, and actions rows                                                                                                                                                          | Any change in role, name, state, or order fails.                                                                                                                                                                                                                                                                                                                                                  | `audit:SideNav/a11y`     |
 | FR6       | `SideNavRailMotion.test.tsx`; `SideNavRailMotion.interaction.browser.spec.ts` frames of a collapse and an expand under a finger and a mouse (the `reducedMotion: 'always'` theme case pending) | collapse and expand; a mouse and a finger; Reduce Motion under a coarse and under a fine primary pointer; a theme with `reducedMotion: 'always'`; a second toggle while the motion runs | an animated width, a collapse that does not end icons-only, an expand that does not end with its labels, a rail copy reachable by assistive technology or left after the motion ends, travel under Reduce Motion, anything but an opacity-only change of 200 ms or less under Reduce Motion on a coarse pointer (DR2), or any animated property under Reduce Motion on a fine pointer (DR3) fails | `audit:SideNav/behavior` |
+| AR3       | `SideNav.test.tsx` collapse-focus suite; `SideNavCollapseFocus.a11y.chromium.spec.ts`                                                                                                          | Focus on an icon-less row with and without a toggle; focus outside the nav; focus on a row the rail keeps; expanding                                                                    | Focus left on the page body, a move to anything but the toggle or the preceding rail row, or a move of focus that was not on a removed row fails.                                                                                                                                                                                                                                                 | `audit:SideNav/a11y`     |
 
 ## Decision log
 
