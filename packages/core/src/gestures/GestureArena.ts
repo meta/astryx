@@ -56,6 +56,7 @@ import type {
   TouchConsumer,
   TouchInput,
   TouchSample,
+  TouchModifiers,
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
 import {internals} from './recognizerInternals';
@@ -79,6 +80,16 @@ export const browserClock: GestureClock = {
  * be swallowed now and replayed if the recognizers holding it all fail.
  */
 export type ClickDisposition = 'allow' | 'suppress' | 'defer';
+
+/** The modifier keys a contact's input reports, none when left out. */
+function modifiersOf(input: Partial<TouchModifiers>): TouchModifiers {
+  return {
+    ctrlKey: input.ctrlKey === true,
+    metaKey: input.metaKey === true,
+    shiftKey: input.shiftKey === true,
+    altKey: input.altKey === true,
+  };
+}
 
 export interface ArenaBeganInput extends TouchBeganInput {
   /** The recognizers on the touch's hit path, innermost first. */
@@ -228,6 +239,7 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
+          ...modifiersOf(input),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
@@ -317,6 +329,7 @@ export class GestureArena {
         target: input.target,
         scroll: input.scroll ?? null,
         takenByBrowser: false,
+        ...modifiersOf(input),
       };
       const context = this.context();
       for (const recognizer of [...this.active]) {
