@@ -260,12 +260,14 @@ those contracts.
 - **INV16 — A shared concern is extended in its owner and called once.** In
   `@astryxdesign/core`, a concern Core already owns in a shared hook or utility
   is extended there; a component calls it once and adds no effect, listener, or
-  tracker of its own for that concern. (Implementation gaps: Dialog calls
+  tracker of its own for that concern. (Known implementation gaps include: Dialog calls
   `useInteractionModalityTracking()` and also keeps its own Effect that tracks
-  modality in a second document; MobileNav keeps its own page scroll lock
-  Effect instead of `useScrollLock`; and DateInput's month scroller,
-  DropdownMenu's overflow check, Layer positioning, and Table's sticky columns
-  each keep their own `ResizeObserver` beside `sharedResizeObserver`.)
+  modality in a second document; MobileNav keeps its own page scroll lock Effect
+  instead of `useScrollLock`; BottomSheet's gestures and mobile keyboard,
+  DateInput's month scroller, DropdownMenu's overflow check, Layer positioning,
+  Popover, and Table's sticky columns each keep their own `ResizeObserver`
+  beside `sharedResizeObserver`; and other Core sites keep their own
+  `MutationObserver` beside `sharedMutationObserver`.)
 
 ## Authoring guidance
 
