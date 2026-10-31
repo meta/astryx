@@ -1,11 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/(Item|Token|ClickableCard|SelectableCard)/ ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Item|Token|ClickableCard|SelectableCard)
+// @pr-a11y scope ^packages/core/src/(Item|Token|ClickableCard|SelectableCard|Thumbnail|Selector|MultiSelector)/ ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Item|Token|ClickableCard|SelectableCard|Thumbnail|Selector|MultiSelector)
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
  * @input The built Item "With End Actions", Token "Clickable With Remove",
- *   ClickableCard "Nested Interactive Elements" and SelectableCard "With
- *   Nested Button" stories in real Chromium, focus moved with Tab, at desktop and phone
+ *   ClickableCard "Nested Interactive Elements", SelectableCard "With
+ *   Nested Button", Thumbnail "With Remove", and ghost and secondary
+ *   Selector and MultiSelector "Clearable" stories in real Chromium, focus moved with Tab, at desktop and phone
  *   widths
  * @output Browser evidence for `architecture:interaction-modality` INV3: each
  *   tab stop in a row, token or card shows exactly one focus ring. A wrapper
@@ -13,7 +14,7 @@
  *   remove button, a button in a card) rings itself, and the wrapper stays
  *   unringed
  * @position Regression proof for focusWithinOwner in Item, Token,
- *   ClickableCard and SelectableCard
+ *   ClickableCard, SelectableCard, Thumbnail, Selector and MultiSelector
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -34,9 +35,11 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function open(page: Page, story: string, width: number) {
+async function open(page: Page, story: string, width: number, args = '') {
   await page.setViewportSize({width, height: 600});
-  await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${story}&viewMode=story${args}`,
+  );
   await page
     .locator('#storybook-root button, #storybook-root a')
     .first()
@@ -120,4 +123,32 @@ for (const width of [1280, 390]) {
       expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
     }
   });
+
+  test(`at ${width} px, a Thumbnail's remove button shows one ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-thumbnail--with-remove', width);
+    for (const {focused, rings} of await ringsAtEachStop(page, 1)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
+
+  for (const variant of ['ghost', 'secondary']) {
+    for (const component of ['selector', 'multiselector']) {
+      test(`at ${width} px, each tab stop in a ${variant} ${component} with a clear button shows one ring`, async ({
+        page,
+      }) => {
+        await open(
+          page,
+          `core-${component}--clearable`,
+          width,
+          `&args=variant:${variant}`,
+        );
+        // The trigger, then its clear button.
+        for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
+          expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+        }
+      });
+    }
+  }
 }
