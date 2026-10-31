@@ -204,6 +204,51 @@ describe('Dialog', () => {
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
   });
 
+  it('is modal before its DialogHeader title takes focus when mounted open (FR1)', () => {
+    // A title focused while the <dialog> is displayed but not yet modal is a
+    // fixed box in its host's flow: the focus scrolls every scroll container
+    // above it to reveal it, and they stay scrolled once showModal() moves the
+    // dialog to the top layer.
+    const order: string[] = [];
+    const showModal = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      order.push('showModal');
+      showModal.call(this);
+    });
+    const focus = vi
+      .spyOn(HTMLElement.prototype, 'focus')
+      .mockImplementation(function (this: HTMLElement) {
+        order.push(`focus ${this.tagName.toLowerCase()}`);
+      });
+    try {
+      render(
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader title="Reset all settings?" />
+          Body
+        </Dialog>,
+      );
+      expect(order).toEqual(['showModal', 'focus h2']);
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  it('focuses a DialogHeader that mounts into an already open Dialog', () => {
+    function Steps({step}: {step: number}) {
+      return (
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <DialogHeader key={step} title={`Step ${step}`} />
+        </Dialog>
+      );
+    }
+    const {rerender} = render(<Steps step={1} />);
+    expect(screen.getByText('Step 1').closest('h2')).toHaveFocus();
+    rerender(<Steps step={2} />);
+    expect(screen.getByText('Step 2').closest('h2')).toHaveFocus();
+  });
+
   it('honors an initial-focus request from an action descendant', () => {
     render(
       <Dialog isOpen={true} onOpenChange={() => {}}>

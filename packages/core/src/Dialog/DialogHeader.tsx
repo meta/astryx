@@ -184,11 +184,23 @@ export function DialogHeader({
   // avoid stealing scroll position from the surrounding page.
   // The parent Dialog detects this title (by `titleId`) via a callback ref to
   // set its default aria-labelledby — no registration handshake needed here.
+  //
+  // A child's effect runs before its parent's, so in the commit that opens a
+  // Dialog this effect would focus the title before Dialog's showModal(),
+  // while the <dialog> is displayed but not yet modal; the focus would then
+  // scroll the dialog's scroll ancestors to reveal it (component:Dialog FR1).
+  // There, Dialog focuses this title itself right after showModal(). Only a
+  // header that mounts into a dialog that is already modal focuses here.
   useEffect(() => {
-    if (shouldAutoFocus && titleRef.current) {
-      titleRef.current.focus();
+    const title = titleRef.current;
+    if (!shouldAutoFocus || title == null) {
+      return;
     }
-  }, [shouldAutoFocus]);
+    const dialog = title.closest('dialog');
+    if (dialogContext == null || dialog == null || dialog.open) {
+      title.focus();
+    }
+  }, [shouldAutoFocus, dialogContext]);
 
   return (
     <LayoutHeader
