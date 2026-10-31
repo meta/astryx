@@ -80,6 +80,19 @@ describe('classifyJob', () => {
   });
 });
 
+describe('job names', () => {
+  it("folds a skipped matrix's unexpanded name, parentheses and all", () => {
+    const summary = summarizeJobs([
+      job('pr-rtl', 'skipped'),
+      job(
+        "pr-rtl (${{ matrix.package }}${{ (((matrix.parts > 1) && format(' {0}/{1}', matrix.part, matrix.parts)) || '') }})",
+        'skipped',
+      ),
+    ]);
+    expect(summary).toEqual([{name: 'pr-rtl', state: 'not-run'}]);
+  });
+});
+
 describe('suite jobs by display name', () => {
   it.each([
     ['Stable visual regression', 'Visual'],

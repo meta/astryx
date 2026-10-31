@@ -45,9 +45,13 @@ function notRunSentence(suite) {
 const SCOPE_STEP = "Decide this job's scope";
 const BOOKKEEPING_STEP = /^(Set up job|Complete job|Post )/;
 
-/** A matrix leg's job name without its `(1/3)` suffix. */
+/**
+ * A job's name without its parenthesized suffix: a matrix leg's `(1/3)`, a
+ * variant's `(browser specs)`, or a skipped matrix's unexpanded expression,
+ * which can hold parentheses of its own.
+ */
 function baseJobName(name) {
-  return String(name ?? '').replace(/\s*\([^)]*\)\s*$/, '');
+  return String(name ?? '').replace(/\s*\(.*\)\s*$/, '');
 }
 
 /**
