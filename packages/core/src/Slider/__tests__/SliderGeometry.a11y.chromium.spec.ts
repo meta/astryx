@@ -448,6 +448,10 @@ test('a desktop slider keeps its pointer styles: no touch targets, no inline tou
   page,
 }) => {
   await mount(page, 'core-slider--default', 'ltr', 'ltr');
+  // Present and painted first: the thumb this test reads has its box.
+  const thumbBox = await page.getByRole('slider').boundingBox();
+  expect(thumbBox?.width ?? 0).toBeGreaterThan(0);
+  expect(thumbBox?.height ?? 0).toBeGreaterThan(0);
   // A fine primary pointer in this context (a context without touch can still
   // match coarse under some configurations).
   expect(

@@ -78,6 +78,8 @@ const UISLIDER = {
 } as const;
 /** Slider's thumb, px: its travel is the track minus one thumb. */
 const THUMB = 20;
+/** UISlider's touch target, px (`slider.thumbHitTarget`). */
+const HIT_TARGET = 48;
 /**
  * A point on a whole CSS pixel. WebKit reports touch and pointer coordinates
  * in whole pixels (a tap scripted at x 50.42 arrives at 50; Chromium keeps
@@ -780,6 +782,39 @@ test('range thumbs closer than their touch targets split the gap: neither thumbâ
   const indexOfLower = await lower.evaluate(element =>
     Array.from(document.querySelectorAll('[role="slider"]')).indexOf(element),
   );
+  // Present and painted first: both thumbs and both touch targets have
+  // boxes, and where the thumbs have room (centers at least a target apart)
+  // each target is UISlider's full 48 px square around its thumb, so the
+  // narrowed cases below measure targets that exist.
+  await expect(lower).toBeVisible();
+  await expect(upper).toBeVisible();
+  await spread(Math.round(80 / pxPerStep));
+  {
+    const roomy = await boxes();
+    const lowerCenter = (roomy.lower.left + roomy.lower.right) / 2;
+    const upperCenter = (roomy.upper.left + roomy.upper.right) / 2;
+    expect(upperCenter - lowerCenter).toBeGreaterThanOrEqual(HIT_TARGET);
+    for (const [thumbBox, hitBox] of [
+      [roomy.lower, roomy.lowerHit],
+      [roomy.upper, roomy.upperHit],
+    ] as const) {
+      expect(
+        Math.abs(thumbBox.right - thumbBox.left - THUMB),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(hitBox.right - hitBox.left - HIT_TARGET),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(hitBox.bottom - hitBox.top - HIT_TARGET),
+      ).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(
+          (hitBox.left + hitBox.right) / 2 -
+            (thumbBox.left + thumbBox.right) / 2,
+        ),
+      ).toBeLessThanOrEqual(1);
+    }
+  }
   // Overlapping thumbs (centers 14 px apart, under the 20 px thumb): a
   // finger on the lower thumb's exposed side takes the lower thumb.
   await spread(Math.max(1, Math.round(14 / pxPerStep)));
@@ -984,6 +1019,8 @@ test('a vertical swipe from a thumb scrolls the list; a horizontal one drags it'
   );
   const list = page.getByTestId('slider-list');
   const thumb = page.getByRole('slider', {name: 'Channel 2'});
+  // Present and painted first: the swipe below must leave this thumb's value.
+  await expect(thumb).toBeVisible();
   await expect(thumb.locator('[data-slider-hit]')).toHaveCount(1);
   const before = await thumb.getAttribute('aria-valuenow');
   const box = await thumb.boundingBox();
@@ -1016,6 +1053,7 @@ test('a vertical swipe from a thumb scrolls the list; a horizontal one drags it'
   // A thumb in view after the scroll.
   const listBox = await list.boundingBox();
   const visible = page.getByRole('slider', {name: 'Channel 6'});
+  await expect(visible).toBeVisible();
   const visibleBefore = await visible.getAttribute('aria-valuenow');
   const next = await visible.boundingBox();
   if (next == null || listBox == null) {
@@ -1234,7 +1272,7 @@ test('a drag lays out nothing per move, and the coast neither lays out nor paint
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-  const {driver, thumb, center} = await openSlider(
+  const {driver, thumb, center, value} = await openSlider(
     page,
     'core-slider--default',
     {
@@ -1242,6 +1280,7 @@ test('a drag lays out nothing per move, and the coast neither lays out nor paint
     },
   );
   const at = await center();
+  const before = await value();
   let moves = {from: 0, to: 0};
   let coast = {from: 0, to: 0};
   const {script, ends} = legs(
@@ -1262,6 +1301,8 @@ test('a drag lays out nothing per move, and the coast neither lays out nor paint
     await waitForRest(thumb);
     coast = {from: start, to: Date.now()};
   });
+  // The drag moved the thumb, so "nothing laid out" measures a real drag.
+  expect(await value()).toBeGreaterThan(before + 20);
   const duringMoves = countBetween(trace, moves.from, moves.to);
   expect(duringMoves.Layout ?? 0, JSON.stringify(duringMoves)).toBe(0);
   const duringCoast = countBetween(trace, coast.from + 80, coast.to - 120);
