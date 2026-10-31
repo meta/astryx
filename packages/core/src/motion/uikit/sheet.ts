@@ -5,7 +5,7 @@
  * @input Nothing; data only
  * @output Exports `sheet`: how UISheetPresentationController resolves a
  *   drag's release, the target projection and the speed that picks the
- *   release spring
+ *   release spring, and the rubber band past the tallest detent
  * @position The sheet domain of the UIKit constants table (motion/uikit);
  *   its springs are `springs.sheetPresent`, `.sheetDismiss`, `.sheetDetent`,
  *   `.sheetReleaseFast` and `.sheetDismissSwipe`
@@ -91,5 +91,18 @@ export const sheet = {
      *   from 0 to 6.6 pt fits, Oct 24 2026
      */
     detentTolerance: 1,
+  },
+  rubberBand: {
+    /**
+     * The rubber band a finger's drag past the tallest detent runs:
+     * (1 − 1 ÷ (x·c ÷ d + 1))·d, with x the finger's travel past it and d the
+     * sheet's height (`spec:AST-094` FR3; motion/rubberBand.ts). UIKit's
+     * own sheet reports this coefficient but holds at its largest detent.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, the sheet interaction's `rubberBandCoefficient` read
+     *   when each drag began: 0.55 on every one of 43 drags of a
+     *   [.medium(), .large()] sheet, 13 on Oct 23 and 30 on Oct 25 2026
+     */
+    coefficient: 0.55,
   },
 } as const;

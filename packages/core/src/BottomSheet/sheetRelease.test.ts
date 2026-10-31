@@ -14,7 +14,12 @@
 
 import {describe, expect, it} from 'vitest';
 import {sheet, springs} from '../motion/uikit';
-import {resolveDefaultRelease, resolveSheetRelease} from './sheetRelease';
+import {solveSpring, toSpring} from '../motion/spring';
+import {
+  limitOvershoot,
+  resolveDefaultRelease,
+  resolveSheetRelease,
+} from './sheetRelease';
 
 /**
  * Measured on the iOS 26.2 simulator (iPhone 17 Pro, 402 × 874 pt), in
@@ -632,5 +637,50 @@ describe("resolveDefaultRelease (under a mouse: today's rule)", () => {
         direction: -1,
       }),
     ).toMatchObject({kind: 'detent', offset: 300});
+  });
+});
+
+describe('limitOvershoot', () => {
+  /** How far the spring goes past `to`, px. */
+  const overshootOf = (from: number, to: number, velocity: number) => {
+    const curve = solveSpring(toSpring(springs.sheetReleaseFast), {
+      from,
+      to,
+      velocity,
+    });
+    let worst = 0;
+    for (let t = 0; t <= 1.5; t += 1 / 480) {
+      worst = Math.max(worst, to - curve.value(t));
+    }
+    return worst;
+  };
+
+  it('keeps a hand-off whose overshoot fits', () => {
+    expect(limitOvershoot(springs.sheetReleaseFast, 5, 0, -1000, 48)).toBe(
+      -1000,
+    );
+  });
+
+  it('caps a throw that would overshoot past the reserve', () => {
+    // Released 5 px below fully open at 3000 px/s: the 80 % damped spring
+    // would carry the sheet about 60 px above it, past the 48 px reserve.
+    expect(overshootOf(5, 0, -3000)).toBeGreaterThan(55);
+    const capped = limitOvershoot(springs.sheetReleaseFast, 5, 0, -3000, 48);
+    expect(capped).toBeGreaterThan(-3000);
+    expect(capped).toBeLessThan(-1500);
+    expect(overshootOf(5, 0, capped)).toBeLessThanOrEqual(48.5);
+  });
+
+  it('keeps a release let go above the tallest detent, still moving up, within the reserve', () => {
+    // Let go at the 48 px wall above fully open moving up at 1500 px/s: the
+    // spring would carry the sheet about 72 px above fully open first.
+    expect(overshootOf(-48, 0, -1500)).toBeGreaterThan(65);
+    const capped = limitOvershoot(springs.sheetReleaseFast, -48, 0, -1500, 48);
+    expect(overshootOf(-48, 0, capped)).toBeLessThanOrEqual(48.5);
+  });
+
+  it('keeps a downward release from above the tallest detent as it is', () => {
+    // Moving down from the wall it only falls back toward the detent.
+    expect(limitOvershoot(springs.sheetReleaseFast, -48, 0, 600, 48)).toBe(600);
   });
 });

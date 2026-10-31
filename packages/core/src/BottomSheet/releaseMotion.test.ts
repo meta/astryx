@@ -47,18 +47,39 @@ afterEach(() => vi.unstubAllGlobals());
 describe('readReleaseMotion', () => {
   it('runs on UIKit springs under a finger', () => {
     pointer(true, {ios: true});
-    expect(readReleaseMotion(sheet(THEME))).toEqual({kind: 'uikit'});
+    expect(readReleaseMotion(sheet(THEME), 'touch')).toEqual({kind: 'uikit'});
   });
 
   it('runs on UIKit springs under a finger on Android too (one touch model)', () => {
     pointer(true);
-    expect(readReleaseMotion(sheet(THEME))).toEqual({kind: 'uikit'});
+    expect(readReleaseMotion(sheet(THEME), 'touch')).toEqual({kind: 'uikit'});
+  });
+
+  it('runs on UIKit springs under a pen where the primary pointer is coarse', () => {
+    pointer(true, {ios: true});
+    expect(readReleaseMotion(sheet(THEME), 'pen')).toEqual({kind: 'uikit'});
+  });
+
+  it('keeps the theme timing under a mouse where the primary pointer is coarse (spec:AST-094 FR13)', () => {
+    pointer(true, {ios: true});
+    expect(readReleaseMotion(sheet(THEME), 'mouse')).toMatchObject({
+      kind: 'theme',
+    });
+  });
+
+  it('keeps the theme timing under a finger where the primary pointer is fine (spec:AST-094 FR13)', () => {
+    pointer(false);
+    expect(readReleaseMotion(sheet(THEME), 'touch')).toMatchObject({
+      kind: 'theme',
+    });
   });
 
   it("keeps the theme timing under a mouse, in WebKit on iOS's engine too", () => {
     pointer(false, {ios: true});
     expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    expect(readReleaseMotion(sheet(THEME))).toMatchObject({kind: 'theme'});
+    expect(readReleaseMotion(sheet(THEME), 'mouse')).toMatchObject({
+      kind: 'theme',
+    });
   });
 
   it('reads the transform transition under a mouse, from a list', () => {
@@ -70,6 +91,7 @@ describe('readReleaseMotion', () => {
         transitionDelay: '0s, 0s',
         transitionTimingFunction: 'linear, cubic-bezier(0.24, 1, 0.4, 1)',
       }),
+      'mouse',
     );
     expect(motion.kind).toBe('theme');
     if (motion.kind === 'theme') {
@@ -85,15 +107,20 @@ describe('readReleaseMotion', () => {
         transitionDuration: '300ms',
         transitionTimingFunction: 'ease-in',
       }),
+      'mouse',
     );
     expect(motion.kind === 'theme' && motion.easing(0.5)).toBeCloseTo(0.315, 2);
   });
 
   it('does not animate when transitions are off', () => {
-    const motion = readReleaseMotion(sheet({transitionProperty: 'none'}));
+    const motion = readReleaseMotion(
+      sheet({transitionProperty: 'none'}),
+      'mouse',
+    );
     expect(motion).toMatchObject({kind: 'theme', durationMs: 0});
     const notTransform = readReleaseMotion(
       sheet({transitionProperty: 'opacity', transitionDuration: '1s'}),
+      'mouse',
     );
     expect(notTransform).toMatchObject({kind: 'theme', durationMs: 0});
   });
@@ -105,10 +132,11 @@ describe('readReleaseMotion', () => {
         transitionDuration: '410ms',
         transitionTimingFunction: 'steps(4, end)',
       }),
+      'mouse',
     );
     expect(motion).toMatchObject({kind: 'theme', durationMs: 410});
     expect(motion.kind === 'theme' && motion.easing(0.3)).toBeCloseTo(0.3, 9);
-    expect(readReleaseMotion(null)).toMatchObject({
+    expect(readReleaseMotion(null, 'mouse')).toMatchObject({
       kind: 'theme',
       durationMs: 0,
     });

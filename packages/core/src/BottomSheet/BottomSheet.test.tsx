@@ -307,6 +307,11 @@ function fireTimedPointer(
     clientY: {value: y},
     isPrimary: {value: true},
     pointerId: {value: 1},
+    // A finger where a test stubs a coarse primary pointer, a mouse otherwise
+    // (useSheetGestures.ts: UIKit's presentation for a finger or a pen there).
+    pointerType: {
+      value: matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse',
+    },
     timeStamp: {value: time},
   });
   return fireEvent(target, event);

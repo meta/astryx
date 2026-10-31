@@ -45,7 +45,7 @@
  */
 
 import {selectSnapPoint} from '../motion/projection';
-import type {SpringDescription} from '../motion/spring';
+import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {sheet} from '../motion/uikit/sheet';
 import {
   SHEET_DETENT_SPRING,
@@ -296,4 +296,48 @@ export function resolveDefaultRelease({
     projected,
     spring: SHEET_DETENT_SPRING,
   };
+}
+
+/**
+ * The release velocity, scaled down if needed so `spring`, released at
+ * `from` moving at `velocity`, rises above `to` by at most `limit` px
+ * (offsets are px down, so above is smaller), or no higher than it starts
+ * when it starts higher than that. A sheet released onto its tallest detent
+ * rises above it when thrown up from below, or when let go while still
+ * stretched above it and moving up; the sheet extends `limit` px below the
+ * screen, so past that the page would show under it.
+ */
+export function limitOvershoot(
+  spring: SpringDescription,
+  from: number,
+  to: number,
+  velocity: number,
+  limit: number,
+): number {
+  // Measured above `to` wherever the release starts: from below, the
+  // overshoot; from above, how far it rises before it falls back.
+  const allowed = Math.max(limit, to - from);
+  const overshoot = (v: number) => {
+    const curve = solveSpring(toSpring(spring), {from, to, velocity: v});
+    const end = Math.min(curve.settleTime(0.1), 3);
+    let worst = 0;
+    for (let t = 0; t <= end; t += 1 / 240) {
+      worst = Math.max(worst, to - curve.value(t));
+    }
+    return worst;
+  };
+  if (overshoot(velocity) <= allowed) {
+    return velocity;
+  }
+  let low = 0;
+  let high = 1;
+  for (let i = 0; i < 24; i += 1) {
+    const mid = (low + high) / 2;
+    if (overshoot(velocity * mid) <= allowed) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return velocity * low;
 }

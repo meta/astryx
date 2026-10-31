@@ -352,7 +352,7 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
   const script = slowDragTo(handle, dy);
   const lastMove =
     toTouchEvents(script).filter(e => e.type === 'touchMove').length - 1;
-  const tops: number[] = [];
+  const tracked: {top: number; finger: number}[] = [];
   let moves = 0;
   let restingTop = NaN;
   const started = Date.now();
@@ -361,20 +361,25 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
       if (step.type !== 'touchMove') {
         return;
       }
-      // Read right away (moves are paced at 60 Hz), and once more after the
-      // last move has been presented: the finger rests 150 ms before lifting.
-      tops.push(await sheetTop(sheet));
+      // A frame after each move, so the page has handled it (Chromium hands
+      // touch moves over on the next animation frame), and once more after
+      // the last move: the finger rests 150 ms before lifting.
+      await frames(page, 1);
+      tracked.push({
+        top: await sheetTop(sheet),
+        finger: step.changed[0].y - handle.y,
+      });
       if (moves++ === lastMove) {
         await frames(page, 1);
         restingTop = await sheetTop(sheet);
       }
     },
   });
-  // The sheet tracked the finger: monotonic, and 1:1 once out of the
-  // starting detent's 40 px magnet.
-  expect(tops.every((top, i) => i === 0 || top >= tops[i - 1] - 0.5)).toBe(
-    true,
-  );
+  // 1:1 with the finger at every move, no pull toward a detent (within the
+  // pixel WebKit rounds touch positions to).
+  for (const {top, finger} of tracked) {
+    expect(Math.abs(top - tallTop - finger)).toBeLessThanOrEqual(1);
+  }
   expect(restingTop).toBeCloseTo(tallTop + dy, 0);
   await waitForRest(sheet);
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
@@ -386,6 +391,90 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
       [],
     );
   }
+});
+
+test('pulled up past the tallest detent, the sheet stretches by the rubber band and settles back (spec:AST-094 FR3)', async ({
+  page,
+}) => {
+  const {driver, sheet, tallTop, handle} = await openSheet(page);
+  // UIKit's rubber band over the sheet's height (coefficient 0.55), no
+  // farther than the 48 px the sheet reserves below the screen.
+  const height = await sheet.evaluate(el => el.getBoundingClientRect().height);
+  const band = (past: number) =>
+    Math.min(48, (1 - 1 / ((past * 0.55) / height + 1)) * height);
+  const pulled: {top: number; past: number}[] = [];
+  await driver.play(
+    drag(handle, {x: handle.x, y: handle.y - 120}, {durationMs: 400, hz: 60}),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          // A frame after each move, so the page has handled it.
+          await frames(page, 1);
+          pulled.push({
+            top: await sheetTop(sheet),
+            past: handle.y - step.changed[0].y,
+          });
+        }
+      },
+    },
+  );
+  expect(pulled.length).toBeGreaterThan(0);
+  for (const {top, past} of pulled) {
+    expect(Math.abs(top - (tallTop - band(past)))).toBeLessThanOrEqual(1);
+  }
+  // Let go, it settles back onto the tallest detent.
+  await waitForRest(sheet);
+  expect(await sheetTop(sheet)).toBeCloseTo(tallTop, 0);
+});
+
+test('on Android too, the drag tracks the finger 1:1 and stretches past the tallest detent', async ({
+  page,
+}) => {
+  // Tracking is universal (F4's Android audit): no shim, Chromium's own idiom.
+  const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page, {
+    idiom: 'android',
+  });
+  const tracked: {top: number; finger: number}[] = [];
+  await driver.play(
+    slowDragTo(handle, Math.round((halfTop - tallTop) * 0.66)),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          await frames(page, 1);
+          tracked.push({
+            top: await sheetTop(sheet),
+            finger: step.changed[0].y - handle.y,
+          });
+        }
+      },
+    },
+  );
+  expect(tracked.length).toBeGreaterThan(0);
+  for (const {top, finger} of tracked) {
+    expect(Math.abs(top - tallTop - finger)).toBeLessThanOrEqual(1);
+  }
+  await waitForRest(sheet);
+  const restTop = await sheetTop(sheet);
+  const upHandle = {x: handle.x, y: restTop + 12};
+  const tops: number[] = [];
+  // From half, up past the tallest detent: it follows to tall, then
+  // stretches by the rubber band, within the 48 px reserve (spec:AST-094 FR3).
+  await driver.play(
+    drag(
+      upHandle,
+      {x: upHandle.x, y: tallTop - 108},
+      {durationMs: 500, hz: 60},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          tops.push(await sheetTop(sheet));
+        }
+      },
+    },
+  );
+  expect(Math.min(...tops)).toBeGreaterThanOrEqual(tallTop - 48.5);
+  expect(Math.min(...tops)).toBeLessThan(tallTop - 10);
 });
 
 test('a downward flick lands on the next detent, and from there dismisses', async ({
