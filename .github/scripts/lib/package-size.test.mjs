@@ -3,9 +3,9 @@
 /**
  * @file package-size.test.mjs
  * Pins the published-package-size check: which packages count as published,
- * what `npm pack` measures, the budget (a tarball growing more than 5% and at
- * least 1 KB) and its `Size budget:` justification, the runtime-dependency
- * diff, the Markdown, and the CLI's exit codes.
+ * what `npm pack` measures, the advisory budget flag (a tarball growing more
+ * than 5% and at least 1 KB), the runtime-dependency diff, the Markdown, and
+ * the CLI, which flags and never fails.
  */
 
 import {execFileSync, spawnSync} from 'node:child_process';
@@ -20,7 +20,6 @@ const {
   PACKED_BUDGET_MIN_BYTES,
   publishedPackages,
   measurePackages,
-  sizeBudgetJustification,
   overBudget,
   comparePackageSizes,
   renderPackageSizeSection,
@@ -143,35 +142,6 @@ describe('measurePackages', () => {
   });
 });
 
-describe('sizeBudgetJustification', () => {
-  it.each([
-    [
-      'Size budget: the new locale data is the feature',
-      'the new locale data is the feature',
-    ],
-    ['Intro\n\n- Size budget: worth it\n', 'worth it'],
-    ['> **Size budget:** bold label', 'bold label'],
-    ['size budget: lower case label', 'lower case label'],
-  ])('reads %j', (body, expected) => {
-    expect(sizeBudgetJustification(body)).toBe(expected);
-  });
-
-  it('ignores a template placeholder inside an HTML comment and an empty line', () => {
-    expect(
-      sizeBudgetJustification(
-        '<!-- Size budget: say why the growth is worth it -->',
-      ),
-    ).toBeNull();
-    expect(
-      sizeBudgetJustification(
-        '<!--\nSize budget: say why the growth is worth it\n-->',
-      ),
-    ).toBeNull();
-    expect(sizeBudgetJustification('Size budget:   \nnext line')).toBeNull();
-    expect(sizeBudgetJustification(null)).toBeNull();
-  });
-});
-
 describe('overBudget', () => {
   it('needs more than 5% and at least the byte floor', () => {
     const base = 100 * 1024;
@@ -198,13 +168,13 @@ describe('comparePackageSizes', () => {
   });
 
   it('passes an unchanged head', () => {
-    const report = comparePackageSizes({head: base, base, body: ''});
+    const report = comparePackageSizes({head: base, base});
     expect(report.verdict).toBe('pass');
     expect(report.packages.every(entry => !entry.overBudget)).toBe(true);
     expect(report.addedDependencies).toEqual([]);
   });
 
-  it('fails a package past the budget, and a Size budget line justifies it', () => {
+  it('flags a package past the budget', () => {
     const head = measurement({
       ...base.packages,
       '@astryxdesign/core': pkg(
@@ -212,19 +182,12 @@ describe('comparePackageSizes', () => {
         base.packages['@astryxdesign/core'].dependencies,
       ),
     });
-    const failing = comparePackageSizes({head, base, body: 'No reason given'});
-    expect(failing.verdict).toBe('over-budget');
+    const flagged = comparePackageSizes({head, base});
+    expect(flagged.verdict).toBe('over-budget');
     expect(
-      failing.packages.find(entry => entry.name === '@astryxdesign/core')
+      flagged.packages.find(entry => entry.name === '@astryxdesign/core')
         .overBudget,
     ).toBe(true);
-    const justified = comparePackageSizes({
-      head,
-      base,
-      body: 'Size budget: ships the new locales',
-    });
-    expect(justified.verdict).toBe('justified');
-    expect(justified.justification).toBe('ships the new locales');
   });
 
   it('lists added and removed runtime dependencies', () => {
@@ -304,7 +267,7 @@ describe('renderPackageSizeSection', () => {
     );
     expect(markdown).not.toContain('theme-neutral');
     expect(markdown).toContain('2 other published packages are unchanged.');
-    expect(markdown).not.toContain('Over budget');
+    expect(markdown).not.toContain('Over the package budget');
   });
 
   it('writes a package past 1 MB in MB', () => {
@@ -329,7 +292,7 @@ describe('renderPackageSizeSection', () => {
     );
   });
 
-  it('flags the row and asks for a Size budget line when over budget', () => {
+  it('flags the row and asks the author when over budget', () => {
     const head = measurement({
       ...base.packages,
       '@astryxdesign/core': pkg(110_000),
@@ -340,8 +303,8 @@ describe('renderPackageSizeSection', () => {
     expect(markdown).toMatch(
       /\| @astryxdesign\/core \|[^\n]*\(\+10\.0%\) ⚠️ \|/,
     );
-    expect(markdown).toContain('**Over budget:**');
-    expect(markdown).toContain('`Size budget:`');
+    expect(markdown).toContain('**⚠️ Over the package budget:**');
+    expect(markdown).toContain('say why in the pull request description');
   });
 
   it('shows every head size and no budget without a base', () => {
@@ -374,20 +337,17 @@ describe('package-size.mjs', () => {
     return spawnSync(process.execPath, [CLI, ...args], {encoding: 'utf8'});
   }
 
-  function compareAndEnforce({head, base, body}) {
+  function compare({head, base}) {
     const dir = tempDir();
     const file = name => path.join(dir, name);
     fs.writeFileSync(file('head.json'), JSON.stringify(head));
     if (base) fs.writeFileSync(file('base.json'), JSON.stringify(base));
-    fs.writeFileSync(file('body.txt'), body);
-    const compare = runCli([
+    const result = runCli([
       'compare',
       '--head',
       file('head.json'),
       '--base',
       file('base.json'),
-      '--body',
-      file('body.txt'),
       '--head-sha',
       'a'.repeat(40),
       '--output',
@@ -395,10 +355,8 @@ describe('package-size.mjs', () => {
       '--summary',
       file('summary.md'),
     ]);
-    const enforce = runCli(['enforce', '--report', file('report.json')]);
     return {
-      compare,
-      enforce,
+      result,
       report: JSON.parse(fs.readFileSync(file('report.json'), 'utf8')),
       summary: fs.readFileSync(file('summary.md'), 'utf8'),
     };
@@ -407,30 +365,23 @@ describe('package-size.mjs', () => {
   const base = measurement({'@astryxdesign/core': pkg(100_000)});
   const grown = measurement({'@astryxdesign/core': pkg(110_000)});
 
-  it('compares without failing, and enforce fails an unjustified overrun', () => {
-    const {compare, enforce, report, summary} = compareAndEnforce({
-      head: grown,
-      base,
-      body: '',
-    });
-    expect(compare.status).toBe(0);
+  it('flags an overrun with a warning and never fails', () => {
+    const {result, report, summary} = compare({head: grown, base});
+    expect(result.status).toBe(0);
     expect(report.headSha).toBe('a'.repeat(40));
-    expect(summary).toContain('**Over budget:**');
-    expect(enforce.status).toBe(1);
-    expect(enforce.stdout).toContain(
-      '::error title=Package size over budget::',
+    expect(summary).toContain('**⚠️ Over the package budget:**');
+    expect(result.stdout).toContain(
+      '::warning title=Package size over budget::',
     );
+    expect(result.stdout).not.toContain('::error');
   });
 
-  it('enforce passes a justified overrun and a missing base', () => {
-    expect(
-      compareAndEnforce({head: grown, base, body: 'Size budget: worth it'})
-        .enforce.status,
-    ).toBe(0);
-    const noBase = compareAndEnforce({head: grown, base: null, body: ''});
-    expect(noBase.report.verdict).toBe('no-base');
-    expect(noBase.compare.stdout).toContain('::notice::');
-    expect(noBase.enforce.status).toBe(0);
+  it('compares without a base, with a notice and no flag', () => {
+    const {result, report} = compare({head: grown, base: null});
+    expect(result.status).toBe(0);
+    expect(report.verdict).toBe('no-base');
+    expect(result.stdout).toContain('::notice::');
+    expect(result.stdout).not.toContain('::warning');
   });
 
   it('measure writes every published package of a workspace', () => {

@@ -389,7 +389,6 @@ describe('published package size', () => {
         },
       ],
       removedDependencies: [],
-      justification: null,
       verdict: 'over-budget',
     });
     expect(out.indexOf('### Bundle Size Summary')).toBeLessThan(
@@ -400,7 +399,7 @@ describe('published package size', () => {
     );
     expect(out).toContain('| 10 → 12 |');
     expect(out).toContain('left-pad');
-    expect(out).toContain('**Over budget:**');
+    expect(out).toContain('**⚠️ Over the package budget:**');
   });
 
   it('renders report strings as literal text', () => {

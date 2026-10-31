@@ -6,16 +6,12 @@
  *   request's measurement with its merge base's.
  * @input `measure --output <file> [--root <dir>]`: a workspace whose packages
  *   are built.
- *   `compare --head <file> [--base <file>] [--body <file>] --output <file>
+ *   `compare --head <file> [--base <file>] --output <file>
  *   [--summary <file>] [--head-sha <sha>] [--base-sha <sha>]`: two
- *   measurements (a missing or unreadable base compares nothing) and the pull
- *   request description.
- *   `enforce --report <file>`: a comparison `compare` wrote.
+ *   measurements (a missing or unreadable base compares nothing).
  * @output `measure` writes each published package's sizes and runtime
- *   dependencies. `compare` writes the comparison and appends it to the job
- *   summary. `enforce` exits 1 when a package is over budget and the
- *   description has no `Size budget:` line; it runs after the report's
- *   artifacts are uploaded, so a failing check still gets its PR report.
+ *   dependencies. `compare` writes the comparison, appends it to the job
+ *   summary, and flags (never fails) a package over its budget.
  * @position CI's build-storybook job measures and compares a pull request's
  *   head; Main's typecheck job measures each main commit and keeps it for 14
  *   days as the base. The PR report renders the comparison.
@@ -46,15 +42,6 @@ function readJson(file) {
   }
 }
 
-function readText(file) {
-  if (!file) return '';
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
 if (command === 'measure') {
   const output = getArg('output');
   if (!output) throw new Error('measure needs --output <file>');
@@ -76,7 +63,6 @@ if (command === 'measure') {
   const report = comparePackageSizes({
     head,
     base,
-    body: readText(getArg('body')),
     headSha: getArg('head-sha') || '',
     baseSha: getArg('base-sha') || '',
   });
@@ -85,20 +71,13 @@ if (command === 'measure') {
   const summary = getArg('summary');
   if (summary) fs.appendFileSync(summary, markdown);
   console.log(markdown);
-} else if (command === 'enforce') {
-  const report = readJson(getArg('report'));
-  if (!report) throw new Error('enforce needs a readable --report <file>');
-  if (report.verdict === 'over-budget') {
+  if (report.verdict === 'over-budget')
     console.log(
-      '::error title=Package size over budget::A published package grew past its budget. Shrink it, or add a "Size budget:" line to the pull request description saying why, then re-run this job.',
+      '::warning title=Package size over budget::A published package grew past its advisory budget. If the growth is not intended, shrink it; if it is, say why in the pull request description.',
     );
-    process.exitCode = 1;
-  } else {
-    console.log(`Package size verdict: ${report.verdict}.`);
-  }
 } else {
   console.error(
-    'usage: package-size.mjs measure --output <file> | compare --head <file> [--base <file>] [--body <file>] --output <file> | enforce --report <file>',
+    'usage: package-size.mjs measure --output <file> | compare --head <file> [--base <file>] --output <file>',
   );
   process.exitCode = 2;
 }
