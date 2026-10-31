@@ -46,12 +46,12 @@
     "vite": "catalog:"
   },
   "dependencies": {
-    "autoprefixer": "^10.5.2",
-    "browserslist": "^4.28.4",
+    "autoprefixer": "^10.6.1",
+    "browserslist": "^4.29.3",
     "fast-glob": "^3.3.0",
     "glob-parent": "^6.0.0",
     "is-glob": "^4.0.0",
-    "lightningcss": "^1.32.0"
+    "lightningcss": "^1.33.0"
   },
   "devDependencies": {
     "enhanced-resolve": "^5.21.6",

@@ -58,7 +58,7 @@
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-neutral-palette-refs.mjs --check && astryx theme build src/neutralTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
-    "lucide-react": "^1.18.0"
+    "lucide-react": "^1.59.0"
   },
   "peerDependencies": {
     "@astryxdesign/core": "0.7.6",
