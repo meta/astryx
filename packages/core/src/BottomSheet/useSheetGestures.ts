@@ -1913,10 +1913,14 @@ export function useSheetGestures({
       // release, not the drag, picks the detent), and past fully open the
       // record's rubber band (spec:AST-094 FR3). Otherwise the pointer
       // presentation's tracking (FR13, spec:AST-017 FR59).
+      const restOffset = offsets[offsets.length - 1];
       const next =
-        releaseMotionRef.current.kind === 'uikit'
-          ? fingerDragOffset(raw, state.height)
-          : pointerDragOffset(raw, offsets);
+        !canDismissRef.current && raw > restOffset
+          ? restOffset +
+            rubberBand(raw - restOffset, state.height, sheetTable.rubberBand.coefficient)
+          : releaseMotionRef.current.kind === 'uikit'
+            ? fingerDragOffset(raw, state.height)
+            : pointerDragOffset(raw, offsets);
       // Dragging above the base restores the full layout height below the
       // viewport; otherwise keep whatever layout the base detent settled with
       // (0 at a peek, so a peek drag stays transform-only).
