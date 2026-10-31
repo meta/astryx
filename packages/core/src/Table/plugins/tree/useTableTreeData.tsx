@@ -41,6 +41,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars, spacingVars} from '../../../theme/tokens.stylex';
+import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {mergeRefs} from '../../../utils';
 import {
@@ -326,7 +327,7 @@ function TreeExpander({
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(treeStyles.expanderButton)}
       onClick={e => {
         e.stopPropagation();
         onToggle();
@@ -375,7 +376,7 @@ function TreeExpandAllToggle({
   return (
     <button
       type="button"
-      {...stylex.props(treeStyles.expanderButton)}
+      {...focusOutlineProps.focusVisible(treeStyles.expanderButton)}
       onClick={e => {
         e.stopPropagation();
         if (allExpanded) {
