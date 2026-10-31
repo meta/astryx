@@ -1,12 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/**
- * @file Selector.doc.mjs
- * @input Selector public props and selection behavior
- * @output Consumer documentation, including disabled selection transitions
- * @position Selector consumer reference
- */
-
 /** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
 const anatomy = [
   {
@@ -260,8 +253,7 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description:
-        'Keeps the trigger focusable but blocks value changes, onChange, and changeAction, including selection from a popup opened before the selector became disabled. Disabled values are excluded from form submission.',
+      description: 'Disables the selector.',
       default: 'false',
     },
     {

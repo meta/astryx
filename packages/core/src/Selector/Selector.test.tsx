@@ -3,7 +3,7 @@
 /**
  * @file Selector.test.tsx
  * @input Uses vitest, @testing-library/react, @testing-library/user-event
- * @output Unit tests for Selector behavior, disabled selection transitions, and selected-item geometry
+ * @output Unit tests for Selector behavior and selected-item geometry
  * @position Tests; validates Selector behavior
  *
  * SYNC: When Selector.tsx API changes, update these tests.
