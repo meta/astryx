@@ -2891,6 +2891,185 @@ jobs:
 
   # Release-time projection only: the existing owners above do all measurement.
   # A skipped owner or main drift must never look like passing release evidence.
+  # The default pull-request check for components: visual, accessibility and
+  # RTL for only the components the change touches, on one standard runner,
+  # against this pull request's Storybook build (spec:AST-030 FR12). It never
+  # widens to reverse dependents or a full suite: those run behind the
+  # ci:run-<suite> labels and in the release check. It writes touched-components.json, one row per component
+  # with each suite's pass/fail/changed/not-run result, for the pull-request
+  # comment. No required context depends on it. Arm, like pr-visual, so the
+  # visual baseline compares on the architecture it was captured on.
+  pr-touched-components:
+    name: Touched components (visual, accessibility, RTL)
+    needs: [build-storybook]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      wide_change: ${{ steps.touched.outputs.wide_change }}
+      component_count: ${{ steps.touched.outputs.component_count }}
+    steps:
+      # The shared scope action lists the pull request's changed files, which
+      # decide a wide change.
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: List the changed files
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          component-audit: 'true'
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Download analysis artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      # More than five touched components, or a change to shared styles
+      # (themes, tokens, shared .stylex.ts), is a wide change: this check
+      # skips and the comment points to the ci:run-<suite> labels.
+      - name: Decide the touched components
+        id: touched
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node .github/scripts/touched-components.mjs scope \
+            --analysis analysis.json \
+            --files "$FILES_PATH" \
+            --head-sha "$HEAD_SHA" \
+            --out touched-components.json
+
+      - name: Skip when no component changed or the change is wide
+        if: steps.touched.outputs.has_components != 'true'
+        env:
+          WIDE: ${{ steps.touched.outputs.wide_change }}
+          COUNT: ${{ steps.touched.outputs.component_count }}
+        run: |
+          if [ "$WIDE" = true ]; then
+            echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
+          else
+            echo "No component changed; nothing to audit."
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.touched.outputs.has_components == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.touched.outputs.has_components == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.touched.outputs.has_components == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # Exit 0 is clean, 2 is a change for review and 3 means nothing touched
+      # has a stable story (visual reports not-run); anything else is an
+      # infrastructure failure.
+      - name: Visual check for the touched components
+        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''
+        env:
+          COMPONENTS: ${{ steps.touched.outputs.visual_components }}
+        run: |
+          set +e
+          node .github/scripts/visual-gate/gate.mjs check \
+            --storybook-dir apps/storybook/dist \
+            --baseline .github/visual-baseline \
+            --out .visual-run \
+            --tiers component \
+            --components "$COMPONENTS" \
+            --no-scout \
+            --summary-output visual-summary.md
+          code=$?
+          set -e
+          case "$code" in
+            0|2) ;;
+            3) rm -f .visual-run/verdict.json ;;
+            *) exit "$code" ;;
+          esac
+
+      # The same changed-component filters an opted-in pull request uses.
+      - name: Accessibility audit for the touched components
+        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != ''
+        run: |
+          COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
+          if [ -z "$COMPONENTS" ]; then
+            echo "No touched component has accessibility stories."
+            exit 0
+          fi
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output a11y-report.json \
+            --concurrency 4 \
+            --components "$COMPONENTS"
+
+      - name: RTL audit for the touched components
+        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.rtl_packages != ''
+        env:
+          PACKAGES: ${{ steps.touched.outputs.rtl_packages }}
+          OWNERS: ${{ steps.touched.outputs.rtl_owners }}
+        run: |
+          mkdir -p rtl-reports
+          IFS=',' read -ra PACKAGE_LIST <<< "$PACKAGES"
+          for PACKAGE in "${PACKAGE_LIST[@]}"; do
+            FILTER=$(tr ',' '\n' <<< "$OWNERS" | grep "^$PACKAGE/" | paste -sd, -)
+            [ -n "$FILTER" ] || continue
+            node apps/storybook/rtl-audit/rtl-audit.mjs \
+              --storybook-dir apps/storybook/dist \
+              --output "rtl-reports/$PACKAGE.json" \
+              --packages "$PACKAGE" \
+              --concurrency 8 \
+              --filter "$FILTER"
+          done
+
+      - name: Report per-component results
+        if: always() && steps.touched.outputs.has_components == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node .github/scripts/touched-components.mjs report \
+            --analysis analysis.json \
+            --visual .visual-run/verdict.json \
+            --visual-manifest .visual-run/manifest.json \
+            --a11y a11y-report.json \
+            --a11y-baseline .github/a11y-baseline.json \
+            --rtl-dir rtl-reports \
+            --head-sha "$HEAD_SHA" \
+            --out touched-components.json
+
+      - name: Upload touched-components results
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        uses: actions/upload-artifact@v7
+        with:
+          name: touched-components
+          path: |
+            touched-components.json
+            a11y-report.json
+            rtl-reports/
+            .visual-run/verdict.json
+            visual-summary.md
+          if-no-files-found: ignore
+          retention-days: 7
+
   release-check:
     needs:
       [
