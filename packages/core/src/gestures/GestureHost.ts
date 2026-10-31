@@ -2033,9 +2033,11 @@ export class GestureHost {
       horizontal ? dx : dy,
       gesture?.step != null && !gesture.step.committed
         ? WHEEL_STEP_CARRY_MS
-        : horizontal
-          ? WHEEL_FOLLOW_END_MS
-          : WHEEL_FOLLOW_END_V_MS,
+        : gesture != null && gesture.follow == null
+          ? WHEEL_END_MS
+          : horizontal
+            ? WHEEL_FOLLOW_END_MS
+            : WHEEL_FOLLOW_END_V_MS,
     );
     this.wheelSegment = seg;
     if (seg.boundary != null) {
@@ -2068,7 +2070,7 @@ export class GestureHost {
       },
       gesture.step != null && !gesture.step.committed
         ? WHEEL_STEP_CARRY_MS
-        : gesture.follow?.endMs ?? WHEEL_FOLLOW_END_V_MS,
+        : gesture.follow?.endMs ?? WHEEL_END_MS,
     );
     if (gesture.ids.length === 0) {
       return;
