@@ -13,11 +13,13 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {parseDoc} from '../../authoring/doctypes/parse.mjs';
 import {
   BUILTIN_DOCS_PACKAGE,
   DocsCatalog,
   discoverBuiltinTopics,
   discoverIntegrationDocs,
+  loadTopicModule,
   mergeTopic,
   problemsInTopic,
 } from './docs-discovery.mjs';
@@ -59,6 +61,356 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
+});
+
+describe('assets/docs audience', () => {
+  // packages/cli/assets/docs ships to people BUILDING WITH Astryx, not people
+  // building Astryx itself - see the README's own audience rule and routing
+  // table. These five words are a clean, measured signal for material that
+  // belongs on the wiki instead: 0 hits across the directory as authored
+  // today, 56 in the draft (#5351) that prompted this check. Deliberately
+  // narrower than the README's own longer "tells" list - audit/checklist/gate
+  // also match plenty of innocent prose ("Verification Checklist", "Audit
+  // every reset stylesheet"), which would make the check noisy enough to get
+  // suppressed rather than acted on.
+  //
+  // The README's own rule (line 24) is that these words are a tell "as
+  // things the reader must produce" - not as vocabulary. "A component's
+  // theme targets are stable once published" is caller-facing even where it
+  // sounds like process; only a statement asking the reader to produce or
+  // hand over one of these things is ours. "GPU compositor promotion" is a
+  // real caller-facing rendering term with no reader-facing directive
+  // anywhere near it, and matched before this fixed it (#5370).
+  //
+  // So a process word only counts when the SAME sentence also names the
+  // MAINTAINER-SIDE handoff - who receives the thing, or the gate it passes
+  // through: "reviewer(s)", "before merging/promoting", "attach", "produce",
+  // "checklist", "gate", "sign off". A bare directive word - "you", "must",
+  // "should", "complete", "pass" - is not on this list: ordinary caller
+  // guidance uses all of those too ("You should animate transforms to keep
+  // compositor promotion", "You should use browser-support evidence to
+  // select a tier"), so a directive alone does not tell a maintainer
+  // instruction apart from a caller one. Only a handoff/audience marker does
+  // - exactly the shape of language the draft (#5351) that prompted this
+  // check actually used ("Reviewers must attach evidence to the readiness
+  // checklist before sign-off").
+  const OUR_PROCESS_WORDS =
+    /\b(rubric|readiness|promotion|sign-off|evidence)\b/i;
+  const PROCESS_DIRECTIVE_CONTEXT =
+    /\b(reviewer|reviewers|before (merging|promoting)|attach|produce|checklist|gate|sign[- ]?off)\b/i;
+
+  /**
+   * A verified, reviewable exception: exactly the (file, section title) pair
+   * where a hit was checked by hand and confirmed caller-facing. A new
+   * occurrence under any OTHER section, in this file or any other, is still
+   * reported and needs the same by-hand check before it's added here - this
+   * is not a way to turn the check off for a whole file.
+   * @type {Array<{file: string, section: string, reason: string}>}
+   */
+  const EXEMPT_SECTIONS = [];
+
+  function isExemptSection(file, sectionTitle) {
+    return EXEMPT_SECTIONS.some(
+      exemption => exemption.file === file && exemption.section === sectionTitle,
+    );
+  }
+
+/**
+   * Sentence-level, not file-level: a process word appearing anywhere in a
+   * long topic file, however many caller-facing paragraphs away from any
+   * directive language, is not the pattern this check exists to catch.
+   */
+  function findOurProcessWordHitsInText(text) {
+    const words = [];
+    for (const sentence of text.split(/(?<=[.!?])\s+|\n{2,}/)) {
+      const wordMatch = sentence.match(OUR_PROCESS_WORDS);
+      if (wordMatch && PROCESS_DIRECTIVE_CONTEXT.test(sentence)) {
+        words.push(wordMatch[0]);
+      }
+    }
+    return words;
+  }
+
+  /**
+   * Every string a block carries that a reader actually reads as prose:
+   * `prose`/`heading.text`, `code.code`, `list.items`, and `table`'s
+   * `headers` and each `rows` cell. A process sentence in a list item or a
+   * table cell is exactly as much a maintainer-audience leak as one in a
+   * paragraph - the shipped topics use all of these formats for guidance,
+   * not just prose blocks.
+   *
+   * @param {{type?: string, text?: string, code?: string, items?: string[], headers?: string[], rows?: string[][]}} block
+   * @returns {string[]}
+   */
+  function textsInBlock(block) {
+    const texts = [];
+    if (typeof block.text === 'string') {
+      texts.push(block.text);
+    }
+    if (typeof block.code === 'string') {
+      texts.push(block.code);
+    }
+    if (Array.isArray(block.items)) {
+      texts.push(...block.items.filter(item => typeof item === 'string'));
+    }
+    if (Array.isArray(block.headers)) {
+      texts.push(...block.headers.filter(header => typeof header === 'string'));
+    }
+    if (Array.isArray(block.rows)) {
+      for (const row of block.rows) {
+        if (Array.isArray(row)) {
+          texts.push(...row.filter(cell => typeof cell === 'string'));
+        }
+      }
+    }
+    return texts;
+  }
+
+  /**
+   * Section-level, not file-level, for WHERE a hit is reported: a topic can
+   * carry several sections, and "the file" alone leaves a reader searching a
+   * whole page for one flagged sentence.
+   *
+   * @param {{sections?: Array<{title?: string, content?: Array<object>}>}} doc
+   * @returns {Array<{section: string, word: string}>}
+   */
+  function findOurProcessWordHits(doc) {
+    const hits = [];
+    for (const section of doc.sections ?? []) {
+      for (const block of section.content ?? []) {
+        for (const text of textsInBlock(block)) {
+          for (const word of findOurProcessWordHitsInText(text)) {
+            hits.push({section: section.title ?? '(untitled)', word});
+          }
+        }
+      }
+    }
+    return hits;
+  }
+
+  /** Build a minimal doc with one prose block, for the matcher's own unit tests. */
+  function docWithProse(text, sectionTitle = 'Section') {
+    return {
+      sections: [{title: sectionTitle, content: [{type: 'prose', text}]}],
+    };
+  }
+
+  // Advisory only: this lists sentences a reviewer may want to look at, and
+  // never fails the suite. A vocabulary check cannot tell maintainer process
+  // from caller guidance reliably enough to block an edit (#5370).
+  it('reports our-process words in a caller-facing doc topic without failing', async () => {
+    const hits = [];
+    // discoverBuiltinTopics already excludes localization/dense overlays
+    // (layout.doc.dense.mjs, foo.doc.zh.mjs, …) - those merge onto a base
+    // topic rather than exporting one of their own, so loadTopicModule
+    // throws on them. README.md documents the audience rule; it isn't
+    // shipped as a topic either, and was never in this map.
+    for (const [, filePath] of Object.entries(discoverBuiltinTopics())) {
+      const file = path.basename(filePath);
+      const doc = parseDoc(await loadTopicModule(filePath), file);
+      for (const hit of findOurProcessWordHits(doc)) {
+        if (isExemptSection(file, hit.section)) {
+          continue;
+        }
+        hits.push(`${file} §${hit.section}: "${hit.word}"`);
+      }
+    }
+    if (hits.length > 0) {
+      console.warn(
+        'assets/docs: these sentences may describe building Astryx, not ' +
+          "building with it. If so, move them to the wiki page named in " +
+          "assets/docs/README.md's routing table. If they are caller-facing, " +
+          'add a reviewed (file, section) entry to EXEMPT_SECTIONS.\n' +
+          hits.join('\n'),
+      );
+    }
+    expect(Array.isArray(hits)).toBe(true);
+  });
+
+  it('flags process language asking the reader to produce one of these things', () => {
+    expect(
+      findOurProcessWordHits(
+        docWithProse(
+          'Reviewers must attach evidence to the readiness checklist before sign-off.',
+        ),
+      ),
+    ).toEqual([{section: 'Section', word: 'evidence'}]);
+  });
+
+  it('flags process language in a list item, not just a prose paragraph', () => {
+    const doc = {
+      sections: [
+        {
+          title: 'Before you submit',
+          content: [
+            {
+              type: 'list',
+              style: 'unordered',
+              items: [
+                'Reviewers must attach evidence to the readiness checklist before sign-off.',
+                'Use a descriptive branch name.',
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(findOurProcessWordHits(doc)).toEqual([
+      {section: 'Before you submit', word: 'evidence'},
+    ]);
+  });
+
+  it('flags process language in a table cell', () => {
+    const doc = {
+      sections: [
+        {
+          title: 'Checklist',
+          content: [
+            {
+              type: 'table',
+              headers: ['Step', 'Detail'],
+              rows: [
+                [
+                  '3',
+                  'Reviewers must attach evidence to the readiness checklist before sign-off.',
+                ],
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(findOurProcessWordHits(doc)).toEqual([
+      {section: 'Checklist', word: 'evidence'},
+    ]);
+  });
+
+  it('flags process language inside a code block comment', () => {
+    const doc = {
+      sections: [
+        {
+          title: 'Example',
+          content: [
+            {
+              type: 'code',
+              lang: 'ts',
+              code: '// Reviewers must attach evidence to the readiness checklist before sign-off.',
+            },
+          ],
+        },
+      ],
+    };
+    expect(findOurProcessWordHits(doc)).toEqual([
+      {section: 'Example', word: 'evidence'},
+    ]);
+  });
+
+  it('allows a caller-facing rendering term that happens to share a word', () => {
+    // The exact false positive from #5370: "promotion" describing GPU
+    // compositor behavior, a fact about the system a caller can rely on, not
+    // a reader-facing directive.
+    expect(
+      findOurProcessWordHits(
+        docWithProse(
+          'A layer with a running transform animation gets its own compositor ' +
+            'promotion, which keeps the animation off the main thread.',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('allows a caller directive that happens to name a process word, with no maintainer-side handoff', () => {
+    // A bare directive ("you should") is not enough on its own - that shape
+    // is ordinary caller guidance too. Two real examples from review: "You
+    // should animate transforms to keep compositor promotion" and "You
+    // should use browser-support evidence to select a tier" - neither asks
+    // the reader to hand evidence to a reviewer or through a gate.
+    expect(
+      findOurProcessWordHits(
+        docWithProse(
+          'You should provide evidence for the browser you are targeting ' +
+            'before choosing a support tier.',
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports which section a hit is in, not just which file', () => {
+    const doc = {
+      sections: [
+        {title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]},
+        {
+          title: 'Contributing',
+          content: [
+            {
+              type: 'prose',
+              text: 'Reviewers must attach evidence to the readiness checklist before sign-off.',
+            },
+          ],
+        },
+      ],
+    };
+    expect(findOurProcessWordHits(doc)).toEqual([
+      {section: 'Contributing', word: 'evidence'},
+    ]);
+  });
+
+  it('EXEMPT_SECTIONS narrows the exception to the exact (file, section) pair verified caller-facing', () => {
+    // Drives the real EXEMPT_SECTIONS array and isExemptSection - the same
+    // two the corpus scan above uses - not a local stand-in, so a
+    // regression in the real matching (a typo in the field names it reads,
+    // a comparison that's accidentally case-insensitive, …) would actually
+    // fail this test.
+    const violatingHits = findOurProcessWordHits(
+      docWithProse(
+        'Reviewers must attach evidence to the readiness checklist before sign-off.',
+        'Verified caller-facing section',
+      ),
+    );
+    expect(violatingHits).toEqual([
+      {section: 'Verified caller-facing section', word: 'evidence'},
+    ]);
+
+    expect(
+      isExemptSection('example.doc.mjs', 'Verified caller-facing section'),
+    ).toBe(false);
+    expect(
+      violatingHits.filter(
+        hit => !isExemptSection('example.doc.mjs', hit.section),
+      ),
+    ).toEqual(violatingHits);
+
+    // Push a temporary entry onto the real list - cleaned up in `finally` so
+    // it can't leak into the corpus scan or any other test in this file.
+    EXEMPT_SECTIONS.push({
+      file: 'example.doc.mjs',
+      section: 'Verified caller-facing section',
+      reason: 'test fixture demonstrating the exemption mechanism',
+    });
+    try {
+      // Exempted for that exact file+section…
+      expect(
+        violatingHits.filter(
+          hit => !isExemptSection('example.doc.mjs', hit.section),
+        ),
+      ).toEqual([]);
+      // …but NOT for a different section in the same file, and not for the
+      // same section title in a different file.
+      expect(
+        isExemptSection('example.doc.mjs', 'A different section'),
+      ).toBe(false);
+      expect(
+        isExemptSection('other.doc.mjs', 'Verified caller-facing section'),
+      ).toBe(false);
+      expect(
+        violatingHits.filter(
+          hit => !isExemptSection('other.doc.mjs', hit.section),
+        ),
+      ).toEqual(violatingHits);
+    } finally {
+      EXEMPT_SECTIONS.length = 0;
+    }
+  });
 });
 
 describe('discoverBuiltinTopics', () => {
