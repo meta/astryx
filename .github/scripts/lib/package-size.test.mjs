@@ -307,6 +307,19 @@ describe('renderPackageSizeSection', () => {
     expect(markdown).not.toContain('Over budget');
   });
 
+  it('writes a package past 1 MB in MB', () => {
+    const big = measurement({'@astryxdesign/core': pkg(9_000_000)});
+    const markdown = renderPackageSizeSection(
+      comparePackageSizes({
+        head: measurement({'@astryxdesign/core': pkg(9_100_000)}),
+        base: big,
+      }),
+    );
+    expect(markdown).toContain(
+      '| @astryxdesign/core | 8.58MB | 8.68MB | +97.7KB (+1.1%) |',
+    );
+  });
+
   it('says when nothing changed', () => {
     const markdown = renderPackageSizeSection(
       comparePackageSizes({head: base, base}),

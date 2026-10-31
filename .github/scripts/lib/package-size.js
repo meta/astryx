@@ -222,7 +222,8 @@ function comparePackageSizes({head, base, body, headSha = '', baseSha = ''}) {
 function sizeText(bytes) {
   if (!isMeasured(bytes)) return 'N/A';
   if (Math.abs(bytes) < 1024) return `${bytes}B`;
-  return `${(bytes / 1024).toFixed(1)}KB`;
+  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
 }
 
 function deltaText(after, before) {
