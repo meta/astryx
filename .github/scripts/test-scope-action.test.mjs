@@ -70,6 +70,7 @@ async function decide({
   baseOverrides = {},
   runs = [],
   earlierFiles = [],
+  headParents = 2,
   env: extraEnv = {},
 } = {}) {
   const outputs = {};
@@ -87,6 +88,11 @@ async function decide({
   };
   const notFound = () => Object.assign(new Error('Not Found'), {status: 404});
   const github = {
+    graphql: async (query, variables) => {
+      apiCalls.push({graphql: variables});
+      if (headParents instanceof Error) throw headParents;
+      return {repository: {object: {parents: {totalCount: headParents}}}};
+    },
     paginate: async () => {
       if (files instanceof Error) throw files;
       return files;
@@ -551,6 +557,7 @@ describe('carrying a passing result forward (spec:AST-030 FR18)', () => {
       `Carried forward from run 41 at ${EARLIER} (https://github.com/o/r/actions/runs/41): this push only merges main, and the pull request's own diff is unchanged. The pre-merge re-run runs everything.`,
     ]);
     expect(apiCalls).toEqual([
+      {graphql: {owner: 'o', repo: 'r', oid: HEAD_SHA}},
       {compare: {owner: 'o', repo: 'r', basehead: `${BASE_SHA}...${EARLIER}`}},
       {
         listWorkflowRuns: {
@@ -601,10 +608,21 @@ describe('carrying a passing result forward (spec:AST-030 FR18)', () => {
     expect(outputs.carried_from).toBe(`run 41 at ${EARLIER}`);
   });
 
-  it('makes one call when the push changed the diff', async () => {
+  it('makes no REST call when the head is not a merge commit', async () => {
+    const {outputs, apiCalls} = await carry({headParents: 1});
+    expect(outputs.carried).toBe('false');
+    expect(apiCalls).toEqual([
+      {graphql: {owner: 'o', repo: 'r', oid: HEAD_SHA}},
+    ]);
+  });
+
+  it('stops after the comparison when the merge changed the diff', async () => {
     const {outputs, apiCalls} = await carry({earlierFiles: [file('other.ts')]});
     expect(outputs.carried).toBe('false');
-    expect(apiCalls).toHaveLength(1);
+    expect(apiCalls.map(call => Object.keys(call)[0])).toEqual([
+      'graphql',
+      'compare',
+    ]);
   });
 
   it("identifies a fork's runs by its repository and branch", async () => {

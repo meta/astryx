@@ -21,7 +21,8 @@
 #   (spec:AST-030 FR18): when this workflow's run on the push's previous head
 #   passed, and the pull request's own diff (each file's status, names, blob
 #   and patch against the merge base) is byte-identical at both heads, `carried` is true, `applies` is false, and the step leaves a
-#   notice naming that run. A job that opts in with `carry-forward` skips its
+#   notice naming that run. Only a merge-commit head is compared, so a push of
+#   ordinary commits makes no REST call. A job that opts in with `carry-forward` skips its
 #   work and reports success. A
 #   re-run (the pre-merge restart), any other event, and anything this step
 #   cannot compare run the job normally.
@@ -300,7 +301,7 @@ runs:
           // merged the base branch (spec:AST-030 FR18). Only a first attempt
           // of a push carries; the pre-merge re-run, an opened, reopened or
           // ready pull request, and anything that cannot be compared run the
-          // job. A push that changes the diff costs one call.
+          // job.
           async function carriedRun() {
             if (process.env.SCOPE_CARRY_FORWARD !== 'true') return null;
             const before = context.payload.before;
@@ -308,6 +309,13 @@ runs:
             if (Number(process.env.GITHUB_RUN_ATTEMPT ?? '1') !== 1) return null;
             const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(process.env.GITHUB_WORKFLOW_REF ?? '')?.[1];
             if (workflow == null) return null;
+            // Only a merge commit can merge the base branch. GraphQL has its own
+            // budget, so a push of ordinary commits spends no REST call.
+            const {repository} = await github.graphql(
+              'query($owner: String!, $repo: String!, $oid: GitObjectID!) { repository(owner: $owner, name: $repo) { object(oid: $oid) { ... on Commit { parents { totalCount } } } } }',
+              {...context.repo, oid: pr.head.sha},
+            );
+            if ((repository?.object?.parents?.totalCount ?? 0) < 2) return null;
             // The pull request's own diff: each file's status, names, blob and
             // patch against its merge base with the base branch. This head's
             // is the file list above; the previous head's comes from a
