@@ -88,7 +88,9 @@ and the repository proves it before a change that could break it merges.
 - **FR5 — Theme targets and class names are unchanged.** The copy answers to the
   same theme targets and emits the same documented class names, data attributes,
   and custom properties as the package component of that version, so a theme,
-  `xstyle`, and product CSS reach it the same way.
+  `xstyle`, and product CSS reach it the same way. The copy's styles sit in the
+  same cascade layer as the package component's, so a theme's component
+  overrides apply to the copy as they do to the package.
 - **FR6 — Behavior matches the package.** Until the product edits it, the copy's
   keyboard handling, focus, roles, names, states, announcements, and events match
   the package component of the same version.
@@ -130,15 +132,18 @@ and the repository proves it before a change that could break it merges.
 
 ### Known gaps
 
-- On `main`, a static check of the 154 components swizzle can copy (Core 106,
-  Lab 40, Charts 6, RichText 1, Vega 1) finds 90 whose imports do not resolve
-  after the copy, 110 whose copy includes test, spec, or doc files, and 3 that
-  import nested folders the copy leaves out (Markdown, Table, Lab Schedule).
-- `swizzle --list` offers 6 folders that are not components: `__tests__`,
-  `gestures`, `i18n`, `internal`, `motion`, and `NavItem`.
-- In the published 0.7.5, none of Item, Token, Dialog, BottomSheet, Button, and
-  Tooltip type-checks or bundles after swizzle; they reach 21 helpers Core does
-  not export.
+- Built from the published 0.7.5, of the 112 names `swizzle --list` offers, 12
+  build and render, 89 fail to build, 9 build but render wrong, and 2 build with
+  nothing to render.
+- The copy sends `../X/file` imports to the public `X` entry, which lacks the
+  internal helpers (87 components), and deep StyleX modules are missing from
+  Core's exports (12).
+- Copied styles land in the app's cascade layer above the theme's, so theme
+  component overrides stop applying (9 components; 38 once imports resolve).
+- Copies include spec records and test files (104 components), leave out nested
+  folders (Markdown, Table), and `swizzle --list` offers 6 folders that are not
+  components: `__tests__`, `gestures`, `i18n`, `internal`, `motion`, and
+  `NavItem`.
 - The layer stack and modal outlet keep module state, so a copied Dialog or
   BottomSheet starts a second stack (FR3).
 - No private-attribute owner module exists yet (FR4).
@@ -151,7 +156,7 @@ and the repository proves it before a change that could break it merges.
 | FR2      | Import graph of each output                                                                     | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs  | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied |
 | FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape | Dialog over package Popover; BottomSheet over package Dialog; modality          | Two stores of one protocol version exist in a document, or Escape and focus return differ from the package alone           |
 | FR4      | The private-attribute lint over each output                                                     | Components that reach an owner module                                           | A hand-written private attribute name or selector, or an edited owner module, in the output                                |
-| FR5      | Render package and copy side by side; compare class names, data attributes, and theme targets   | Default; each variant; a theme override                                         | A theme target, documented class name, or data attribute present on one and not the other                                  |
+| FR5      | Render package and copy side by side under a theme with component overrides; compare            | Default; each variant; a theme component override                               | A theme override, documented class name, data attribute, or theme target reaches one and not the other                     |
 | FR6      | The component's own interaction and accessibility checks run against the copy                   | Keyboard, pointer, screen-reader tree                                           | A check that passes on the package fails on the copy                                                                       |
 | FR7      | The required test lane's swizzle proof and the release-time proof                               | A change to component source; a change to the swizzle copy; an unrelated change | An offered component missing from the proof, a failure that does not block, or a non-component folder in `swizzle --list`  |
 
