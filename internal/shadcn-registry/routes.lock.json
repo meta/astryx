@@ -641,6 +641,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
+      "aliases": []
+    },
+    {
       "name": "component-lab-stat",
       "path": "components/lab/stat",
       "aliases": []
