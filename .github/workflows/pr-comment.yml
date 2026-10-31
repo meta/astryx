@@ -183,8 +183,96 @@ jobs:
                 'The current change has no visual or preview-producing scope. Visual checks are not applicable; preview links are not shown.',
             });
 
-  comment:
+  # The changed visual frames behind the report's thumbnails, on the pull
+  # request's assets branch. The only job here that writes repository
+  # contents: it runs trusted code from main (never pull-request code), keeps
+  # no credentials in its checkout, and publish-frames.mjs writes only
+  # assets/pr-<n>, and only validated PNG/WebP frames.
+  frames:
     needs: resolve
+    concurrency:
+      group: pr-frames-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
+    if: >-
+      always() &&
+      github.event.action == 'completed' &&
+      needs.resolve.outputs.valid == 'true' &&
+      needs.resolve.outputs.spec_only != 'true' &&
+      needs.resolve.outputs.tooling_only != 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: read
+      contents: write
+    outputs:
+      image_base: ${{ steps.frames.outputs.image_base }}
+      published: ${{ steps.frames.outputs.published }}
+      failed: >-
+        ${{ steps.checkout.outcome == 'failure' ||
+        steps.setup.outcome == 'failure' ||
+        steps.visual.outcome == 'failure' ||
+        steps.frames.outcome == 'failure' }}
+    steps:
+      - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        id: setup
+        continue-on-error: true
+        if: steps.checkout.outcome == 'success'
+        uses: ./.github/actions/setup
+
+      - name: Download canonical visual report
+        id: visual-download
+        if: steps.setup.outcome == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: visual-pr-report
+          path: visual-pr-report
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The same re-encoding the comment job applies: only JSON and
+      # re-encoded PNGs from the exact CI attempt.
+      - name: Prepare canonical visual report
+        id: visual
+        continue-on-error: true
+        if: steps.visual-download.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          RUN_ID: ${{ needs.resolve.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}
+        run: |
+          node .github/scripts/visual-gate/publish-pr-report.mjs \
+            --input visual-pr-report \
+            --output trusted-visual \
+            --head-sha "$HEAD_SHA" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT"
+
+      - name: Publish changed visual frames
+        id: frames
+        continue-on-error: true
+        if: steps.visual.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          node .github/scripts/visual-gate/publish-frames.mjs \
+            --input trusted-visual \
+            --pr "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --limit 12
+
+  comment:
+    needs: [resolve, frames]
     concurrency:
       group: pr-report-${{ needs.resolve.outputs.pr_number }}
       cancel-in-progress: false
@@ -199,7 +287,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: write
+      # actions: the artifacts and the source run's job list; deployments:
+      # this head's Vercel preview state.
       actions: read
+      deployments: read
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
     outputs:
@@ -382,6 +473,8 @@ jobs:
           RUN_ID: ${{ steps.identity.outputs.run_id }}
           RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
           SOURCE_CONCLUSION: ${{ steps.identity.outputs.source_conclusion }}
+          VISUAL_IMAGE_BASE: ${{ needs.frames.outputs.image_base }}
+          VISUAL_PUBLISHED: ${{ needs.frames.outputs.published }}
         with:
           retries: 3
           script: |
@@ -405,6 +498,10 @@ jobs:
                 sourceRunAttempt: Number(process.env.RUN_ATTEMPT),
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
+              visualFrames: {
+                imageBase: process.env.VISUAL_IMAGE_BASE,
+                published: process.env.VISUAL_PUBLISHED,
+              },
             });
 
   # The CI-completion lane runs on workflow_run, so GitHub attaches its jobs to
@@ -413,7 +510,7 @@ jobs:
   # continues on error, and this job reports their outcome as the PR Comment
   # status on the pull request's own head.
   report:
-    needs: [resolve, spec-only-reconcile, comment]
+    needs: [resolve, spec-only-reconcile, frames, comment]
     if: >-
       always() &&
       github.event_name == 'workflow_run' &&
@@ -434,6 +531,7 @@ jobs:
           FAILED: >-
             ${{ needs.resolve.outputs.failed == 'true' ||
             needs.spec-only-reconcile.outputs.failed == 'true' ||
+            needs.frames.outputs.failed == 'true' ||
             needs.comment.outputs.failed == 'true' ||
             contains(needs.*.result, 'failure') ||
             contains(needs.*.result, 'cancelled') }}
