@@ -70,7 +70,7 @@ export const docs = {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. The panel does not slide with these props, but focus inside it moves to its ResizeHandle as it collapses, and it is inert while collapsed.",
+        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. With the hook's own props the panel slides closed and open like the ref form; a hand-built object does not slide. Either way, focus inside the panel moves to its ResizeHandle as it collapses, and it is inert while collapsed.",
     },
   ],
 };
@@ -123,7 +123,7 @@ export const docsZh = {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。使用这些属性时面板不会滑动，但折叠时面板内的焦点会移到其 ResizeHandle 上，折叠期间面板为 inert。",
+        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。使用 hook 自身返回的 props 时，面板与 ref 形式一样滑动关闭和打开；手动构造的对象不会滑动。两种情况下，折叠时面板内的焦点都会移到其 ResizeHandle 上，折叠期间面板为 inert。",
     },
   ],
 };
@@ -144,6 +144,6 @@ export const docsDense = {
     width:
       'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width. width={region.size} beside a useResizable(handleRef) handle: slides closed/open from the handle-facing edge; focus inside moves to the handle on collapse; inert while collapsed.',
     resizable:
-      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent. No slide; focus inside moves to the handle on collapse; inert while collapsed.',
+      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent. Hook props slide; hand-built ones do not. Focus inside moves to the handle on collapse; inert while collapsed.',
   },
 };
