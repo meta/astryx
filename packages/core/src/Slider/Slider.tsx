@@ -1397,3 +1397,5 @@ export function Slider({ref, ...props}: SliderProps) {
 }
 
 Slider.displayName = 'Slider';
+
+// Replay fixture for the touched-components check timing; not for merge.
