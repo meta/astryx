@@ -2,27 +2,16 @@
 
 /**
  * @file coarsePointer.test.ts
- * @input coarsePointer.ts, touchPresentation.ts and the gestures' pointer
- *   test helper
- * @output The gate's query is TOUCH_QUERY; it reads and follows the primary
- *   pointer
+ * @input coarsePointer.ts and the gestures' pointer test helper
+ * @output The gate reads and follows the primary pointer
  * @position Unit tests of packages/core/src/utils/coarsePointer.ts
  */
 
 import {describe, expect, it} from 'vitest';
-import {TOUCH_QUERY} from './touchPresentation';
-import {
-  COARSE_POINTER_QUERY,
-  isCoarsePointer,
-  watchCoarsePointer,
-} from './coarsePointer';
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 
 describe('coarsePointer', () => {
-  it("spells the touch presentation's query", () => {
-    expect(COARSE_POINTER_QUERY).toBe(TOUCH_QUERY);
-  });
-
   it('reads the primary pointer, and follows it until stopped', () => {
     const pointer = pointerQuery(false);
     try {

@@ -13,7 +13,7 @@
  * gate itself drives pointerQuery() and fires its change.
  */
 
-import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
+import {TOUCH_QUERY} from '../../utils/touchQueries';
 
 /** The primary pointer as a test sets it. */
 export interface PointerQuery {
@@ -35,7 +35,7 @@ export function pointerQuery(isCoarse: boolean): PointerQuery {
     get matches() {
       return coarse;
     },
-    media: COARSE_POINTER_QUERY,
+    media: TOUCH_QUERY,
     onchange: null,
     addEventListener: (_type: string, listener: () => void) => {
       listeners.add(listener);
@@ -52,7 +52,7 @@ export function pointerQuery(isCoarse: boolean): PointerQuery {
     dispatchEvent: () => false,
   } as unknown as MediaQueryList;
   window.matchMedia = (media: string) =>
-    media.trim() === COARSE_POINTER_QUERY ? query : matchMedia(media);
+    media.trim() === TOUCH_QUERY ? query : matchMedia(media);
   return {
     set(next) {
       if (next === coarse) {
