@@ -35,6 +35,7 @@ import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -201,13 +202,13 @@ export function TopNavItem({
   const renderMode = useTopNavRenderMode();
   const {closeMobileNav} = useAppShellMobile();
 
-  // A disabled item renders as a plain <a> with no href: an href-less anchor
-  // is not focusable and exposes no link affordance, so programmatic focus +
-  // Enter, AT activation commands, and middle-click cannot navigate or fire
-  // the consumer onClick. The router LinkComponent is deliberately skipped —
-  // a disabled item performs no navigation, and custom router links may
-  // require a live href. target is omitted with the href. (Mirrors the
-  // disabled paths of Link and SideNavItem.)
+  // A disabled item renders as an <a> with no href, so Enter, AT activation
+  // commands, and middle-click cannot navigate or fire the consumer onClick.
+  // It keeps its Tab stop and the link role so keyboard and screen-reader
+  // users still find it (spec:AST-085 FR1, FR5). The router LinkComponent is
+  // deliberately skipped — a disabled item performs no navigation, and custom
+  // router links may require a live href. target is omitted with the href.
+  // (Mirrors the disabled paths of Link and Token.)
   const Root = isDisabled ? 'a' : LinkComponent;
 
   // =========================================================================
@@ -231,8 +232,9 @@ export function TopNavItem({
         target={isDisabled ? undefined : target}
         aria-label={isIconOnly ? label : undefined}
         aria-current={isSelected ? 'page' : undefined}
+        role={isDisabled ? 'link' : undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
+        tabIndex={isDisabled ? 0 : undefined}
         {...pressable}
         {...mergeProps(
           themeProps('top-nav-item', {
@@ -251,6 +253,7 @@ export function TopNavItem({
           style,
         )}
         {...props}
+        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}
         onClick={handleDrawerClick}>
         {icon}
         {!isIconOnly && (children ?? label)}
@@ -270,8 +273,9 @@ export function TopNavItem({
       onClick={isDisabled ? preventDefaultClick : onClick}
       aria-label={isIconOnly ? label : undefined}
       aria-current={isSelected ? 'page' : undefined}
+      role={isDisabled ? 'link' : undefined}
       aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : undefined}
+      tabIndex={isDisabled ? 0 : undefined}
       {...pressable}
       {...mergeProps(
         themeProps('top-nav-item', {
@@ -288,7 +292,8 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>

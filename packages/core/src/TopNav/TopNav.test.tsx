@@ -542,12 +542,14 @@ describe('TopNavItem', () => {
     );
   });
 
-  it('sets tabIndex to -1 when disabled', () => {
+  it('keeps its tab stop and link role when disabled (spec:AST-085 FR1, FR5)', async () => {
+    const user = userEvent.setup();
     render(<TopNavItem label="Home" href="#" isDisabled />);
-    expect(screen.getByText('Home').closest('a')).toHaveAttribute(
-      'tabIndex',
-      '-1',
-    );
+    const item = screen.getByRole('link', {name: 'Home'});
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('tabIndex', '0');
+    await user.tab();
+    expect(item).toHaveFocus();
   });
 
   describe('disabled items do not navigate', () => {
@@ -562,14 +564,13 @@ describe('TopNavItem', () => {
           isDisabled
         />,
       );
-      // An href-less anchor exposes no link role, so it is not announced
-      // with a live destination.
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      // The href-less anchor keeps the link role and its tab stop, so it is
+      // found and announced as disabled, with no live destination.
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called, i.e.
@@ -592,12 +593,11 @@ describe('TopNavItem', () => {
           />
         </TopNavRenderContext>,
       );
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called.
@@ -605,6 +605,40 @@ describe('TopNavItem', () => {
       expect(notCancelled).toBe(false);
       expect(handleClick).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['default', undefined],
+      ['drawer', 'drawer' as const],
+    ])(
+      'stays inert from the keyboard once focused (%s mode)',
+      async (_name, mode) => {
+        const user = userEvent.setup();
+        const handleClick = vi.fn();
+        const handleKeyDown = vi.fn();
+        const item = (
+          <TopNavItem
+            label="Home"
+            href="/home"
+            onClick={handleClick}
+            onKeyDown={handleKeyDown}
+            isDisabled
+          />
+        );
+        render(
+          mode ? (
+            <TopNavRenderContext value={mode}>{item}</TopNavRenderContext>
+          ) : (
+            item
+          ),
+        );
+        await user.tab();
+        expect(screen.getByRole('link', {name: 'Home'})).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await user.keyboard(' ');
+        expect(handleClick).not.toHaveBeenCalled();
+        expect(handleKeyDown).not.toHaveBeenCalled();
+      },
+    );
 
     it('keeps href and click behavior for enabled items (default mode)', async () => {
       const user = userEvent.setup();
