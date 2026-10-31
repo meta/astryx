@@ -553,7 +553,11 @@ Before any component, module, family, design, theme, or architecture record beco
    Review may request that contraction without deciding the tagalong's semantics,
    then continue reviewing the remaining change. A `novel-human` delta enters a
    private human hold only when it is the primary intent, is inseparable from it,
-   or the author or owner explicitly chooses to pursue it.
+   or the author or owner explicitly chooses to pursue it. An added or changed
+   row of a pull request's public API changes
+   (`architecture:public-component-api` INV24) that is `novel-human` instead
+   sends the pull request to human review with that row listed, whether or not
+   it is separable; an owner of that record accepts, splits, or removes it.
 7. A bug fix is `preserves` only when it restores existing current authority
    without changing public API or public behavior beyond that contract. Any
    separable API, visual, layout, or interaction tagalong follows step 5 or 6
