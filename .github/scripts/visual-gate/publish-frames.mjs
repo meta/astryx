@@ -7,7 +7,8 @@
  *   re-encoded `before|after|diff/<key>.png`), `--pr <number>`,
  *   `--head-sha <sha>`, `--repository <owner/repo>`, `--limit <n>`, and a
  *   token in GITHUB_TOKEN.
- * @output Commits up to `limit` changed shots' frames, largest change first,
+ * @output Commits up to `limit` (at most 12) changed shots' frames, PNG or
+ *   WebP of at most 500 KB each by their own bytes, largest change first,
  *   to the pull request's `assets/pr-<number>` branch (the path PR screenshots
  *   already use) under `visual/<head sha>/`, and writes `image_base` (their
  *   raw URL prefix) to GITHUB_OUTPUT. Writes nothing when no shot changed.
@@ -23,6 +24,31 @@ import {fileURLToPath} from 'node:url';
 
 const KEY = /^(?!\.+$)[A-Za-z0-9._-]{1,240}$/;
 const KINDS = ['before', 'after', 'diff'];
+/** Shots published per head, whatever `--limit` asks for. */
+export const MAX_SHOTS = 12;
+export const MAX_FRAME_BYTES = 500 * 1024;
+
+/** A PNG or WebP no larger than MAX_FRAME_BYTES, by its own bytes. */
+export function isPublishableImage(bytes) {
+  if (
+    !Buffer.isBuffer(bytes) ||
+    bytes.length === 0 ||
+    bytes.length > MAX_FRAME_BYTES
+  )
+    return false;
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (bytes.subarray(0, 8).equals(png)) return true;
+  return (
+    bytes.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('latin1') === 'WEBP'
+  );
+}
+
+/** The only ref this script writes: PR #<pr>'s assets branch. */
+export function assetsBranch(pr) {
+  if (!Number.isSafeInteger(pr) || pr <= 0) throw new Error('not a PR number');
+  return `assets/pr-${pr}`;
+}
 
 /** The frames to publish: changed shots by pixels changed, then added and removed. */
 export function framesToPublish(verdict, limit) {
@@ -36,7 +62,7 @@ export function framesToPublish(verdict, limit) {
     ...(verdict.added || []).map(key => ({key, kinds: ['after']})),
     ...(verdict.removed || []).map(key => ({key, kinds: ['before']})),
   ].filter(shot => KEY.test(String(shot.key ?? '')));
-  return shots.slice(0, limit);
+  return shots.slice(0, Math.min(Number(limit) || 0, MAX_SHOTS));
 }
 
 async function api(request, method, route, body) {
@@ -66,12 +92,16 @@ export async function publishFrames({
   for (const shot of framesToPublish(verdict, limit)) {
     for (const kind of shot.kinds) {
       const file = path.join(input, kind, `${shot.key}.png`);
-      if (fs.existsSync(file))
-        files.push({path: `visual/${headSha}/${kind}/${shot.key}.png`, file});
+      if (!fs.existsSync(file)) continue;
+      const bytes = fs.readFileSync(file);
+      if (!isPublishableImage(bytes)) continue;
+      files.push({path: `visual/${headSha}/${kind}/${shot.key}.png`, bytes});
     }
   }
   if (files.length === 0) return null;
-  const branch = `assets/pr-${pr}`;
+  if (!/^[0-9a-f]{40}$/.test(String(headSha)))
+    throw new Error('not a head SHA');
+  const branch = assetsBranch(pr);
   const ref = await api(
     request,
     'GET',
@@ -84,7 +114,7 @@ export async function publishFrames({
   const tree = [];
   for (const entry of files) {
     const blob = await api(request, 'POST', `/repos/${repository}/git/blobs`, {
-      content: fs.readFileSync(entry.file).toString('base64'),
+      content: entry.bytes.toString('base64'),
       encoding: 'base64',
     });
     tree.push({path: entry.path, mode: '100644', type: 'blob', sha: blob.sha});

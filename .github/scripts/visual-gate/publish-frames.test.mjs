@@ -11,7 +11,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
-import {framesToPublish, publishFrames} from './publish-frames.mjs';
+import {
+  MAX_FRAME_BYTES,
+  MAX_SHOTS,
+  assetsBranch,
+  framesToPublish,
+  isPublishableImage,
+  publishFrames,
+} from './publish-frames.mjs';
+
+const PNG = Buffer.concat([
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  Buffer.from('rest'),
+]);
 
 const HEAD = 'a'.repeat(40);
 const roots = [];
@@ -27,7 +39,7 @@ function input(verdict) {
   for (const kind of ['before', 'after', 'diff']) {
     fs.mkdirSync(path.join(root, kind));
     for (const key of ['a', 'b', 'c', 'added'])
-      fs.writeFileSync(path.join(root, kind, `${key}.png`), `${kind}-${key}`);
+      fs.writeFileSync(path.join(root, kind, `${key}.png`), PNG);
   }
   return root;
 }
@@ -72,6 +84,40 @@ describe('framesToPublish', () => {
   });
 });
 
+describe('image and ref limits', () => {
+  it('accepts only PNG or WebP bytes no larger than 500 KB', () => {
+    expect(isPublishableImage(PNG)).toBe(true);
+    const webp = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.alloc(4),
+      Buffer.from('WEBPVP8 '),
+    ]);
+    expect(isPublishableImage(webp)).toBe(true);
+    expect(isPublishableImage(Buffer.from('<svg onload=alert(1)>'))).toBe(
+      false,
+    );
+    expect(isPublishableImage(Buffer.from('GIF89a'))).toBe(false);
+    expect(
+      isPublishableImage(Buffer.concat([PNG, Buffer.alloc(MAX_FRAME_BYTES)])),
+    ).toBe(false);
+  });
+
+  it('publishes at most 12 shots, whatever the limit asks', () => {
+    const changes = Array.from({length: 30}, (_, i) => ({
+      key: `s${i}`,
+      diffPixels: i,
+    }));
+    expect(framesToPublish({changes}, 100)).toHaveLength(MAX_SHOTS);
+    expect(MAX_SHOTS).toBe(12);
+  });
+
+  it('writes only assets/pr-<n>', () => {
+    expect(assetsBranch(42)).toBe('assets/pr-42');
+    for (const bad of [0, -1, 1.5, NaN, '42/../main'])
+      expect(() => assetsBranch(bad)).toThrow();
+  });
+});
+
 describe('publishFrames', () => {
   it("commits the frames on top of the PR's existing assets branch", async () => {
     const {calls, request} = fakeGitHub({branchExists: true});
@@ -101,6 +147,33 @@ describe('publishFrames', () => {
       route: '/repos/meta/astryx/git/refs/heads/assets/pr-9171',
       body: {sha: 'commit'},
     });
+  });
+
+  it('skips a frame that is not an image, and touches no other ref', async () => {
+    const root = input({changes: [{key: 'a', diffPixels: 1}]});
+    fs.writeFileSync(path.join(root, 'diff', 'a.png'), '<html>');
+    const {calls, request} = fakeGitHub({branchExists: true});
+    await publishFrames({
+      input: root,
+      pr: 7,
+      headSha: HEAD,
+      repository: 'meta/astryx',
+      limit: 12,
+      request,
+    });
+    const tree = calls.find(call => call.route.endsWith('/git/trees')).body;
+    expect(tree.tree.map(entry => entry.path)).toEqual([
+      `visual/${HEAD}/before/a.png`,
+      `visual/${HEAD}/after/a.png`,
+    ]);
+    const refs = calls.filter(call => call.route.includes('/git/ref'));
+    expect(
+      refs.every(
+        call =>
+          call.route.includes('assets/pr-7') ||
+          call.route.endsWith('/git/refs'),
+      ),
+    ).toBe(true);
   });
 
   it('creates the branch when it does not exist, and writes nothing without changes', async () => {

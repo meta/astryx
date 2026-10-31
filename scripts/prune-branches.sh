@@ -2,6 +2,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # scripts/prune-branches.sh — Delete remote branches with merged/closed PRs
+# (a PR's `assets/pr-<n>` branch goes with PR #<n>)
 #
 # Usage:
 #   ./scripts/prune-branches.sh          # dry run (default)
@@ -90,7 +91,13 @@ stale_cutoff="$3"
 repo="$4"
 safe_name=$(echo "$branch" | tr '/' '_')
 
-state=$(gh pr list --repo "$repo" --head "$branch" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+# A PR's assets branch (`assets/pr-<n>`: screenshots and the PR report's
+# visual frames) belongs to PR #<n>, not to a PR whose head it is.
+if [[ "$branch" =~ ^assets/pr-([0-9]+)$ ]]; then
+  state=$(gh pr view "${BASH_REMATCH[1]}" --repo "$repo" --json state --jq '.state' 2>/dev/null || echo "error")
+else
+  state=$(gh pr list --repo "$repo" --head "$branch" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+fi
 
 if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then
   echo "$branch" > "$tmp_dir/delete/$safe_name"
