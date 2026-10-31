@@ -6,11 +6,11 @@ id: spec:AST-110
 authority: draft
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: cixzhang
+approved_at: 2026-10-31
+phase: accepted
 owners: [cixzhang, josephfarina]
-affects_architecture: [architecture:cli-surface]
+affects_architecture: [architecture:cli-surface, architecture:layer-runtime]
 affects_families: []
 affects_contributing: []
 affects_consumer_docs: [cli]
@@ -70,7 +70,12 @@ and the repository proves it before a change that could break it merges.
   import each other by relative path. A symbol the owner package exports publicly
   is imported from that public path. Nested folders the component imports are
   copied with it. The output holds only source the component runs: tests,
-  stories, spec records, and component docs are not copied.
+  stories, spec records, and component docs are not copied. When a helper the
+  copy needs already exists in the output from an earlier swizzle, an identical
+  file is reused; a different file is never overwritten, even with
+  `--overwrite`, which replaces only the component's own files: the new helper
+  is written alongside under a version-suffixed name, and only the new copy's
+  imports point at it.
 - **FR3 — Shared runtime state stays single.** A module whose state coordinates
   components with each other (the layer stack, the modal outlet, interaction
   modality, the bottom-sheet stack) keeps that state in one store per document,
@@ -78,25 +83,28 @@ and the repository proves it before a change that could break it merges.
   the package component on the same protocol version use the same store, so
   stacking, Escape, focus return, and modality behave as they do with the package
   alone. A copy on another protocol version keeps a store of its own and never
-  reads a store of a different shape. A module whose state only caches work may
-  be duplicated by a copy.
-- **FR4 — Private attributes stay contained.** Each private-attribute owner
-  module the component reaches (`architecture:public-component-api` INV23) is
-  copied whole and unedited. The copy sets private attributes only through those
-  owner modules; no copied file spells a private attribute name or selector by
-  hand.
+  reads a store of a different shape. A context that connects a provider to its
+  consumers is coordinating state too: its context object lives under the same
+  kind of versioned key, so a copied `useToast` reaches the package's
+  `LayerProvider`. A module whose state only caches work may be duplicated by a
+  copy.
+- **FR4 — Private attributes stay contained.** A module that owns a private
+  data attribute, holding its name and the styles that set it, and that the
+  component imports is copied whole and unedited, so callers, the copy
+  included, still never write the attribute by hand.
 - **FR5 — Theme targets and class names are unchanged.** The copy answers to the
   same theme targets and emits the same documented class names, data attributes,
   and custom properties as the package component of that version, so a theme,
-  `xstyle`, and product CSS reach it the same way. The copy's styles sit in the
-  same cascade layer as the package component's, so a theme's component
-  overrides apply to the copy as they do to the package.
+  `xstyle`, and product CSS reach it the same way. The copy's component rules
+  sit in `astryx-base` like the package component's, below `astryx-theme`, so a
+  theme's component overrides apply to the copy as they do to the package
+  (`spec:AST-080` FR7).
 - **FR6 — Behavior matches the package.** Until the product edits it, the copy's
   keyboard handling, focus, roles, names, states, announcements, and events match
   the package component of the same version.
-- **FR7 — Every offered component is proven before merge.** `swizzle --list`
-  offers only component folders. Before a change to a component package's source
-  or to the swizzle copy merges, every offered component is ejected into a clean
+- **FR7 — Every offered component is proven before merge.** Before a change to
+  a component package's source or to the swizzle copy merges, every component
+  `swizzle --list` offers (`spec:AST-035` FR12) is ejected into a clean
   project, type-checked, bundled with a StyleX compiler, and rendered once on the
   server; a failure blocks the merge through a required check. Release checks run
   the same proof for every component and also render each copy in a real
@@ -120,45 +128,43 @@ and the repository proves it before a change that could break it merges.
 - The CLI's swizzle copy follows the component's module graph (FR1–FR2, FR4),
   writes no test, story, spec, or doc file, and lists only component folders
   (FR7). The CLI owner implements and owns these changes.
-- Core keeps the layer stack and modal outlet in versioned document stores
-  (FR3), as interaction modality and the bottom-sheet stack already do.
 - The FR7 proof joins the repository's existing required test lane
   (`spec:AST-030` FR11), selected by the shared change-scope classification and
-  reported in the single pull-request report: standard runners, about three
-  job-minutes on a pull request that changes component source or the swizzle
-  copy (about two to three percent of pull-request runner time), no added
-  wall-clock time to green, and the full proof at release time.
+  reported in the single pull-request report, with the full proof at release
+  time.
+- `architecture:layer-runtime`: the layer stack, the modal outlet, and the
+  layer contexts (`LayerProvider` and its consumers, such as `useToast`) keep
+  their state and context objects under versioned keys (FR3, DEC-2).
+- `spec:AST-080` FR7 places a swizzled copy's component rules in `astryx-base`
+  (FR5).
 - The `swizzle` command doc states FR1 and FR6 for product teams.
 
 ### Known gaps
 
-- Built from the published 0.7.5, of the 112 names `swizzle --list` offers, 12
-  build and render, 89 fail to build, 9 build but render wrong, and 2 build with
-  nothing to render.
 - The copy sends `../X/file` imports to the public `X` entry, which lacks the
-  internal helpers (87 components), and deep StyleX modules are missing from
-  Core's exports (12).
+  internal helpers, and deep StyleX modules are missing from Core's exports
+  (FR1, FR2).
 - Copied styles land in the app's cascade layer above the theme's, so theme
-  component overrides stop applying (9 components; 38 once imports resolve).
-- Copies include spec records and test files (104 components), leave out nested
-  folders (Markdown, Table), and `swizzle --list` offers 6 folders that are not
-  components: `__tests__`, `gestures`, `i18n`, `internal`, `motion`, and
-  `NavItem`.
-- The layer stack and modal outlet keep module state, so a copied Dialog or
-  BottomSheet starts a second stack (FR3).
-- No private-attribute owner module exists yet (FR4).
+  component overrides stop applying (FR5).
+- Copies include spec records and test files and leave out nested folders
+  (FR2), and `swizzle --list` offers folders that are not components
+  (`spec:AST-035` FR12).
+- The layer stack, the modal outlet, and the layer contexts keep module state,
+  so a copied Dialog, BottomSheet, or `useToast` starts its own stack or misses
+  the package's provider (FR3).
+- No private data-attribute owner module exists yet (FR4).
 
 ## Verification
 
-| Contract | Verification                                                                                    | Representative states                                                           | Mutation or failure expectation                                                                                            |
-| -------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Eject every offered component into a clean project; type-check and bundle                       | Every component in `swizzle --list`; Core, Lab, Charts, RichText, Vega          | A type or resolve error, or an import of a path the owner's `exports` lacks or of `./internal/*`, fails                    |
-| FR2      | Import graph of each output                                                                     | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs  | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied |
-| FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape | Dialog over package Popover; BottomSheet over package Dialog; modality          | Two stores of one protocol version exist in a document, or Escape and focus return differ from the package alone           |
-| FR4      | The private-attribute lint over each output                                                     | Components that reach an owner module                                           | A hand-written private attribute name or selector, or an edited owner module, in the output                                |
-| FR5      | Render package and copy side by side under a theme with component overrides; compare            | Default; each variant; a theme component override                               | A theme override, documented class name, data attribute, or theme target reaches one and not the other                     |
-| FR6      | The component's own interaction and accessibility checks run against the copy                   | Keyboard, pointer, screen-reader tree                                           | A check that passes on the package fails on the copy                                                                       |
-| FR7      | The required test lane's swizzle proof and the release-time proof                               | A change to component source; a change to the swizzle copy; an unrelated change | An offered component missing from the proof, a failure that does not block, or a non-component folder in `swizzle --list`  |
+| Contract | Verification                                                                                                     | Representative states                                                                                                                      | Mutation or failure expectation                                                                                                                                    |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1      | Eject every offered component into a clean project; type-check and bundle                                        | Every component in `swizzle --list`; Core, Lab, Charts, RichText, Vega                                                                     | A type or resolve error, or an import of a path the owner's `exports` lacks or of `./internal/*`, fails                                                            |
+| FR2      | Import graph of each output                                                                                      | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs; a helper an earlier swizzle wrote, identical and different | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied, or an existing helper is overwritten   |
+| FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape                  | Dialog over package Popover; BottomSheet over package Dialog; modality; a copied `useToast` under the package `LayerProvider`              | Two stores of one protocol version exist in a document, or Escape and focus return differ from the package alone, or a copied consumer misses the package provider |
+| FR4      | Scan each output for private data-attribute names and selectors; compare copied owner modules with the package's | Components that reach an owner module                                                                                                      | A hand-written private attribute name or selector, or an edited owner module, in the output                                                                        |
+| FR5      | Render package and copy side by side under a theme with component overrides; compare                             | Default; each variant; a theme component override                                                                                          | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                             |
+| FR6      | The component's own interaction and accessibility checks run against the copy                                    | Keyboard, pointer, screen-reader tree                                                                                                      | A check that passes on the package fails on the copy                                                                                                               |
+| FR7      | The required test lane's swizzle proof and the release-time proof                                                | A change to component source; a change to the swizzle copy; an unrelated change                                                            | An offered component missing from the proof, or a failure that does not block                                                                                      |
 
 Known verification gap: none of these checks exist on `main`.
 
@@ -180,7 +186,7 @@ package path is public (`architecture:public-component-api` INV12).
 ### DEC-2 — Shared runtime state lives in versioned document stores
 
 **Reference:** `spec:AST-110/DEC-2`
-**Decider:** pending (`cixzhang`)
+**Decider:** `cixzhang`, `2026-10-31`
 
 A copy is a second bundle of the same modules. Core already keeps interaction
 modality and the bottom-sheet stack in a per-document store under a registered,
