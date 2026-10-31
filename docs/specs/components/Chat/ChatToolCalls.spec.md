@@ -1,13 +1,13 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:ChatToolCalls
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility, testing]
 verified_by:
@@ -38,18 +38,17 @@ system_specs: [spec:AST-009, spec:AST-029]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                 |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | The exported component accepts a required call list, optional group label, controlled or uncontrolled expansion, a change callback, and supported root div props and ref.                |
-| Behavior                | No calls render nothing; one call renders directly; multiple calls expose a disclosure whose collapsed surface shows the latest call and whose expanded surface shows every call.        |
-| End-user impact         | Group labels appear as supplied, collapsed detail controls leave keyboard and accessibility navigation, and every disclosure has the shared visible focus treatment.                     |
-| Builder impact          | Existing calls keep their shape and defaults. Builders may rely on the released `label` prop and continue to omit it for the translated count.                                           |
-| Compatibility/readiness | Patch-compatible restoration of documented behavior and objective accessibility requirements. No prop, export, default, theme target, call ordering, or caller-content contract changes. |
-| Review checks           | Reject ignored labels, focusable descendants inside a collapsed group, lost keyboard activation, unreadable supporting text, dropped root inputs, or changed call ordering/defaults.     |
-| Governing rules         | `architecture:public-component-api/INV5–INV6, INV8–INV9`; `architecture:interaction-modality`; `spec:AST-009/FR7`; `spec:AST-029/FR3–FR7`; WCAG 2.2 SC 1.4.3 and 2.4.7.                  |
+| Area                    | Contract                                                                                                                                                                                                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `ChatToolCalls` with required `calls` (each with `name`, optional `status`, `target`, `node`, `duration`, `additions`, `deletions`, `stats`, `errorMessage`, `resultDetail`, and `key`), optional `label`, `isExpanded`, `defaultIsExpanded`, `onExpandedChange`, and root div props and ref. |
+| Behavior                | No calls render nothing; one call renders directly; multiple calls expose a disclosure whose collapsed surface shows the latest call and whose expanded surface shows every call.                                                                                                             |
+| End-user impact         | Readers see what tools an assistant ran and whether each is pending, running, done, or failed; a group of calls collapses to its latest call and keeps hidden rows out of keyboard and screen-reader navigation.                                                                              |
+| Builder impact          | None.                                                                                                                                                                                                                                                                                         |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                                                                                                                         |
+| Review checks           | Reject ignored labels, focusable descendants inside a collapsed group, lost keyboard activation, unreadable supporting text, dropped root inputs, or changed call ordering/defaults.                                                                                                          |
+| Governing rules         | `architecture:public-component-api/INV5–INV6, INV8–INV9`; `architecture:interaction-modality`; `spec:AST-009/FR7`; WCAG 2.2 SC 1.4.3 and 2.4.7.                                                                                                                                               |
 
-This table is a review projection. The draft body records verified shipped or
-remediated behavior and creates no new tool-call protocol or visual policy.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -58,12 +57,20 @@ including execution status, optional metadata, and inspectable result details.
 
 ## Compatibility and migration
 
-- Released default preserved: yes; omitted status means complete and groups start collapsed unless `defaultIsExpanded` is true.
-- Compatibility class: patch-compatible correctness and accessibility repair.
+- Released default preserved: `yes`; omitted status means complete and groups
+  start collapsed unless `defaultIsExpanded` is true
+- Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: `isExpanded` remains authoritative when supplied; otherwise local state starts from `defaultIsExpanded ?? false`.
-- Migration decision: none. No public type, prop, export, default, or theme target changes.
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **Signed statistics can miss text contrast.** The success and error
+  foreground tokens used for signed `+N` and `-N` statistics do not reach
+  4.5:1 on every shipped light and dark surface; WCAG 2.2 SC 1.4.3 requires
+  that contrast for text (FR5, OQ2).
 
 ## Ownership boundary
 
@@ -83,25 +90,25 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept       | Closed values or states                               | Meaning                                                      | Availability        | Default   | Owner                               | Stability                 | Invalid-value behavior               |
-| ------------- | ----------------------------------------------------- | ------------------------------------------------------------ | ------------------- | --------- | ----------------------------------- | ------------------------- | ------------------------------------ |
-| Call list     | empty; single; multiple                               | Selects absent, direct-row, or grouped presentation.         | Every render        | required  | `component:ChatToolCalls`           | released observed surface | Empty renders nothing.               |
-| Status        | pending; running; complete; error                     | Selects the visible and accessible execution state.          | Every call          | complete  | `component:ChatToolCalls`           | released observed surface | Type-invalid values reject.          |
-| Group label   | omitted; supplied string                              | Names an expanded group; omission uses the translated count. | Multiple calls      | omitted   | caller and component                | released observed surface | Supplied strings render verbatim.    |
-| Group state   | controlled; uncontrolled collapsed; uncontrolled open | Controls whether grouped rows are exposed.                   | Multiple calls      | collapsed | caller or component                 | released observed surface | Conflicting control is avoided.      |
-| Result detail | omitted; caller React node                            | Adds an independently operable per-call disclosure.          | Any call            | omitted   | caller and component                | released observed surface | Omitted content adds no control.     |
-| Root surface  | ref; supported DOM/data/ARIA/class/style/xstyle       | Extends the root without replacing its owned target.         | Non-empty call list | omitted   | `architecture:public-component-api` | released observed surface | Unsupported inputs stay unsupported. |
+| Concept       | Closed values or states                               | Meaning                                                      | Availability        | Default   | Owner                               | Stability | Invalid-value behavior               |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------------------ | ------------------- | --------- | ----------------------------------- | --------- | ------------------------------------ |
+| Call list     | empty; single; multiple                               | Selects absent, direct-row, or grouped presentation.         | Every render        | required  | `component:ChatToolCalls`           | Stable    | Empty renders nothing.               |
+| Status        | pending; running; complete; error                     | Selects the visible and accessible execution state.          | Every call          | complete  | `component:ChatToolCalls`           | Stable    | Type-invalid values reject.          |
+| Group label   | omitted; supplied string                              | Names an expanded group; omission uses the translated count. | Multiple calls      | omitted   | caller and component                | Stable    | Supplied strings render verbatim.    |
+| Group state   | controlled; uncontrolled collapsed; uncontrolled open | Controls whether grouped rows are exposed.                   | Multiple calls      | collapsed | caller or component                 | Stable    | Conflicting control is avoided.      |
+| Result detail | omitted; caller React node                            | Adds an independently operable per-call disclosure.          | Any call            | omitted   | caller and component                | Stable    | Omitted content adds no control.     |
+| Root surface  | ref; supported DOM/data/ARIA/class/style/xstyle       | Extends the root without replacing its owned target.         | Non-empty call list | omitted   | `architecture:public-component-api` | Stable    | Unsupported inputs stay unsupported. |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                 | Basis                                                         | Draft review state       |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------ |
-| FR1 | An empty call list MUST render no root; one call MUST render directly; multiple calls MUST render one group disclosure and preserve caller order in its full list.                                  | Released implementation, docs, stories, and tests             | verified                 |
-| FR2 | A supplied `label` MUST replace the translated count on the expanded group surface; omission MUST retain the translated count fallback.                                                             | Released public prop and consumer docs; public API INV5, INV9 | remediated and verified  |
-| FR3 | A collapsed group MUST keep its descendant call disclosures out of keyboard and accessibility navigation; expansion MUST restore them.                                                              | HTML `inert`, disclosure semantics, WCAG operability          | remediated and verified  |
-| FR4 | Every component-owned disclosure MUST activate with Enter, Space, and pointer input, expose expansion state, and draw the shared keyboard focus ring.                                               | Current interaction-modality architecture and WCAG 2.4.7      | remediated and verified  |
-| FR5 | Neutral supporting labels, targets, durations, and custom statistics MUST use the readable secondary foreground; signed addition/deletion counts retain their released semantic colors pending OQ2. | WCAG 2.2 SC 1.4.3 and current token architecture              | partial remediation; OQ2 |
-| FR6 | Supported root ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root while the public target remains intact.                                                    | `architecture:public-component-api/INV5–INV6, INV8`           | verified                 |
+| ID  | Invariant                                                                                                                                                                                                                                                                        | Basis                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| FR1 | An empty call list MUST render no root; one call MUST render directly; multiple calls MUST render one group disclosure and preserve caller order in its full list.                                                                                                               | Current source, tests, and docs                        |
+| FR2 | A supplied `label` MUST replace the translated count on the expanded group surface; omission MUST retain the translated count fallback.                                                                                                                                          | Current source, tests, and docs                        |
+| FR3 | A collapsed group MUST keep its descendant call disclosures out of keyboard and accessibility navigation; expansion MUST restore them.                                                                                                                                           | Current source and tests                               |
+| FR4 | Every component-owned disclosure MUST activate with Enter, Space, and pointer input, expose expansion state, and draw the shared keyboard focus ring.                                                                                                                            | `architecture:interaction-modality`; WCAG 2.2 SC 2.4.7 |
+| FR5 | Neutral supporting labels, targets, durations, and custom statistics MUST use the readable secondary foreground; signed addition and deletion counts use the success and error text colors. Implementation gap: those colors can miss text contrast (Current-state impact; OQ2). | WCAG 2.2 SC 1.4.3 and current token architecture       |
+| FR6 | Supported root ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root while the public target remains intact.                                                                                                                                 | `architecture:public-component-api/INV5–INV6, INV8`    |
 
 ### Allowed variation
 
@@ -138,8 +145,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Disclosure operation.** Group and detail disclosures expose `aria-expanded`, operate with pointer, Enter, and Space, and use the shared visible focus ring.
 - **AR2 — Collapsed ownership.** Collapsed group content is inert; hidden detail content is unmounted.
-- **AR3 — Status meaning.** Every status exposes translated visually hidden text. Complete and error also use distinct semantic marks; pending and running currently share the same subtle spinner (OQ1). Error messages are exposed to assistive technology and echoed in the status icon's hover tooltip.
-- **AR4 — Static evidence.** Focus appearance, keyboard behavior, inertness, color contrast, and DOM relationships use unit, axe, and real-browser evidence under `spec:AST-009/FR7`; this audit makes no AT-announcement claim.
+- **AR3 — Status meaning.** Every status exposes translated visually hidden text. Complete and error also use distinct semantic marks; pending and running share the same subtle spinner (OQ1). Error messages are exposed to assistive technology and echoed in the status icon's hover tooltip.
+- **AR4 — Static evidence.** Focus appearance, keyboard behavior, inertness, color contrast, and DOM relationships use unit, axe, and real-browser evidence under `spec:AST-009/FR7`; this record makes no announcement claim.
 
 ## Design relationships
 
@@ -149,14 +156,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Disclosure       | Keyboard focus remains visible without changing layout.                                        | Current interaction architecture  | supporting     | FR4, AR1           |
 | Status           | Translated hidden text preserves accessible meaning; complete and error retain semantic marks. | Current source and objective a11y | supporting     | FR5, AR3           |
 
-This observational draft does not choose new spacing, density, iconography,
-proportion, status vocabulary, or motion.
+No component-local design decision is recorded.
 
 ### Theme ownership
 
 The existing `chat-tool-calls` target remains on the root. Badge, Icon, and Spinner
-own their nested targets and paint. This observational draft does not add a public
-theme target or redefine inherited Chat-family anatomy.
+own their nested targets and paint. No anatomy-theming map is recorded yet; the
+block is optional during migration, so the map is deferred.
 
 ## Family and system relationships
 
@@ -165,30 +171,38 @@ theme target or redefine inherited Chat-family anatomy.
 - `architecture:interaction-modality` owns shared keyboard focus treatment.
 - `architecture:component-test-sufficiency` owns bounded, mutation-sensitive evidence.
 - `spec:AST-009` assigns these static semantics, keyboard, focus, and contrast claims to lower evidence layers rather than real AT.
-- `spec:AST-029` owns this observational audit backfill and closed evidence receipt.
+- `spec:AST-029` owns the audit evidence inventory this record's verification
+  map follows.
 
 ## Verification map
 
-| Contract         | Verification                                                                  | Representative states                                                | Mutation or failure expectation                                                        | Audit section                       |
-| ---------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------- |
-| FR1–FR4, AR1–AR2 | `ChatToolCalls.test.tsx`                                                      | empty, single, grouped, label, disclosures                           | Ignored label, wrong state, operable collapsed row, or missing ring fails.             | `audit:ChatToolCalls/behavior`      |
-| FR5, AR3–AR4     | scoped Chromium axe plus existing-baseline visual comparisons                 | neutral metadata in light mode; existing visual states in light/dark | Reintroducing disabled-text contrast fails; semantic stats remain baselined under OQ2. | `audit:ChatToolCalls/accessibility` |
-| FR6              | focused root passthrough/ref checks and theming target guard                  | single root                                                          | A supported input, ref, or public target is dropped or replaced.                       | `audit:ChatToolCalls/public-api`    |
-| RTL relation     | source-hashed verified-N/A record                                             | all checked-in stories                                               | Component-owned directional behavior invalidates the record.                           | `audit:ChatToolCalls/i18n-rtl`      |
-| Browser matrix   | existing visual baselines, scoped a11y, and required real-browser play guards | grouped focus and 320px narrow overflow; existing light/dark states  | Missing focus, overflow, visual regressions, or new a11y violations fail.              | `audit:ChatToolCalls/rendered`      |
-| Docs / surface   | docs, declarations, exports, knowledge check, docs typecheck                  | public props, Chat subpath, draft record                             | Missing or stale docs, export, target, or knowledge shape fails.                       | `audit:ChatToolCalls/docs`          |
+| Contract     | Verification                                                                                      | Representative states                      | Mutation or failure expectation                                            | Audit section                       |
+| ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- | ----------------------------------- |
+| FR1          | `ChatToolCalls.test.tsx` empty, single, latest-call surface, collapsed default, and toggle tests  | empty; single; grouped                     | A rendered empty root, group chrome on one call, or a wrong surface fails. | `audit:ChatToolCalls/behavior`      |
+| FR2          | `ChatToolCalls.test.tsx` "renders the public custom group label when expanded"                    | supplied label                             | An ignored label fails.                                                    | `audit:ChatToolCalls/behavior`      |
+| FR3, AR2     | `ChatToolCalls.test.tsx` "removes collapsed call rows from keyboard and accessibility navigation" | collapsed; expanded                        | An operable collapsed row fails.                                           | `audit:ChatToolCalls/accessibility` |
+| FR4, AR1     | `ChatToolCalls.test.tsx` focus-ring, disclosure-semantics, and `aria-controls` tests              | group header; detail row                   | A missing ring, expansion state, or controls reference fails.              | `audit:ChatToolCalls/accessibility` |
+| AR3          | `ChatToolCalls.test.tsx` status-mark, status-name, and error-message tests                        | each status; error with and without detail | A missing status text, mark, or error text fails.                          | `audit:ChatToolCalls/accessibility` |
+| FR6          | `ChatToolCalls.test.tsx` "forwards the root ref and supported DOM props"                          | single root                                | A dropped ref or prop fails.                                               | `audit:ChatToolCalls/public-api`    |
+| RTL relation | `apps/storybook/rtl-audit/verified-not-applicable.json`                                           | all stories                                | —                                                                          | `audit:ChatToolCalls/i18n-rtl`      |
+
+Read from source, with no focused test yet:
+
+- FR1: caller order in the expanded list.
+- FR4: Enter and Space activation.
+- FR5: the secondary foreground on supporting text.
+- FR6: `className`, `style`, and `xstyle` composition, and the target.
+- PR1–PR2: no Effect or external resource, and no mutation of caller data.
 
 ## Decision log
 
-No component-local product decision is created by this observational draft. The
-repairs restore released API behavior and objective accessibility requirements.
+No component-local decision is recorded.
 
 ## Open questions
 
-- **OQ1 — Pending/running visual distinction.** Pending and running currently render the same subtle spinner and differ only in translated accessible text. Which approved visible treatment should distinguish them without inventing component-local status policy?
+- **OQ1 — Pending/running visual distinction.** Pending and running render the same subtle spinner and differ only in translated accessible text. Which approved visible treatment should distinguish them without inventing component-local status policy?
 - **OQ2 — Semantic statistics contrast.** The released success/error foreground tokens for signed `+N`/`-N` statistics do not reach 4.5:1 in every shipped light/dark surface. Which system-level semantic text token should replace them while preserving addition/deletion meaning? The five affected axe baselines remain until that owner decision lands.
 
 ## Content boundary
 
-This file does not duplicate consumer examples, audit scores, screenshots, tool
-execution policy, or delegated component contracts.
+This file does not duplicate consumer examples, tool execution policy, or delegated component contracts.
