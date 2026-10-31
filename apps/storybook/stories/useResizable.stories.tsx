@@ -57,7 +57,8 @@ function StructuredPercentProbe({
   const isDefault = kind.startsWith('default');
   const isMinimum = kind === 'minimum';
   const storageKey = `storybook-structured-percent-${kind}`;
-  const region = useResizable({
+  const regionHandleRef = useRef<HTMLDivElement>(null);
+  const region = useResizable(regionHandleRef, {
     ...(isDefault
       ? {defaultSize: percent(40, {min: pixel(333)})}
       : isMinimum
@@ -67,11 +68,6 @@ function StructuredPercentProbe({
     direction: 'horizontal',
     autoSaveId: storageKey,
   });
-  const resolvedBound = isDefault
-    ? null
-    : isMinimum
-      ? region.props._minSizePx
-      : region.props._maxSizePx;
   const label = isDefault
     ? `defaultSize: percent(40, {min: pixel(333)})`
     : isMinimum
@@ -104,7 +100,6 @@ function StructuredPercentProbe({
       data-testid={`structured-percent-${kind}-frame`}
       data-width={width}
       data-size={region.size}
-      data-resolved-bound={resolvedBound ?? undefined}
       data-storage-key={`astryx-resizable:${storageKey}`}
       {...stylex.props(s.shell, s.structuredFrame)}
       style={{width}}>
@@ -117,9 +112,7 @@ function StructuredPercentProbe({
         </div>
         <div>
           {Math.round(region.size)}px selected
-          {resolvedBound == null
-            ? ' initially'
-            : ` · ${Math.round(resolvedBound)}px resolved bound`}
+          {isDefault ? ' initially' : ''}
         </div>
       </div>
       <div {...stylex.props(s.structuredLayout)}>
@@ -138,7 +131,7 @@ function StructuredPercentProbe({
                 direction="horizontal"
                 hasDivider
                 label={`Resize structured percent ${kind} example`}
-                resizable={region.props}
+                ref={regionHandleRef}
               />
             </>
           }
@@ -231,7 +224,8 @@ type Story = StoryObj<typeof HookDemo>;
 /** Two side-by-side panels with a divider handle. */
 export const Horizontal: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 200,
       minSize: 100,
       maxSize: 500,
@@ -248,7 +242,7 @@ export const Horizontal: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
               />
             </>
           }
@@ -262,7 +256,8 @@ export const Horizontal: Story = {
 /** Vertical layout — top and bottom panels. */
 export const Vertical: Story = {
   render: () => {
-    const top = useResizable({
+    const topHandleRef = useRef<HTMLDivElement>(null);
+    const top = useResizable(topHandleRef, {
       defaultSize: 150,
       minSize: 60,
       maxSize: 250,
@@ -280,7 +275,7 @@ export const Vertical: Story = {
               <ResizeHandle
                 direction="vertical"
                 hasDivider
-                resizable={top.props}
+                ref={topHandleRef}
               />
             </>
           }
@@ -294,12 +289,14 @@ export const Vertical: Story = {
 /** Three panels with two handles — mail client layout. */
 export const ThreePanel: Story = {
   render: () => {
-    const left = useResizable({
+    const leftHandleRef = useRef<HTMLDivElement>(null);
+    const left = useResizable(leftHandleRef, {
       defaultSize: 180,
       minSize: 120,
       maxSize: 300,
     });
-    const right = useResizable({
+    const rightHandleRef = useRef<HTMLDivElement>(null);
+    const right = useResizable(rightHandleRef, {
       defaultSize: 220,
       minSize: 150,
       maxSize: 400,
@@ -316,7 +313,7 @@ export const ThreePanel: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={left.props}
+                ref={leftHandleRef}
               />
             </>
           }
@@ -327,7 +324,7 @@ export const ThreePanel: Story = {
                 direction="horizontal"
                 hasDivider
                 isReversed
-                resizable={right.props}
+                ref={rightHandleRef}
               />
               <LayoutPanel width={right.size} hasDivider={false}>
                 Preview
@@ -343,12 +340,14 @@ export const ThreePanel: Story = {
 /** Nested — horizontal split with a vertical split inside. */
 export const Nested: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 200,
       minSize: 120,
       maxSize: 350,
     });
-    const editor = useResizable({
+    const editorHandleRef = useRef<HTMLDivElement>(null);
+    const editor = useResizable(editorHandleRef, {
       defaultSize: 200,
       minSize: 80,
       maxSize: 250,
@@ -366,7 +365,7 @@ export const Nested: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
               />
             </>
           }
@@ -391,7 +390,7 @@ export const Nested: Story = {
                 <ResizeHandle
                   direction="vertical"
                   hasDivider
-                  resizable={editor.props}
+                  ref={editorHandleRef}
                 />
                 <div
                   style={{
@@ -414,7 +413,8 @@ export const Nested: Story = {
 /** Always-visible pill grip with divider line. */
 export const AlwaysVisible: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 250,
       minSize: 100,
       maxSize: 500,
@@ -431,7 +431,7 @@ export const AlwaysVisible: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
               />
             </>
           }
@@ -445,12 +445,15 @@ export const AlwaysVisible: Story = {
 /** Mixed container styles — no divider lines, relying on background contrast. */
 export const MixedContainers: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 200,
       minSize: 120,
       maxSize: 350,
     });
-    const editor = useResizable({
+    const editorHandleRef = useRef<HTMLDivElement>(null);
+    // The panes split the space by flex: the story shows the handle only.
+    useResizable(editorHandleRef, {
       defaultSize: 200,
       minSize: 80,
       maxSize: 250,
@@ -468,7 +471,7 @@ export const MixedContainers: Story = {
                 xstyle={s.muted}>
                 Explorer
               </LayoutPanel>
-              <ResizeHandle direction="horizontal" resizable={sidebar.props} />
+              <ResizeHandle direction="horizontal" ref={sidebarHandleRef} />
             </>
           }
           content={
@@ -488,7 +491,7 @@ export const MixedContainers: Story = {
                   }}>
                   Editor
                 </div>
-                <ResizeHandle direction="vertical" resizable={editor.props} />
+                <ResizeHandle direction="vertical" ref={editorHandleRef} />
                 <div
                   {...stylex.props(s.card)}
                   style={{
@@ -520,7 +523,8 @@ export const MixedContainers: Story = {
 export const PercentageSizing: Story = {
   render: () => {
     const frameRef = useRef<HTMLDivElement>(null);
-    const region = useResizable({
+    const regionHandleRef = useRef<HTMLDivElement>(null);
+    const region = useResizable(regionHandleRef, {
       defaultSize: '40%',
       minSize: '15%',
       maxSize: '60%',
@@ -538,7 +542,7 @@ export const PercentageSizing: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={region.props}
+                ref={regionHandleRef}
               />
             </>
           }
@@ -571,7 +575,11 @@ export const StructuredPercentSizing: Story = {
  */
 export const ViewportPercentage: Story = {
   render: () => {
-    const region = useResizable({defaultSize: '25%', minSize: 80});
+    const regionHandleRef = useRef<HTMLDivElement>(null);
+    const region = useResizable(regionHandleRef, {
+      defaultSize: '25%',
+      minSize: 80,
+    });
     return (
       <div {...stylex.props(s.shell)} data-testid="viewport-pct">
         <Layout
@@ -584,7 +592,7 @@ export const ViewportPercentage: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={region.props}
+                ref={regionHandleRef}
               />
             </>
           }
