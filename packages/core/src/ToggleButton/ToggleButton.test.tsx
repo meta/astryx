@@ -658,6 +658,7 @@ describe('ToggleButton caller attributes', () => {
   const callerProps: Record<string, string> = {
     'data-is-pressed': 'bogus',
     'aria-pressed': 'mixed',
+    'data-elevation': 'high',
     'data-testid-extra': 'kept',
   };
 
@@ -684,6 +685,9 @@ describe('ToggleButton caller attributes', () => {
     expect(unpressed).toHaveAttribute('aria-pressed', 'false');
     expect(pressed).toHaveAttribute('data-is-pressed', 'true');
     expect(pressed).toHaveAttribute('aria-pressed', 'true');
+    // The reflected elevation (the default, none) wins over a caller's too.
+    expect(unpressed).toHaveAttribute('data-elevation', 'none');
+    expect(pressed).toHaveAttribute('data-elevation', 'none');
   });
 
   it('still forwards other caller data attributes to the root', () => {
