@@ -15,6 +15,7 @@
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof} from './busy';
 import * as skip from './busy.skip.fixture';
+import * as slowTail from './busy.slowtail.fixture';
 import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -532,5 +533,67 @@ describe('inPresentationOrder', () => {
     const proof = busyWindowProof(inPresentationOrder(shuffled), BLOCK);
     expect(proof.monotonic).toBe(true);
     expect(proof.verdict.failures).toEqual([]);
+  });
+});
+
+/** `slowTail`'s frames as tracked boxes on the x axis. */
+const slowTailFrames = (
+  frames: ReadonlyArray<readonly [number, number | null]>,
+): TrackedFrame[] =>
+  frames.map(
+    ([t, x]) =>
+      ({
+        t,
+        box: x == null ? null : {x, y: 0, width: 1, height: 1},
+      }) as TrackedFrame,
+  );
+
+describe('busyWindowProof in a slow tail', () => {
+  it('reads a frame that shows no step under two steps a frame, then a two-frame catch-up, as moved', () => {
+    // A spring settling: 3.6 px a frame over the window, about 1.7 in its
+    // tail on a 1 px grid. Its frame at +968 ms holds the position before
+    // while the control moves, and the next catches up 2 px.
+    const proof = busyWindowProof(
+      slowTailFrames(slowTail.tracked),
+      slowTail.block,
+      {
+        axis: 'x',
+        settledWithin: 2,
+        control: slowTailFrames(slowTail.control),
+      },
+    );
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.notes.join('\n')).toMatch(
+      /under two of the cast's 1 px position steps from \+\d+ ms/,
+    );
+  });
+
+  it('still fails a two-frame freeze in a slow tail', () => {
+    const tracked = slowTailFrames(slowTail.tracked);
+    // Hold the tail's position for two frames before the catch-up.
+    const i = tracked.findIndex(f => f.t > 968 && f.t < 975);
+    const frozen = tracked.map((f, k) =>
+      k === i + 1 ? ({...f, box: {...tracked[i].box!}} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(frozen, slowTail.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control: slowTailFrames(slowTail.control),
+    });
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+  });
+
+  it('still fails a frame that shows no step in a fast window', () => {
+    // 3 px a frame, the control moving on every frame: one repeated frame is
+    // a freeze there, and its 6 px catch-up two steps past the grid.
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const proof = busyWindowProof(repeating([at(1300)]), BLOCK, {control});
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
   });
 });

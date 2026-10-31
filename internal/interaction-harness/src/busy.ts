@@ -407,7 +407,9 @@ export interface BusyProof extends FrameStats {
  *
  * `stepPx` and `pxPerFrame` say whether a frame's motion is resolvable at
  * all: under two position steps per frame, a frame delivered early can show
- * no step and read as not moved, which the proof notes (never a failure).
+ * no step and read as not moved. The proof notes each stretch of the judged
+ * part that moves that slowly, read over four frames at a time so a slow tail
+ * inside a fast window shows (never a failure).
  *
  * A loaded machine's screencast can skip frames the compositor still presents
  * (Chromium). Given the compositor's record (`presented`, from
@@ -433,8 +435,11 @@ export interface BusyProof extends FrameStats {
  * A run of frames with no new component position counts as moved when the
  * change that ends it is a single cast step (`stepPx`): the component moves
  * under one step per frame there, as on an easing tail, which the cast cannot
- * show on every frame. The run also has to read as a slowing curve, at most
- * one frame longer than the component's run before it. A freeze ends in a
+ * show on every frame. Where the component moved under two steps per frame
+ * over the frames just before the run, a frame delivered early can show no
+ * step too, so the change may carry the motion of every frame the run held
+ * at that pace, to the nearest step. The run also has to read as a slowing
+ * curve, at most one frame longer than the component's run before it. A freeze ends in a
  * catch-up of more than one step, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
  * The component still has to show a new position on at least
@@ -443,6 +448,37 @@ export interface BusyProof extends FrameStats {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  */
+/**
+ * The stretches of a judged series that move under `limitPx` per frame,
+ * read over four frames at a time, merged where they overlap: where the cast
+ * cannot show a step on every frame.
+ */
+function slowStretches(
+  values: readonly {t: number; value: number}[],
+  cadence: number,
+  limitPx: number,
+): {from: number; to: number; pxPerFrame: number}[] {
+  const SPAN = 4;
+  const stretches: {from: number; to: number; pxPerFrame: number}[] = [];
+  for (let k = 0; k + SPAN < values.length; k += 1) {
+    const a = values[k];
+    const b = values[k + SPAN];
+    const frames = (b.t - a.t) / cadence;
+    const pxPerFrame = frames > 0 ? Math.abs(b.value - a.value) / frames : 0;
+    if (pxPerFrame <= 0 || pxPerFrame >= limitPx) {
+      continue;
+    }
+    const last = stretches[stretches.length - 1];
+    if (last != null && a.t <= last.to) {
+      last.to = b.t;
+      last.pxPerFrame = Math.min(last.pxPerFrame, pxPerFrame);
+    } else {
+      stretches.push({from: a.t, to: b.t, pxPerFrame});
+    }
+  }
+  return stretches;
+}
+
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
@@ -742,9 +778,11 @@ export function busyWindowProof(
       `the screencast skipped ${recorderSkipped} frames the compositor presented (at ${skips.map(g => `+${(g.from - window.from).toFixed(0)} ms`).join(', ')})`,
     );
   }
-  if (pxPerFrame > 0 && pxPerFrame < 2 * stepPx) {
+  // Read over a few frames at a time, not the whole part: a fast window can
+  // end in a slow tail whose frames the cast cannot all show.
+  for (const stretch of slowStretches(judgedValues, cadence, 2 * stepPx)) {
     notes.push(
-      `${pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps: a frame delivered early can show no step and read as not moved`,
+      `${stretch.pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps from +${(stretch.from - window.from).toFixed(0)} ms to +${(stretch.to - window.from).toFixed(0)} ms: a frame delivered early there can show no step and read as not moved`,
     );
   }
   // The control's own new positions in the judged part, against its frame
@@ -788,6 +826,18 @@ export function busyWindowProof(
       }
       return s;
     };
+    // The component's motion per frame over up to four frames before frame
+    // `start`, or null with fewer than two to read.
+    const pxPerFrameBefore = (start: number): number | null => {
+      const back = Math.min(4, start);
+      if (back < 2) {
+        return null;
+      }
+      const frames = (series[start].t - series[start - back].t) / cadence;
+      return frames > 0
+        ? Math.abs(series[start].value - series[start - back].value) / frames
+        : null;
+    };
     const underStep = (t: number): boolean => {
       const i = seriesIndex.get(t);
       if (i == null || changed.has(t)) {
@@ -798,15 +848,26 @@ export function busyWindowProof(
       while (k < series.length && same(k, i)) {
         k += 1;
       }
-      if (
-        k >= series.length ||
-        Math.abs(series[k].value - series[i].value) >= 1.5 * stepPx
-      ) {
+      if (k >= series.length) {
+        return false;
+      }
+      const unchanged = k - 1 - start;
+      // Under one step a frame the change that ends the run is a single step.
+      // Under two, a frame delivered early can also show no step, and the
+      // change then carries the motion of every frame the run held, at the
+      // pace of the frames before it, to the nearest step.
+      const catchUp = Math.abs(series[k].value - series[i].value);
+      const pace = pxPerFrameBefore(start);
+      const shown =
+        catchUp < 1.5 * stepPx ||
+        (pace != null &&
+          pace < 2 * stepPx &&
+          catchUp <= (unchanged + 1) * pace + stepPx);
+      if (!shown) {
         return false;
       }
       // A slowing curve lengthens its runs a frame at a time: a run more than
       // one frame longer than the one before it is a stall.
-      const unchanged = k - 1 - start;
       const before = start > 0 ? start - 1 - runStart(start - 1) : 0;
       return unchanged <= before + 1;
     };

@@ -160,8 +160,9 @@ casts are 2 px quantized: the frames come at the
 viewport's size, but the page in them is captured at half resolution, so
 positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
-not moved. The proof reports `stepPx` and `pxPerFrame` and notes motion under
-two steps per frame, which never fails it. Move a proof's element at least two
+not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
+that moves under two steps per frame, read over four frames at a time so a
+slow tail inside a fast window shows, which never fails it. Move a proof's element at least two
 steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 
 On a two-core runner the software compositor and the screencast share the core
@@ -187,9 +188,12 @@ which the control moved on fewer than four frames fails, since the machine
 presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
-on every frame. The run must also read as a slowing curve, at most one frame
-longer than the component's run before it. A freeze ends in a catch-up of more
-than one step, a stall in a frame-counted animation is longer than its runs
+on every frame. Where it moved under two steps a frame over the frames just
+before the run (a spring's slow tail inside a fast window), a frame delivered
+early can show no step too, so the change may carry the motion of every frame
+the run held at that pace, to the nearest step. The run must also read as a
+slowing curve, at most one frame longer than the component's run before it. A
+freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)
 is read from the value's changes in the judged part, so a position the page
