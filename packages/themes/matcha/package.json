@@ -51,7 +51,20 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
-    "palette.config.json"
+    "palette.config.json",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-matcha-palette-refs.mjs --check && astryx theme build src/matchaTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"

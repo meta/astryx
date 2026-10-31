@@ -52,7 +52,20 @@
     "src",
     "palette.config.json",
     "fonts.css",
-    "fonts.css.d.ts"
+    "fonts.css.d.ts",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-y2k-palette-refs.mjs --check && astryx theme build src/y2kTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
