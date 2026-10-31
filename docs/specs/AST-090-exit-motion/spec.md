@@ -128,7 +128,9 @@ governs them in a touch presentation.
   leaving surface keeps the dismissal role it had while open (`spec:AST-003`
   FR1). A leaving active or blocking owner stays present on the shared
   dismissal stack (`family:overlay-dismissal` FR2), so an Escape press or
-  platform close request during its exit does not reach an owner beneath it. A
+  platform close request during its exit does not reach an owner beneath it,
+  except a closing pinned `Tooltip` or `HoverCard`, which leaves the stack when
+  its exit starts. A
   leaving passive dependent, such as an unpinned `Tooltip`, stays passive and
   shields nothing (`spec:AST-003` FR4). A pinned `Tooltip` or `HoverCard` that
   is closing plays its exit and stops taking Escape once the exit starts: it is
@@ -202,14 +204,18 @@ governs them in a touch presentation.
   it does with the exit off, and its exit plays after that on the runtime's
   shared exit copy (INV14), drawn in the top layer where the layer was. Native
   close reconciliation stays single-fired (INV6). A leaving active or blocking
-  owner keeps its place on the dismissal stack until its exit ends (FR5). A
+  owner keeps its place on the dismissal stack until its exit ends, except a
+  closing pinned Tooltip or HoverCard, which leaves it when its exit starts
+  (FR5). A
   leaving Dialog keeps supplying its modal outlet until it is hidden (FR13);
   BottomSheet's outlet behavior does not change.
 - `architecture:component-style-authoring`: no claim changes. A layer's exit
   is the one transient exit copy INV7 allows, made by the shared mechanism and
   removed when the exit ends (FR9).
 - `family:overlay-dismissal`: no claim changes. A leaving member stays present
-  for FR2 until it is hidden, and animation stays member-owned (AV6).
+  for FR2 until it is hidden, except a closing pinned Tooltip or HoverCard,
+  which leaves the stack when its exit starts (FR5), and animation stays
+  member-owned (AV6).
 - `spec:AST-003`: no claim changes. A leaving surface keeps its interaction role
   (FR1), a leaving passive dependent such as an unpinned `Tooltip` still never
   shields an owner (FR4, DEC-1), and a closing pinned `Tooltip` or `HoverCard`
