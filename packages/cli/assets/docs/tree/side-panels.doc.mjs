@@ -42,7 +42,7 @@ export const docs = {
           items: [
             'LayoutPanel in the start or end slot of Layout, holding a fixed width budget',
             'hasDivider to fence it from the content region; isScrollable so long detail scrolls on its own',
-            'For user-adjustable width, pair useResizable() with a ResizeHandle on the panel inner edge: after the panel in a start slot, before it in an end slot with isReversed',
+            'For user-adjustable width, give the same ref to useResizable(handleRef, options) and to a ResizeHandle on the panel inner edge, and render the panel at the size it reports: the handle goes after the panel in a start slot, before it in an end slot with isReversed',
             'The handle then owns the divider, so the panel sets hasDivider={false}',
             'Render an EmptyState when nothing is selected, so the region never collapses',
           ],
@@ -63,9 +63,11 @@ export const docs = {
 
 // Resizable: handle first in an end slot, and isReversed so
 // dragging left widens the panel.
+const handleRef = useRef(null);
+const panel = useResizable(handleRef, {defaultSize: 380, minSize: 320});
 end={
   <>
-    <ResizeHandle isReversed hasDivider resizable={panel.props}
+    <ResizeHandle ref={handleRef} isReversed hasDivider
       label="Resize details" />
     <LayoutPanel width={panel.size} hasDivider={false} />
   </>

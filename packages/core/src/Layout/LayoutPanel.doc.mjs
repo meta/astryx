@@ -64,13 +64,13 @@ export const docs = {
       name: 'width',
       type: 'number | string',
       description:
-        'Width of the panel. Numbers are treated as pixels, strings are used as-is. Ignored when resizable is provided; the hook controls width. Beside the ResizeHandle of a useResizable(handleRef, options) region, pass width={region.size}: the panel slides closed and open from the edge facing the handle when the region collapses or opens, focus inside it moves to the handle as it collapses, and it is inert while collapsed.',
+        'Width of the panel. Numbers are treated as pixels, strings are used as-is. For a resizable panel, pass the size useResizable(handleRef, options) reports (width={region.size}) and give the ref to the adjacent ResizeHandle: the panel slides closed and open from the edge facing the handle when the region collapses or opens, focus inside it moves to the handle as it collapses, and it is inert while collapsed. Ignored when the deprecated resizable prop is provided.',
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. With the hook's own props the panel slides closed and open like the ref form; a hand-built object does not slide. Either way, focus inside the panel moves to its ResizeHandle as it collapses, and it is inert while collapsed.",
+        "Deprecated: resize props from useResizable's configuration-object form; the panel width is the hook's size. They carry the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. With the hook's own props the panel slides closed and open like the ref form; a hand-built object does not slide. Either way, focus inside the panel moves to its ResizeHandle as it collapses, and it is inert while collapsed. Pass width={region.size} from useResizable(handleRef, options) instead. Removed in the next minor.",
     },
   ],
 };
@@ -117,13 +117,13 @@ export const docsZh = {
       name: 'width',
       type: 'number | string',
       description:
-        '面板宽度。数字按像素处理，字符串按原样使用。提供 resizable 时忽略，宽度由 hook 控制。放在 useResizable(handleRef, options) 区域的 ResizeHandle 旁边时传入 width={region.size}：区域折叠或展开时，面板从朝向手柄的边缘滑动关闭和打开，折叠时面板内的焦点移到手柄上，折叠期间面板为 inert。',
+        '面板宽度。数字按像素处理，字符串按原样使用。可调整大小的面板传入 useResizable(handleRef, options) 报告的尺寸（width={region.size}），并把 ref 交给相邻的 ResizeHandle：区域折叠或展开时，面板从朝向手柄的边缘滑动关闭和打开，折叠时面板内的焦点移到手柄上，折叠期间面板为 inert。提供已弃用的 resizable 时忽略。',
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。使用 hook 自身返回的 props 时，面板与 ref 形式一样滑动关闭和打开；手动构造的对象不会滑动。两种情况下，折叠时面板内的焦点都会移到其 ResizeHandle 上，折叠期间面板为 inert。",
+        "已弃用：来自 useResizable 配置对象形式的调整大小属性，面板宽度即 hook 的尺寸。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。使用 hook 自身返回的 props 时，面板与 ref 形式一样滑动关闭和打开；手动构造的对象不会滑动。两种情况下，折叠时面板内的焦点都会移到其 ResizeHandle 上，折叠期间面板为 inert。请改为传入 useResizable(handleRef, options) 的 width={region.size}。将在下一个次版本中移除。",
     },
   ],
 };
@@ -142,8 +142,8 @@ export const docsDense = {
     label: 'Accessible label for landmark element.',
     role: 'ARIA landmark role.',
     width:
-      'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width. width={region.size} beside a useResizable(handleRef) handle: slides closed/open from the handle-facing edge; focus inside moves to the handle on collapse; inert while collapsed.',
+      'Panel width. Numbers = pixels, strings as-is. Resizable panel: width={region.size} from useResizable(handleRef, options): slides closed/open from the handle-facing edge; focus inside moves to the handle on collapse; inert while collapsed. Ignored when deprecated resizable provided.',
     resizable:
-      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent. Hook props slide; hand-built ones do not. Focus inside moves to the handle on collapse; inert while collapsed.',
+      'Deprecated: config-object useResizable props. Hook props slide; hand-built ones do not. Focus inside moves to the handle on collapse; inert while collapsed. Use width={region.size} instead. Removed next minor.',
   },
 };
