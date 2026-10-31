@@ -72,6 +72,12 @@ export const docs = {
       description:
         "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction.",
     },
+    {
+      name: 'hideBelow',
+      type: "'sm' | 'md' | 'lg' | 'xl'",
+      description:
+        'Hides the panel below the given viewport-width breakpoint via a CSS media query (sm = 640px, md = 768px, lg = 1024px, xl = 1280px). SSR-safe: the panel stays mounted, so no useMediaQuery or hydration flash.',
+    },
   ],
 };
 
@@ -125,6 +131,12 @@ export const docsZh = {
       description:
         "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。",
     },
+    {
+      name: 'hideBelow',
+      type: "'sm' | 'md' | 'lg' | 'xl'",
+      description:
+        '在给定视口宽度断点以下通过 CSS 媒体查询隐藏面板（sm = 640px、md = 768px、lg = 1024px、xl = 1280px）。SSR 安全：面板保持挂载，无需 useMediaQuery，也没有水合闪烁。',
+    },
   ],
 };
 
@@ -145,5 +157,7 @@ export const docsDense = {
       'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width.',
     resizable:
       'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent.',
+    hideBelow:
+      'Hide panel below viewport breakpoint via CSS media query. sm=640px, md=768px, lg=1024px, xl=1280px. SSR-safe, panel stays mounted; replaces useMediaQuery + conditional render.',
   },
 };
