@@ -173,42 +173,52 @@ export function useInteractionModalityTracking(
 ): () => InteractionModality {
   useEffect(() => trackInteractionModality(), []);
 
-  const trackedDocumentRef = useRef<Document | null>(null);
-  const releaseRef = useRef<(() => void) | null>(null);
-  // Syncs the external per-document listener registry with the element's
-  // CURRENT owner document. No dependency list: the ref is re-read after every
-  // commit, so a node that is replaced or moved to another document
-  // re-targets the tracking; the comparison makes an unchanged commit free.
+  // The one owner of this component's hold on a second document: attach,
+  // `null` detachment and replacement all go through `hold`, which releases
+  // the old document before it tracks the new one (INV6), and unmount
+  // releases it (INV5).
+  const holdRef = useRef<SecondDocumentHold | null>(null);
+  holdRef.current ??= createSecondDocumentHold();
+  const hold = holdRef.current;
+  // Synchronizes the per-document listener registry with the element's
+  // CURRENT owner document. It re-reads the ref after every commit, so a node
+  // that is detached, replaced or moved to another document re-targets the
+  // hold. `hold` is idempotent, so an unchanged commit and a StrictMode replay
+  // are free. A callback ref cannot do this here: useMenuPress, useTouchTrigger
+  // and useFocusReturnVisibility receive object refs their callers own.
   useEffect(() => {
-    const ownerDocument = elementRef?.current?.ownerDocument ?? null;
-    const secondDocument =
-      ownerDocument != null &&
-      (typeof document === 'undefined' || ownerDocument !== document)
-        ? ownerDocument
-        : null;
-    if (secondDocument === trackedDocumentRef.current) {
-      return;
-    }
-    releaseRef.current?.();
-    releaseRef.current =
-      secondDocument == null
-        ? null
-        : trackInteractionModalityIn(secondDocument);
-    trackedDocumentRef.current = secondDocument;
+    hold(elementRef?.current?.ownerDocument ?? null);
   });
-  useEffect(
-    () => () => {
-      releaseRef.current?.();
-      releaseRef.current = null;
-      trackedDocumentRef.current = null;
-    },
-    [],
-  );
+  useEffect(() => () => hold(null), [hold]);
 
   return useCallback(
     () => getInteractionModality(elementRef?.current),
     [elementRef],
   );
+}
+
+/** Holds at most one second document, re-targeted idempotently. */
+type SecondDocumentHold = (ownerDocument: Document | null) => void;
+
+function createSecondDocumentHold(): SecondDocumentHold {
+  let heldDocument: Document | null = null;
+  let release: (() => void) | null = null;
+  return ownerDocument => {
+    const secondDocument =
+      ownerDocument != null &&
+      (typeof document === 'undefined' || ownerDocument !== document)
+        ? ownerDocument
+        : null;
+    if (secondDocument === heldDocument) {
+      return;
+    }
+    release?.();
+    release =
+      secondDocument == null
+        ? null
+        : trackInteractionModalityIn(secondDocument);
+    heldDocument = secondDocument;
+  };
 }
 
 /**

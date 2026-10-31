@@ -215,6 +215,48 @@ describe('interactionModality', () => {
     unmount();
   });
 
+  it('releases a second document when the element detaches, and holds one under StrictMode replay', async () => {
+    const tracker = await loadTracker();
+    const {StrictMode, createElement} = await import('react');
+    const secondDocument = document.implementation.createHTMLDocument();
+    const addEventListener = vi.spyOn(secondDocument, 'addEventListener');
+    const removeEventListener = vi.spyOn(secondDocument, 'removeEventListener');
+    const elementRef: {current: Element | null} = {
+      current: secondDocument.createElement('div'),
+    };
+    const listeners = (spy: typeof addEventListener) =>
+      spy.mock.calls.filter(([type]) => type === 'pointerdown').length;
+
+    const {rerender, unmount} = renderHook(
+      () => tracker.useInteractionModalityTracking(elementRef),
+      {wrapper: ({children}) => createElement(StrictMode, null, children)},
+    );
+    // StrictMode replays the effects; one hold remains.
+    expect(listeners(addEventListener) - listeners(removeEventListener)).toBe(
+      1,
+    );
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    expect(tracker.getInteractionModality(secondDocument)).toBe('pointer');
+
+    // `null` detachment releases the document.
+    elementRef.current = null;
+    rerender();
+    expect(listeners(addEventListener) - listeners(removeEventListener)).toBe(
+      0,
+    );
+
+    // Re-attaching tracks it again; unmount releases it.
+    elementRef.current = secondDocument.createElement('div');
+    rerender();
+    expect(listeners(addEventListener) - listeners(removeEventListener)).toBe(
+      1,
+    );
+    unmount();
+    expect(listeners(addEventListener) - listeners(removeEventListener)).toBe(
+      0,
+    );
+  });
+
   it('uses the keyboard-safe default without a document', async () => {
     vi.stubGlobal('document', undefined);
     const serverModule = await loadTracker();

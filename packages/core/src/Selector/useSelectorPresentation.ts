@@ -84,7 +84,7 @@ export function useSelectorPresentation({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(triggerRef);
   onHideRef.current = onHide;
   onShowRef.current = onShow;
 
