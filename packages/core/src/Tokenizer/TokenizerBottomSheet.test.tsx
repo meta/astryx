@@ -644,6 +644,32 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the default no-results state for an emptySearchText that renders nothing (FR20)', async () => {
+    for (const emptySearchText of ['', false, true, null]) {
+      const {unmount} = render(
+        <TokenizerWithPresentation
+          label="Tags"
+          searchSource={source}
+          value={[ITEMS[0]]}
+          onChange={() => {}}
+          debounceMs={0}
+          emptySearchText={emptySearchText}
+          experimental={{presentation: 'bottom-sheet'}}
+        />,
+      );
+      fireEvent.click(openTrigger());
+      fireEvent.change(await screen.findByLabelText('Search Tags'), {
+        target: {value: 'zzz'},
+      });
+      // Not an empty box and not an empty title: the default state.
+      expect(
+        await screen.findByRole('heading', {name: 'No results found'}),
+        String(emptySearchText),
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it('shows only the search field for an empty query with nothing to list, as the inline field does — no list, no message, no announcement (FR20)', async () => {
     // A search-only source: typing finds items, the bootstrap set is empty.
     const searchOnly: SearchSource<SearchableItem> = {
@@ -1806,7 +1832,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // changes until the sheet closes.
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('dialog', {name: 'Tags'})).toBe(dialog);
     expect(trigger).toBeInTheDocument();
@@ -2550,7 +2578,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // the hand-off inside the field reports neither a blur nor a focus.
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('combobox')).toHaveFocus();
     expect(onFocus).toHaveBeenCalledTimes(1);
@@ -2558,14 +2588,18 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // And back: the input focused, the screen becomes compact again.
     compact = true;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(openTrigger()).toHaveFocus();
     // Unfocused, a change moves nothing.
     openTrigger().blur();
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(document.body).toHaveFocus();
   });
