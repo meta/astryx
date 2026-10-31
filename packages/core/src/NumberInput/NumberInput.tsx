@@ -24,12 +24,12 @@ import {
   useState,
   useMemo,
   useCallback,
-  useLayoutEffect,
   useRef,
   type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -723,38 +723,31 @@ export function NumberInput({
   // `formatValue` the text at rest differs from the editable text, and putting
   // the editable text in the input after focus collapses that selection to the
   // end, so typing would append. When focus arrives with the text selected,
-  // select the swapped-in text too.
-  const reselectOnFocusRef = useRef(false);
-
+  // the focus handler commits the swap and selects the swapped-in text itself:
+  // the work one event causes stays in its handler
+  // (architecture:react-component-runtime/INV2).
   const handleFocus = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
       const input = e.currentTarget;
-      // Only when focusing swaps the text: otherwise no render follows to
-      // consume the flag, and the first keystroke would.
       const editableText =
         pendingInput ??
         (value == null ? '' : formatEditableNumber(value, locale));
-      reselectOnFocusRef.current =
+      const shouldReselect =
         input.value.length > 0 &&
         input.value !== editableText &&
         input.selectionStart === 0 &&
         input.selectionEnd === input.value.length;
       setIsFocused(true);
       onFocus?.(e);
+      if (shouldReselect) {
+        // Commit the swap now, so the editable text is in the input to select.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the editable text must be in the input before the focus event selects it
+        flushSync(() => {});
+        input.setSelectionRange(0, input.value.length);
+      }
     },
     [onFocus, pendingInput, value, locale],
   );
-
-  useLayoutEffect(() => {
-    if (!reselectOnFocusRef.current) {
-      return;
-    }
-    reselectOnFocusRef.current = false;
-    const input = inputRef.current;
-    if (input != null && input === document.activeElement) {
-      input.setSelectionRange(0, input.value.length);
-    }
-  }, [displayValue]);
 
   const commitPendingInput = useCallback(
     (trigger: 'blur' | 'Enter') => {
