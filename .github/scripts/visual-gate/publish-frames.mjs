@@ -10,7 +10,8 @@
  * @output Commits up to `limit` (at most 12) changed shots' frames, PNG or
  *   WebP of at most 500 KB each by their own bytes, largest change first,
  *   to the pull request's `assets/pr-<number>` branch (the path PR screenshots
- *   already use) under `visual/<head sha>/`, and writes `image_base` (their
+ *   already use) under `visual/<head sha>/`, marking a branch it creates with
+ *   MARKER so only such branches are pruned, and writes `image_base` (their
  *   raw URL prefix) to GITHUB_OUTPUT. Writes nothing when no shot changed.
  * @position The PR Comment workflow's comment job, after the visual report is
  *   prepared and before the report renders. It writes only that branch, and
@@ -43,6 +44,13 @@ export function isPublishableImage(bytes) {
     bytes.subarray(8, 12).toString('latin1') === 'WEBP'
   );
 }
+
+/**
+ * The file that marks an assets branch as created by this script. The daily
+ * branch pruner deletes only marked branches, once their PR closes; a branch
+ * someone pushed by hand never gets the marker.
+ */
+export const MARKER = '.pr-report-frames';
 
 /** The only ref this script writes: PR #<pr>'s assets branch. */
 export function assetsBranch(pr) {
@@ -112,6 +120,20 @@ export async function publishFrames({
     ? await api(request, 'GET', `/repos/${repository}/git/commits/${parent}`)
     : null;
   const tree = [];
+  if (!parent) {
+    const marker = await api(
+      request,
+      'POST',
+      `/repos/${repository}/git/blobs`,
+      {
+        content: Buffer.from(
+          'Created by the PR report; pruned when the PR closes.\n',
+        ).toString('base64'),
+        encoding: 'base64',
+      },
+    );
+    tree.push({path: MARKER, mode: '100644', type: 'blob', sha: marker.sha});
+  }
   for (const entry of files) {
     const blob = await api(request, 'POST', `/repos/${repository}/git/blobs`, {
       content: entry.bytes.toString('base64'),

@@ -14,6 +14,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {
   MAX_FRAME_BYTES,
   MAX_SHOTS,
+  MARKER,
   assetsBranch,
   framesToPublish,
   isPublishableImage,
@@ -134,6 +135,7 @@ describe('publishFrames', () => {
     );
     const tree = calls.find(call => call.route.endsWith('/git/trees')).body;
     expect(tree.base_tree).toBe('parent-tree');
+    expect(tree.tree.map(entry => entry.path)).not.toContain(MARKER);
     expect(tree.tree.map(entry => entry.path)).toEqual([
       `visual/${HEAD}/before/b.png`,
       `visual/${HEAD}/after/b.png`,
@@ -186,6 +188,11 @@ describe('publishFrames', () => {
       limit: 12,
       request: created.request,
     });
+    // Only a branch this script creates carries the pruning marker.
+    const createdTree = created.calls.find(call =>
+      call.route.endsWith('/git/trees'),
+    ).body;
+    expect(createdTree.tree.map(entry => entry.path)).toContain(MARKER);
     expect(created.calls.at(-1)).toMatchObject({
       method: 'POST',
       route: '/repos/meta/astryx/git/refs',

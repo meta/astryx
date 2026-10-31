@@ -2,8 +2,10 @@
 
 /**
  * @file prune-branches.test.mjs
- * Pins that the daily branch pruner deletes a PR's `assets/pr-<n>` branch
- * once PR #<n> is merged or closed, and keeps it while the PR is open.
+ * Pins that the daily branch pruner deletes an `assets/pr-<n>` branch the PR
+ * report created (it carries `.pr-report-frames`) once PR #<n> is merged or
+ * closed, keeps it while the PR is open, and does not delete an assets branch
+ * without the marker, such as screenshots pushed by hand, for its PR closing.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -36,15 +38,12 @@ function setup(prStates) {
   git(work, 'config', 'user.name', 'Test');
   git(work, 'commit', '-q', '--allow-empty', '-m', 'base');
   git(work, 'remote', 'add', 'origin', origin);
-  git(
-    work,
-    'push',
-    '-q',
-    'origin',
-    'main',
-    'main:assets/pr-1',
-    'main:assets/pr-2',
-  );
+  // assets/pr-3 is pushed by hand: no marker.
+  git(work, 'push', '-q', 'origin', 'main', 'main:assets/pr-3');
+  fs.writeFileSync(path.join(work, '.pr-report-frames'), 'marker\n');
+  git(work, 'add', '.pr-report-frames');
+  git(work, 'commit', '-q', '-m', 'frames');
+  git(work, 'push', '-q', 'origin', 'HEAD:assets/pr-1', 'HEAD:assets/pr-2');
   // A stand-in for gh: `pr view <n>` answers from prStates; `pr list` finds no PR.
   const bin = path.join(root, 'bin');
   fs.mkdirSync(bin);
@@ -61,8 +60,8 @@ function setup(prStates) {
 }
 
 describe('prune-branches.sh', () => {
-  it("lists a merged or closed PR's assets branch for deletion and keeps an open PR's", () => {
-    const {work, bin} = setup({1: 'MERGED', 2: 'OPEN'});
+  it("deletes a closed PR's marked assets branch, keeps an open PR's, and never an unmarked one", () => {
+    const {work, bin} = setup({1: 'MERGED', 2: 'OPEN', 3: 'CLOSED'});
     const out = execFileSync('bash', [SCRIPT], {
       cwd: work,
       encoding: 'utf8',
@@ -73,5 +72,8 @@ describe('prune-branches.sh', () => {
     );
     expect(willDelete).toContain('assets/pr-1');
     expect(willDelete).not.toContain('assets/pr-2');
+    // assets/pr-3 has no marker: its PR is closed, yet it is not deleted.
+    expect(out).not.toMatch(/^\s+assets\/pr-3$/m);
+    expect(out).toContain('0 branches (no PR');
   });
 });
