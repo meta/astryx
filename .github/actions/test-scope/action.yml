@@ -12,7 +12,7 @@
 # - The classifier (change-scope.cjs and its two helpers) is read from the PR's
 #   base commit, so a pull request cannot loosen its own classification. It is
 #   read in one GraphQL query, not a REST call per file: every job runs this
-#   step, and the repository's REST budget is shared by every workflow.
+#   step, and every workflow shares the repository's REST rate limit.
 # - Anything this step cannot decide (not a pull request, a missing trusted
 #   classifier, an API error, an empty file list or one GitHub truncates)
 #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
@@ -184,7 +184,7 @@ runs:
             root = fs.mkdtempSync(path.join(os.tmpdir(), 'test-scope-'));
             // The trusted policy comes from the base commit in one GraphQL
             // query: every job in every run reads it, and one REST call per
-            // file spent the repository's shared REST budget.
+            // file counted against the repository's shared REST rate limit.
             const policy = [
               '.github/scripts/change-scope.cjs',
               '.github/scripts/knowledge-paths.cjs',
