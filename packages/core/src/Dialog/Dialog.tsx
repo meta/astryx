@@ -560,19 +560,27 @@ export function Dialog({
   // own title on mount — would otherwise move document.activeElement inside
   // the dialog before the capture ran, and closing would then restore focus
   // to a detached node, stranding the user's focus on <body>.
+  //
+  // Only the closed-to-open edge captures. StrictMode re-runs this effect after
+  // the commit's passive effects, by which time that same descendant has
+  // already focused its title, so capturing on every run would take the title
+  // as the opener. The ref survives that re-run; it starts false so a dialog
+  // first mounted open still captures on its first commit.
+  const wasOpenRef = useRef(false);
   useLayoutEffect(() => {
-    if (isInline || !isOpen) {
-      return;
+    const isOpenNow = !isInline && isOpen;
+    if (isOpenNow && !wasOpenRef.current) {
+      // The dialog's own document while it holds focus: an app can render a
+      // dialog into a second document (a same-origin iframe, a Document
+      // Picture-in-Picture window) through a portal, and a control there that
+      // opens it is focused in that document, which the page's document reports
+      // only as the iframe element, or not at all. A control in the page that
+      // opens such a dialog leaves focus in the page.
+      const dialogDocument = dialogRef.current?.ownerDocument ?? document;
+      const doc = dialogDocument.hasFocus() ? dialogDocument : document;
+      triggerElementRef.current = doc.activeElement as HTMLElement | null;
     }
-    // The dialog's own document while it holds focus: an app can render a
-    // dialog into a second document (a same-origin iframe, a Document
-    // Picture-in-Picture window) through a portal, and a control there that
-    // opens it is focused in that document, which the page's document reports
-    // only as the iframe element, or not at all. A control in the page that
-    // opens such a dialog leaves focus in the page.
-    const dialogDocument = dialogRef.current?.ownerDocument ?? document;
-    const doc = dialogDocument.hasFocus() ? dialogDocument : document;
-    triggerElementRef.current = doc.activeElement as HTMLElement | null;
+    wasOpenRef.current = isOpenNow;
   }, [isOpen, isInline]);
 
   // Derive dismissal behavior from purpose
