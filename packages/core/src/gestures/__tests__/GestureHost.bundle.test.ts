@@ -5,7 +5,8 @@
  * @input GestureHost.ts, PressTracker.ts and usePressTracker.ts, bundled and
  *   minified by esbuild
  * @output The gesture host, the press tracker and its hook carry only the
- *   UIKit gesture groups they read, never the whole table
+ *   UIKit gesture groups they read, never the whole table, and the press
+ *   tracker only the timing table's press clocks
  *   (architecture:component-style-authoring INV6)
  * @position Bundle evidence for packages/core/src/gestures: every recognizer
  *   and press tracker attaches through the host, so what it imports ships
@@ -99,6 +100,13 @@ describe.each([
       'minimumMovementDecay:',
       'scrollReleaseWeight:',
     ]) {
+      expect(text).not.toContain(key);
+    }
+  });
+  it('carries only the press clocks of the UIKit timing table, never the whole table', () => {
+    expect(text).toContain('highlightOutMs:');
+    // Keys only the whole timing table has: its curves.
+    for (const key of ['curves:', 'viewChange:']) {
       expect(text).not.toContain(key);
     }
   });

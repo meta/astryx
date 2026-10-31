@@ -36,7 +36,7 @@ import {
   isClickGuardArmed,
 } from '../../utils/clickGuard';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
-import type {GestureTouch} from '../types';
+import type {GestureEventContext, GestureTouch} from '../types';
 
 interface Contact {
   id: number;
@@ -78,6 +78,9 @@ function pointer(
     button?: number;
     buttons?: number;
     ctrlKey?: boolean;
+    metaKey?: boolean;
+    shiftKey?: boolean;
+    altKey?: boolean;
     time: number;
   },
 ): Event {
@@ -92,6 +95,9 @@ function pointer(
     button: init.button ?? 0,
     buttons: init.buttons ?? 0,
     ctrlKey: init.ctrlKey ?? false,
+    metaKey: init.metaKey ?? false,
+    shiftKey: init.shiftKey ?? false,
+    altKey: init.altKey ?? false,
   });
   Object.defineProperty(event, 'timeStamp', {value: init.time});
   target.dispatchEvent(event);
@@ -4596,6 +4602,83 @@ describe('gestures attach for every pointer (spec:AST-094 FR43, FR19, FR24)', ()
     }
     expect(['began', 'changed']).toContain(swipe.state);
     expect(last?.defaultPrevented).toBe(true);
+  });
+
+  it('hands a recognizer the modifier keys a press began with, so a group can leave a Ctrl-, Cmd- or Shift-click on a link to the browser', () => {
+    const {box} = mount('<div id="box"></div>');
+    const fine = fineHost();
+    const seen: GestureTouch[] = [];
+    detachers.push(
+      fine.attach(
+        box,
+        new TapGestureRecognizer({
+          shouldReceiveTouch: (_recognizer, touch) => {
+            seen.push(touch);
+            return true;
+          },
+        }),
+      ),
+    );
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      metaKey: true,
+      shiftKey: true,
+      time: 0,
+    });
+    pointer('pointerup', box, {pointerType: 'mouse', x: 10, y: 10, time: 50});
+    expect(
+      seen.map(({ctrlKey, metaKey, shiftKey, altKey}) => ({
+        ctrlKey,
+        metaKey,
+        shiftKey,
+        altKey,
+      })),
+    ).toEqual([{ctrlKey: false, metaKey: true, shiftKey: true, altKey: false}]);
+  });
+
+  it('hands a recognizer tracking a finger the modifier keys of another finger that lands where nothing takes part', () => {
+    class HearsElsewhere extends LongPressGestureRecognizer {
+      readonly heard: GestureTouch[] = [];
+      protected override touchBeganElsewhere(
+        touches: ReadonlyArray<GestureTouch>,
+        event: GestureEventContext,
+      ): void {
+        this.heard.push(...touches);
+        super.touchBeganElsewhere(touches, event);
+      }
+    }
+    const {box, page} = mount('<div id="box"></div><p id="page">text</p>');
+    const hold = new HearsElsewhere();
+    detachers.push(host.attach(box, hold));
+    const first = {id: 1, x: 10, y: 10};
+    touch('touchstart', box, [first], [first], 0);
+    // A second finger on plain page content, with Shift held.
+    const second = new Event('touchstart', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+    const at = {identifier: 2, clientX: 10, clientY: 200, target: page};
+    Object.defineProperty(second, 'changedTouches', {value: [at]});
+    Object.defineProperty(second, 'touches', {
+      value: [{identifier: 1, clientX: 10, clientY: 10, target: box}, at],
+    });
+    Object.defineProperty(second, 'timeStamp', {value: 40});
+    Object.defineProperty(second, 'shiftKey', {value: true});
+    page.dispatchEvent(second);
+    expect(
+      hold.heard.map(({ctrlKey, metaKey, shiftKey, altKey}) => ({
+        ctrlKey,
+        metaKey,
+        shiftKey,
+        altKey,
+      })),
+    ).toEqual([
+      {ctrlKey: false, metaKey: false, shiftKey: true, altKey: false},
+    ]);
   });
 
   it("starts no press for a right click or a ctrl-click on macOS, that platform's context click, and starts one for a ctrl-click elsewhere (FR43)", () => {
