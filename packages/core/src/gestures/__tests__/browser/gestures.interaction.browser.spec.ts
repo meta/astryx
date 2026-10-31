@@ -1914,8 +1914,9 @@ test.describe('where the primary pointer is fine', () => {
     expect(moves.at(-1)).toBeCloseTo(-travel, 1);
   });
 
-  test('a pan that allows scroll input follows a real wheel along its axis and keeps the page still, a wheel across it scrolls the page, and a pinch follows a ctrl-wheel (spec:AST-094 FR43)', async ({
+  test("a pan that takes a trackpad's scroll follows a real trackpad scroll along its axis and keeps the page still, never a mouse wheel's notches, which scroll the page; a wheel across it scrolls the page, and a pinch follows a ctrl-wheel (spec:AST-094 FR43, DEC-24)", async ({
     page,
+    browserName,
   }) => {
     await page.goto('about:blank');
     await page.setContent(
@@ -1928,7 +1929,7 @@ test.describe('where the primary pointer is fine', () => {
         '<div id="strip" style="height: 120px; width: 300px">strip</div><div id="photo" style="height: 120px; width: 300px">photo</div><div style="height: 3000px; width: 3000px"></div>';
       const pan = new PanGestureRecognizer({
         direction: 'horizontal',
-        allowedScrollTypes: ['continuous', 'discrete'],
+        allowedScrollTypes: ['continuous'],
       });
       pan.addTransitionListener((_recognizer, _from, to) =>
         window.__wheelLog.push(`pan:${to}:${Math.round(pan.translation().x)}`),
@@ -1950,12 +1951,22 @@ test.describe('where the primary pointer is fine', () => {
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
     );
-    expect(pan[0]).toMatch(/^pan:began:/);
-    expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
-    // The content moves the way the fingers do: a scroll right drags it left.
-    const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
-    expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
-    expect(await page.evaluate(() => window.scrollX)).toBe(0);
+    if (browserName === 'chromium') {
+      // Chromium's driver sends a mouse wheel's notches (wheelDeltaX -120
+      // whatever the delta): a pan never takes them, and they scroll the page.
+      expect(pan).toEqual([]);
+      expect(await page.evaluate(() => window.scrollX)).toBeGreaterThan(0);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(250);
+    } else {
+      // WebKit's sends a trackpad's precise deltas, which the pan follows.
+      expect(pan[0]).toMatch(/^pan:began:/);
+      expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
+      // The content moves the way the fingers do: a scroll right drags it left.
+      const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
+      expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+      expect(await page.evaluate(() => window.scrollX)).toBe(0);
+    }
     // Across the pan's axis the wheel is the page's.
     await driver.wheel({...strip, dy: 60});
     await page.waitForTimeout(250);
