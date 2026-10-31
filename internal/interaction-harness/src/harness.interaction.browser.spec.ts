@@ -1432,7 +1432,11 @@ test.describe('wheel and pen input', () => {
     browser,
   }) => {
     // The page is free well before each next step arrives, so the gap is the
-    // dispatch's, not the page's.
+    // dispatch's, not the page's. The steps leave 400 ms apart, four times
+    // the 100 ms bound with the 30 ms listener long done when the next one
+    // arrives, so the case still has to throw: a runner whose CPU quota holds
+    // the engine for 100-300 ms could deliver steps 125 ms apart back to back,
+    // leaving no gap past the bound to classify.
     const context = await browser.newContext({
       viewport: {width: 402, height: 714},
       isMobile: false,
@@ -1454,7 +1458,7 @@ test.describe('wheel and pen input', () => {
           x: 200,
           y: 300,
           steps: Array.from({length: 4}, () => ({dx: 10})),
-          everyMs: 125,
+          everyMs: 400,
           maxGapMs: 100,
         }),
       ).rejects.toBeInstanceOf(WheelPacingError);

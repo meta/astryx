@@ -147,21 +147,70 @@ export function wheelArrivals(
 }
 
 /**
+ * How far apart the harness sent the steps behind each received gap, ms
+ * (`sendGapsMs[i - 1]` for the gap before received step `i`), or `null` where
+ * the received steps cannot be matched to the sent ones. A received step is
+ * matched to the last sent step its deltas reach: WebKit coalesces the steps
+ * it holds into one that carries their summed deltas.
+ */
+export function wheelSendGaps(
+  steps: readonly {readonly dx?: number; readonly dy?: number}[],
+  sentAt: readonly number[],
+  deltas: readonly (readonly [number, number])[],
+): (number | null)[] {
+  const close = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  // What the page has received after each sent step, if it received them all.
+  const sentSums: [number, number][] = [];
+  let sx = 0;
+  let sy = 0;
+  for (const {dx = 0, dy = 0} of steps) {
+    sx += dx;
+    sy += dy;
+    sentSums.push([sx, sy]);
+  }
+  let rx = 0;
+  let ry = 0;
+  let from = 0;
+  const lastSent = deltas.map(([dx, dy]) => {
+    rx += dx;
+    ry += dy;
+    for (let j = from; j < sentSums.length; j++) {
+      if (close(sentSums[j][0], rx) && close(sentSums[j][1], ry)) {
+        from = j + 1;
+        return j;
+      }
+    }
+    return null;
+  });
+  return lastSent.slice(1).map((j, i) => {
+    const before = lastSent[i];
+    return j == null || before == null ? null : sentAt[j] - sentAt[before];
+  });
+}
+
+/**
  * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
  * received steps reached the page (`wheelArrivals`); `handledAt` is when the
- * page's wheel listeners had finished with each (NaN where that was not seen). In WebKit, which
- * dispatches a step only once the page's main thread is free, a gap is the
- * page's when the step reached the page within one frame of the listeners
- * finishing the step before: it was waiting on them. Every other gap is the
- * dispatch's, and in Chromium, which stamps a step with its dispatch time, so
- * the page cannot move its stamps, every gap is. Other work on the page's main
- * thread between steps (timers, frame callbacks) counts as the dispatch's.
+ * page's wheel listeners had finished with each (NaN where that was not seen);
+ * `sendGapsMs` is how far apart the harness sent the steps behind each gap
+ * (`wheelSendGaps`; `null` where unknown). In WebKit, which dispatches a step
+ * only once the page's main thread is free, a gap is the page's when the step
+ * reached the page within one frame of the listeners finishing the step
+ * before, so it was waiting on them, and the gap is more than a frame wider
+ * than the harness's own spacing of those steps: the page can only widen a
+ * gap, so one no wider than the send spacing is the dispatch's, even when a
+ * starved renderer also held the step (a runner whose CPU quota holds the
+ * page right after its listeners). Every other gap is the dispatch's, and in
+ * Chromium, which stamps a step with its dispatch time, so the page cannot
+ * move its stamps, every gap is. Other work on the page's main thread between
+ * steps (timers, frame callbacks) counts as the dispatch's.
  */
 export function wheelGapCauses(
   engine: Engine,
   stamps: readonly number[],
   handledAt: readonly number[],
   maxGapMs: number,
+  sendGapsMs: readonly (number | null)[] = [],
 ): {pageStalls: WheelPageStall[]; dispatchStalls: number[]} {
   const pageStalls: WheelPageStall[] = [];
   const dispatchStalls: number[] = [];
@@ -170,10 +219,12 @@ export function wheelGapCauses(
     if (gapMs <= maxGapMs) {
       continue;
     }
+    const sendGapMs = sendGapsMs[i - 1];
     const heldBack =
       engine === 'webkit' &&
       Number.isFinite(handledAt[i - 1]) &&
-      stamps[i] - handledAt[i - 1] <= HELD_BACK_MS;
+      stamps[i] - handledAt[i - 1] <= HELD_BACK_MS &&
+      (sendGapMs == null || gapMs > sendGapMs + HELD_BACK_MS);
     if (heldBack) {
       pageStalls.push({gapMs, handlingMs: handledAt[i - 1] - stamps[i - 1]});
     } else {
@@ -319,6 +370,8 @@ interface WheelRun {
   receivedAt: number[];
   /** When the page's wheel listeners had finished with each step; NaN until seen. */
   handledAt: number[];
+  /** Each received step's deltas, CSS px: a coalesced step carries the sum. */
+  deltas: [number, number][];
   dx: number;
   dy: number;
   stop: () => void;
@@ -339,6 +392,7 @@ function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
       stamps: [] as number[],
       receivedAt: [] as number[],
       handledAt: [] as number[],
+      deltas: [] as [number, number][],
       dx: 0,
       dy: 0,
       stop: () => {
@@ -351,6 +405,7 @@ function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
       run.stamps.push(wheel.timeStamp);
       run.receivedAt.push(performance.now());
       run.handledAt.push(Number.NaN);
+      run.deltas.push([wheel.deltaX, wheel.deltaY]);
       run.dx += wheel.deltaX;
       run.dy += wheel.deltaY;
     };
@@ -372,6 +427,7 @@ async function untilRunReceived(
   engine: Engine,
   armed: JSHandle<WheelRun>,
   {steps, maxGapMs}: Pick<WheelBurst, 'steps' | 'maxGapMs'>,
+  sentAt: readonly number[],
 ): Promise<{receivedSteps: number; receivedGapsMs: number[]}> {
   const want = steps.reduce<{dx: number; dy: number}>(
     (sum, {dx = 0, dy = 0}) => ({dx: sum.dx + dx, dy: sum.dy + dy}),
@@ -383,6 +439,7 @@ async function untilRunReceived(
         stamps: number[];
         receivedAt: number[];
         handledAt: number[];
+        deltas: [number, number][];
         dx: number;
         dy: number;
       }>(resolve => {
@@ -405,6 +462,7 @@ async function untilRunReceived(
               stamps: run.stamps.slice(),
               receivedAt: run.receivedAt.slice(),
               handledAt: run.handledAt.slice(),
+              deltas: run.deltas.slice(),
               dx: run.dx,
               dy: run.dy,
             });
@@ -433,6 +491,7 @@ async function untilRunReceived(
       arrivals,
       got.handledAt,
       maxGapMs,
+      wheelSendGaps(steps, sentAt, got.deltas),
     );
     if (pageStalls.length > 0) {
       throw new WheelPageStallError(maxGapMs, pageStalls[0]);
@@ -446,23 +505,27 @@ async function untilRunReceived(
 
 /**
  * Sends each step at its scheduled time without awaiting the one before, then
- * waits until every dispatch is answered.
+ * waits until every dispatch is answered. Resolves with when each step left
+ * (`Date.now()`, ms).
  */
 async function dispatchOnSchedule<T>(
   steps: readonly T[],
   everyMs: number,
   send: (step: T) => Promise<unknown>,
-): Promise<void> {
+): Promise<number[]> {
   const start = Date.now();
   const sent: Promise<unknown>[] = [];
+  const sentAt: number[] = [];
   for (const [i, step] of steps.entries()) {
     const wait = start + i * everyMs - Date.now();
     if (wait > 0) {
       await sleep(wait);
     }
+    sentAt.push(Date.now());
     sent.push(send(step));
   }
   await Promise.all(sent);
+  return sentAt;
 }
 
 async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
@@ -491,17 +554,26 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
         () => window.devicePixelRatio * (window.visualViewport?.scale ?? 1),
       );
       const armed = await armWheelRun(page);
-      await dispatchOnSchedule(steps, everyMs, ({dx = 0, dy = 0}) =>
-        cdp.send('Input.dispatchMouseEvent', {
-          type: 'mouseWheel',
-          x,
-          y,
-          deltaX: dx * scale,
-          deltaY: dy * scale,
-          modifiers: ctrl ? 2 : 0,
-        }),
+      const sentAt = await dispatchOnSchedule(
+        steps,
+        everyMs,
+        ({dx = 0, dy = 0}) =>
+          cdp.send('Input.dispatchMouseEvent', {
+            type: 'mouseWheel',
+            x,
+            y,
+            deltaX: dx * scale,
+            deltaY: dy * scale,
+            modifiers: ctrl ? 2 : 0,
+          }),
       );
-      return untilRunReceived(page, 'chromium', armed, {steps, maxGapMs});
+      return untilRunReceived(
+        page,
+        'chromium',
+        armed,
+        {steps, maxGapMs},
+        sentAt,
+      );
     },
     async pen(points) {
       if (points.length === 0) {
@@ -592,13 +664,18 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
       }
       try {
         const armed = await armWheelRun(page);
-        await dispatchOnSchedule(steps, everyMs, ({dx = 0, dy = 0}) =>
-          page.mouse.wheel(dx, dy),
-        );
-        return await untilRunReceived(page, 'webkit', armed, {
+        const sentAt = await dispatchOnSchedule(
           steps,
-          maxGapMs,
-        });
+          everyMs,
+          ({dx = 0, dy = 0}) => page.mouse.wheel(dx, dy),
+        );
+        return await untilRunReceived(
+          page,
+          'webkit',
+          armed,
+          {steps, maxGapMs},
+          sentAt,
+        );
       } finally {
         if (ctrl) {
           await page.keyboard.up('Control');
