@@ -17,29 +17,6 @@
   "packages/core/src/Markdown/Markdown.tsx": ["rendered"],
   "packages/core/src/MetadataList/MetadataList.tsx": ["title"],
   "packages/core/src/MetadataList/MetadataListItem.tsx": ["icon"],
-  "packages/core/src/OverflowList/OverflowList.tsx": ["measureIndicator"],
-  "packages/core/src/Pagination/Pagination.tsx": ["computedTotalPages"],
-  "packages/core/src/PowerSearch/PowerSearch.tsx": ["resultCountText"],
-  "packages/core/src/Table/BaseTable.tsx": ["after"],
-  "packages/core/src/Table/plugins/sortable/useTableSortable.tsx": [
-    "rank",
-    "rank"
-  ],
-  "packages/core/src/TextArea/TextArea.tsx": ["maxLength"],
-  "packages/core/src/ToggleButton/ToggleButton.tsx": ["children"],
-  "packages/core/src/TopNav/TopNavMegaMenu.tsx": [
-    "featured",
-    "featured",
-    "items"
-  ],
-  "packages/core/src/TreeList/TreeList.tsx": ["header"],
-  "packages/core/src/TreeList/TreeListItem.tsx": [
-    "description",
-    "endContent",
-    "renderedChildren",
-    "startContent"
-  ],
-  "packages/core/src/utils/getNodeText.ts": ["node"],
   "packages/richtext/src/RichTextEditor.tsx": ["maxLength", "toolbar"],
   "packages/richtext/src/RichTextEditorToolbar.tsx": ["endContent"]
 }

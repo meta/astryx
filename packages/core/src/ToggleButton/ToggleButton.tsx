@@ -319,6 +319,7 @@ export function ToggleButton({
 
   // isIconOnly prop is the source of truth for icon-only rendering.
   const labelContent =
+    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- switching to isRenderable would show `label` for children of '', false or true, a visible change that needs a decision
     children != null ? (
       <span {...stylex.props(labelStyles.wrapper)}>
         <span {...stylex.props(isPressed && labelStyles.pressed)}>
