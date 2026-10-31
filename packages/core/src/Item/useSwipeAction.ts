@@ -1252,7 +1252,6 @@ export function useSwipeAction({
         // contact, moving with the content.
         allowedPointerTypes: ['touch', 'pen'],
         allowedScrollTypes: ['continuous'],
-        wheelStep: true,
         direction: 'horizontal',
         hysteresis: SWIPE.claim,
         maximumNumberOfTouches: 1,
