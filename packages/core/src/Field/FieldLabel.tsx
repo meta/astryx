@@ -39,6 +39,7 @@ import {
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {Tooltip} from '../Tooltip/Tooltip';
+import {TOUCH_POINTER_TYPES} from '../Layer/useTouchTrigger';
 import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
@@ -116,12 +117,6 @@ const styles = stylex.create({
     },
   },
 });
-
-/**
- * The pointers whose tap opens the label's help (`touchTrigger="tap"`): a
- * finger and a pen, the same ones the shared touch trigger answers.
- */
-const TAP_POINTER_TYPES = new Set(['touch', 'pen']);
 
 export interface FieldLabelProps extends BaseProps<HTMLLabelElement> {
   /** Ref forwarded to the root element */
@@ -276,7 +271,9 @@ export function FieldLabel({
   // keeps that native activation, and hover shows the help.
   const iconPressIsTapRef = useRef(false);
   const handleIconPointerDown = (event: PointerEvent<Element>) => {
-    iconPressIsTapRef.current = TAP_POINTER_TYPES.has(event.pointerType);
+    // A finger or a pen: the pointers whose tap the shared touch trigger
+    // answers, so the ones whose tap opens or closes the help.
+    iconPressIsTapRef.current = TOUCH_POINTER_TYPES.has(event.pointerType);
   };
   const handleIconClick = (event: MouseEvent<Element>) => {
     if (iconPressIsTapRef.current) {
@@ -313,8 +310,9 @@ export function FieldLabel({
         </span>
       )}
       {labelTooltip && (
-        // The icon's one job is to reveal the help, so a tap on it always opens
-        // the help (`touchTrigger="tap"`), although it sits inside a `<label>`.
+        // The icon's one job is to reveal the help, so a tap on it opens or
+        // closes the help (`touchTrigger="tap"`), although it sits inside a
+        // `<label>`.
         <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
           <Icon
             icon="info"

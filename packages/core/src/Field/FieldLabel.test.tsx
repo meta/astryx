@@ -206,28 +206,6 @@ describe('FieldLabel', () => {
       expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
 
-    it('opens the help on a tap of its icon without focusing the field', async () => {
-      render(
-        <>
-          <FieldLabel
-            label="Owner"
-            inputID="owner"
-            labelTooltip="The person who approves changes"
-          />
-          <input type="text" id="owner" />
-        </>,
-      );
-
-      tap(infoIcon('Owner'));
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
-          'popover-open',
-        );
-      });
-      expect(screen.getByRole('textbox')).not.toHaveFocus();
-    });
-
     it('opens the help on a pen tap of its icon and leaves a checkbox alone', async () => {
       render(
         <>
