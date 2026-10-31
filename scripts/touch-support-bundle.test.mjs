@@ -123,6 +123,8 @@ const GESTURE_USERS = new Set([
   'Slider',
   // Switch: its press tracking and its drag, for every pointer.
   'Switch',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
