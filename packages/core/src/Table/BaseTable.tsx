@@ -265,10 +265,10 @@ function TableRowInner<T extends Record<string, unknown>>({
  * Compares TableRowProps to determine if re-render is needed.
  * Shallow compares the item object and checks if columns/plugins references changed.
  *
- * Includes rowIndex in the comparison so that plugins using the index
- * (e.g. for row numbering or conditional formatting) get correct values
- * after insertions/deletions. This also future-proofs for tree grid
- * index paths where structural position matters.
+ * The row index reaches a row's output only through a plugin's
+ * `transformBodyRow` (cells get no index), so it is compared only when some
+ * plugin has one: a re-sort that moves rows then re-renders none of them
+ * unless a plugin can show the index (row numbering, conditional formatting).
  */
 function areRowPropsEqual<T extends Record<string, unknown>>(
   prevProps: TableRowProps<T>,
@@ -277,7 +277,10 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
   if (prevProps.rowKey !== nextProps.rowKey) {
     return false;
   }
-  if (prevProps.rowIndex !== nextProps.rowIndex) {
+  if (
+    prevProps.rowIndex !== nextProps.rowIndex &&
+    nextProps.plugins.some(plugin => plugin.transformBodyRow != null)
+  ) {
     return false;
   }
   if (prevProps.ariaRowIndex !== nextProps.ariaRowIndex) {
