@@ -1060,11 +1060,9 @@ export function Selector<T extends SelectorOptionType>(
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
   const announce = useAnnounce();
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip. The container receives hover and bubbled focus
+  // while the trigger stays focusable via aria-disabled. Opening and selection
+  // are guarded independently, including options in an already-open surface.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1327,6 +1325,11 @@ export function Selector<T extends SelectorOptionType>(
 
   const commitValue = useCallback(
     (newValue: string) => {
+      // A surface or pointer gesture can outlive the enabled state that opened
+      // it. Enforce current availability before callbacks or optimistic state.
+      if (isDisabled || isEffectivelyReadOnly) {
+        return;
+      }
       onChange?.(newValue);
       if (changeAction) {
         startTransition(async () => {
@@ -1335,7 +1338,14 @@ export function Selector<T extends SelectorOptionType>(
         });
       }
     },
-    [onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Selector behavior (keyboard nav, selection)
