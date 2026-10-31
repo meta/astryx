@@ -31,6 +31,8 @@ const SHORT = {width: 1024, height: 360};
 const APP_INSET_BLOCK_END = 80;
 /** The layer runtime's gutter at the default spacing scale (spacing-4). */
 const RUNTIME_GUTTER = 16;
+/** The popup's offset from its control (spacing-1 at the default scale) plus 1px. */
+const POPUP_OFFSET_TOLERANCE = 5;
 
 type Mode = 'light' | 'dark';
 type Direction = 'ltr' | 'rtl';
@@ -148,7 +150,11 @@ function storyId(item: AuditCase) {
     return 'core-complexselector--secondary-variant';
   }
   if (item.story === 'tree') {
-    return 'core-complexselector--tree-list-with-search';
+    // The app declares its block-end bar once, through LayerProvider's
+    // public `inset` (spec:AST-059 FR6), in its own story.
+    return item.inset
+      ? 'core-complexselector--tree-list-with-search-above-app-bar'
+      : 'core-complexselector--tree-list-with-search';
   }
   return 'core-complexselector--audit-matrix';
 }
@@ -450,6 +456,18 @@ async function readPopupScroll(page: Page, contentId: string | null) {
         scrollHeight: element.scrollHeight,
         clientHeight: element.clientHeight,
       }));
+    const edges = (element: Element | null) => {
+      if (element == null) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      };
+    };
     return {
       owned: owned.length,
       geometry: {
@@ -459,6 +477,10 @@ async function readPopupScroll(page: Page, contentId: string | null) {
         right: box.right,
         height: box.height,
       },
+      // The painted surface and the content it holds can extend past a capped
+      // layer box; the block-end bar must clear what paints, not only the box.
+      surfaceGeometry: edges(surface),
+      contentGeometry: edges(content),
       scrolling,
     };
   }, contentId);
@@ -558,11 +580,6 @@ for (const item of cases) {
         })
         .flat();
     }, rootSelector);
-    if (item.inset) {
-      await page.addStyleTag({
-        content: `:root { --astryx-layer-inset-block-end: ${APP_INSET_BLOCK_END}px; }`,
-      });
-    }
     await holdMotionStill(page);
     await page.evaluate(async () => document.fonts.ready);
 
@@ -620,6 +637,32 @@ for (const item of cases) {
         item.state === 'caller-open' ||
         item.state === 'tall-open'
       ) {
+        if (item.state === 'caller-open') {
+          // spec:AST-055 AR2: the caller's control carries the one focus
+          // ring. Reach it by keyboard and record its ring before opening.
+          await trigger.focus();
+          await page.keyboard.press('Shift+Tab');
+          await page.keyboard.press('Tab');
+          stateFacts.callerFocused = await trigger.evaluate(
+            element => element === document.activeElement,
+          );
+          stateFacts.callerFocusVisible = await trigger.evaluate(element =>
+            element.matches(':focus-visible'),
+          );
+          await nextFrames(page);
+          const focusPaint = await paintOf(owner);
+          stateFacts.callerFocusPaint = focusPaint;
+          // A ring the rest state does not already paint: a visible outline
+          // that differs from rest, or a changed box shadow.
+          stateFacts.callerFocusRing =
+            (focusPaint.outlineStyle !== 'none' &&
+              Number.parseFloat(focusPaint.outlineWidth) > 0 &&
+              (focusPaint.outlineStyle !== restPaint?.outlineStyle ||
+                focusPaint.outlineWidth !== restPaint?.outlineWidth ||
+                focusPaint.outlineColor !== restPaint?.outlineColor)) ||
+            focusPaint.boxShadow !== restPaint?.boxShadow;
+          await page.mouse.move(0, 0);
+        }
         if (item.pointer === 'coarse') {
           await trigger.tap();
         } else {
@@ -805,17 +848,49 @@ for (const item of cases) {
         item.viewport.height -
         RUNTIME_GUTTER -
         (item.inset ? APP_INSET_BLOCK_END : 0);
+      const paintedBottom =
+        popupScroll == null
+          ? Number.POSITIVE_INFINITY
+          : Math.max(
+              popupScroll.geometry.bottom,
+              popupScroll.surfaceGeometry?.bottom ?? Number.POSITIVE_INFINITY,
+              popupScroll.contentGeometry?.bottom ?? Number.POSITIVE_INFINITY,
+            );
+      stateFacts.paintedBottom = paintedBottom;
+      stateFacts.floor = floor;
       statePass =
         triggerFacts?.expanded === 'true' &&
         popupScroll != null &&
         popupScroll.scrolling.length <= 1 &&
-        popupScroll.geometry.bottom <= floor + 1;
+        paintedBottom <= floor + 1;
     } else {
       statePass =
         triggerFacts?.expanded === 'true' &&
         triggerFacts.role === 'combobox' &&
         popupScroll != null &&
         popupFitsInline;
+      if (item.state === 'caller-open' && trigger != null) {
+        // spec:AST-055 FR4: the popup opens against the caller's control,
+        // touching its block edge and overlapping it inline.
+        const control = await trigger.boundingBox();
+        const surface = popupScroll?.surfaceGeometry ?? null;
+        const anchored =
+          control != null &&
+          surface != null &&
+          surface.left < control.x + control.width &&
+          surface.right > control.x &&
+          (Math.abs(surface.top - (control.y + control.height)) <=
+            POPUP_OFFSET_TOLERANCE ||
+            Math.abs(control.y - surface.bottom) <= POPUP_OFFSET_TOLERANCE);
+        stateFacts.controlRect = control;
+        stateFacts.anchoredToControl = anchored;
+        statePass =
+          statePass &&
+          anchored &&
+          stateFacts.callerFocused === true &&
+          stateFacts.callerFocusVisible === true &&
+          stateFacts.callerFocusRing === true;
+      }
     }
 
     const settled = await readSettledRender(page, rootSelector);
