@@ -303,6 +303,33 @@ function published(state) {
   );
 }
 
+/** Count every GitHub API call a run makes (paginated lists count once). */
+function countApiCalls(harness) {
+  const counter = {total: 0};
+  for (const namespace of Object.values(harness.github.rest)) {
+    for (const [name, method] of Object.entries(namespace)) {
+      if (typeof method !== 'function') continue;
+      namespace[name] = async (...args) => {
+        counter.total += 1;
+        return method(...args);
+      };
+    }
+  }
+  return counter;
+}
+
+const codeOnlyFile = {
+  filename: 'packages/core/src/Button/Button.tsx',
+  status: 'modified',
+};
+
+/** A pull_request_target event that carries the full pull request. */
+function fullPrContext(harness, runId) {
+  const ctx = context({runId, action: 'synchronize'});
+  ctx.payload.pull_request = structuredClone(harness.state.pr);
+  return ctx;
+}
+
 function latestReviewGate(state) {
   return state.statuses.find(status => status.context === 'review-required');
 }
@@ -1400,6 +1427,83 @@ describe('spec owner workflow reconciliation', () => {
       await run(harness, context({runId: 100n}));
 
       expect(latestReviewGate(harness.state).state).toBe('pending');
+    });
+  });
+});
+
+describe('a head that changes no knowledge record', () => {
+  it('is decided once, then read back in two calls with nothing written', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+
+    await run(harness, fullPrContext(harness, 100n));
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+    });
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'No code review required.',
+    });
+
+    const statusCount = harness.state.statuses.length;
+    const counter = countApiCalls(harness);
+    await run(harness, fullPrContext(harness, 101n));
+
+    // The file list and the head's statuses; no status is written again.
+    expect(counter.total).toBe(2);
+    expect(harness.state.statuses).toHaveLength(statusCount);
+  });
+
+  it('decides a new head in a handful of calls, not a full reconcile', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    const counter = countApiCalls(harness);
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    // Was 27 (pull ×3, files, reviews, comments, timeline, statuses ×6,
+    // mirror and gate writes) before this head path.
+    expect(counter.total).toBeLessThanOrEqual(8);
+  });
+
+  it('answers an owner review on a decided head in three calls', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    await run(harness, fullPrContext(harness, 100n));
+    const counter = countApiCalls(harness);
+
+    await run(
+      harness,
+      context({
+        runId: 101n,
+        eventName: 'pull_request_review',
+        action: 'submitted',
+        review: {state: 'approved', user: {login: 'cixzhang'}},
+      }),
+    );
+
+    // The review event carries no file count, so the pull request is read.
+    expect(counter.total).toBe(3);
+  });
+
+  it('falls back to the full reconcile when its file read fails', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    let failed = false;
+    const listFiles = harness.github.rest.pulls.listFiles;
+    harness.github.rest.pulls.listFiles = async options => {
+      if (!failed) {
+        failed = true;
+        throw new Error('listFiles failed');
+      }
+      return listFiles(options);
+    };
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    expect(harness.state.calls).toContain(
+      'warning:Falling back to the full reconcile: listFiles failed',
+    );
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
     });
   });
 });

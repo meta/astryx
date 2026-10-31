@@ -736,9 +736,13 @@ jobs:
   spec-owner:
     # Fork reviews (read-only tokens) are skipped; owners use the command. The
     # reconciler orders concurrent runs itself: no concurrency group.
+    # Only events that can change the spec decision: a comment-only review
+    # and a draft conversion cannot.
     if: >-
       (github.event_name != 'pull_request_review' ||
-       github.event.pull_request.head.repo.full_name == github.repository) &&
+       (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.review.state != 'commented')) &&
+      github.event.action != 'converted_to_draft' &&
       (github.event_name != 'issue_comment' ||
        (github.event.issue.pull_request != null &&
         (startsWith(github.event.comment.body, '/approve-spec') ||
