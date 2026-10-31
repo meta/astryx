@@ -405,3 +405,5 @@ export function ToastSurface({
 
 Toast.displayName = 'Toast';
 ToastSurface.displayName = 'ToastSurface';
+
+// Replay fixture for the touched-components check timing; not for merge.

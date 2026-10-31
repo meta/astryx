@@ -196,8 +196,19 @@ they are separately named.
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
   confirm that runs nothing. A label runs only its own suite; a pull request
-  update without one runs none of them, and no required context depends on
-  them. An opted-in PR's a11y MUST remain scoped to changed components
+  update without one runs none of these owners, and no required context
+  depends on them. Every pull request instead runs one touched-components
+  check (`pr-touched-components`): visual, accessibility and RTL for only the
+  components the change touches, never their reverse dependents, on one standard runner within the 15-minute budget, against the
+  pull request's Storybook build. A wide change skips it: one that touches
+  more than five components, or changes shared styles (themes, tokens, or a
+  `.stylex.ts` file in a package's shared `theme`, `utils`, `hooks`,
+  `internal` or `Layer` folder); behaviour-only shared code is not a wide
+  change. Nothing starts a full suite on its own; a wide change's check is the
+  full suites behind the labels. It never widens to a full suite, no required
+  context depends on it, and it records each touched component's pass, fail,
+  changed or not-run result per suite, or that the change was wide and how
+  many components it touched, for the pull-request comment. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -479,7 +490,10 @@ the same exact-commit `release-check` the release gate uses, and before a cut;
 a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
-Pull request updates keep the fast checks and every required context; the
+Pull request updates keep the fast checks and every required context, and add
+the touched-components check (FR12), which audits only what the change touches
+on one standard runner, so each update spends few runner-minutes while the full
+suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
 failure on `main` is repaired forward with an atomic pull request, not reverted
