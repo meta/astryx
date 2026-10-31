@@ -93,6 +93,14 @@ import {
   withFinger,
   writeEvidence,
 } from './index';
+import {toTouchEvents} from './scripts';
+import {
+  retakeOnTouchPacing,
+  SCRIPTED_CLICK_SKIP,
+  TOUCH_PACING_TOLERANCE_MS,
+  TouchPacingError,
+  TouchPageStallError,
+} from './touch';
 
 const FIXTURE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
 <style>
@@ -451,6 +459,132 @@ test.describe('touch input', () => {
         ...log.filter(r => r.type === 'touchmove').map(r => r.touches ?? 0),
       ),
     ).toBe(2);
+  });
+
+  test('a scripted tap clicks where the driver says it does, and driver.tap clicks in both engines', async ({
+    page,
+  }) => {
+    await page.route('http://tap.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><body style="margin:0"><button id=b style="position:absolute;left:40px;top:40px;width:200px;height:80px">tap</button><script>window.__order=[];for(const type of ['touchstart','touchend','click'])b.addEventListener(type,()=>window.__order.push(type));</script>`,
+      }),
+    );
+    await page.goto('http://tap.test/');
+    const order = () =>
+      page.evaluate(() =>
+        (window as unknown as {__order: string[]}).__order.slice(),
+      );
+    const driver = await touchDriver(page);
+
+    await driver.play(tap({x: 140, y: 80}));
+    await driver.tap({x: 140, y: 80});
+    // driver.tap's click comes last, and a click of the scripted tap, if it
+    // gets one, before driver.tap's touchstart: no wait on the clock.
+    await expect
+      .poll(async () => {
+        const events = await order();
+        return events.lastIndexOf('click') > events.lastIndexOf('touchstart');
+      })
+      .toBe(true);
+    const events = await order();
+    const second = events.indexOf('touchstart', 1);
+    expect(events.slice(0, second)).toEqual(
+      driver.synthesizesClicks
+        ? ['touchstart', 'touchend', 'click']
+        : ['touchstart', 'touchend'],
+    );
+    expect(events.slice(second)).toEqual(['touchstart', 'touchend', 'click']);
+    expect(SCRIPTED_CLICK_SKIP).toContain('driver.tap');
+  });
+
+  test('a gesture the page receives off its pacing throws TouchPacingError where the page times touches by their arrival', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await touchDriver(page);
+    const script = flick(
+      {x: 160, y: 200},
+      {velocity: {x: 0, y: -1500}, durationMs: 96, hz: 120},
+    );
+    // The driver stalls 40 ms before the last move, as a dispatch does on a
+    // loaded runner: the interval a release velocity reads stretches.
+    const count = toTouchEvents(script).length;
+    const played = driver.play(script, {
+      checkPacing: true,
+      onEvent: async (_, index) => {
+        if (index === count - 3) {
+          await new Promise(r => setTimeout(r, 40));
+        }
+      },
+    });
+    if (driver.scriptedTimestamps) {
+      // Chromium: the page sees the script's stamps whatever the dispatch.
+      expect((await played).length).toBeGreaterThan(4);
+      return;
+    }
+    const error = await played.then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
+    expect(error).toBeInstanceOf(TouchPacingError);
+    const {scriptedGaps, receivedGaps} = error as TouchPacingError;
+    expect(receivedGaps).toHaveLength(scriptedGaps.length);
+    // The stall stretches the interval ending at the last move.
+    expect(receivedGaps[count - 3] - scriptedGaps[count - 3]).toBeGreaterThan(
+      TOUCH_PACING_TOLERANCE_MS,
+    );
+  });
+
+  test("a gesture the page's own touch handler stalls throws TouchPageStallError, which is never re-taken as the runner's", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const driver = await touchDriver(page);
+    const script = flick(
+      {x: 160, y: 200},
+      {velocity: {x: 0, y: -1500}, durationMs: 96, hz: 120},
+    );
+    const count = toTouchEvents(script).length;
+    // The page's own listener holds its main thread 40 ms on the event
+    // before the last move (event 0 is the touch-down).
+    await page.evaluate(stallAt => {
+      window.addEventListener(
+        'touchmove',
+        () => {
+          const w = window as unknown as {__moves: number};
+          w.__moves = (w.__moves ?? 0) + 1;
+          if (w.__moves === stallAt) {
+            const end = performance.now() + 40;
+            while (performance.now() < end) {
+              // the page's own work
+            }
+          }
+        },
+        {passive: true},
+      );
+    }, count - 3);
+    let attempts = 0;
+    const outcome = await retakeOnTouchPacing(test.info(), async () => {
+      attempts += 1;
+      await page.evaluate(() => {
+        (window as unknown as {__moves: number}).__moves = 0;
+      });
+      return driver.play(script, {checkPacing: true});
+    }).then(
+      () => 'played',
+      (thrown: unknown) => thrown,
+    );
+    if (driver.scriptedTimestamps) {
+      // Chromium: the page sees the script's stamps whatever it does.
+      expect(outcome).toBe('played');
+      return;
+    }
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    // A re-take, if any, was a runner stall the page did not cause.
+    expect(attempts).toBe(
+      test.info().annotations.filter(a => a.type === 'touch-retake').length + 1,
+    );
   });
 });
 
