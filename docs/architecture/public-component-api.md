@@ -204,7 +204,8 @@ guidance owns the process used to propose and test APIs.
 - **INV22 — Every interaction hook has a non-React path.** A public hook that
   attaches gesture, press, drag, or motion behavior to an element delegates
   entirely to a public `create…(element, options)` factory that takes the same
-  options and returns a handle with `destroy()` (`spec:AST-107` FR6), except a
+  options, with React content taken as a render callback (`spec:AST-107` FR8),
+  and returns a handle with `destroy()` (`spec:AST-107` FR6), except a
   hook whose result only an Astryx React component or StyleX can use, such as
   `useAnimatedLayout`, `useEntryAnimation`, `useContainerReveal`,
   `useTouchTrigger`, `useTableRowExpansion`, and `useTableColumnResize`. A hook
@@ -305,6 +306,11 @@ copy the component matrix.
 
 Known verification gaps:
 
+- INV22: `useLongPress`, `useMenuPress`, `usePressFeedback`,
+  `useClickableContainer`, `useCombobox`, `useMultiCombobox`, and
+  `useResizable` attach press, drag, or selection behavior and have no
+  `create…` factory yet. Each conforms by adding its factory and, where its
+  signature cannot delegate, a ref-taking signature beside the deprecated one.
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
