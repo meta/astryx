@@ -177,23 +177,26 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   /**
    * Width of the panel.
    * Numbers are treated as pixels, strings are used as-is.
-   * When `resizable` is provided, this is ignored — the hook controls width.
+   * For a resizable panel, pass the size useResizable reports.
+   * When `resizable` is provided, this is ignored.
+   *
+   * @example
+   * ```
+   * const handleRef = useRef(null);
+   * const sidebar = useResizable(handleRef, {defaultSize: 250, minSize: 200});
+   * <LayoutPanel width={sidebar.size}>
+   *   <Navigation />
+   * </LayoutPanel>
+   * <ResizeHandle ref={handleRef} />
+   * ```
    */
   width?: SizeValue;
 
   /**
-   * Resize props from `useResizable()`. When provided, the panel width
-   * is driven by the hook and a resize handle should be placed adjacent
-   * to this panel.
-   *
-   * @example
-   * ```
-   * const sidebar = useResizable({ defaultSize: 250, minSize: 200 });
-   * <LayoutPanel resizable={sidebar.props}>
-   *   <Navigation />
-   * </LayoutPanel>
-   * <ResizeHandle resizable={sidebar.props} />
-   * ```
+   * Resize props from the configuration-object form of `useResizable()`.
+   * When provided, the panel width is the hook's size.
+   * @deprecated Pass `width={region.size}` from
+   * `useResizable(handleRef, options)` instead. Removed in the next minor.
    */
   resizable?: ResizableProps;
 }
