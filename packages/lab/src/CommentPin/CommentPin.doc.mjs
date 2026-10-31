@@ -66,8 +66,15 @@ export const docs = {
       name: 'label',
       type: 'string',
       description:
-        'Required accessible action name and hover/focus tooltip. Include grouped, unread, or resolved context when it changes the action meaning, for example “Open 4 grouped annotations from Ada and Lin, 2 unread”.',
+        'Required accessible action name and, unless hasTooltip is false, its hover/focus tooltip. Include grouped, unread, or resolved context when it changes the action meaning, for example “Open 4 grouped annotations from Ada and Lin, 2 unread”.',
       required: true,
+    },
+    {
+      name: 'hasTooltip',
+      type: 'boolean',
+      description:
+        'Whether label also shows as a tooltip on pointer hover and keyboard focus. Turn it off when your page shows the thread itself on hover and focus, a preview the tooltip would cover or repeat. The label still names the button for assistive technology.',
+      default: 'true',
     },
     {
       name: 'participants',

@@ -7,8 +7,8 @@
  * @input Ordered participants (grouped pins show at most three circles),
  *   total and unread represented thread counts (unread shows as a dot), a
  *   size on the element-size
- *   scale, controlled selected/dimmed/resolved/disabled state, and button DOM
- *   props
+ *   scale, controlled selected/dimmed/resolved/disabled state, whether the
+ *   label also shows as a tooltip, and button DOM props
  * @output Exports the avatar-first CommentPin button and its public types
  * @position Lab collaboration primitive for annotation anchors over content or
  *   in content margins; callers own grouping, coordinates, and opened content
@@ -71,11 +71,20 @@ export interface CommentPinProps extends Omit<
   /** Ref forwarded to the marker button. */
   ref?: React.Ref<HTMLButtonElement>;
   /**
-   * Accessible action name and visual hover/focus tooltip.
+   * Accessible action name and, unless `hasTooltip` is false, visual
+   * hover/focus tooltip.
    * Include grouped, unread, or resolved context when it changes the action's
    * meaning.
    */
   label: string;
+  /**
+   * Whether `label` also shows as a tooltip on pointer hover and keyboard
+   * focus. Turn it off when the host shows the thread itself on hover and
+   * focus, a preview the tooltip would cover or repeat. The label still names
+   * the button.
+   * @default true
+   */
+  hasTooltip?: boolean;
   /**
    * Ordered participants, lead first. A single marker shows the first. A
    * grouped marker shows distinct IDs as an AvatarGroup of at most three
@@ -389,6 +398,7 @@ const MAX_GROUP_CIRCLES = 3;
  */
 export function CommentPin({
   label,
+  hasTooltip = true,
   participants,
   size = 'sm',
   threadCount = 1,
@@ -451,12 +461,12 @@ export function CommentPin({
   );
 
   const pressFeedback = usePressFeedback();
-  const hasTooltip = !isDisabled && label.trim() !== '';
+  const showsTooltip = hasTooltip && !isDisabled && label.trim() !== '';
   const tooltip = useTooltip({
     placement: 'above',
-    isEnabled: hasTooltip,
+    isEnabled: showsTooltip,
   });
-  const mergedRef = useMergedRefs(ref, hasTooltip ? tooltip.ref : undefined);
+  const mergedRef = useMergedRefs(ref, showsTooltip ? tooltip.ref : undefined);
 
   // Resolved discussion leaves the content. A selected pin stays, so a thread
   // the reader opened (or resolved from its popover) keeps its anchor until
@@ -583,7 +593,7 @@ export function CommentPin({
   return (
     <>
       {marker}
-      {hasTooltip ? tooltip.renderTooltip(label) : null}
+      {showsTooltip ? tooltip.renderTooltip(label) : null}
     </>
   );
 }

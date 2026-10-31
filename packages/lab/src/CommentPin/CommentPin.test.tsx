@@ -602,4 +602,31 @@ describe('CommentPin', () => {
     );
     showPopover.mockRestore();
   });
+
+  it('shows no tooltip when the host previews the thread itself, and keeps its name', async () => {
+    const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const onPointerEnter = vi.fn();
+    render(
+      <CommentPin
+        label="Open annotation from Ada"
+        participants={[ADA]}
+        hasTooltip={false}
+        onPointerEnter={onPointerEnter}
+      />,
+    );
+
+    const marker = screen.getByRole('button', {
+      name: 'Open annotation from Ada',
+    });
+    fireEvent.pointerEnter(marker, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(marker);
+    fireEvent.focus(marker);
+
+    // The host's own hover handler still runs: the preview is its to show.
+    expect(onPointerEnter).toHaveBeenCalledTimes(1);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(showPopover).not.toHaveBeenCalled();
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    showPopover.mockRestore();
+  });
 });
