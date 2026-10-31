@@ -18,6 +18,7 @@
  */
 
 const {inline, num, sizeText} = require('./report-text');
+const {SUITE_LABELS} = require('../run-labels.cjs');
 
 /**
  * The heavy suites a pull request runs only with its `ci:run-<suite>` label,
@@ -37,7 +38,6 @@ const SUITES = [
     jobs: /^(pr-a11y|Accessibility spec-test)/i,
   },
   {id: 'rtl', label: 'RTL', short: 'RTL', jobs: /^pr-rtl/i},
-  {id: 'perf', label: 'Perf', short: 'Perf', jobs: /^(perf|pr-perf)/i},
 ];
 
 /** Rows shown before the rest of a table is collapsed. */
@@ -176,8 +176,9 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
   const base = analysis.baseComponentSizes || {};
   const stats = analysis.componentStats || {};
   const baseStats = analysis.baseComponentStats || {};
-  const byName = new Map(
-    (touched?.components || []).map(component => [component.name, component]),
+  // By key: Core and Lab can each have a component of one name.
+  const byKey = new Map(
+    (touched?.components || []).map(component => [component.key, component]),
   );
   const keys = new Set(Object.keys(head));
   for (const name of [
@@ -201,19 +202,22 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
     Object.keys(baseStats).length > 0;
   return [...keys].map(key => {
     const name = key.slice(key.indexOf('/') + 1);
-    // The touched-components check's own result comes first.
-    const reported = byName.get(name)?.results || {};
+    // The touched-components check's own result comes first; `not-run` is no
+    // result, so the other reports still apply.
+    const reported = byKey.get(key)?.results || {};
+    const own = suite =>
+      reported[suite] && reported[suite] !== 'not-run' ? reported[suite] : null;
     // A component the audit did not cover has no accessibility result.
     const audited = a11yReport?.components?.[name];
     const a11y =
-      reported.a11y ??
+      own('a11y') ??
       (audited
         ? (audited.violations?.length ?? 0) > 0
           ? 'fail'
           : 'pass'
         : null);
     const visual =
-      reported.visual ??
+      own('visual') ??
       (visualVerdict && visualVerdict.status !== 'skipped'
         ? // A run that failed compared nothing: never a pass.
           visualVerdict.status === 'failed'
@@ -230,7 +234,7 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
       base: base[key],
       growth: sizeChange(head[key], base[key]),
       loc: [stats[name]?.linesOfCode, baseStats[name]?.linesOfCode],
-      results: {visual, a11y, rtl: reported.rtl ?? null},
+      results: {visual, a11y, rtl: own('rtl')},
       baseMeasured,
     };
   });
@@ -268,9 +272,9 @@ function buildComponentTable({
     visualVerdict,
   }).sort(compareRows);
   if (rows.length === 0) return '';
-  // The checks column appears only when a browser suite has a result here,
-  // or when the change is too wide for the touched-components check, which
-  // then ran none of them (every mark —).
+  // The checks column appears when a browser suite has a result here, or
+  // when the change is too wide for the touched-components check (a suite
+  // run by its label still shows its marks).
   const wide = touched?.wideChange === true;
   const checks =
     wide || rows.some(row => CHECK_SUITES.some(id => row.results[id] != null));
@@ -293,7 +297,7 @@ function buildComponentTable({
       stories ? `${name} · [Storybook](${stories})` : name,
       sizeCell(row.head, row.base, row.baseMeasured),
       locCell(...row.loc, row.baseMeasured),
-      ...(checks ? [checksCell(wide ? {} : row.results)] : []),
+      ...(checks ? [checksCell(row.results)] : []),
     ];
     return `| ${cells.join(' | ')} |`;
   };
@@ -430,9 +434,6 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     job => baseJobName(job.name) === 'build-storybook',
   );
   if (build && ['failure', 'cancelled'].includes(build.conclusion)) return '';
-  // Too wide for the touched-components check: no suite ran per component.
-  if (touched?.wideChange === true)
-    return `Wide change (${num(touched.componentCount)} components): add \`ci:run-visual\`, \`ci:run-a11y\` or \`ci:run-rtl\` to run that suite.\n\n`;
   const notRun = SUITES.filter(suite => {
     const state = suiteRunState(suite, jobs);
     if (state !== null) return state === 'not-run';
@@ -442,12 +443,18 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     return false;
   });
   if (notRun.length === 0) return '';
-  const labels = notRun.map(suite => `\`ci:run-${suite.id}\``);
+  const labels = notRun.map(suite => `\`${SUITE_LABELS[suite.id]}\``);
   const list =
     labels.length === 1
       ? labels[0]
       : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
-  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  // Too wide for the touched-components check: it says so, and names only
+  // the suites that did not run.
+  const lead =
+    touched?.wideChange === true
+      ? `Wide change (${num(touched.componentCount)} components)`
+      : 'Not run on this PR';
+  return `${lead}: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
 /** The compact report body, between the heading and the footer. */

@@ -149,25 +149,75 @@ describe('buildComponentTable', () => {
     expect(table).not.toContain('<details>');
   });
 
-  it('takes results from the touched-components report first', () => {
-    const table = buildComponentTable({
-      analysis: analysis([['core/A', 1000, 1000]]),
-      origin: ORIGIN,
-      touched: {
-        components: [{name: 'A', results: {visual: 'changed', rtl: 'fail'}}],
-      },
-      a11yReport: {components: {A: {violations: []}}},
-    });
-    expect(table).toMatch(/\| ✗ · ✓ · ✗ \|$/m);
+  // The touched-components check's report, as #9178 writes it.
+  const touchedReport = (components, extra = {}) => ({
+    headSha: HEAD,
+    wideChange: false,
+    componentCount: components.length,
+    components,
+    ...extra,
   });
 
-  it('shows every mark as not run for a wide change', () => {
+  it('takes results from the touched-components report first, by key', () => {
+    const table = buildComponentTable({
+      analysis: analysis([
+        ['core/Chat', 1000, 1000],
+        ['lab/Chat', 900, 900],
+      ]),
+      origin: ORIGIN,
+      touched: touchedReport([
+        {
+          key: 'core/Chat',
+          package: 'core',
+          name: 'Chat',
+          results: {visual: 'changed', a11y: 'pass', rtl: 'fail'},
+        },
+        {
+          key: 'lab/Chat',
+          package: 'lab',
+          name: 'Chat',
+          results: {visual: 'pass', a11y: 'pass', rtl: 'pass'},
+        },
+      ]),
+    });
+    expect(table).toMatch(/^\| \[Chat\][^\n]* \| ✗ · ✓ · ✗ \|$/m);
+    expect(table).toMatch(/^\| \[lab\/Chat\][^\n]* \| ✓ · ✓ · ✓ \|$/m);
+  });
+
+  it('treats not-run as no result, so the other reports still apply', () => {
     const table = buildComponentTable({
       analysis: analysis([['core/A', 1000, 1000]]),
       origin: ORIGIN,
-      touched: {wideChange: true, componentCount: 60, components: []},
+      touched: touchedReport([
+        {
+          key: 'core/A',
+          package: 'core',
+          name: 'A',
+          results: {visual: 'not-run', a11y: 'not-run', rtl: 'not-run'},
+        },
+      ]),
+      a11yReport: {components: {A: {violations: []}}},
     });
-    expect(table).toMatch(/\| — · — · — \|$/m);
+    expect(table).toMatch(/\| — · ✓ · — \|$/m);
+  });
+
+  it('keeps the marks of a suite run by its label on a wide change', () => {
+    const wide = {wideChange: true, componentCount: 60, components: []};
+    expect(
+      buildComponentTable({
+        analysis: analysis([['core/A', 1000, 1000]]),
+        origin: ORIGIN,
+        touched: wide,
+      }),
+    ).toMatch(/\| — · — · — \|$/m);
+    expect(
+      buildComponentTable({
+        analysis: analysis([['core/A', 1000, 1000]]),
+        origin: ORIGIN,
+        touched: wide,
+        a11yReport: {components: {A: {violations: []}}},
+      }),
+    ).toMatch(/\| — · ✓ · — \|$/m);
   });
 
   it('lists a modified component folder with no size', () => {
@@ -381,12 +431,21 @@ describe('notRunLine', () => {
     );
   });
 
-  it('names the labels for a wide change', () => {
+  it('names only the suites that did not run on a wide change', () => {
+    const wide = {wideChange: true, componentCount: 60};
     expect(
-      notRunLine({jobs: [], touched: {wideChange: true, componentCount: 60}}),
+      notRunLine({
+        jobs: [
+          skipped('Stable visual scout (1/2)'),
+          {name: 'pr-a11y (full audit)', conclusion: 'success'},
+          skipped('pr-rtl (core)'),
+        ],
+        touched: wide,
+      }),
     ).toBe(
-      'Wide change (60 components): add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run that suite.\n\n',
+      'Wide change (60 components): add `ci:run-visual` or `ci:run-rtl` to run them.\n\n',
     );
+    expect(notRunLine({jobs: [], touched: wide})).toBe('');
   });
 
   it('leaves the line out when the Storybook build failed', () => {
