@@ -27,7 +27,7 @@ import {
 const controllers: ResizableController[] = [];
 
 function create(
-  handle: HTMLElement,
+  handle: HTMLElement | null,
   options?: CreateResizableOptions,
 ): ResizableController {
   const controller = createResizable(handle, options);
@@ -106,6 +106,31 @@ afterEach(() => {
   document.body.style.userSelect = '';
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('createResizable with no handle yet', () => {
+  it('answers collapse, expand, resize and subscribe, and touches no element', () => {
+    const added = vi.spyOn(EventTarget.prototype, 'addEventListener');
+    const onSizeChange = vi.fn();
+    const resizable = create(null, {
+      defaultSize: 200,
+      collapsible: true,
+      onSizeChange,
+    });
+    const listener = vi.fn();
+    resizable.subscribe(listener);
+    resizable.collapse();
+    expect(resizable.isCollapsed).toBe(true);
+    expect(resizable.size).toBe(0);
+    resizable.expand();
+    expect(resizable.size).toBe(200);
+    resizable.resize(260);
+    expect(resizable.size).toBe(260);
+    expect(onSizeChange).toHaveBeenLastCalledWith(260);
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(added).not.toHaveBeenCalled();
+    resizable.destroy();
+  });
 });
 
 describe('createResizable without React (spec:AST-107 FR6)', () => {
