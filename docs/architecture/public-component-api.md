@@ -267,10 +267,9 @@ guidance owns the process used to propose and test APIs.
   or changed row of a pull request's API changes with current records. A row
   that a record current at the merge base, or a record change in the same pull
   request, decides needs no further step. A row that no current record decides,
-  including a reachable member tagged internal, sends the pull request to human
-  review with that row listed, for an owner of this record to accept, split, or
-  remove; such a row alone is never a request for changes. A removed or renamed
-  row follows INV9.
+  including a reachable member tagged internal, goes to human review with that
+  row listed, for an owner of this record, as `architecture:knowledge-contracts`
+  change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
 source. Lab components are not stable public promises until promotion.

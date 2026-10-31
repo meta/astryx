@@ -204,7 +204,9 @@ Every record is either:
   separable delta that violates current authority or requires a new human decision
   is removed or split before review asks the primary change to carry new authority.
   A specification is the path for an intentional durable decision, not the default
-  remedy for unrelated scope discovered during review.
+  remedy for unrelated scope discovered during review. An added or changed public
+  API row that no current record decides is the exception: it goes to human
+  review for an owner's decision instead (change coupling step 6).
 - **INV16 — Specs govern; generated review context only informs.** Committed current
   component, module, family, design, theme, architecture, and system records own
   intended product behavior. Reviewer-generated summaries, sections, checklists,
@@ -557,7 +559,8 @@ Before any component, module, family, design, theme, or architecture record beco
    row of a pull request's public API changes
    (`architecture:public-component-api` INV24) that is `novel-human` instead
    sends the pull request to human review with that row listed, whether or not
-   it is separable; an owner of that record accepts, splits, or removes it.
+   it is separable; an owner of that record accepts, splits, or removes it, and
+   review never requests changes for that row alone.
 7. A bug fix is `preserves` only when it restores existing current authority
    without changing public API or public behavior beyond that contract. Any
    separable API, visual, layout, or interaction tagalong follows step 5 or 6
@@ -588,8 +591,11 @@ Review and build should converge on the smallest ideal change that can land:
    specification unless changing policy is itself an intentional, separately
    reviewable goal.
 4. For an unsettled but separable delta, remove or split it. Continue the primary
-   change without asking the contributor to solve adjacent system design.
-5. Escalate only a surviving, intentional `novel-human` delta. Record only the
+   change without asking the contributor to solve adjacent system design. An
+   undeclared public API row is the exception: it goes to human review for an
+   owner to accept, split, or remove (change coupling step 6).
+5. Escalate only a surviving, intentional `novel-human` delta or an undeclared
+   public API row. Record only the
    exact decision needed for that delta; adjacent module behavior may stay
    uncontracted.
 
